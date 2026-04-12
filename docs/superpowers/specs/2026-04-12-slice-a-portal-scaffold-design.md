@@ -829,7 +829,7 @@ GitHub Actions CI       Vercel preview
 
 ## 12. Test surface
 
-Eight smoke tests across four packages. None touch the network. They prove infrastructure works, not that any features work — features come in slices B and C with their own test suites.
+Eight smoke tests spread across `apps/portal` and three of the four shared packages (`@cmt/ui`, `@cmt/firebase-shared`, `@cmt/shared-domain`; `@cmt/config` is config-only and has no test surface). None touch the network. They prove infrastructure works, not that any features work — features come in slices B and C with their own test suites.
 
 | File | Test | What it proves |
 |---|---|---|
