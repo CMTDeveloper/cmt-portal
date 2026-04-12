@@ -1,0 +1,9 @@
+{
+  "extends": "@cmt/config/tsconfig.base",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "jsx": "react-jsx"
+  },
+  "include": ["src/**/*"]
+}
