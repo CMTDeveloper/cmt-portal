@@ -1,0 +1,36 @@
+{
+  "name": "@cmt/firebase-shared",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./admin": {
+      "types": "./src/admin.ts",
+      "default": "./src/admin.ts"
+    },
+    "./client": {
+      "types": "./src/client.ts",
+      "default": "./src/client.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "lint": "eslint src",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "firebase": "^12.0.0",
+    "firebase-admin": "^13.0.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@cmt/config": "workspace:*",
+    "vitest": "^4.1.2",
+    "typescript": "^5.7.2"
+  }
+}
