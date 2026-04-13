@@ -9,6 +9,15 @@ build/
 out/
 .turbo/
 
+# TypeScript incremental build cache
+*.tsbuildinfo
+
+# Next.js auto-generated type file (not source — regenerated on each build)
+next-env.d.ts
+
+# OMC plugin session state (local-only, not part of the repo)
+.omc/
+
 # test
 coverage/
 *.lcov
