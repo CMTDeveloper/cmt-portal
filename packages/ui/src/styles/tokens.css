@@ -1,37 +1,35 @@
-@layer base {
-  :root {
-    /* CMT brand — mined from chinmayatoronto.org */
-    --background: 0 0% 100%;
-    --foreground: 205 38% 30%;
+:root {
+  /* CMT brand — mined from chinmayatoronto.org */
+  --background: 0 0% 100%;
+  --foreground: 205 38% 30%;
 
-    /* Card and popover use background/foreground by default in slice A.
-       The shadcn Card and Dialog components reference these. */
-    --card: 0 0% 100%;
-    --card-foreground: 205 38% 30%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 205 38% 30%;
+  /* Card and popover use background/foreground by default in slice A.
+     The shadcn Card and Dialog components reference these. */
+  --card: 0 0% 100%;
+  --card-foreground: 205 38% 30%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 205 38% 30%;
 
-    --primary: 192 44% 23%;             /* #214a54 navy/teal */
-    --primary-foreground: 0 0% 100%;
+  --primary: 192 44% 23%;             /* #214a54 navy/teal */
+  --primary-foreground: 0 0% 100%;
 
-    --secondary: 177 51% 79%;           /* #b3e1de light teal */
-    --secondary-foreground: 192 44% 23%;
+  --secondary: 177 51% 79%;           /* #b3e1de light teal */
+  --secondary-foreground: 192 44% 23%;
 
-    --accent: 35 95% 67%;               /* #fbb559 warm gold */
-    --accent-foreground: 192 44% 23%;
+  --accent: 35 95% 67%;               /* #fbb559 warm gold */
+  --accent-foreground: 192 44% 23%;
 
-    --muted: 50 21% 95%;                /* #f5f4f0 warm beige */
-    --muted-foreground: 0 0% 44%;
+  --muted: 50 21% 95%;                /* #f5f4f0 warm beige */
+  --muted-foreground: 0 0% 44%;
 
-    --heading: 200 36% 32%;             /* #335b70 deeper teal-gray */
+  --heading: 200 36% 32%;             /* #335b70 deeper teal-gray */
 
-    --border: 50 21% 90%;
-    --input: 50 21% 90%;
-    --ring: 192 44% 23%;
+  --border: 50 21% 90%;
+  --input: 50 21% 90%;
+  --ring: 192 44% 23%;
 
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 98%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 98%;
 
-    --radius: 0.5rem;
-  }
+  --radius: 0.5rem;
 }
