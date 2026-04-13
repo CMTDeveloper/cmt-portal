@@ -6,7 +6,9 @@ This file orients AI agents (Claude Code, Cursor, etc.) working in this reposito
 
 A Turborepo monorepo for the Chinmaya Mission Toronto unified portal. One Next.js 16 application (`apps/portal`) and four shared workspace packages.
 
-**Spec for the current slice:** `docs/superpowers/specs/2026-04-12-slice-a-portal-scaffold-design.md`
+**Slice A status:** ✅ Shipped (merged to `main`). Spec: `docs/superpowers/specs/2026-04-12-slice-a-portal-scaffold-design.md`, plan: `docs/superpowers/plans/2026-04-12-slice-a-portal-scaffold.md`.
+
+**Next slice:** B — port `chinmaya-family-check-in` into `apps/portal/src/app/check-in/*`. Spec pending.
 
 ## Architecture in one paragraph
 
@@ -17,7 +19,7 @@ A Turborepo monorepo for the Chinmaya Mission Toronto unified portal. One Next.j
 1. **Strict feature boundaries** — Files under `apps/portal/src/features/<a>/` cannot import from `apps/portal/src/features/<b>/`. Lint-enforced via `eslint-plugin-boundaries`.
 2. **`@cmt/shared-domain`** is for pure TypeScript that web + mobile can both consume. No React, no Next, no DOM imports — enforced by ESLint `no-restricted-imports`.
 3. **Per-segment React error boundaries** — Every top-level route segment under `src/app/` has its own `error.tsx`.
-4. **CI gate on `main`** — No PR merges without `pnpm typecheck && pnpm lint && pnpm test && pnpm build` all passing. Branch protection enforces.
+4. **Pre-push hook on `main`** — Every `git push` runs `pnpm typecheck && pnpm lint && pnpm test && pnpm build` via a local git hook installed by the root `package.json` `prepare` script (hook source at `scripts/git-hooks/pre-push`). If any check fails, the push is aborted. Fix the underlying issue; never bypass with `--no-verify`. The `.github/workflows/ci.yml` workflow is retained as a dormant fallback for a future feature-branch/PR workflow but is not the enforcement mechanism today.
 5. **Feature flags via env vars** — All risky features gated through `apps/portal/src/lib/flags.ts`. No hardcoded booleans.
 6. **No premature package extraction** — Code lives in the consuming app until two consumers exist. Portal chrome (header, footer, nav) lives in `apps/portal/src/components/chrome/`, NOT in a `@cmt/portal-chrome` package. New shared packages require justification.
 
@@ -41,10 +43,11 @@ A Turborepo monorepo for the Chinmaya Mission Toronto unified portal. One Next.j
 
 ## Workflow expectations
 
+- **Solo-dev main-only workflow** — All commits go directly to `main`. No feature branches, no PRs for routine work. The pre-push hook validates `typecheck && lint && test && build` locally before every push; a failed hook aborts the push. Larger experimental changes may still warrant a feature branch, but it's not the default.
 - **Tests are TDD** — write the failing test, run it to confirm it fails, implement, run it again, commit. See existing tests in `packages/firebase-shared/src/__tests__/` for the pattern.
 - **Frequent commits** — Each task in the implementation plan corresponds to one (or a few) commits. Don't bundle unrelated changes.
 - **Commit author** — Always `CMT Developer <developer@chinmayatoronto.org>` (set in local `.git/config`, not global).
-- **Never bypass `--no-verify`** on commits unless explicitly told.
+- **Never bypass `--no-verify`** on commits or pushes unless explicitly told.
 
 ## Reading the prototype
 
@@ -55,6 +58,6 @@ The original 4-phase product brief is in `docs/superpowers/specs/reference/Chinm
 - Don't add a new package to `packages/` without justifying two-or-more consumers (discipline 6).
 - Don't import across feature directories — go through `@cmt/shared-domain` or `@cmt/ui`.
 - Don't add React/Next imports to `@cmt/shared-domain` — lint will fail and the discipline matters.
-- Don't bypass the CI gate. If `pnpm test` fails, fix the test or the code, not the CI config.
+- Don't bypass the pre-push hook with `--no-verify`. If `pnpm test` or any check fails, fix the test or the code, not the hook.
 - Don't migrate to Tailwind v4, `vercel.ts`, or shadcn v4-only components without a dedicated upgrade slice.
 - Don't propose retiring the standalone `chinmaya-event-registration` or `chinmaya-family-check-in` deployments until slices B and C are proven in parallel-run.

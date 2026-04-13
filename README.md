@@ -63,14 +63,27 @@ git config user.email "developer@chinmayatoronto.org"
 
 ## Slice-based development
 
-This project ships in slices, each with its own design spec and implementation plan. See `docs/superpowers/specs/` for the current state.
+This project ships in slices, each with its own design spec and implementation plan. See `docs/superpowers/specs/` and `docs/superpowers/plans/` for the current state.
 
-- **Slice A** — Monorepo scaffold + portal app shell + 4 shared packages (this slice)
-- **Slice B** — Port `chinmaya-family-check-in` into the portal as `apps/portal/src/app/check-in/*`
+- **Slice A** — ✅ **Shipped** — Monorepo scaffold + portal app shell + 4 shared packages
+- **Slice B** — Port `chinmaya-family-check-in` into the portal as `apps/portal/src/app/check-in/*` (next)
 - **Slice C** — Port `chinmaya-event-registration` into the portal as `apps/portal/src/app/events/*`
 - **Slice D** — Unified portal-level auth
 - **Slice E+** — Future modules (programs, enrollment, retirement of old portal)
 
-## CI
+## Workflow (solo-dev, main-only)
 
-GitHub Actions runs `typecheck`, `lint`, `test`, `build` on every PR. Branch protection requires the `ci` check to pass before merge.
+All changes commit directly to `main`. Before every `git push`, a local **pre-push hook** runs the full validation suite:
+
+```
+pnpm typecheck
+pnpm lint
+pnpm test
+pnpm build
+```
+
+If any step fails, the push is aborted. Fix the underlying issue; do **not** bypass with `--no-verify`.
+
+The hook is installed automatically by the root `package.json` `prepare` script on `pnpm install`. Hook source lives at `scripts/git-hooks/pre-push`.
+
+A dormant `.github/workflows/ci.yml` is retained for a future feature-branch/PR workflow if the project ever grows beyond solo-dev. It is not the enforcement mechanism today.

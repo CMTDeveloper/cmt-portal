@@ -7,6 +7,7 @@
     "node": ">=22.0.0"
   },
   "scripts": {
+    "prepare": "test -d .git/hooks && cp scripts/git-hooks/pre-push .git/hooks/pre-push && chmod +x .git/hooks/pre-push || true",
     "build": "turbo build",
     "dev": "turbo dev",
     "lint": "turbo lint",

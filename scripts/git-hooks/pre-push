@@ -1,0 +1,27 @@
+#!/bin/sh
+#
+# Pre-push hook for cmt-portal.
+#
+# Installed automatically by the root package.json "prepare" script on `pnpm install`.
+# Runs the full local validation suite before every push. If any step fails, the push
+# is aborted. Fix the underlying issue; do NOT bypass with --no-verify.
+#
+# Solo-dev main-only workflow: this hook replaces a traditional CI gate for routine work.
+# The .github/workflows/ci.yml workflow is retained as a dormant fallback for a future
+# feature-branch/PR workflow.
+
+set -e
+
+echo "==> pre-push: pnpm typecheck"
+pnpm typecheck
+
+echo "==> pre-push: pnpm lint"
+pnpm lint
+
+echo "==> pre-push: pnpm test"
+pnpm test
+
+echo "==> pre-push: pnpm build"
+pnpm build
+
+echo "==> pre-push: all checks passed — pushing"
