@@ -1,42 +1,54 @@
 import { z } from 'zod';
 
-export const adminEnvSchema = z.object({
-  FIREBASE_PROJECT_ID: z.string().min(1),
-  FIREBASE_CLIENT_EMAIL: z.string().email(),
-  FIREBASE_PRIVATE_KEY: z.string().min(1),
-  FIREBASE_DATABASE_URL: z.string().url(),
+// Portal Firebase project (Firestore + Auth — UAT in dev, prod in prod)
+export const portalAdminEnvSchema = z.object({
+  PORTAL_FIREBASE_PROJECT_ID: z.string().min(1),
+  PORTAL_FIREBASE_CLIENT_EMAIL: z.string().email(),
+  PORTAL_FIREBASE_PRIVATE_KEY: z.string().min(1),
 });
+export type PortalAdminEnv = z.infer<typeof portalAdminEnvSchema>;
 
-export const clientEnvSchema = z.object({
-  NEXT_PUBLIC_FIREBASE_API_KEY: z.string().min(1),
-  NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: z.string().min(1),
-  NEXT_PUBLIC_FIREBASE_PROJECT_ID: z.string().min(1),
-  NEXT_PUBLIC_FIREBASE_DATABASE_URL: z.string().url(),
+export const portalClientEnvSchema = z.object({
+  NEXT_PUBLIC_PORTAL_FIREBASE_API_KEY: z.string().min(1),
+  NEXT_PUBLIC_PORTAL_FIREBASE_AUTH_DOMAIN: z.string().min(1),
+  NEXT_PUBLIC_PORTAL_FIREBASE_PROJECT_ID: z.string().min(1),
+  NEXT_PUBLIC_PORTAL_FIREBASE_STORAGE_BUCKET: z.string().min(1),
+  NEXT_PUBLIC_PORTAL_FIREBASE_MESSAGING_SENDER_ID: z.string().min(1),
+  NEXT_PUBLIC_PORTAL_FIREBASE_APP_ID: z.string().min(1),
 });
+export type PortalClientEnv = z.infer<typeof portalClientEnvSchema>;
 
-export type AdminEnv = z.infer<typeof adminEnvSchema>;
-export type ClientEnv = z.infer<typeof clientEnvSchema>;
+// Master Firebase project (RTDB reads — always prod)
+export const masterAdminEnvSchema = z.object({
+  MASTER_FIREBASE_PROJECT_ID: z.string().min(1),
+  MASTER_FIREBASE_CLIENT_EMAIL: z.string().email(),
+  MASTER_FIREBASE_PRIVATE_KEY: z.string().min(1),
+  MASTER_FIREBASE_DATABASE_URL: z.string().url(),
+});
+export type MasterAdminEnv = z.infer<typeof masterAdminEnvSchema>;
 
-export function readAdminEnv(): AdminEnv {
-  const parsed = adminEnvSchema.safeParse(process.env);
+export const masterClientEnvSchema = z.object({
+  NEXT_PUBLIC_MASTER_FIREBASE_DATABASE_URL: z.string().url(),
+});
+export type MasterClientEnv = z.infer<typeof masterClientEnvSchema>;
+
+export function readPortalAdminEnv(): PortalAdminEnv {
+  const parsed = portalAdminEnvSchema.safeParse(process.env);
   if (!parsed.success) {
+    const missing = parsed.error.errors.map((e) => e.path.join('.')).join(', ');
     throw new Error(
-      `[firebase-shared] Missing or invalid Firebase admin env vars: ${parsed.error.message}`,
+      `[firebase-shared] Missing or invalid portal admin env vars: ${missing}. ${parsed.error.message}`,
     );
   }
   return parsed.data;
 }
 
-export function readClientEnv(): ClientEnv {
-  const parsed = clientEnvSchema.safeParse({
-    NEXT_PUBLIC_FIREBASE_API_KEY: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-    NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-    NEXT_PUBLIC_FIREBASE_PROJECT_ID: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-    NEXT_PUBLIC_FIREBASE_DATABASE_URL: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL,
-  });
+export function readMasterAdminEnv(): MasterAdminEnv {
+  const parsed = masterAdminEnvSchema.safeParse(process.env);
   if (!parsed.success) {
+    const missing = parsed.error.errors.map((e) => e.path.join('.')).join(', ');
     throw new Error(
-      `[firebase-shared] Missing or invalid Firebase client env vars: ${parsed.error.message}`,
+      `[firebase-shared] Missing or invalid master admin env vars: ${missing}. ${parsed.error.message}`,
     );
   }
   return parsed.data;

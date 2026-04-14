@@ -1,54 +1,103 @@
-import { describe, it, expect } from 'vitest';
-import { adminEnvSchema, clientEnvSchema } from '../env';
+import { describe, it, expect, beforeEach } from 'vitest';
+import {
+  portalAdminEnvSchema,
+  masterAdminEnvSchema,
+  portalClientEnvSchema,
+  masterClientEnvSchema,
+  readPortalAdminEnv,
+  readMasterAdminEnv,
+} from '../env';
 
-describe('adminEnvSchema', () => {
-  it('accepts a fully-populated admin env', () => {
-    const result = adminEnvSchema.safeParse({
-      FIREBASE_PROJECT_ID: 'chinmaya-setu-715b8',
-      FIREBASE_CLIENT_EMAIL: 'test@example.iam.gserviceaccount.com',
-      FIREBASE_PRIVATE_KEY: '-----BEGIN PRIVATE KEY-----\\nfake\\n-----END PRIVATE KEY-----',
-      FIREBASE_DATABASE_URL: 'https://chinmaya-setu-715b8.firebaseio.com',
+describe('portalAdminEnvSchema', () => {
+  it('parses valid portal admin env', () => {
+    const result = portalAdminEnvSchema.safeParse({
+      PORTAL_FIREBASE_PROJECT_ID: 'chinmaya-setu-uat',
+      PORTAL_FIREBASE_CLIENT_EMAIL: 'sa@chinmaya-setu-uat.iam.gserviceaccount.com',
+      PORTAL_FIREBASE_PRIVATE_KEY: '-----BEGIN PRIVATE KEY-----\\nabc\\n-----END PRIVATE KEY-----\\n',
     });
     expect(result.success).toBe(true);
   });
 
-  it('rejects missing FIREBASE_PROJECT_ID', () => {
-    const result = adminEnvSchema.safeParse({
-      FIREBASE_CLIENT_EMAIL: 'test@example.iam.gserviceaccount.com',
-      FIREBASE_PRIVATE_KEY: 'fake',
-      FIREBASE_DATABASE_URL: 'https://example.com',
+  it('rejects missing private key', () => {
+    const result = portalAdminEnvSchema.safeParse({
+      PORTAL_FIREBASE_PROJECT_ID: 'chinmaya-setu-uat',
+      PORTAL_FIREBASE_CLIENT_EMAIL: 'sa@chinmaya-setu-uat.iam.gserviceaccount.com',
     });
     expect(result.success).toBe(false);
   });
 
-  it('rejects malformed FIREBASE_DATABASE_URL', () => {
-    const result = adminEnvSchema.safeParse({
-      FIREBASE_PROJECT_ID: 'p',
-      FIREBASE_CLIENT_EMAIL: 'test@example.iam.gserviceaccount.com',
-      FIREBASE_PRIVATE_KEY: 'fake',
-      FIREBASE_DATABASE_URL: 'not-a-url',
+  it('rejects invalid client email', () => {
+    const result = portalAdminEnvSchema.safeParse({
+      PORTAL_FIREBASE_PROJECT_ID: 'chinmaya-setu-uat',
+      PORTAL_FIREBASE_CLIENT_EMAIL: 'not-an-email',
+      PORTAL_FIREBASE_PRIVATE_KEY: 'key',
     });
     expect(result.success).toBe(false);
   });
 });
 
-describe('clientEnvSchema', () => {
-  it('accepts a fully-populated client env', () => {
-    const result = clientEnvSchema.safeParse({
-      NEXT_PUBLIC_FIREBASE_API_KEY: 'AIzaSyExample',
-      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: 'chinmaya-setu-715b8.firebaseapp.com',
-      NEXT_PUBLIC_FIREBASE_PROJECT_ID: 'chinmaya-setu-715b8',
-      NEXT_PUBLIC_FIREBASE_DATABASE_URL: 'https://chinmaya-setu-715b8.firebaseio.com',
+describe('masterAdminEnvSchema', () => {
+  it('parses valid master admin env with database URL', () => {
+    const result = masterAdminEnvSchema.safeParse({
+      MASTER_FIREBASE_PROJECT_ID: 'chinmaya-setu-715b8',
+      MASTER_FIREBASE_CLIENT_EMAIL: 'sa@chinmaya-setu-715b8.iam.gserviceaccount.com',
+      MASTER_FIREBASE_PRIVATE_KEY: 'key',
+      MASTER_FIREBASE_DATABASE_URL: 'https://chinmaya-setu-715b8-default-rtdb.firebaseio.com',
     });
     expect(result.success).toBe(true);
   });
 
-  it('rejects missing NEXT_PUBLIC_FIREBASE_PROJECT_ID', () => {
-    const result = clientEnvSchema.safeParse({
-      NEXT_PUBLIC_FIREBASE_API_KEY: 'k',
-      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: 'd.firebaseapp.com',
-      NEXT_PUBLIC_FIREBASE_DATABASE_URL: 'https://example.com',
+  it('rejects missing database URL', () => {
+    const result = masterAdminEnvSchema.safeParse({
+      MASTER_FIREBASE_PROJECT_ID: 'chinmaya-setu-715b8',
+      MASTER_FIREBASE_CLIENT_EMAIL: 'sa@chinmaya-setu-715b8.iam.gserviceaccount.com',
+      MASTER_FIREBASE_PRIVATE_KEY: 'key',
     });
     expect(result.success).toBe(false);
+  });
+});
+
+describe('readPortalAdminEnv', () => {
+  beforeEach(() => {
+    delete process.env.PORTAL_FIREBASE_PROJECT_ID;
+    delete process.env.PORTAL_FIREBASE_CLIENT_EMAIL;
+    delete process.env.PORTAL_FIREBASE_PRIVATE_KEY;
+  });
+
+  it('throws a clear error when PRIVATE_KEY is missing', () => {
+    process.env.PORTAL_FIREBASE_PROJECT_ID = 'p';
+    process.env.PORTAL_FIREBASE_CLIENT_EMAIL = 'sa@p.iam.gserviceaccount.com';
+    expect(() => readPortalAdminEnv()).toThrow(/PORTAL_FIREBASE_PRIVATE_KEY/);
+  });
+
+  it('returns parsed env when all vars are present', () => {
+    process.env.PORTAL_FIREBASE_PROJECT_ID = 'p';
+    process.env.PORTAL_FIREBASE_CLIENT_EMAIL = 'sa@p.iam.gserviceaccount.com';
+    process.env.PORTAL_FIREBASE_PRIVATE_KEY = 'key';
+    const env = readPortalAdminEnv();
+    expect(env.PORTAL_FIREBASE_PROJECT_ID).toBe('p');
+  });
+});
+
+describe('portalClientEnvSchema', () => {
+  it('parses public portal firebase env', () => {
+    const result = portalClientEnvSchema.safeParse({
+      NEXT_PUBLIC_PORTAL_FIREBASE_API_KEY: 'AIza...',
+      NEXT_PUBLIC_PORTAL_FIREBASE_AUTH_DOMAIN: 'p.firebaseapp.com',
+      NEXT_PUBLIC_PORTAL_FIREBASE_PROJECT_ID: 'p',
+      NEXT_PUBLIC_PORTAL_FIREBASE_STORAGE_BUCKET: 'p.firebasestorage.app',
+      NEXT_PUBLIC_PORTAL_FIREBASE_MESSAGING_SENDER_ID: '123',
+      NEXT_PUBLIC_PORTAL_FIREBASE_APP_ID: '1:123:web:abc',
+    });
+    expect(result.success).toBe(true);
+  });
+});
+
+describe('masterClientEnvSchema', () => {
+  it('parses master firebase db url', () => {
+    const result = masterClientEnvSchema.safeParse({
+      NEXT_PUBLIC_MASTER_FIREBASE_DATABASE_URL: 'https://m-default-rtdb.firebaseio.com',
+    });
+    expect(result.success).toBe(true);
   });
 });
