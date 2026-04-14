@@ -66,7 +66,13 @@ git config user.email "developer@chinmayatoronto.org"
 This project ships in slices, each with its own design spec and implementation plan. See `docs/superpowers/specs/` and `docs/superpowers/plans/` for the current state.
 
 - **Slice A** — ✅ **Shipped** — Monorepo scaffold + portal app shell + 4 shared packages
-- **Slice B** — 🚧 In progress — Port `chinmaya-family-check-in` + portal-wide auth foundation (subsumes former slice D)
+- **Slice B** — 🚧 In progress —
+  - B0 ✅ — Portal auth foundation
+  - B2 ✅ — Family portal (OTP login, dashboard, self-check-in)
+  - B3 — Teacher portal (next)
+  - B1 — Kiosk port
+  - B4 — Admin dashboard
+  - B5 — Notifications & cron
 - **Slice C** — Port `chinmaya-event-registration` into `apps/portal/src/app/events/*`
 - **Slice E+** — Future modules (programs, enrollment, retirement of old portal)
 
