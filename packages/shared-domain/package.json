@@ -5,6 +5,28 @@
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./auth": {
+      "types": "./src/auth/index.ts",
+      "default": "./src/auth/index.ts"
+    },
+    "./auth/*": {
+      "types": "./src/auth/*.ts",
+      "default": "./src/auth/*.ts"
+    },
+    "./check-in": {
+      "types": "./src/check-in/index.ts",
+      "default": "./src/check-in/index.ts"
+    },
+    "./check-in/*": {
+      "types": "./src/check-in/*.ts",
+      "default": "./src/check-in/*.ts"
+    }
+  },
   "scripts": {
     "build": "tsc --noEmit",
     "lint": "eslint src",
