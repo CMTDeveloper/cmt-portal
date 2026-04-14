@@ -1,0 +1,58 @@
+import { describe, it, expect } from 'vitest';
+import { PUBLIC_ROUTES, matchRoute, isPublicRoute } from '../auth/public-routes';
+
+describe('PUBLIC_ROUTES', () => {
+  it('includes portal landing and events stub', () => {
+    expect(PUBLIC_ROUTES).toContain('/');
+    expect(PUBLIC_ROUTES).toContain('/events');
+  });
+  it('includes /login and its sub-paths', () => {
+    expect(PUBLIC_ROUTES).toContain('/login');
+    expect(PUBLIC_ROUTES).toContain('/login/admin');
+    expect(PUBLIC_ROUTES).toContain('/login/teacher');
+    expect(PUBLIC_ROUTES).toContain('/login/family');
+  });
+  it('includes kiosk routes', () => {
+    expect(PUBLIC_ROUTES).toContain('/check-in');
+    expect(PUBLIC_ROUTES).toContain('/check-in/guest');
+    expect(PUBLIC_ROUTES).toContain('/check-in/lookup');
+  });
+  it('includes public auth APIs', () => {
+    expect(PUBLIC_ROUTES).toContain('/api/auth/admin/signin');
+    expect(PUBLIC_ROUTES).toContain('/api/auth/teacher/signin');
+    expect(PUBLIC_ROUTES).toContain('/api/auth/family/send-code');
+    expect(PUBLIC_ROUTES).toContain('/api/auth/family/verify-code');
+    expect(PUBLIC_ROUTES).toContain('/api/auth/signout');
+  });
+});
+
+describe('matchRoute', () => {
+  it('exact match', () => {
+    expect(matchRoute('/login', '/login')).toBe(true);
+    expect(matchRoute('/login', '/login/admin')).toBe(false);
+  });
+  it('prefix match with trailing /', () => {
+    expect(matchRoute('/login/', '/login/admin')).toBe(true);
+    expect(matchRoute('/login/', '/loginz')).toBe(false);
+  });
+  it(':param placeholder matches one segment', () => {
+    expect(matchRoute('/api/check-in/families/:familyId', '/api/check-in/families/42')).toBe(true);
+    expect(matchRoute('/api/check-in/families/:familyId', '/api/check-in/families/42/check-in')).toBe(
+      false,
+    );
+  });
+});
+
+describe('isPublicRoute', () => {
+  it('returns true for a listed public route', () => {
+    expect(isPublicRoute('/login')).toBe(true);
+    expect(isPublicRoute('/check-in/guest')).toBe(true);
+  });
+  it('returns false for a protected route', () => {
+    expect(isPublicRoute('/check-in/admin')).toBe(false);
+    expect(isPublicRoute('/check-in/family')).toBe(false);
+  });
+  it('returns true for :param route matches', () => {
+    expect(isPublicRoute('/api/check-in/families/42')).toBe(true);
+  });
+});
