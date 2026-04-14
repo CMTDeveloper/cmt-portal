@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isAdmin, isTeacher, isFamily, ROLES, type Role } from '../auth/role';
+import { isAdmin, isTeacher, isFamily, ROLES } from '../auth/role';
 
 describe('ROLES', () => {
   it('lists the three known roles', () => {

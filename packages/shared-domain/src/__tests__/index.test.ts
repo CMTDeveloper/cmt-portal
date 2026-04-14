@@ -6,7 +6,10 @@ describe('@cmt/shared-domain', () => {
     expect(sharedDomain).toBeDefined();
   });
 
-  it('is empty in slice A (no exports yet)', () => {
-    expect(Object.keys(sharedDomain)).toEqual([]);
+  it('exports auth surface added in slice B0', () => {
+    expect(Object.keys(sharedDomain)).toContain('ROLES');
+    expect(Object.keys(sharedDomain)).toContain('isAdmin');
+    expect(Object.keys(sharedDomain)).toContain('canAccessRoute');
+    expect(Object.keys(sharedDomain)).toContain('isPublicRoute');
   });
 });
