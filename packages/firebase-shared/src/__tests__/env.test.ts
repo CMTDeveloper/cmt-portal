@@ -79,6 +79,19 @@ describe('readPortalAdminEnv', () => {
   });
 });
 
+describe('readMasterAdminEnv', () => {
+  it('throws when DATABASE_URL is missing', () => {
+    delete process.env.MASTER_FIREBASE_DATABASE_URL;
+    process.env.MASTER_FIREBASE_PROJECT_ID = 'm';
+    process.env.MASTER_FIREBASE_CLIENT_EMAIL = 'sa@m.iam.gserviceaccount.com';
+    process.env.MASTER_FIREBASE_PRIVATE_KEY = 'key';
+    expect(() => readMasterAdminEnv()).toThrow(/MASTER_FIREBASE_DATABASE_URL/);
+    delete process.env.MASTER_FIREBASE_PROJECT_ID;
+    delete process.env.MASTER_FIREBASE_CLIENT_EMAIL;
+    delete process.env.MASTER_FIREBASE_PRIVATE_KEY;
+  });
+});
+
 describe('portalClientEnvSchema', () => {
   it('parses public portal firebase env', () => {
     const result = portalClientEnvSchema.safeParse({

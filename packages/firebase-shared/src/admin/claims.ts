@@ -15,7 +15,7 @@ export async function setPortalUserClaims(uid: string, claims: PortalClaims): Pr
 
 export interface UserWithClaims {
   uid: string;
-  email?: string;
+  email?: string | undefined;
   claims: PortalClaims | Record<string, never>;
 }
 
@@ -23,7 +23,7 @@ export async function getPortalUserWithClaims(uid: string): Promise<UserWithClai
   const user = await portalAuth().getUser(uid);
   return {
     uid: user.uid,
-    email: user.email,
+    ...(user.email !== undefined ? { email: user.email } : {}),
     claims: (user.customClaims as PortalClaims | undefined) ?? {},
   };
 }

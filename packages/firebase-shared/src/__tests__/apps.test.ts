@@ -55,7 +55,7 @@ describe('getPortalApp', () => {
 
   it('restores escaped newlines in the private key', () => {
     getPortalApp();
-    const call = (initializeApp as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const call = (initializeApp as unknown as ReturnType<typeof vi.fn>).mock.calls[0]![0];
     expect(call.credential.privateKey).toContain('\n');
     expect(call.credential.privateKey).not.toContain('\\n');
   });

@@ -2,7 +2,7 @@ import { initializeApp, getApps, type FirebaseApp } from 'firebase/app';
 import { getAuth, type Auth } from 'firebase/auth';
 import { getFirestore, type Firestore } from 'firebase/firestore';
 import { getDatabase, type Database } from 'firebase/database';
-import { readClientEnv } from './env';
+import { portalClientEnvSchema } from './env';
 
 let cachedApp: FirebaseApp | undefined;
 
@@ -15,12 +15,21 @@ export function getClientApp(): FirebaseApp {
     return cachedApp;
   }
 
-  const env = readClientEnv();
+  const parsed = portalClientEnvSchema.safeParse(process.env);
+  if (!parsed.success) {
+    throw new Error(
+      `[firebase-shared] Missing or invalid portal client env vars: ${parsed.error.message}`,
+    );
+  }
+  const env = parsed.data;
+
   cachedApp = initializeApp({
-    apiKey: env.NEXT_PUBLIC_FIREBASE_API_KEY,
-    authDomain: env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-    projectId: env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-    databaseURL: env.NEXT_PUBLIC_FIREBASE_DATABASE_URL,
+    apiKey: env.NEXT_PUBLIC_PORTAL_FIREBASE_API_KEY,
+    authDomain: env.NEXT_PUBLIC_PORTAL_FIREBASE_AUTH_DOMAIN,
+    projectId: env.NEXT_PUBLIC_PORTAL_FIREBASE_PROJECT_ID,
+    storageBucket: env.NEXT_PUBLIC_PORTAL_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: env.NEXT_PUBLIC_PORTAL_FIREBASE_MESSAGING_SENDER_ID,
+    appId: env.NEXT_PUBLIC_PORTAL_FIREBASE_APP_ID,
   });
 
   return cachedApp;

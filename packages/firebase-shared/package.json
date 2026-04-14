@@ -8,9 +8,29 @@
       "types": "./src/index.ts",
       "default": "./src/index.ts"
     },
-    "./admin": {
-      "types": "./src/admin.ts",
-      "default": "./src/admin.ts"
+    "./admin/apps": {
+      "types": "./src/admin/apps.ts",
+      "default": "./src/admin/apps.ts"
+    },
+    "./admin/auth": {
+      "types": "./src/admin/auth.ts",
+      "default": "./src/admin/auth.ts"
+    },
+    "./admin/firestore": {
+      "types": "./src/admin/firestore.ts",
+      "default": "./src/admin/firestore.ts"
+    },
+    "./admin/rtdb": {
+      "types": "./src/admin/rtdb.ts",
+      "default": "./src/admin/rtdb.ts"
+    },
+    "./admin/session": {
+      "types": "./src/admin/session.ts",
+      "default": "./src/admin/session.ts"
+    },
+    "./admin/claims": {
+      "types": "./src/admin/claims.ts",
+      "default": "./src/admin/claims.ts"
     },
     "./client": {
       "types": "./src/client.ts",
