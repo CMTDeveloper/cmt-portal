@@ -1,4 +1,4 @@
-import { FamilyLoginForm } from '@/features/check-in/auth/family-login-form';
+import { FamilyLoginForm } from '@/features/check-in/family';
 
 export const metadata = { title: 'Family sign in — CMT Portal' };
 
