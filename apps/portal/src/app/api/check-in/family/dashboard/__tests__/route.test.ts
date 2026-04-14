@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { testApiHandler } from 'next-test-api-route-handler';
 
-vi.mock('@/features/check-in/shared', () => ({
+vi.mock('@/features/check-in/shared', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/features/check-in/shared')>()),
   findFamilyById: vi.fn(),
 }));
 
@@ -22,6 +23,8 @@ import * as appHandler from '../route';
 beforeEach(() => {
   vi.clearAllMocks();
   fakeCollection.get.mockReset();
+  fakeCollection.orderBy.mockClear();
+  fakeCollection.limit.mockClear();
 });
 
 describe('GET /api/check-in/family/dashboard', () => {
@@ -46,12 +49,21 @@ describe('GET /api/check-in/family/dashboard', () => {
     fakeCollection.get.mockResolvedValueOnce({
       docs: [
         {
-          id: 'ci-1',
+          id: 'ci-old',
           data: () => ({
             sid: '1',
             status: 'present',
             checkedInAt: '2026-04-10T14:00:00Z',
             checkedInBy: 'sevak',
+          }),
+        },
+        {
+          id: 'ci-new',
+          data: () => ({
+            sid: '1',
+            status: 'present',
+            checkedInAt: '2026-04-12T14:00:00Z',
+            checkedInBy: 'family',
           }),
         },
       ],
@@ -64,11 +76,14 @@ describe('GET /api/check-in/family/dashboard', () => {
         expect(res.status).toBe(200);
         const body = await res.json();
         expect(body.family.fid).toBe('42');
-        expect(body.recentCheckIns).toHaveLength(1);
+        expect(body.recentCheckIns).toHaveLength(2);
+        expect(body.recentCheckIns[0].checkInId).toBe('ci-new');
         expect(body.recentCheckIns[0].firstName).toBe('Alice');
         expect(body.paymentStatus).toBe('paid');
       },
     });
+    expect(fakeCollection.orderBy).not.toHaveBeenCalled();
+    expect(fakeCollection.limit).not.toHaveBeenCalled();
   });
 
   it('returns 404 if family not found', async () => {
