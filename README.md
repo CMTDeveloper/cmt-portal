@@ -66,10 +66,63 @@ git config user.email "developer@chinmayatoronto.org"
 This project ships in slices, each with its own design spec and implementation plan. See `docs/superpowers/specs/` and `docs/superpowers/plans/` for the current state.
 
 - **Slice A** — ✅ **Shipped** — Monorepo scaffold + portal app shell + 4 shared packages
-- **Slice B** — Port `chinmaya-family-check-in` into the portal as `apps/portal/src/app/check-in/*` (next)
-- **Slice C** — Port `chinmaya-event-registration` into the portal as `apps/portal/src/app/events/*`
-- **Slice D** — Unified portal-level auth
+- **Slice B** — 🚧 In progress — Port `chinmaya-family-check-in` + portal-wide auth foundation (subsumes former slice D)
+- **Slice C** — Port `chinmaya-event-registration` into `apps/portal/src/app/events/*`
 - **Slice E+** — Future modules (programs, enrollment, retirement of old portal)
+
+## Environment variables
+
+Slice B0 introduced a dual Firebase project model: the portal app uses one Firebase project for Firestore + Auth, and a second for read-only RTDB. Copy the complete variable list from `apps/portal/.env.example` to your local `apps/portal/.env.local`. The required keys are:
+
+```
+# Portal Firebase (Firestore + Auth)
+PORTAL_FIREBASE_PROJECT_ID
+PORTAL_FIREBASE_CLIENT_EMAIL
+PORTAL_FIREBASE_PRIVATE_KEY
+NEXT_PUBLIC_PORTAL_FIREBASE_API_KEY
+NEXT_PUBLIC_PORTAL_FIREBASE_AUTH_DOMAIN
+NEXT_PUBLIC_PORTAL_FIREBASE_PROJECT_ID
+NEXT_PUBLIC_PORTAL_FIREBASE_STORAGE_BUCKET
+NEXT_PUBLIC_PORTAL_FIREBASE_MESSAGING_SENDER_ID
+NEXT_PUBLIC_PORTAL_FIREBASE_APP_ID
+
+# Master Firebase (RTDB reads — always prod)
+MASTER_FIREBASE_PROJECT_ID
+MASTER_FIREBASE_CLIENT_EMAIL
+MASTER_FIREBASE_PRIVATE_KEY
+MASTER_FIREBASE_DATABASE_URL
+NEXT_PUBLIC_MASTER_FIREBASE_DATABASE_URL
+
+# Auth
+TEACHER_PASSPHRASE
+SESSION_COOKIE_EXPIRES_DAYS  # default 5
+
+# AWS (consumed in slice B5)
+AWS_SES_REGION  # default ca-central-1
+AWS_SNS_REGION  # default us-east-1
+AWS_ACCESS_KEY_ID
+AWS_SECRET_ACCESS_KEY
+AWS_SES_FROM_EMAIL
+AWS_SNS_TOPIC_ARN
+```
+
+## Bootstrapping the first admin
+
+Before `/login/admin` works, there must be at least one Firebase user with the `admin` custom claim. Run:
+
+```sh
+pnpm --filter @cmt/portal seed:admin --email=your-admin@example.com
+```
+
+The script prompts for a password (8+ chars), creates the user in the portal Firebase project if missing, and sets the `admin` claim. It is idempotent — re-running it updates the password.
+
+## End-to-end tests (Playwright)
+
+```sh
+pnpm test:e2e
+```
+
+Playwright runs against a locally-served `pnpm --filter @cmt/portal dev -- --port=3001`. Set `E2E_ADMIN_EMAIL` and `E2E_ADMIN_PASSWORD` in your environment before running — the "admin can sign in" test is skipped without them. Playwright is **not** on the pre-push hook; run it before every production promotion.
 
 ## Workflow (solo-dev, main-only)
 

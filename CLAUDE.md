@@ -8,7 +8,7 @@ A Turborepo monorepo for the Chinmaya Mission Toronto unified portal. One Next.j
 
 **Slice A status:** ✅ Shipped (merged to `main`). Spec: `docs/superpowers/specs/2026-04-12-slice-a-portal-scaffold-design.md`, plan: `docs/superpowers/plans/2026-04-12-slice-a-portal-scaffold.md`.
 
-**Next slice:** B — port `chinmaya-family-check-in` into `apps/portal/src/app/check-in/*`. Spec pending.
+**Slice B status:** In progress. Spec: `docs/superpowers/specs/2026-04-13-slice-b-family-check-in-port-design.md`. Decomposed into six sub-slices (B0 → B2 → B3 → B1 → B4 → B5); B0 (portal auth foundation) is the first. Slice D (unified auth) is **removed** from the roadmap — B0 absorbs it.
 
 ## Architecture in one paragraph
 
