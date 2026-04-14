@@ -43,3 +43,9 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+
+# playwright
+apps/portal/playwright-report/
+apps/portal/test-results/
+apps/portal/blob-report/
+apps/portal/.playwright/

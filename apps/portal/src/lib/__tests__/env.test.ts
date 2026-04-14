@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { portalEnvSchema } from '../env';
 
 const base = {
@@ -46,6 +46,7 @@ describe('portalEnvSchema', () => {
   });
 
   it('rejects missing PORTAL_FIREBASE_PRIVATE_KEY with a message mentioning the field', () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { PORTAL_FIREBASE_PRIVATE_KEY: _omit, ...withoutKey } = base;
     const result = portalEnvSchema.safeParse(withoutKey);
     expect(result.success).toBe(false);

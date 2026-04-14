@@ -22,6 +22,7 @@
   },
   "devDependencies": {
     "@cmt/config": "workspace:*",
+    "@playwright/test": "^1.50.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.1.0",
     "@testing-library/user-event": "^14.6.1",
