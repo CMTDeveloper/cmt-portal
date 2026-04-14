@@ -12,7 +12,7 @@ import {
 } from '../rtdb/family-lookup';
 
 beforeEach(() => {
-  vi.clearAllMocks();
+  vi.resetAllMocks();
 });
 
 describe('findFamilyById', () => {
@@ -30,9 +30,74 @@ describe('findFamilyById', () => {
   });
 
   it('returns null when not found', async () => {
-    (readRtdb as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(null);
+    (readRtdb as unknown as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({});
     const family = await findFamilyById('999');
     expect(family).toBeNull();
+  });
+
+  it('falls back to /roster and maps legacy roster rows into a family', async () => {
+    (readRtdb as unknown as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        studentA: {
+          sid: 1001,
+          fid: 42,
+          fname: 'Anika',
+          lname: 'Rao',
+          level: 'Bala Vihar 3',
+          classid: 'BV3-A',
+          payment: 'paid',
+          pemail: 'Parent@Example.com',
+          phphone: '(647) 555-0100',
+          pmphone: '',
+        },
+        studentB: {
+          sid: 1002,
+          fid: 42,
+          fname: 'Dev',
+          lname: 'Rao',
+          level: 'Bala Vihar 1',
+          classid: 'BV1-B',
+          payment: 'paid',
+          pemail: 'Parent@Example.com',
+          phphone: '(647) 555-0100',
+          pmphone: '',
+        },
+      });
+
+    const family = await findFamilyById('42');
+
+    expect(readRtdb).toHaveBeenCalledWith('/families/42');
+    expect(readRtdb).toHaveBeenCalledWith('/roster');
+    expect(family).toMatchObject({
+      fid: '42',
+      name: 'Rao family',
+      paymentStatus: 'paid',
+      contacts: [
+        { type: 'email', value: 'Parent@Example.com' },
+        { type: 'phone', value: '(647) 555-0100' },
+      ],
+      students: [
+        {
+          sid: '1001',
+          fid: '42',
+          firstName: 'Anika',
+          lastName: 'Rao',
+          level: 'Bala Vihar 3',
+          className: 'BV3-A',
+        },
+        {
+          sid: '1002',
+          fid: '42',
+          firstName: 'Dev',
+          lastName: 'Rao',
+          level: 'Bala Vihar 1',
+          className: 'BV1-B',
+        },
+      ],
+    });
   });
 });
 
@@ -60,9 +125,35 @@ describe('findFamilyByContact - email', () => {
   });
 
   it('returns null when no family matches', async () => {
-    (readRtdb as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({});
+    (readRtdb as unknown as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({});
     const family = await findFamilyByContact('email', 'nobody@example.com');
     expect(family).toBeNull();
+  });
+
+  it('falls back to /roster and matches legacy parent email', async () => {
+    (readRtdb as unknown as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({
+        studentA: {
+          sid: 1001,
+          fid: 42,
+          fname: 'Anika',
+          lname: 'Rao',
+          level: 'Bala Vihar 3',
+          classid: 'BV3-A',
+          payment: 'paid',
+          pemail: 'Parent@Example.com',
+          phphone: '(647) 555-0100',
+        },
+      });
+
+    const family = await findFamilyByContact('email', 'parent@example.com');
+
+    expect(readRtdb).toHaveBeenCalledWith('/families');
+    expect(readRtdb).toHaveBeenCalledWith('/roster');
+    expect(family?.fid).toBe('42');
   });
 });
 
@@ -78,6 +169,28 @@ describe('findFamilyByContact - phone', () => {
       },
     });
     const family = await findFamilyByContact('phone', '6475550100');
+    expect(family?.fid).toBe('42');
+  });
+
+  it('falls back to /roster and matches legacy parent phone by last 10 digits', async () => {
+    (readRtdb as unknown as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({
+        studentA: {
+          sid: 1001,
+          fid: 42,
+          fname: 'Anika',
+          lname: 'Rao',
+          level: 'Bala Vihar 3',
+          classid: 'BV3-A',
+          payment: 'paid',
+          pemail: 'parent@example.com',
+          phphone: '+1 (647) 555-0100',
+        },
+      });
+
+    const family = await findFamilyByContact('phone', '6475550100');
+
     expect(family?.fid).toBe('42');
   });
 });
