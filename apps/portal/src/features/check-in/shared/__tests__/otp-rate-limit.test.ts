@@ -2,7 +2,16 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const fakeDoc = { get: vi.fn(), set: vi.fn() };
 const fakeCollection = { doc: vi.fn(() => fakeDoc) };
-const fakeFirestore = { collection: vi.fn(() => fakeCollection) };
+
+// Transaction mock: calls the callback with a tx object that delegates to fakeDoc
+const fakeTx = {
+  get: vi.fn(async () => fakeDoc.get()),
+  set: vi.fn((ref: unknown, data: unknown) => fakeDoc.set(data)),
+};
+const fakeFirestore = {
+  collection: vi.fn(() => fakeCollection),
+  runTransaction: vi.fn(async (cb: (tx: typeof fakeTx) => Promise<unknown>) => cb(fakeTx)),
+};
 
 vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
   portalFirestore: vi.fn(() => fakeFirestore),
@@ -18,6 +27,15 @@ beforeEach(() => {
   vi.clearAllMocks();
   fakeDoc.get.mockReset();
   fakeDoc.set.mockReset();
+  fakeTx.get.mockReset();
+  fakeTx.set.mockReset();
+  fakeFirestore.runTransaction.mockReset();
+  // Restore default transaction behaviour
+  fakeFirestore.runTransaction.mockImplementation(
+    async (cb: (tx: typeof fakeTx) => Promise<unknown>) => cb(fakeTx),
+  );
+  fakeTx.get.mockImplementation(async () => fakeDoc.get());
+  fakeTx.set.mockImplementation((_ref: unknown, data: unknown) => fakeDoc.set(data));
 });
 
 describe('checkAndRecordOtpRateLimit', () => {
@@ -25,6 +43,7 @@ describe('checkAndRecordOtpRateLimit', () => {
     fakeDoc.get.mockResolvedValueOnce({ exists: false });
     const result = await checkAndRecordOtpRateLimit('a@b.com');
     expect(result.allowed).toBe(true);
+    expect(fakeFirestore.runTransaction).toHaveBeenCalled();
     expect(fakeDoc.set).toHaveBeenCalled();
   });
 
@@ -59,5 +78,14 @@ describe('checkAndRecordOtpRateLimit', () => {
     expect(calls[0]).toBeDefined();
     const write = calls[0]?.[0] as { count: number };
     expect(write.count).toBe(1);
+  });
+
+  // Firestore transaction semantics (runTransaction auto-retries on contention)
+  // handle concurrent requests serializing correctly. The mock validates the
+  // happy-path logic; true concurrency is guaranteed by Firestore, not unit tests.
+  it('uses runTransaction to serialize concurrent requests', async () => {
+    fakeDoc.get.mockResolvedValueOnce({ exists: false });
+    await checkAndRecordOtpRateLimit('a@b.com');
+    expect(fakeFirestore.runTransaction).toHaveBeenCalledOnce();
   });
 });
