@@ -179,13 +179,14 @@ function uniqueContacts(contacts: ContactInfo[]) {
 }
 
 function paymentStatusFor(rows: LegacyRosterStudent[]): PaymentStatus {
-  const statuses = rows
-    .map((row) => (row.payment ?? '').trim().toLowerCase())
-    .filter((s) => s.length > 0);
-  if (statuses.length === 0) return 'partial';
-  if (statuses.some((p) => p.includes('unpaid') || p.includes('due'))) return 'unpaid';
-  if (statuses.some((p) => p.includes('partial'))) return 'partial';
-  if (statuses.every((p) => p.includes('paid') && !p.includes('unpaid'))) return 'paid';
+  const raw = rows.map((row) => (row.payment ?? '').trim().toLowerCase());
+  const known = raw.filter((s) => s.length > 0);
+  if (known.length === 0) return 'partial'; // all unknown → warn
+  if (known.some((p) => p.includes('unpaid') || p.includes('due'))) return 'unpaid';
+  if (known.some((p) => p.includes('partial'))) return 'partial';
+  // Some rows had unknown/empty values mixed with paid → warn (don't silently pass them off as paid)
+  if (known.length < raw.length) return 'partial';
+  if (known.every((p) => p.includes('paid'))) return 'paid';
   return 'partial';
 }
 

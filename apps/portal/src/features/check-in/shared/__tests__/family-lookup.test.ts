@@ -310,14 +310,19 @@ describe('findFamilyById numeric fid coercion', () => {
     expect(family?.fid).toBe('42');
   });
 
-  it('matches fid "042" (leading zero) to numeric 42', async () => {
+  it('matches fid "042" (leading zero) to numeric 42 and returns canonical stored form', async () => {
     (readRtdb as unknown as ReturnType<typeof vi.fn>)
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce({
         studentA: { sid: 1001, fid: 42, fname: 'Anika', lname: 'Rao', payment: 'paid' },
       });
+    // Lookup accepts '042' via numeric coercion, but the returned family.fid is
+    // always the canonical stored form ('42'). This ensures two different lookup
+    // inputs pointing at the same family produce identical family.fid values,
+    // which is required for consistent session cookies and downstream Firestore
+    // queries keyed on fid.
     const family = await findFamilyById('042');
-    expect(family?.fid).toBe('042');
+    expect(family?.fid).toBe('42');
   });
 });
 
