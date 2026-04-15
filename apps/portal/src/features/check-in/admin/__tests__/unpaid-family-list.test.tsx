@@ -47,9 +47,8 @@ describe('UnpaidFamilyList', () => {
       '/api/check-in/notifications/send-email',
       expect.objectContaining({ method: 'POST' }),
     );
-    const body = JSON.parse(
-      (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1].body,
-    );
+    const calls = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls as Array<[string, { body: string }]>;
+    const body = JSON.parse(calls[0]![1]!.body);
     expect(body.to).toBe('a@b.com');
     expect(body.template).toBe('donation-thank-you');
   });
