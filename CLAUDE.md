@@ -53,6 +53,16 @@ A Turborepo monorepo for the Chinmaya Mission Toronto unified portal. One Next.j
 
 The original 4-phase product brief is in `docs/superpowers/specs/reference/Chinmaya Setu Prototype.{md,pdf}`. **Phase 1 of that brief is already implemented as the standalone `chinmaya-family-check-in` app and will be ported into this portal in slice B.** The Setu prototype's `chinmaya-setu` repo (a different prior-dev attempt with a Supabase schema and ~83 shadcn components) is REFERENCE ONLY — its data model is intentionally NOT being adopted because it reinvents what production already has. We did salvage the 12 shadcn components in slice A.
 
+## B2 notes
+
+1. **Family UID derivation**: `sha256(normalizedContact)` is used as the Firebase Auth UID for family users. The hash is unsalted — deliberate, because the same contact must produce the same UID across redeploys. UIDs are therefore computable by anyone who knows a user's email/phone, but UID alone is not a credential.
+
+2. **Firestore composite index requirement**: the family dashboard query requires a composite index on `check_in_events(fid ASC, checkedInAt DESC)`. The index is declared in `firestore.indexes.json` at the repo root (added in B2). Before the first production deploy after B2, run `firebase deploy --only firestore:indexes` against the prod Firebase project (`chinmaya-setu-715b8`) and UAT (`chinmaya-setu-uat`). The portal will fail at runtime with a "query requires an index" error if the index is not deployed.
+
+3. **Legacy roster schema**: the RTDB roster uses a different schema than what the Family type suggests — student-row-keyed with `fname/lname/pemail/phphone/payment/grade` fields. The parser in `features/check-in/shared/rtdb/family-lookup.ts` adapts the legacy shape into the portal's `Family` type. Parent rows are identified by `grade === 99`. Payment status defaults to `'partial'` on unknown/missing data so sevaks notice.
+
+4. **Timestamps**: all user-facing timestamps render in `America/Toronto` timezone regardless of Vercel function region.
+
 ## Things not to do
 
 - Don't add a new package to `packages/` without justifying two-or-more consumers (discipline 6).
