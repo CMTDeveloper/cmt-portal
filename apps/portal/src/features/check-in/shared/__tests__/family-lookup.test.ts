@@ -204,3 +204,212 @@ describe('normalizeContact', () => {
     expect(normalizeContact('phone', '+1 (647) 555-0100')).toBe('16475550100');
   });
 });
+
+describe('paymentStatusFor (via findFamilyById roster fallback)', () => {
+  function makeRow(payment: string | null | undefined, fid = 42, sid = 1) {
+    return { sid, fid, fname: 'A', lname: 'B', payment: payment as string | undefined };
+  }
+
+  async function getStatus(rows: ReturnType<typeof makeRow>[]) {
+    const roster: Record<string, ReturnType<typeof makeRow>> = {};
+    rows.forEach((r, i) => { roster[`row${i}`] = r; });
+    (readRtdb as unknown as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(roster);
+    const family = await findFamilyById('42');
+    return family?.paymentStatus;
+  }
+
+  it('defaults to partial when all rows have empty payment', async () => {
+    expect(await getStatus([makeRow(''), makeRow('')])).toBe('partial');
+  });
+
+  it('defaults to partial when all rows have null payment', async () => {
+    expect(await getStatus([makeRow(null), makeRow(null)])).toBe('partial');
+  });
+
+  it('returns paid when every row explicitly says paid', async () => {
+    expect(await getStatus([makeRow('paid'), makeRow('Paid')])).toBe('paid');
+  });
+
+  it('returns partial when some rows say paid and others have unknown values', async () => {
+    expect(await getStatus([makeRow('paid'), makeRow('')])).toBe('partial');
+  });
+
+  it('returns unpaid when any row contains unpaid', async () => {
+    expect(await getStatus([makeRow('paid'), makeRow('unpaid')])).toBe('unpaid');
+  });
+
+  it('returns unpaid when any row contains due', async () => {
+    expect(await getStatus([makeRow('paid'), makeRow('due')])).toBe('unpaid');
+  });
+});
+
+describe('rosterContactsFor parent-row filtering', () => {
+  it('filters to parent rows (grade 99) when present', async () => {
+    (readRtdb as unknown as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        parentRow: {
+          sid: 999,
+          fid: 42,
+          fname: 'Parent',
+          lname: 'Smith',
+          plname: 'Smith',
+          grade: 99,
+          pemail: 'parent@example.com',
+          phphone: '6475550100',
+          payment: 'paid',
+        },
+        studentRow: {
+          sid: 1001,
+          fid: 42,
+          fname: 'Kid',
+          lname: 'Smith',
+          grade: 3,
+          pemail: 'student-email@example.com',
+          payment: 'paid',
+        },
+      });
+    const family = await findFamilyById('42');
+    const emails = family?.contacts.filter((c) => c.type === 'email').map((c) => c.value) ?? [];
+    expect(emails).toContain('parent@example.com');
+    expect(emails).not.toContain('student-email@example.com');
+  });
+
+  it('falls back to all rows and warns when no parent rows found', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    (readRtdb as unknown as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        studentRow: {
+          sid: 1001,
+          fid: 42,
+          fname: 'Kid',
+          lname: 'Smith',
+          pemail: 'kid@example.com',
+          payment: 'paid',
+        },
+      });
+    const family = await findFamilyById('42');
+    const emails = family?.contacts.filter((c) => c.type === 'email').map((c) => c.value) ?? [];
+    expect(emails).toContain('kid@example.com');
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+});
+
+describe('findFamilyById numeric fid coercion', () => {
+  it('matches numeric fid 42 stored as number to string lookup "42"', async () => {
+    (readRtdb as unknown as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        studentA: { sid: 1001, fid: 42, fname: 'Anika', lname: 'Rao', payment: 'paid' },
+      });
+    const family = await findFamilyById('42');
+    expect(family?.fid).toBe('42');
+  });
+
+  it('matches fid "042" (leading zero) to numeric 42', async () => {
+    (readRtdb as unknown as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        studentA: { sid: 1001, fid: 42, fname: 'Anika', lname: 'Rao', payment: 'paid' },
+      });
+    const family = await findFamilyById('042');
+    expect(family?.fid).toBe('042');
+  });
+});
+
+describe('family name from parent row', () => {
+  it('uses parent row plname even when student row comes first', async () => {
+    (readRtdb as unknown as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        studentFirst: {
+          sid: 1001,
+          fid: 42,
+          fname: 'Kid',
+          lname: 'StudentSurname',
+          grade: 3,
+          payment: 'paid',
+        },
+        parentSecond: {
+          sid: 999,
+          fid: 42,
+          fname: 'Parent',
+          lname: 'ParentSurname',
+          plname: 'ParentSurname',
+          grade: 99,
+          pemail: 'parent@example.com',
+          payment: 'paid',
+        },
+      });
+    const family = await findFamilyById('42');
+    expect(family?.name).toBe('ParentSurname family');
+  });
+});
+
+describe('findFamilyByContact edge cases', () => {
+  it('matches contact value with trailing whitespace after normalization', async () => {
+    (readRtdb as unknown as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({
+        parentRow: {
+          sid: 999,
+          fid: 42,
+          fname: 'Parent',
+          lname: 'Smith',
+          grade: 99,
+          pemail: 'parent@example.com  ',
+          payment: 'paid',
+        },
+      });
+    const family = await findFamilyByContact('email', 'parent@example.com');
+    expect(family?.fid).toBe('42');
+  });
+
+  it('skips malformed roster row missing sid', async () => {
+    (readRtdb as unknown as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        malformedRow: { fid: 42, fname: 'Bad', lname: 'Row', payment: 'paid' },
+        goodRow: { sid: 1001, fid: 42, fname: 'Good', lname: 'Row', payment: 'paid' },
+      });
+    const family = await findFamilyById('42');
+    expect(family).not.toBeNull();
+    expect(family?.students).toHaveLength(1);
+    expect(family?.students[0].sid).toBe('1001');
+  });
+
+  it('rejects whitespace-only contact values', async () => {
+    (readRtdb as unknown as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({
+        parentRow: {
+          sid: 999,
+          fid: 42,
+          fname: 'Parent',
+          lname: 'Smith',
+          grade: 99,
+          pemail: '   ',
+          phphone: '  ',
+          payment: 'paid',
+        },
+      });
+    const family = await findFamilyByContact('email', 'parent@example.com');
+    expect(family).toBeNull();
+  });
+
+  it('mixed statuses paid+unpaid+empty → unpaid (unpaid wins)', async () => {
+    (readRtdb as unknown as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        r1: { sid: 1, fid: 42, fname: 'A', lname: 'B', payment: 'paid' },
+        r2: { sid: 2, fid: 42, fname: 'C', lname: 'D', payment: 'unpaid' },
+        r3: { sid: 3, fid: 42, fname: 'E', lname: 'F', payment: '' },
+      });
+    const family = await findFamilyById('42');
+    expect(family?.paymentStatus).toBe('unpaid');
+  });
+});

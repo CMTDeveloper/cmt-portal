@@ -14,6 +14,7 @@ interface LegacyRosterStudent {
   fid?: string | number;
   fname?: string;
   lname?: string;
+  plname?: string;
   level?: string;
   classid?: string;
   payment?: string;
@@ -22,7 +23,8 @@ interface LegacyRosterStudent {
   phphone?: string;
   pmphone?: string;
   phone?: string;
-  plname?: string;
+  // grade 99 identifies parent rows in the legacy RTDB roster schema
+  grade?: number;
 }
 
 export async function findFamilyById(fid: string): Promise<Family | null> {
@@ -33,7 +35,7 @@ export async function findFamilyById(fid: string): Promise<Family | null> {
 
   const roster = (await readRtdb<Record<string, LegacyRosterStudent>>('/roster')) ?? {};
   return familyFromRosterRows(
-    Object.values(roster).filter((student) => String(student.fid ?? '') === fid),
+    Object.values(roster).filter((student) => fidMatches(student.fid, fid)),
   );
 }
 
@@ -54,7 +56,8 @@ export async function findFamilyByContact(
   }
 
   const roster = (await readRtdb<Record<string, LegacyRosterStudent>>('/roster')) ?? {};
-  const matchingRow = Object.values(roster).find((student) =>
+  const allRows = Object.values(roster);
+  const matchingRow = allRows.find((student) =>
     rosterContactsFor(student).some((contact) => {
       if (contact.type !== type) return false;
       return contactsMatch(type, normalizeContact(type, contact.value), target);
@@ -66,7 +69,7 @@ export async function findFamilyByContact(
   }
 
   return familyFromRosterRows(
-    Object.values(roster).filter((student) => String(student.fid ?? '') === String(matchingRow.fid)),
+    allRows.filter((student) => fidMatches(student.fid, String(matchingRow.fid))),
   );
 }
 
@@ -98,9 +101,12 @@ function familyFromRosterRows(rows: LegacyRosterStudent[]): Family | null {
     return null;
   }
 
-  const lastName = first?.lname || first?.plname;
-  const contacts = uniqueContacts(rows.flatMap(rosterContactsFor));
+  const parentRows = rows.filter((r) => r.grade === 99);
+  const nameSource = parentRows[0] ?? first;
+  const lastName = nameSource.plname || nameSource.lname;
+  const contacts = uniqueContacts(contactRowsFor(rows).flatMap(rosterContactsFor));
   const students = rows
+    .filter((r) => r.grade !== 99)
     .map(mapRosterStudent)
     .filter((student): student is Student => Boolean(student));
 
@@ -134,16 +140,27 @@ function mapRosterStudent(student: LegacyRosterStudent): Student | null {
   return mapped;
 }
 
+// Returns the rows to extract contacts from: parent rows (grade 99) when present,
+// falling back to all rows with a warning if the roster lacks grade metadata.
+function contactRowsFor(rows: LegacyRosterStudent[]): LegacyRosterStudent[] {
+  const parents = rows.filter((r) => r.grade === 99);
+  if (parents.length > 0) return parents;
+  console.warn(
+    'family-lookup: no parent rows (grade=99) found; falling back to all rows for contact extraction',
+  );
+  return rows;
+}
+
 function rosterContactsFor(student: LegacyRosterStudent): ContactInfo[] {
   const contacts: ContactInfo[] = [];
   for (const value of [student.pemail, student.email]) {
-    if (value) {
-      contacts.push({ type: 'email', value });
+    if (value && value.trim().length > 0) {
+      contacts.push({ type: 'email', value: value.trim() });
     }
   }
   for (const value of [student.phphone, student.pmphone, student.phone]) {
-    if (value) {
-      contacts.push({ type: 'phone', value });
+    if (value && value.trim().length > 0) {
+      contacts.push({ type: 'phone', value: value.trim() });
     }
   }
   return contacts;
@@ -162,12 +179,23 @@ function uniqueContacts(contacts: ContactInfo[]) {
 }
 
 function paymentStatusFor(rows: LegacyRosterStudent[]): PaymentStatus {
-  const statuses = rows.map((row) => (row.payment ?? '').toLowerCase());
-  if (statuses.some((payment) => payment.includes('unpaid') || payment.includes('due'))) {
-    return 'unpaid';
-  }
-  if (statuses.some((payment) => payment.includes('partial'))) {
-    return 'partial';
-  }
-  return 'paid';
+  const statuses = rows
+    .map((row) => (row.payment ?? '').trim().toLowerCase())
+    .filter((s) => s.length > 0);
+  if (statuses.length === 0) return 'partial';
+  if (statuses.some((p) => p.includes('unpaid') || p.includes('due'))) return 'unpaid';
+  if (statuses.some((p) => p.includes('partial'))) return 'partial';
+  if (statuses.every((p) => p.includes('paid') && !p.includes('unpaid'))) return 'paid';
+  return 'partial';
+}
+
+// Numeric-coercing fid equality: handles stored-as-number vs string-with-leading-zero mismatches.
+function fidMatches(stored: unknown, target: string): boolean {
+  if (stored === undefined || stored === null) return false;
+  const a = String(stored);
+  if (a === target) return true;
+  const an = Number(a);
+  const bn = Number(target);
+  if (!Number.isFinite(an) || !Number.isFinite(bn)) return false;
+  return an === bn;
 }
