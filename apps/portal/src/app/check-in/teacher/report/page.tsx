@@ -2,7 +2,6 @@ import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { listClasses } from '@/features/check-in/shared';
 import { AttendanceReportTable } from '@/features/check-in/teacher/attendance-report-table';
-import { toCsv } from '@/features/check-in/teacher/csv';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { getRosterForClass } from '@/features/check-in/shared';
 import { flags } from '@/lib/flags';
