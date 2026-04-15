@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { testApiHandler } from 'next-test-api-route-handler';
 
+const flagsMock = vi.hoisted(() => ({ checkInFamily: true }));
+
+vi.mock('@/lib/flags', () => ({ flags: flagsMock }));
+
 vi.mock('@/features/check-in/shared', () => ({
   verifyCode: vi.fn(),
   findFamilyByContact: vi.fn(),
@@ -42,6 +46,7 @@ import * as appHandler from '../route';
 beforeEach(() => {
   vi.clearAllMocks();
   process.env.SESSION_COOKIE_EXPIRES_DAYS = '5';
+  flagsMock.checkInFamily = true;
 });
 
 function happyPathMocks() {
@@ -63,6 +68,22 @@ function happyPathMocks() {
 }
 
 describe('POST /api/auth/family/verify-code', () => {
+  it('returns 404 when checkInFamily flag is off', async () => {
+    flagsMock.checkInFamily = false;
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        const res = await fetch({
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ type: 'email', value: 'a@b.com', code: '123456' }),
+        });
+        expect(res.status).toBe(404);
+      },
+    });
+    expect(verifyCode).not.toHaveBeenCalled();
+  });
+
   it('returns 400 on invalid body', async () => {
     await testApiHandler({
       appHandler,

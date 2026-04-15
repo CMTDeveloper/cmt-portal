@@ -1,6 +1,7 @@
 import { randomInt } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+import { flags } from '@/lib/flags';
 import {
   checkAndRecordOtpRateLimit,
   findFamilyByContact,
@@ -26,6 +27,10 @@ export async function POST(req: Request) {
   const parsed = bodySchema.safeParse(raw);
   if (!parsed.success) {
     return NextResponse.json({ error: 'bad-request' }, { status: 400 });
+  }
+
+  if (!flags.checkInFamily) {
+    return NextResponse.json({ error: 'not-found' }, { status: 404 });
   }
 
   const normalized = normalizeContact(parsed.data.type, parsed.data.value);

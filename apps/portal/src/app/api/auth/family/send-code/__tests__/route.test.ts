@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { testApiHandler } from 'next-test-api-route-handler';
 
+const flagsMock = vi.hoisted(() => ({ checkInFamily: true }));
+
+vi.mock('@/lib/flags', () => ({ flags: flagsMock }));
+
 vi.mock('@/features/check-in/shared', () => ({
   findFamilyByContact: vi.fn(),
   storeVerificationCode: vi.fn(),
@@ -21,9 +25,26 @@ import * as appHandler from '../route';
 
 beforeEach(() => {
   vi.clearAllMocks();
+  flagsMock.checkInFamily = true;
 });
 
 describe('POST /api/auth/family/send-code', () => {
+  it('returns 404 when checkInFamily flag is off', async () => {
+    flagsMock.checkInFamily = false;
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        const res = await fetch({
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ type: 'email', value: 'a@b.com' }),
+        });
+        expect(res.status).toBe(404);
+      },
+    });
+    expect(checkAndRecordOtpRateLimit).not.toHaveBeenCalled();
+  });
+
   it('returns 400 on invalid body', async () => {
     await testApiHandler({
       appHandler,
