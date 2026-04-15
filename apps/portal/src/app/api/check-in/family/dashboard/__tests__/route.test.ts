@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { testApiHandler } from 'next-test-api-route-handler';
 
-vi.mock('@/features/check-in/shared', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/features/check-in/shared')>()),
+vi.mock('@/features/check-in/shared', () => ({
   findFamilyById: vi.fn(),
+  loadRecentFamilyCheckIns: vi.fn(),
 }));
 
 const fakeQuery = {
@@ -17,14 +17,21 @@ vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
   portalFirestore: vi.fn(() => ({ collection: vi.fn(() => fakeCollection) })),
 }));
 
-import { findFamilyById } from '@/features/check-in/shared';
+const mockFlags = vi.hoisted(() => ({ checkInFamily: true }));
+vi.mock('@/lib/flags', () => ({ flags: mockFlags }));
+
+import { findFamilyById, loadRecentFamilyCheckIns } from '@/features/check-in/shared';
 import * as appHandler from '../route';
+
+const mockLoadRecentFamilyCheckIns = loadRecentFamilyCheckIns as unknown as ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockFlags.checkInFamily = true;
   fakeCollection.get.mockReset();
   fakeCollection.orderBy.mockClear();
   fakeCollection.limit.mockClear();
+  mockLoadRecentFamilyCheckIns.mockResolvedValue([]);
 });
 
 describe('GET /api/check-in/family/dashboard', () => {
@@ -46,28 +53,26 @@ describe('GET /api/check-in/family/dashboard', () => {
       contacts: [],
       students: [{ sid: '1', fid: '42', firstName: 'Alice', lastName: 'Acme', level: 'K' }],
     });
-    fakeCollection.get.mockResolvedValueOnce({
-      docs: [
-        {
-          id: 'ci-old',
-          data: () => ({
-            sid: '1',
-            status: 'present',
-            checkedInAt: '2026-04-10T14:00:00Z',
-            checkedInBy: 'sevak',
-          }),
-        },
-        {
-          id: 'ci-new',
-          data: () => ({
-            sid: '1',
-            status: 'present',
-            checkedInAt: '2026-04-12T14:00:00Z',
-            checkedInBy: 'family',
-          }),
-        },
-      ],
-    });
+    mockLoadRecentFamilyCheckIns.mockResolvedValueOnce([
+      {
+        checkInId: 'ci-new',
+        sid: '1',
+        firstName: 'Alice',
+        lastName: 'Acme',
+        status: 'present',
+        checkedInAt: '2026-04-12T14:00:00Z',
+        checkedInBy: 'family',
+      },
+      {
+        checkInId: 'ci-old',
+        sid: '1',
+        firstName: 'Alice',
+        lastName: 'Acme',
+        status: 'present',
+        checkedInAt: '2026-04-10T14:00:00Z',
+        checkedInBy: 'sevak',
+      },
+    ]);
     await testApiHandler({
       appHandler,
       requestPatcher: (req) => req.headers.set('x-portal-family-id', '42'),
@@ -82,8 +87,6 @@ describe('GET /api/check-in/family/dashboard', () => {
         expect(body.paymentStatus).toBe('paid');
       },
     });
-    expect(fakeCollection.orderBy).not.toHaveBeenCalled();
-    expect(fakeCollection.limit).not.toHaveBeenCalled();
   });
 
   it('returns 404 if family not found', async () => {
@@ -95,6 +98,20 @@ describe('GET /api/check-in/family/dashboard', () => {
       test: async ({ fetch }) => {
         const res = await fetch({ method: 'GET' });
         expect(res.status).toBe(404);
+      },
+    });
+  });
+
+  it('returns 404 when checkInFamily flag is off', async () => {
+    mockFlags.checkInFamily = false;
+    await testApiHandler({
+      appHandler,
+      requestPatcher: (req) => req.headers.set('x-portal-family-id', '42'),
+      test: async ({ fetch }) => {
+        const res = await fetch({ method: 'GET' });
+        expect(res.status).toBe(404);
+        const body = await res.json();
+        expect(body.error).toBe('not-found');
       },
     });
   });

@@ -9,10 +9,12 @@ vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
   portalFirestore: vi.fn(() => ({ collection: vi.fn(() => fakeCollection) })),
 }));
 
-vi.mock('@/features/check-in/shared', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/features/check-in/shared')>()),
+vi.mock('@/features/check-in/shared', () => ({
   findFamilyById: vi.fn(),
 }));
+
+const mockFlags = vi.hoisted(() => ({ checkInFamily: true }));
+vi.mock('@/lib/flags', () => ({ flags: mockFlags }));
 
 import { findFamilyById } from '@/features/check-in/shared';
 import * as appHandler from '../route';
@@ -33,6 +35,7 @@ const familyWith123 = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockFlags.checkInFamily = true;
   fakeCollection.add.mockResolvedValue(fakeAddResults);
   mockFindFamilyById.mockResolvedValue(familyWith123);
 });
@@ -181,5 +184,26 @@ describe('POST /api/check-in/family/self-check-in', () => {
     const write = writes[0]?.[0] as { checkedInBy: string; recordedByUid: string };
     expect(write.checkedInBy).toBe('family');
     expect(write.recordedByUid).toBe('u1');
+  });
+
+  it('returns 404 when checkInFamily flag is off', async () => {
+    mockFlags.checkInFamily = false;
+    await testApiHandler({
+      appHandler,
+      requestPatcher: (req) => {
+        req.headers.set('x-portal-family-id', '42');
+        req.headers.set('x-portal-uid', 'u1');
+      },
+      test: async ({ fetch }) => {
+        const res = await fetch({
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ students: { '1': true } }),
+        });
+        expect(res.status).toBe(404);
+        const body = await res.json();
+        expect(body.error).toBe('not-found');
+      },
+    });
   });
 });

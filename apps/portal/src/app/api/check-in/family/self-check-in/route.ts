@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { findFamilyById } from '@/features/check-in/shared';
+import { flags } from '@/lib/flags';
 import type { FamilySelfCheckInResponse } from '@cmt/shared-domain/check-in';
 
 export const runtime = 'nodejs';
@@ -14,6 +15,10 @@ const bodySchema = z.object({
 });
 
 export async function POST(req: Request) {
+  if (!flags.checkInFamily) {
+    return NextResponse.json({ error: 'not-found' }, { status: 404 });
+  }
+
   const familyId = req.headers.get('x-portal-family-id');
   const uid = req.headers.get('x-portal-uid');
   if (!familyId || !uid) {
