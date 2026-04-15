@@ -1,0 +1,84 @@
+import { notFound } from 'next/navigation';
+import Link from 'next/link';
+import { listClasses } from '@/features/check-in/shared';
+import { AttendanceReportTable } from '@/features/check-in/teacher/attendance-report-table';
+import { toCsv } from '@/features/check-in/teacher/csv';
+import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
+import { getRosterForClass } from '@/features/check-in/shared';
+import { flags } from '@/lib/flags';
+import type { AttendanceStatus, TeacherReportEntry } from '@cmt/shared-domain/check-in';
+
+export const metadata = { title: 'Attendance report — CMT Portal' };
+export const dynamic = 'force-dynamic';
+
+interface Props {
+  searchParams: Promise<{ classId?: string; from?: string; to?: string }>;
+}
+
+export default async function ReportPage({ searchParams }: Props) {
+  if (!flags.checkInTeacher) notFound();
+  const params = await searchParams;
+  const classes = await listClasses();
+  const classId = params.classId ?? classes[0]?.classId;
+
+  let entries: TeacherReportEntry[] = [];
+  if (classId) {
+    let q = portalFirestore().collectionGroup(classId).where('classId', '==', classId);
+    if (params.from) q = q.where('date', '>=', params.from);
+    if (params.to) q = q.where('date', '<=', params.to);
+    q = q.orderBy('date', 'desc');
+    const snap = await q.get();
+    const roster = await getRosterForClass(classId);
+    const studentMap = new Map((roster?.students ?? []).map((s) => [s.sid, s]));
+    entries = snap.docs.map((d) => {
+      const data = d.data() as { date: string; classId: string; sid: string; status: AttendanceStatus };
+      const st = studentMap.get(data.sid);
+      return {
+        date: data.date,
+        classId: data.classId,
+        sid: data.sid,
+        firstName: st?.firstName ?? 'Unknown',
+        lastName: st?.lastName ?? '',
+        status: data.status,
+      };
+    });
+  }
+
+  return (
+    <main className="mx-auto flex min-h-screen max-w-5xl flex-col gap-4 p-6">
+      <header className="flex items-start justify-between">
+        <h1 className="text-2xl font-bold text-[hsl(var(--heading))]">Attendance report</h1>
+        <Link href="/check-in/teacher" className="text-sm underline">
+          ← Back
+        </Link>
+      </header>
+
+      <form action="/check-in/teacher/report" method="get" className="flex flex-wrap gap-2">
+        <select name="classId" defaultValue={classId} className="rounded border px-2 py-1">
+          {classes.map((c) => (
+            <option key={c.classId} value={c.classId}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+        <input name="from" type="date" defaultValue={params.from ?? ''} className="rounded border px-2 py-1" />
+        <input name="to" type="date" defaultValue={params.to ?? ''} className="rounded border px-2 py-1" />
+        <button type="submit" className="rounded bg-[hsl(var(--primary))] px-3 py-1 text-white">
+          Filter
+        </button>
+      </form>
+
+      {classId && (
+        <a
+          href={`/api/check-in/teacher/report?classId=${classId}${params.from ? `&from=${params.from}` : ''}${params.to ? `&to=${params.to}` : ''}`}
+          className="self-start text-sm underline"
+          download
+        >
+          Download CSV
+        </a>
+      )}
+
+      <AttendanceReportTable entries={entries} />
+    </main>
+  );
+}
