@@ -1,0 +1,62 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { GuestCheckInForm } from '../guest-check-in-form';
+
+beforeEach(() => {
+  vi.spyOn(global, 'fetch').mockReset();
+  vi.stubGlobal('location', { assign: vi.fn(), href: '' });
+});
+
+describe('GuestCheckInForm', () => {
+  it('renders required fields', () => {
+    render(<GuestCheckInForm />);
+    expect(screen.getByLabelText(/first name/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/last name/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/adults/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/children/i)).toBeInTheDocument();
+  });
+
+  it('submits to POST /api/check-in/guests', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ success: true, id: 'g-1' }),
+    } as Response);
+
+    render(<GuestCheckInForm />);
+    await user.type(screen.getByLabelText(/first name/i), 'Carol');
+    await user.type(screen.getByLabelText(/last name/i), 'Visitor');
+    await user.type(screen.getByLabelText(/email/i), 'c@v.com');
+    await user.clear(screen.getByLabelText(/adults/i));
+    await user.type(screen.getByLabelText(/adults/i), '2');
+    await user.clear(screen.getByLabelText(/children/i));
+    await user.type(screen.getByLabelText(/children/i), '1');
+    await user.click(screen.getByRole('button', { name: /check in/i }));
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      '/api/check-in/guests',
+      expect.objectContaining({
+        method: 'POST',
+      }),
+    );
+    const body = JSON.parse(
+      (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1].body,
+    );
+    expect(body.firstName).toBe('Carol');
+    expect(body.numberOfAdults).toBe(2);
+  });
+
+  it('shows success message after submit', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ success: true, id: 'g-1' }),
+    } as Response);
+    render(<GuestCheckInForm />);
+    await user.type(screen.getByLabelText(/first name/i), 'Carol');
+    await user.type(screen.getByLabelText(/last name/i), 'Visitor');
+    await user.click(screen.getByRole('button', { name: /check in/i }));
+    expect(await screen.findByText(/thank you/i)).toBeInTheDocument();
+  });
+});
