@@ -1,0 +1,13 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "check_in_events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "fid", "order": "ASCENDING" },
+        { "fieldPath": "checkedInAt", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
