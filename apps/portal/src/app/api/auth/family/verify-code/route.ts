@@ -36,12 +36,12 @@ export async function POST(req: Request) {
   const normalized = normalizeContact(parsed.data.type, parsed.data.value);
   const ok = await verifyCode(normalized, parsed.data.code, parsed.data.type);
   if (!ok) {
-    return NextResponse.json({ error: 'invalid-code' }, { status: 401 });
+    return NextResponse.json({ error: 'invalid-or-expired' }, { status: 401 });
   }
 
   const family = await findFamilyByContact(parsed.data.type, parsed.data.value);
   if (!family) {
-    return NextResponse.json({ error: 'family-not-found' }, { status: 404 });
+    return NextResponse.json({ error: 'invalid-or-expired' }, { status: 401 });
   }
 
   const uid = sha256Hex(normalized);

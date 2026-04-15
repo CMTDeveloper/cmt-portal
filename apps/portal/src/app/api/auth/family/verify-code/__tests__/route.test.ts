@@ -77,7 +77,7 @@ describe('POST /api/auth/family/verify-code', () => {
     });
   });
 
-  it('returns 401 on wrong code', async () => {
+  it('returns 401 with invalid-or-expired on wrong code', async () => {
     (verifyCode as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(false);
     await testApiHandler({
       appHandler,
@@ -88,6 +88,26 @@ describe('POST /api/auth/family/verify-code', () => {
           body: JSON.stringify({ type: 'email', value: 'a@b.com', code: '000000' }),
         });
         expect(res.status).toBe(401);
+        const body = await res.json();
+        expect(body.error).toBe('invalid-or-expired');
+      },
+    });
+  });
+
+  it('returns 401 with invalid-or-expired when family not found after valid code', async () => {
+    (verifyCode as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(true);
+    (findFamilyByContact as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(null);
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        const res = await fetch({
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ type: 'email', value: 'nobody@example.com', code: '123456' }),
+        });
+        expect(res.status).toBe(401);
+        const body = await res.json();
+        expect(body.error).toBe('invalid-or-expired');
       },
     });
   });
