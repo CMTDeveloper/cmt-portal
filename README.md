@@ -109,7 +109,6 @@ AWS_SNS_REGION  # default us-east-1
 AWS_ACCESS_KEY_ID
 AWS_SECRET_ACCESS_KEY
 AWS_SES_FROM_EMAIL
-AWS_SNS_TOPIC_ARN
 ```
 
 ## Bootstrapping the first admin

@@ -31,7 +31,6 @@ export const portalEnvSchema = z.object({
   AWS_ACCESS_KEY_ID: z.string().min(1).optional(),
   AWS_SECRET_ACCESS_KEY: z.string().min(1).optional(),
   AWS_SES_FROM_EMAIL: z.string().email().optional(),
-  AWS_SNS_TOPIC_ARN: z.string().optional(),
 
   // Cron auth (slice B5)
   CRON_SECRET: z.string().min(16).optional(),
