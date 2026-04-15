@@ -1,12 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
   ATTENDANCE_STATUSES,
-  type AttendanceStatus,
   type AttendanceRecord,
   type ClassRoster,
   type TeacherAttendanceRequest,
-  type TeacherReportQuery,
-  type TeacherReportResponse,
 } from '../check-in/attendance';
 
 describe('ATTENDANCE_STATUSES', () => {

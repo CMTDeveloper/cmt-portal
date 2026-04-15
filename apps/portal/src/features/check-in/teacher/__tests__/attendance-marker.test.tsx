@@ -54,7 +54,7 @@ describe('AttendanceMarker', () => {
       }),
     );
     const body = JSON.parse(
-      (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1].body,
+      (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0]![1]!.body,
     );
     expect(body.classId).toBe('K');
     expect(body.statuses['1']).toBe('present');
