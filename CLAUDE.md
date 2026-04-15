@@ -69,5 +69,6 @@ The original 4-phase product brief is in `docs/superpowers/specs/reference/Chinm
 - Don't import across feature directories — go through `@cmt/shared-domain` or `@cmt/ui`.
 - Don't add React/Next imports to `@cmt/shared-domain` — lint will fail and the discipline matters.
 - Don't bypass the pre-push hook with `--no-verify`. If `pnpm test` or any check fails, fix the test or the code, not the hook.
-- Don't migrate to Tailwind v4, `vercel.ts`, or shadcn v4-only components without a dedicated upgrade slice.
+- Don't migrate to Tailwind v4 or shadcn v4-only components without a dedicated upgrade slice. (`vercel.ts` was adopted in slice B5 for cron declarations — it's fine.)
 - Don't propose retiring the standalone `chinmaya-event-registration` or `chinmaya-family-check-in` deployments until slices B and C are proven in parallel-run.
+- **Never run `firebase deploy --only firestore:indexes --project chinmaya-setu-715b8 --force`.** Prod Firestore is shared with the standalone `chinmaya-family-check-in` app, which has its own composite indexes deployed there. A forced deploy from this repo would delete them and break the standalone kiosk in production. Always deploy without `--force`; the CLI will warn that there are "extra" indexes not in our file — leave them alone. This rule stays in effect until the standalone app is retired via kiosk cutover (`NEXT_PUBLIC_FEATURE_CHECK_IN_KIOSK=true`). UAT (`chinmaya-setu-uat`) is portal-only, so forced deploys there are safe.
