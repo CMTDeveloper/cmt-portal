@@ -1,5 +1,11 @@
-import { ComingSoon } from '@/components/coming-soon';
+import { notFound } from 'next/navigation';
+import { KioskHome } from '@/features/check-in/kiosk';
+import { flags } from '@/lib/flags';
 
-export default function CheckInPage() {
-  return <ComingSoon feature="Family Check-in" />;
+export const metadata = { title: 'Check in — CMT Portal' };
+export const dynamic = 'force-dynamic';
+
+export default function CheckInKioskPage() {
+  if (!flags.checkInKiosk) notFound();
+  return <KioskHome />;
 }
