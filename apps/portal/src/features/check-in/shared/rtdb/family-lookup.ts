@@ -91,12 +91,12 @@ function lastTenDigits(value: string) {
 }
 
 function familyFromRosterRows(rows: LegacyRosterStudent[]): Family | null {
-  if (rows.length === 0) {
+  const first = rows[0];
+  if (!first) {
     return null;
   }
 
-  const first = rows[0];
-  const fid = String(first?.fid ?? '');
+  const fid = String(first.fid ?? '');
   if (!fid) {
     return null;
   }

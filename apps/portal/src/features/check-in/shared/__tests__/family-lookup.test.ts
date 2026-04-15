@@ -384,7 +384,7 @@ describe('findFamilyByContact edge cases', () => {
     const family = await findFamilyById('42');
     expect(family).not.toBeNull();
     expect(family?.students).toHaveLength(1);
-    expect(family?.students[0].sid).toBe('1001');
+    expect(family?.students[0]?.sid).toBe('1001');
   });
 
   it('rejects whitespace-only contact values', async () => {
