@@ -15,18 +15,22 @@ export interface NotificationSender {
   sendSMS(args: SendSMSArgs): Promise<void>;
 }
 
+function redactDigitRuns(s: string): string {
+  return s.replace(/\d{6}/g, '******');
+}
+
 export const mockSender: NotificationSender = {
   async sendEmail(args) {
     console.log('[mock-email]', {
       to: args.to,
       subject: args.subject,
-      preview: args.text.slice(0, 80),
+      preview: redactDigitRuns(args.text.slice(0, 80)),
     });
   },
   async sendSMS(args) {
     console.log('[mock-sms]', {
       phone: args.phone,
-      preview: args.message.slice(0, 80),
+      preview: redactDigitRuns(args.message.slice(0, 80)),
     });
   },
 };
