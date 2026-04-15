@@ -1,13 +1,16 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
+import { findFamilyById } from '@/features/check-in/shared';
 import type { FamilySelfCheckInResponse } from '@cmt/shared-domain/check-in';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const bodySchema = z.object({
-  students: z.record(z.string(), z.boolean()),
+  students: z
+    .record(z.string(), z.boolean())
+    .refine((r) => Object.keys(r).length > 0, { message: 'at-least-one-student-required' }),
 });
 
 export async function POST(req: Request) {
@@ -23,21 +26,34 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'bad-request' }, { status: 400 });
   }
 
-  const checkInIds: string[] = [];
+  const family = await findFamilyById(familyId);
+  if (!family) {
+    return NextResponse.json({ error: 'family-not-found' }, { status: 404 });
+  }
+
+  const validSids = new Set(family.students.map((s) => s.sid));
+  const foreignSids = Object.keys(parsed.data.students).filter((sid) => !validSids.has(sid));
+  if (foreignSids.length > 0) {
+    return NextResponse.json({ error: 'invalid-students', foreignSids }, { status: 400 });
+  }
+
   const collection = portalFirestore().collection('check_in_events');
   const checkedInAt = new Date().toISOString();
 
-  for (const [sid, isPresent] of Object.entries(parsed.data.students)) {
-    const docRef = await collection.add({
-      fid: familyId,
-      sid,
-      status: isPresent ? 'present' : 'absent',
-      checkedInBy: 'family' as const,
-      checkedInAt,
-      recordedByUid: uid,
-    });
-    checkInIds.push(docRef.id);
-  }
+  const entries = Object.entries(parsed.data.students);
+  const docRefs = await Promise.all(
+    entries.map(([sid, isPresent]) =>
+      collection.add({
+        fid: familyId,
+        sid,
+        status: isPresent ? 'present' : 'absent',
+        checkedInBy: 'family' as const,
+        checkedInAt,
+        recordedByUid: uid,
+      }),
+    ),
+  );
+  const checkInIds = docRefs.map((ref) => ref.id);
 
   const body: FamilySelfCheckInResponse = { success: true, checkInIds };
   return NextResponse.json(body, { status: 200 });
