@@ -38,7 +38,7 @@ describe('POST /api/auth/family/send-code', () => {
     });
   });
 
-  it('returns 404 when family not found', async () => {
+  it('returns 200 but does not send code when family not found', async () => {
     (findFamilyByContact as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(null);
     (checkAndRecordOtpRateLimit as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       allowed: true,
@@ -51,9 +51,33 @@ describe('POST /api/auth/family/send-code', () => {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ type: 'email', value: 'nobody@example.com' }),
         });
-        expect(res.status).toBe(404);
+        expect(res.status).toBe(200);
+        const body = await res.json();
+        expect(body.success).toBe(true);
       },
     });
+    expect(storeVerificationCode).not.toHaveBeenCalled();
+    expect(mockSender.sendEmail).not.toHaveBeenCalled();
+    expect(mockSender.sendSMS).not.toHaveBeenCalled();
+  });
+
+  it('still increments rate limit when family not found (enumerator cannot bypass rate limit)', async () => {
+    (findFamilyByContact as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(null);
+    (checkAndRecordOtpRateLimit as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      allowed: true,
+    });
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        const res = await fetch({
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ type: 'email', value: 'bogus@example.com' }),
+        });
+        expect(res.status).toBe(200);
+      },
+    });
+    expect(checkAndRecordOtpRateLimit).toHaveBeenCalled();
   });
 
   it('returns 429 when rate-limited', async () => {

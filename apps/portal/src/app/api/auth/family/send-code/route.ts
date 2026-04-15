@@ -36,7 +36,7 @@ export async function POST(req: Request) {
 
   const family = await findFamilyByContact(parsed.data.type, parsed.data.value);
   if (!family) {
-    return NextResponse.json({ error: 'family-not-found' }, { status: 404 });
+    return NextResponse.json({ success: true }, { status: 200 });
   }
 
   const code = generateCode();
