@@ -1,31 +1,45 @@
-import { headers } from 'next/headers';
+import { notFound } from 'next/navigation';
+import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
+import { readRtdb } from '@cmt/firebase-shared/admin/rtdb';
+import { AdminDashboard } from '@/features/check-in/admin';
+import { flags } from '@/lib/flags';
+import type { Family } from '@cmt/shared-domain/check-in';
 
-export const metadata = { title: 'Admin — Check-in — CMT Portal' };
+export const metadata = { title: 'Admin — CMT Portal' };
 export const dynamic = 'force-dynamic';
 
-export default async function AdminStubPage() {
-  const h = await headers();
-  const role = h.get('x-portal-role') ?? 'unknown';
-  const uid = h.get('x-portal-uid') ?? 'unknown';
+function startOfTodayIso(): string {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.toISOString();
+}
+function startOfWeekIso(): string {
+  const d = new Date();
+  d.setDate(d.getDate() - 7);
+  d.setHours(0, 0, 0, 0);
+  return d.toISOString();
+}
 
-  return (
-    <main className="mx-auto flex min-h-screen max-w-2xl flex-col items-start justify-center gap-4 p-6">
-      <h1 className="text-3xl font-bold text-[hsl(var(--heading))]">Admin dashboard</h1>
-      <p className="text-[hsl(var(--foreground))]">
-        You are signed in as <strong>{role}</strong> (<code>{uid}</code>).
-      </p>
-      <p className="text-[hsl(var(--foreground))]">
-        The full admin dashboard — stats, user provisioning, guest list, reports — is shipping in
-        slice B4. This stub confirms the auth gate works.
-      </p>
-      <form action="/api/auth/signout" method="post">
-        <button
-          type="submit"
-          className="rounded bg-[hsl(var(--primary))] px-4 py-2 text-white hover:opacity-90"
-        >
-          Sign out
-        </button>
-      </form>
-    </main>
-  );
+export default async function AdminDashboardPage() {
+  if (!flags.checkInAdmin) notFound();
+
+  const db = portalFirestore();
+  const todayIso = startOfTodayIso();
+  const weekIso = startOfWeekIso();
+
+  const [todaySnap, weekSnap, guestsSnap, allFamilies] = await Promise.all([
+    db.collection('check_in_events').where('checkedInAt', '>=', todayIso).get(),
+    db.collection('check_in_events').where('checkedInAt', '>=', weekIso).get(),
+    db.collection('guest_check_ins').where('checkedInAt', '>=', todayIso).get(),
+    readRtdb<Record<string, Family>>('/families'),
+  ]);
+
+  const stats = {
+    checkInsToday: todaySnap.size,
+    checkInsThisWeek: weekSnap.size,
+    guestsToday: guestsSnap.size,
+    unpaidFamilies: Object.values(allFamilies ?? {}).filter((f) => f.paymentStatus !== 'paid').length,
+  };
+
+  return <AdminDashboard stats={stats} />;
 }
