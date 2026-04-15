@@ -28,7 +28,8 @@ import { sendTemplatedEmail } from '@/features/check-in/notifications/send-email
 import { sendPaymentReminder, IDEMPOTENCY_WINDOW_MS } from '../payment-reminder-service';
 
 function getFakeDoc() {
-  const fs = (portalFirestore as unknown as ReturnType<typeof vi.fn>)();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const fs = (portalFirestore as unknown as (...args: any[]) => any)();
   return fs.collection().doc();
 }
 
