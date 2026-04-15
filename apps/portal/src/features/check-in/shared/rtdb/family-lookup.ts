@@ -18,11 +18,14 @@ interface LegacyRosterStudent {
   level?: string;
   classid?: string;
   payment?: string;
-  pemail?: string;
-  email?: string;
-  phphone?: string;
-  pmphone?: string;
-  phone?: string;
+  // Contact fields can be string OR number in the legacy RTDB roster — phone
+  // fields especially are often stored as numbers. Always coerce before calling
+  // string methods like trim().
+  pemail?: string | number;
+  email?: string | number;
+  phphone?: string | number;
+  pmphone?: string | number;
+  phone?: string | number;
   // grade 99 identifies parent rows in the legacy RTDB roster schema
   grade?: number;
 }
@@ -153,14 +156,20 @@ function contactRowsFor(rows: LegacyRosterStudent[]): LegacyRosterStudent[] {
 
 function rosterContactsFor(student: LegacyRosterStudent): ContactInfo[] {
   const contacts: ContactInfo[] = [];
-  for (const value of [student.pemail, student.email]) {
-    if (value && value.trim().length > 0) {
-      contacts.push({ type: 'email', value: value.trim() });
+  // Legacy RTDB stores phone fields as numbers (not strings), so coerce before
+  // trimming — Number.prototype.trim doesn't exist and `value && value.trim()`
+  // would throw TypeError at runtime. This was the root cause of a 500 in
+  // send-code during B2 production smoke testing.
+  for (const raw of [student.pemail, student.email]) {
+    const trimmed = raw == null ? '' : String(raw).trim();
+    if (trimmed.length > 0) {
+      contacts.push({ type: 'email', value: trimmed });
     }
   }
-  for (const value of [student.phphone, student.pmphone, student.phone]) {
-    if (value && value.trim().length > 0) {
-      contacts.push({ type: 'phone', value: value.trim() });
+  for (const raw of [student.phphone, student.pmphone, student.phone]) {
+    const trimmed = raw == null ? '' : String(raw).trim();
+    if (trimmed.length > 0) {
+      contacts.push({ type: 'phone', value: trimmed });
     }
   }
   return contacts;

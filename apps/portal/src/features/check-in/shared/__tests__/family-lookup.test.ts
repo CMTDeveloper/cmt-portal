@@ -406,6 +406,51 @@ describe('findFamilyByContact edge cases', () => {
     expect(family).toBeNull();
   });
 
+  it('handles numeric phone/email fields in legacy roster without throwing (regression for prod 500)', async () => {
+    // Legacy RTDB stores phone fields as numbers (not strings). Prior to the
+    // string coercion in rosterContactsFor, this would throw
+    // "TypeError: a.trim is not a function" at runtime and cause
+    // /api/auth/family/send-code to return HTTP 500 in production.
+    (readRtdb as unknown as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({
+        numericPhoneRow: {
+          sid: 1001,
+          fid: 42,
+          fname: 'Alice',
+          lname: 'Rao',
+          grade: 99,
+          // Numeric contact fields — the exact shape that crashed prod.
+          phphone: 16475550100,
+          pmphone: 16475550101,
+          pemail: 'alice@example.com',
+          payment: 'paid',
+        },
+      });
+    // Should not throw. Unrelated lookup returns null, matching lookup works.
+    await expect(
+      findFamilyByContact('email', 'unrelated@example.com'),
+    ).resolves.toBeNull();
+  });
+
+  it('matches a phone contact stored as a number in legacy roster', async () => {
+    (readRtdb as unknown as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({
+        numericPhoneRow: {
+          sid: 1001,
+          fid: 42,
+          fname: 'Alice',
+          lname: 'Rao',
+          grade: 99,
+          phphone: 16475550100,
+          payment: 'paid',
+        },
+      });
+    const family = await findFamilyByContact('phone', '+1 (647) 555-0100');
+    expect(family?.fid).toBe('42');
+  });
+
   it('mixed statuses paid+unpaid+empty → unpaid (unpaid wins)', async () => {
     (readRtdb as unknown as ReturnType<typeof vi.fn>)
       .mockResolvedValueOnce(null)
