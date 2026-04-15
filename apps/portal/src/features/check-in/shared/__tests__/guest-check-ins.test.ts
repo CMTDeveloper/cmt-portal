@@ -23,7 +23,7 @@ describe('recordGuestCheckIn', () => {
       numberOfChildren: 1,
     });
     expect(id).toBe('g-1');
-    const written = (fakeCollection.add as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const written = (fakeCollection.add as unknown as ReturnType<typeof vi.fn>).mock.calls[0]?.[0];
     expect(written.firstName).toBe('Carol');
     expect(written.numberOfAdults).toBe(2);
     expect(written.checkedInAt).toMatch(/T/);

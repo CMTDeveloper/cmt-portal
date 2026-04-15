@@ -21,6 +21,13 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: 'bad-request' }, { status: 400 });
   }
-  const id = await recordGuestCheckIn(parsed.data);
+  const { email, phone, notes, ...required } = parsed.data;
+  const input = {
+    ...required,
+    ...(email !== undefined ? { email } : {}),
+    ...(phone !== undefined ? { phone } : {}),
+    ...(notes !== undefined ? { notes } : {}),
+  };
+  const id = await recordGuestCheckIn(input);
   return NextResponse.json({ success: true, id }, { status: 200 });
 }

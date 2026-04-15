@@ -70,8 +70,8 @@ This project ships in slices, each with its own design spec and implementation p
   - B0 ✅ — Portal auth foundation
   - B2 ✅ — Family portal (OTP login, dashboard, self-check-in)
   - B3 ✅ — Teacher portal (attendance, report, uninformed)
-  - B1 — Kiosk port (next)
-  - B4 — Admin dashboard
+  - B1 ✅ — Kiosk 1:1 port (dark-launched in prod)
+  - B4 — Admin dashboard (next)
   - B5 — Notifications & cron
 - **Slice C** — Port `chinmaya-event-registration` into `apps/portal/src/app/events/*`
 - **Slice E+** — Future modules (programs, enrollment, retirement of old portal)

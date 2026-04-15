@@ -75,7 +75,7 @@ describe('POST /api/check-in/families/:familyId/check-in', () => {
       },
     });
     expect(fakeCollection.add).toHaveBeenCalledTimes(3);
-    const firstCall = (fakeCollection.add as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const firstCall = (fakeCollection.add as unknown as ReturnType<typeof vi.fn>).mock.calls[0]?.[0];
     expect(firstCall.checkedInBy).toBe('sevak');
   });
 
