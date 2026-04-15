@@ -60,7 +60,7 @@ export function FamilyDashboard({ data }: Props) {
               <li key={checkIn.checkInId} className="flex justify-between gap-4">
                 <span>{checkIn.firstName}</span>
                 <span className="text-[hsl(var(--foreground))]">
-                  {new Date(checkIn.checkedInAt).toLocaleString()} by {checkIn.checkedInBy}
+                  {new Date(checkIn.checkedInAt).toLocaleString('en-CA', { timeZone: 'America/Toronto' })} by {checkIn.checkedInBy}
                 </span>
               </li>
             ))}
