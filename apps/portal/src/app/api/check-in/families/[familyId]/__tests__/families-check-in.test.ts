@@ -8,7 +8,11 @@ vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
 
 vi.mock('@/features/check-in/shared', () => ({
   findFamilyById: vi.fn(),
-  mockSender: { sendEmail: vi.fn(), sendSMS: vi.fn() },
+}));
+
+const fakeSender = { sendEmail: vi.fn(), sendSMS: vi.fn() };
+vi.mock('@/lib/aws/resolve-sender', () => ({
+  resolveSender: vi.fn(() => fakeSender),
 }));
 
 import { findFamilyById } from '@/features/check-in/shared';
@@ -80,7 +84,6 @@ describe('POST /api/check-in/families/:familyId/check-in', () => {
   });
 
   it('does not send payment reminder for paid families', async () => {
-    const { mockSender } = await import('@/features/check-in/shared');
     (findFamilyById as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       fid: '42',
       paymentStatus: 'paid',
@@ -99,11 +102,10 @@ describe('POST /api/check-in/families/:familyId/check-in', () => {
         });
       },
     });
-    expect(mockSender.sendEmail).not.toHaveBeenCalled();
+    expect(fakeSender.sendEmail).not.toHaveBeenCalled();
   });
 
   it('sends payment reminder for unpaid families with email contact', async () => {
-    const { mockSender } = await import('@/features/check-in/shared');
     (findFamilyById as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       fid: '42',
       paymentStatus: 'unpaid',
@@ -122,7 +124,7 @@ describe('POST /api/check-in/families/:familyId/check-in', () => {
         });
       },
     });
-    expect(mockSender.sendEmail).toHaveBeenCalledWith(
+    expect(fakeSender.sendEmail).toHaveBeenCalledWith(
       expect.objectContaining({ to: 'a@b.com' }),
     );
   });

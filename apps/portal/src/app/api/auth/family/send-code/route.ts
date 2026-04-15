@@ -5,10 +5,10 @@ import { flags } from '@/lib/flags';
 import {
   checkAndRecordOtpRateLimit,
   findFamilyByContact,
-  mockSender,
   normalizeContact,
   storeVerificationCode,
 } from '@/features/check-in/shared';
+import { resolveSender } from '@/lib/aws/resolve-sender';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -48,13 +48,13 @@ export async function POST(req: Request) {
   await storeVerificationCode(normalized, code, parsed.data.type);
 
   if (parsed.data.type === 'email') {
-    await mockSender.sendEmail({
+    await resolveSender().sendEmail({
       to: parsed.data.value,
       subject: 'Your CMT portal verification code',
       text: `Your verification code is ${code}. It expires in 10 minutes.`,
     });
   } else {
-    await mockSender.sendSMS({
+    await resolveSender().sendSMS({
       phone: parsed.data.value,
       message: `CMT portal code: ${code} (10 min)`,
     });

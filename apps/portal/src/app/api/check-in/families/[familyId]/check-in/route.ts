@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
-import { findFamilyById, mockSender } from '@/features/check-in/shared';
+import { findFamilyById } from '@/features/check-in/shared';
+import { resolveSender } from '@/lib/aws/resolve-sender';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -44,7 +45,7 @@ export async function POST(
   if (family.paymentStatus !== 'paid') {
     const email = family.contacts.find((c) => c.type === 'email')?.value;
     if (email) {
-      await mockSender.sendEmail({
+      await resolveSender().sendEmail({
         to: email,
         subject: 'Payment reminder — Chinmaya Mission Toronto',
         text: `Hari OM ${family.name}, your family check-in was recorded. Please see a sevak to settle your outstanding payment.`,

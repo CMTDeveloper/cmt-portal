@@ -11,14 +11,17 @@ vi.mock('@/features/check-in/shared', () => ({
   checkAndRecordOtpRateLimit: vi.fn(),
   normalizeContact: (t: string, v: string) =>
     t === 'email' ? v.toLowerCase() : v.replace(/\D/g, ''),
-  mockSender: { sendEmail: vi.fn(), sendSMS: vi.fn() },
+}));
+
+const fakeSender = { sendEmail: vi.fn(), sendSMS: vi.fn() };
+vi.mock('@/lib/aws/resolve-sender', () => ({
+  resolveSender: vi.fn(() => fakeSender),
 }));
 
 import {
   findFamilyByContact,
   storeVerificationCode,
   checkAndRecordOtpRateLimit,
-  mockSender,
 } from '@/features/check-in/shared';
 
 import * as appHandler from '../route';
@@ -78,8 +81,8 @@ describe('POST /api/auth/family/send-code', () => {
       },
     });
     expect(storeVerificationCode).not.toHaveBeenCalled();
-    expect(mockSender.sendEmail).not.toHaveBeenCalled();
-    expect(mockSender.sendSMS).not.toHaveBeenCalled();
+    expect(fakeSender.sendEmail).not.toHaveBeenCalled();
+    expect(fakeSender.sendSMS).not.toHaveBeenCalled();
   });
 
   it('still increments rate limit when family not found (enumerator cannot bypass rate limit)', async () => {
@@ -146,7 +149,7 @@ describe('POST /api/auth/family/send-code', () => {
     expect(calls[0]).toBeDefined();
     const code = calls[0]?.[1] as string;
     expect(code).toMatch(/^\d{6}$/);
-    expect(mockSender.sendEmail).toHaveBeenCalled();
+    expect(fakeSender.sendEmail).toHaveBeenCalled();
   });
 
   it('calls sendSMS for phone type', async () => {
@@ -168,6 +171,6 @@ describe('POST /api/auth/family/send-code', () => {
         expect(res.status).toBe(200);
       },
     });
-    expect(mockSender.sendSMS).toHaveBeenCalled();
+    expect(fakeSender.sendSMS).toHaveBeenCalled();
   });
 });
