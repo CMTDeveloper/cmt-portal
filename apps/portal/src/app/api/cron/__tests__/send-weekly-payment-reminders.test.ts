@@ -16,6 +16,7 @@ import * as appHandler from '../send-weekly-payment-reminders/route';
 beforeEach(() => {
   vi.clearAllMocks();
   process.env.CRON_SECRET = 'a'.repeat(32);
+  process.env.WEEKLY_REMINDER_CRON_ENABLED = 'true';
 });
 
 describe('POST /api/cron/send-weekly-payment-reminders', () => {
@@ -27,6 +28,26 @@ describe('POST /api/cron/send-weekly-payment-reminders', () => {
         expect(res.status).toBe(401);
       },
     });
+  });
+
+  it('short-circuits to disabled:true when WEEKLY_REMINDER_CRON_ENABLED is not "true"', async () => {
+    delete process.env.WEEKLY_REMINDER_CRON_ENABLED;
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        const res = await fetch({
+          method: 'POST',
+          headers: { authorization: `Bearer ${'a'.repeat(32)}` },
+        });
+        expect(res.status).toBe(200);
+        const body = await res.json();
+        expect(body.disabled).toBe(true);
+        expect(body.sent).toBe(0);
+        expect(body.processed).toBe(0);
+      },
+    });
+    expect(readRtdb).not.toHaveBeenCalled();
+    expect(sendPaymentReminder).not.toHaveBeenCalled();
   });
 
   it('iterates unpaid families and calls sendPaymentReminder', async () => {

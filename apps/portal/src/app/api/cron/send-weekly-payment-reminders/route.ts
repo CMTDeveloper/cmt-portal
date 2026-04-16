@@ -23,6 +23,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
+  // Opt-in kill switch. Ashram staff currently handle payment reminders
+  // manually, so this cron stays off until the env var is explicitly set to
+  // "true" in Vercel. Keeping it a server-only env (not NEXT_PUBLIC) so it
+  // can be flipped without a redeploy of the client bundle.
+  if (process.env.WEEKLY_REMINDER_CRON_ENABLED !== 'true') {
+    return NextResponse.json(
+      { success: true, disabled: true, processed: 0, sent: 0, skipped: 0 },
+      { status: 200 },
+    );
+  }
+
   const all = (await readRtdb<Record<string, Family>>('/families')) ?? {};
   const unpaid = Object.values(all).filter((f) => f.paymentStatus !== 'paid');
 
