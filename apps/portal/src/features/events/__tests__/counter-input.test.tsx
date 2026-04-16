@@ -23,19 +23,19 @@ describe('CounterInput', () => {
     const user = userEvent.setup();
     render(<CounterInput label="Adults" value={2} min={1} onChange={onChange} />);
     const buttons = screen.getAllByRole('button');
-    await user.click(buttons[0]);
+    await user.click(buttons[0]!);
     expect(onChange).toHaveBeenCalledWith(1);
   });
 
   it('disables - button at min value', () => {
     render(<CounterInput label="Adults" value={1} min={1} onChange={() => {}} />);
     const buttons = screen.getAllByRole('button');
-    expect(buttons[0]).toBeDisabled();
+    expect(buttons[0]!).toBeDisabled();
   });
 
   it('disables + button at max value', () => {
     render(<CounterInput label="Adults" value={50} min={1} max={50} onChange={() => {}} />);
     const buttons = screen.getAllByRole('button');
-    expect(buttons[1]).toBeDisabled();
+    expect(buttons[1]!).toBeDisabled();
   });
 });
