@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@cmt/ui';
 
 interface FeatureCard {
-  href: '/events' | '/check-in';
+  href: '/events' | '/login/family';
   title: string;
   description: string;
   cta: string;
@@ -17,7 +17,7 @@ const cards: FeatureCard[] = [
     cta: 'Open Events →',
   },
   {
-    href: '/check-in',
+    href: '/login/family',
     title: 'Family Check-in',
     description: 'Sign your family in when you arrive at the Ashram.',
     cta: 'Open Check-in →',
