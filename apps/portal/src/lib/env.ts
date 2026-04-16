@@ -42,6 +42,25 @@ export const portalEnvSchema = z.object({
   NEXT_PUBLIC_FEATURE_CHECK_IN_TEACHER: flagString,
   NEXT_PUBLIC_FEATURE_CHECK_IN_ADMIN: flagString,
   NEXT_PUBLIC_FEATURE_CHECK_IN_NOTIFY: flagString,
+
+  // Feature flags — events
+  NEXT_PUBLIC_FEATURE_EVENTS: flagString,
+  NEXT_PUBLIC_FEATURE_EVENTS_REGISTER: flagString,
+
+  // Events — public
+  NEXT_PUBLIC_EVENT_CAMPAIGN: z.string().default('2026MothersDay'),
+  NEXT_PUBLIC_EVENT_DISPLAY_NAME: z.string().optional(),
+  NEXT_PUBLIC_PRICE_PER_PERSON: z.coerce.number().int().min(1).default(10),
+  NEXT_PUBLIC_ENABLE_STRIPE: flagString,
+  NEXT_PUBLIC_EVENT_POSTER_URL: z.string().url().optional(),
+  NEXT_PUBLIC_ETRANSFER_EMAIL: z.string().email().optional(),
+  NEXT_PUBLIC_GOOGLE_SHEET_URL: z.string().url().optional(),
+
+  // Events — server-only
+  STRIPE_CHECKOUT_URL: z.string().url().optional(),
+  STRIPE_API_KEY: z.string().min(1).optional(),
+  WEBHOOK_API_KEY: z.string().min(1).optional(),
+  EVENT_REGISTRATION_RATE_LIMIT_PER_MIN: z.coerce.number().int().min(1).default(5),
 });
 
 export type PortalEnv = z.infer<typeof portalEnvSchema>;

@@ -6,6 +6,7 @@ const master = readFlag('NEXT_PUBLIC_FEATURE_CHECK_IN');
 
 export const flags = {
   events: readFlag('NEXT_PUBLIC_FEATURE_EVENTS'),
+  eventsRegister: readFlag('NEXT_PUBLIC_FEATURE_EVENTS_REGISTER'),
   checkIn: master,
   checkInKiosk: master && readFlag('NEXT_PUBLIC_FEATURE_CHECK_IN_KIOSK'),
   checkInFamily: master && readFlag('NEXT_PUBLIC_FEATURE_CHECK_IN_FAMILY'),
