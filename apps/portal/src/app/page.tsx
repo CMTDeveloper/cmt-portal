@@ -43,10 +43,10 @@ export default function HomePage() {
         <Image
           src="/cmt-logo.png"
           alt=""
-          width={120}
-          height={120}
+          width={48}
+          height={48}
           priority
-          className="mb-6"
+          className="mb-4"
         />
         <h1 className="mb-4 font-serif text-4xl text-heading sm:text-5xl">
           Chinmaya Mission Toronto
