@@ -73,7 +73,7 @@ This project ships in slices, each with its own design spec and implementation p
   - B1 ✅ — Kiosk 1:1 port (dark-launched in prod)
   - B4 ✅ — Admin dashboard (stats, user provisioning, guests, unpaid, CSV exports)
   - B5 ✅ — Notifications & cron (real SES/SNS, email templates, Vercel Cron, idempotent reminders)
-- **Slice C** — Port `chinmaya-event-registration` into `apps/portal/src/app/events/*`
+- **Slice C** — ✅ **Shipped** — Event registration port (`/events/register/*`, 10 API routes, flag-gated via `NEXT_PUBLIC_FEATURE_EVENTS_REGISTER`)
 - **Slice E+** — Future modules (programs, enrollment, retirement of old portal)
 
 ## Environment variables

@@ -10,6 +10,8 @@ A Turborepo monorepo for the Chinmaya Mission Toronto unified portal. One Next.j
 
 **Slice B status:** ✅ Shipped (merged to `main`). All six sub-slices complete (B0 → B2 → B3 → B1 → B4 → B5). Real AWS SES/SNS senders active (`NEXT_PUBLIC_FEATURE_CHECK_IN_NOTIFY=true`). Vercel Cron wired for daily cache-reset and weekly payment reminders. Spec: `docs/superpowers/specs/2026-04-13-slice-b-family-check-in-port-design.md`. Slice D (unified auth) is **removed** from the roadmap — B0 absorbs it.
 
+**Slice C status:** ✅ Shipped (merged to `main`). Event registration port complete: `/events/register/*` UI (form, payment instructions, success, cancel), 10 API routes (`/api/events/*`), Stripe checkout proxy, etransfer reference flow, webhook handler with `timingSafeEqual` API key auth. All routes flag-gated via `NEXT_PUBLIC_FEATURE_EVENTS_REGISTER` except the webhook. Spec: `docs/superpowers/specs/2026-04-13-slice-c-event-registration-port-design.md`.
+
 ## Architecture in one paragraph
 
 `apps/portal` is a single Next.js 16 monolith. Future features (events, check-in, programs, etc.) are added as **internal route segments** under `apps/portal/src/app/<feature>/`, NOT as sibling apps in the monorepo. Cross-feature dependencies must go through shared packages (`@cmt/shared-domain` or `@cmt/ui`), enforced by `eslint-plugin-boundaries`. The choice to stay monolithic was deliberate — it preserves operational simplicity and gives future mobile apps a single API surface. The structure has been designed so that splitting into Next.js multi-zones later is cheap if needed.
