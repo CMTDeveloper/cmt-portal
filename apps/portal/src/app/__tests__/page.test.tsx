@@ -22,21 +22,21 @@ describe('Landing page', () => {
     expect(eventsLink.getAttribute('href')).toBe('/events');
   });
 
-  it('family check-in card links to /login/family', () => {
+  it('family check-in card links to /check-in/family', () => {
     render(<HomePage />);
     const checkInLink = screen.getByRole('link', { name: /family check.in/i });
-    expect(checkInLink.getAttribute('href')).toBe('/login/family');
+    expect(checkInLink.getAttribute('href')).toBe('/check-in/family');
   });
 
-  it('teacher portal card links to /login/teacher', () => {
+  it('teacher portal card links to /check-in/teacher', () => {
     render(<HomePage />);
     const teacherLink = screen.getByRole('link', { name: /teacher portal/i });
-    expect(teacherLink.getAttribute('href')).toBe('/login/teacher');
+    expect(teacherLink.getAttribute('href')).toBe('/check-in/teacher');
   });
 
-  it('admin dashboard card links to /login/admin', () => {
+  it('admin dashboard card links to /check-in/admin', () => {
     render(<HomePage />);
     const adminLink = screen.getByRole('link', { name: /admin dashboard/i });
-    expect(adminLink.getAttribute('href')).toBe('/login/admin');
+    expect(adminLink.getAttribute('href')).toBe('/check-in/admin');
   });
 });

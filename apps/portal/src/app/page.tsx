@@ -17,19 +17,19 @@ const cards: FeatureCard[] = [
     cta: 'Open Events →',
   },
   {
-    href: '/login/family',
+    href: '/check-in/family',
     title: 'Family Check-in',
     description: 'Sign your family in when you arrive at the Ashram.',
     cta: 'Open Check-in →',
   },
   {
-    href: '/login/teacher',
+    href: '/check-in/teacher',
     title: 'Teacher Portal',
     description: 'Access attendance records and class management for teachers.',
     cta: 'Open Teacher Portal →',
   },
   {
-    href: '/login/admin',
+    href: '/check-in/admin',
     title: 'Admin Dashboard',
     description: 'Manage families, registrations, and site-wide settings.',
     cta: 'Open Admin Dashboard →',
