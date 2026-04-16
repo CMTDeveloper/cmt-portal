@@ -26,6 +26,21 @@ export const PUBLIC_ROUTES = [
   '/api/check-in/families/:familyId/check-in',
   '/api/check-in/lookup',
   '/api/check-in/guests',
+
+  // Event registration (public, no auth — feature-flagged in the app layer)
+  '/events/register',
+  '/events/register/payment',
+  '/events/register/success',
+  '/events/register/cancel',
+
+  // Public event APIs
+  '/api/events/check-bv-status',
+  '/api/events/register',
+  '/api/events/lookup',
+  '/api/events/create-checkout',
+  '/api/events/update-reference',
+  '/api/events/update-payment-status',
+  '/api/events/webhooks/payment-status',
 ] as const;
 
 export function matchRoute(pattern: string, pathname: string): boolean {
