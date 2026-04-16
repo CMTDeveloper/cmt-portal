@@ -142,7 +142,8 @@ describe('POST /api/events/lookup', () => {
   });
 
   it('defaults paymentStatus to pending when field is missing in Firebase', async () => {
-    const { paymentStatus: _, ...regWithoutStatus } = mockRegistration;
+    const { paymentStatus: _omit, ...regWithoutStatus } = mockRegistration;
+    void _omit;
     mockGet.mockResolvedValue({
       exists: true,
       data: () => regWithoutStatus,
