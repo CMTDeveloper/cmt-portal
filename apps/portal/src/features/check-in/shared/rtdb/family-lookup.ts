@@ -199,6 +199,26 @@ function paymentStatusFor(rows: LegacyRosterStudent[]): PaymentStatus {
   return 'partial';
 }
 
+export async function listAllFamilies(): Promise<Family[]> {
+  const all = (await readRtdb<Record<string, Family>>('/families')) ?? {};
+  const families = Object.values(all);
+  if (families.length > 0) return families;
+
+  const roster = (await readRtdb<Record<string, LegacyRosterStudent>>('/roster')) ?? {};
+  const rows = Object.values(roster);
+  const byFid = new Map<string, LegacyRosterStudent[]>();
+  for (const row of rows) {
+    const fid = String(row.fid ?? '');
+    if (!fid) continue;
+    const group = byFid.get(fid) ?? [];
+    group.push(row);
+    byFid.set(fid, group);
+  }
+  return [...byFid.values()]
+    .map(familyFromRosterRows)
+    .filter((f): f is Family => f !== null);
+}
+
 // Numeric-coercing fid equality: handles stored-as-number vs string-with-leading-zero mismatches.
 function fidMatches(stored: unknown, target: string): boolean {
   if (stored === undefined || stored === null) return false;

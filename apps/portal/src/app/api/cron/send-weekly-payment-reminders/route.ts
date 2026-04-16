@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
 import { timingSafeEqual } from 'node:crypto';
-import { readRtdb } from '@cmt/firebase-shared/admin/rtdb';
 import { sendPaymentReminder } from '@/features/check-in/notifications/payment-reminder-service';
-import type { Family } from '@cmt/shared-domain/check-in';
+import { listAllFamilies } from '@/features/check-in/shared';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -34,8 +33,8 @@ export async function POST(req: Request) {
     );
   }
 
-  const all = (await readRtdb<Record<string, Family>>('/families')) ?? {};
-  const unpaid = Object.values(all).filter((f) => f.paymentStatus !== 'paid');
+  const all = await listAllFamilies();
+  const unpaid = all.filter((f) => f.paymentStatus !== 'paid');
 
   let sent = 0;
   let skipped = 0;

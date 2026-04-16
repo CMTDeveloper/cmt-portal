@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
-import { readRtdb } from '@cmt/firebase-shared/admin/rtdb';
-import type { Family } from '@cmt/shared-domain/check-in';
+import { listAllFamilies } from '@/features/check-in/shared';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -27,10 +26,10 @@ export async function GET() {
     db.collection('check_in_events').where('checkedInAt', '>=', todayIso).get(),
     db.collection('check_in_events').where('checkedInAt', '>=', weekIso).get(),
     db.collection('guest_check_ins').where('checkedInAt', '>=', todayIso).get(),
-    readRtdb<Record<string, Family>>('/families'),
+    listAllFamilies(),
   ]);
 
-  const unpaidFamilies = Object.values(allFamilies ?? {}).filter(
+  const unpaidFamilies = allFamilies.filter(
     (f) => f.paymentStatus !== 'paid',
   ).length;
 
