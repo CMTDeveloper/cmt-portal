@@ -22,25 +22,43 @@ export default async function ReportPage({ searchParams }: Props) {
 
   let entries: TeacherReportEntry[] = [];
   if (classId) {
-    let q = portalFirestore().collectionGroup(classId).where('classId', '==', classId);
-    if (params.from) q = q.where('date', '>=', params.from);
-    if (params.to) q = q.where('date', '<=', params.to);
-    q = q.orderBy('date', 'desc');
-    const snap = await q.get();
-    const roster = await getRosterForClass(classId);
-    const studentMap = new Map((roster?.students ?? []).map((s) => [s.sid, s]));
-    entries = snap.docs.map((d) => {
-      const data = d.data() as { date: string; classId: string; sid: string; status: AttendanceStatus };
-      const st = studentMap.get(data.sid);
-      return {
-        date: data.date,
-        classId: data.classId,
-        sid: data.sid,
-        firstName: st?.firstName ?? 'Unknown',
-        lastName: st?.lastName ?? '',
-        status: data.status,
-      };
-    });
+    try {
+      const db = portalFirestore();
+      const roster = await getRosterForClass(classId);
+      const studentMap = new Map((roster?.students ?? []).map((s) => [s.sid, s]));
+
+      // Attendance is stored at attendance/{date}/{classId}/{sid}.
+      // Query date-specific subcollections rather than collectionGroup
+      // (which requires a separate index per class name).
+      const datesSnap = await db.collection('attendance').listDocuments();
+      const dateDocs = datesSnap
+        .map((d) => d.id)
+        .filter((date) => {
+          if (params.from && date < params.from) return false;
+          if (params.to && date > params.to) return false;
+          return true;
+        })
+        .sort()
+        .reverse();
+
+      for (const date of dateDocs) {
+        const snap = await db.collection('attendance').doc(date).collection(classId).get();
+        for (const d of snap.docs) {
+          const data = d.data() as { date: string; classId: string; sid: string; status: AttendanceStatus };
+          const st = studentMap.get(data.sid);
+          entries.push({
+            date: data.date ?? date,
+            classId: data.classId ?? classId,
+            sid: data.sid,
+            firstName: st?.firstName ?? 'Unknown',
+            lastName: st?.lastName ?? '',
+            status: data.status,
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Report query failed:', (err as Error).message);
+    }
   }
 
   return (
