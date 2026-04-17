@@ -14,6 +14,23 @@ interface LegacyRosterRow {
   lname?: string;
   level?: string;
   grade?: number;
+  pemail?: string | number;
+  email?: string | number;
+  phphone?: string | number;
+  pmphone?: string | number;
+  payment?: string;
+}
+
+export interface StudentWithContact extends Student {
+  parentEmail: string;
+  parentPhone: string;
+  paymentStatus: string;
+}
+
+export interface ClassRosterWithContacts {
+  classId: string;
+  name: string;
+  students: StudentWithContact[];
 }
 
 export async function listClasses(): Promise<
@@ -67,6 +84,61 @@ export async function getRosterForClass(classId: string): Promise<ClassRoster | 
       return { sid, fid, firstName: r.fname ?? '', lastName: r.lname ?? '', level: r.level ?? '' };
     })
     .filter((s): s is Student => s !== null);
+
+  return { classId, name: classId, students };
+}
+
+export async function getRosterWithContacts(
+  classId: string,
+): Promise<ClassRosterWithContacts | null> {
+  const roster = (await readRtdb<Record<string, LegacyRosterRow>>('/roster')) ?? {};
+  const allRows = Object.values(roster);
+
+  const studentRows = allRows.filter(
+    (r) => r.grade !== 99 && r.level?.trim() === classId,
+  );
+  if (studentRows.length === 0) return null;
+
+  // Build fid -> parent contact map
+  const parentByFid = new Map<string, { email: string; phone: string }>();
+  for (const row of allRows) {
+    if (row.grade !== 99) continue;
+    const fid = String(row.fid ?? '');
+    if (!fid) continue;
+    if (!parentByFid.has(fid)) {
+      const email = row.pemail ?? row.email;
+      const phone = row.phphone ?? row.pmphone;
+      parentByFid.set(fid, {
+        email: email == null ? '' : String(email).trim(),
+        phone: phone == null ? '' : String(phone).trim(),
+      });
+    }
+  }
+
+  const students: StudentWithContact[] = studentRows
+    .map((r) => {
+      const sid = String(r.sid ?? '');
+      const fid = String(r.fid ?? '');
+      if (!sid || !fid) return null;
+      const contact = parentByFid.get(fid) ?? { email: '', phone: '' };
+      const rawPayment = (r.payment ?? '').trim().toLowerCase();
+      const paymentStatus = rawPayment.includes('unpaid') || rawPayment.includes('due')
+        ? 'unpaid'
+        : rawPayment.includes('paid') && !rawPayment.includes('partial')
+          ? 'paid'
+          : 'partial';
+      return {
+        sid,
+        fid,
+        firstName: r.fname ?? '',
+        lastName: r.lname ?? '',
+        level: r.level ?? '',
+        parentEmail: contact.email,
+        parentPhone: contact.phone,
+        paymentStatus,
+      } satisfies StudentWithContact;
+    })
+    .filter((s): s is StudentWithContact => s !== null);
 
   return { classId, name: classId, students };
 }
