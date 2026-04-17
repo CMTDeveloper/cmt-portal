@@ -14,27 +14,38 @@ export default async function UninformedPage() {
 
   const classes = await listClasses();
   const entries: TeacherReportEntry[] = [];
-  for (const c of classes) {
-    const snap = await portalFirestore()
-      .collectionGroup(c.classId)
-      .where('classId', '==', c.classId)
-      .where('status', '==', 'uninformed')
-      .orderBy('date', 'desc')
-      .get();
-    const roster = await getRosterForClass(c.classId);
-    const studentMap = new Map((roster?.students ?? []).map((s) => [s.sid, s]));
-    for (const doc of snap.docs) {
-      const data = doc.data() as { date: string; classId: string; sid: string; status: AttendanceStatus };
-      const st = studentMap.get(data.sid);
-      entries.push({
-        date: data.date,
-        classId: data.classId,
-        sid: data.sid,
-        firstName: st?.firstName ?? 'Unknown',
-        lastName: st?.lastName ?? '',
-        status: data.status,
-      });
+  try {
+    const db = portalFirestore();
+    const datesSnap = await db.collection('attendance').listDocuments();
+    const dateDocs = datesSnap.map((d) => d.id).sort().reverse();
+
+    for (const date of dateDocs) {
+      for (const c of classes) {
+        const snap = await db
+          .collection('attendance')
+          .doc(date)
+          .collection(c.classId)
+          .where('status', '==', 'uninformed')
+          .get();
+        if (snap.empty) continue;
+        const roster = await getRosterForClass(c.classId);
+        const studentMap = new Map((roster?.students ?? []).map((s) => [s.sid, s]));
+        for (const doc of snap.docs) {
+          const data = doc.data() as { date: string; classId: string; sid: string; status: AttendanceStatus };
+          const st = studentMap.get(data.sid);
+          entries.push({
+            date: data.date ?? date,
+            classId: data.classId ?? c.classId,
+            sid: data.sid,
+            firstName: st?.firstName ?? 'Unknown',
+            lastName: st?.lastName ?? '',
+            status: data.status,
+          });
+        }
+      }
     }
+  } catch (err) {
+    console.error('Uninformed query failed:', (err as Error).message);
   }
 
   return (
