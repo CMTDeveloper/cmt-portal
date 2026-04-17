@@ -10,6 +10,9 @@ interface RegistrationState {
   phone: string;
   adults: number;
   children: number;
+  additionalAttendees?: number;
+  mothersInPuja?: number;
+  category?: 'bv-family' | 'sevak' | 'non-bv';
   paymentMethod: 'etransfer' | 'stripe';
   registrationId: string;
   subtotal: number;
@@ -129,8 +132,11 @@ function SuccessContent() {
         </div>
 
         <OrderSummary
+          category={registration.category ?? (registration.isBvFamily ? 'bv-family' : 'non-bv')}
           adults={registration.adults}
           children={registration.children}
+          additionalAttendees={registration.additionalAttendees ?? 0}
+          mothersInPuja={registration.mothersInPuja ?? 0}
           subtotal={registration.subtotal}
           processingFee={registration.processingFee}
           total={registration.total}

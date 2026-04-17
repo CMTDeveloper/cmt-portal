@@ -1,8 +1,13 @@
 'use client';
 
+import type { RegistrationCategory } from '@cmt/shared-domain/events/registration';
+
 interface OrderSummaryProps {
+  category: RegistrationCategory;
   adults: number;
   children: number;
+  additionalAttendees: number;
+  mothersInPuja: number;
   subtotal: number;
   processingFee: number;
   total: number;
@@ -11,40 +16,67 @@ interface OrderSummaryProps {
 }
 
 export function OrderSummary({
+  category,
   adults,
   children,
-  subtotal,
+  additionalAttendees,
+  mothersInPuja,
   processingFee,
   total,
   paymentMethod,
-  isBvFamily,
 }: OrderSummaryProps) {
   return (
     <div className="border border-gray-200 rounded-xl p-6 mb-4">
       <h2 className="text-lg font-bold text-gray-900 mb-4">Order Summary</h2>
       <div className="space-y-2">
-        {isBvFamily ? (
-          <div className="flex justify-between text-gray-700">
-            <span>BV Family (flat rate)</span>
-            <span>${subtotal.toFixed(2)}</span>
-          </div>
+        {category === 'bv-family' ? (
+          <>
+            <div className="flex justify-between text-gray-700">
+              <span>BV Family (flat donation)</span>
+              <span>$10.00</span>
+            </div>
+            {additionalAttendees > 0 && (
+              <div className="flex justify-between text-gray-700">
+                <span>Additional Attendees x {additionalAttendees}</span>
+                <span>${(additionalAttendees * 10).toFixed(2)}</span>
+              </div>
+            )}
+          </>
+        ) : category === 'sevak' ? (
+          <>
+            <div className="flex justify-between text-gray-700">
+              <span>BV Teacher/Sevak (flat donation)</span>
+              <span>$10.00</span>
+            </div>
+            {additionalAttendees > 0 && (
+              <div className="flex justify-between text-gray-700">
+                <span>Additional Attendees x {additionalAttendees}</span>
+                <span>${(additionalAttendees * 10).toFixed(2)}</span>
+              </div>
+            )}
+          </>
         ) : (
           <>
             <div className="flex justify-between text-gray-700">
               <span>Adults x {adults}</span>
-              <span>${(adults * (subtotal / Math.max(adults + children, 1))).toFixed(2)}</span>
+              <span>${(adults * 10).toFixed(2)}</span>
             </div>
             {children > 0 && (
               <div className="flex justify-between text-gray-700">
                 <span>Children x {children}</span>
-                <span>${(children * (subtotal / Math.max(adults + children, 1))).toFixed(2)}</span>
+                <span>${(children * 10).toFixed(2)}</span>
               </div>
             )}
           </>
         )}
+        {mothersInPuja > 0 && (
+          <div className="flex justify-between text-gray-500 text-sm">
+            <span>Mothers in Matr Puja: {mothersInPuja}</span>
+          </div>
+        )}
         {paymentMethod === 'stripe' && processingFee > 0 && (
           <div className="flex justify-between text-gray-500 text-sm">
-            <span>Processing Fee (2.20% + 30c)</span>
+            <span>Processing Fee (2.20% + 30¢)</span>
             <span>${processingFee.toFixed(2)}</span>
           </div>
         )}
