@@ -37,7 +37,7 @@ export default async function TeacherCheckInPage({ searchParams }: Props) {
           </div>
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
             <Link
-              href="/check-in/teacher/report"
+              href="/check-in/teacher/check-in-report"
               className="inline-flex items-center justify-center px-3 py-2 text-sm font-medium text-blue-700 bg-blue-50 rounded-md hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 whitespace-nowrap"
             >
               Check-in Reports
