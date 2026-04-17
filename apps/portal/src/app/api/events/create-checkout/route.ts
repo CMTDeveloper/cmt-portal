@@ -14,7 +14,14 @@ function verifyPricing(
   lineItems: { name: string; amount: number; quantity: number }[],
 ): boolean {
   for (const item of lineItems) {
-    if (item.name === 'Adults' || item.name === 'Child' || item.name === 'BV Family') {
+    if (
+      item.name === 'Adults' ||
+      item.name === 'Child' ||
+      item.name === 'Children' ||
+      item.name === 'BV Family' ||
+      item.name === 'BV Teacher/Sevak' ||
+      item.name === 'Additional Attendees'
+    ) {
       if (item.amount !== PRICE_PER_PERSON) return false;
     }
     if (item.name === 'Processing Fees') {

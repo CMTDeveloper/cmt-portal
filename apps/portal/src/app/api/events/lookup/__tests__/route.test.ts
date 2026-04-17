@@ -58,6 +58,46 @@ describe('POST /api/events/lookup', () => {
     });
   });
 
+  it('returns category, additionalAttendees, mothersInPuja from Firebase', async () => {
+    mockGet.mockResolvedValue({
+      exists: true,
+      data: () => ({ ...mockRegistration, category: 'bv-family', additionalAttendees: 2, mothersInPuja: 1 }),
+    });
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        const res = await fetch({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ registrationId: 'MD26-ABC1234', email: 'john@example.com' }),
+        });
+        const data = await res.json();
+        expect(res.status).toBe(200);
+        expect(data.category).toBe('bv-family');
+        expect(data.additionalAttendees).toBe(2);
+        expect(data.mothersInPuja).toBe(1);
+      },
+    });
+  });
+
+  it('defaults category to non-bv and counts to 0 when fields missing', async () => {
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        const res = await fetch({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ registrationId: 'MD26-ABC1234', email: 'john@example.com' }),
+        });
+        const data = await res.json();
+        expect(res.status).toBe(200);
+        expect(data.category).toBe('non-bv');
+        expect(data.additionalAttendees).toBe(0);
+        expect(data.mothersInPuja).toBe(0);
+      },
+    });
+  });
+
   it('email matching is case-insensitive', async () => {
     await testApiHandler({
       appHandler,

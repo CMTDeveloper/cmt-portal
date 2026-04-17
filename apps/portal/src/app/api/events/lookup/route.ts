@@ -34,6 +34,9 @@ export async function POST(req: Request) {
           payment_source: data.payment_source,
           contribution: data.contribution,
           isBvFamily: data.isBvFamily || false,
+          category: data.category || 'non-bv',
+          additionalAttendees: data.additionalAttendees || 0,
+          mothersInPuja: data.mothersInPuja || 0,
           paymentStatus: data.paymentStatus || 'pending',
           etransferReference: data.etransferReference || '',
         });

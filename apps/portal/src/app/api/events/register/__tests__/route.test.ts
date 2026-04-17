@@ -177,4 +177,48 @@ describe('POST /api/events/register', () => {
       },
     });
   });
+
+  it('accepts optional category, additionalAttendees, mothersInPuja fields', async () => {
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        const res = await fetch({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...validPayload,
+            category: 'bv-family',
+            additionalAttendees: 2,
+            mothersInPuja: 1,
+          }),
+        });
+        expect(res.status).toBe(200);
+      },
+    });
+  });
+
+  it('writes category, additionalAttendees, mothersInPuja to Firebase', async () => {
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        await fetch({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...validPayload,
+            category: 'sevak',
+            additionalAttendees: 1,
+            mothersInPuja: 0,
+          }),
+        });
+        expect(mockCreate).toHaveBeenCalledWith(
+          expect.objectContaining({
+            category: 'sevak',
+            additionalAttendees: 1,
+            mothersInPuja: 0,
+          }),
+        );
+      },
+    });
+  });
 });

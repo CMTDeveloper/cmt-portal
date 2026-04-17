@@ -151,6 +151,69 @@ describe('POST /api/events/create-checkout', () => {
     });
   });
 
+  it('accepts BV Teacher/Sevak + Additional Attendees line items', async () => {
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        const res = await fetch({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', origin: ORIGIN },
+          body: JSON.stringify({
+            ...validPayload,
+            lineItems: [
+              { name: 'BV Teacher/Sevak' as const, amount: 10.0, quantity: 1 },
+              { name: 'Additional Attendees' as const, amount: 10.0, quantity: 2 },
+              { name: 'Processing Fees' as const, amount: 0.96, quantity: 1 },
+            ],
+          }),
+        });
+        expect(res.status).toBe(200);
+      },
+    });
+  });
+
+  it('accepts BV Family + Additional Attendees line items', async () => {
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        const res = await fetch({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', origin: ORIGIN },
+          body: JSON.stringify({
+            ...validPayload,
+            lineItems: [
+              { name: 'BV Family' as const, amount: 10.0, quantity: 1 },
+              { name: 'Additional Attendees' as const, amount: 10.0, quantity: 1 },
+              { name: 'Processing Fees' as const, amount: 0.74, quantity: 1 },
+            ],
+          }),
+        });
+        expect(res.status).toBe(200);
+      },
+    });
+  });
+
+  it('rejects Additional Attendees with manipulated price', async () => {
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        const res = await fetch({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', origin: ORIGIN },
+          body: JSON.stringify({
+            ...validPayload,
+            lineItems: [
+              { name: 'BV Family' as const, amount: 10.0, quantity: 1 },
+              { name: 'Additional Attendees' as const, amount: 0.01, quantity: 3 },
+              { name: 'Processing Fees' as const, amount: 0.37, quantity: 1 },
+            ],
+          }),
+        });
+        expect(res.status).toBe(400);
+      },
+    });
+  });
+
   it('returns 400 for manipulated per-person price', async () => {
     await testApiHandler({
       appHandler,

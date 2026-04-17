@@ -29,6 +29,12 @@ vi.mock('@cmt/firebase-shared/admin/rtdb', () => ({
   })),
 }));
 
+// Mock sevak check
+const mockCheckSevakByEmail = vi.fn();
+vi.mock('@/features/events/shared/sevak-check', () => ({
+  checkSevakByEmail: (...args: unknown[]) => mockCheckSevakByEmail(...args),
+}));
+
 import * as appHandler from '../route';
 
 describe('POST /api/events/check-bv-status', () => {
@@ -36,6 +42,7 @@ describe('POST /api/events/check-bv-status', () => {
     vi.clearAllMocks();
     mockFindFamilyById.mockResolvedValue(null);
     mockFindFamilyByContact.mockResolvedValue(null);
+    mockCheckSevakByEmail.mockResolvedValue(false);
   });
 
   it('returns isBvFamily true for BV family email', async () => {
@@ -164,6 +171,54 @@ describe('POST /api/events/check-bv-status', () => {
         const data = await res.json();
         expect(res.status).toBe(200);
         expect(data.isBvFamily).toBe(false);
+      },
+    });
+  });
+
+  it('returns isSevak true for verified sevak email', async () => {
+    mockCheckSevakByEmail.mockResolvedValue(true);
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        const res = await fetch({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sevakEmail: 'sevak@example.com' }),
+        });
+        const data = await res.json();
+        expect(res.status).toBe(200);
+        expect(data.isSevak).toBe(true);
+      },
+    });
+  });
+
+  it('returns isSevak false for unknown sevak email', async () => {
+    mockCheckSevakByEmail.mockResolvedValue(false);
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        const res = await fetch({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sevakEmail: 'unknown@example.com' }),
+        });
+        const data = await res.json();
+        expect(res.status).toBe(200);
+        expect(data.isSevak).toBe(false);
+      },
+    });
+  });
+
+  it('returns 400 for invalid sevakEmail format', async () => {
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        const res = await fetch({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sevakEmail: 'not-an-email' }),
+        });
+        expect(res.status).toBe(400);
       },
     });
   });

@@ -3,6 +3,7 @@ import { flags } from '@/lib/flags';
 import { checkBvStatusRequestSchema } from '@cmt/shared-domain/events/api-contracts';
 import { findFamilyById, findFamilyByContact } from '@/features/check-in/shared';
 import { checkIpRateLimit } from '@/features/events/shared/rate-limiter';
+import { checkSevakByEmail } from '@/features/events/shared/sevak-check';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -33,6 +34,11 @@ export async function POST(req: Request) {
   }
 
   try {
+    if ('sevakEmail' in parsed) {
+      const isSevak = await checkSevakByEmail(parsed.sevakEmail);
+      return NextResponse.json({ isSevak });
+    }
+
     if ('email' in parsed) {
       const family = await findFamilyByContact('email', parsed.email);
       if (family) {
