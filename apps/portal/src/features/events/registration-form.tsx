@@ -4,6 +4,7 @@ import { useState, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { CounterInput, StepIndicator } from '@/features/events';
 import { calculatePricing } from '@cmt/shared-domain/events/pricing';
+import type { RegistrationCategory } from '@cmt/shared-domain/events/registration';
 
 interface RegistrationState {
   name: string;
@@ -11,6 +12,9 @@ interface RegistrationState {
   phone: string;
   adults: number;
   children: number;
+  additionalAttendees: number;
+  mothersInPuja: number;
+  category: RegistrationCategory;
   paymentMethod: 'etransfer' | 'stripe';
   registrationId: string;
   subtotal: number;
@@ -57,6 +61,9 @@ async function submitRegistration(data: RegistrationState): Promise<void> {
     payment_source: data.paymentMethod === 'stripe' ? 'stripe' : 'etransfer',
     contribution: data.paymentMethod === 'stripe' ? data.total : data.subtotal,
     isBvFamily: data.isBvFamily,
+    category: data.category,
+    additionalAttendees: data.additionalAttendees,
+    mothersInPuja: data.mothersInPuja,
   };
 
   const response = await fetch('/api/events/register', {
@@ -76,14 +83,22 @@ async function createCheckoutSession(
 ): Promise<string> {
   const lineItems: { name: string; amount: number; quantity: number }[] = [];
 
-  if (data.isBvFamily) {
+  if (data.category === 'bv-family') {
     lineItems.push({ name: 'BV Family', amount: 10.0, quantity: 1 });
+    if (data.additionalAttendees > 0) {
+      lineItems.push({ name: 'Additional Attendees', amount: 10.0, quantity: data.additionalAttendees });
+    }
+  } else if (data.category === 'sevak') {
+    lineItems.push({ name: 'BV Teacher/Sevak', amount: 10.0, quantity: 1 });
+    if (data.additionalAttendees > 0) {
+      lineItems.push({ name: 'Additional Attendees', amount: 10.0, quantity: data.additionalAttendees });
+    }
   } else {
     if (data.adults > 0) {
       lineItems.push({ name: 'Adults', amount: config.pricePerPerson, quantity: data.adults });
     }
     if (data.children > 0) {
-      lineItems.push({ name: 'Child', amount: config.pricePerPerson, quantity: data.children });
+      lineItems.push({ name: 'Children', amount: config.pricePerPerson, quantity: data.children });
     }
   }
   lineItems.push({ name: 'Processing Fees', amount: data.processingFee, quantity: 1 });
@@ -127,18 +142,22 @@ async function lookupRegistration(
     if (!response.ok) return null;
     const data = await response.json() as Record<string, unknown>;
     if (!data || !data.registrationId) return null;
+    const category = (data.category as RegistrationCategory) || 'non-bv';
     return {
       name: String(data.name || ''),
       email: String(data.email || email),
       phone: String(data.phone || ''),
       adults: Number(data.adults) || 1,
       children: Number(data.children) || 0,
+      additionalAttendees: Number(data.additionalAttendees) || 0,
+      mothersInPuja: Number(data.mothersInPuja) || 0,
+      category,
       paymentMethod: data.payment_source === 'stripe' ? 'stripe' : 'etransfer',
       registrationId: String(data.registrationId),
       subtotal: Number(data.contribution) || 0,
       processingFee: 0,
       total: Number(data.contribution) || 0,
-      isBvFamily: Boolean(data.isBvFamily),
+      isBvFamily: category === 'bv-family',
       paymentStatus: (data.paymentStatus as RegistrationState['paymentStatus']) || 'pending',
     };
   } catch {
@@ -154,17 +173,40 @@ export function EventRegistrationForm({ config }: { config: EventConfig }) {
   const [phone, setPhone] = useState('');
   const [adults, setAdults] = useState(1);
   const [children, setChildren] = useState(0);
+  const [additionalAttendees, setAdditionalAttendees] = useState(0);
+  const [mothersInPuja, setMothersInPuja] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState<'etransfer' | 'stripe'>('etransfer');
 
-  const [bvSelection, setBvSelection] = useState<'yes' | 'no' | null>(null);
+  const [category, setCategory] = useState<RegistrationCategory | null>(null);
+
+  // BV family verification state
   const [bvLookupMethod, setBvLookupMethod] = useState<'familyId' | 'email'>('familyId');
   const [bvLookupValue, setBvLookupValue] = useState('');
-  const [isBvFamily, setIsBvFamily] = useState(false);
-  const [bvCheckDone, setBvCheckDone] = useState(false);
+  const [bvVerified, setBvVerified] = useState(false);
   const [bvChecking, setBvChecking] = useState(false);
   const [bvError, setBvError] = useState('');
   const [bvFamilyEmails, setBvFamilyEmails] = useState<string[]>([]);
   const [bvFamilyPhones, setBvFamilyPhones] = useState<string[]>([]);
+
+  // Sevak verification state
+  const [sevakEmail, setSevakEmail] = useState('');
+  const [sevakVerified, setSevakVerified] = useState(false);
+  const [sevakChecking, setSevakChecking] = useState(false);
+  const [sevakError, setSevakError] = useState('');
+
+  // BV Family with 2 parents: max 1 mother (other parent is father)
+  const maxMothers = (category === 'bv-family' && adults === 2) ? 1 : adults;
+
+  const handleAdultsChange = (val: number) => {
+    setAdults(val);
+    if (category === 'bv-family' && val === 2) {
+      setMothersInPuja(1);
+    }
+    const newMax = (category === 'bv-family' && val === 2) ? 1 : val;
+    if (mothersInPuja > newMax) {
+      setMothersInPuja(newMax);
+    }
+  };
 
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -175,12 +217,41 @@ export function EventRegistrationForm({ config }: { config: EventConfig }) {
   const [lookupLoading, setLookupLoading] = useState(false);
   const [lookupError, setLookupError] = useState('');
 
+  const isBvFamily = category === 'bv-family';
+
   const totals = useMemo(
     () => calculatePricing({
-      adults, children, isBvFamily, paymentMethod, pricePerPerson: config.pricePerPerson,
+      category: category ?? 'non-bv',
+      adults,
+      children,
+      additionalAttendees,
+      paymentMethod,
+      pricePerPerson: config.pricePerPerson,
     }),
-    [adults, children, paymentMethod, isBvFamily, config.pricePerPerson],
+    [category, adults, children, additionalAttendees, paymentMethod, config.pricePerPerson],
   );
+
+  const showForm = category === 'non-bv'
+    || (category === 'bv-family' && bvVerified)
+    || (category === 'sevak' && sevakVerified);
+
+  function handleCategoryChange(newCategory: RegistrationCategory) {
+    setCategory(newCategory);
+    setBvVerified(false);
+    setBvChecking(false);
+    setBvError('');
+    setBvLookupValue('');
+    setBvFamilyEmails([]);
+    setBvFamilyPhones([]);
+    setSevakVerified(false);
+    setSevakChecking(false);
+    setSevakError('');
+    setSevakEmail('');
+    setAdults(1);
+    setChildren(0);
+    setAdditionalAttendees(0);
+    setMothersInPuja(0);
+  }
 
   const verifyBvStatus = useCallback(async () => {
     if (!bvLookupValue.trim()) {
@@ -204,12 +275,10 @@ export function EventRegistrationForm({ config }: { config: EventConfig }) {
       });
       const data = await res.json() as { isBvFamily: boolean; familyEmails?: string[]; familyPhones?: string[] };
       if (data.isBvFamily) {
-        setIsBvFamily(true);
-        setBvCheckDone(true);
+        setBvVerified(true);
         if (data.familyEmails) setBvFamilyEmails(data.familyEmails);
         if (data.familyPhones) setBvFamilyPhones(data.familyPhones);
       } else {
-        setIsBvFamily(false);
         setBvError(bvLookupMethod === 'familyId'
           ? 'Family ID not found in BV roster. Please check and try again.'
           : 'Email not found in BV roster. Try using your Family ID instead.');
@@ -220,6 +289,36 @@ export function EventRegistrationForm({ config }: { config: EventConfig }) {
       setBvChecking(false);
     }
   }, [bvLookupMethod, bvLookupValue]);
+
+  const verifySevakStatus = useCallback(async () => {
+    if (!sevakEmail.trim()) {
+      setSevakError('Please enter your email');
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(sevakEmail)) {
+      setSevakError('Please enter a valid email address');
+      return;
+    }
+    setSevakChecking(true);
+    setSevakError('');
+    try {
+      const res = await fetch('/api/events/check-bv-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sevakEmail: sevakEmail.trim() }),
+      });
+      const data = await res.json() as { isSevak: boolean };
+      if (data.isSevak) {
+        setSevakVerified(true);
+      } else {
+        setSevakError('Email not found in the teacher/sevak list. Please check and try again.');
+      }
+    } catch {
+      setSevakError('Unable to verify. Please try again.');
+    } finally {
+      setSevakChecking(false);
+    }
+  }, [sevakEmail]);
 
   function normalizePhone(p: string): string {
     const digits = p.replace(/\D/g, '');
@@ -274,6 +373,9 @@ export function EventRegistrationForm({ config }: { config: EventConfig }) {
         phone: phone.trim(),
         adults,
         children,
+        additionalAttendees,
+        mothersInPuja,
+        category: category ?? 'non-bv',
         paymentMethod,
         registrationId,
         subtotal,
@@ -414,49 +516,34 @@ export function EventRegistrationForm({ config }: { config: EventConfig }) {
 
           {!showLookup && (
             <div className="space-y-5">
+              {/* Category Selection */}
               <div className="space-y-3">
                 <label className="block text-sm font-medium text-gray-700">
-                  Are you a Bala Vihar (BV) family member?
+                  Registration Category
                 </label>
-                <div className="flex gap-3">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setBvSelection('yes');
-                      setIsBvFamily(false);
-                      setBvCheckDone(false);
-                      setBvError('');
-                      setBvLookupValue('');
-                      setBvFamilyEmails([]);
-                      setBvFamilyPhones([]);
-                    }}
-                    className={`flex-1 py-2.5 rounded-lg border text-sm font-medium transition-colors ${
-                      bvSelection === 'yes'
-                        ? 'border-amber-500 bg-amber-50 text-amber-800'
-                        : 'border-gray-300 text-gray-600 hover:bg-gray-50'
-                    }`}
-                  >
-                    Yes
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setBvSelection('no');
-                      setIsBvFamily(false);
-                      setBvCheckDone(false);
-                      setBvError('');
-                    }}
-                    className={`flex-1 py-2.5 rounded-lg border text-sm font-medium transition-colors ${
-                      bvSelection === 'no'
-                        ? 'border-amber-500 bg-amber-50 text-amber-800'
-                        : 'border-gray-300 text-gray-600 hover:bg-gray-50'
-                    }`}
-                  >
-                    No
-                  </button>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  {([
+                    { value: 'bv-family' as RegistrationCategory, label: 'Bala Vihar Family' },
+                    { value: 'sevak' as RegistrationCategory, label: 'BV Teacher/Sevak' },
+                    { value: 'non-bv' as RegistrationCategory, label: 'Non-Bala Vihar Family' },
+                  ]).map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => handleCategoryChange(opt.value)}
+                      className={`flex-1 py-3 px-4 rounded-lg border text-sm font-medium transition-colors ${
+                        category === opt.value
+                          ? 'border-amber-500 bg-amber-50 text-amber-800'
+                          : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
                 </div>
 
-                {bvSelection === 'yes' && !bvCheckDone && (
+                {/* BV Family Verification */}
+                {category === 'bv-family' && !bvVerified && (
                   <div className="bg-gray-50 rounded-xl p-4 space-y-3">
                     <p className="text-sm text-gray-600">Verify your BV family status using:</p>
                     <div className="flex gap-2">
@@ -493,7 +580,7 @@ export function EventRegistrationForm({ config }: { config: EventConfig }) {
                     {bvError && <p className="text-sm text-red-600">{bvError}</p>}
                     <button
                       type="button"
-                      onClick={verifyBvStatus}
+                      onClick={() => void verifyBvStatus()}
                       disabled={bvChecking || !bvLookupValue.trim()}
                       className="w-full py-2.5 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                     >
@@ -502,27 +589,76 @@ export function EventRegistrationForm({ config }: { config: EventConfig }) {
                   </div>
                 )}
 
-                {bvCheckDone && isBvFamily && (
+                {/* BV Family Verified */}
+                {category === 'bv-family' && bvVerified && (
                   <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-3 flex items-center gap-2">
                     <svg className="w-5 h-5 text-green-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                     </svg>
                     <div>
-                      <p className="text-sm text-green-700 font-medium">BV Family verified - $10 flat rate for entire family</p>
-                      <button type="button" onClick={() => { setBvCheckDone(false); setIsBvFamily(false); setBvLookupValue(''); }} className="text-xs text-green-600 underline mt-0.5">Change</button>
+                      <p className="text-sm text-green-700 font-medium">BV Family verified</p>
+                      <button type="button" onClick={() => { setBvVerified(false); setBvLookupValue(''); setBvFamilyEmails([]); setBvFamilyPhones([]); }} className="text-xs text-green-600 underline mt-0.5">Change</button>
                     </div>
                   </div>
                 )}
 
-                {bvSelection === 'no' && (
+                {/* Sevak Verification */}
+                {category === 'sevak' && !sevakVerified && (
+                  <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+                    <p className="text-sm text-gray-600">Verify your teacher/sevak status:</p>
+                    <input
+                      type="email"
+                      value={sevakEmail}
+                      onChange={(e) => { setSevakEmail(e.target.value); setSevakError(''); }}
+                      placeholder="Enter your registered email"
+                      className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent text-gray-900 placeholder-gray-400 text-sm"
+                    />
+                    {sevakError && <p className="text-sm text-red-600">{sevakError}</p>}
+                    <button
+                      type="button"
+                      onClick={() => void verifySevakStatus()}
+                      disabled={sevakChecking || !sevakEmail.trim()}
+                      className="w-full py-2.5 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {sevakChecking ? 'Verifying...' : 'Verify'}
+                    </button>
+                  </div>
+                )}
+
+                {/* Sevak Verified */}
+                {category === 'sevak' && sevakVerified && (
+                  <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-3 flex items-center gap-2">
+                    <svg className="w-5 h-5 text-green-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                    <div>
+                      <p className="text-sm text-green-700 font-medium">BV Teacher/Sevak verified</p>
+                      <button type="button" onClick={() => { setSevakVerified(false); setSevakEmail(''); }} className="text-xs text-green-600 underline mt-0.5">Change</button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Non-BV Info */}
+                {category === 'non-bv' && (
                   <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
                     <p className="text-sm text-amber-800 font-medium">Non-BV Family - ${config.pricePerPerson} per person (adults and children)</p>
                   </div>
                 )}
               </div>
 
-              {(bvSelection === 'no' || (bvSelection === 'yes' && bvCheckDone && isBvFamily)) && (
+              {/* Registration form fields - shown after category selection + verification */}
+              {showForm && (
                 <form onSubmit={handleSubmit} className="space-y-5">
+                  {/* BV Family definition info */}
+                  {category === 'bv-family' && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
+                      <p className="text-sm text-blue-800">
+                        Family registration covers parents and children enrolled in Bala Vihar. Please include all others (such as grandparents, relatives, or friends) as additional attendees.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Full Name */}
                   <div>
                     <label htmlFor="fullName" className="block text-sm font-medium text-gray-700 mb-1">
                       Full Name
@@ -547,6 +683,7 @@ export function EventRegistrationForm({ config }: { config: EventConfig }) {
                     {errors.name && <p className="text-sm text-red-600 mt-1">{errors.name}</p>}
                   </div>
 
+                  {/* Email */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
                     <div className="relative">
@@ -566,6 +703,7 @@ export function EventRegistrationForm({ config }: { config: EventConfig }) {
                     {errors.email && <p className="text-sm text-red-600 mt-1">{errors.email}</p>}
                   </div>
 
+                  {/* Phone */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
                     <div className="relative">
@@ -588,6 +726,7 @@ export function EventRegistrationForm({ config }: { config: EventConfig }) {
                     {errors.phone && <p className="text-sm text-red-600 mt-1">{errors.phone}</p>}
                   </div>
 
+                  {/* Attendee Counters - Category-specific */}
                   <div>
                     <div className="flex items-center gap-2 mb-2">
                       <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -595,20 +734,117 @@ export function EventRegistrationForm({ config }: { config: EventConfig }) {
                       </svg>
                       <span className="text-sm font-medium text-gray-700">Number of Attendees</span>
                     </div>
-                    <CounterInput label="Adults" value={adults} min={1} onChange={setAdults} />
-                    <CounterInput label="Children" value={children} min={0} onChange={setChildren} />
+
+                    {/* BV Family Counters */}
+                    {category === 'bv-family' && (
+                      <>
+                        <CounterInput label="Parents" value={adults} min={1} max={2} onChange={handleAdultsChange} />
+                        <CounterInput label="Children" value={children} min={0} onChange={setChildren} />
+                        <div className="border-t border-gray-200 mt-4 pt-4">
+                          <div className="flex items-center gap-2 mb-2">
+                            <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
+                            </svg>
+                            <span className="text-sm font-medium text-gray-700">Additional Attendees</span>
+                          </div>
+                          <p className="text-xs text-gray-500 mb-2 ml-7">Grandparents, relatives, friends — $10 per person</p>
+                          <CounterInput label="Attendees" value={additionalAttendees} min={0} onChange={setAdditionalAttendees} />
+                        </div>
+                        <div className="border-t border-gray-200 mt-4 pt-4">
+                          <div className="flex items-center gap-2 mb-2">
+                            <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+                            </svg>
+                            <span className="text-sm font-medium text-gray-700">Number of Mothers</span>
+                          </div>
+                          <p className="text-xs text-gray-500 mb-2 ml-7">Of above, how many Mothers will need seating for Matr Puja?</p>
+                          <CounterInput label="Mothers" value={mothersInPuja} min={0} max={maxMothers} onChange={setMothersInPuja} />
+                        </div>
+                      </>
+                    )}
+
+                    {/* Sevak Counters */}
+                    {category === 'sevak' && (
+                      <>
+                        <CounterInput label="Sevak & Spouse" value={adults} min={1} max={2} onChange={handleAdultsChange} />
+                        <div className="border-t border-gray-200 mt-4 pt-4">
+                          <div className="flex items-center gap-2 mb-2">
+                            <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
+                            </svg>
+                            <span className="text-sm font-medium text-gray-700">Additional Attendees</span>
+                          </div>
+                          <p className="text-xs text-gray-500 mb-2 ml-7">$10 per person</p>
+                          <CounterInput label="Attendees" value={additionalAttendees} min={0} onChange={setAdditionalAttendees} />
+                        </div>
+                        <div className="border-t border-gray-200 mt-4 pt-4">
+                          <div className="flex items-center gap-2 mb-2">
+                            <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+                            </svg>
+                            <span className="text-sm font-medium text-gray-700">Number of Mothers</span>
+                          </div>
+                          <p className="text-xs text-gray-500 mb-2 ml-7">Of above, how many Mothers will need seating for Matr Puja?</p>
+                          <CounterInput label="Mothers" value={mothersInPuja} min={0} max={maxMothers} onChange={setMothersInPuja} />
+                        </div>
+                      </>
+                    )}
+
+                    {/* Non-BV Counters */}
+                    {category === 'non-bv' && (
+                      <>
+                        <CounterInput label="Adults" value={adults} min={1} onChange={handleAdultsChange} />
+                        <CounterInput label="Children" value={children} min={0} onChange={setChildren} />
+                        <div className="border-t border-gray-200 mt-4 pt-4">
+                          <div className="flex items-center gap-2 mb-2">
+                            <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+                            </svg>
+                            <span className="text-sm font-medium text-gray-700">Number of Mothers</span>
+                          </div>
+                          <p className="text-xs text-gray-500 mb-2 ml-7">Of above, how many Mothers will need seating for Matr Puja?</p>
+                          <CounterInput label="Mothers" value={mothersInPuja} min={0} max={maxMothers} onChange={setMothersInPuja} />
+                        </div>
+                      </>
+                    )}
                   </div>
 
+                  {/* Cost Display */}
                   <div className="pt-2 space-y-1">
-                    <div className="flex justify-between text-sm text-gray-600">
-                      <span>{isBvFamily ? 'BV Family (flat rate)' : 'Subtotal'}</span>
-                      <span>
-                        {isBvFamily
-                          ? `$${totals.subtotal.toFixed(2)}`
-                          : `$${totals.subtotal.toFixed(2)} (${adults + children} x $${config.pricePerPerson})`
-                        }
-                      </span>
-                    </div>
+                    {category === 'bv-family' && (
+                      <>
+                        <div className="flex justify-between text-sm text-gray-600">
+                          <span>BV Family (flat donation)</span>
+                          <span>$10.00</span>
+                        </div>
+                        {additionalAttendees > 0 && (
+                          <div className="flex justify-between text-sm text-gray-600">
+                            <span>Additional Attendees ({additionalAttendees} x $10)</span>
+                            <span>${(additionalAttendees * 10).toFixed(2)}</span>
+                          </div>
+                        )}
+                      </>
+                    )}
+                    {category === 'sevak' && (
+                      <>
+                        <div className="flex justify-between text-sm text-gray-600">
+                          <span>BV Teacher/Sevak (flat donation)</span>
+                          <span>$10.00</span>
+                        </div>
+                        {additionalAttendees > 0 && (
+                          <div className="flex justify-between text-sm text-gray-600">
+                            <span>Additional Attendees ({additionalAttendees} x $10)</span>
+                            <span>${(additionalAttendees * 10).toFixed(2)}</span>
+                          </div>
+                        )}
+                      </>
+                    )}
+                    {category === 'non-bv' && (
+                      <div className="flex justify-between text-sm text-gray-600">
+                        <span>Subtotal</span>
+                        <span>${totals.subtotal.toFixed(2)} ({adults + children} x $10)</span>
+                      </div>
+                    )}
                     {paymentMethod === 'stripe' && (
                       <div className="flex justify-between text-sm text-gray-600">
                         <span>+ Processing Fees</span>
@@ -621,6 +857,7 @@ export function EventRegistrationForm({ config }: { config: EventConfig }) {
                     </div>
                   </div>
 
+                  {/* Payment Method */}
                   <div className="pt-2">
                     <label className="block text-sm font-medium text-gray-700 mb-3">Payment Method</label>
                     <div className="space-y-3">

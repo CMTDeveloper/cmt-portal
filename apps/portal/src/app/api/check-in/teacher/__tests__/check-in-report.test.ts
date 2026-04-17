@@ -3,26 +3,15 @@ import { testApiHandler } from 'next-test-api-route-handler';
 
 // ── hoisted mocks ────────────────────────────────────────────────────────────
 const mocks = vi.hoisted(() => {
-  const fakeGetAll = vi.fn();
-  const fakeCollection = vi.fn();
-  const fakeDoc = vi.fn();
-
-  // portalFirestore() returns an object with collection() and getAll()
-  const fakeFirestore = {
-    collection: fakeCollection,
-    getAll: fakeGetAll,
-  };
-
-  // collection('family-check-ins').doc(fid).collection('checkIns').doc(date)
-  const subDocRef = { id: 'ref', get: vi.fn() }; // stub ref
+  const subDocGet = vi.fn();
+  const subDocRef = { id: 'ref', get: subDocGet };
   const subCollection = { doc: vi.fn(() => subDocRef) };
   const familyDoc = { collection: vi.fn(() => subCollection) };
   const topCollection = { doc: vi.fn(() => familyDoc) };
+  const fakeCollection = vi.fn(() => topCollection);
+  const fakeFirestore = { collection: fakeCollection };
 
-  fakeCollection.mockReturnValue(topCollection);
-  fakeDoc.mockReturnValue(familyDoc);
-
-  return { fakeFirestore, fakeGetAll, fakeCollection, topCollection, familyDoc, subCollection, subDocRef };
+  return { fakeFirestore, subDocGet, fakeCollection, topCollection, familyDoc, subCollection, subDocRef };
 });
 
 vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
@@ -44,12 +33,11 @@ import * as appHandler from '../check-in-report/route';
 const mockReadRtdb = readRtdb as ReturnType<typeof vi.fn>;
 const mockPortalFirestore = portalFirestore as ReturnType<typeof vi.fn>;
 
-// Roster with two families in Brampton, one in Scarborough
 const bramptonRoster = {
-  'r1': { sid: '1', fid: '100', fname: 'Alice', lname: 'Smith', grade: 1, center: 'Brampton' },
-  'r2': { sid: '2', fid: '100', fname: 'Bob', lname: 'Smith', grade: 99, pfname: 'Carol', plname: 'Smith', center: 'Brampton' },
-  'r3': { sid: '3', fid: '200', fname: 'Dave', lname: 'Jones', grade: 1, center: 'Brampton' },
-  'r4': { sid: '4', fid: '999', fname: 'Eve', lname: 'Remote', grade: 1, center: 'Scarborough' },
+  r1: { sid: '1', fid: '100', fname: 'Alice', lname: 'Smith', grade: 1, center: 'Brampton' },
+  r2: { sid: '2', fid: '100', fname: 'Bob', lname: 'Smith', grade: 99, pfname: 'Carol', plname: 'Smith', center: 'Brampton' },
+  r3: { sid: '3', fid: '200', fname: 'Dave', lname: 'Jones', grade: 1, center: 'Brampton' },
+  r4: { sid: '4', fid: '999', fname: 'Eve', lname: 'Remote', grade: 1, center: 'Scarborough' },
 };
 
 function makeSnap(exists: boolean, data?: Record<string, unknown>) {
@@ -58,15 +46,12 @@ function makeSnap(exists: boolean, data?: Record<string, unknown>) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  // Restore portalFirestore implementation (clearAllMocks wipes it)
   mockPortalFirestore.mockReturnValue(mocks.fakeFirestore);
-  // Reset collection chain
   mocks.fakeCollection.mockReturnValue(mocks.topCollection);
   mocks.topCollection.doc.mockReturnValue(mocks.familyDoc);
   mocks.familyDoc.collection.mockReturnValue(mocks.subCollection);
   mocks.subCollection.doc.mockReturnValue(mocks.subDocRef);
-  // Default: each ref.get() returns a non-existent snap (all checkIns false)
-  mocks.subDocRef.get.mockResolvedValue(makeSnap(false));
+  mocks.subDocGet.mockResolvedValue(makeSnap(false));
 });
 
 describe('GET /api/check-in/teacher/check-in-report', () => {
@@ -107,16 +92,14 @@ describe('GET /api/check-in/teacher/check-in-report', () => {
         const res = await fetch({ method: 'GET', headers: { 'x-portal-uid': 'u1' } });
         expect(res.status).toBe(200);
         const body = await res.json();
-        // April 2026 Sundays: 5, 12, 19, 26
         expect(body.dates).toEqual(['2026-04-05', '2026-04-12', '2026-04-19', '2026-04-26']);
       },
     });
   });
 
-  it('returns aggregated check-in data with correct booleans', async () => {
+  it('returns aggregated check-in data with correct family names and grid', async () => {
     mockReadRtdb.mockResolvedValueOnce(bramptonRoster);
-    // Default subDocRef.get() returns non-existent → all checkIns false
-
+    // default subDocGet returns makeSnap(false) for all 8 refs
     await testApiHandler({
       appHandler,
       url: '/api/check-in/teacher/check-in-report?center=Brampton&month=2026-04',
@@ -124,15 +107,12 @@ describe('GET /api/check-in/teacher/check-in-report', () => {
         const res = await fetch({ method: 'GET', headers: { 'x-portal-uid': 'u1' } });
         const body = await res.json();
         expect(res.status).toBe(200);
-
         expect(body.totalFamilies).toBe(2);
         expect(body.dates).toEqual(['2026-04-05', '2026-04-12', '2026-04-19', '2026-04-26']);
 
         const f100 = body.families['100'];
         expect(f100).toBeDefined();
-        // parent row override: plname=Smith, pfname=Carol
         expect(f100.name).toBe('Smith, Carol');
-        // all snaps are non-existing → all false
         expect(Object.values(f100.checkIns).every((v) => v === false)).toBe(true);
         expect(Object.keys(f100.checkIns)).toEqual(['2026-04-05', '2026-04-12', '2026-04-19', '2026-04-26']);
 
@@ -143,16 +123,13 @@ describe('GET /api/check-in/teacher/check-in-report', () => {
     });
   });
 
-  it('maps checked-in snapshots to true via array format', async () => {
-    // Single family in center Test, January 2026 (Sundays: 4, 11, 18, 25)
+  it('maps checked-in snapshots to true via array and object formats', async () => {
     const oneFamily = {
       r1: { sid: '1', fid: '100', fname: 'Alice', lname: 'Smith', grade: 1, center: 'Test' },
     };
     mockReadRtdb.mockResolvedValueOnce(oneFamily);
-
-    // Route calls ref.get() for each (fid, date) pair in order:
-    // [100/2026-01-04, 100/2026-01-11, 100/2026-01-18, 100/2026-01-25]
-    mocks.subDocRef.get
+    // Jan 2026 Sundays: 4,11,18,25 — 4 sequential ref.get() calls
+    mocks.subDocGet
       .mockResolvedValueOnce(makeSnap(true, { students: [{ sid: '1', isCheckedIn: true }] }))
       .mockResolvedValueOnce(makeSnap(false))
       .mockResolvedValueOnce(makeSnap(true, { students: { '1': true } }))
@@ -178,8 +155,6 @@ describe('GET /api/check-in/teacher/check-in-report', () => {
 
   it('includes centers array derived from roster', async () => {
     mockReadRtdb.mockResolvedValueOnce(bramptonRoster);
-    // Default subDocRef.get() returns non-existent → fine for this test
-
     await testApiHandler({
       appHandler,
       url: '/api/check-in/teacher/check-in-report?center=Brampton&month=2026-04',
