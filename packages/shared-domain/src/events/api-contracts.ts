@@ -5,6 +5,7 @@ import { z } from 'zod';
 export const checkBvStatusRequestSchema = z.union([
   z.object({ familyId: z.string().min(1).max(10) }),
   z.object({ email: z.string().email() }),
+  z.object({ sevakEmail: z.string().email() }),
 ]);
 export type CheckBvStatusRequest = z.infer<typeof checkBvStatusRequestSchema>;
 
@@ -27,6 +28,9 @@ export const registerRequestSchema = z.object({
   payment_source: z.enum(['stripe', 'etransfer']),
   contribution: z.number().min(0),
   isBvFamily: z.boolean().optional(),
+  category: z.enum(['bv-family', 'sevak', 'non-bv']).optional(),
+  additionalAttendees: z.number().int().min(0).max(50).optional(),
+  mothersInPuja: z.number().int().min(0).max(50).optional(),
   etransferReference: z.string().max(50).optional(),
 });
 export type RegisterRequest = z.infer<typeof registerRequestSchema>;
@@ -42,7 +46,7 @@ export type LookupRequest = z.infer<typeof lookupRequestSchema>;
 // --- create-checkout ---
 
 export const lineItemSchema = z.object({
-  name: z.enum(['Adults', 'Child', 'BV Family', 'Processing Fees']),
+  name: z.enum(['Adults', 'Child', 'Children', 'BV Family', 'BV Teacher/Sevak', 'Additional Attendees', 'Processing Fees']),
   amount: z.number().positive().max(1000),
   quantity: z.number().int().positive().max(100),
 });

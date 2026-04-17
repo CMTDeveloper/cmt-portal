@@ -20,6 +20,11 @@ describe('checkBvStatusRequestSchema', () => {
     expect(result.success).toBe(true);
   });
 
+  it('accepts sevakEmail variant', () => {
+    const result = checkBvStatusRequestSchema.safeParse({ sevakEmail: 'sevak@example.com' });
+    expect(result.success).toBe(true);
+  });
+
   it('rejects empty object', () => {
     const result = checkBvStatusRequestSchema.safeParse({});
     expect(result.success).toBe(false);
@@ -27,6 +32,11 @@ describe('checkBvStatusRequestSchema', () => {
 
   it('rejects invalid email', () => {
     const result = checkBvStatusRequestSchema.safeParse({ email: 'not-email' });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects invalid sevakEmail', () => {
+    const result = checkBvStatusRequestSchema.safeParse({ sevakEmail: 'not-email' });
     expect(result.success).toBe(false);
   });
 });
@@ -63,6 +73,38 @@ describe('registerRequestSchema', () => {
     expect(registerRequestSchema.safeParse({ ...valid, isBvFamily: true }).success).toBe(true);
   });
 
+  it('accepts optional category bv-family', () => {
+    expect(registerRequestSchema.safeParse({ ...valid, category: 'bv-family' }).success).toBe(true);
+  });
+
+  it('accepts optional category sevak', () => {
+    expect(registerRequestSchema.safeParse({ ...valid, category: 'sevak' }).success).toBe(true);
+  });
+
+  it('accepts optional category non-bv', () => {
+    expect(registerRequestSchema.safeParse({ ...valid, category: 'non-bv' }).success).toBe(true);
+  });
+
+  it('rejects invalid category value', () => {
+    expect(registerRequestSchema.safeParse({ ...valid, category: 'other' }).success).toBe(false);
+  });
+
+  it('accepts optional additionalAttendees', () => {
+    expect(registerRequestSchema.safeParse({ ...valid, additionalAttendees: 3 }).success).toBe(true);
+  });
+
+  it('rejects additionalAttendees above 50', () => {
+    expect(registerRequestSchema.safeParse({ ...valid, additionalAttendees: 51 }).success).toBe(false);
+  });
+
+  it('accepts optional mothersInPuja', () => {
+    expect(registerRequestSchema.safeParse({ ...valid, mothersInPuja: 1 }).success).toBe(true);
+  });
+
+  it('rejects mothersInPuja above 50', () => {
+    expect(registerRequestSchema.safeParse({ ...valid, mothersInPuja: 51 }).success).toBe(false);
+  });
+
   it('accepts optional etransferReference within 50 chars', () => {
     expect(registerRequestSchema.safeParse({ ...valid, etransferReference: 'C1AsjcyW6gqU' }).success).toBe(true);
   });
@@ -91,8 +133,36 @@ describe('createCheckoutRequestSchema', () => {
     cancelUrl: 'https://example.com/cancel',
   };
 
-  it('accepts valid payload', () => {
+  it('accepts valid payload with Adults', () => {
     expect(createCheckoutRequestSchema.safeParse(valid).success).toBe(true);
+  });
+
+  it('accepts BV Family line item name', () => {
+    expect(createCheckoutRequestSchema.safeParse({
+      ...valid,
+      lineItems: [{ name: 'BV Family', amount: 10, quantity: 1 }],
+    }).success).toBe(true);
+  });
+
+  it('accepts BV Teacher/Sevak line item name', () => {
+    expect(createCheckoutRequestSchema.safeParse({
+      ...valid,
+      lineItems: [{ name: 'BV Teacher/Sevak', amount: 10, quantity: 1 }],
+    }).success).toBe(true);
+  });
+
+  it('accepts Additional Attendees line item name', () => {
+    expect(createCheckoutRequestSchema.safeParse({
+      ...valid,
+      lineItems: [{ name: 'Additional Attendees', amount: 10, quantity: 2 }],
+    }).success).toBe(true);
+  });
+
+  it('accepts Children line item name', () => {
+    expect(createCheckoutRequestSchema.safeParse({
+      ...valid,
+      lineItems: [{ name: 'Children', amount: 10, quantity: 2 }],
+    }).success).toBe(true);
   });
 
   it('rejects empty lineItems', () => {

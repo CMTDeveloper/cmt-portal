@@ -1,12 +1,13 @@
-import type { PaymentSource } from './registration';
+import type { PaymentSource, RegistrationCategory } from './registration';
 
 const STRIPE_PERCENT_FEE = 0.022;
 const STRIPE_FIXED_FEE = 0.3;
 
 export interface PricingInput {
+  category: RegistrationCategory;
   adults: number;
   children: number;
-  isBvFamily: boolean;
+  additionalAttendees: number;
   paymentMethod: PaymentSource;
   pricePerPerson: number;
 }
@@ -18,9 +19,10 @@ export interface PricingResult {
 }
 
 export function calculatePricing(input: PricingInput): PricingResult {
-  const subtotal = input.isBvFamily
-    ? input.pricePerPerson
-    : (input.adults + input.children) * input.pricePerPerson;
+  const subtotal =
+    input.category === 'non-bv'
+      ? (input.adults + input.children) * input.pricePerPerson
+      : input.pricePerPerson + input.additionalAttendees * input.pricePerPerson;
 
   const processingFee =
     input.paymentMethod === 'stripe'

@@ -11,6 +11,9 @@ export const REGISTRATION_PAYMENT_STATUSES = [
 export type RegistrationPaymentStatus =
   (typeof REGISTRATION_PAYMENT_STATUSES)[number];
 
+export const REGISTRATION_CATEGORIES = ['bv-family', 'sevak', 'non-bv'] as const;
+export type RegistrationCategory = (typeof REGISTRATION_CATEGORIES)[number];
+
 export interface EventRegistration {
   registrationId: string;
   campaign: string;
@@ -20,6 +23,9 @@ export interface EventRegistration {
   adults: number;
   children: number;
   isBvFamily: boolean;
+  category: RegistrationCategory;
+  additionalAttendees: number;
+  mothersInPuja: number;
   payment_source: PaymentSource;
   contribution: number;
   etransferReference?: string;
