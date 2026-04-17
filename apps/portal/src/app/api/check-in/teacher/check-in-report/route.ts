@@ -21,9 +21,7 @@ function getSundaysInMonth(yearMonth: string): string[] {
   const [year, month] = yearMonth.split('-').map(Number);
   if (!year || !month) return [];
   const sundays: string[] = [];
-  // month is 1-based; Date uses 0-based months
   const d = new Date(year, month - 1, 1);
-  // advance to first Sunday
   while (d.getDay() !== 0) {
     d.setDate(d.getDate() + 1);
   }
@@ -130,29 +128,27 @@ export async function GET(req: Request) {
   if (familyIds.length > 0 && dates.length > 0) {
     const db = portalFirestore();
 
-    // Build all DocumentReferences for a single getAll() round-trip
-    const refs: FirebaseFirestore.DocumentReference[] = [];
-    const refIndex: Array<{ fid: string; date: string }> = [];
-
+    // Batch all Firestore reads in one Promise.all round-trip
+    const tasks: Array<{ fid: string; date: string; ref: FirebaseFirestore.DocumentReference }> = [];
     for (const fid of familyIds) {
       for (const date of dates) {
-        refs.push(
-          db.collection('family-check-ins').doc(fid).collection('checkIns').doc(date),
-        );
-        refIndex.push({ fid, date });
+        tasks.push({
+          fid,
+          date,
+          ref: db.collection('family-check-ins').doc(fid).collection('checkIns').doc(date),
+        });
       }
     }
 
-    // getAll is supported for subcollection refs in firebase-admin
-    const snapshots = await db.getAll(...refs);
+    const snapshots = await Promise.all(tasks.map((t) => t.ref.get()));
 
     for (let i = 0; i < snapshots.length; i++) {
       const snap = snapshots[i];
-      const entry = refIndex[i];
-      if (!entry || !snap) continue;
+      const task = tasks[i];
+      if (!snap || !task) continue;
       if (snap.exists) {
         const data = snap.data() as Record<string, unknown>;
-        families[entry.fid]!.checkIns[entry.date] = isCheckedInDoc(data);
+        families[task.fid]!.checkIns[task.date] = isCheckedInDoc(data);
       }
     }
   }
