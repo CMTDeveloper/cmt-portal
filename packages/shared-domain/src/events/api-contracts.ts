@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-// --- check-bv-status ---
+// --- check-bv-status (legacy — kept for backwards compat) ---
 
 export const checkBvStatusRequestSchema = z.union([
   z.object({ familyId: z.string().min(1).max(10) }),
@@ -15,6 +15,22 @@ export const checkBvStatusResponseSchema = z.object({
   familyPhones: z.array(z.string()).optional(),
 });
 export type CheckBvStatusResponse = z.infer<typeof checkBvStatusResponseSchema>;
+
+// --- verify-registration ---
+
+export const existingRegistrationSchema = z.object({
+  registrationId: z.string(),
+  paymentStatus: z.string(),
+});
+export type ExistingRegistrationResult = z.infer<typeof existingRegistrationSchema>;
+
+export const verifyRegistrationRequestSchema = z.union([
+  z.object({ email: z.string().email() }),
+  z.object({ familyId: z.string().min(1).max(10) }),
+  z.object({ sevakEmail: z.string().email() }),
+  z.object({ checkDuplicateEmail: z.string().email(), category: z.enum(['non-bv']) }),
+]);
+export type VerifyRegistrationRequest = z.infer<typeof verifyRegistrationRequestSchema>;
 
 // --- register ---
 

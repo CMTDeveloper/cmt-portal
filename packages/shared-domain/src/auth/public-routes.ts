@@ -35,6 +35,7 @@ export const PUBLIC_ROUTES = [
 
   // Public event APIs
   '/api/events/check-bv-status',
+  '/api/events/verify-registration',
   '/api/events/register',
   '/api/events/lookup',
   '/api/events/create-checkout',
