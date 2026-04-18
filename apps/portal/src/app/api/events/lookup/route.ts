@@ -40,6 +40,8 @@ export async function POST(req: Request) {
           fid: data.fid || '',
           paymentStatus: data.paymentStatus || 'pending',
           etransferReference: data.etransferReference || '',
+          contributionExpected: data.contributionExpected || undefined,
+          contributionReceived: data.contributionReceived || undefined,
         });
       }
     }

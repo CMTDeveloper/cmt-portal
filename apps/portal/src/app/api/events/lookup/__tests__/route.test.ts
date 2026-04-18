@@ -351,4 +351,49 @@ describe('POST /api/events/lookup', () => {
       },
     });
   });
+
+  it('returns contributionExpected and contributionReceived when present in Firebase', async () => {
+    mockGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        ...mockRegistration,
+        paymentStatus: 'review',
+        contributionExpected: '50',
+        contributionReceived: '1.00',
+      }),
+    });
+
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        const res = await fetch({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ registrationId: 'MD26-ABC1234', email: 'john@example.com' }),
+        });
+        const data = await res.json();
+        expect(res.status).toBe(200);
+        expect(data.paymentStatus).toBe('review');
+        expect(data.contributionExpected).toBe('50');
+        expect(data.contributionReceived).toBe('1.00');
+      },
+    });
+  });
+
+  it('omits contributionExpected and contributionReceived when absent in Firebase', async () => {
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        const res = await fetch({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ registrationId: 'MD26-ABC1234', email: 'john@example.com' }),
+        });
+        const data = await res.json();
+        expect(res.status).toBe(200);
+        expect(data.contributionExpected).toBeUndefined();
+        expect(data.contributionReceived).toBeUndefined();
+      },
+    });
+  });
 });

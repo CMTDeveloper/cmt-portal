@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { testApiHandler } from 'next-test-api-route-handler';
 
+const mockSet = vi.fn().mockResolvedValue(undefined);
 vi.mock('@/features/events/shared/firestore-adapter', () => ({
   registrationsCollection: () => ({
     doc: () => ({
-      set: vi.fn().mockResolvedValue(undefined),
+      set: mockSet,
     }),
   }),
 }));
@@ -26,6 +27,7 @@ const VALID_API_KEY = 'test-webhook-key-123';
 describe('POST /api/events/webhooks/payment-status', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockSet.mockResolvedValue(undefined);
     mockSendToGoogleSheet.mockResolvedValue(undefined);
     process.env.WEBHOOK_API_KEY = VALID_API_KEY;
     delete process.env.NEXT_PUBLIC_GOOGLE_SHEET_URL;
@@ -230,7 +232,7 @@ describe('POST /api/events/webhooks/payment-status', () => {
   });
 
   it('accepts all valid paymentStatus values', async () => {
-    for (const status of ['completed', 'pending', 'failed', 'refunded']) {
+    for (const status of ['completed', 'pending', 'failed', 'refunded', 'review']) {
       await testApiHandler({
         appHandler,
         test: async ({ fetch }) => {
@@ -245,5 +247,55 @@ describe('POST /api/events/webhooks/payment-status', () => {
         },
       });
     }
+  });
+
+  it('accepts review status with contributionExpected and contributionReceived', async () => {
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        const res = await fetch({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-api-key': VALID_API_KEY },
+          body: JSON.stringify({
+            registrationId: 'MD26-ABC1234',
+            paymentStatus: 'review',
+            payment_source: 'etransfer',
+            contributionExpected: '50',
+            contributionReceived: '1.00',
+          }),
+        });
+        const data = await res.json();
+        expect(res.status).toBe(200);
+        expect(data.success).toBe(true);
+        expect(data.paymentStatus).toBe('review');
+      },
+    });
+  });
+
+  it('stores contributionExpected and contributionReceived in Firestore on review', async () => {
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        await fetch({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-api-key': VALID_API_KEY },
+          body: JSON.stringify({
+            registrationId: 'MD26-ABC1234',
+            paymentStatus: 'review',
+            payment_source: 'etransfer',
+            contributionExpected: '50',
+            contributionReceived: '1.00',
+          }),
+        });
+        expect(mockSet).toHaveBeenCalledWith(
+          expect.objectContaining({
+            paymentStatus: 'review',
+            contributionExpected: '50',
+            contributionReceived: '1.00',
+          }),
+          { merge: true },
+        );
+      },
+    });
   });
 });

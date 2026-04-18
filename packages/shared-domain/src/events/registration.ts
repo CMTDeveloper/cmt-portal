@@ -7,6 +7,7 @@ export const REGISTRATION_PAYMENT_STATUSES = [
   'failed',
   'refunded',
   'cancelled',
+  'review',
 ] as const;
 export type RegistrationPaymentStatus =
   (typeof REGISTRATION_PAYMENT_STATUSES)[number];
@@ -31,6 +32,8 @@ export interface EventRegistration {
   contribution: number;
   etransferReference?: string;
   paymentStatus: RegistrationPaymentStatus;
+  contributionExpected?: string;
+  contributionReceived?: string;
   createdAt: number;
   updatedAt: number;
 }

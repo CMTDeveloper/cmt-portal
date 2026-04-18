@@ -85,7 +85,9 @@ export type UpdatePaymentStatusRequest = z.infer<typeof updatePaymentStatusReque
 
 export const webhookPaymentStatusRequestSchema = z.object({
   registrationId: z.string().regex(/^MD26-[A-Z0-9]{7}$/),
-  paymentStatus: z.enum(['pending', 'completed', 'failed', 'refunded']),
+  paymentStatus: z.enum(['pending', 'completed', 'failed', 'refunded', 'review']),
   payment_source: z.enum(['stripe', 'etransfer', 'unknown']).optional().default('unknown'),
+  contributionExpected: z.string().optional(),
+  contributionReceived: z.string().optional(),
 });
 export type WebhookPaymentStatusRequest = z.infer<typeof webhookPaymentStatusRequestSchema>;

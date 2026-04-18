@@ -21,7 +21,9 @@ interface RegistrationState {
   stripePaymentLink?: string;
   etransferReference?: string;
   isBvFamily: boolean;
-  paymentStatus: 'pending' | 'completed' | 'cancelled';
+  paymentStatus: 'pending' | 'completed' | 'cancelled' | 'review';
+  contributionExpected?: string;
+  contributionReceived?: string;
 }
 
 const STORAGE_KEY = 'cmtEventRegistration';
@@ -68,11 +70,16 @@ export function PaymentInstructions() {
         body: JSON.stringify({ registrationId: regId, email }),
       });
       if (!res.ok) return;
-      const data = await res.json() as { paymentStatus?: string };
-      if (data.paymentStatus === 'completed') {
+      const data = await res.json() as { paymentStatus?: string; contributionExpected?: string; contributionReceived?: string };
+      if (data.paymentStatus && data.paymentStatus !== 'pending') {
         const current = loadRegistration();
-        if (current) {
-          const updated = { ...current, paymentStatus: 'completed' as const };
+        if (current && current.paymentStatus !== data.paymentStatus) {
+          const updated: RegistrationState = {
+            ...current,
+            paymentStatus: data.paymentStatus as RegistrationState['paymentStatus'],
+            ...(data.contributionExpected ? { contributionExpected: data.contributionExpected } : {}),
+            ...(data.contributionReceived ? { contributionReceived: data.contributionReceived } : {}),
+          };
           saveRegistration(updated);
           setRegistration(updated);
         }
@@ -83,7 +90,7 @@ export function PaymentInstructions() {
   }, []);
 
   useEffect(() => {
-    if (!registration || registration.paymentStatus === 'completed') return;
+    if (!registration || registration.paymentStatus === 'completed' || registration.paymentStatus === 'cancelled') return;
     const interval = setInterval(() => {
       void pollPaymentStatus(registration.registrationId, registration.email);
     }, 15000);
@@ -117,13 +124,13 @@ export function PaymentInstructions() {
             {process.env.NEXT_PUBLIC_EVENT_DISPLAY_NAME || 'Event'} Registration
           </h1>
           <p className="text-gray-500 mt-1">
-            {registration.paymentStatus === 'completed' ? 'Registration complete' : 'Complete your payment'}
+            {registration.paymentStatus === 'completed' ? 'Registration complete' : registration.paymentStatus === 'review' ? 'Payment under review' : 'Complete your payment'}
           </p>
         </div>
 
         <StepIndicator currentStep={2} />
 
-        {registration.paymentStatus !== 'completed' && (
+        {registration.paymentStatus !== 'completed' && registration.paymentStatus !== 'review' && (
           <div className="mb-4">
             <h2 className="text-lg font-bold text-gray-900 mb-3">Payment Instructions</h2>
 
@@ -209,7 +216,7 @@ export function PaymentInstructions() {
           isBvFamily={registration.isBvFamily}
         />
 
-        {registration.paymentMethod === 'etransfer' && registration.paymentStatus !== 'completed' && (
+        {registration.paymentMethod === 'etransfer' && registration.paymentStatus !== 'completed' && registration.paymentStatus !== 'review' && (
           <div className="border border-gray-200 rounded-xl p-6 mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-1">
               e-Transfer Reference Number{' '}
@@ -290,6 +297,22 @@ export function PaymentInstructions() {
             <div>
               <p className="text-green-700 font-bold">Payment Confirmed</p>
               <p className="text-green-600 text-sm">Your registration is complete!</p>
+            </div>
+          </div>
+        ) : registration.paymentStatus === 'review' ? (
+          <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 flex items-start gap-3 mb-6">
+            <svg className="w-6 h-6 text-orange-500 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+            </svg>
+            <div>
+              <p className="text-orange-700 font-bold">Under Review</p>
+              <p className="text-orange-600 text-sm">
+                We have received your donation, but it does not match the expected amount.
+                {registration.contributionExpected && (
+                  <> Expected: <span className="font-semibold">${parseFloat(registration.contributionExpected).toFixed(2)}</span>, Received: <span className="font-semibold">${parseFloat(registration.contributionReceived || '0').toFixed(2)}</span>.</>
+                )}
+                {' '}We will review your donation and update the status accordingly.
+              </p>
             </div>
           </div>
         ) : (

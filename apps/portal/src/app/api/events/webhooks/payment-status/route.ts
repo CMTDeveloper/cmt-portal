@@ -34,12 +34,19 @@ export async function POST(req: Request) {
     }
 
     try {
+      const firestoreUpdate: Record<string, unknown> = {
+        paymentStatus: parsed.paymentStatus,
+        payment_source: parsed.payment_source,
+        updatedAt: FieldValue.serverTimestamp(),
+      };
+      if (parsed.contributionExpected !== undefined) {
+        firestoreUpdate.contributionExpected = parsed.contributionExpected;
+      }
+      if (parsed.contributionReceived !== undefined) {
+        firestoreUpdate.contributionReceived = parsed.contributionReceived;
+      }
       await registrationsCollection().doc(parsed.registrationId).set(
-        {
-          paymentStatus: parsed.paymentStatus,
-          payment_source: parsed.payment_source,
-          updatedAt: FieldValue.serverTimestamp(),
-        },
+        firestoreUpdate,
         { merge: true },
       );
     } catch (err) {
