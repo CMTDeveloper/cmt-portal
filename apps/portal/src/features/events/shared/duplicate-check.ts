@@ -8,7 +8,7 @@ export interface ExistingRegistration {
 export async function checkExistingRegistration(
   identifier:
     | { type: 'fid'; value: string }
-    | { type: 'email'; value: string; category: 'sevak' | 'non-bv' },
+    | { type: 'email'; value: string; category: 'sevak' | 'non-bv' | 'bv-family' },
 ): Promise<ExistingRegistration | null> {
   const col = registrationsCollection();
 

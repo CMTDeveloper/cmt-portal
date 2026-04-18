@@ -74,7 +74,14 @@ export async function POST(req: Request) {
 
       let existingRegistration: { registrationId: string; paymentStatus: string } | undefined;
       const existing = await checkExistingRegistration({ type: 'fid', value: family.fid });
-      if (existing) existingRegistration = existing;
+      if (existing) {
+        existingRegistration = existing;
+      } else {
+        for (const email of emails) {
+          const byEmail = await checkExistingRegistration({ type: 'email', value: email, category: 'bv-family' });
+          if (byEmail) { existingRegistration = byEmail; break; }
+        }
+      }
 
       return NextResponse.json({
         isBvFamily: true,
@@ -98,7 +105,14 @@ export async function POST(req: Request) {
 
     let existingRegistration: { registrationId: string; paymentStatus: string } | undefined;
     const existing = await checkExistingRegistration({ type: 'fid', value: family.fid });
-    if (existing) existingRegistration = existing;
+    if (existing) {
+      existingRegistration = existing;
+    } else {
+      for (const email of emails) {
+        const byEmail = await checkExistingRegistration({ type: 'email', value: email, category: 'bv-family' });
+        if (byEmail) { existingRegistration = byEmail; break; }
+      }
+    }
 
     return NextResponse.json({
       isBvFamily: true,

@@ -114,7 +114,91 @@ describe('POST /api/events/verify-registration', () => {
     });
   });
 
+  // --- BV email fallback path ---
+
+  it('BV by email: finds dup via email+bv-family category when fid query returns empty', async () => {
+    mockFindFamilyByContact.mockResolvedValue(BV_FAMILY);
+    mockCheckExistingRegistration.mockImplementation(
+      (identifier: { type: string; value: string; category?: string }) => {
+        if (identifier.type === 'fid') return Promise.resolve(null);
+        if (identifier.type === 'email' && identifier.category === 'bv-family') {
+          return Promise.resolve({ registrationId: 'MD26-OLD001', paymentStatus: 'completed' });
+        }
+        return Promise.resolve(null);
+      },
+    );
+
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        const res = await fetch({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: 'parent@example.com' }),
+        });
+        const data = await res.json();
+        expect(res.status).toBe(200);
+        expect(data.isBvFamily).toBe(true);
+        expect(data.existingRegistration).toEqual({
+          registrationId: 'MD26-OLD001',
+          paymentStatus: 'completed',
+        });
+      },
+    });
+  });
+
+  it('BV by email: no dup when neither fid nor email matches', async () => {
+    mockFindFamilyByContact.mockResolvedValue(BV_FAMILY);
+    mockCheckExistingRegistration.mockResolvedValue(null);
+
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        const res = await fetch({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: 'parent@example.com' }),
+        });
+        const data = await res.json();
+        expect(res.status).toBe(200);
+        expect(data.isBvFamily).toBe(true);
+        expect(data.existingRegistration).toBeUndefined();
+      },
+    });
+  });
+
   // --- BV familyId path ---
+
+  it('BV by familyId: finds dup via email fallback when fid query returns empty', async () => {
+    mockFindFamilyById.mockResolvedValue(BV_FAMILY);
+    mockCheckExistingRegistration.mockImplementation(
+      (identifier: { type: string; value: string; category?: string }) => {
+        if (identifier.type === 'fid') return Promise.resolve(null);
+        if (identifier.type === 'email' && identifier.category === 'bv-family') {
+          return Promise.resolve({ registrationId: 'MD26-OLD002', paymentStatus: 'pending' });
+        }
+        return Promise.resolve(null);
+      },
+    );
+
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        const res = await fetch({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ familyId: '42' }),
+        });
+        const data = await res.json();
+        expect(res.status).toBe(200);
+        expect(data.isBvFamily).toBe(true);
+        expect(data.existingRegistration).toEqual({
+          registrationId: 'MD26-OLD002',
+          paymentStatus: 'pending',
+        });
+      },
+    });
+  });
 
   it('returns isBvFamily true + fid for known familyId (no duplicate)', async () => {
     mockFindFamilyById.mockResolvedValue(BV_FAMILY);
