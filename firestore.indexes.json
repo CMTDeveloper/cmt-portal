@@ -12,17 +12,8 @@
       "collectionGroup": "registrations",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
-        { "fieldPath": "fid", "order": "ASCENDING" },
-        { "fieldPath": "__name__", "order": "ASCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "registrations",
-      "queryScope": "COLLECTION_GROUP",
-      "fields": [
         { "fieldPath": "email", "order": "ASCENDING" },
-        { "fieldPath": "category", "order": "ASCENDING" },
-        { "fieldPath": "__name__", "order": "ASCENDING" }
+        { "fieldPath": "category", "order": "ASCENDING" }
       ]
     }
   ],
