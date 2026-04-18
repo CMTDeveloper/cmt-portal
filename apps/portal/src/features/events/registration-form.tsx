@@ -196,6 +196,9 @@ export function EventRegistrationForm({ config }: { config: EventConfig }) {
   const [sevakChecking, setSevakChecking] = useState(false);
   const [sevakError, setSevakError] = useState('');
 
+  // Duplicate registration detection
+  const [existingRegistration, setExistingRegistration] = useState<{ registrationId: string; paymentStatus: string } | null>(null);
+
   const maxMothersFromParents = (category === 'bv-family' && adults === 2) ? 1 : adults;
   const maxMothers = maxMothersFromParents + additionalAttendees;
 
@@ -250,6 +253,7 @@ export function EventRegistrationForm({ config }: { config: EventConfig }) {
     setSevakChecking(false);
     setSevakError('');
     setSevakEmail('');
+    setExistingRegistration(null);
     setAdults(1);
     setChildren(0);
     setAdditionalAttendees(0);
@@ -271,16 +275,17 @@ export function EventRegistrationForm({ config }: { config: EventConfig }) {
       const payload = bvLookupMethod === 'email'
         ? { email: bvLookupValue.trim() }
         : { familyId: bvLookupValue.trim() };
-      const res = await fetch('/api/events/check-bv-status', {
+      const res = await fetch('/api/events/verify-registration', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      const data = await res.json() as { isBvFamily: boolean; familyEmails?: string[]; familyPhones?: string[] };
+      const data = await res.json() as { isBvFamily: boolean; familyEmails?: string[]; familyPhones?: string[]; existingRegistration?: { registrationId: string; paymentStatus: string } };
       if (data.isBvFamily) {
         setBvVerified(true);
         if (data.familyEmails) setBvFamilyEmails(data.familyEmails);
         if (data.familyPhones) setBvFamilyPhones(data.familyPhones);
+        if (data.existingRegistration) setExistingRegistration(data.existingRegistration);
       } else {
         setBvError(bvLookupMethod === 'familyId'
           ? 'Family ID not found in BV roster. Please check and try again.'
@@ -305,14 +310,15 @@ export function EventRegistrationForm({ config }: { config: EventConfig }) {
     setSevakChecking(true);
     setSevakError('');
     try {
-      const res = await fetch('/api/events/check-bv-status', {
+      const res = await fetch('/api/events/verify-registration', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sevakEmail: sevakEmail.trim() }),
       });
-      const data = await res.json() as { isSevak: boolean };
+      const data = await res.json() as { isSevak: boolean; existingRegistration?: { registrationId: string; paymentStatus: string } };
       if (data.isSevak) {
         setSevakVerified(true);
+        if (data.existingRegistration) setExistingRegistration(data.existingRegistration);
       } else {
         setSevakError('Email not found in the teacher/sevak list. Please check and try again.');
       }
@@ -322,6 +328,22 @@ export function EventRegistrationForm({ config }: { config: EventConfig }) {
       setSevakChecking(false);
     }
   }, [sevakEmail]);
+
+  const handleNonBvEmailBlur = useCallback(async () => {
+    if (category !== 'non-bv') return;
+    if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return;
+    try {
+      const res = await fetch('/api/events/verify-registration', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ checkDuplicateEmail: email.trim(), category: 'non-bv' }),
+      });
+      const data = await res.json() as { existingRegistration?: { registrationId: string; paymentStatus: string } };
+      if (data.existingRegistration) setExistingRegistration(data.existingRegistration);
+    } catch {
+      // Silently ignore duplicate check errors
+    }
+  }, [category, email]);
 
   function normalizePhone(p: string): string {
     const digits = p.replace(/\D/g, '');
@@ -650,6 +672,34 @@ export function EventRegistrationForm({ config }: { config: EventConfig }) {
                 )}
               </div>
 
+              {/* Duplicate Registration Warning */}
+              {existingRegistration && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start gap-3">
+                  <svg className="w-5 h-5 text-amber-500 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+                  </svg>
+                  <div>
+                    <p className="text-amber-800 font-medium">Existing Registration Found</p>
+                    <p className="text-amber-700 text-sm mt-1">
+                      A registration already exists with ID{' '}
+                      <span className="font-mono font-bold text-amber-900">{existingRegistration.registrationId}</span>
+                      {existingRegistration.paymentStatus === 'completed'
+                        ? ' and payment is confirmed.'
+                        : '. You can check your payment status on the payment page.'}
+                    </p>
+                    <p className="text-amber-700 text-sm mt-1">
+                      Please check your email from <span className="font-semibold">events@chinmayatoronto.org</span> for confirmation details. Check your junk/spam folder if you don&apos;t see it.
+                    </p>
+                    <a
+                      href={`/events/register/payment?regId=${existingRegistration.registrationId}`}
+                      className="inline-block mt-2 text-sm text-amber-800 underline hover:text-amber-900"
+                    >
+                      Go to Payment Page →
+                    </a>
+                  </div>
+                </div>
+              )}
+
               {/* Registration form fields - shown after category selection + verification */}
               {showForm && (
                 <form onSubmit={handleSubmit} className="space-y-5">
@@ -700,6 +750,7 @@ export function EventRegistrationForm({ config }: { config: EventConfig }) {
                         type="email"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
+                        onBlur={() => void handleNonBvEmailBlur()}
                         placeholder="you@example.com"
                         className="w-full pl-10 pr-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent text-gray-900 placeholder-gray-400"
                       />
