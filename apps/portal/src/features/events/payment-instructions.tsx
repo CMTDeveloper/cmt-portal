@@ -175,75 +175,6 @@ export function PaymentInstructions() {
                   Amount to send:{' '}
                   <span className="font-bold text-gray-900">${registration.total.toFixed(2)}</span>
                 </p>
-
-                <div className="border-t border-gray-200 pt-4 mt-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    e-Transfer Reference Number{' '}
-                    <span className="text-gray-400 font-normal">(optional)</span>
-                  </label>
-                  <p className="text-xs text-gray-400 mb-2">
-                    You can find this in your bank&apos;s transfer confirmation
-                  </p>
-                  {referenceSaved ? (
-                    <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <svg className="w-5 h-5 text-green-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                        </svg>
-                        <p className="text-sm text-green-700 font-medium">
-                          Reference number saved: <span className="font-bold">{referenceNumber}</span>
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setReferenceSaved(false)}
-                        className="text-xs text-green-600 underline mt-1 ml-7"
-                      >
-                        Edit
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <input
-                        type="text"
-                        value={referenceNumber}
-                        onChange={(e) => setReferenceNumber(e.target.value)}
-                        placeholder="e.g. C1AsjcyW6gqU"
-                        maxLength={50}
-                        className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent text-gray-900 placeholder-gray-400 text-sm"
-                      />
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          if (!referenceNumber.trim() || !registration || referenceLoading) return;
-                          setReferenceLoading(true);
-                          const updated = { ...registration, etransferReference: referenceNumber.trim() };
-                          saveRegistration(updated);
-                          setRegistration(updated);
-                          try {
-                            await fetch('/api/events/update-reference', {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({
-                                registrationId: registration.registrationId,
-                                email: registration.email,
-                                etransferReference: referenceNumber.trim(),
-                              }),
-                            });
-                          } catch {
-                            // Don't block UX if update fails
-                          }
-                          setReferenceLoading(false);
-                          setReferenceSaved(true);
-                        }}
-                        disabled={!referenceNumber.trim() || referenceLoading}
-                        className="w-full py-2.5 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                      >
-                        {referenceLoading ? 'Submitting...' : 'Submit Reference Number'}
-                      </button>
-                    </div>
-                  )}
-                </div>
               </div>
             ) : (
               <div className="space-y-4">
@@ -265,29 +196,6 @@ export function PaymentInstructions() {
           </div>
         )}
 
-        <div className="bg-gray-50 rounded-xl p-6 mb-4">
-          <p className="text-sm text-gray-500 mb-1">Your Registration ID</p>
-          <div className="flex items-center justify-between">
-            <span className="text-3xl font-bold tracking-wider text-gray-900">
-              {registration.registrationId}
-            </span>
-            <button
-              onClick={() => void handleCopy('registrationId')}
-              className="ml-3 p-2 text-gray-400 hover:text-gray-600 transition-colors"
-              aria-label="Copy registration ID"
-            >
-              {copiedField === 'registrationId' ? (
-                <span className="text-sm text-green-600 font-medium">Copied!</span>
-              ) : (
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                </svg>
-              )}
-            </button>
-          </div>
-          <p className="text-sm text-gray-400 mt-2">Please save this ID for your records</p>
-        </div>
-
         <OrderSummary
           category={registration.category ?? (registration.isBvFamily ? 'bv-family' : 'non-bv')}
           adults={registration.adults}
@@ -300,6 +208,77 @@ export function PaymentInstructions() {
           paymentMethod={registration.paymentMethod}
           isBvFamily={registration.isBvFamily}
         />
+
+        {registration.paymentMethod === 'etransfer' && registration.paymentStatus !== 'completed' && (
+          <div className="border border-gray-200 rounded-xl p-6 mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              e-Transfer Reference Number{' '}
+              <span className="text-gray-400 font-normal">(optional)</span>
+            </label>
+            <p className="text-xs text-gray-400 mb-2">
+              You can find this in your bank&apos;s transfer confirmation
+            </p>
+            {referenceSaved ? (
+              <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <svg className="w-5 h-5 text-green-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                  <p className="text-sm text-green-700 font-medium">
+                    Reference number saved: <span className="font-bold">{referenceNumber}</span>
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setReferenceSaved(false)}
+                  className="text-xs text-green-600 underline mt-1 ml-7"
+                >
+                  Edit
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  value={referenceNumber}
+                  onChange={(e) => setReferenceNumber(e.target.value)}
+                  placeholder="e.g. C1AsjcyW6gqU"
+                  maxLength={50}
+                  className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent text-gray-900 placeholder-gray-400 text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!referenceNumber.trim() || !registration || referenceLoading) return;
+                    setReferenceLoading(true);
+                    const updated = { ...registration, etransferReference: referenceNumber.trim() };
+                    saveRegistration(updated);
+                    setRegistration(updated);
+                    try {
+                      await fetch('/api/events/update-reference', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          registrationId: registration.registrationId,
+                          email: registration.email,
+                          etransferReference: referenceNumber.trim(),
+                        }),
+                      });
+                    } catch {
+                      // Don't block UX if update fails
+                    }
+                    setReferenceLoading(false);
+                    setReferenceSaved(true);
+                  }}
+                  disabled={!referenceNumber.trim() || referenceLoading}
+                  className="w-full py-2.5 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  {referenceLoading ? 'Submitting...' : 'Submit Reference Number'}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {registration.paymentStatus === 'completed' ? (
           <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3 mb-6">
