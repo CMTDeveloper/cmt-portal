@@ -24,6 +24,7 @@ interface RegistrationState {
   etransferReference?: string;
   isBvFamily: boolean;
   paymentStatus: 'pending' | 'completed' | 'cancelled';
+  fid?: string;
 }
 
 interface EventConfig {
@@ -64,6 +65,7 @@ async function submitRegistration(data: RegistrationState): Promise<void> {
     category: data.category,
     additionalAttendees: data.additionalAttendees,
     mothersInPuja: data.mothersInPuja,
+    fid: data.fid ?? '',
   };
 
   const response = await fetch('/api/events/register', {
@@ -194,15 +196,16 @@ export function EventRegistrationForm({ config }: { config: EventConfig }) {
   const [sevakChecking, setSevakChecking] = useState(false);
   const [sevakError, setSevakError] = useState('');
 
-  // BV Family with 2 parents: max 1 mother (other parent is father)
-  const maxMothers = (category === 'bv-family' && adults === 2) ? 1 : adults;
+  const maxMothersFromParents = (category === 'bv-family' && adults === 2) ? 1 : adults;
+  const maxMothers = maxMothersFromParents + additionalAttendees;
 
   const handleAdultsChange = (val: number) => {
     setAdults(val);
     if (category === 'bv-family' && val === 2) {
-      setMothersInPuja(1);
+      setMothersInPuja((prev) => Math.max(prev, 1));
     }
-    const newMax = (category === 'bv-family' && val === 2) ? 1 : val;
+    const newMaxFromParents = (category === 'bv-family' && val === 2) ? 1 : val;
+    const newMax = newMaxFromParents + additionalAttendees;
     if (mothersInPuja > newMax) {
       setMothersInPuja(newMax);
     }
@@ -382,6 +385,7 @@ export function EventRegistrationForm({ config }: { config: EventConfig }) {
         processingFee,
         total,
         isBvFamily,
+        fid: (category === 'bv-family' && bvLookupMethod === 'familyId') ? bvLookupValue.trim() : '',
         paymentStatus: 'pending',
       };
 
