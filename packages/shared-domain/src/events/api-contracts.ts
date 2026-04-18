@@ -31,6 +31,7 @@ export const registerRequestSchema = z.object({
   category: z.enum(['bv-family', 'sevak', 'non-bv']).optional(),
   additionalAttendees: z.number().int().min(0).max(50).optional(),
   mothersInPuja: z.number().int().min(0).max(50).optional(),
+  fid: z.string().optional(),
   etransferReference: z.string().max(50).optional(),
 });
 export type RegisterRequest = z.infer<typeof registerRequestSchema>;

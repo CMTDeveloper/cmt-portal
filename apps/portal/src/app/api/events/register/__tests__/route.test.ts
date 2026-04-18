@@ -197,6 +197,22 @@ describe('POST /api/events/register', () => {
     });
   });
 
+  it('accepts optional fid field and writes to Firebase', async () => {
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        await fetch({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...validPayload, fid: '1257' }),
+        });
+        expect(mockCreate).toHaveBeenCalledWith(
+          expect.objectContaining({ fid: '1257' }),
+        );
+      },
+    });
+  });
+
   it('writes category, additionalAttendees, mothersInPuja to Firebase', async () => {
     await testApiHandler({
       appHandler,

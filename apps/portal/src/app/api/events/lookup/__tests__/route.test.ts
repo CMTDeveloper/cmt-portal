@@ -58,6 +58,42 @@ describe('POST /api/events/lookup', () => {
     });
   });
 
+  it('returns fid from Firebase when present', async () => {
+    mockGet.mockResolvedValue({
+      exists: true,
+      data: () => ({ ...mockRegistration, fid: '1257' }),
+    });
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        const res = await fetch({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ registrationId: 'MD26-ABC1234', email: 'john@example.com' }),
+        });
+        const data = await res.json();
+        expect(res.status).toBe(200);
+        expect(data.fid).toBe('1257');
+      },
+    });
+  });
+
+  it('defaults fid to empty string when field missing', async () => {
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        const res = await fetch({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ registrationId: 'MD26-ABC1234', email: 'john@example.com' }),
+        });
+        const data = await res.json();
+        expect(res.status).toBe(200);
+        expect(data.fid).toBe('');
+      },
+    });
+  });
+
   it('returns category, additionalAttendees, mothersInPuja from Firebase', async () => {
     mockGet.mockResolvedValue({
       exists: true,

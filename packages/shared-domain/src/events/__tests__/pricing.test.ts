@@ -88,7 +88,7 @@ describe('calculatePricing', () => {
 
   // --- BV Family pricing ($10 flat + $10/additional) ---
 
-  it('calculates BV Family flat rate with no additional attendees', () => {
+  it('calculates BV Family flat donation with no additional attendees', () => {
     const result = calculatePricing({
       category: 'bv-family',
       adults: 2,
@@ -130,7 +130,7 @@ describe('calculatePricing', () => {
     expect(result.total).toBe(10.52);
   });
 
-  it('BV Family flat rate ignores adults/children counts', () => {
+  it('BV Family flat donation ignores adults/children counts', () => {
     const one = calculatePricing({
       category: 'bv-family',
       adults: 1,
@@ -153,7 +153,7 @@ describe('calculatePricing', () => {
 
   // --- Sevak pricing ($10 flat + $10/additional) ---
 
-  it('calculates Sevak flat rate with no additional attendees', () => {
+  it('calculates Sevak flat donation with no additional attendees', () => {
     const result = calculatePricing({
       category: 'sevak',
       adults: 1,
@@ -210,7 +210,7 @@ describe('calculatePricing', () => {
     expect(result.total).toBe(50);
   });
 
-  it('BV flat rate equals pricePerPerson regardless of attendee count', () => {
+  it('BV flat donation equals pricePerPerson regardless of attendee count', () => {
     const result = calculatePricing({
       category: 'bv-family',
       adults: 4,

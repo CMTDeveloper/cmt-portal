@@ -37,6 +37,7 @@ export async function POST(req: Request) {
           category: data.category || 'non-bv',
           additionalAttendees: data.additionalAttendees || 0,
           mothersInPuja: data.mothersInPuja || 0,
+          fid: data.fid || '',
           paymentStatus: data.paymentStatus || 'pending',
           etransferReference: data.etransferReference || '',
         });

@@ -112,6 +112,14 @@ describe('registerRequestSchema', () => {
   it('rejects etransferReference over 50 chars', () => {
     expect(registerRequestSchema.safeParse({ ...valid, etransferReference: 'A'.repeat(51) }).success).toBe(false);
   });
+
+  it('accepts optional fid field', () => {
+    expect(registerRequestSchema.safeParse({ ...valid, fid: '1257' }).success).toBe(true);
+  });
+
+  it('accepts empty string fid', () => {
+    expect(registerRequestSchema.safeParse({ ...valid, fid: '' }).success).toBe(true);
+  });
 });
 
 describe('lookupRequestSchema', () => {

@@ -26,6 +26,7 @@ export interface EventRegistration {
   category: RegistrationCategory;
   additionalAttendees: number;
   mothersInPuja: number;
+  fid?: string;
   payment_source: PaymentSource;
   contribution: number;
   etransferReference?: string;
