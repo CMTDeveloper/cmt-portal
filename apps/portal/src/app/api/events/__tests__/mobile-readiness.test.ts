@@ -15,6 +15,12 @@ import { z } from 'zod';
 import {
   checkBvStatusResponseSchema,
   existingRegistrationSchema,
+  verifyRegistrationResponseSchema,
+  registerResponseSchema,
+  lookupResponseSchema,
+  updateReferenceResponseSchema,
+  updatePaymentStatusResponseSchema,
+  webhookPaymentStatusResponseSchema,
 } from '@cmt/shared-domain/events/api-contracts';
 
 // ── Shared mocks ──────────────────────────────────────────────────────────────
@@ -153,6 +159,7 @@ describe('Mobile readiness: events API', () => {
             body: JSON.stringify({ email: VALID_EMAIL }),
           });
           const body = await assertJsonResponse(res, [200]);
+          verifyRegistrationResponseSchema.parse(body);
           expect(body).toHaveProperty('isBvFamily', false);
         },
       });
@@ -247,6 +254,7 @@ describe('Mobile readiness: events API', () => {
             body: JSON.stringify(baseRegistration),
           });
           const body = await assertJsonResponse(res, [200]);
+          registerResponseSchema.parse(body);
           expect(body).toMatchObject({ success: true, registrationId: VALID_REG_ID });
         },
       });
@@ -329,6 +337,7 @@ describe('Mobile readiness: events API', () => {
             body: JSON.stringify({ registrationId: VALID_REG_ID, email: VALID_EMAIL }),
           });
           const body = await assertJsonResponse(res, [200]);
+          lookupResponseSchema.parse(body);
           expect(body).toMatchObject({ registrationId: VALID_REG_ID, email: VALID_EMAIL });
         },
       });
@@ -457,6 +466,7 @@ describe('Mobile readiness: events API', () => {
             }),
           });
           const body = await assertJsonResponse(res, [200]);
+          updateReferenceResponseSchema.parse(body);
           expect(body).toMatchObject({ success: true, registrationId: VALID_REG_ID });
         },
       });
@@ -499,6 +509,7 @@ describe('Mobile readiness: events API', () => {
             }),
           });
           const body = await assertJsonResponse(res, [200]);
+          updatePaymentStatusResponseSchema.parse(body);
           expect(body).toMatchObject({ success: true, registrationId: VALID_REG_ID });
         },
       });
@@ -571,6 +582,7 @@ describe('Mobile readiness: events API', () => {
             body: JSON.stringify({ registrationId: VALID_REG_ID, paymentStatus: 'completed' }),
           });
           const body = await assertJsonResponse(res, [200]);
+          webhookPaymentStatusResponseSchema.parse(body);
           expect(body).toMatchObject({
             success: true,
             registrationId: VALID_REG_ID,
