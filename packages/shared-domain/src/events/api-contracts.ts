@@ -32,6 +32,27 @@ export const verifyRegistrationRequestSchema = z.union([
 ]);
 export type VerifyRegistrationRequest = z.infer<typeof verifyRegistrationRequestSchema>;
 
+export const verifyRegistrationResponseSchema = z.union([
+  // BV family path (email or familyId)
+  z.object({
+    isBvFamily: z.literal(true),
+    fid: z.string(),
+    familyEmails: z.array(z.string()),
+    familyPhones: z.array(z.string()),
+    existingRegistration: existingRegistrationSchema.optional(),
+  }),
+  // Non-BV family path (not found)
+  z.object({ isBvFamily: z.literal(false) }),
+  // Sevak path
+  z.object({
+    isSevak: z.boolean(),
+    existingRegistration: existingRegistrationSchema.optional(),
+  }),
+  // Non-BV duplicate check path
+  z.object({ existingRegistration: existingRegistrationSchema.optional() }),
+]);
+export type VerifyRegistrationResponse = z.infer<typeof verifyRegistrationResponseSchema>;
+
 // --- register ---
 
 export const registerRequestSchema = z.object({
@@ -52,6 +73,12 @@ export const registerRequestSchema = z.object({
 });
 export type RegisterRequest = z.infer<typeof registerRequestSchema>;
 
+export const registerResponseSchema = z.object({
+  success: z.boolean(),
+  registrationId: z.string(),
+});
+export type RegisterResponse = z.infer<typeof registerResponseSchema>;
+
 // --- lookup ---
 
 export const lookupRequestSchema = z.object({
@@ -59,6 +86,27 @@ export const lookupRequestSchema = z.object({
   email: z.string().email(),
 });
 export type LookupRequest = z.infer<typeof lookupRequestSchema>;
+
+export const lookupResponseSchema = z.object({
+  registrationId: z.string(),
+  name: z.string(),
+  email: z.string(),
+  phone: z.string(),
+  adults: z.number(),
+  children: z.number(),
+  payment_source: z.enum(['stripe', 'etransfer']),
+  contribution: z.number(),
+  isBvFamily: z.boolean(),
+  category: z.enum(['bv-family', 'sevak', 'non-bv']),
+  additionalAttendees: z.number(),
+  mothersInPuja: z.number(),
+  fid: z.string(),
+  paymentStatus: z.enum(['pending', 'completed', 'failed', 'refunded', 'review']),
+  etransferReference: z.string(),
+  contributionExpected: z.string().optional(),
+  contributionReceived: z.string().optional(),
+});
+export type LookupResponse = z.infer<typeof lookupResponseSchema>;
 
 // --- create-checkout ---
 
@@ -79,6 +127,12 @@ export const createCheckoutRequestSchema = z.object({
 });
 export type CreateCheckoutRequest = z.infer<typeof createCheckoutRequestSchema>;
 
+export const createCheckoutResponseSchema = z.object({
+  checkoutUrl: z.string().url().optional(),
+  url: z.string().url().optional(),
+});
+export type CreateCheckoutResponse = z.infer<typeof createCheckoutResponseSchema>;
+
 // --- update-reference ---
 
 export const updateReferenceRequestSchema = z.object({
@@ -88,6 +142,12 @@ export const updateReferenceRequestSchema = z.object({
 });
 export type UpdateReferenceRequest = z.infer<typeof updateReferenceRequestSchema>;
 
+export const updateReferenceResponseSchema = z.object({
+  success: z.boolean(),
+  registrationId: z.string(),
+});
+export type UpdateReferenceResponse = z.infer<typeof updateReferenceResponseSchema>;
+
 // --- update-payment-status (client-side, Stripe success page) ---
 
 export const updatePaymentStatusRequestSchema = z.object({
@@ -96,6 +156,12 @@ export const updatePaymentStatusRequestSchema = z.object({
   payment_source: z.enum(['stripe']),
 });
 export type UpdatePaymentStatusRequest = z.infer<typeof updatePaymentStatusRequestSchema>;
+
+export const updatePaymentStatusResponseSchema = z.object({
+  success: z.boolean(),
+  registrationId: z.string(),
+});
+export type UpdatePaymentStatusResponse = z.infer<typeof updatePaymentStatusResponseSchema>;
 
 // --- webhook payment-status (server-side, Vaibhav's admin tool) ---
 
@@ -107,3 +173,10 @@ export const webhookPaymentStatusRequestSchema = z.object({
   contributionReceived: z.string().optional(),
 });
 export type WebhookPaymentStatusRequest = z.infer<typeof webhookPaymentStatusRequestSchema>;
+
+export const webhookPaymentStatusResponseSchema = z.object({
+  success: z.boolean(),
+  registrationId: z.string(),
+  paymentStatus: z.enum(['pending', 'completed', 'failed', 'refunded', 'review']),
+});
+export type WebhookPaymentStatusResponse = z.infer<typeof webhookPaymentStatusResponseSchema>;

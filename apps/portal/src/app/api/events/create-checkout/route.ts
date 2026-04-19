@@ -69,18 +69,25 @@ export async function POST(req: Request) {
     req.headers.get('referer') ? new URL(req.headers.get('referer')!).origin : null,
   ].filter(Boolean) as string[];
 
-  const successOrigin = new URL(parsed.successUrl).origin;
-  const cancelOrigin = new URL(parsed.cancelUrl).origin;
+  // Mobile deep-link scheme prefixes allowed via env var (comma-separated, e.g. "chinmayacmt://")
+  const mobileAllowedPrefixes = (process.env.STRIPE_MOBILE_REDIRECT_PREFIXES ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
 
-  const VERCEL_PROJECT_PATTERN = /^https:\/\/cmt-portal[a-z0-9-]*\.vercel\.app$/;
-  const isValidRedirect =
-    allowedOrigins.some((o) => successOrigin === o) ||
-    VERCEL_PROJECT_PATTERN.test(successOrigin);
-  const isValidCancel =
-    allowedOrigins.some((o) => cancelOrigin === o) ||
-    VERCEL_PROJECT_PATTERN.test(cancelOrigin);
+  function isAllowedRedirectUrl(url: string): boolean {
+    const VERCEL_PROJECT_PATTERN = /^https:\/\/cmt-portal[a-z0-9-]*\.vercel\.app$/;
+    try {
+      const origin = new URL(url).origin;
+      if (allowedOrigins.some((o) => origin === o)) return true;
+      if (VERCEL_PROJECT_PATTERN.test(origin)) return true;
+    } catch {
+      // non-hierarchical URLs (e.g. custom schemes) have no origin — fall through to prefix check
+    }
+    return mobileAllowedPrefixes.some((prefix) => url.startsWith(prefix));
+  }
 
-  if (!isValidRedirect || !isValidCancel) {
+  if (!isAllowedRedirectUrl(parsed.successUrl) || !isAllowedRedirectUrl(parsed.cancelUrl)) {
     return NextResponse.json(
       { error: 'Invalid redirect URLs' },
       { status: 400 },
