@@ -189,6 +189,7 @@ export function EventRegistrationForm({ config }: { config: EventConfig }) {
   const [bvError, setBvError] = useState('');
   const [bvFamilyEmails, setBvFamilyEmails] = useState<string[]>([]);
   const [bvFamilyPhones, setBvFamilyPhones] = useState<string[]>([]);
+  const [bvFid, setBvFid] = useState<string>('');
 
   // Sevak verification state
   const [sevakEmail, setSevakEmail] = useState('');
@@ -249,6 +250,7 @@ export function EventRegistrationForm({ config }: { config: EventConfig }) {
     setBvLookupValue('');
     setBvFamilyEmails([]);
     setBvFamilyPhones([]);
+    setBvFid('');
     setSevakVerified(false);
     setSevakChecking(false);
     setSevakError('');
@@ -280,9 +282,10 @@ export function EventRegistrationForm({ config }: { config: EventConfig }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      const data = await res.json() as { isBvFamily: boolean; familyEmails?: string[]; familyPhones?: string[]; existingRegistration?: { registrationId: string; paymentStatus: string } };
+      const data = await res.json() as { isBvFamily: boolean; fid?: string; familyEmails?: string[]; familyPhones?: string[]; existingRegistration?: { registrationId: string; paymentStatus: string } };
       if (data.isBvFamily) {
         setBvVerified(true);
+        if (data.fid) setBvFid(data.fid);
         if (data.familyEmails) setBvFamilyEmails(data.familyEmails);
         if (data.familyPhones) setBvFamilyPhones(data.familyPhones);
         if (data.existingRegistration) setExistingRegistration(data.existingRegistration);
@@ -407,7 +410,8 @@ export function EventRegistrationForm({ config }: { config: EventConfig }) {
         processingFee,
         total,
         isBvFamily,
-        fid: (category === 'bv-family' && bvLookupMethod === 'familyId') ? bvLookupValue.trim() : '',
+        ...(category === 'bv-family' && bvLookupMethod === 'familyId' && { fid: bvLookupValue.trim() }),
+        ...(category === 'bv-family' && bvLookupMethod === 'email' && bvFid && { fid: bvFid }),
         paymentStatus: 'pending',
       };
 
