@@ -21,6 +21,7 @@ import {
   updateReferenceResponseSchema,
   updatePaymentStatusResponseSchema,
   webhookPaymentStatusResponseSchema,
+  statsResponseSchema,
 } from '@cmt/shared-domain/events/api-contracts';
 
 // ── Shared mocks ──────────────────────────────────────────────────────────────
@@ -34,9 +35,11 @@ vi.mock('@/features/events/shared/rate-limiter', () => ({
 const mockCreate = vi.fn().mockResolvedValue(undefined);
 const mockDocGet = vi.fn();
 const mockDocSet = vi.fn().mockResolvedValue(undefined);
+const mockCollectionGet = vi.fn().mockResolvedValue({ forEach: () => {} });
 
 vi.mock('@/features/events/shared/firestore-adapter', () => ({
   registrationsCollection: () => ({
+    get: mockCollectionGet,
     doc: () => ({
       create: mockCreate,
       get: mockDocGet,
@@ -92,6 +95,7 @@ import * as updateReferenceRoute from '../update-reference/route';
 import * as updatePaymentStatusRoute from '../update-payment-status/route';
 import * as webhookRoute from '../webhooks/payment-status/route';
 import * as checkBvStatusRoute from '../check-bv-status/route';
+import * as statsRoute from '../stats/route';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -133,6 +137,7 @@ describe('Mobile readiness: events API', () => {
     mockCreate.mockResolvedValue(undefined);
     mockDocSet.mockResolvedValue(undefined);
     mockDocGet.mockResolvedValue({ exists: false });
+    mockCollectionGet.mockResolvedValue({ forEach: () => {} });
     mockFindFamilyByContact.mockResolvedValue(null);
     mockFindFamilyById.mockResolvedValue(null);
     mockStripeFetch.mockResolvedValue({
@@ -697,6 +702,48 @@ describe('Mobile readiness: events API', () => {
             body: JSON.stringify({}),
           });
           const body = await assertJsonResponse(res, [400]);
+          expect(body).toHaveProperty('error');
+        },
+      });
+    });
+  });
+
+  // ── stats ────────────────────────────────────────────────────────────────────
+
+  describe('GET /api/events/stats', () => {
+    it('returns 401 (not HTML) without x-api-key', async () => {
+      await testApiHandler({
+        appHandler: statsRoute,
+        test: async ({ fetch }) => {
+          const res = await fetch({ method: 'GET' });
+          const body = await assertJsonResponse(res, [401]);
+          expect(body).toHaveProperty('error');
+        },
+      });
+    });
+
+    it('returns JSON stats with valid x-api-key (no cookies required)', async () => {
+      await testApiHandler({
+        appHandler: statsRoute,
+        test: async ({ fetch }) => {
+          const res = await fetch({ method: 'GET', headers: { 'x-api-key': WEBHOOK_KEY } });
+          const body = await assertJsonResponse(res, [200]);
+          statsResponseSchema.parse(body);
+          expect(body).toHaveProperty('totalRegistrations');
+          expect(body).toHaveProperty('paid');
+          expect(body).toHaveProperty('byStatus');
+          expect(body).toHaveProperty('byCategory');
+          expect(body).toHaveProperty('byPaymentSource');
+        },
+      });
+    });
+
+    it('returns JSON 401 (not HTML) for wrong x-api-key', async () => {
+      await testApiHandler({
+        appHandler: statsRoute,
+        test: async ({ fetch }) => {
+          const res = await fetch({ method: 'GET', headers: { 'x-api-key': 'wrong' } });
+          const body = await assertJsonResponse(res, [401]);
           expect(body).toHaveProperty('error');
         },
       });

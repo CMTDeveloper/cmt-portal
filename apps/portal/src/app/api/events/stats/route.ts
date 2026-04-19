@@ -77,7 +77,7 @@ export async function GET(req: Request) {
       totalContribution += contribution;
 
       const status = data.paymentStatus || 'pending';
-      if (status in byStatus) byStatus[status] += 1;
+      if (status in byStatus) byStatus[status] = (byStatus[status] ?? 0) + 1;
       else byStatus[status] = 1;
 
       if (status === 'completed' || status === 'review') {
@@ -87,11 +87,11 @@ export async function GET(req: Request) {
 
       // Records without category are legacy (pre-V2), regardless of isBvFamily
       const category = data.category ?? 'legacy';
-      if (category in byCategory) byCategory[category] += 1;
+      if (category in byCategory) byCategory[category] = (byCategory[category] ?? 0) + 1;
       else byCategory[category] = 1;
 
       const source = data.payment_source || 'unknown';
-      if (source in byPaymentSource) byPaymentSource[source] += 1;
+      if (source in byPaymentSource) byPaymentSource[source] = (byPaymentSource[source] ?? 0) + 1;
       else byPaymentSource[source] = 1;
     });
 

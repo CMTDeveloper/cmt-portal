@@ -415,6 +415,105 @@ Proxied directly from the Stripe Lambda — contains `url` (Stripe checkout URL)
 
 ---
 
+## 9. GET /api/events/stats
+
+**Purpose:** Admin aggregation endpoint. Returns live counts across all registrations for the current campaign — total mothers, attendees, contribution, and breakdowns by status, category, and payment source.
+
+**Auth:** `x-api-key` header — must match `WEBHOOK_API_KEY` env var (timing-safe comparison, same pattern as the webhook endpoint)
+
+**Flag-gated:** No (always active; auth enforced by `x-api-key`)
+
+### Request
+
+No request body. GET method only.
+
+```bash
+curl https://portal.chinmayatoronto.org/api/events/stats \
+  -H "x-api-key: $WEBHOOK_API_KEY"
+```
+
+### Response
+
+```json
+{
+  "campaign": "2026MothersDay",
+  "generatedAt": "2026-04-19T12:34:56.000Z",
+  "totalRegistrations": 42,
+  "totalMothers": 38,
+  "totalAttendees": 168,
+  "totalContribution": 420.00,
+  "paid": { "mothers": 30, "attendees": 135 },
+  "byStatus": {
+    "pending": 5,
+    "completed": 35,
+    "review": 1,
+    "failed": 0,
+    "refunded": 1,
+    "cancelled": 0
+  },
+  "byCategory": {
+    "bv-family": 28,
+    "sevak": 4,
+    "non-bv": 8,
+    "legacy": 2
+  },
+  "byPaymentSource": {
+    "stripe": 25,
+    "etransfer": 17,
+    "unknown": 0
+  }
+}
+```
+
+**Key fields:**
+- `totalMothers` — sum of `mothersInPuja` across ALL registrations regardless of status
+- `paid.mothers` — sum of `mothersInPuja` for `completed` and `review` statuses only (confirmed Matr Puja attendees)
+- `byCategory.legacy` — pre-V2 records with no `category` field (historical records captured for completeness)
+- Missing numeric fields default to `0`; missing `payment_source` defaults to `"unknown"`
+
+### Shared-domain import
+
+```ts
+import {
+  statsResponseSchema,
+  type StatsResponse,
+} from '@cmt/shared-domain/events/api-contracts';
+```
+
+### React Native fetch example
+
+```ts
+async function portalGet<T>(path: string, apiKey: string): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: 'GET',
+    headers: { 'x-api-key': apiKey },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Unknown error' }));
+    throw Object.assign(new Error(err.error ?? 'Request failed'), { status: res.status });
+  }
+  return res.json() as Promise<T>;
+}
+
+import { type StatsResponse } from '@cmt/shared-domain/events/api-contracts';
+
+const stats = await portalGet<StatsResponse>(
+  '/api/events/stats',
+  process.env.EXPO_PUBLIC_WEBHOOK_API_KEY!,
+);
+console.log(`Total registrations: ${stats.totalRegistrations}`);
+console.log(`Paid mothers: ${stats.paid.mothers}`);
+```
+
+### Error codes
+
+| Status | Meaning |
+|---|---|
+| 401 | Missing or invalid `x-api-key` |
+| 500 | Firestore query failed |
+
+---
+
 ## End-to-end flow example
 
 ```
