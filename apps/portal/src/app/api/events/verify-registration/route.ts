@@ -37,12 +37,13 @@ export async function POST(req: Request) {
   try {
     // Sevak path
     if ('sevakEmail' in parsed) {
-      const isSevak = await checkSevakByEmail(parsed.sevakEmail);
+      const sevakEmail = parsed.sevakEmail.toLowerCase().trim();
+      const isSevak = await checkSevakByEmail(sevakEmail);
       let existingRegistration: { registrationId: string; paymentStatus: string } | undefined;
       if (isSevak) {
         const existing = await checkExistingRegistration({
           type: 'email',
-          value: parsed.sevakEmail,
+          value: sevakEmail,
           category: 'sevak',
         });
         if (existing) existingRegistration = existing;
@@ -52,9 +53,10 @@ export async function POST(req: Request) {
 
     // Non-BV duplicate check path
     if ('checkDuplicateEmail' in parsed) {
+      const checkDuplicateEmail = parsed.checkDuplicateEmail.toLowerCase().trim();
       const existing = await checkExistingRegistration({
         type: 'email',
-        value: parsed.checkDuplicateEmail,
+        value: checkDuplicateEmail,
         category: 'non-bv',
       });
       return NextResponse.json({ existingRegistration: existing ?? undefined });
@@ -78,7 +80,7 @@ export async function POST(req: Request) {
         existingRegistration = existing;
       } else {
         for (const email of emails) {
-          const byEmail = await checkExistingRegistration({ type: 'email', value: email, category: 'bv-family' });
+          const byEmail = await checkExistingRegistration({ type: 'bvFamilyEmail', value: email });
           if (byEmail) { existingRegistration = byEmail; break; }
         }
       }
@@ -109,7 +111,7 @@ export async function POST(req: Request) {
       existingRegistration = existing;
     } else {
       for (const email of emails) {
-        const byEmail = await checkExistingRegistration({ type: 'email', value: email, category: 'bv-family' });
+        const byEmail = await checkExistingRegistration({ type: 'bvFamilyEmail', value: email });
         if (byEmail) { existingRegistration = byEmail; break; }
       }
     }

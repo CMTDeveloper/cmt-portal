@@ -116,12 +116,12 @@ describe('POST /api/events/verify-registration', () => {
 
   // --- BV email fallback path ---
 
-  it('BV by email: finds dup via email+bv-family category when fid query returns empty', async () => {
+  it('BV by email: finds dup via bvFamilyEmail fallback when fid query returns empty', async () => {
     mockFindFamilyByContact.mockResolvedValue(BV_FAMILY);
     mockCheckExistingRegistration.mockImplementation(
       (identifier: { type: string; value: string; category?: string }) => {
         if (identifier.type === 'fid') return Promise.resolve(null);
-        if (identifier.type === 'email' && identifier.category === 'bv-family') {
+        if (identifier.type === 'bvFamilyEmail') {
           return Promise.resolve({ registrationId: 'MD26-OLD001', paymentStatus: 'completed' });
         }
         return Promise.resolve(null);
@@ -169,12 +169,12 @@ describe('POST /api/events/verify-registration', () => {
 
   // --- BV familyId path ---
 
-  it('BV by familyId: finds dup via email fallback when fid query returns empty', async () => {
+  it('BV by familyId: finds dup via bvFamilyEmail fallback when fid query returns empty', async () => {
     mockFindFamilyById.mockResolvedValue(BV_FAMILY);
     mockCheckExistingRegistration.mockImplementation(
       (identifier: { type: string; value: string; category?: string }) => {
         if (identifier.type === 'fid') return Promise.resolve(null);
-        if (identifier.type === 'email' && identifier.category === 'bv-family') {
+        if (identifier.type === 'bvFamilyEmail') {
           return Promise.resolve({ registrationId: 'MD26-OLD002', paymentStatus: 'pending' });
         }
         return Promise.resolve(null);

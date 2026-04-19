@@ -34,6 +34,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
   }
 
+  parsed.email = parsed.email.toLowerCase().trim();
+
   try {
     await registrationsCollection().doc(parsed.registrationId).create({
       ...parsed,
