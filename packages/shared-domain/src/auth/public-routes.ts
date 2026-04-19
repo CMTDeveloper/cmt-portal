@@ -42,6 +42,9 @@ export const PUBLIC_ROUTES = [
   '/api/events/update-reference',
   '/api/events/update-payment-status',
   '/api/events/webhooks/payment-status',
+
+  // Admin stats — session-auth-exempt; route enforces x-api-key
+  '/api/events/stats',
 ] as const;
 
 export function matchRoute(pattern: string, pathname: string): boolean {

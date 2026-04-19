@@ -163,6 +163,28 @@ export const updatePaymentStatusResponseSchema = z.object({
 });
 export type UpdatePaymentStatusResponse = z.infer<typeof updatePaymentStatusResponseSchema>;
 
+// --- stats (admin aggregation, x-api-key protected) ---
+
+export const statsRequestSchema = z.object({});
+export type StatsRequest = z.infer<typeof statsRequestSchema>;
+
+export const statsResponseSchema = z.object({
+  campaign: z.string(),
+  generatedAt: z.string(),
+  totalRegistrations: z.number(),
+  totalMothers: z.number(),
+  totalAttendees: z.number(),
+  totalContribution: z.number(),
+  paid: z.object({
+    mothers: z.number(),
+    attendees: z.number(),
+  }),
+  byStatus: z.record(z.string(), z.number()),
+  byCategory: z.record(z.string(), z.number()),
+  byPaymentSource: z.record(z.string(), z.number()),
+});
+export type StatsResponse = z.infer<typeof statsResponseSchema>;
+
 // --- webhook payment-status (server-side, Vaibhav's admin tool) ---
 
 export const webhookPaymentStatusRequestSchema = z.object({
