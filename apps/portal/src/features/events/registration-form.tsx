@@ -238,9 +238,12 @@ export function EventRegistrationForm({ config }: { config: EventConfig }) {
     [category, adults, children, additionalAttendees, paymentMethod, config.pricePerPerson],
   );
 
-  const showForm = category === 'non-bv'
+  // Hide the entire form when a duplicate registration is found (hard block)
+  const showForm = !existingRegistration && (
+    category === 'non-bv'
     || (category === 'bv-family' && bvVerified)
-    || (category === 'sevak' && sevakVerified);
+    || (category === 'sevak' && sevakVerified)
+  );
 
   function handleCategoryChange(newCategory: RegistrationCategory) {
     setCategory(newCategory);
