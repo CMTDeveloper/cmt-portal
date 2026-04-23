@@ -3,6 +3,9 @@ import { flags } from '@/lib/flags';
 import { registerRequestSchema } from '@cmt/shared-domain/events/api-contracts';
 import { FieldValue } from '@cmt/firebase-shared/admin/firestore';
 import { registrationsCollection } from '@/features/events/shared/firestore-adapter';
+import { checkExistingRegistration } from '@/features/events/shared/duplicate-check';
+import { checkSevakByEmail } from '@/features/events/shared/sevak-check';
+import { findFamilyById, findFamilyByContact } from '@/features/check-in/shared';
 import { sendToGoogleSheet } from '@/features/events/shared/google-sheets-sender';
 import { checkIpRateLimit } from '@/features/events/shared/rate-limiter';
 
@@ -35,6 +38,67 @@ export async function POST(req: Request) {
   }
 
   parsed.email = parsed.email.toLowerCase().trim();
+
+  try {
+    let existing = null;
+    if (parsed.category === 'bv-family') {
+      if (parsed.fid) {
+        existing = await checkExistingRegistration({ type: 'fid', value: parsed.fid });
+      }
+      if (!existing) {
+        existing = await checkExistingRegistration({ type: 'bvFamilyEmail', value: parsed.email });
+      }
+    } else if (parsed.category === 'sevak' || parsed.category === 'non-bv') {
+      existing = await checkExistingRegistration({
+        type: 'email',
+        value: parsed.email,
+        category: parsed.category,
+      });
+    }
+    if (existing) {
+      return NextResponse.json(
+        { error: 'Duplicate registration', existingRegistration: existing },
+        { status: 409 },
+      );
+    }
+  } catch (err) {
+    console.error('Duplicate check failed, proceeding with registration:', err);
+  }
+
+  if (
+    (parsed.category === 'bv-family' || parsed.category === 'sevak') &&
+    parsed.adults === 2 &&
+    (parsed.mothersInPuja ?? 0) > 1
+  ) {
+    return NextResponse.json(
+      { error: 'Maximum 1 mother for BV Family or Sevak with 2 adults' },
+      { status: 400 },
+    );
+  }
+
+  try {
+    if (parsed.category === 'sevak') {
+      const isSevak = await checkSevakByEmail(parsed.email);
+      if (!isSevak) {
+        return NextResponse.json(
+          { error: 'Email not found in BV Teacher/Sevak roster' },
+          { status: 403 },
+        );
+      }
+    } else if (parsed.category === 'bv-family') {
+      const family = parsed.fid
+        ? await findFamilyById(parsed.fid)
+        : await findFamilyByContact('email', parsed.email);
+      if (!family) {
+        return NextResponse.json(
+          { error: 'Not found in BV Family roster' },
+          { status: 403 },
+        );
+      }
+    }
+  } catch (err) {
+    console.error('Roster check failed, proceeding with registration:', err);
+  }
 
   try {
     await registrationsCollection().doc(parsed.registrationId).create({

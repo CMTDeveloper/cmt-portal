@@ -51,7 +51,14 @@ function saveRegistration(data: RegistrationState): void {
   }
 }
 
-async function submitRegistration(data: RegistrationState): Promise<void> {
+interface DuplicateResult {
+  registrationId: string;
+  paymentStatus: string;
+}
+
+async function submitRegistration(
+  data: RegistrationState,
+): Promise<{ duplicate: DuplicateResult } | null> {
   const payload = {
     registrationId: data.registrationId,
     name: data.name,
@@ -74,9 +81,18 @@ async function submitRegistration(data: RegistrationState): Promise<void> {
     body: JSON.stringify(payload),
   });
 
+  if (response.status === 409) {
+    const body = await response.json() as { error?: string; existingRegistration?: DuplicateResult };
+    if (body.existingRegistration) {
+      return { duplicate: body.existingRegistration };
+    }
+  }
+
   if (!response.ok) {
     throw new Error('Failed to submit registration');
   }
+
+  return null;
 }
 
 async function createCheckoutSession(
@@ -200,15 +216,15 @@ export function EventRegistrationForm({ config }: { config: EventConfig }) {
   // Duplicate registration detection
   const [existingRegistration, setExistingRegistration] = useState<{ registrationId: string; paymentStatus: string } | null>(null);
 
-  const maxMothersFromParents = (category === 'bv-family' && adults === 2) ? 1 : adults;
+  const maxMothersFromParents = ((category === 'bv-family' || category === 'sevak') && adults === 2) ? 1 : adults;
   const maxMothers = maxMothersFromParents + additionalAttendees;
 
   const handleAdultsChange = (val: number) => {
     setAdults(val);
-    if (category === 'bv-family' && val === 2) {
+    if ((category === 'bv-family' || category === 'sevak') && val === 2) {
       setMothersInPuja((prev) => Math.max(prev, 1));
     }
-    const newMaxFromParents = (category === 'bv-family' && val === 2) ? 1 : val;
+    const newMaxFromParents = ((category === 'bv-family' || category === 'sevak') && val === 2) ? 1 : val;
     const newMax = newMaxFromParents + additionalAttendees;
     if (mothersInPuja > newMax) {
       setMothersInPuja(newMax);
@@ -419,13 +435,23 @@ export function EventRegistrationForm({ config }: { config: EventConfig }) {
       };
 
       if (paymentMethod === 'stripe') {
-        const [, paymentLink] = await Promise.all([
+        const [duplicateResult, paymentLink] = await Promise.all([
           submitRegistration(registration),
           createCheckoutSession(registration, config),
         ]);
+        if (duplicateResult) {
+          setExistingRegistration(duplicateResult.duplicate);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          return;
+        }
         registration.stripePaymentLink = paymentLink;
       } else {
-        await submitRegistration(registration);
+        const duplicateResult = await submitRegistration(registration);
+        if (duplicateResult) {
+          setExistingRegistration(duplicateResult.duplicate);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          return;
+        }
       }
 
       saveRegistration(registration);

@@ -27,6 +27,27 @@ vi.mock('@/features/events/shared/google-sheets-sender', () => ({
   sendToGoogleSheet: vi.fn(),
 }));
 
+const mockCheckExistingRegistration = vi.fn().mockResolvedValue(null);
+vi.mock('@/features/events/shared/duplicate-check', () => ({
+  checkExistingRegistration: (...args: Parameters<typeof mockCheckExistingRegistration>) =>
+    mockCheckExistingRegistration(...args),
+}));
+
+const mockCheckSevakByEmail = vi.fn().mockResolvedValue(true);
+vi.mock('@/features/events/shared/sevak-check', () => ({
+  checkSevakByEmail: (...args: Parameters<typeof mockCheckSevakByEmail>) =>
+    mockCheckSevakByEmail(...args),
+}));
+
+const mockFindFamilyById = vi.fn().mockResolvedValue({ fid: '383', contacts: [] });
+const mockFindFamilyByContact = vi.fn().mockResolvedValue({ fid: '383', contacts: [] });
+vi.mock('@/features/check-in/shared', () => ({
+  findFamilyById: (...args: Parameters<typeof mockFindFamilyById>) =>
+    mockFindFamilyById(...args),
+  findFamilyByContact: (...args: Parameters<typeof mockFindFamilyByContact>) =>
+    mockFindFamilyByContact(...args),
+}));
+
 const mockAfterCallbacks: (() => Promise<void>)[] = [];
 vi.mock('next/server', async (importOriginal) => {
   const actual = await importOriginal<typeof import('next/server')>();
@@ -53,6 +74,10 @@ describe('POST /api/events/register', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockCreate.mockResolvedValue(undefined);
+    mockCheckExistingRegistration.mockResolvedValue(null);
+    mockCheckSevakByEmail.mockResolvedValue(true);
+    mockFindFamilyById.mockResolvedValue({ fid: '383', contacts: [] });
+    mockFindFamilyByContact.mockResolvedValue({ fid: '383', contacts: [] });
     mockAfterCallbacks.length = 0;
     process.env.NEXT_PUBLIC_GOOGLE_SHEET_URL = 'https://script.google.com/test';
   });
@@ -234,6 +259,304 @@ describe('POST /api/events/register', () => {
             mothersInPuja: 0,
           }),
         );
+      },
+    });
+  });
+
+  it('returns 409 with existingRegistration when BV family fid matches', async () => {
+    const existing = { registrationId: 'MD26-EXISTING', paymentStatus: 'completed' };
+    mockCheckExistingRegistration.mockResolvedValueOnce(existing);
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        const res = await fetch({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...validPayload, category: 'bv-family', fid: '383' }),
+        });
+        const data = await res.json();
+        expect(res.status).toBe(409);
+        expect(data.error).toBe('Duplicate registration');
+        expect(data.existingRegistration).toEqual(existing);
+        expect(mockCreate).not.toHaveBeenCalled();
+      },
+    });
+  });
+
+  it('returns 409 when BV family fid is null and bvFamilyEmail matches', async () => {
+    const existing = { registrationId: 'MD26-DUPE01', paymentStatus: 'pending' };
+    mockCheckExistingRegistration.mockResolvedValueOnce(existing);
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        const res = await fetch({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...validPayload, category: 'bv-family' }),
+        });
+        const data = await res.json();
+        expect(res.status).toBe(409);
+        expect(data.existingRegistration).toEqual(existing);
+        expect(mockCreate).not.toHaveBeenCalled();
+      },
+    });
+  });
+
+  it('returns 409 when sevak email matches', async () => {
+    const existing = { registrationId: 'MD26-SEVAK1', paymentStatus: 'pending' };
+    mockCheckExistingRegistration.mockResolvedValueOnce(existing);
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        const res = await fetch({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...validPayload, category: 'sevak' }),
+        });
+        const data = await res.json();
+        expect(res.status).toBe(409);
+        expect(data.existingRegistration).toEqual(existing);
+        expect(mockCreate).not.toHaveBeenCalled();
+      },
+    });
+  });
+
+  it('returns 409 when non-BV email matches', async () => {
+    const existing = { registrationId: 'MD26-NONBV1', paymentStatus: 'pending' };
+    mockCheckExistingRegistration.mockResolvedValueOnce(existing);
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        const res = await fetch({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...validPayload, category: 'non-bv' }),
+        });
+        const data = await res.json();
+        expect(res.status).toBe(409);
+        expect(data.existingRegistration).toEqual(existing);
+        expect(mockCreate).not.toHaveBeenCalled();
+      },
+    });
+  });
+
+  it('proceeds with registration when duplicate check throws', async () => {
+    mockCheckExistingRegistration.mockRejectedValueOnce(new Error('Firestore timeout'));
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        const res = await fetch({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...validPayload, category: 'non-bv' }),
+        });
+        expect(res.status).toBe(200);
+        expect(mockCreate).toHaveBeenCalled();
+      },
+    });
+  });
+
+  it('lowercases email before duplicate check and storage', async () => {
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        await fetch({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...validPayload, email: 'JOHN@EXAMPLE.COM', category: 'non-bv' }),
+        });
+        expect(mockCheckExistingRegistration).toHaveBeenCalledWith(
+          expect.objectContaining({ value: 'john@example.com' }),
+        );
+        expect(mockCreate).toHaveBeenCalledWith(
+          expect.objectContaining({ email: 'john@example.com' }),
+        );
+      },
+    });
+  });
+
+  // --- Mothers cap tests ---
+
+  it('returns 400 for BV Family with 2 adults and 2 mothers (cap violation)', async () => {
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        const res = await fetch({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...validPayload,
+            category: 'bv-family',
+            adults: 2,
+            mothersInPuja: 2,
+          }),
+        });
+        expect(res.status).toBe(400);
+        const data = await res.json();
+        expect(data.error).toBe('Maximum 1 mother for BV Family or Sevak with 2 adults');
+        expect(mockCreate).not.toHaveBeenCalled();
+      },
+    });
+  });
+
+  it('returns 400 for Sevak with 2 adults and 2 mothers (MD26-09YV920 scenario)', async () => {
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        const res = await fetch({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...validPayload,
+            category: 'sevak',
+            adults: 2,
+            mothersInPuja: 2,
+          }),
+        });
+        expect(res.status).toBe(400);
+        const data = await res.json();
+        expect(data.error).toBe('Maximum 1 mother for BV Family or Sevak with 2 adults');
+        expect(mockCreate).not.toHaveBeenCalled();
+      },
+    });
+  });
+
+  it('returns 200 for non-BV with 2 adults and 2 mothers (no cap)', async () => {
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        const res = await fetch({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...validPayload,
+            category: 'non-bv',
+            adults: 2,
+            mothersInPuja: 2,
+          }),
+        });
+        expect(res.status).toBe(200);
+        expect(mockCreate).toHaveBeenCalled();
+      },
+    });
+  });
+
+  it('returns 200 for BV Family with 1 adult and 1 mother (under cap)', async () => {
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        const res = await fetch({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...validPayload,
+            category: 'bv-family',
+            adults: 1,
+            mothersInPuja: 1,
+          }),
+        });
+        expect(res.status).toBe(200);
+        expect(mockCreate).toHaveBeenCalled();
+      },
+    });
+  });
+
+  // --- Roster re-verification tests ---
+
+  it('returns 403 when sevak email is not in roster', async () => {
+    mockCheckSevakByEmail.mockResolvedValueOnce(false);
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        const res = await fetch({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...validPayload, category: 'sevak' }),
+        });
+        expect(res.status).toBe(403);
+        const data = await res.json();
+        expect(data.error).toBe('Email not found in BV Teacher/Sevak roster');
+        expect(mockCreate).not.toHaveBeenCalled();
+      },
+    });
+  });
+
+  it('returns 403 when BV Family fid is not found in roster', async () => {
+    mockFindFamilyById.mockResolvedValueOnce(null);
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        const res = await fetch({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...validPayload, category: 'bv-family', fid: '9999' }),
+        });
+        expect(res.status).toBe(403);
+        const data = await res.json();
+        expect(data.error).toBe('Not found in BV Family roster');
+        expect(mockCreate).not.toHaveBeenCalled();
+      },
+    });
+  });
+
+  it('returns 200 for valid sevak in roster', async () => {
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        const res = await fetch({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...validPayload, category: 'sevak' }),
+        });
+        expect(res.status).toBe(200);
+        expect(mockCreate).toHaveBeenCalled();
+      },
+    });
+  });
+
+  it('returns 200 for valid BV Family in roster', async () => {
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        const res = await fetch({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...validPayload, category: 'bv-family', fid: '383' }),
+        });
+        expect(res.status).toBe(200);
+        expect(mockCreate).toHaveBeenCalled();
+      },
+    });
+  });
+
+  it('proceeds with 200 when sevak roster check throws (graceful degradation)', async () => {
+    mockCheckSevakByEmail.mockRejectedValueOnce(new Error('Firebase timeout'));
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        const res = await fetch({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...validPayload, category: 'sevak' }),
+        });
+        expect(res.status).toBe(200);
+        expect(mockCreate).toHaveBeenCalled();
+      },
+    });
+  });
+
+  it('skips sevak and BV roster checks for non-BV category', async () => {
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        await fetch({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...validPayload, category: 'non-bv' }),
+        });
+        expect(mockCheckSevakByEmail).not.toHaveBeenCalled();
+        expect(mockFindFamilyById).not.toHaveBeenCalled();
+        expect(mockFindFamilyByContact).not.toHaveBeenCalled();
       },
     });
   });
