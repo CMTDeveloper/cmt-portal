@@ -65,13 +65,16 @@ export async function POST(req: Request) {
     console.error('Duplicate check failed, proceeding with registration:', err);
   }
 
-  if (
+  const maxMothersFromParents =
     (parsed.category === 'bv-family' || parsed.category === 'sevak') &&
-    parsed.adults === 2 &&
-    (parsed.mothersInPuja ?? 0) > 1
-  ) {
+    parsed.adults === 2
+      ? 1
+      : parsed.adults;
+  const additional = parsed.additionalAttendees ?? 0;
+  const maxMothers = maxMothersFromParents + additional;
+  if ((parsed.mothersInPuja ?? 0) > maxMothers) {
     return NextResponse.json(
-      { error: 'Maximum 1 mother for BV Family or Sevak with 2 adults' },
+      { error: `Mothers count cannot exceed ${maxMothers} for this registration` },
       { status: 400 },
     );
   }

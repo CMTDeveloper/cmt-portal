@@ -393,7 +393,7 @@ describe('POST /api/events/register', () => {
         });
         expect(res.status).toBe(400);
         const data = await res.json();
-        expect(data.error).toBe('Maximum 1 mother for BV Family or Sevak with 2 adults');
+        expect(data.error).toBe('Mothers count cannot exceed 1 for this registration');
         expect(mockCreate).not.toHaveBeenCalled();
       },
     });
@@ -415,7 +415,7 @@ describe('POST /api/events/register', () => {
         });
         expect(res.status).toBe(400);
         const data = await res.json();
-        expect(data.error).toBe('Maximum 1 mother for BV Family or Sevak with 2 adults');
+        expect(data.error).toBe('Mothers count cannot exceed 1 for this registration');
         expect(mockCreate).not.toHaveBeenCalled();
       },
     });
@@ -457,6 +457,72 @@ describe('POST /api/events/register', () => {
         });
         expect(res.status).toBe(200);
         expect(mockCreate).toHaveBeenCalled();
+      },
+    });
+  });
+
+  it('returns 200 for BV Family FID 1142 with 2 adults, 1 additional attendee, 2 mothers', async () => {
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        const res = await fetch({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...validPayload,
+            category: 'bv-family',
+            fid: '1142',
+            adults: 2,
+            additionalAttendees: 1,
+            mothersInPuja: 2,
+          }),
+        });
+        expect(res.status).toBe(200);
+        expect(mockCreate).toHaveBeenCalled();
+      },
+    });
+  });
+
+  it('returns 200 for Sevak with 2 adults, 2 additional attendees, 3 mothers', async () => {
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        const res = await fetch({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...validPayload,
+            category: 'sevak',
+            adults: 2,
+            additionalAttendees: 2,
+            mothersInPuja: 3,
+          }),
+        });
+        expect(res.status).toBe(200);
+        expect(mockCreate).toHaveBeenCalled();
+      },
+    });
+  });
+
+  it('returns 400 for BV Family 2 adults, 0 additional, 2 mothers with exact error body', async () => {
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        const res = await fetch({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...validPayload,
+            category: 'bv-family',
+            adults: 2,
+            additionalAttendees: 0,
+            mothersInPuja: 2,
+          }),
+        });
+        expect(res.status).toBe(400);
+        const data = await res.json();
+        expect(data).toEqual({ error: 'Mothers count cannot exceed 1 for this registration' });
+        expect(mockCreate).not.toHaveBeenCalled();
       },
     });
   });
