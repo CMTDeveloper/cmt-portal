@@ -89,7 +89,11 @@ async function submitRegistration(
   }
 
   if (!response.ok) {
-    throw new Error('Failed to submit registration');
+    const body = await response.json().catch(() => null) as { error?: string } | null;
+    const msg = typeof body?.error === 'string' && body.error.length > 0
+      ? body.error
+      : 'Something went wrong. Please try again.';
+    throw new Error(msg);
   }
 
   return null;
@@ -157,7 +161,13 @@ async function lookupRegistration(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ registrationId, email }),
     });
-    if (!response.ok) return null;
+    if (!response.ok) {
+      const body = await response.json().catch(() => null) as { error?: string } | null;
+      const msg = typeof body?.error === 'string' && body.error.length > 0
+        ? body.error
+        : 'Something went wrong. Please try again.';
+      throw new Error(msg);
+    }
     const data = await response.json() as Record<string, unknown>;
     if (!data || !data.registrationId) return null;
     const category = (data.category as RegistrationCategory) || 'non-bv';
@@ -456,8 +466,11 @@ export function EventRegistrationForm({ config }: { config: EventConfig }) {
 
       saveRegistration(registration);
       router.push('/events/register/payment');
-    } catch {
-      setErrors({ form: 'Something went wrong. Please try again.' });
+    } catch (e) {
+      const msg = e instanceof Error && e.message.length > 0
+        ? e.message
+        : 'Something went wrong. Please try again.';
+      setErrors({ form: msg });
     } finally {
       setLoading(false);
     }
@@ -481,8 +494,11 @@ export function EventRegistrationForm({ config }: { config: EventConfig }) {
       } else {
         setLookupError('Registration not found. Please check your details and try again.');
       }
-    } catch {
-      setLookupError('Something went wrong. Please try again.');
+    } catch (e) {
+      const msg = e instanceof Error && e.message.length > 0
+        ? e.message
+        : 'Something went wrong. Please try again.';
+      setLookupError(msg);
     } finally {
       setLookupLoading(false);
     }
