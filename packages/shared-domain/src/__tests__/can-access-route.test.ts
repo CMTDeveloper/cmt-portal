@@ -217,6 +217,36 @@ describe('canAccessRoute — /api/setu/invite/* — Setu family + welcome-team (
   });
 });
 
+describe('canAccessRoute — /api/setu/invite/accept — any signed-in user', () => {
+  // The accept route handler enforces verified-contact email match itself,
+  // so middleware just needs a session. A fresh-OTP invitee has role='family'
+  // (no fid yet) and MUST be allowed through middleware to reach the handler.
+  it('allows family-manager on /api/setu/invite/accept', () => {
+    expect(canAccessRoute(manager, '/api/setu/invite/accept', 'POST')).toBe(true);
+  });
+  it('allows family-member on /api/setu/invite/accept', () => {
+    expect(canAccessRoute(member, '/api/setu/invite/accept', 'POST')).toBe(true);
+  });
+  it('allows fresh-OTP family role on /api/setu/invite/accept', () => {
+    expect(canAccessRoute(family, '/api/setu/invite/accept', 'POST')).toBe(true);
+  });
+  it('allows welcome-team on /api/setu/invite/accept', () => {
+    expect(canAccessRoute(welcomeTeam, '/api/setu/invite/accept', 'POST')).toBe(true);
+  });
+});
+
+describe('canAccessRoute — GET /api/setu/invite/{token} — any signed-in user', () => {
+  it('allows family-manager on /api/setu/invite/<token>', () => {
+    expect(canAccessRoute(manager, '/api/setu/invite/abc123', 'GET')).toBe(true);
+  });
+  it('allows fresh-OTP family role on /api/setu/invite/<token>', () => {
+    expect(canAccessRoute(family, '/api/setu/invite/abc123', 'GET')).toBe(true);
+  });
+  it('allows family-member on /api/setu/invite/<token>', () => {
+    expect(canAccessRoute(member, '/api/setu/invite/abc123', 'GET')).toBe(true);
+  });
+});
+
 describe('canAccessRoute — /welcome/* — welcome-team', () => {
   it('allows welcome-team on /welcome', () => {
     expect(canAccessRoute(welcomeTeam, '/welcome')).toBe(true);
