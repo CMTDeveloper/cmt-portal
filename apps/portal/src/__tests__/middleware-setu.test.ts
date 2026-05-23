@@ -12,11 +12,17 @@ import {
 } from '@cmt/firebase-shared/admin/session';
 import { middleware } from '../middleware';
 
-const makeReq = (url: string, init: { cookie?: string; bearer?: string } = {}) => {
+const makeReq = (
+  url: string,
+  init: { cookie?: string; bearer?: string; method?: string } = {},
+) => {
   const headers = new Headers();
   if (init.bearer) headers.set('authorization', `Bearer ${init.bearer}`);
   if (init.cookie) headers.set('cookie', `__session=${init.cookie}`);
-  return new NextRequest(new URL(url, 'http://localhost'), { headers });
+  return new NextRequest(new URL(url, 'http://localhost'), {
+    headers,
+    method: init.method ?? 'GET',
+  });
 };
 
 beforeEach(() => {
@@ -249,5 +255,101 @@ describe('legacy familyId header forwarded', () => {
     );
     expect(res.status).toBe(200);
     expect(res.headers.get('x-portal-family-id')).toBe('42');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Method-aware: family-member denied POST/PATCH/DELETE on /api/setu/members
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('Method-aware: /api/setu/members mutations denied for family-member', () => {
+  it('family-member POST /api/setu/members → 401 unauthorized', async () => {
+    (verifyPortalSessionCookie as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      uid: 'u-mem',
+      role: 'family-member',
+      fid: 'FAM001',
+      mid: 'FAM001-02',
+    });
+    const res = await middleware(
+      makeReq('http://localhost/api/setu/members', { cookie: 'good', method: 'POST' }),
+    );
+    expect(res.status).toBe(401);
+    const body = await res.json();
+    expect(body.error).toBe('unauthorized');
+  });
+
+  it('family-member PATCH /api/setu/members/FAM001-02 (own mid) → 200 self-edit allowed', async () => {
+    // Self-edit: session mid matches the path mid — middleware allows through.
+    // Route handler enforces that manager flag cannot be changed.
+    (verifyPortalSessionCookie as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      uid: 'u-mem',
+      role: 'family-member',
+      fid: 'FAM001',
+      mid: 'FAM001-02',
+    });
+    const res = await middleware(
+      makeReq('http://localhost/api/setu/members/FAM001-02', { cookie: 'good', method: 'PATCH' }),
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it('family-member PATCH /api/setu/members/FAM001-01 (other member) → 401 unauthorized', async () => {
+    // Editing a different member's mid — blocked at middleware.
+    (verifyPortalSessionCookie as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      uid: 'u-mem',
+      role: 'family-member',
+      fid: 'FAM001',
+      mid: 'FAM001-02',
+    });
+    const res = await middleware(
+      makeReq('http://localhost/api/setu/members/FAM001-01', { cookie: 'good', method: 'PATCH' }),
+    );
+    expect(res.status).toBe(401);
+    const body = await res.json();
+    expect(body.error).toBe('unauthorized');
+  });
+
+  it('family-member DELETE /api/setu/members/FAM001-02 → 401 unauthorized', async () => {
+    (verifyPortalSessionCookie as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      uid: 'u-mem',
+      role: 'family-member',
+      fid: 'FAM001',
+      mid: 'FAM001-02',
+    });
+    const res = await middleware(
+      makeReq('http://localhost/api/setu/members/FAM001-02', {
+        cookie: 'good',
+        method: 'DELETE',
+      }),
+    );
+    expect(res.status).toBe(401);
+    const body = await res.json();
+    expect(body.error).toBe('unauthorized');
+  });
+
+  it('family-member GET /api/setu/members → 200 (read-only is allowed)', async () => {
+    (verifyPortalSessionCookie as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      uid: 'u-mem',
+      role: 'family-member',
+      fid: 'FAM001',
+      mid: 'FAM001-02',
+    });
+    const res = await middleware(
+      makeReq('http://localhost/api/setu/members', { cookie: 'good', method: 'GET' }),
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it('family-manager POST /api/setu/members → 200 (manager can mutate)', async () => {
+    (verifyPortalSessionCookie as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      uid: 'u-mgr',
+      role: 'family-manager',
+      fid: 'FAM001',
+      mid: 'FAM001-01',
+    });
+    const res = await middleware(
+      makeReq('http://localhost/api/setu/members', { cookie: 'good', method: 'POST' }),
+    );
+    expect(res.status).toBe(200);
   });
 });

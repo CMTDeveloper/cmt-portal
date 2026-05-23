@@ -1,0 +1,330 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+vi.mock('@/lib/flags', () => ({ flags: { setuAuth: true } }));
+vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
+  portalFirestore: vi.fn(),
+  FieldValue: { serverTimestamp: vi.fn(() => 'SERVER_TIMESTAMP') },
+}));
+vi.mock('@/features/setu/members', () => ({
+  assertNotLastManager: vi.fn(),
+  LastManagerError: class LastManagerError extends Error {
+    constructor(op: string) {
+      super(`Cannot ${op} the last manager`);
+      this.name = 'LastManagerError';
+    }
+  },
+}));
+vi.mock('@/features/setu/registration/hash-contact-key', () => ({
+  hashContactKey: vi.fn((type: string, value: string) => `hash:${type}:${value}`),
+}));
+
+import { PATCH, DELETE } from '../route';
+import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
+import { assertNotLastManager, LastManagerError } from '@/features/setu/members';
+
+const mockRunTransaction = vi.fn();
+const mockGet = vi.fn();
+const mockTxnSet = vi.fn();
+const mockTxnDelete = vi.fn();
+
+function makeChainRef(): Record<string, unknown> {
+  const ref: Record<string, unknown> = {};
+  ref['doc'] = vi.fn(() => makeChainRef());
+  ref['collection'] = vi.fn(() => makeChainRef());
+  ref['set'] = mockTxnSet;
+  ref['delete'] = mockTxnDelete;
+  return ref;
+}
+
+function makeRequest(method: 'PATCH' | 'DELETE', body: unknown, xHeaders: Record<string, string> = {}) {
+  return new Request('http://localhost/api/setu/members/FAM001ABCD12-02', {
+    method,
+    headers: { 'content-type': 'application/json', ...xHeaders },
+    ...(body !== null ? { body: JSON.stringify(body) } : {}),
+  });
+}
+
+function managerHeaders(fid = 'FAM001ABCD12', mid = 'FAM001ABCD12-01'): Record<string, string> {
+  return { 'x-portal-role': 'family-manager', 'x-portal-fid': fid, 'x-portal-mid': mid, 'x-portal-uid': `uid-${mid}` };
+}
+
+function memberHeaders(fid = 'FAM001ABCD12', mid = 'FAM001ABCD12-02'): Record<string, string> {
+  return { 'x-portal-role': 'family-member', 'x-portal-fid': fid, 'x-portal-mid': mid, 'x-portal-uid': `uid-${mid}` };
+}
+
+const memberSnap = {
+  exists: true,
+  data: () => ({
+    mid: 'FAM001ABCD12-02',
+    uid: null,
+    firstName: 'Diya',
+    lastName: 'Patel',
+    type: 'Child',
+    gender: 'Female',
+    manager: false,
+    joinedAt: { toDate: () => new Date('2026-01-01') },
+    email: null,
+    phone: null,
+    schoolGrade: 'Grade 5',
+    birthMonthYear: null,
+    volunteeringSkills: [],
+    foodAllergies: null,
+    emergencyContacts: [null, null],
+  }),
+};
+
+const familySnap = {
+  exists: true,
+  data: () => ({
+    fid: 'FAM001ABCD12',
+    managers: ['FAM001ABCD12-01'],
+  }),
+};
+
+const params = { mid: 'FAM001ABCD12-02' };
+
+beforeEach(() => {
+  vi.clearAllMocks();
+
+  mockRunTransaction.mockImplementation(async (fn: (txn: unknown) => unknown) => {
+    const txn = {
+      get: mockGet,
+      set: mockTxnSet,
+      delete: mockTxnDelete,
+      update: vi.fn(),
+    };
+    return fn(txn);
+  });
+
+  const chainRef = makeChainRef();
+  (portalFirestore as ReturnType<typeof vi.fn>).mockReturnValue({
+    runTransaction: mockRunTransaction,
+    collection: vi.fn(() => chainRef),
+  });
+});
+
+// ─── PATCH ────────────────────────────────────────────────────────────────────
+
+describe('PATCH /api/setu/members/[mid]', () => {
+  it('returns 401 when no session', async () => {
+    const res = await PATCH(makeRequest('PATCH', { firstName: 'Diya2' }), { params: Promise.resolve(params) });
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 403 when family-member tries to edit another member', async () => {
+    // session mid is -03, target is -02 (different)
+    const res = await PATCH(
+      makeRequest('PATCH', { firstName: 'New' }, memberHeaders('FAM001ABCD12', 'FAM001ABCD12-03')),
+      { params: Promise.resolve({ mid: 'FAM001ABCD12-02' }) },
+    );
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.error).toBe('manager-required');
+  });
+
+  it('allows family-member self-edit (own mid)', async () => {
+    mockGet
+      .mockResolvedValueOnce(familySnap)
+      .mockResolvedValueOnce(memberSnap);
+
+    const res = await PATCH(
+      makeRequest('PATCH', { firstName: 'Diya2' }, memberHeaders('FAM001ABCD12', 'FAM001ABCD12-02')),
+      { params: Promise.resolve(params) },
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it('returns 403 when family-member self-edits tries to set manager flag', async () => {
+    const res = await PATCH(
+      makeRequest('PATCH', { manager: true }, memberHeaders('FAM001ABCD12', 'FAM001ABCD12-02')),
+      { params: Promise.resolve(params) },
+    );
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.error).toBe('manager-flag-requires-manager-role');
+  });
+
+  it('returns 400 when patch body attempts to mutate mid', async () => {
+    const res = await PATCH(makeRequest('PATCH', { mid: 'NEW-ID' }, managerHeaders()), {
+      params: Promise.resolve(params),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 400 when patch body attempts to mutate uid', async () => {
+    const res = await PATCH(makeRequest('PATCH', { uid: 'new-uid' }, managerHeaders()), {
+      params: Promise.resolve(params),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 400 when patch body attempts to mutate joinedAt', async () => {
+    const res = await PATCH(makeRequest('PATCH', { joinedAt: new Date() }, managerHeaders()), {
+      params: Promise.resolve(params),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 404 when member does not exist', async () => {
+    mockGet
+      .mockResolvedValueOnce(familySnap)
+      .mockResolvedValueOnce({ exists: false });
+
+    const res = await PATCH(makeRequest('PATCH', { firstName: 'New' }, managerHeaders()), {
+      params: Promise.resolve(params),
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it('returns 200 on successful manager patch', async () => {
+    mockGet
+      .mockResolvedValueOnce(familySnap)
+      .mockResolvedValueOnce(memberSnap);
+
+    const res = await PATCH(makeRequest('PATCH', { firstName: 'DiyaNew', schoolGrade: 'Grade 6' }, managerHeaders()), {
+      params: Promise.resolve(params),
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it('calls assertNotLastManager when demoting manager flag', async () => {
+    const managerMemberSnap = {
+      exists: true,
+      data: () => ({ ...memberSnap.data(), manager: true, mid: 'FAM001ABCD12-01' }),
+    };
+    const demotionFamilySnap = {
+      exists: true,
+      data: () => ({ fid: 'FAM001ABCD12', managers: ['FAM001ABCD12-01'] }),
+    };
+    mockGet
+      .mockResolvedValueOnce(demotionFamilySnap)
+      .mockResolvedValueOnce(managerMemberSnap);
+
+    (assertNotLastManager as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      throw new (LastManagerError as unknown as new (op: string) => Error)('demote');
+    });
+
+    const res = await PATCH(makeRequest('PATCH', { manager: false }, managerHeaders()), {
+      params: Promise.resolve({ mid: 'FAM001ABCD12-01' }),
+    });
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.error).toBe('last-manager');
+  });
+
+  it('returns 404 when feature flag is off', async () => {
+    vi.resetModules();
+    vi.doMock('@/lib/flags', () => ({ flags: { setuAuth: false } }));
+    const { PATCH: flaggedPATCH } = await import('../route');
+    const res = await flaggedPATCH(makeRequest('PATCH', {}, managerHeaders()), { params: Promise.resolve(params) });
+    expect(res.status).toBe(404);
+  });
+});
+
+// ─── DELETE ───────────────────────────────────────────────────────────────────
+
+describe('DELETE /api/setu/members/[mid]', () => {
+  it('returns 401 when no session', async () => {
+    const res = await DELETE(makeRequest('DELETE', null), { params: Promise.resolve(params) });
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 403 when family-member tries to delete', async () => {
+    const res = await DELETE(
+      makeRequest('DELETE', null, memberHeaders()),
+      { params: Promise.resolve(params) },
+    );
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.error).toBe('manager-required');
+  });
+
+  it('returns 404 when member does not exist', async () => {
+    mockGet
+      .mockResolvedValueOnce(familySnap)
+      .mockResolvedValueOnce({ exists: false });
+
+    const res = await DELETE(makeRequest('DELETE', null, managerHeaders()), { params: Promise.resolve(params) });
+    expect(res.status).toBe(404);
+  });
+
+  it('calls assertNotLastManager when deleting a manager', async () => {
+    const managerMemberSnap = {
+      exists: true,
+      data: () => ({ ...memberSnap.data(), manager: true, mid: 'FAM001ABCD12-01' }),
+    };
+    const singleManagerFamilySnap = {
+      exists: true,
+      data: () => ({ fid: 'FAM001ABCD12', managers: ['FAM001ABCD12-01'] }),
+    };
+    mockGet
+      .mockResolvedValueOnce(singleManagerFamilySnap)
+      .mockResolvedValueOnce(managerMemberSnap);
+
+    (assertNotLastManager as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      throw new (LastManagerError as unknown as new (op: string) => Error)('remove');
+    });
+
+    const res = await DELETE(makeRequest('DELETE', null, managerHeaders()), {
+      params: Promise.resolve({ mid: 'FAM001ABCD12-01' }),
+    });
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.error).toBe('last-manager');
+  });
+
+  it('returns 200 on successful delete of non-manager member', async () => {
+    mockGet
+      .mockResolvedValueOnce(familySnap)
+      .mockResolvedValueOnce(memberSnap);
+
+    const res = await DELETE(makeRequest('DELETE', null, managerHeaders()), { params: Promise.resolve(params) });
+    expect(res.status).toBe(200);
+  });
+
+  it('removes contactKey docs when member has email/phone', async () => {
+    const memberWithContactSnap = {
+      exists: true,
+      data: () => ({
+        ...memberSnap.data(),
+        email: 'diya@example.com',
+        phone: '4165559999',
+      }),
+    };
+    mockGet
+      .mockResolvedValueOnce(familySnap)
+      .mockResolvedValueOnce(memberWithContactSnap);
+
+    await DELETE(makeRequest('DELETE', null, managerHeaders()), { params: Promise.resolve(params) });
+    // mockTxnDelete called for member + email contactKey + phone contactKey
+    expect(mockTxnDelete).toHaveBeenCalledTimes(3);
+  });
+
+  it('removes family managers array entry when deleting a non-last manager', async () => {
+    const twoManagerFamilySnap = {
+      exists: true,
+      data: () => ({ fid: 'FAM001ABCD12', managers: ['FAM001ABCD12-01', 'FAM001ABCD12-02'] }),
+    };
+    const managerMemberSnap = {
+      exists: true,
+      data: () => ({ ...memberSnap.data(), manager: true, mid: 'FAM001ABCD12-02' }),
+    };
+    mockGet
+      .mockResolvedValueOnce(twoManagerFamilySnap)
+      .mockResolvedValueOnce(managerMemberSnap);
+
+    (assertNotLastManager as ReturnType<typeof vi.fn>).mockReturnValue(undefined);
+
+    const res = await DELETE(makeRequest('DELETE', null, managerHeaders()), { params: Promise.resolve(params) });
+    expect(res.status).toBe(200);
+    expect(mockTxnSet).toHaveBeenCalled();
+  });
+
+  it('returns 404 when feature flag is off', async () => {
+    vi.resetModules();
+    vi.doMock('@/lib/flags', () => ({ flags: { setuAuth: false } }));
+    const { DELETE: flaggedDELETE } = await import('../route');
+    const res = await flaggedDELETE(makeRequest('DELETE', null, managerHeaders()), { params: Promise.resolve(params) });
+    expect(res.status).toBe(404);
+  });
+});

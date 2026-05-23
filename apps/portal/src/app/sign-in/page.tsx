@@ -14,6 +14,8 @@ type PageState = 'form' | 'code' | 'verifying';
 
 function SignInPrototype() {
   const [state, setState] = useState<'form' | 'sent'>('form');
+  const [email, setEmail] = useState('');
+  const displayEmail = email.trim() || 'your address';
 
   return (
     <>
@@ -34,7 +36,7 @@ function SignInPrototype() {
                   </p>
                   <div className="field" style={{ marginBottom: 14 }}>
                     <label>Email address</label>
-                    <input className="input" type="email" defaultValue="aarti.patel@gmail.com"/>
+                    <input className="input" type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)}/>
                   </div>
                   <button className="btn btn--p btn--block" style={{ marginBottom: 10 }} onClick={() => setState('sent')}>
                     Send sign-in code →
@@ -52,7 +54,7 @@ function SignInPrototype() {
                   </div>
                   <h1 style={{ fontSize: 28, fontWeight: 400, marginBottom: 10 }}>Check your inbox</h1>
                   <p style={{ fontSize: 14, color: 'var(--body-text)', lineHeight: 1.6 }}>
-                    We sent a 6-digit code to <strong>aarti.patel@gmail.com</strong>. Enter it below to sign in.
+                    We sent a 6-digit code to <strong>{displayEmail}</strong>. Enter it below to sign in.
                   </p>
                   <div style={{ marginTop: 28 }}>
                     <button className="btn btn--s btn--block" style={{ marginBottom: 8 }} onClick={() => setState('sent')}>Re-send code</button>
@@ -84,7 +86,7 @@ function SignInPrototype() {
                   </p>
                   <div className="field" style={{ marginBottom: 16 }}>
                     <label>Email address</label>
-                    <input className="input" type="email" defaultValue="aarti.patel@gmail.com"/>
+                    <input className="input" type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)}/>
                   </div>
                   <button className="btn btn--p btn--block" style={{ marginBottom: 10, padding: '14px 22px' }} onClick={() => setState('sent')}>
                     Send sign-in code →
@@ -102,7 +104,7 @@ function SignInPrototype() {
                   </div>
                   <h1 style={{ fontSize: 40, fontWeight: 400, marginBottom: 12, lineHeight: 1.1 }}>Check your inbox</h1>
                   <p style={{ fontSize: 15, color: 'var(--body-text)', lineHeight: 1.6, marginBottom: 32 }}>
-                    We sent a 6-digit code to <strong>aarti.patel@gmail.com</strong>. Enter it below to sign in.
+                    We sent a 6-digit code to <strong>{displayEmail}</strong>. Enter it below to sign in.
                   </p>
                   <button className="btn btn--s btn--block" style={{ marginBottom: 10, padding: '14px' }} onClick={() => setState('sent')}>Re-send code</button>
                   <button className="btn btn--g btn--block" onClick={() => setState('form')}>Use a different address</button>

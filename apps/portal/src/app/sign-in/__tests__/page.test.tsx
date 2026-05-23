@@ -349,18 +349,19 @@ describe('SignInPage — resend code (M4)', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('SignInPage — flag off renders prototype', () => {
-  it('renders the prototype (static email defaultValue) without calling fetch', async () => {
+  it('renders the prototype with empty controlled email input + placeholder, without calling fetch', async () => {
     flagsMock.setuAuth = false;
     render(<SignInPage />);
 
-    // The prototype has a default value of aarti.patel@gmail.com
     const emailInputs = document.querySelectorAll(
       'input[type="email"]',
     ) as NodeListOf<HTMLInputElement>;
-    const hasDefault = Array.from(emailInputs).some(
-      (el) => el.defaultValue === 'aarti.patel@gmail.com',
-    );
-    expect(hasDefault).toBe(true);
+    expect(emailInputs.length).toBeGreaterThan(0);
+    // Inputs are controlled and start empty; the example shows via placeholder.
+    Array.from(emailInputs).forEach((el) => {
+      expect(el.value).toBe('');
+      expect(el.placeholder).toBe('you@example.com');
+    });
 
     // No fetch calls at all
     expect(fetchMock).not.toHaveBeenCalled();

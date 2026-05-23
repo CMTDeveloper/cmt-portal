@@ -1,8 +1,41 @@
 import Link from 'next/link';
 import { SetuLogo, SetuAvatar, SetuIcon } from '@cmt/ui';
 import { CspRoot, Stat, MetricCard, DesktopSidebar } from '@/features/family/components/atoms';
+import { flags } from '@/lib/flags';
+import { mockFamily } from '@/features/family/data/mock';
+import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 
-export default function FamilyDashboardPage() {
+export default async function FamilyDashboardPage() {
+  let managerName = 'Aarti Patel';
+  let familyName = mockFamily.name;
+  let memberCount = mockFamily.members.length;
+  let displayMembers: { name: string }[] = mockFamily.members.map((m) => ({ name: m.name }));
+
+  if (flags.setuAuth) {
+    const data = await getCurrentFamily();
+    if (data) {
+      const currentMember = data.members.find((m) => m.mid === data.currentMid);
+      if (currentMember) {
+        managerName = `${currentMember.firstName} ${currentMember.lastName}`;
+      }
+      familyName = data.family.name;
+      memberCount = data.members.length;
+      displayMembers = data.members.map((m) => ({ name: `${m.firstName} ${m.lastName}` }));
+    }
+  }
+
+  const firstName = managerName.split(' ')[0];
+  // Date rendered in America/Toronto so the dashboard greeting matches what
+  // a sevak in the lobby sees on their clock (per CLAUDE.md B2 note 4).
+  const todayLabel = new Date().toLocaleDateString('en-CA', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'America/Toronto',
+  });
+  void familyName;
+
   return (
     <>
       {/* Mobile */}
@@ -11,13 +44,13 @@ export default function FamilyDashboardPage() {
           <div style={{ padding: '14px 18px 90px', overflowY: 'auto', minHeight: '100dvh' }}>
             <div className="between" style={{ marginBottom: 22 }}>
               <SetuLogo size={18}/>
-              <SetuAvatar name="Aarti Patel" size={32}/>
+              <SetuAvatar name={managerName} size={32}/>
             </div>
 
             <div style={{ marginBottom: 22 }}>
-              <p style={{ fontSize: 12, color: 'var(--muted)', letterSpacing: '.02em' }}>Sunday, 14 June 2026</p>
+              <p style={{ fontSize: 12, color: 'var(--muted)', letterSpacing: '.02em' }}>{todayLabel}</p>
               <h1 style={{ fontSize: 28, lineHeight: 1.15, fontWeight: 600, marginTop: 4, letterSpacing: '-0.02em' }}>
-                Namaste, Aarti.
+                Namaste, {firstName}.
               </h1>
             </div>
 
@@ -47,7 +80,7 @@ export default function FamilyDashboardPage() {
               <div style={{ height: 6, background: 'var(--surface2)', borderRadius: 99, overflow: 'hidden' }}>
                 <div style={{ width: '0%', height: '100%', background: 'var(--accent)' }}/>
               </div>
-              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 8 }}>$0 of $500 · Brampton Fall '26 · suggested</div>
+              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 8 }}>$0 of $500 · Brampton Fall &#39;26 · suggested</div>
             </div>
 
             <div className="card" style={{ padding: 16, marginBottom: 12 }}>
@@ -77,14 +110,14 @@ export default function FamilyDashboardPage() {
 
             <div className="card" style={{ padding: 16 }}>
               <div className="between" style={{ marginBottom: 12 }}>
-                <span style={{ fontSize: 12, fontWeight: 600 }}>My family · 4</span>
+                <span style={{ fontSize: 12, fontWeight: 600 }}>My family · {memberCount}</span>
                 <Link href="/family/members" className="focus-ring" style={{ background: 'transparent', border: 0, color: 'var(--accent)', fontSize: 12, fontWeight: 600, textDecoration: 'none' }}>Manage</Link>
               </div>
               <div className="row" style={{ gap: -6, flexWrap: 'wrap' }}>
-                {['Aarti Patel', 'Raj Patel', 'Diya Patel', 'Arjun Patel'].map((n, i) => (
+                {displayMembers.map((m, i) => (
                   <div key={i} style={{ marginLeft: i > 0 ? -8 : 0 }}>
                     <div style={{ border: '2px solid var(--surface)', borderRadius: '50%' }}>
-                      <SetuAvatar name={n} size={36}/>
+                      <SetuAvatar name={m.name} size={36}/>
                     </div>
                   </div>
                 ))}
@@ -117,8 +150,8 @@ export default function FamilyDashboardPage() {
           <main style={{ flex: 1, padding: '32px 40px', overflow: 'auto' }}>
             <header className="between" style={{ marginBottom: 28 }}>
               <div>
-                <p style={{ fontSize: 12, color: 'var(--muted)' }}>Sunday, 14 June 2026</p>
-                <h1 style={{ fontSize: 32, fontWeight: 600, marginTop: 4, letterSpacing: '-0.02em' }}>Namaste, Aarti.</h1>
+                <p style={{ fontSize: 12, color: 'var(--muted)' }}>{todayLabel}</p>
+                <h1 style={{ fontSize: 32, fontWeight: 600, marginTop: 4, letterSpacing: '-0.02em' }}>Namaste, {firstName}.</h1>
               </div>
               <div className="row" style={{ gap: 10 }}>
                 <button className="btn btn--s"><SetuIcon.search/> Search</button>
@@ -128,9 +161,9 @@ export default function FamilyDashboardPage() {
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 18 }}>
               <MetricCard label="Attendance" value="92%" sub="14 / 15 classes" tone="ok"/>
-              <MetricCard label="Donation"   value="$500" sub="pending · Fall '26" tone="warn"/>
+              <MetricCard label="Donation"   value="$500" sub="pending · Fall &#39;26" tone="warn"/>
               <MetricCard label="Next class" value="Sun · 10:00" sub="Brampton hall"/>
-              <MetricCard label="Family"     value="4" sub="2 adults · 2 children"/>
+              <MetricCard label="Family"     value={String(memberCount)} sub={`${memberCount} member${memberCount !== 1 ? 's' : ''}`}/>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 18 }}>
@@ -168,7 +201,7 @@ export default function FamilyDashboardPage() {
                 <div style={{ height: 6, background: 'var(--surface2)', borderRadius: 99, overflow: 'hidden', marginBottom: 8 }}>
                   <div style={{ width: '0%', height: '100%', background: 'var(--accent)' }}/>
                 </div>
-                <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 18 }}>$0 of $500 · Brampton Fall '26</div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 18 }}>$0 of $500 · {familyName} Fall &#39;26</div>
                 <p style={{ fontSize: 13, color: 'var(--body-text)', lineHeight: 1.5, marginBottom: 18 }}>
                   Suggested, not required. Any amount welcome. Donations are tax-deductible.
                 </p>

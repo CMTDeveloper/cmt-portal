@@ -23,7 +23,7 @@ export async function middleware(req: NextRequest) {
   }
 
   if (!claims) return deny(req, 'no-session');
-  if (!canAccessRoute(claims, pathname)) return deny(req, 'unauthorized');
+  if (!canAccessRoute(claims, pathname, req.method)) return deny(req, 'unauthorized');
 
   const reqHeaders = new Headers(req.headers);
   reqHeaders.set('x-portal-role', claims.role);

@@ -84,7 +84,7 @@ describe('canAccessRoute — unknown routes default-deny', () => {
   });
 });
 
-// ── Setu roles — H2 follow-up from Slice 2a review ───────────────────────────
+// ── Setu roles ────────────────────────────────────────────────────────────────
 
 describe('canAccessRoute — /family/* — family-manager', () => {
   it('allows family-manager on /family', () => {
@@ -122,37 +122,98 @@ describe('canAccessRoute — /family/* — family-member', () => {
   });
 });
 
-describe('canAccessRoute — /api/setu/family* — Setu family roles', () => {
-  it('allows family-manager on /api/setu/family', () => {
+describe('canAccessRoute — /api/setu/family — GET (read)', () => {
+  it('allows family-manager GET /api/setu/family', () => {
+    expect(canAccessRoute(manager, '/api/setu/family', 'GET')).toBe(true);
+  });
+  it('allows family-member GET /api/setu/family', () => {
+    expect(canAccessRoute(member, '/api/setu/family', 'GET')).toBe(true);
+  });
+  it('denies legacy family role GET /api/setu/family', () => {
+    expect(canAccessRoute(family, '/api/setu/family', 'GET')).toBe(false);
+  });
+  it('defaults to GET when method omitted', () => {
     expect(canAccessRoute(manager, '/api/setu/family')).toBe(true);
-  });
-  it('allows family-manager on /api/setu/family/search', () => {
-    expect(canAccessRoute(manager, '/api/setu/family/search')).toBe(true);
-  });
-  it('allows family-member on /api/setu/family', () => {
     expect(canAccessRoute(member, '/api/setu/family')).toBe(true);
-  });
-  it('denies legacy family role on /api/setu/family', () => {
-    expect(canAccessRoute(family, '/api/setu/family')).toBe(false);
   });
 });
 
-describe('canAccessRoute — /api/setu/members* — Setu family roles', () => {
-  it('allows family-manager on /api/setu/members', () => {
-    expect(canAccessRoute(manager, '/api/setu/members')).toBe(true);
+describe('canAccessRoute — /api/setu/family/search — welcome-team only', () => {
+  it('allows welcome-team GET /api/setu/family/search', () => {
+    expect(canAccessRoute(welcomeTeam, '/api/setu/family/search', 'GET')).toBe(true);
   });
-  it('allows family-manager on /api/setu/members/FAM001-02', () => {
-    expect(canAccessRoute(manager, '/api/setu/members/FAM001-02')).toBe(true);
+  it('denies family-manager GET /api/setu/family/search', () => {
+    expect(canAccessRoute(manager, '/api/setu/family/search', 'GET')).toBe(false);
   });
-  it('allows family-member on /api/setu/members (middleware level — route handler enforces manager-only for mutations)', () => {
-    // NOTE: H1 catch-all gap — canAccessRoute lets family-member reach POST/PATCH/DELETE
-    // /api/setu/members at the middleware level because isSetuFamily() covers both roles.
-    // Defense-in-depth requires route handlers to check isSetuManager() for mutations.
-    // This test documents the CURRENT behavior, not the desired end state.
-    expect(canAccessRoute(member, '/api/setu/members')).toBe(true);
+  it('denies family-member GET /api/setu/family/search', () => {
+    expect(canAccessRoute(member, '/api/setu/family/search', 'GET')).toBe(false);
   });
-  it('denies legacy family role on /api/setu/members', () => {
-    expect(canAccessRoute(family, '/api/setu/members')).toBe(false);
+});
+
+describe('canAccessRoute — /api/setu/members — GET', () => {
+  it('allows family-manager GET /api/setu/members', () => {
+    expect(canAccessRoute(manager, '/api/setu/members', 'GET')).toBe(true);
+  });
+  it('allows family-member GET /api/setu/members', () => {
+    expect(canAccessRoute(member, '/api/setu/members', 'GET')).toBe(true);
+  });
+  it('allows family-manager GET /api/setu/members/FAM001-02', () => {
+    expect(canAccessRoute(manager, '/api/setu/members/FAM001-02', 'GET')).toBe(true);
+  });
+  it('allows family-member GET /api/setu/members/FAM001-02', () => {
+    expect(canAccessRoute(member, '/api/setu/members/FAM001-02', 'GET')).toBe(true);
+  });
+  it('denies legacy family role GET /api/setu/members', () => {
+    expect(canAccessRoute(family, '/api/setu/members', 'GET')).toBe(false);
+  });
+});
+
+describe('canAccessRoute — /api/setu/members — mutations (POST/PATCH/DELETE) manager-only', () => {
+  it('allows family-manager POST /api/setu/members', () => {
+    expect(canAccessRoute(manager, '/api/setu/members', 'POST')).toBe(true);
+  });
+  it('denies family-member POST /api/setu/members', () => {
+    expect(canAccessRoute(member, '/api/setu/members', 'POST')).toBe(false);
+  });
+  it('allows family-manager PATCH /api/setu/members/FAM001-02', () => {
+    expect(canAccessRoute(manager, '/api/setu/members/FAM001-02', 'PATCH')).toBe(true);
+  });
+  // Per design §8: PATCH allows self-edit. A family-member can PATCH their own
+  // mid; the route handler enforces that `manager` cannot be flipped by a
+  // non-manager. PATCHing another member's mid is denied at middleware.
+  it('allows family-member PATCH on own mid /api/setu/members/FAM001-02 (self-edit)', () => {
+    expect(canAccessRoute(member, '/api/setu/members/FAM001-02', 'PATCH')).toBe(true);
+  });
+  it('denies family-member PATCH on another member /api/setu/members/FAM001-03', () => {
+    expect(canAccessRoute(member, '/api/setu/members/FAM001-03', 'PATCH')).toBe(false);
+  });
+  it('allows family-manager DELETE /api/setu/members/FAM001-02', () => {
+    expect(canAccessRoute(manager, '/api/setu/members/FAM001-02', 'DELETE')).toBe(true);
+  });
+  it('denies family-member DELETE /api/setu/members/FAM001-02', () => {
+    expect(canAccessRoute(member, '/api/setu/members/FAM001-02', 'DELETE')).toBe(false);
+  });
+  it('denies legacy family POST /api/setu/members', () => {
+    expect(canAccessRoute(family, '/api/setu/members', 'POST')).toBe(false);
+  });
+});
+
+describe('canAccessRoute — /api/setu/invite/* — Setu family + welcome-team (catch-all)', () => {
+  it('allows family-manager on /api/setu/invite/send', () => {
+    expect(canAccessRoute(manager, '/api/setu/invite/send')).toBe(true);
+  });
+  it('allows welcome-team on /api/setu/invite/send', () => {
+    expect(canAccessRoute(welcomeTeam, '/api/setu/invite/send')).toBe(true);
+  });
+  it('denies family-member on /api/setu/invite/send (manager-only future endpoint)', () => {
+    // The catch-all now only permits manager/welcome-team/admin, not family-member
+    expect(canAccessRoute(member, '/api/setu/invite/send')).toBe(false);
+  });
+  it('denies legacy family on /api/setu/invite/send', () => {
+    expect(canAccessRoute(family, '/api/setu/invite/send')).toBe(false);
+  });
+  it('denies teacher on /api/setu/invite/send', () => {
+    expect(canAccessRoute(teacher, '/api/setu/invite/send')).toBe(false);
   });
 });
 
@@ -174,29 +235,5 @@ describe('canAccessRoute — /welcome/* — welcome-team', () => {
   });
   it('denies teacher on /welcome', () => {
     expect(canAccessRoute(teacher, '/welcome')).toBe(false);
-  });
-});
-
-describe('canAccessRoute — /api/setu/* catch-all — H1 gap documentation', () => {
-  // The catch-all at canAccessRoute line 35-37 allows isSetuFamily() || isWelcomeTeam() || isAdmin()
-  // for any /api/setu/* path not matched by the specific rules above.
-  // When Slice 2c/2d add manager-only mutation endpoints, route handlers MUST enforce
-  // isSetuManager() internally — middleware alone does not distinguish POST vs GET here.
-  it('allows welcome-team on /api/setu/invite/send (future endpoint, covered by catch-all)', () => {
-    expect(canAccessRoute(welcomeTeam, '/api/setu/invite/send')).toBe(true);
-  });
-  it('allows family-manager on /api/setu/invite/send (catch-all)', () => {
-    expect(canAccessRoute(manager, '/api/setu/invite/send')).toBe(true);
-  });
-  it('allows family-member on /api/setu/invite/send (catch-all — H1: route handler must re-enforce)', () => {
-    // NOTE: H1 gap — family-member can reach any future /api/setu/* endpoint at middleware level.
-    // Each new endpoint must validate the specific required role internally.
-    expect(canAccessRoute(member, '/api/setu/invite/send')).toBe(true);
-  });
-  it('denies legacy family on /api/setu/invite/send', () => {
-    expect(canAccessRoute(family, '/api/setu/invite/send')).toBe(false);
-  });
-  it('denies teacher on /api/setu/invite/send', () => {
-    expect(canAccessRoute(teacher, '/api/setu/invite/send')).toBe(false);
   });
 });

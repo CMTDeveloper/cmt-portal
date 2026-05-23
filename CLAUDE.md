@@ -12,7 +12,17 @@ A Turborepo monorepo for the Chinmaya Mission Toronto unified portal. One Next.j
 
 **Slice C status:** ❌ Removed (2026-05-22). Event registration was shipped to the portal as a port from the standalone app, then removed because events now live entirely at https://events.chinmayatoronto.org/ (the standalone `chinmaya-event-registration` repo). All `/events/*` pages, `/api/events/*` routes, `features/events/`, `packages/shared-domain/src/events/`, related tests, and the `NEXT_PUBLIC_FEATURE_EVENTS*` flags have been deleted. If the portal ever needs to surface events again it should link out to the standalone domain. Reference: `docs/superpowers/specs/2026-04-13-slice-c-event-registration-port-design.md` (historical only).
 
-**2026 redesign status:** ⏳ In progress. Direction locked to "Cool Mist · Orange CTA" (see `docs/superpowers/specs/2026-05-16-portal-2026-redesign-brief.md`). Family-flow visual prototypes shipped at `/`, `/sign-in`, `/register`, `/register/family`, `/invite/[token]`, `/family`, `/family/members`, `/family/members/[mid]`, `/family/members/new`, `/family/enroll`, `/family/donate`, `/family/donations`. Static-data only — no Firebase Auth wiring yet. Next slice is **Slice 2 — Firebase Auth + family registration API** (covers magic-link sign-in, contact-based family dedupe, member CRUD, legacy-FID migration). When that lands, `/family/*` moves OUT of `PUBLIC_ROUTES`.
+**2026 redesign status:** ⏳ In progress. Direction locked to "Cool Mist · Orange CTA" (see `docs/superpowers/specs/2026-05-16-portal-2026-redesign-brief.md`). Family-flow visual prototypes shipped at `/`, `/sign-in`, `/register`, `/register/family`, `/invite/[token]`, `/family`, `/family/members`, `/family/members/[mid]`, `/family/members/new`, `/family/enroll`, `/family/donate`, `/family/donations`.
+
+**Slice 2 sub-slice status** (design: `docs/superpowers/specs/2026-05-22-slice-2-setu-auth-family-api-design.md`, plan: `docs/superpowers/plans/2026-05-22-slice-2-setu-auth-family-api.md`):
+- **2a — OTP auth wiring**: ✅ Shipped (commit `3da1cd2`). `POST /api/setu/auth/{send-code,verify-code,signout}` reusing existing AWS SES/SNS pipeline. New session-claims roles (`family-manager`, `family-member`, `welcome-team`). Middleware redirects `/family/*` unauth to `/sign-in`. Review: `apps/portal/docs/slice-2a-review.md`.
+- **2b — Registration + dedupe + lazy migration**: ✅ Shipped (commit `3d5cdb8`). `POST /api/setu/family-lookup`, `POST /api/setu/register`, `POST /api/setu/family/join`. Atomic Firestore transactions for the dedupe transaction. `lazyMigrateLegacyFamily` runs on verify-code legacy hits. Review: `apps/portal/docs/slice-2b-review.md`.
+- **2c — Family CRUD + edit screen**: ⏳ In progress. `GET /api/setu/family` + `POST/PATCH/DELETE /api/setu/members`. canAccessRoute H1 tightening (method-aware). last-manager-guard at every demotion path. New `/family/members/[mid]/edit/` screen.
+- **2d — Invite flow** (next).
+- **2e — Welcome-team family search** (after 2d).
+- **2f — Bulk legacy migration script** (last).
+
+**Release timing for Slice 2:** Per CMT Developer's 2026-05-22 decision — the Setu auth flow merges to `main` as sub-slices land, but is NOT announced to real families until Slices 3 (donations) and 4 (teacher + attendance) are also complete. Until then the new routes are reachable but no families know about them. Legacy `/login` + `/check-in/*` remains the production entry point for sevaks and existing BV families.
 
 ## Architecture in one paragraph
 

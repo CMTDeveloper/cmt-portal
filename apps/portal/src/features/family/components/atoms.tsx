@@ -339,3 +339,18 @@ export function Stat({ label, value, sub }: StatProps) {
     </div>
   );
 }
+
+// ─── FieldError ───────────────────────────────────────────────────────────────
+
+interface FieldErrorProps {
+  message?: string | undefined;
+}
+
+export function FieldError({ message }: FieldErrorProps) {
+  if (!message) return null;
+  return (
+    <span data-testid="field-error" style={{ fontSize: 11, color: 'var(--err)', marginTop: 4, display: 'block' }}>
+      {message}
+    </span>
+  );
+}
