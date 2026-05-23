@@ -20,18 +20,21 @@ const emergencyContactSchema = z
   })
   .nullable();
 
+// Use .nullish() (== nullable + optional) on every optional string field so
+// the client can safely send `null` for empty values (its natural
+// "no value here" sentinel) without zod rejecting the whole body.
 const addMemberSchema = z.object({
   firstName: z.string().min(1),
   lastName: z.string().min(1),
   type: z.enum(['Adult', 'Child']),
   gender: z.enum(['Male', 'Female', 'PreferNotToSay']),
-  email: z.string().email().optional(),
-  phone: z.string().min(7).optional(),
-  schoolGrade: z.string().optional(),
-  birthMonthYear: z.string().optional(),
-  foodAllergies: z.string().optional(),
-  volunteeringSkills: z.array(z.string()).optional(),
-  emergencyContacts: z.tuple([emergencyContactSchema, emergencyContactSchema]).optional(),
+  email: z.string().email().nullish(),
+  phone: z.string().min(7).nullish(),
+  schoolGrade: z.string().nullish(),
+  birthMonthYear: z.string().nullish(),
+  foodAllergies: z.string().nullish(),
+  volunteeringSkills: z.array(z.string()).nullish(),
+  emergencyContacts: z.tuple([emergencyContactSchema, emergencyContactSchema]).nullish(),
 });
 
 function zeroPad(n: number): string {

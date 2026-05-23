@@ -85,17 +85,31 @@ export default function AddMemberPage() {
     }
 
     const json = await res.json().catch(() => ({}));
-    const code = (json as { error?: string }).error ?? 'unknown';
-    setError(friendlyError(code));
+    const data = json as { error?: string; issues?: Array<{ path?: string[]; message?: string }>; field?: string };
+    setError(friendlyError(data));
     setSaving(false);
   }
 
-  function friendlyError(code: string): string {
+  function friendlyError(data: { error?: string; issues?: Array<{ path?: string[]; message?: string }>; field?: string }): string {
+    const code = data.error ?? 'unknown';
+    if (code === 'bad-request' && Array.isArray(data.issues) && data.issues.length > 0) {
+      // Surface the specific zod issue(s) so the user knows what to fix.
+      const issues = data.issues
+        .map((i) => {
+          const field = (i.path ?? []).join('.') || 'field';
+          return `${field}: ${i.message ?? 'invalid'}`;
+        })
+        .join(' · ');
+      return `Some fields look off — ${issues}`;
+    }
+    if (code === 'contact-already-registered') {
+      const field = data.field ?? 'contact';
+      return `This ${field} is already linked to another family. Use a different ${field}.`;
+    }
     const map: Record<string, string> = {
-      'bad-request': 'Please check the highlighted fields and try again.',
+      'bad-request': 'Please check your inputs and try again.',
       'no-session': 'Your session expired. Please sign in again.',
       'manager-required': 'Only family managers can add members.',
-      'contact-already-registered': 'This email or phone is already linked to another family. Use a different one.',
       'family-not-found': 'We couldn\'t find your family record. Try signing in again.',
     };
     return map[code] ?? 'Couldn\'t add the member. Please try again.';
