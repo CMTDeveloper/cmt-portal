@@ -52,7 +52,15 @@ export function resolveSender(): ResolvedSender {
         await mockSender.sendEmail(args);
         return;
       }
-      await realSendEmail(args);
+      console.log(`[resolveSender] real SES send → ${args.to} (subject: ${args.subject})`);
+      try {
+        await realSendEmail(args);
+        console.log(`[resolveSender] SES send OK → ${args.to}`);
+      } catch (e) {
+        const err = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+        console.error(`[resolveSender] SES send FAILED → ${args.to}: ${err}`);
+        throw e;
+      }
     },
     sendSMS: async (args) => {
       if (!isAllowed(args.phone, allowlist)) {
