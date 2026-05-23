@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { SetuIcon, toast } from '@cmt/ui';
-import { CspRoot, SectionLabel, DesktopSidebar, FieldError } from '@/features/family/components/atoms';
+import { CspRoot, SectionLabel, FieldError } from '@/features/family/components/atoms';
 import { getCurrentFamilyClient } from '@/features/setu/members/get-current-family-client';
 import type { FamilyWithMembers } from '@/features/setu/members/get-current-family';
 
@@ -362,40 +362,30 @@ export default function EditMemberPage() {
         </CspRoot>
       </div>
 
-      {/* Desktop */}
-      <div className="hidden md:flex" style={{ minHeight: '100dvh' }}>
-        <CspRoot style={{ display: 'flex', width: '100%', minHeight: '100dvh' }}>
-          <DesktopSidebar
-            active="family"
-            displayName={data ? (() => { const m = data.members.find((m) => m.mid === data.currentMid); return m ? `${m.firstName} ${m.lastName}` : undefined; })() : undefined}
-            subtitle={data ? `${data.family.name}${data.family.legacyFid ? ` · FID ${data.family.fid} · Legacy ${data.family.legacyFid}` : ` · FID ${data.family.fid}`}` : undefined}
-            showSignOut
-          />
-          <main style={{ flex: 1, padding: '32px 48px', overflow: 'auto' }}>
-            <header style={{ marginBottom: 28 }}>
-              <Link href={`/family/members/${mid}`} className="focus-ring" style={{ background: 'transparent', border: 0, color: 'var(--body-text)', fontSize: 13, padding: 0, marginBottom: 10, display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none' }}>
-                <SetuIcon.back/> Back to member
-              </Link>
-              <div className="between">
-                <div>
-                  <p style={{ fontSize: 11, letterSpacing: '.16em', textTransform: 'uppercase', color: 'var(--muted)' }}>Edit member</p>
-                  <h1 style={{ fontSize: 38, fontWeight: 400, marginTop: 6 }}>{firstName || '…'} {lastName}</h1>
-                </div>
-              </div>
-            </header>
-
-            <div style={{ maxWidth: 720 }}>
-              {formBody}
-              {removeButton}
-              <div style={{ marginTop: 28, paddingTop: 22, borderTop: '1px solid var(--line)', display: 'flex', gap: 10 }}>
-                <button type="submit" className="btn btn--p" style={{ padding: '14px 28px' }} disabled={saving || loading}>
-                  {saving ? 'Saving…' : 'Save changes'}
-                </button>
-                <Link href={`/family/members/${mid}`} className="btn btn--g">Cancel</Link>
-              </div>
+      {/* Desktop — layout.tsx owns sidebar + main wrapper */}
+      <div className="hidden md:block">
+        <header style={{ marginBottom: 28 }}>
+          <Link href={`/family/members/${mid}`} className="focus-ring" style={{ background: 'transparent', border: 0, color: 'var(--body-text)', fontSize: 13, padding: 0, marginBottom: 10, display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none' }}>
+            <SetuIcon.back/> Back to member
+          </Link>
+          <div className="between">
+            <div>
+              <p style={{ fontSize: 11, letterSpacing: '.16em', textTransform: 'uppercase', color: 'var(--muted)' }}>Edit member</p>
+              <h1 style={{ fontSize: 38, fontWeight: 400, marginTop: 6 }}>{firstName || '…'} {lastName}</h1>
             </div>
-          </main>
-        </CspRoot>
+          </div>
+        </header>
+
+        <div style={{ maxWidth: 720 }}>
+          {formBody}
+          {removeButton}
+          <div style={{ marginTop: 28, paddingTop: 22, borderTop: '1px solid var(--line)', display: 'flex', gap: 10 }}>
+            <button type="submit" className="btn btn--p" style={{ padding: '14px 28px' }} disabled={saving || loading}>
+              {saving ? 'Saving…' : 'Save changes'}
+            </button>
+            <Link href={`/family/members/${mid}`} className="btn btn--g">Cancel</Link>
+          </div>
+        </div>
       </div>
     </form>
   );

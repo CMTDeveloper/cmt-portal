@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { SetuAvatar, SetuIcon } from '@cmt/ui';
-import { CspRoot, DesktopSidebar } from '@/features/family/components/atoms';
+import { CspRoot } from '@/features/family/components/atoms';
 import { getFamilyForWelcome } from '@/features/setu/search/get-family-for-welcome';
 import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
 import { SetuSessionClaimsSchema } from '@cmt/shared-domain/setu';
@@ -39,7 +39,6 @@ export default async function WelcomeFamilyDetailPage({
 
   const { fid } = await params;
   const data = await getFamilyForWelcome(fid);
-  const welcomeDisplayName = 'Welcome team';
 
   if (!data) notFound();
 
@@ -67,23 +66,18 @@ export default async function WelcomeFamilyDetailPage({
         </CspRoot>
       </div>
 
-      {/* Desktop */}
-      <div className="hidden md:flex" style={{ minHeight: '100dvh' }}>
-        <CspRoot style={{ display: 'flex', width: '100%', minHeight: '100dvh' }}>
-          <DesktopSidebar active="home" role="welcome-team" displayName={welcomeDisplayName} subtitle="Welcome team" showSignOut/>
-          <main style={{ flex: 1, padding: '32px 48px', overflow: 'auto' }}>
-            <header style={{ marginBottom: 24 }}>
-              <Link href="/welcome" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--muted)', textDecoration: 'none', marginBottom: 12 }}>
-                <SetuIcon.back/> Back to search
-              </Link>
-              <p style={{ fontSize: 11, letterSpacing: '.16em', textTransform: 'uppercase', color: 'var(--muted)' }}>
-                FID {family.fid}{family.legacyFid ? ` · Legacy ${family.legacyFid}` : ''}
-              </p>
-              <h1 style={{ fontSize: 38, fontWeight: 400, marginTop: 6 }}>The {family.name} Family</h1>
-            </header>
-            <FamilyDetailBody family={family} members={members} adults={adults} children={children}/>
-          </main>
-        </CspRoot>
+      {/* Desktop — layout.tsx owns sidebar + main wrapper */}
+      <div className="hidden md:block">
+        <header style={{ marginBottom: 24 }}>
+          <Link href="/welcome" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--muted)', textDecoration: 'none', marginBottom: 12 }}>
+            <SetuIcon.back/> Back to search
+          </Link>
+          <p style={{ fontSize: 11, letterSpacing: '.16em', textTransform: 'uppercase', color: 'var(--muted)' }}>
+            FID {family.fid}{family.legacyFid ? ` · Legacy ${family.legacyFid}` : ''}
+          </p>
+          <h1 style={{ fontSize: 38, fontWeight: 400, marginTop: 6 }}>The {family.name} Family</h1>
+        </header>
+        <FamilyDetailBody family={family} members={members} adults={adults} children={children}/>
       </div>
     </>
   );

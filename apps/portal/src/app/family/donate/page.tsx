@@ -1,28 +1,14 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { SetuIcon, Rosette } from '@cmt/ui';
-import { CspRoot, SectionLabel, PayMethod, DesktopSidebar } from '@/features/family/components/atoms';
-import { getCurrentFamilyClient } from '@/features/setu/members/get-current-family-client';
+import { CspRoot, SectionLabel, PayMethod } from '@/features/family/components/atoms';
 
 type PayMethodId = 'card' | 'etransfer' | 'cheque';
 
 export default function DonatePage() {
   const [payMethod, setPayMethod] = useState<PayMethodId>('card');
-  const [sidebarDisplayName, setSidebarDisplayName] = useState<string | undefined>();
-  const [sidebarSubtitle, setSidebarSubtitle] = useState<string | undefined>();
-
-  useEffect(() => {
-    getCurrentFamilyClient().then((data) => {
-      if (!data) return;
-      const currentMember = data.members.find((m) => m.mid === data.currentMid);
-      if (currentMember) {
-        setSidebarDisplayName(`${currentMember.firstName} ${currentMember.lastName}`);
-      }
-      setSidebarSubtitle(`${data.family.name}${data.family.legacyFid ? ` · FID ${data.family.fid} · Legacy ${data.family.legacyFid}` : ` · FID ${data.family.fid}`}`);
-    }).catch(() => { /* identity fetch failure is non-fatal */ });
-  }, []);
 
   const amountBlock = (
     <div style={{ padding: '22px 18px', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radius)', marginBottom: 14 }}>
@@ -147,48 +133,43 @@ export default function DonatePage() {
         </CspRoot>
       </div>
 
-      {/* Desktop — two column layout */}
-      <div className="hidden md:flex" style={{ minHeight: '100dvh' }}>
-        <CspRoot style={{ display: 'flex', width: '100%', minHeight: '100dvh' }}>
-          <DesktopSidebar active="giving" displayName={sidebarDisplayName} subtitle={sidebarSubtitle} showSignOut/>
-          <main style={{ flex: 1, padding: '32px 48px', overflow: 'auto' }}>
-            <header style={{ marginBottom: 28 }}>
-              <Link href="/family/enroll" className="focus-ring" style={{ background: 'transparent', border: 0, color: 'var(--body-text)', fontSize: 13, padding: 0, marginBottom: 10, display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none' }}>
-                <SetuIcon.back/> Back to enrollment
-              </Link>
-              <div>
-                <p style={{ fontSize: 11, letterSpacing: '.16em', textTransform: 'uppercase', color: 'var(--muted)' }}>Bala Vihar · Brampton Fall '26</p>
-                <h1 style={{ fontSize: 38, fontWeight: 400, marginTop: 6 }}>Your <em className="sa">dakshina</em></h1>
-              </div>
-            </header>
+      {/* Desktop — layout.tsx owns sidebar + main wrapper */}
+      <div className="hidden md:block">
+        <header style={{ marginBottom: 28 }}>
+          <Link href="/family/enroll" className="focus-ring" style={{ background: 'transparent', border: 0, color: 'var(--body-text)', fontSize: 13, padding: 0, marginBottom: 10, display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none' }}>
+            <SetuIcon.back/> Back to enrollment
+          </Link>
+          <div>
+            <p style={{ fontSize: 11, letterSpacing: '.16em', textTransform: 'uppercase', color: 'var(--muted)' }}>Bala Vihar · Brampton Fall &#39;26</p>
+            <h1 style={{ fontSize: 38, fontWeight: 400, marginTop: 6 }}>Your <em className="sa">dakshina</em></h1>
+          </div>
+        </header>
 
-            <div style={{ padding: '14px 18px', background: 'var(--accentSoft)', color: 'var(--accentDeep)', border: '1px solid var(--accent)', borderRadius: 'var(--radius)', marginBottom: 20, fontSize: 14, fontWeight: 600 }}>
-              Coming soon — online donate isn&apos;t live yet. In the meantime, bring a cheque on Sunday or pay via e-Transfer (donations@chinmayatoronto.org).
+        <div style={{ padding: '14px 18px', background: 'var(--accentSoft)', color: 'var(--accentDeep)', border: '1px solid var(--accent)', borderRadius: 'var(--radius)', marginBottom: 20, fontSize: 14, fontWeight: 600 }}>
+          Coming soon — online donate isn&apos;t live yet. In the meantime, bring a cheque on Sunday or pay via e-Transfer (donations@chinmayatoronto.org).
+        </div>
+
+        {/* Two-column content */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: 22 }}>
+          {/* Left — amount + why */}
+          <div>
+            <h2 style={{ fontSize: 13, textTransform: 'uppercase', letterSpacing: '.12em', fontWeight: 700, fontFamily: 'var(--body)', color: 'var(--body-text)', marginBottom: 14 }}>Donation amount</h2>
+            {amountBlock}
+            {whyBlock}
+          </div>
+
+          {/* Right — payment + summary + CTA */}
+          <aside>
+            <div className="card" style={{ padding: 24, position: 'sticky', top: 0 }}>
+              {paymentMethods}
+              {orderSummary}
+              <button className="btn btn--p btn--block" style={{ marginTop: 18, padding: '14px', cursor: 'not-allowed', opacity: 0.6 }} disabled>Give $500 →</button>
+              <p style={{ marginTop: 10, fontSize: 11, color: 'var(--muted)', textAlign: 'center', lineHeight: 1.5 }}>
+                Secured by Stripe · Tax receipt emailed automatically
+              </p>
             </div>
-
-            {/* Two-column content */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: 22 }}>
-              {/* Left — amount + why */}
-              <div>
-                <h2 style={{ fontSize: 13, textTransform: 'uppercase', letterSpacing: '.12em', fontWeight: 700, fontFamily: 'var(--body)', color: 'var(--body-text)', marginBottom: 14 }}>Donation amount</h2>
-                {amountBlock}
-                {whyBlock}
-              </div>
-
-              {/* Right — payment + summary + CTA */}
-              <aside>
-                <div className="card" style={{ padding: 24, position: 'sticky', top: 0 }}>
-                  {paymentMethods}
-                  {orderSummary}
-                  <button className="btn btn--p btn--block" style={{ marginTop: 18, padding: '14px', cursor: 'not-allowed', opacity: 0.6 }} disabled>Give $500 →</button>
-                  <p style={{ marginTop: 10, fontSize: 11, color: 'var(--muted)', textAlign: 'center', lineHeight: 1.5 }}>
-                    Secured by Stripe · Tax receipt emailed automatically
-                  </p>
-                </div>
-              </aside>
-            </div>
-          </main>
-        </CspRoot>
+          </aside>
+        </div>
       </div>
     </>
   );

@@ -1,24 +1,9 @@
 import Link from 'next/link';
 import { SetuAvatar, SetuIcon, Rosette } from '@cmt/ui';
-import { CspRoot, SectionLabel, DesktopSidebar } from '@/features/family/components/atoms';
+import { CspRoot, SectionLabel } from '@/features/family/components/atoms';
 import { mockEnrollment } from '@/features/family/data/mock';
-import { flags } from '@/lib/flags';
-import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 
 export default async function EnrollPage() {
-  let sidebarDisplayName: string | undefined;
-  let sidebarSubtitle: string | undefined;
-
-  if (flags.setuAuth) {
-    const data = await getCurrentFamily();
-    if (data) {
-      const currentMember = data.members.find((m) => m.mid === data.currentMid);
-      if (currentMember) {
-        sidebarDisplayName = `${currentMember.firstName} ${currentMember.lastName}`;
-      }
-      sidebarSubtitle = `${data.family.name}${data.family.legacyFid ? ` · FID ${data.family.fid} · Legacy ${data.family.legacyFid}` : ` · FID ${data.family.fid}`}`;
-    }
-  }
   return (
     <>
       {/* Mobile */}
@@ -97,11 +82,8 @@ export default async function EnrollPage() {
         </CspRoot>
       </div>
 
-      {/* Desktop */}
-      <div className="hidden md:flex" style={{ minHeight: '100dvh' }}>
-        <CspRoot style={{ display: 'flex', width: '100%', minHeight: '100dvh' }}>
-          <DesktopSidebar active="bv" displayName={sidebarDisplayName} subtitle={sidebarSubtitle} showSignOut/>
-          <main style={{ flex: 1, padding: '28px 48px', overflow: 'auto' }}>
+      {/* Desktop — layout.tsx owns sidebar + main wrapper */}
+      <div className="hidden md:block">
             <header style={{ marginBottom: 26 }}>
               <Link href="/family" className="focus-ring" style={{ background: 'transparent', border: 0, color: 'var(--body-text)', fontSize: 13, padding: 0, marginBottom: 8, display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none' }}>
                 <SetuIcon.back/> Back to dashboard
@@ -187,8 +169,6 @@ export default async function EnrollPage() {
                 </div>
               </aside>
             </div>
-          </main>
-        </CspRoot>
       </div>
     </>
   );

@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
 import { SetuSessionClaimsSchema } from '@cmt/shared-domain/setu';
 import type { FamilyDoc } from '@cmt/shared-domain/setu';
@@ -11,7 +12,7 @@ export type FamilyWithMembers = {
   isManager: boolean;
 };
 
-export async function getCurrentFamily(): Promise<FamilyWithMembers | null> {
+export const getCurrentFamily = cache(async function getCurrentFamily(): Promise<FamilyWithMembers | null> {
   const { cookies } = await import('next/headers');
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get('__session')?.value;
@@ -76,4 +77,4 @@ export async function getCurrentFamily(): Promise<FamilyWithMembers | null> {
     currentMid: mid,
     isManager: claims.role === 'family-manager',
   };
-}
+});

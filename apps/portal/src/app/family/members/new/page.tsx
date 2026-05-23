@@ -1,11 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { SetuIcon } from '@cmt/ui';
-import { CspRoot, SectionLabel, DesktopSidebar } from '@/features/family/components/atoms';
-import { getCurrentFamilyClient } from '@/features/setu/members/get-current-family-client';
+import { CspRoot, SectionLabel } from '@/features/family/components/atoms';
 
 type MemberType = 'Adult' | 'Child';
 type Gender = 'Male' | 'Female' | 'PreferNotToSay';
@@ -13,19 +12,6 @@ type Gender = 'Male' | 'Female' | 'PreferNotToSay';
 export default function AddMemberPage() {
   const router = useRouter();
   const [mode, setMode] = useState<MemberType>('Child');
-  const [sidebarDisplayName, setSidebarDisplayName] = useState<string | undefined>();
-  const [sidebarSubtitle, setSidebarSubtitle] = useState<string | undefined>();
-
-  useEffect(() => {
-    getCurrentFamilyClient().then((data) => {
-      if (!data) return;
-      const currentMember = data.members.find((m) => m.mid === data.currentMid);
-      if (currentMember) {
-        setSidebarDisplayName(`${currentMember.firstName} ${currentMember.lastName}`);
-      }
-      setSidebarSubtitle(`${data.family.name}${data.family.legacyFid ? ` · FID ${data.family.fid} · Legacy ${data.family.legacyFid}` : ` · FID ${data.family.fid}`}`);
-    }).catch(() => { /* non-fatal */ });
-  }, []);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [gender, setGender] = useState<Gender>('Male');
@@ -246,33 +232,28 @@ export default function AddMemberPage() {
         </CspRoot>
       </div>
 
-      {/* Desktop */}
-      <div className="hidden md:flex" style={{ minHeight: '100dvh' }}>
-        <CspRoot style={{ display: 'flex', width: '100%', minHeight: '100dvh' }}>
-          <DesktopSidebar active="family" displayName={sidebarDisplayName} subtitle={sidebarSubtitle} showSignOut/>
-          <main style={{ flex: 1, padding: '32px 48px', overflow: 'auto' }}>
-            <header style={{ marginBottom: 28 }}>
-              <Link href="/family/members" className="focus-ring" style={{ background: 'transparent', border: 0, color: 'var(--body-text)', fontSize: 13, padding: 0, marginBottom: 10, display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none' }}>
-                <SetuIcon.back/> Back to family
-              </Link>
-              <div className="between">
-                <div>
-                  <h1 style={{ fontSize: 38, fontWeight: 400, marginTop: 6 }}>Add member</h1>
-                </div>
-              </div>
-            </header>
-
-            <div style={{ maxWidth: 720 }}>
-              {formBody}
-              <div style={{ marginTop: 28, paddingTop: 22, borderTop: '1px solid var(--line)', display: 'flex', gap: 10 }}>
-                <button type="submit" className="btn btn--p" style={{ padding: '14px 28px' }} disabled={saving}>
-                  {saving ? 'Adding…' : 'Add member'}
-                </button>
-                <Link href="/family/members" className="btn btn--g">Cancel</Link>
-              </div>
+      {/* Desktop — layout.tsx owns sidebar + main wrapper */}
+      <div className="hidden md:block">
+        <header style={{ marginBottom: 28 }}>
+          <Link href="/family/members" className="focus-ring" style={{ background: 'transparent', border: 0, color: 'var(--body-text)', fontSize: 13, padding: 0, marginBottom: 10, display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none' }}>
+            <SetuIcon.back/> Back to family
+          </Link>
+          <div className="between">
+            <div>
+              <h1 style={{ fontSize: 38, fontWeight: 400, marginTop: 6 }}>Add member</h1>
             </div>
-          </main>
-        </CspRoot>
+          </div>
+        </header>
+
+        <div style={{ maxWidth: 720 }}>
+          {formBody}
+          <div style={{ marginTop: 28, paddingTop: 22, borderTop: '1px solid var(--line)', display: 'flex', gap: 10 }}>
+            <button type="submit" className="btn btn--p" style={{ padding: '14px 28px' }} disabled={saving}>
+              {saving ? 'Adding…' : 'Add member'}
+            </button>
+            <Link href="/family/members" className="btn btn--g">Cancel</Link>
+          </div>
+        </div>
       </div>
     </form>
   );

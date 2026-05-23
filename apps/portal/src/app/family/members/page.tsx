@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { SetuAvatar, SetuIcon } from '@cmt/ui';
-import { CspRoot, DesktopSidebar } from '@/features/family/components/atoms';
+import { CspRoot } from '@/features/family/components/atoms';
 import { MobileInviteButton, DesktopInviteButton } from './invite-button';
 import { mockFamily } from '@/features/family/data/mock';
 import { flags } from '@/lib/flags';
@@ -59,9 +59,6 @@ export default async function FamilyRosterPage() {
     isCurrent: false,
     nameMissing: false,
   }));
-  let sidebarDisplayName: string | undefined;
-  let sidebarSubtitle: string | undefined;
-
   if (flags.setuAuth) {
     const data = await getCurrentFamily();
     if (data) {
@@ -70,11 +67,6 @@ export default async function FamilyRosterPage() {
       familyLocation = data.family.location;
       familyJoinedYear = data.family.createdAt.getFullYear();
       members = data.members.map((m) => memberToDisplay(m, data.currentMid));
-      const currentMember = data.members.find((m) => m.mid === data.currentMid);
-      if (currentMember) {
-        sidebarDisplayName = `${currentMember.firstName} ${currentMember.lastName}`;
-      }
-      sidebarSubtitle = `${data.family.name}${data.family.legacyFid ? ` · FID ${data.family.fid} · Legacy ${data.family.legacyFid}` : ` · FID ${data.family.fid}`}`;
     }
   }
 
@@ -127,59 +119,54 @@ export default async function FamilyRosterPage() {
         </CspRoot>
       </div>
 
-      {/* Desktop */}
-      <div className="hidden md:flex" style={{ minHeight: '100dvh' }}>
-        <CspRoot style={{ display: 'flex', width: '100%', minHeight: '100dvh' }}>
-          <DesktopSidebar active="family" displayName={sidebarDisplayName} subtitle={sidebarSubtitle} showSignOut/>
-          <main style={{ flex: 1, padding: '32px 48px', overflow: 'auto' }}>
-            <header className="between" style={{ marginBottom: 24 }}>
-              <div>
-                <p style={{ fontSize: 11, letterSpacing: '.16em', textTransform: 'uppercase', color: 'var(--muted)' }}>The {familyName} Family · FID {familyFid}</p>
-                <h1 style={{ fontSize: 38, fontWeight: 400, marginTop: 6 }}>My family</h1>
-              </div>
-              <div className="row" style={{ gap: 10 }}>
-                <DesktopInviteButton/>
-                <Link href="/family/members/new" className="btn btn--p"><SetuIcon.plus/> Add member</Link>
-              </div>
-            </header>
+      {/* Desktop — layout.tsx owns sidebar + main wrapper */}
+      <div className="hidden md:block">
+        <header className="between" style={{ marginBottom: 24 }}>
+          <div>
+            <p style={{ fontSize: 11, letterSpacing: '.16em', textTransform: 'uppercase', color: 'var(--muted)' }}>The {familyName} Family · FID {familyFid}</p>
+            <h1 style={{ fontSize: 38, fontWeight: 400, marginTop: 6 }}>My family</h1>
+          </div>
+          <div className="row" style={{ gap: 10 }}>
+            <DesktopInviteButton/>
+            <Link href="/family/members/new" className="btn btn--p"><SetuIcon.plus/> Add member</Link>
+          </div>
+        </header>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14 }}>
-              {members.map((m, i) => (
-                <div key={i} className="card" style={{ padding: 20, borderColor: m.isCurrent ? 'var(--accent)' : undefined, borderWidth: m.isCurrent ? 2 : 1, borderStyle: 'solid' }}>
-                  <div className="row" style={{ gap: 16, marginBottom: 14 }}>
-                    <SetuAvatar name={m.nameMissing ? '?' : m.name} size={56}/>
-                    <div style={{ flex: 1 }}>
-                      <div className="row" style={{ gap: 8 }}>
-                        <span style={{ fontSize: 18, fontFamily: 'var(--display)', fontWeight: 500, color: m.nameMissing ? 'var(--muted)' : 'inherit', fontStyle: m.nameMissing ? 'italic' : 'normal' }}>{m.name}</span>
-                        {m.isCurrent && <span style={{ fontSize: 10, padding: '2px 8px', background: 'var(--accentSoft)', color: 'var(--accentDeep)', borderRadius: 99, fontWeight: 600 }}>You</span>}
-                        {m.tag && <span style={{ fontSize: 10, padding: '2px 8px', background: 'var(--accentSoft)', color: 'var(--accentDeep)', borderRadius: 99, fontWeight: 600 }}>{m.tag}</span>}
-                      </div>
-                      <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{m.type}</div>
-                    </div>
-                    <Link href={`/family/members/${m.mid}/edit`} className="btn btn--s" style={{ padding: '6px 10px', fontSize: 12 }}><SetuIcon.edit/> Edit</Link>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14 }}>
+          {members.map((m, i) => (
+            <div key={i} className="card" style={{ padding: 20, borderColor: m.isCurrent ? 'var(--accent)' : undefined, borderWidth: m.isCurrent ? 2 : 1, borderStyle: 'solid' }}>
+              <div className="row" style={{ gap: 16, marginBottom: 14 }}>
+                <SetuAvatar name={m.nameMissing ? '?' : m.name} size={56}/>
+                <div style={{ flex: 1 }}>
+                  <div className="row" style={{ gap: 8 }}>
+                    <span style={{ fontSize: 18, fontFamily: 'var(--display)', fontWeight: 500, color: m.nameMissing ? 'var(--muted)' : 'inherit', fontStyle: m.nameMissing ? 'italic' : 'normal' }}>{m.name}</span>
+                    {m.isCurrent && <span style={{ fontSize: 10, padding: '2px 8px', background: 'var(--accentSoft)', color: 'var(--accentDeep)', borderRadius: 99, fontWeight: 600 }}>You</span>}
+                    {m.tag && <span style={{ fontSize: 10, padding: '2px 8px', background: 'var(--accentSoft)', color: 'var(--accentDeep)', borderRadius: 99, fontWeight: 600 }}>{m.tag}</span>}
                   </div>
-                  {m.nameMissing && m.isCurrent && (
-                    <Link href={`/family/members/${m.mid}/edit`} style={{ display: 'block', padding: '10px 14px', background: 'var(--accentSoft)', border: '1px solid var(--accent)', borderRadius: 'var(--radiusSm)', textDecoration: 'none', color: 'var(--accentDeep)', marginBottom: 10, fontSize: 13, fontWeight: 600 }}>
-                      Add your name & details →
-                    </Link>
-                  )}
-                  {m.warn && (
-                    <div style={{ padding: '8px 12px', background: '#fff3ec', border: '1px solid var(--err)', borderRadius: 'var(--radiusSm)', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <SetuIcon.warn color="var(--err)"/>
-                      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--err)' }}>Allergy: {m.warn}</span>
-                    </div>
-                  )}
-                  <div style={{ fontSize: 12, color: 'var(--body-text)', display: 'flex', flexDirection: 'column', gap: 6, fontFamily: 'var(--mono)' }}>
-                    {m.email && <div className="row" style={{ gap: 6 }}><SetuIcon.mail color="var(--muted)"/> {m.email}</div>}
-                    {m.phone && <div className="row" style={{ gap: 6 }}><SetuIcon.phone color="var(--muted)"/> {m.phone}</div>}
-                    {m.role && <div className="row" style={{ gap: 6 }}><SetuIcon.heart color="var(--muted)"/> {m.role}</div>}
-                    {!m.email && !m.phone && !m.role && <div style={{ color: 'var(--muted)' }}>No contact info on file</div>}
-                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{m.type}</div>
                 </div>
-              ))}
+                <Link href={`/family/members/${m.mid}/edit`} className="btn btn--s" style={{ padding: '6px 10px', fontSize: 12 }}><SetuIcon.edit/> Edit</Link>
+              </div>
+              {m.nameMissing && m.isCurrent && (
+                <Link href={`/family/members/${m.mid}/edit`} style={{ display: 'block', padding: '10px 14px', background: 'var(--accentSoft)', border: '1px solid var(--accent)', borderRadius: 'var(--radiusSm)', textDecoration: 'none', color: 'var(--accentDeep)', marginBottom: 10, fontSize: 13, fontWeight: 600 }}>
+                  Add your name & details →
+                </Link>
+              )}
+              {m.warn && (
+                <div style={{ padding: '8px 12px', background: '#fff3ec', border: '1px solid var(--err)', borderRadius: 'var(--radiusSm)', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <SetuIcon.warn color="var(--err)"/>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--err)' }}>Allergy: {m.warn}</span>
+                </div>
+              )}
+              <div style={{ fontSize: 12, color: 'var(--body-text)', display: 'flex', flexDirection: 'column', gap: 6, fontFamily: 'var(--mono)' }}>
+                {m.email && <div className="row" style={{ gap: 6 }}><SetuIcon.mail color="var(--muted)"/> {m.email}</div>}
+                {m.phone && <div className="row" style={{ gap: 6 }}><SetuIcon.phone color="var(--muted)"/> {m.phone}</div>}
+                {m.role && <div className="row" style={{ gap: 6 }}><SetuIcon.heart color="var(--muted)"/> {m.role}</div>}
+                {!m.email && !m.phone && !m.role && <div style={{ color: 'var(--muted)' }}>No contact info on file</div>}
+              </div>
             </div>
-          </main>
-        </CspRoot>
+          ))}
+        </div>
       </div>
     </>
   );

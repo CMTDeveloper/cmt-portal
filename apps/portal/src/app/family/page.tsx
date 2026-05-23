@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { SetuLogo, SetuAvatar, SetuIcon } from '@cmt/ui';
-import { CspRoot, Stat, MetricCard, DesktopSidebar } from '@/features/family/components/atoms';
+import { CspRoot, Stat, MetricCard } from '@/features/family/components/atoms';
 import { SignOutButton } from '@/features/family/components/sign-out-button';
 import { flags } from '@/lib/flags';
 import { mockFamily } from '@/features/family/data/mock';
@@ -11,8 +11,6 @@ export default async function FamilyDashboardPage() {
   let familyName = mockFamily.name;
   let memberCount = mockFamily.members.length;
   let displayMembers: { name: string }[] = mockFamily.members.map((m) => ({ name: m.name }));
-  let sidebarDisplayName: string | undefined;
-  let sidebarSubtitle: string | undefined;
   let currentMid: string | null = null;
 
   if (flags.setuAuth) {
@@ -21,13 +19,11 @@ export default async function FamilyDashboardPage() {
       const currentMember = data.members.find((m) => m.mid === data.currentMid);
       if (currentMember) {
         managerName = `${currentMember.firstName} ${currentMember.lastName}`;
-        sidebarDisplayName = managerName;
       }
       currentMid = data.currentMid;
       familyName = data.family.name;
       memberCount = data.members.length;
       displayMembers = data.members.map((m) => ({ name: `${m.firstName} ${m.lastName}` }));
-      sidebarSubtitle = `${data.family.name}${data.family.legacyFid ? ` · FID ${data.family.fid} · Legacy ${data.family.legacyFid}` : ` · FID ${data.family.fid}`}`;
     }
   }
 
@@ -165,86 +161,81 @@ export default async function FamilyDashboardPage() {
         </CspRoot>
       </div>
 
-      {/* Desktop */}
-      <div className="hidden md:flex" style={{ minHeight: '100dvh' }}>
-        <CspRoot style={{ display: 'flex', width: '100%', minHeight: '100dvh' }}>
-          <DesktopSidebar active="home" displayName={sidebarDisplayName} subtitle={sidebarSubtitle} showSignOut/>
-          <main style={{ flex: 1, padding: '32px 40px', overflow: 'auto' }}>
-            <header className="between" style={{ marginBottom: 28 }}>
-              <div>
-                <p style={{ fontSize: 12, color: 'var(--muted)' }}>{todayLabel}</p>
-                <h1 style={{ fontSize: 32, fontWeight: 600, marginTop: 4, letterSpacing: '-0.02em' }}>{firstName ? `Namaste, ${firstName}.` : 'Namaste!'}</h1>
-              </div>
-              <div className="row" style={{ gap: 10 }}>
-                <button className="btn btn--s" disabled style={{ cursor: 'not-allowed', opacity: 0.5 }}><SetuIcon.search/> Search</button>
-                <Link href="/family/donate" className="btn btn--p">Give donation</Link>
-              </div>
-            </header>
+      {/* Desktop — layout.tsx owns sidebar + main wrapper */}
+      <div className="hidden md:block">
+        <header className="between" style={{ marginBottom: 28 }}>
+          <div>
+            <p style={{ fontSize: 12, color: 'var(--muted)' }}>{todayLabel}</p>
+            <h1 style={{ fontSize: 32, fontWeight: 600, marginTop: 4, letterSpacing: '-0.02em' }}>{firstName ? `Namaste, ${firstName}.` : 'Namaste!'}</h1>
+          </div>
+          <div className="row" style={{ gap: 10 }}>
+            <button className="btn btn--s" disabled style={{ cursor: 'not-allowed', opacity: 0.5 }}><SetuIcon.search/> Search</button>
+            <Link href="/family/donate" className="btn btn--p">Give donation</Link>
+          </div>
+        </header>
 
-            {needsProfile && currentMid && (
-              <Link href={`/family/members/${currentMid}/edit`} style={{ display: 'block', padding: '16px 20px', background: 'var(--accentSoft)', border: '1px solid var(--accent)', borderRadius: 'var(--radius)', textDecoration: 'none', color: 'var(--accentDeep)', marginBottom: 24 }}>
-                <div style={{ fontSize: 14, fontWeight: 600 }}>Complete your profile →</div>
-                <div style={{ fontSize: 13, marginTop: 2 }}>We don&apos;t have your name on file yet. Add it so sevaks know who to greet on Sunday.</div>
-              </Link>
-            )}
+        {needsProfile && currentMid && (
+          <Link href={`/family/members/${currentMid}/edit`} style={{ display: 'block', padding: '16px 20px', background: 'var(--accentSoft)', border: '1px solid var(--accent)', borderRadius: 'var(--radius)', textDecoration: 'none', color: 'var(--accentDeep)', marginBottom: 24 }}>
+            <div style={{ fontSize: 14, fontWeight: 600 }}>Complete your profile →</div>
+            <div style={{ fontSize: 13, marginTop: 2 }}>We don&apos;t have your name on file yet. Add it so sevaks know who to greet on Sunday.</div>
+          </Link>
+        )}
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 18 }}>
-              <MetricCard label="Attendance" value="92%" sub="14 / 15 classes" tone="ok"/>
-              <MetricCard label="Donation"   value="$500" sub="pending · Fall &#39;26" tone="warn"/>
-              <MetricCard label="Next class" value="Sun · 10:00" sub="Brampton hall"/>
-              <MetricCard label="Family"     value={String(memberCount)} sub={`${memberCount} member${memberCount !== 1 ? 's' : ''}`}/>
-            </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 18 }}>
+          <MetricCard label="Attendance" value="92%" sub="14 / 15 classes" tone="ok"/>
+          <MetricCard label="Donation"   value="$500" sub="pending · Fall &#39;26" tone="warn"/>
+          <MetricCard label="Next class" value="Sun · 10:00" sub="Brampton hall"/>
+          <MetricCard label="Family"     value={String(memberCount)} sub={`${memberCount} member${memberCount !== 1 ? 's' : ''}`}/>
+        </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 18 }}>
-              <div className="card" style={{ padding: 24 }}>
-                <div className="between" style={{ marginBottom: 18 }}>
-                  <h3 style={{ fontSize: 14, fontWeight: 600 }}><em className="sa">Bala Vihar</em> · Fall 2026</h3>
-                  <div className="row" style={{ gap: 6 }}>
-                    <span className="pill" style={{ background: 'var(--surface2)', color: 'var(--muted)', fontSize: 10 }}>Sample data — real data coming soon</span>
-                    <span className="pill" style={{ background: 'var(--accentSoft)', color: 'var(--accentDeep)' }}>Enrolled</span>
-                  </div>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(16, 1fr)', gap: 4, marginBottom: 18 }}>
-                  {Array.from({ length: 16 }).map((_, i) => {
-                    const states = ['p','p','p','p','a','p','p','p','p','p','p','p','p','f','f','f'];
-                    const s = states[i];
-                    const bg = s === 'p' ? 'var(--accent)' : s === 'a' ? 'var(--err)' : 'var(--surface2)';
-                    const op = s === 'p' ? 0.75 : 1;
-                    return <div key={i} style={{ aspectRatio: '1', borderRadius: 4, background: bg, opacity: op, border: s === 'f' ? '1px dashed var(--line2)' : undefined }} title={`Week ${i + 1}`}/>;
-                  })}
-                </div>
-                <div className="row" style={{ gap: 18, fontSize: 11, color: 'var(--muted)' }}>
-                  <span className="row" style={{ gap: 6 }}><span style={{ width: 10, height: 10, background: 'var(--accent)', borderRadius: 2, opacity: .75 }}/> present</span>
-                  <span className="row" style={{ gap: 6 }}><span style={{ width: 10, height: 10, background: 'var(--err)', borderRadius: 2 }}/> absent</span>
-                  <span className="row" style={{ gap: 6 }}><span style={{ width: 10, height: 10, background: 'var(--surface2)', borderRadius: 2, border: '1px dashed var(--line2)' }}/> upcoming</span>
-                  <span style={{ marginLeft: 'auto' }}>14 of 15 attended · 1 absence</span>
-                </div>
-              </div>
-
-              <div className="card" style={{ padding: 24 }}>
-                <div className="between" style={{ marginBottom: 14 }}>
-                  <span style={{ fontSize: 14, fontWeight: 600 }}>Donation</span>
-                  <div className="row" style={{ gap: 6 }}>
-                    <span className="pill" style={{ background: 'var(--surface2)', color: 'var(--muted)', fontSize: 10 }}>Sample data — real data coming soon</span>
-                    <SetuIcon.info color="var(--muted)"/>
-                  </div>
-                </div>
-                <div style={{ marginBottom: 14 }}>
-                  <span style={{ fontSize: 36, fontWeight: 600, letterSpacing: '-0.02em' }}>$500</span>
-                  <span style={{ color: 'var(--muted)', marginLeft: 6, fontSize: 14 }}>suggested</span>
-                </div>
-                <div style={{ height: 6, background: 'var(--surface2)', borderRadius: 99, overflow: 'hidden', marginBottom: 8 }}>
-                  <div style={{ width: '0%', height: '100%', background: 'var(--accent)' }}/>
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 18 }}>$0 of $500 · {familyName} Fall &#39;26</div>
-                <p style={{ fontSize: 13, color: 'var(--body-text)', lineHeight: 1.5, marginBottom: 18 }}>
-                  Suggested, not required. Any amount welcome. Donations are tax-deductible.
-                </p>
-                <Link href="/family/donate" className="btn btn--p btn--block" style={{ display: 'flex' }}>Give donation</Link>
+        <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 18 }}>
+          <div className="card" style={{ padding: 24 }}>
+            <div className="between" style={{ marginBottom: 18 }}>
+              <h3 style={{ fontSize: 14, fontWeight: 600 }}><em className="sa">Bala Vihar</em> · Fall 2026</h3>
+              <div className="row" style={{ gap: 6 }}>
+                <span className="pill" style={{ background: 'var(--surface2)', color: 'var(--muted)', fontSize: 10 }}>Sample data — real data coming soon</span>
+                <span className="pill" style={{ background: 'var(--accentSoft)', color: 'var(--accentDeep)' }}>Enrolled</span>
               </div>
             </div>
-          </main>
-        </CspRoot>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(16, 1fr)', gap: 4, marginBottom: 18 }}>
+              {Array.from({ length: 16 }).map((_, i) => {
+                const states = ['p','p','p','p','a','p','p','p','p','p','p','p','p','f','f','f'];
+                const s = states[i];
+                const bg = s === 'p' ? 'var(--accent)' : s === 'a' ? 'var(--err)' : 'var(--surface2)';
+                const op = s === 'p' ? 0.75 : 1;
+                return <div key={i} style={{ aspectRatio: '1', borderRadius: 4, background: bg, opacity: op, border: s === 'f' ? '1px dashed var(--line2)' : undefined }} title={`Week ${i + 1}`}/>;
+              })}
+            </div>
+            <div className="row" style={{ gap: 18, fontSize: 11, color: 'var(--muted)' }}>
+              <span className="row" style={{ gap: 6 }}><span style={{ width: 10, height: 10, background: 'var(--accent)', borderRadius: 2, opacity: .75 }}/> present</span>
+              <span className="row" style={{ gap: 6 }}><span style={{ width: 10, height: 10, background: 'var(--err)', borderRadius: 2 }}/> absent</span>
+              <span className="row" style={{ gap: 6 }}><span style={{ width: 10, height: 10, background: 'var(--surface2)', borderRadius: 2, border: '1px dashed var(--line2)' }}/> upcoming</span>
+              <span style={{ marginLeft: 'auto' }}>14 of 15 attended · 1 absence</span>
+            </div>
+          </div>
+
+          <div className="card" style={{ padding: 24 }}>
+            <div className="between" style={{ marginBottom: 14 }}>
+              <span style={{ fontSize: 14, fontWeight: 600 }}>Donation</span>
+              <div className="row" style={{ gap: 6 }}>
+                <span className="pill" style={{ background: 'var(--surface2)', color: 'var(--muted)', fontSize: 10 }}>Sample data — real data coming soon</span>
+                <SetuIcon.info color="var(--muted)"/>
+              </div>
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <span style={{ fontSize: 36, fontWeight: 600, letterSpacing: '-0.02em' }}>$500</span>
+              <span style={{ color: 'var(--muted)', marginLeft: 6, fontSize: 14 }}>suggested</span>
+            </div>
+            <div style={{ height: 6, background: 'var(--surface2)', borderRadius: 99, overflow: 'hidden', marginBottom: 8 }}>
+              <div style={{ width: '0%', height: '100%', background: 'var(--accent)' }}/>
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 18 }}>$0 of $500 · {familyName} Fall &#39;26</div>
+            <p style={{ fontSize: 13, color: 'var(--body-text)', lineHeight: 1.5, marginBottom: 18 }}>
+              Suggested, not required. Any amount welcome. Donations are tax-deductible.
+            </p>
+            <Link href="/family/donate" className="btn btn--p btn--block" style={{ display: 'flex' }}>Give donation</Link>
+          </div>
+        </div>
       </div>
     </>
   );

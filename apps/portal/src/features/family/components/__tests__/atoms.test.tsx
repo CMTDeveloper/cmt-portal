@@ -8,6 +8,10 @@ vi.mock('next/link', () => ({
   ),
 }));
 
+vi.mock('next/navigation', () => ({
+  usePathname: () => '/family',
+}));
+
 vi.mock('@cmt/ui', () => ({
   SetuLogo: () => <div data-testid="setu-logo" />,
   SetuAvatar: ({ name }: { name: string }) => <div data-testid="setu-avatar">{name}</div>,
