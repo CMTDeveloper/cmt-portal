@@ -1,7 +1,6 @@
-import { createHash } from 'node:crypto';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { findFamilyByContact as legacyFindFamilyByContact } from '@/features/check-in/shared/rtdb/family-lookup';
-import { normalizeContact } from '@/features/check-in/shared/contact/normalize';
+import { hashContactKey } from '@/features/setu/registration/hash-contact-key';
 
 export interface SetuContactKeyDoc {
   contactKey: string;
@@ -19,16 +18,18 @@ export interface FindSetuFamilyResult {
   member?: Record<string, unknown>;
 }
 
-function hashContact(normalized: string): string {
-  return createHash('sha256').update(normalized).digest('hex');
-}
-
 export async function findSetuFamilyByContact(
   type: 'email' | 'phone',
   value: string,
 ): Promise<FindSetuFamilyResult> {
-  const normalized = normalizeContact(type, value);
-  const hash = hashContact(normalized);
+  // CRITICAL: must use the same hashContactKey() function that every writer
+  // (register-family, lazy-migrate, accept-invite, members CRUD) uses, OR the
+  // doc written with type-prefixed hash will never be found by an
+  // unprefixed-hash lookup. The mismatched hash was a pre-existing bug
+  // surfaced when lazy-migration first wrote a Setu family for a legacy user
+  // in UAT — the post-migration re-lookup missed and the user was redirected
+  // to /register?contact=verified instead of /family.
+  const hash = hashContactKey(type, value);
   const db = portalFirestore();
 
   const contactKeySnap = await db.collection('contactKeys').doc(hash).get();

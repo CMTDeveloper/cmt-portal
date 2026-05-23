@@ -365,7 +365,6 @@ function RegisterReal() {
             <Link href="/sign-in" className="focus-ring" style={{ background: 'transparent', border: 0, padding: 6, marginLeft: -6, marginBottom: 12, color: 'var(--body-text)', display: 'inline-flex' }}>
               <SetuIcon.back/>
             </Link>
-            <Suspense>{/* reads searchParams */}<ContactVerifiedBanner /></Suspense>
             {formContent}
           </div>
         </CspRoot>
@@ -382,7 +381,6 @@ function RegisterReal() {
               <SetuLogo size={22}/>
             </div>
             <div style={{ maxWidth: 480, width: '100%', alignSelf: 'center', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', paddingBottom: 60 }}>
-              <Suspense>{/* reads searchParams */}<ContactVerifiedBanner /></Suspense>
               {formContent}
             </div>
             <div style={{ fontSize: 12, color: 'var(--muted)', display: 'flex', gap: 18 }}>
