@@ -1,3 +1,5 @@
+import { Suspense } from 'react';
+import { connection } from 'next/server';
 import { notFound } from 'next/navigation';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { AdminDashboard } from '@/features/check-in/admin';
@@ -6,25 +8,21 @@ import { flags } from '@/lib/flags';
 
 export const metadata = { title: 'Admin — CMT Portal' };
 
-function startOfTodayIso(): string {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString();
-}
-function startOfWeekIso(): string {
-  const d = new Date();
-  d.setDate(d.getDate() - 7);
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString();
-}
-
-export default async function AdminDashboardPage() {
-  if (!flags.checkInAdmin) notFound();
+async function AdminBody() {
+  // connection() marks this subtree as dynamic so the request-time new Date()
+  // calls below are excluded from prerender. Live check-in counts must be
+  // fresh — caching here would hide kiosk activity from sevaks.
+  await connection();
+  const now = new Date();
+  const todayStart = new Date(now);
+  todayStart.setHours(0, 0, 0, 0);
+  const weekStart = new Date(now);
+  weekStart.setDate(weekStart.getDate() - 7);
+  weekStart.setHours(0, 0, 0, 0);
+  const todayIso = todayStart.toISOString();
+  const weekIso = weekStart.toISOString();
 
   const db = portalFirestore();
-  const todayIso = startOfTodayIso();
-  const weekIso = startOfWeekIso();
-
   const [todaySnap, weekSnap, guestsSnap, allFamilies] = await Promise.all([
     db.collection('check_in_events').where('checkedInAt', '>=', todayIso).get(),
     db.collection('check_in_events').where('checkedInAt', '>=', weekIso).get(),
@@ -40,4 +38,13 @@ export default async function AdminDashboardPage() {
   };
 
   return <AdminDashboard stats={stats} />;
+}
+
+export default function AdminDashboardPage() {
+  if (!flags.checkInAdmin) notFound();
+  return (
+    <Suspense fallback={<div style={{ padding: 32 }}>Loading dashboard…</div>}>
+      <AdminBody />
+    </Suspense>
+  );
 }

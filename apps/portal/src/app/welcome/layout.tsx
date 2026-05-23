@@ -3,7 +3,7 @@ import { cookies } from 'next/headers';
 import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
 import { SetuSessionClaimsSchema } from '@cmt/shared-domain/setu';
 import { CspRoot } from '@/features/family/components/atoms';
-import { DesktopSidebar } from '@/features/family/components/desktop-sidebar';
+import { DesktopSidebarLive } from '@/features/family/components/desktop-sidebar';
 
 // The layout is synchronous so cacheComponents:true can stream the shell.
 // The role check is async (cookies + session verify) so it lives inside its
@@ -27,7 +27,7 @@ async function WelcomeChromeAndChildren({ children }: { children: React.ReactNod
   return (
     <CspRoot style={{ display: 'flex', width: '100%', minHeight: '100dvh' }}>
       {isWelcomeTeam ? (
-        <DesktopSidebar role="welcome-team" displayName="Welcome team" subtitle="Welcome team" showSignOut/>
+        <DesktopSidebarLive role="welcome-team" displayName="Welcome team" subtitle="Welcome team" showSignOut/>
       ) : (
         <div style={{ width: 248, background: 'var(--surface)', borderRight: '1px solid var(--line)' }}/>
       )}
@@ -47,8 +47,13 @@ async function WelcomeChromeAndChildren({ children }: { children: React.ReactNod
 export default function WelcomeLayout({ children }: { children: React.ReactNode }) {
   return (
     <>
-      {/* Mobile: pass-through. Each page renders its own mobile chrome. */}
-      <div className="block md:hidden">{children}</div>
+      {/* Mobile: pass-through. Each page renders its own mobile chrome.
+          Wrapped in <Suspense> so dynamic children stream under cacheComponents. */}
+      <div className="block md:hidden">
+        <Suspense fallback={<div style={{ padding: 32, color: 'var(--muted)' }}>Loading…</div>}>
+          {children}
+        </Suspense>
+      </div>
 
       {/* Desktop: chrome streams via Suspense so the static shell renders first. */}
       <div className="hidden md:flex" style={{ minHeight: '100dvh' }}>

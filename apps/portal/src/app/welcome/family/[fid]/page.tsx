@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { SetuAvatar, SetuIcon } from '@cmt/ui';
@@ -8,7 +9,21 @@ import { SetuSessionClaimsSchema } from '@cmt/shared-domain/setu';
 import type { FamilyDoc, MemberDoc } from '@cmt/shared-domain/setu';
 import { cookies } from 'next/headers';
 
-export default async function WelcomeFamilyDetailPage({
+export default function WelcomeFamilyDetailPage({
+  params,
+}: {
+  params: Promise<{ fid: string }>;
+}) {
+  return (
+    <Suspense fallback={<div style={{ padding: 32, color: 'var(--muted)' }}>Loading family…</div>}>
+      <WelcomeFamilyDetailBody params={params}/>
+    </Suspense>
+  );
+}
+
+// Exported for testing — the page's default export is a thin Suspense wrapper
+// (Next.js 16 Cache Components require dynamic data access inside <Suspense>).
+export async function WelcomeFamilyDetailBody({
   params,
 }: {
   params: Promise<{ fid: string }>;

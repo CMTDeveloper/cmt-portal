@@ -51,7 +51,7 @@ vi.mock('@/features/setu/search/get-family-for-welcome', () => ({
   getFamilyForWelcome: mockGetFamilyForWelcome,
 }));
 
-import WelcomeFamilyDetailPage from '../page';
+import { WelcomeFamilyDetailBody as WelcomeFamilyDetailPage } from '../page';
 
 beforeEach(() => {
   mockGetFamilyForWelcome.mockReset();

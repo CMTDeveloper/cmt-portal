@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import { Header } from '@/components/chrome/header';
@@ -32,13 +33,19 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${geist.variable} ${geistMono.variable}`}>
       <body className="flex min-h-screen flex-col">
-        <ChromeWrapper>
-          <Header />
-        </ChromeWrapper>
+        {/* ChromeWrapper uses usePathname() which is request-time dynamic data.
+            Suspense lets cacheComponents prerender the static shell first. */}
+        <Suspense fallback={null}>
+          <ChromeWrapper>
+            <Header />
+          </ChromeWrapper>
+        </Suspense>
         <main className="flex-1">{children}</main>
-        <ChromeWrapper>
-          <Footer />
-        </ChromeWrapper>
+        <Suspense fallback={null}>
+          <ChromeWrapper>
+            <Footer />
+          </ChromeWrapper>
+        </Suspense>
         <ToasterMount />
       </body>
     </html>

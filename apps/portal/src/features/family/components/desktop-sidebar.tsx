@@ -39,10 +39,10 @@ function deriveActiveFromPathname(pathname: string): SidebarTab {
   return 'home';
 }
 
-export function DesktopSidebar({ active: activeProp, role = 'family', displayName, subtitle, showSignOut }: DesktopSidebarProps) {
-  const pathname = usePathname();
-  const active = deriveActiveFromPathname(pathname) ?? activeProp;
-
+// DesktopSidebar is pure — it does not call hooks. This lets it render inside
+// Suspense fallbacks (which Next.js 16 cacheComponents prerenders statically).
+// For pathname-driven self-highlighting, use DesktopSidebarLive instead.
+export function DesktopSidebar({ active, role = 'family', displayName, subtitle, showSignOut }: DesktopSidebarProps) {
   const navItems = role === 'welcome-team' ? WELCOME_NAV_ITEMS : FAMILY_NAV_ITEMS;
   const trimmed = (displayName ?? '').trim();
   const name = trimmed || (role === 'welcome-team' ? 'Welcome team' : 'Family member');
@@ -99,4 +99,13 @@ export function DesktopSidebar({ active: activeProp, role = 'family', displayNam
       </div>
     </aside>
   );
+}
+
+// Live wrapper that derives the active tab from the current pathname. Use this
+// for the actual rendered sidebar (inside a Suspense boundary). The Suspense
+// fallback should use the bare DesktopSidebar so it can prerender statically.
+export function DesktopSidebarLive(props: Omit<DesktopSidebarProps, 'active'>) {
+  const pathname = usePathname();
+  const active = deriveActiveFromPathname(pathname);
+  return <DesktopSidebar {...props} active={active} />;
 }

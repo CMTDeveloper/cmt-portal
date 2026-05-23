@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import Link from 'next/link';
 import { SetuLogo, SetuAvatar, Rosette } from '@cmt/ui';
 import { CspRoot } from '@/features/family/components/atoms';
@@ -5,7 +6,32 @@ import { getInviteByToken } from '@/features/setu/invite/get-invite';
 import { flags } from '@/lib/flags';
 import { InviteAcceptClient } from './invite-accept-client';
 
-export default async function InvitePage({
+export default function InvitePage({
+  params,
+}: {
+  params: Promise<{ token: string }>;
+}) {
+  return (
+    <Suspense fallback={<InviteSkeleton/>}>
+      <InviteBody params={params}/>
+    </Suspense>
+  );
+}
+
+function InviteSkeleton() {
+  return (
+    <CspRoot style={{ minHeight: '100dvh' }}>
+      <div style={{ padding: '40px 24px', minHeight: '100dvh', display: 'flex', flexDirection: 'column' }}>
+        <SetuLogo size={18}/>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)', fontSize: 14 }}>
+          Loading invite…
+        </div>
+      </div>
+    </CspRoot>
+  );
+}
+
+async function InviteBody({
   params,
 }: {
   params: Promise<{ token: string }>;

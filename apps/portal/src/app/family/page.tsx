@@ -1,4 +1,5 @@
 import { Suspense } from 'react';
+import { connection } from 'next/server';
 import Link from 'next/link';
 import { SetuLogo, SetuAvatar, SetuIcon } from '@cmt/ui';
 import { CspRoot, Stat, MetricCard, SkeletonCard } from '@/features/family/components/atoms';
@@ -8,6 +9,10 @@ import { mockFamily } from '@/features/family/data/mock';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 
 export default async function FamilyDashboardPage() {
+  // Mark this page as dynamic — flags.setuAuth may be false in which case no
+  // awaited request-data access happens before the request-time new Date()
+  // below. connection() makes the rest of this component request-time only.
+  await connection();
   let managerName = 'Aarti Patel';
   let familyName = mockFamily.name;
   let memberCount = mockFamily.members.length;

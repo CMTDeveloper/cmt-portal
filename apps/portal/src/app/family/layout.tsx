@@ -1,7 +1,7 @@
 import { Suspense } from 'react';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 import { CspRoot } from '@/features/family/components/atoms';
-import { DesktopSidebar } from '@/features/family/components/desktop-sidebar';
+import { DesktopSidebar, DesktopSidebarLive } from '@/features/family/components/desktop-sidebar';
 
 // The layout itself stays synchronous so cacheComponents:true can stream the
 // static shell. The two awaited data fetches (sidebar identity, page body) are
@@ -17,14 +17,19 @@ async function SidebarWithIdentity() {
     if (currentMember) displayName = `${currentMember.firstName} ${currentMember.lastName}`;
     subtitle = `${data.family.name}${data.family.legacyFid ? ` · FID ${data.family.fid} · Legacy ${data.family.legacyFid}` : ` · FID ${data.family.fid}`}`;
   }
-  return <DesktopSidebar displayName={displayName} subtitle={subtitle} showSignOut/>;
+  return <DesktopSidebarLive displayName={displayName} subtitle={subtitle} showSignOut/>;
 }
 
 export default function FamilyLayout({ children }: { children: React.ReactNode }) {
   return (
     <>
-      {/* Mobile: pass-through. Each page renders its own mobile chrome. */}
-      <div className="block md:hidden">{children}</div>
+      {/* Mobile: pass-through. Each page renders its own mobile chrome.
+          Wrapped in <Suspense> so dynamic children stream under cacheComponents. */}
+      <div className="block md:hidden">
+        <Suspense fallback={<div style={{ padding: 32, color: 'var(--muted)' }}>Loading…</div>}>
+          {children}
+        </Suspense>
+      </div>
 
       {/* Desktop: shared sidebar around the children main area. */}
       <div className="hidden md:flex" style={{ minHeight: '100dvh' }}>
