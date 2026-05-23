@@ -5,7 +5,6 @@ import { checkAndRecordOtpRateLimit } from '@/features/check-in/shared';
 import { lookupFamilyByContacts } from '@/features/setu/registration/family-lookup';
 
 export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
 
 const bodySchema = z.object({
   email: z.string().email(),

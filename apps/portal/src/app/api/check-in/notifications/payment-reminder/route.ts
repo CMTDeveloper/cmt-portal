@@ -3,7 +3,6 @@ import { z } from 'zod';
 import { sendPaymentReminder } from '@/features/check-in/notifications/payment-reminder-service';
 
 export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
 
 const bodySchema = z.object({
   familyId: z.string().min(1),

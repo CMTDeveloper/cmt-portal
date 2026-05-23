@@ -8,18 +8,18 @@ vi.mock('@cmt/firebase-shared/admin/session', () => ({
   verifyPortalSessionCookie: vi.fn(),
 }));
 
-vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
-  portalFirestore: vi.fn(),
+vi.mock('../get-family-by-fid', () => ({
+  getFamilyByFid: vi.fn(),
 }));
 
 import { cookies } from 'next/headers';
 import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
-import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
+import { getFamilyByFid } from '../get-family-by-fid';
 import { getCurrentFamily } from '../get-current-family';
 
 const mockCookies = vi.mocked(cookies);
 const mockVerify = vi.mocked(verifyPortalSessionCookie);
-const mockFirestore = vi.mocked(portalFirestore);
+const mockGetFamilyByFid = vi.mocked(getFamilyByFid);
 
 function makeCookieStore(value: string | undefined) {
   return {
@@ -41,51 +41,36 @@ const memberClaims = {
   mid: 'fam-001-02',
 };
 
-const familyDocData = {
-  fid: 'fam-001',
-  legacyFid: null,
-  name: 'Patel',
-  location: 'Brampton',
-  createdAt: { toDate: () => new Date('2024-01-01') },
-  managers: ['fam-001-01'],
-  searchKeys: ['patel'],
+const familyAndMembers = {
+  family: {
+    fid: 'fam-001',
+    legacyFid: null,
+    name: 'Patel',
+    location: 'Brampton',
+    createdAt: new Date('2024-01-01'),
+    managers: ['fam-001-01'],
+    searchKeys: ['patel'],
+  },
+  members: [
+    {
+      mid: 'fam-001-01',
+      uid: 'uid-001',
+      firstName: 'Aarti',
+      lastName: 'Patel',
+      type: 'Adult',
+      gender: 'Female',
+      manager: true,
+      joinedAt: new Date('2024-01-01'),
+      email: 'aarti@example.com',
+      phone: null,
+      schoolGrade: null,
+      birthMonthYear: null,
+      volunteeringSkills: [],
+      foodAllergies: null,
+      emergencyContacts: [null, null],
+    },
+  ],
 };
-
-const memberDocData = {
-  mid: 'fam-001-01',
-  uid: 'uid-001',
-  firstName: 'Aarti',
-  lastName: 'Patel',
-  type: 'Adult',
-  gender: 'Female',
-  manager: true,
-  joinedAt: { toDate: () => new Date('2024-01-01') },
-  email: 'aarti@example.com',
-  phone: null,
-  schoolGrade: null,
-  birthMonthYear: null,
-  volunteeringSkills: [],
-  foodAllergies: null,
-  emergencyContacts: [null, null],
-};
-
-function makeFirestoreDb(familyExists = true) {
-  return {
-    collection: (_col: string) => ({
-      doc: (_id: string) => ({
-        get: vi.fn().mockResolvedValue({
-          exists: familyExists,
-          data: () => (familyExists ? familyDocData : undefined),
-        }),
-        collection: (_sub: string) => ({
-          get: vi.fn().mockResolvedValue({
-            docs: [{ data: () => memberDocData }],
-          }),
-        }),
-      }),
-    }),
-  };
-}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -119,7 +104,7 @@ describe('getCurrentFamily', () => {
   it('returns family+members for family-manager', async () => {
     mockCookies.mockResolvedValue(makeCookieStore('valid') as never);
     mockVerify.mockResolvedValue(managerClaims as never);
-    mockFirestore.mockReturnValue(makeFirestoreDb(true) as never);
+    mockGetFamilyByFid.mockResolvedValue(familyAndMembers as never);
 
     const result = await getCurrentFamily();
     expect(result).not.toBeNull();
@@ -132,7 +117,7 @@ describe('getCurrentFamily', () => {
   it('returns family+members for family-member with isManager=false', async () => {
     mockCookies.mockResolvedValue(makeCookieStore('valid') as never);
     mockVerify.mockResolvedValue(memberClaims as never);
-    mockFirestore.mockReturnValue(makeFirestoreDb(true) as never);
+    mockGetFamilyByFid.mockResolvedValue(familyAndMembers as never);
 
     const result = await getCurrentFamily();
     expect(result).not.toBeNull();
@@ -143,7 +128,7 @@ describe('getCurrentFamily', () => {
   it('returns null when family doc does not exist', async () => {
     mockCookies.mockResolvedValue(makeCookieStore('valid') as never);
     mockVerify.mockResolvedValue(managerClaims as never);
-    mockFirestore.mockReturnValue(makeFirestoreDb(false) as never);
+    mockGetFamilyByFid.mockResolvedValue(null);
 
     const result = await getCurrentFamily();
     expect(result).toBeNull();

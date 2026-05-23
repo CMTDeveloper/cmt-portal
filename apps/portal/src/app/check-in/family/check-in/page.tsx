@@ -5,7 +5,6 @@ import { findFamilyById } from '@/features/check-in/shared';
 import { flags } from '@/lib/flags';
 
 export const metadata = { title: 'Check in my kids — CMT Portal' };
-export const dynamic = 'force-dynamic';
 
 export default async function FamilySelfCheckInPage() {
   if (!flags.checkInFamily) notFound();

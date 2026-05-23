@@ -6,7 +6,6 @@ import { AddAdminForm } from '@/features/check-in/admin/add-admin-form';
 import { flags } from '@/lib/flags';
 
 export const metadata = { title: 'Admin users — CMT Portal' };
-export const dynamic = 'force-dynamic';
 
 export default async function AdminUsersPage() {
   if (!flags.checkInAdmin) notFound();

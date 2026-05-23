@@ -4,7 +4,6 @@ import { listAllFamilies } from '@/features/check-in/shared';
 import { flags } from '@/lib/flags';
 
 export const metadata = { title: 'Unpaid families — CMT Portal' };
-export const dynamic = 'force-dynamic';
 
 export default async function AdminUnpaidPage() {
   if (!flags.checkInAdmin) notFound();

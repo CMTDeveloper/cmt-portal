@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+import { revalidateTag } from 'next/cache';;
 import { flags } from '@/lib/flags';
 import { portalFirestore, FieldValue, Timestamp } from '@cmt/firebase-shared/admin/firestore';
 import { portalEnv } from '@/lib/env';
@@ -8,7 +9,6 @@ import { resolveSender } from '@/lib/aws/resolve-sender';
 import { setuInviteEmail } from '@/lib/aws/templates/setu-invite-email';
 
 export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
 
 const bodySchema = z.object({
   email: z.string().email(),
@@ -99,6 +99,7 @@ export async function POST(req: Request) {
     throw err;
   }
 
+  revalidateTag(`family-${fid}`, 'max');
   const baseUrl = env.NEXT_PUBLIC_PORTAL_BASE_URL ?? '';
   const acceptUrl = `${baseUrl}/invite/${token}`;
 

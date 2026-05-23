@@ -7,7 +7,6 @@ import { flags } from '@/lib/flags';
 import type { AttendanceStatus, TeacherReportEntry } from '@cmt/shared-domain/check-in';
 
 export const metadata = { title: 'Uninformed absentees — CMT Portal' };
-export const dynamic = 'force-dynamic';
 
 export default async function UninformedPage() {
   if (!flags.checkInTeacher) notFound();

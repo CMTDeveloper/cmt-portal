@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import { portalAuth } from '@cmt/firebase-shared/admin/auth';
 
 export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
 
 export async function DELETE(
   req: Request,

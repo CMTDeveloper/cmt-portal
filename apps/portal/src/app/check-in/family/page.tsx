@@ -6,7 +6,6 @@ import { findFamilyById, loadRecentFamilyCheckIns } from '@/features/check-in/sh
 import { flags } from '@/lib/flags';
 
 export const metadata = { title: 'My family — CMT Portal' };
-export const dynamic = 'force-dynamic';
 
 export default async function FamilyDashboardPage() {
   if (!flags.checkInFamily) notFound();

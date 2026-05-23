@@ -11,7 +11,6 @@ import {
 } from '@cmt/firebase-shared/admin/session';
 
 export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
 
 const bodySchema = z.object({ passphrase: z.string().min(1) });
 

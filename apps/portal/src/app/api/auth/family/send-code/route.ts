@@ -11,7 +11,6 @@ import {
 import { resolveSender } from '@/lib/aws/resolve-sender';
 
 export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
 
 const bodySchema = z.object({
   type: z.enum(['email', 'phone']),

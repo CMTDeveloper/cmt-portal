@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
+// ── next/cache ────────────────────────────────────────────────────────────────
+vi.mock('next/cache', () => ({ revalidateTag: vi.fn(), cacheTag: vi.fn(), cacheLife: vi.fn() }));
+
 // ── Feature flag ──────────────────────────────────────────────────────────────
 const flagsMock = vi.hoisted(() => ({ setuAuth: true }));
 vi.mock('@/lib/flags', () => ({ flags: flagsMock }));

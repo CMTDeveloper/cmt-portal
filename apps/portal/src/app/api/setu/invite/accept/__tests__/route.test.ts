@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+vi.mock('next/cache', () => ({ revalidateTag: vi.fn() }));
 vi.mock('@/lib/flags', () => ({ flags: { setuAuth: true } }));
 vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
   portalFirestore: vi.fn(),
@@ -30,6 +31,7 @@ import {
   createPortalSessionCookie,
   exchangeCustomTokenForIdToken,
 } from '@cmt/firebase-shared/admin/session';
+import { revalidateTag } from 'next/cache';
 
 const mockSetCustomUserClaims = vi.fn();
 const mockCreateCustomToken = vi.fn();
@@ -233,6 +235,7 @@ describe('POST /api/setu/invite/accept', () => {
     expect(FieldValue.arrayUnion).toHaveBeenCalled();
     // Verify set was called (for member + contactKey + invite update)
     expect(mockSet).toHaveBeenCalled();
+    expect(vi.mocked(revalidateTag)).toHaveBeenCalledWith('family-FAM001ABCD12');
   });
 
   it('happy path: sets __session cookie with refreshed claims after invite accept', async () => {

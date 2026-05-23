@@ -10,7 +10,6 @@ import {
 import { normalizeContact, sha256Hex } from '@/features/check-in/shared';
 
 export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
 
 const bodySchema = z.object({
   fid: z.string().min(1),

@@ -3,7 +3,6 @@ import { flags } from '@/lib/flags';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 
 export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
 
 export async function GET(_req: Request) {
   if (!flags.setuAuth) {

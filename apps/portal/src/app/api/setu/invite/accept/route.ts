@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+import { revalidateTag } from 'next/cache';;
 import { flags } from '@/lib/flags';
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
 import { portalAuth } from '@cmt/firebase-shared/admin/auth';
@@ -11,7 +12,6 @@ import { getCurrentSessionContact } from '@/features/setu/auth/get-current-sessi
 import { hashContactKey } from '@/features/setu/registration/hash-contact-key';
 
 export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
 
 const bodySchema = z.object({
   token: z.string().min(1),
@@ -177,6 +177,7 @@ export async function POST(req: Request) {
   }
 
   const { mid, fid } = result;
+  revalidateTag(`family-${fid}`, 'max');
   const auth = portalAuth();
 
   const claims: Record<string, unknown> = {

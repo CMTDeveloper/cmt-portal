@@ -1,9 +1,8 @@
 import { cache } from 'react';
 import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
 import { SetuSessionClaimsSchema } from '@cmt/shared-domain/setu';
-import type { FamilyDoc } from '@cmt/shared-domain/setu';
-import type { MemberDoc } from '@cmt/shared-domain/setu';
-import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
+import type { FamilyDoc, MemberDoc } from '@cmt/shared-domain/setu';
+import { getFamilyByFid } from './get-family-by-fid';
 
 export type FamilyWithMembers = {
   family: FamilyDoc;
@@ -28,52 +27,13 @@ export const getCurrentFamily = cache(async function getCurrentFamily(): Promise
   if (claims.role !== 'family-manager' && claims.role !== 'family-member') return null;
 
   const { fid, mid } = claims;
-  const db = portalFirestore();
 
-  const [familySnap, membersSnap] = await Promise.all([
-    db.collection('families').doc(fid).get(),
-    db.collection('families').doc(fid).collection('members').get(),
-  ]);
-
-  if (!familySnap.exists) return null;
-
-  const familyData = familySnap.data();
-  if (!familyData) return null;
-
-  const family: FamilyDoc = {
-    fid: familyData.fid,
-    legacyFid: familyData.legacyFid ?? null,
-    name: familyData.name,
-    location: familyData.location,
-    createdAt: familyData.createdAt?.toDate() ?? new Date(),
-    managers: familyData.managers ?? [],
-    searchKeys: familyData.searchKeys ?? [],
-  };
-
-  const members: MemberDoc[] = membersSnap.docs.map((doc) => {
-    const d = doc.data();
-    return {
-      mid: d.mid,
-      uid: d.uid ?? null,
-      firstName: d.firstName,
-      lastName: d.lastName,
-      type: d.type,
-      gender: d.gender,
-      manager: d.manager ?? false,
-      joinedAt: d.joinedAt?.toDate() ?? new Date(),
-      email: d.email ?? null,
-      phone: d.phone ?? null,
-      schoolGrade: d.schoolGrade ?? null,
-      birthMonthYear: d.birthMonthYear ?? null,
-      volunteeringSkills: d.volunteeringSkills ?? [],
-      foodAllergies: d.foodAllergies ?? null,
-      emergencyContacts: d.emergencyContacts ?? [null, null],
-    } as MemberDoc;
-  });
+  const cached = await getFamilyByFid(fid);
+  if (!cached) return null;
 
   return {
-    family,
-    members,
+    family: cached.family,
+    members: cached.members,
     currentMid: mid,
     isManager: claims.role === 'family-manager',
   };

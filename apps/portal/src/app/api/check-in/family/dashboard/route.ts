@@ -4,7 +4,6 @@ import { flags } from '@/lib/flags';
 import type { FamilyDashboardResponse } from '@cmt/shared-domain/check-in';
 
 export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
   if (!flags.checkInFamily) {

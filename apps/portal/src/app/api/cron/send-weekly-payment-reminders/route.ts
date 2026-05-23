@@ -4,7 +4,6 @@ import { sendPaymentReminder } from '@/features/check-in/notifications/payment-r
 import { listAllFamilies } from '@/features/check-in/shared';
 
 export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
 
 function verifyCronAuth(req: Request): boolean {
   const secret = process.env.CRON_SECRET;

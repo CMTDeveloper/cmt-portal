@@ -305,3 +305,15 @@ export function FieldError({ message }: FieldErrorProps) {
     </span>
   );
 }
+
+// ─── SkeletonCard ─────────────────────────────────────────────────────────────
+
+export function SkeletonCard() {
+  return (
+    <div className="card" style={{ padding: 24, minHeight: 120, display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ width: '40%', height: 14, borderRadius: 6, background: 'var(--surface2)' }}/>
+      <div style={{ width: '70%', height: 10, borderRadius: 6, background: 'var(--surface2)', opacity: 0.6 }}/>
+      <div style={{ width: '55%', height: 10, borderRadius: 6, background: 'var(--surface2)', opacity: 0.4 }}/>
+    </div>
+  );
+}

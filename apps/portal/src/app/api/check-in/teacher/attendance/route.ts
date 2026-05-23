@@ -4,7 +4,6 @@ import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { ATTENDANCE_STATUSES, type TeacherAttendanceResponse } from '@cmt/shared-domain/check-in';
 
 export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
 
 const statusEnum = z.enum(ATTENDANCE_STATUSES);
 const bodySchema = z.object({

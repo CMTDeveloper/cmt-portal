@@ -3,7 +3,6 @@ import { z } from 'zod';
 import { recordGuestCheckIn } from '@/features/check-in/shared';
 
 export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
 
 const bodySchema = z.object({
   firstName: z.string().min(1),

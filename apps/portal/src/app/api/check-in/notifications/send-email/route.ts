@@ -3,7 +3,6 @@ import { z } from 'zod';
 import { sendTemplatedEmail } from '@/features/check-in/notifications/send-email-service';
 
 export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
 
 const bodySchema = z.object({
   to: z.string().email(),

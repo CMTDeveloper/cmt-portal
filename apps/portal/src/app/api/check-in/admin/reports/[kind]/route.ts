@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 
 export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
 
 type Kind = 'check-ins' | 'guests';
 

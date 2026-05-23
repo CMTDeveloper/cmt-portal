@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+vi.mock('next/cache', () => ({ revalidateTag: vi.fn() }));
 vi.mock('@/lib/flags', () => ({ flags: { setuAuth: true } }));
 vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
   portalFirestore: vi.fn(),
@@ -11,6 +12,7 @@ vi.mock('@/features/setu/registration/hash-contact-key', () => ({
 
 import { POST } from '../route';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
+import { revalidateTag } from 'next/cache';
 
 const mockRunTransaction = vi.fn();
 const mockGet = vi.fn();
@@ -119,6 +121,7 @@ describe('POST /api/setu/members', () => {
     const body = await res.json();
     expect(body.mid).toBeDefined();
     expect(body.mid).toMatch(/^FAM001ABCD12-/);
+    expect(vi.mocked(revalidateTag)).toHaveBeenCalledWith('family-FAM001ABCD12');
   });
 
   it('returns 404 when feature flag is off', async () => {

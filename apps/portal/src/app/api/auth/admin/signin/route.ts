@@ -7,7 +7,6 @@ import {
 import { getPortalUserWithClaims } from '@cmt/firebase-shared/admin/claims';
 
 export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
 
 const bodySchema = z.object({
   email: z.string().email(),

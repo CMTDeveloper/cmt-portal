@@ -5,7 +5,6 @@ import { findFamilyById } from '@/features/check-in/shared';
 import { resolveSender } from '@/lib/aws/resolve-sender';
 
 export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
 
 const bodySchema = z.object({
   students: z.record(z.string(), z.boolean()),

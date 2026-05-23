@@ -11,7 +11,6 @@ import { sha256Hex } from '@/features/check-in/shared';
 import { normalizeContact } from '@/features/check-in/shared';
 
 export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
 
 const additionalMemberSchema = z.object({
   firstName: z.string().min(1),

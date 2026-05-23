@@ -6,7 +6,6 @@ import { flags } from '@/lib/flags';
 import type { FamilySelfCheckInResponse } from '@cmt/shared-domain/check-in';
 
 export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
 
 const bodySchema = z.object({
   students: z

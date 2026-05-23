@@ -3,7 +3,6 @@ import { flags } from '@/lib/flags';
 import { getInviteByToken } from '@/features/setu/invite/get-invite';
 
 export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
 
 export async function GET(
   _req: Request,

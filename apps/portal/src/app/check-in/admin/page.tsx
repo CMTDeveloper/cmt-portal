@@ -5,7 +5,6 @@ import { listAllFamilies } from '@/features/check-in/shared';
 import { flags } from '@/lib/flags';
 
 export const metadata = { title: 'Admin — CMT Portal' };
-export const dynamic = 'force-dynamic';
 
 function startOfTodayIso(): string {
   const d = new Date();

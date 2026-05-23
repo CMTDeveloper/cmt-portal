@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+// ── next/cache ────────────────────────────────────────────────────────────────
+vi.mock('next/cache', () => ({ revalidateTag: vi.fn(), cacheTag: vi.fn(), cacheLife: vi.fn() }));
+
 // ── Feature flag ──────────────────────────────────────────────────────────────
 const flagsMock = vi.hoisted(() => ({ setuAuth: true }));
 vi.mock('@/lib/flags', () => ({ flags: flagsMock }));
@@ -55,6 +58,12 @@ vi.mock('@cmt/firebase-shared/admin/session', () => ({
   verifyPortalSessionCookie: mockVerifySession,
   createPortalSessionCookie: vi.fn().mockResolvedValue('fake-session-cookie'),
   exchangeCustomTokenForIdToken: vi.fn().mockResolvedValue('fake-id-token'),
+}));
+
+// ── getFamilyByFid — used by getCurrentFamily (GET /api/setu/family) ─────────
+const mockGetFamilyByFid = vi.hoisted(() => vi.fn());
+vi.mock('@/features/setu/members/get-family-by-fid', () => ({
+  getFamilyByFid: mockGetFamilyByFid,
 }));
 
 // ── hash-contact-key ──────────────────────────────────────────────────────────
@@ -165,8 +174,33 @@ function memberHeaders(fid: string, mid: string): Record<string, string> {
 // ── Firestore mock helpers ────────────────────────────────────────────────────
 
 function setupFamilyFirestoreForGet(members: Record<string, unknown>[]) {
-  mockFirestoreGet.mockResolvedValue({ exists: true, data: () => FAMILY_A });
-  mockCollectionGet.mockResolvedValue({ docs: members.map((m) => ({ data: () => m })) });
+  const family = {
+    fid: FAMILY_A.fid,
+    legacyFid: FAMILY_A.legacyFid,
+    name: FAMILY_A.name,
+    location: FAMILY_A.location,
+    createdAt: FAMILY_A.createdAt.toDate(),
+    managers: FAMILY_A.managers,
+    searchKeys: FAMILY_A.searchKeys,
+  };
+  const mappedMembers = members.map((m) => ({
+    mid: m.mid,
+    uid: m.uid ?? null,
+    firstName: m.firstName,
+    lastName: m.lastName,
+    type: m.type,
+    gender: m.gender,
+    manager: m.manager ?? false,
+    joinedAt: (m.joinedAt as { toDate: () => Date }).toDate(),
+    email: m.email ?? null,
+    phone: m.phone ?? null,
+    schoolGrade: m.schoolGrade ?? null,
+    birthMonthYear: m.birthMonthYear ?? null,
+    volunteeringSkills: m.volunteeringSkills ?? [],
+    foodAllergies: m.foodAllergies ?? null,
+    emergencyContacts: m.emergencyContacts ?? [null, null],
+  }));
+  mockGetFamilyByFid.mockResolvedValue({ family, members: mappedMembers });
 }
 
 function setupTransaction(outcome: 'success' | 'not-found', familyData = FAMILY_A, memberData: Record<string, unknown> = MEMBER_02) {
@@ -253,7 +287,7 @@ describe('GET /api/setu/family', () => {
 
   it('returns 401 when family doc does not exist (getCurrentFamily returns null)', async () => {
     setupSessionCookieAs('family-manager', FAMILY_FID, MEMBER_01_MID);
-    mockFirestoreGet.mockResolvedValue({ exists: false });
+    mockGetFamilyByFid.mockResolvedValue(null);
 
     const res = await familyGET(makeRequest('GET', '/api/setu/family'));
     expect(res.status).toBe(401);

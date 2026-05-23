@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+vi.mock('next/cache', () => ({ revalidateTag: vi.fn(), cacheTag: vi.fn(), cacheLife: vi.fn() }));
+
 vi.mock('@/lib/flags', () => ({ flags: { setuAuth: true } }));
 
 const mockCookiesGet = vi.hoisted(() => vi.fn());
@@ -13,38 +15,24 @@ vi.mock('@cmt/firebase-shared/admin/session', () => ({
   verifyPortalSessionCookie: mockVerifySession,
 }));
 
-vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
-  portalFirestore: vi.fn(),
+const mockGetFamilyByFid = vi.hoisted(() => vi.fn());
+vi.mock('@/features/setu/members/get-family-by-fid', () => ({
+  getFamilyByFid: mockGetFamilyByFid,
 }));
 
 import { GET } from '../route';
-import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 
-const mockGet = vi.fn();
-const mockCollectionGet = vi.fn();
-
-function makeChainRef(): Record<string, unknown> {
-  const ref: Record<string, unknown> = {};
-  ref['doc'] = vi.fn(() => makeChainRef());
-  ref['collection'] = vi.fn().mockImplementation(() => ({
-    get: mockCollectionGet,
-    doc: vi.fn(() => makeChainRef()),
-  }));
-  ref['get'] = mockGet;
-  return ref;
-}
-
-const familyData = {
+const familyDoc = {
   fid: 'FAM001ABCD12',
   legacyFid: null,
   name: 'Patel',
   location: 'Brampton',
-  createdAt: { toDate: () => new Date('2026-01-01') },
+  createdAt: new Date('2026-01-01'),
   managers: ['FAM001ABCD12-01'],
   searchKeys: ['patel', 'FAM001ABCD12'],
 };
 
-const memberData = {
+const memberDoc = {
   mid: 'FAM001ABCD12-01',
   uid: 'uid-raj',
   firstName: 'Raj',
@@ -52,7 +40,7 @@ const memberData = {
   type: 'Adult',
   gender: 'Male',
   manager: true,
-  joinedAt: { toDate: () => new Date('2026-01-01') },
+  joinedAt: new Date('2026-01-01'),
   email: 'raj@example.com',
   phone: '4165551234',
   schoolGrade: null,
@@ -76,14 +64,7 @@ beforeEach(() => {
 
   mockCookiesGet.mockReturnValue(null);
   mockVerifySession.mockResolvedValue(null);
-
-  mockGet.mockResolvedValue({ exists: true, data: () => familyData });
-  mockCollectionGet.mockResolvedValue({ docs: [{ data: () => memberData }] });
-
-  const chainRef = makeChainRef();
-  (portalFirestore as ReturnType<typeof vi.fn>).mockReturnValue({
-    collection: vi.fn(() => chainRef),
-  });
+  mockGetFamilyByFid.mockResolvedValue({ family: familyDoc, members: [memberDoc] });
 });
 
 describe('GET /api/setu/family', () => {
@@ -124,7 +105,7 @@ describe('GET /api/setu/family', () => {
 
   it('returns 404 when family document does not exist', async () => {
     setupSession('family-manager', 'FAM001ABCD12', 'FAM001ABCD12-01');
-    mockGet.mockResolvedValue({ exists: false });
+    mockGetFamilyByFid.mockResolvedValue(null);
     const res = await GET(makeRequest());
     expect(res.status).toBe(401);
   });

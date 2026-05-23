@@ -5,7 +5,6 @@ import { CursorPagination } from '@/features/check-in/admin/cursor-pagination';
 import { flags } from '@/lib/flags';
 
 export const metadata = { title: 'Guests — CMT Portal' };
-export const dynamic = 'force-dynamic';
 
 interface Props {
   searchParams: Promise<{ cursor?: string }>;

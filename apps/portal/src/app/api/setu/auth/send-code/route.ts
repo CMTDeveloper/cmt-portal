@@ -11,7 +11,6 @@ import { resolveSender } from '@/lib/aws/resolve-sender';
 import { findSetuFamilyByContact } from '@/features/setu/auth/find-family-by-contact';
 
 export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
 
 const bodySchema = z.object({
   type: z.enum(['email', 'phone']),

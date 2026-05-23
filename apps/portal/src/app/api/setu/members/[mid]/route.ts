@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+import { revalidateTag } from 'next/cache';
 import { flags } from '@/lib/flags';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { assertNotLastManager, LastManagerError } from '@/features/setu/members';
 import { hashContactKey } from '@/features/setu/registration/hash-contact-key';
 
 export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
 
 type RouteContext = { params: Promise<{ mid: string }> };
 
@@ -202,6 +202,7 @@ export async function PATCH(req: Request, ctx: RouteContext) {
     throw err;
   }
 
+  revalidateTag(`family-${fid}`, 'max');
   return NextResponse.json({ ok: true }, { status: 200 });
 }
 
@@ -281,5 +282,6 @@ export async function DELETE(_req: Request, ctx: RouteContext) {
     throw err;
   }
 
+  revalidateTag(`family-${fid}`, 'max');
   return NextResponse.json({ ok: true }, { status: 200 });
 }

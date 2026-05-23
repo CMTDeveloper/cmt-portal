@@ -4,7 +4,6 @@ import { readRtdb } from '@cmt/firebase-shared/admin/rtdb';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 
 export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
 
 interface LegacyRosterStudent {
   sid?: string | number;
