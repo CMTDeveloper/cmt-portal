@@ -225,11 +225,9 @@ function SignInReal() {
 
   async function handleResend() {
     setOtp('');
-    setPageState('form');
-    // Brief delay so form renders, then re-trigger send
-    setTimeout(() => {
-      setPageState('form');
-    }, 0);
+    // Call send-code with current contactValue; on success handleSendCode sets 'code' state.
+    // We don't pre-set 'form' so the user stays on the code screen if the resend fails.
+    await handleSendCode();
   }
 
   const isVerifying = pageState === 'verifying';

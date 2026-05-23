@@ -15,6 +15,14 @@
         { "fieldPath": "email", "order": "ASCENDING" },
         { "fieldPath": "category", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "families",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "searchKeys", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "location", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

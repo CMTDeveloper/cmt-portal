@@ -248,6 +248,103 @@ describe('SignInPage — verify-code flow', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// M4 fix: handleResend actually re-sends the code
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('SignInPage — resend code (M4)', () => {
+  async function renderToCodeState() {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ success: true }),
+    });
+    const user = userEvent.setup();
+    render(<SignInPage />);
+
+    const emailInputs = document.querySelectorAll('input[type="email"]');
+    await user.clear(emailInputs[0] as HTMLElement);
+    await user.type(emailInputs[0] as HTMLElement, 'test@example.com');
+
+    const sendBtns = screen.getAllByText(/send sign-in code/i);
+    await user.click(sendBtns[0]!);
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('group').length).toBeGreaterThan(0);
+    });
+
+    return user;
+  }
+
+  it('clicking Re-send code calls /api/setu/auth/send-code a second time', async () => {
+    // Second send-code call
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ success: true }),
+    });
+
+    const user = await renderToCodeState();
+
+    // At this point fetchMock has been called once (initial send)
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    const resendBtns = screen.getAllByText(/re-send code/i);
+    await user.click(resendBtns[0]!);
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    // Both calls were to send-code
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/setu/auth/send-code',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
+  it('after resend the OTP entry is shown again (stays on code state)', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ success: true }),
+    });
+
+    const user = await renderToCodeState();
+
+    const resendBtns = screen.getAllByText(/re-send code/i);
+    await user.click(resendBtns[0]!);
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    // OTP entry still visible
+    expect(screen.getAllByRole('group').length).toBeGreaterThan(0);
+  });
+
+  it('resend rate-limit shows toast.error and stays on code state', async () => {
+    const resetAt = new Date(Date.now() + 60_000).toISOString();
+    // renderToCodeState consumes its own success mock internally.
+    // Queue the 429 AFTER renderToCodeState returns so the resend fetch gets it.
+    const user = await renderToCodeState();
+
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      status: 429,
+      json: async () => ({ resetAt }),
+    });
+
+    const resendBtns = screen.getAllByText(/re-send code/i);
+    await user.click(resendBtns[0]!);
+
+    await waitFor(() => {
+      expect(toastMock.error).toHaveBeenCalledWith(expect.stringMatching(/too many attempts/i));
+    });
+
+    // After 429 on resend, user stays on code state (handleResend no longer pre-sets 'form').
+    expect(screen.getAllByRole('group').length).toBeGreaterThan(0);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Flag-off: renders prototype (no fetch calls)
 // ─────────────────────────────────────────────────────────────────────────────
 

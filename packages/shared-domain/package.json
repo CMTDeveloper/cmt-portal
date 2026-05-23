@@ -25,6 +25,14 @@
     "./check-in/*": {
       "types": "./src/check-in/*.ts",
       "default": "./src/check-in/*.ts"
+    },
+    "./setu": {
+      "types": "./src/setu/index.ts",
+      "default": "./src/setu/index.ts"
+    },
+    "./setu/*": {
+      "types": "./src/setu/*.ts",
+      "default": "./src/setu/*.ts"
     }
   },
   "scripts": {

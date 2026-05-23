@@ -12,6 +12,7 @@ import {
   exchangeCustomTokenForIdToken,
 } from '@cmt/firebase-shared/admin/session';
 import { findSetuFamilyByContact } from '@/features/setu/auth/find-family-by-contact';
+import { lazyMigrateLegacyFamily } from '@/features/setu/registration/lazy-migrate';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -43,7 +44,7 @@ export async function POST(req: Request) {
 
   const result = await findSetuFamilyByContact(type, value);
 
-  // No family found — OTP was valid but no matching family; send to registration
+  // No family found — OTP was valid but no matching family; send to registration (no session)
   if (result.source === null) {
     return NextResponse.json({ redirectTo: '/register?contact=verified' }, { status: 200 });
   }
@@ -64,8 +65,8 @@ export async function POST(req: Request) {
   // Build claims — Setu roles extend beyond the legacy PortalClaims type so we
   // set custom claims directly via the Firebase Admin SDK.
   const contactClaim = type === 'email' ? { email: value } : { phone: value };
-  let claims: Record<string, unknown>;
-  let redirectTo: string;
+  let claims: Record<string, unknown> = { role: 'family', familyId: '', ...contactClaim };
+  let redirectTo: string = '/register?contact=verified';
 
   if (result.source === 'setu' && result.fid && result.mid) {
     const isManager = result.member?.manager === true;
@@ -77,10 +78,35 @@ export async function POST(req: Request) {
     };
     redirectTo = '/family';
   } else {
-    // Legacy hit — family exists in RTDB but not yet migrated to Setu;
-    // set legacy session claims and send to register so migration can happen.
-    claims = { role: 'family', familyId: result.legacyFid ?? '', ...contactClaim };
-    redirectTo = '/register?contact=verified';
+    // Legacy hit — attempt lazy single-family migration to Setu on first sign-in.
+    const legacyFid = result.legacyFid ?? '';
+    let migratedToSetu = false;
+
+    if (legacyFid) {
+      try {
+        await lazyMigrateLegacyFamily(legacyFid);
+        // Re-lookup to get the new Setu fid/mid after migration
+        const setuResult = await findSetuFamilyByContact(type, value);
+        if (setuResult.source === 'setu' && setuResult.fid && setuResult.mid) {
+          claims = {
+            role: setuResult.member?.manager === true ? 'family-manager' : 'family-member',
+            fid: setuResult.fid,
+            mid: setuResult.mid,
+            ...contactClaim,
+          };
+          redirectTo = '/family';
+          migratedToSetu = true;
+        }
+      } catch (err) {
+        console.error('[verify-code] lazyMigrateLegacyFamily failed', err);
+      }
+    }
+
+    if (!migratedToSetu) {
+      // Migration failed or re-lookup missed — use legacy claims, send to register
+      claims = { role: 'family', familyId: legacyFid, ...contactClaim };
+      redirectTo = '/register?contact=verified';
+    }
   }
 
   await auth.setCustomUserClaims(uid, claims);

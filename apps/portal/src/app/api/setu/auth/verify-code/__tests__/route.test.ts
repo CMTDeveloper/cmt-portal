@@ -18,6 +18,9 @@ vi.mock('@cmt/firebase-shared/admin/session', () => ({
 vi.mock('@/features/setu/auth/find-family-by-contact', () => ({
   findSetuFamilyByContact: vi.fn(),
 }));
+vi.mock('@/features/setu/registration/lazy-migrate', () => ({
+  lazyMigrateLegacyFamily: vi.fn(),
+}));
 
 import { POST } from '../route';
 import { verifyCode } from '@/features/check-in/shared';
@@ -27,6 +30,7 @@ import {
   exchangeCustomTokenForIdToken,
 } from '@cmt/firebase-shared/admin/session';
 import { findSetuFamilyByContact } from '@/features/setu/auth/find-family-by-contact';
+import { lazyMigrateLegacyFamily } from '@/features/setu/registration/lazy-migrate';
 
 const mockGetUser = vi.fn();
 const mockCreateUser = vi.fn();
@@ -102,11 +106,46 @@ describe('POST /api/setu/auth/verify-code', () => {
     );
   });
 
-  it('correct code with legacy hit redirects to /register?contact=verified', async () => {
+  it('legacy hit: migration fails → falls back to legacy claims and /register', async () => {
     (verifyCode as ReturnType<typeof vi.fn>).mockResolvedValue(true);
     (findSetuFamilyByContact as ReturnType<typeof vi.fn>).mockResolvedValue({
       source: 'legacy', fid: null, mid: null, legacyFid: '42', family: {},
     });
+    (lazyMigrateLegacyFamily as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('RTDB error'));
+    const res = await POST(makeRequest({ type: 'email', value: 'sharma@example.com', code: '654321' }));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.redirectTo).toBe('/register?contact=verified');
+    expect(mockSetCustomUserClaims).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ role: 'family', familyId: '42' }),
+    );
+  });
+
+  it('legacy hit: migration succeeds → re-lookup returns Setu hit → redirects to /family', async () => {
+    (verifyCode as ReturnType<typeof vi.fn>).mockResolvedValue(true);
+    // First call: legacy hit
+    // Second call (post-migration): setu hit
+    (findSetuFamilyByContact as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({ source: 'legacy', fid: null, mid: null, legacyFid: '42', family: {} })
+      .mockResolvedValueOnce({ source: 'setu', fid: 'FAMNEW', mid: 'FAMNEW-01', legacyFid: '42', family: {}, member: { manager: true } });
+    (lazyMigrateLegacyFamily as ReturnType<typeof vi.fn>).mockResolvedValue({ migrated: true, fid: 'FAMNEW', legacyFid: '42' });
+    const res = await POST(makeRequest({ type: 'email', value: 'sharma@example.com', code: '654321' }));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.redirectTo).toBe('/family');
+    expect(mockSetCustomUserClaims).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ role: 'family-manager', fid: 'FAMNEW', mid: 'FAMNEW-01' }),
+    );
+  });
+
+  it('legacy hit: migration succeeds but re-lookup misses → falls back to legacy claims', async () => {
+    (verifyCode as ReturnType<typeof vi.fn>).mockResolvedValue(true);
+    (findSetuFamilyByContact as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({ source: 'legacy', fid: null, mid: null, legacyFid: '42', family: {} })
+      .mockResolvedValueOnce({ source: null, fid: null, mid: null, legacyFid: null, family: null });
+    (lazyMigrateLegacyFamily as ReturnType<typeof vi.fn>).mockResolvedValue({ migrated: true, fid: 'FAMNEW', legacyFid: '42' });
     const res = await POST(makeRequest({ type: 'email', value: 'sharma@example.com', code: '654321' }));
     expect(res.status).toBe(200);
     const body = await res.json();
