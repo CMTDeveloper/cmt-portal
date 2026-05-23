@@ -46,7 +46,14 @@ export {
   SheetDescription,
 } from './components/sheet';
 export { Toaster } from './components/sonner';
+export { toast } from 'sonner';
 export { Alert, AlertTitle, AlertDescription } from './components/alert';
 export { Skeleton } from './components/skeleton';
 export { Avatar, AvatarImage, AvatarFallback } from './components/avatar';
 export { Separator } from './components/separator';
+
+// Setu design primitives — used by the v3 family flow
+export { Rosette } from './components/rosette';
+export { SetuLogo } from './components/setu-logo';
+export { SetuAvatar } from './components/setu-avatar';
+export { SetuIcon } from './components/setu-icon';

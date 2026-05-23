@@ -25,20 +25,33 @@ export async function middleware(req: NextRequest) {
   if (!claims) return deny(req, 'no-session');
   if (!canAccessRoute(claims, pathname)) return deny(req, 'unauthorized');
 
-  const headers = new Headers(req.headers);
-  headers.set('x-portal-role', claims.role);
-  headers.set('x-portal-uid', claims.uid);
-  if (claims.familyId) headers.set('x-portal-family-id', claims.familyId);
-  return NextResponse.next({ request: { headers } });
+  const reqHeaders = new Headers(req.headers);
+  reqHeaders.set('x-portal-role', claims.role);
+  reqHeaders.set('x-portal-uid', claims.uid);
+  if (claims.familyId) reqHeaders.set('x-portal-family-id', claims.familyId);
+  if (claims.fid) reqHeaders.set('x-portal-fid', claims.fid);
+  if (claims.mid) reqHeaders.set('x-portal-mid', claims.mid);
+
+  const res = NextResponse.next({ request: { headers: reqHeaders } });
+  res.headers.set('x-portal-role', claims.role);
+  res.headers.set('x-portal-uid', claims.uid);
+  if (claims.familyId) res.headers.set('x-portal-family-id', claims.familyId);
+  if (claims.fid) res.headers.set('x-portal-fid', claims.fid);
+  if (claims.mid) res.headers.set('x-portal-mid', claims.mid);
+  return res;
 }
 
 function deny(req: NextRequest, reason: 'no-session' | 'unauthorized') {
-  const isApi = req.nextUrl.pathname.startsWith('/api/');
+  const { pathname } = req.nextUrl;
+  const isApi = pathname.startsWith('/api/');
   if (isApi) {
     return NextResponse.json({ error: reason }, { status: 401 });
   }
-  const redirect = new URL('/login', req.nextUrl.origin);
-  redirect.searchParams.set('from', req.nextUrl.pathname);
+  // Setu family routes redirect to /sign-in; legacy check-in routes keep /login
+  const isSetuFamily = pathname === '/family' || pathname.startsWith('/family/');
+  const loginPath = isSetuFamily ? '/sign-in' : '/login';
+  const redirect = new URL(loginPath, req.nextUrl.origin);
+  redirect.searchParams.set('from', pathname);
   redirect.searchParams.set('error', reason === 'no-session' ? 'session-expired' : 'unauthorized');
   return NextResponse.redirect(redirect);
 }

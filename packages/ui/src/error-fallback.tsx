@@ -19,7 +19,7 @@ export function ErrorFallback({ error, reset, feature }: ErrorFallbackProps) {
       role="alert"
       className="container mx-auto flex min-h-[40vh] max-w-2xl flex-col items-center justify-center gap-4 px-4 py-16 text-center"
     >
-      <h2 className="font-serif text-2xl text-heading">
+      <h2 className="font-sans text-2xl text-heading">
         {feature ? `Something went wrong in ${feature}` : 'Something went wrong'}
       </h2>
       <p className="text-muted-foreground">

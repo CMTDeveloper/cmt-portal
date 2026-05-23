@@ -1,35 +1,161 @@
+/* ============================================================================
+ * Chinmaya Setu — Design tokens
+ * Direction: Cool Mist · Orange CTA (locked, 22 May 2026)
+ *
+ * Source of truth: the --setu-* HEX tokens below (designer-authored).
+ * The --setu-*-hsl companion triples exist so shadcn/Tailwind utilities like
+ * bg-primary/90, ring-destructive/20 keep working — the project's Tailwind
+ * preset wraps OS-level tokens with hsl(var(--token) / <alpha>), which only
+ * resolves correctly if the var holds an "H S% L%" triple.
+ * ========================================================================== */
+
 :root {
-  /* CMT brand — mined from chinmayatoronto.org */
-  --background: 0 0% 100%;
-  --foreground: 205 38% 30%;
+  /* ── Surfaces ────────────────────────────────────────────────────────── */
+  --setu-bg:           #f3f6f8;   /* page background — coolest neutral */
+  --setu-surface:      #ffffff;   /* cards, sheets, popovers */
+  --setu-surface-2:    #e3edf1;   /* recessed surfaces, hover bg, day chips */
 
-  /* Card and popover use background/foreground by default in slice A.
-     The shadcn Card and Dialog components reference these. */
-  --card: 0 0% 100%;
-  --card-foreground: 205 38% 30%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 205 38% 30%;
+  --setu-bg-hsl:        204 26% 96%;
+  --setu-surface-hsl:   0 0% 100%;
+  --setu-surface-2-hsl: 197 33% 92%;
 
-  --primary: 192 44% 23%;             /* #214a54 navy/teal */
-  --primary-foreground: 0 0% 100%;
+  /* ── Ink ─────────────────────────────────────────────────────────────── */
+  --setu-ink:          #0f1a22;   /* primary text — near-black, very slight teal */
+  --setu-body:         #3a4a56;   /* body text */
+  --setu-muted:        #7a8a96;   /* secondary text, captions, dividers in copy */
+  --setu-line:         #dde6ec;   /* hairline borders */
+  --setu-line-2:       #c4d2dc;   /* stronger borders, input outlines */
 
-  --secondary: 177 51% 79%;           /* #b3e1de light teal */
-  --secondary-foreground: 192 44% 23%;
+  --setu-ink-hsl:    205 39% 10%;
+  --setu-body-hsl:   206 19% 28%;
+  --setu-muted-hsl:  206 12% 53%;
+  --setu-line-hsl:   204 28% 90%;
+  --setu-line-2-hsl: 205 26% 82%;
 
-  --accent: 35 95% 67%;               /* #fbb559 warm gold */
-  --accent-foreground: 192 44% 23%;
+  /* ── Accent (warm coral orange — the CTA color) ──────────────────────── */
+  --setu-accent:       #d96642;   /* primary CTA fill */
+  --setu-accent-hover: #c2562f;   /* CTA hover */
+  --setu-accent-deep:  #a23f1e;   /* text on tint, focus rings */
+  --setu-accent-soft:  #fde2d3;   /* tinted bg for badges, callouts, focus halo */
 
-  --muted: 50 21% 95%;                /* #f5f4f0 warm beige */
-  --muted-foreground: 0 0% 44%;
+  --setu-accent-hsl:       14 67% 55%;
+  --setu-accent-hover-hsl: 16 61% 47%;
+  --setu-accent-deep-hsl:  15 69% 38%;
+  --setu-accent-soft-hsl:  21 91% 91%;
 
-  --heading: 200 36% 32%;             /* #335b70 deeper teal-gray */
+  /* ── Teal (kept as info / chrome / illustrative) ─────────────────────── */
+  --setu-info:         #3a7e88;   /* "Enrolled" badges, info chips */
+  --setu-info-deep:    #1f4a52;
+  --setu-info-soft:    #d6e8eb;   /* badge/tag backgrounds */
 
-  --border: 50 21% 90%;
-  --input: 50 21% 90%;
-  --ring: 192 44% 23%;
+  --setu-info-hsl:      188 40% 38%;
+  --setu-info-deep-hsl: 189 45% 22%;
+  --setu-info-soft-hsl: 189 34% 88%;
 
-  --destructive: 0 84% 60%;
-  --destructive-foreground: 0 0% 98%;
+  /* ── Status ──────────────────────────────────────────────────────────── */
+  --setu-ok:           #3d7a5a;
+  --setu-ok-soft:      #d8ebdc;
+  --setu-warn:         #a06410;
+  --setu-warn-soft:    #fbe6c6;
+  --setu-err:          #8a3030;
+  --setu-err-soft:     #fde0d8;
 
-  --radius: 0.5rem;
+  --setu-ok-hsl:        149 33% 36%;
+  --setu-ok-soft-hsl:   133 32% 88%;
+  --setu-warn-hsl:      35 82% 35%;
+  --setu-warn-soft-hsl: 36 87% 88%;
+  --setu-err-hsl:       0 48% 36%;
+  --setu-err-soft-hsl:  13 90% 92%;
+
+  /* ── Type ────────────────────────────────────────────────────────────── *
+   * Note: actual rendered fonts are wired via next/font in apps/portal/src/
+   * app/layout.tsx — Geist (--font-sans) and Geist Mono (--font-mono).
+   * The --setu-font-* tokens below document the design direction; they are
+   * informational only — Tailwind's font-sans / font-mono utilities resolve
+   * via the next/font variables, not these.
+   * ──────────────────────────────────────────────────────────────────── */
+  --setu-font-display: 'Geist', 'Inter Tight', system-ui, sans-serif;
+  --setu-font-body:    'Geist', 'Inter Tight', system-ui, sans-serif;
+  --setu-font-mono:    'Geist Mono', ui-monospace, monospace;
+
+  /* ── Radii ───────────────────────────────────────────────────────────── */
+  --setu-radius:       14px;      /* cards, sheets */
+  --setu-radius-sm:    10px;      /* buttons, inputs, pills */
+  --setu-radius-xs:    6px;       /* tiny chips, small swatches */
+
+  /* ── Elevation ───────────────────────────────────────────────────────── */
+  --setu-elev-1:       0 1px 0 rgba(15, 26, 34, 0.04);
+  --setu-elev-2:       0 4px 14px rgba(15, 26, 34, 0.06);
+  --setu-elev-3:       0 16px 40px rgba(15, 26, 34, 0.10);
+  --setu-focus-ring:   0 0 0 3px var(--setu-accent-soft);
+
+  /* ── Spacing ─────────────────────────────────────────────────────────── */
+  --setu-space-1:      4px;
+  --setu-space-2:      8px;
+  --setu-space-3:      12px;
+  --setu-space-4:      16px;
+  --setu-space-5:      24px;
+  --setu-space-6:      32px;
+  --setu-space-7:      48px;
+  --setu-space-8:      64px;
 }
+
+/* ============================================================================
+ * shadcn / OS-level mapping
+ * ----------------------------------------------------------------------------
+ * The project's tailwind.preset.ts wraps every color token with
+ * hsl(var(--token)) (and Tailwind appends `/ <alpha>` for opacity modifiers).
+ * That means these vars MUST hold "H S% L%" triples, not hex. We point them at
+ * the --setu-*-hsl companions above.
+ * ========================================================================== */
+
+:root {
+  --background:           var(--setu-bg-hsl);
+  --foreground:           var(--setu-ink-hsl);
+
+  --card:                 var(--setu-surface-hsl);
+  --card-foreground:      var(--setu-ink-hsl);
+  --popover:              var(--setu-surface-hsl);
+  --popover-foreground:   var(--setu-ink-hsl);
+
+  --primary:              var(--setu-accent-hsl);
+  --primary-foreground:   0 0% 100%;
+
+  --secondary:            var(--setu-info-soft-hsl);   /* teal chrome lives on here */
+  --secondary-foreground: var(--setu-info-deep-hsl);
+
+  --muted:                var(--setu-surface-2-hsl);
+  --muted-foreground:     var(--setu-muted-hsl);
+
+  --accent:               var(--setu-accent-soft-hsl);
+  --accent-foreground:    var(--setu-accent-deep-hsl);
+
+  --destructive:          var(--setu-err-hsl);
+  --destructive-foreground: 0 0% 100%;
+
+  --border:               var(--setu-line-hsl);
+  --input:                var(--setu-line-2-hsl);
+  --ring:                 var(--setu-accent-hsl);
+
+  --heading:              var(--setu-info-deep-hsl);   /* deep teal, used by h1–h6 in globals.css */
+
+  --radius:               var(--setu-radius-sm);
+}
+
+/* ============================================================================
+ * Migration notes
+ * ----------------------------------------------------------------------------
+ * Old --primary  (#214a54 navy-teal)        → now --setu-info-deep
+ *      kept for "Enrolled" badges, info chips, illustrative chrome.
+ *      Reachable via the --heading token and via the shadcn `secondary` slot
+ *      (--secondary-foreground = --setu-info-deep-hsl).
+ * Old --secondary (#fbb559 warm gold)       → REPLACED. The new --setu-accent
+ *      (#d96642 coral) is the CTA color across the product.
+ *      If the existing site relies on the gold somewhere, alias:
+ *        --legacy-gold: #fbb559;
+ * Old --foreground (#1c1c1c)                → --setu-ink (#0f1a22, slight teal bias)
+ *
+ * Fonts: Geist (sans) and Geist Mono are wired via next/font in
+ * apps/portal/src/app/layout.tsx. Old Inter + Merriweather pair is removed.
+ * No more font-serif slot — globals.css headings use font-sans now.
+ * ========================================================================== */

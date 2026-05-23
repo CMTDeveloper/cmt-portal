@@ -1,9 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { isAdmin, isTeacher, isFamily, ROLES } from '../auth/role';
+import { isAdmin, isTeacher, isFamily, isSetuFamily, isSetuManager, isWelcomeTeam, ROLES } from '../auth/role';
 
 describe('ROLES', () => {
-  it('lists the three known roles', () => {
-    expect(ROLES).toEqual(['admin', 'teacher', 'family']);
+  it('includes all known roles', () => {
+    expect(ROLES).toContain('admin');
+    expect(ROLES).toContain('teacher');
+    expect(ROLES).toContain('family');
+    expect(ROLES).toContain('family-manager');
+    expect(ROLES).toContain('family-member');
+    expect(ROLES).toContain('welcome-team');
   });
 });
 
@@ -40,5 +45,38 @@ describe('isFamily', () => {
   });
   it('returns false for admin', () => {
     expect(isFamily({ role: 'admin' })).toBe(false);
+  });
+});
+
+describe('isSetuFamily', () => {
+  it('returns true for family-manager', () => {
+    expect(isSetuFamily({ role: 'family-manager' })).toBe(true);
+  });
+  it('returns true for family-member', () => {
+    expect(isSetuFamily({ role: 'family-member' })).toBe(true);
+  });
+  it('returns false for legacy family role', () => {
+    expect(isSetuFamily({ role: 'family' })).toBe(false);
+  });
+  it('returns false for admin', () => {
+    expect(isSetuFamily({ role: 'admin' })).toBe(false);
+  });
+});
+
+describe('isSetuManager', () => {
+  it('returns true for family-manager', () => {
+    expect(isSetuManager({ role: 'family-manager' })).toBe(true);
+  });
+  it('returns false for family-member', () => {
+    expect(isSetuManager({ role: 'family-member' })).toBe(false);
+  });
+});
+
+describe('isWelcomeTeam', () => {
+  it('returns true for welcome-team', () => {
+    expect(isWelcomeTeam({ role: 'welcome-team' })).toBe(true);
+  });
+  it('returns false for admin', () => {
+    expect(isWelcomeTeam({ role: 'admin' })).toBe(false);
   });
 });

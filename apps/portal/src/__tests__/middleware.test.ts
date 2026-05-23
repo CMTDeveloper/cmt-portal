@@ -53,6 +53,25 @@ describe('middleware — cookie auth', () => {
     expect(res.headers.get('location')).toMatch(/error=session-expired/);
   });
 
+  it('redirects unauthenticated /family to /sign-in (not /login)', async () => {
+    const res = await middleware(makeReq('http://localhost/family'));
+    expect(res.status).toBe(307);
+    expect(res.headers.get('location')).toMatch(/\/sign-in\?from=%2Ffamily/);
+    expect(res.headers.get('location')).toMatch(/error=session-expired/);
+  });
+
+  it('redirects unauthenticated /family/members to /sign-in', async () => {
+    const res = await middleware(makeReq('http://localhost/family/members'));
+    expect(res.status).toBe(307);
+    expect(res.headers.get('location')).toMatch(/\/sign-in\?from=%2Ffamily%2Fmembers/);
+  });
+
+  it('still redirects unauthenticated /check-in/admin to /login', async () => {
+    const res = await middleware(makeReq('http://localhost/check-in/admin'));
+    expect(res.status).toBe(307);
+    expect(res.headers.get('location')).toMatch(/\/login\?from=%2Fcheck-in%2Fadmin/);
+  });
+
   it('redirects to /login?error=unauthorized when role is wrong', async () => {
     (verifyPortalSessionCookie as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       uid: 'u1',

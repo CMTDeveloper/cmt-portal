@@ -14,7 +14,7 @@ export function Header() {
             height={48}
             priority
           />
-          <span className="hidden font-serif text-lg text-heading sm:inline">
+          <span className="hidden font-sans text-lg text-heading sm:inline">
             Chinmaya Mission Toronto
           </span>
         </Link>

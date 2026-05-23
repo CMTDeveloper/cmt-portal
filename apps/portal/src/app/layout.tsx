@@ -1,19 +1,20 @@
 import type { Metadata } from 'next';
-import { Inter, Merriweather } from 'next/font/google';
+import { Geist, Geist_Mono } from 'next/font/google';
 import { Header } from '@/components/chrome/header';
 import { Footer } from '@/components/chrome/footer';
+import { ChromeWrapper } from '@/components/chrome/chrome-wrapper';
+import { ToasterMount } from '@/components/chrome/toaster-mount';
 import './globals.css';
 
-const inter = Inter({
+const geist = Geist({
   subsets: ['latin'],
   variable: '--font-sans',
   display: 'swap',
 });
 
-const merriweather = Merriweather({
+const geistMono = Geist_Mono({
   subsets: ['latin'],
-  weight: ['400', '700'],
-  variable: '--font-serif',
+  variable: '--font-mono',
   display: 'swap',
 });
 
@@ -29,11 +30,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${inter.variable} ${merriweather.variable}`}>
+    <html lang="en" className={`${geist.variable} ${geistMono.variable}`}>
       <body className="flex min-h-screen flex-col">
-        <Header />
+        <ChromeWrapper>
+          <Header />
+        </ChromeWrapper>
         <main className="flex-1">{children}</main>
-        <Footer />
+        <ChromeWrapper>
+          <Footer />
+        </ChromeWrapper>
+        <ToasterMount />
       </body>
     </html>
   );

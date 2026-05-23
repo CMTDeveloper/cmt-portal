@@ -1,20 +1,32 @@
 export const PUBLIC_ROUTES = [
-  // Slice A landing + stubs
+  // Landing
   '/',
-  '/events',
 
-  // Login surface
+  // Legacy login surface (Slice B family check-in auth). Kept until the new
+  // Setu auth handles all three roles and the /check-in/* tree is retired.
   '/login',
   '/login/admin',
   '/login/teacher',
   '/login/family',
+
+  // 2026 redesign — Setu family flow entry points (public).
+  // /family and /family/ are auth-gated — intentionally NOT listed here.
+  '/sign-in',
+  '/register',
+  '/register/family',
+  '/invite/:token',
+
+  // Setu OTP auth APIs (public — unauthenticated users call these to sign in)
+  '/api/setu/auth/send-code',
+  '/api/setu/auth/verify-code',
+  '/api/setu/auth/signout',
 
   // Kiosk (public) — feature-flagged in the app layer
   '/check-in',
   '/check-in/guest',
   '/check-in/lookup',
 
-  // Public auth APIs
+  // Public auth APIs (legacy Slice B)
   '/api/auth/admin/signin',
   '/api/auth/teacher/signin',
   '/api/auth/family/send-code',
@@ -26,25 +38,6 @@ export const PUBLIC_ROUTES = [
   '/api/check-in/families/:familyId/check-in',
   '/api/check-in/lookup',
   '/api/check-in/guests',
-
-  // Event registration (public, no auth — feature-flagged in the app layer)
-  '/events/register',
-  '/events/register/payment',
-  '/events/register/success',
-  '/events/register/cancel',
-
-  // Public event APIs
-  '/api/events/check-bv-status',
-  '/api/events/verify-registration',
-  '/api/events/register',
-  '/api/events/lookup',
-  '/api/events/create-checkout',
-  '/api/events/update-reference',
-  '/api/events/update-payment-status',
-  '/api/events/webhooks/payment-status',
-
-  // Admin stats — session-auth-exempt; route enforces x-api-key
-  '/api/events/stats',
 ] as const;
 
 export function matchRoute(pattern: string, pathname: string): boolean {

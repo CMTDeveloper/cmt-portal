@@ -2,9 +2,22 @@ import { describe, it, expect } from 'vitest';
 import { PUBLIC_ROUTES, matchRoute, isPublicRoute } from '../auth/public-routes';
 
 describe('PUBLIC_ROUTES', () => {
-  it('includes portal landing and events stub', () => {
+  it('includes portal landing', () => {
     expect(PUBLIC_ROUTES).toContain('/');
-    expect(PUBLIC_ROUTES).toContain('/events');
+  });
+  it('includes the 2026 Setu sign-in and register entry points', () => {
+    expect(PUBLIC_ROUTES).toContain('/sign-in');
+    expect(PUBLIC_ROUTES).toContain('/register');
+    expect(PUBLIC_ROUTES).toContain('/register/family');
+  });
+  it('does NOT include /family (now auth-gated)', () => {
+    expect(PUBLIC_ROUTES).not.toContain('/family');
+    expect(PUBLIC_ROUTES).not.toContain('/family/');
+  });
+  it('includes Setu OTP auth API routes', () => {
+    expect(PUBLIC_ROUTES).toContain('/api/setu/auth/send-code');
+    expect(PUBLIC_ROUTES).toContain('/api/setu/auth/verify-code');
+    expect(PUBLIC_ROUTES).toContain('/api/setu/auth/signout');
   });
   it('includes /login and its sub-paths', () => {
     expect(PUBLIC_ROUTES).toContain('/login');
@@ -51,6 +64,13 @@ describe('isPublicRoute', () => {
   it('returns false for a protected route', () => {
     expect(isPublicRoute('/check-in/admin')).toBe(false);
     expect(isPublicRoute('/check-in/family')).toBe(false);
+    expect(isPublicRoute('/family')).toBe(false);
+    expect(isPublicRoute('/family/members')).toBe(false);
+  });
+  it('returns true for Setu OTP auth APIs', () => {
+    expect(isPublicRoute('/api/setu/auth/send-code')).toBe(true);
+    expect(isPublicRoute('/api/setu/auth/verify-code')).toBe(true);
+    expect(isPublicRoute('/api/setu/auth/signout')).toBe(true);
   });
   it('returns true for :param route matches', () => {
     expect(isPublicRoute('/api/check-in/families/42')).toBe(true);

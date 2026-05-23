@@ -9,7 +9,8 @@
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "seed:admin": "tsx --env-file=.env.local scripts/seed-admin.ts"
+    "seed:admin": "tsx --env-file=.env.local scripts/seed-admin.ts",
+    "attendance:report": "tsx --env-file=.env.local scripts/attendance-report.ts"
   },
   "dependencies": {
     "@aws-sdk/client-ses": "^3.700.0",
@@ -36,6 +37,7 @@
     "aws-sdk-client-mock": "^4.0.0",
     "eslint": "^9.17.0",
     "eslint-plugin-boundaries": "^5.0.1",
+    "exceljs": "^4.4.0",
     "jsdom": "^26.0.0",
     "next-test-api-route-handler": "^5.0.0",
     "postcss": "^8.5.1",
