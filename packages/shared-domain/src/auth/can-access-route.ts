@@ -61,7 +61,17 @@ export function canAccessRoute(
     return isSetuFamily(claims);
   }
 
-  // Setu API — remaining paths (invite, register, etc.): manager + welcome-team + admin
+  // Setu API — invite paths (GET metadata, accept) are reachable by any
+  // signed-in user. The route handlers enforce their own auth:
+  //   - GET /api/setu/invite/{token} returns only non-sensitive metadata.
+  //   - POST /api/setu/invite/accept requires the invitee's verified contact
+  //     to match the invite email; a fresh OTP-signed-in invitee has
+  //     role='family' (no fid yet) and must be allowed through middleware.
+  if (pathname.startsWith('/api/setu/invite/')) {
+    return claims.role != null;
+  }
+
+  // Setu API — remaining paths (register, etc.): manager + welcome-team + admin
   // family-member is NOT included here; manager-level is the safe default for unknown setu paths
   if (pathname.startsWith('/api/setu/')) {
     return isSetuManager(claims) || isWelcomeTeam(claims) || isAdmin(claims);

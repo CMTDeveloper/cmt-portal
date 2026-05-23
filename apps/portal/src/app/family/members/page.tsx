@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { SetuAvatar, SetuIcon } from '@cmt/ui';
 import { CspRoot, DesktopSidebar } from '@/features/family/components/atoms';
+import { MobileInviteButton, DesktopInviteButton } from './invite-button';
 import { mockFamily } from '@/features/family/data/mock';
 import { flags } from '@/lib/flags';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
@@ -82,16 +83,7 @@ export default async function FamilyRosterPage() {
                 <div style={{ fontSize: 12, color: 'var(--muted)', fontFamily: 'var(--mono)' }}>FID {familyFid} · {familyLocation} · since {familyJoinedYear}</div>
               </div>
 
-              <button className="focus-ring" style={{ width: '100%', padding: 14, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radius)', display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>
-                <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--accentSoft)', display: 'grid', placeItems: 'center', color: 'var(--accentDeep)' }}>
-                  <SetuIcon.mail/>
-                </div>
-                <div style={{ flex: 1, textAlign: 'left' }}>
-                  <div style={{ fontWeight: 600, fontSize: 13 }}>Invite a co-manager</div>
-                  <div style={{ fontSize: 11, color: 'var(--muted)' }}>Spouse or other parent can co-manage</div>
-                </div>
-                <SetuIcon.chevron color="var(--muted)"/>
-              </button>
+              <MobileInviteButton/>
 
               <div style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: '.12em', textTransform: 'uppercase', fontWeight: 600, marginBottom: 10 }}>Members · {members.length}</div>
 
@@ -127,7 +119,7 @@ export default async function FamilyRosterPage() {
                 <h1 style={{ fontSize: 38, fontWeight: 400, marginTop: 6 }}>My family</h1>
               </div>
               <div className="row" style={{ gap: 10 }}>
-                <button className="btn btn--s"><SetuIcon.mail/> Invite co-manager</button>
+                <DesktopInviteButton/>
                 <Link href="/family/members/new" className="btn btn--p"><SetuIcon.plus/> Add member</Link>
               </div>
             </header>

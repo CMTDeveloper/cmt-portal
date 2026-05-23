@@ -1,0 +1,212 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+vi.mock('@/lib/flags', () => ({ flags: { setuAuth: true } }));
+vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
+  portalFirestore: vi.fn(),
+  FieldValue: {
+    serverTimestamp: vi.fn(() => 'SERVER_TIMESTAMP'),
+    arrayUnion: vi.fn((...args: string[]) => ({ _arrayUnion: args })),
+  },
+}));
+vi.mock('@/features/setu/auth/get-current-session-email', () => ({
+  getCurrentSessionContact: vi.fn(),
+}));
+vi.mock('@/features/setu/registration/hash-contact-key', () => ({
+  hashContactKey: vi.fn((type: string, value: string) => `hash:${type}:${value}`),
+}));
+
+import { POST } from '../route';
+import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
+import { getCurrentSessionContact } from '@/features/setu/auth/get-current-session-email';
+
+const mockGetSession = vi.mocked(getCurrentSessionContact);
+const mockRunTransaction = vi.fn();
+const mockGet = vi.fn();
+const mockSet = vi.fn();
+const mockUpdate = vi.fn();
+
+function makeRequest(body: unknown) {
+  return new Request('http://localhost/api/setu/invite/accept', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+function makeChainRef(): Record<string, unknown> {
+  const ref: Record<string, unknown> = {};
+  ref['doc'] = vi.fn(() => makeChainRef());
+  ref['collection'] = vi.fn(() => makeChainRef());
+  ref['set'] = mockSet;
+  ref['update'] = mockUpdate;
+  ref['delete'] = vi.fn();
+  return ref;
+}
+
+const validInvite = {
+  token: 'tok-abc123',
+  fid: 'FAM001ABCD12',
+  inviterMid: 'FAM001ABCD12-01',
+  inviterName: 'Raj Patel',
+  familyName: 'Patel Family',
+  relation: 'Spouse',
+  email: 'priya@example.com',
+  expiresAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+  acceptedAt: null,
+  acceptedByMid: null,
+};
+
+const validSession = {
+  type: 'email' as const,
+  value: 'priya@example.com',
+  uid: 'uid-priya',
+};
+
+beforeEach(() => {
+  vi.clearAllMocks();
+
+  mockRunTransaction.mockImplementation(async (fn: (txn: unknown) => unknown) => {
+    const txn = { get: mockGet, set: mockSet, update: mockUpdate };
+    return fn(txn);
+  });
+
+  const familySnap = {
+    exists: true,
+    data: () => ({ fid: 'FAM001ABCD12', name: 'Patel Family', managers: ['FAM001ABCD12-01'] }),
+  };
+  const membersSnap = { size: 1, docs: [] };
+  const contactKeySnap = { exists: false };
+  const inviteSnap = {
+    exists: true,
+    data: () => ({
+      token: validInvite.token,
+      inviterMid: validInvite.inviterMid,
+      inviterName: validInvite.inviterName,
+      familyName: validInvite.familyName,
+      relation: validInvite.relation,
+      email: validInvite.email,
+      expiresAt: { toDate: () => validInvite.expiresAt },
+      acceptedAt: null,
+      acceptedByMid: null,
+    }),
+    ref: {
+      parent: { parent: { id: 'FAM001ABCD12' } },
+      update: mockUpdate,
+    },
+  };
+
+  mockGet
+    .mockResolvedValueOnce(inviteSnap)   // invite doc inside txn
+    .mockResolvedValueOnce(familySnap)   // family doc
+    .mockResolvedValueOnce(membersSnap)  // members collection
+    .mockResolvedValueOnce(contactKeySnap); // contactKey
+
+  const chainRef = makeChainRef();
+  (portalFirestore as ReturnType<typeof vi.fn>).mockReturnValue({
+    runTransaction: mockRunTransaction,
+    collection: vi.fn(() => chainRef),
+    collectionGroup: vi.fn(() => ({
+      where: vi.fn(() => ({
+        limit: vi.fn(() => ({
+          get: vi.fn().mockResolvedValue({
+            empty: false,
+            docs: [inviteSnap],
+          }),
+        })),
+      })),
+    })),
+  });
+});
+
+describe('POST /api/setu/invite/accept', () => {
+  it('returns 404 when feature flag is off', async () => {
+    vi.resetModules();
+    vi.doMock('@/lib/flags', () => ({ flags: { setuAuth: false } }));
+    const { POST: flaggedPOST } = await import('../route');
+    const res = await flaggedPOST(makeRequest({ token: 'tok-abc123' }));
+    expect(res.status).toBe(404);
+  });
+
+  it('returns 401 when no session', async () => {
+    mockGetSession.mockResolvedValueOnce(null);
+    const res = await POST(makeRequest({ token: 'tok-abc123' }));
+    expect(res.status).toBe(401);
+    const body = await res.json();
+    expect(body.error).toBe('no-session');
+  });
+
+  it('returns 400 when token missing from body', async () => {
+    mockGetSession.mockResolvedValueOnce(validSession);
+    const res = await POST(makeRequest({}));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe('bad-request');
+  });
+
+  it('returns 404 when token not found', async () => {
+    mockGetSession.mockResolvedValueOnce(validSession);
+    mockRunTransaction.mockRejectedValueOnce(new Error('invite-not-found'));
+    const res = await POST(makeRequest({ token: 'missing-tok' }));
+    expect(res.status).toBe(404);
+    const body = await res.json();
+    expect(body.error).toBe('invite-not-found');
+  });
+
+  it('returns 410 when invite is expired', async () => {
+    mockGetSession.mockResolvedValueOnce(validSession);
+    mockRunTransaction.mockRejectedValueOnce(new Error('invite-expired'));
+    const res = await POST(makeRequest({ token: 'tok-expired' }));
+    expect(res.status).toBe(410);
+    const body = await res.json();
+    expect(body.error).toBe('expired');
+  });
+
+  it('returns 409 when invite already accepted', async () => {
+    mockGetSession.mockResolvedValueOnce(validSession);
+    mockRunTransaction.mockRejectedValueOnce(new Error('invite-already-accepted'));
+    const res = await POST(makeRequest({ token: 'tok-used' }));
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.error).toBe('already-accepted');
+  });
+
+  it('returns 403 when verified-contact email does not match invite email', async () => {
+    mockGetSession.mockResolvedValueOnce({
+      type: 'email' as const,
+      value: 'other@example.com',
+      uid: 'uid-other',
+    });
+    mockRunTransaction.mockRejectedValueOnce(new Error('email-mismatch'));
+    const res = await POST(makeRequest({ token: 'tok-abc123' }));
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.error).toBe('email-mismatch');
+  });
+
+  it('returns 409 when contactKey already belongs to a different family', async () => {
+    mockGetSession.mockResolvedValueOnce(validSession);
+    mockRunTransaction.mockRejectedValueOnce(new Error('contact-conflict'));
+    const res = await POST(makeRequest({ token: 'tok-abc123' }));
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.error).toBe('contact-already-registered');
+  });
+
+  it('happy path: creates member, updates family.managers, writes contactKey, marks acceptedAt', async () => {
+    mockGetSession.mockResolvedValueOnce(validSession);
+    mockRunTransaction.mockImplementationOnce(async (fn: (txn: unknown) => unknown) => {
+      const txn = { get: mockGet, set: mockSet, update: mockUpdate };
+      return fn(txn);
+    });
+    const res = await POST(makeRequest({ token: 'tok-abc123' }));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.mid).toBeDefined();
+    expect(body.fid).toBe('FAM001ABCD12');
+    expect(body.mid).toMatch(/^FAM001ABCD12-/);
+    // Verify FieldValue.arrayUnion was called (for managers update)
+    expect(FieldValue.arrayUnion).toHaveBeenCalled();
+    // Verify set was called (for member + contactKey + invite update)
+    expect(mockSet).toHaveBeenCalled();
+  });
+});

@@ -44,6 +44,9 @@ export const portalEnvSchema = z.object({
   NEXT_PUBLIC_FEATURE_CHECK_IN_NOTIFY: flagString,
   NEXT_PUBLIC_FEATURE_SETU_AUTH: flagString,
 
+  // Portal public URL (used for invite links, etc.)
+  NEXT_PUBLIC_PORTAL_BASE_URL: z.string().url().optional(),
+
   // Setu OTP
   SETU_OTP_TTL_MIN: z.coerce.number().int().min(5).max(30).default(10),
   SETU_OTP_RATE_LIMIT_PER_MIN: z.coerce.number().int().min(1).default(5),
