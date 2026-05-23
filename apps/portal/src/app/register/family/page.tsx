@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { Suspense, useState, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { toast, SetuLogo, SetuAvatar, SetuIcon, Rosette } from '@cmt/ui';
@@ -517,5 +517,11 @@ export default function RegisterFamilyPage() {
   if (!flags.setuAuth) {
     return <RegisterFamilyPrototype />;
   }
-  return <RegisterFamilyReal />;
+  // useSearchParams() inside RegisterFamilyReal requires a Suspense boundary
+  // for Next 16 static generation to bail cleanly.
+  return (
+    <Suspense fallback={null}>
+      <RegisterFamilyReal />
+    </Suspense>
+  );
 }

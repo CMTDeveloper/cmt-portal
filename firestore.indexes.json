@@ -23,14 +23,15 @@
         { "fieldPath": "searchKeys", "arrayConfig": "CONTAINS" },
         { "fieldPath": "location", "order": "ASCENDING" }
       ]
-    },
-    {
-      "collectionGroup": "invites",
-      "queryScope": "COLLECTION_GROUP",
-      "fields": [
-        { "fieldPath": "token", "order": "ASCENDING" }
-      ]
     }
   ],
-  "fieldOverrides": []
+  "fieldOverrides": [
+    {
+      "collectionGroup": "invites",
+      "fieldPath": "token",
+      "indexes": [
+        { "queryScope": "COLLECTION_GROUP", "order": "ASCENDING" }
+      ]
+    }
+  ]
 }
