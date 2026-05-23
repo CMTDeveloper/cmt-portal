@@ -187,7 +187,7 @@ describe('PATCH /api/setu/members/[mid]', () => {
       params: Promise.resolve(params),
     });
     expect(res.status).toBe(200);
-    expect(vi.mocked(revalidateTag)).toHaveBeenCalledWith('family-FAM001ABCD12');
+    expect(vi.mocked(revalidateTag)).toHaveBeenCalledWith('family-FAM001ABCD12', 'max');
   });
 
   it('calls assertNotLastManager when demoting manager flag', async () => {
@@ -283,7 +283,7 @@ describe('DELETE /api/setu/members/[mid]', () => {
 
     const res = await DELETE(makeRequest('DELETE', null, managerHeaders()), { params: Promise.resolve(params) });
     expect(res.status).toBe(200);
-    expect(vi.mocked(revalidateTag)).toHaveBeenCalledWith('family-FAM001ABCD12');
+    expect(vi.mocked(revalidateTag)).toHaveBeenCalledWith('family-FAM001ABCD12', 'max');
   });
 
   it('removes contactKey docs when member has email/phone', async () => {

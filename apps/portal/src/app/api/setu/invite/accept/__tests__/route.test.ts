@@ -235,7 +235,7 @@ describe('POST /api/setu/invite/accept', () => {
     expect(FieldValue.arrayUnion).toHaveBeenCalled();
     // Verify set was called (for member + contactKey + invite update)
     expect(mockSet).toHaveBeenCalled();
-    expect(vi.mocked(revalidateTag)).toHaveBeenCalledWith('family-FAM001ABCD12');
+    expect(vi.mocked(revalidateTag)).toHaveBeenCalledWith('family-FAM001ABCD12', 'max');
   });
 
   it('happy path: sets __session cookie with refreshed claims after invite accept', async () => {

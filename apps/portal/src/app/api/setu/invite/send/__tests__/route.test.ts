@@ -165,7 +165,7 @@ describe('POST /api/setu/invite/send', () => {
     const body = await res.json();
     expect(body.token).toBeDefined();
     expect(typeof body.token).toBe('string');
-    expect(vi.mocked(revalidateTag)).toHaveBeenCalledWith('family-FAM001ABCD12');
+    expect(vi.mocked(revalidateTag)).toHaveBeenCalledWith('family-FAM001ABCD12', 'max');
   });
 
   it('happy path: token is base64url (no +/= chars, 32+ chars)', async () => {

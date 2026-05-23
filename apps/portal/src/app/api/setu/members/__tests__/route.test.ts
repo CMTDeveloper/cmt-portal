@@ -121,7 +121,7 @@ describe('POST /api/setu/members', () => {
     const body = await res.json();
     expect(body.mid).toBeDefined();
     expect(body.mid).toMatch(/^FAM001ABCD12-/);
-    expect(vi.mocked(revalidateTag)).toHaveBeenCalledWith('family-FAM001ABCD12');
+    expect(vi.mocked(revalidateTag)).toHaveBeenCalledWith('family-FAM001ABCD12', 'max');
   });
 
   it('returns 404 when feature flag is off', async () => {
