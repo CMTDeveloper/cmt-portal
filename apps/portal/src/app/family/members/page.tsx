@@ -16,10 +16,15 @@ type DisplayMember = {
   email: string | null;
   phone: string | null;
   role: string | null;
+  isCurrent: boolean;
+  nameMissing: boolean;
 };
 
-function memberToDisplay(m: MemberDoc): DisplayMember {
-  const name = `${m.firstName} ${m.lastName}`;
+function memberToDisplay(m: MemberDoc, currentMid: string | null): DisplayMember {
+  const isCurrent = currentMid !== null && m.mid === currentMid;
+  const rawName = `${m.firstName ?? ''} ${m.lastName ?? ''}`.trim();
+  const nameMissing = rawName.length === 0;
+  const name = nameMissing ? (isCurrent ? 'Your profile' : 'Unnamed member') : rawName;
   const typeLabel = m.type === 'Child'
     ? `Child${m.schoolGrade ? ` · ${m.schoolGrade}` : ''}`
     : 'Adult';
@@ -32,6 +37,8 @@ function memberToDisplay(m: MemberDoc): DisplayMember {
     email: m.email,
     phone: m.phone,
     role: m.volunteeringSkills.length > 0 ? m.volunteeringSkills.join(', ') : null,
+    isCurrent,
+    nameMissing,
   };
 }
 
@@ -49,6 +56,8 @@ export default async function FamilyRosterPage() {
     email: m.email,
     phone: m.phone,
     role: m.role,
+    isCurrent: false,
+    nameMissing: false,
   }));
   let sidebarDisplayName: string | undefined;
   let sidebarSubtitle: string | undefined;
@@ -60,7 +69,7 @@ export default async function FamilyRosterPage() {
       familyFid = data.family.fid;
       familyLocation = data.family.location;
       familyJoinedYear = data.family.createdAt.getFullYear();
-      members = data.members.map(memberToDisplay);
+      members = data.members.map((m) => memberToDisplay(m, data.currentMid));
       const currentMember = data.members.find((m) => m.mid === data.currentMid);
       if (currentMember) {
         sidebarDisplayName = `${currentMember.firstName} ${currentMember.lastName}`;
@@ -96,14 +105,17 @@ export default async function FamilyRosterPage() {
 
               <div className="col" style={{ gap: 8 }}>
                 {members.map((m, i) => (
-                  <Link key={i} href={`/family/members/${m.mid}`} className="focus-ring" style={{ width: '100%', padding: 14, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radius)', display: 'flex', alignItems: 'center', gap: 12, textDecoration: 'none', color: 'inherit' }}>
-                    <SetuAvatar name={m.name} size={44}/>
+                  <Link key={i} href={m.nameMissing && m.isCurrent ? `/family/members/${m.mid}/edit` : `/family/members/${m.mid}`} className="focus-ring" style={{ width: '100%', padding: 14, background: 'var(--surface)', border: m.isCurrent ? '1px solid var(--accent)' : '1px solid var(--line)', borderRadius: 'var(--radius)', display: 'flex', alignItems: 'center', gap: 12, textDecoration: 'none', color: 'inherit' }}>
+                    <SetuAvatar name={m.nameMissing ? '?' : m.name} size={44}/>
                     <div style={{ flex: 1, textAlign: 'left' }}>
                       <div className="row" style={{ gap: 8 }}>
-                        <span style={{ fontWeight: 600, fontSize: 14 }}>{m.name}</span>
+                        <span style={{ fontWeight: 600, fontSize: 14, color: m.nameMissing ? 'var(--muted)' : 'inherit', fontStyle: m.nameMissing ? 'italic' : 'normal' }}>{m.name}</span>
+                        {m.isCurrent && <span style={{ fontSize: 10, padding: '1px 7px', background: 'var(--accentSoft)', color: 'var(--accentDeep)', borderRadius: 99, fontWeight: 600 }}>You</span>}
                         {m.tag && <span style={{ fontSize: 10, padding: '1px 7px', background: 'var(--accentSoft)', color: 'var(--accentDeep)', borderRadius: 99, fontWeight: 600 }}>{m.tag}</span>}
                       </div>
-                      <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{m.type}</div>
+                      <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
+                        {m.nameMissing && m.isCurrent ? 'Tap to add your name →' : m.type}
+                      </div>
                       {m.warn && <div style={{ marginTop: 6, fontSize: 11, color: 'var(--err)', display: 'flex', alignItems: 'center', gap: 4 }}><SetuIcon.warn/> {m.warn}</div>}
                     </div>
                     <SetuIcon.chevron color="var(--muted)"/>
@@ -133,18 +145,24 @@ export default async function FamilyRosterPage() {
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14 }}>
               {members.map((m, i) => (
-                <div key={i} className="card" style={{ padding: 20 }}>
+                <div key={i} className="card" style={{ padding: 20, borderColor: m.isCurrent ? 'var(--accent)' : undefined, borderWidth: m.isCurrent ? 2 : 1, borderStyle: 'solid' }}>
                   <div className="row" style={{ gap: 16, marginBottom: 14 }}>
-                    <SetuAvatar name={m.name} size={56}/>
+                    <SetuAvatar name={m.nameMissing ? '?' : m.name} size={56}/>
                     <div style={{ flex: 1 }}>
                       <div className="row" style={{ gap: 8 }}>
-                        <span style={{ fontSize: 18, fontFamily: 'var(--display)', fontWeight: 500 }}>{m.name}</span>
+                        <span style={{ fontSize: 18, fontFamily: 'var(--display)', fontWeight: 500, color: m.nameMissing ? 'var(--muted)' : 'inherit', fontStyle: m.nameMissing ? 'italic' : 'normal' }}>{m.name}</span>
+                        {m.isCurrent && <span style={{ fontSize: 10, padding: '2px 8px', background: 'var(--accentSoft)', color: 'var(--accentDeep)', borderRadius: 99, fontWeight: 600 }}>You</span>}
                         {m.tag && <span style={{ fontSize: 10, padding: '2px 8px', background: 'var(--accentSoft)', color: 'var(--accentDeep)', borderRadius: 99, fontWeight: 600 }}>{m.tag}</span>}
                       </div>
                       <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{m.type}</div>
                     </div>
                     <Link href={`/family/members/${m.mid}/edit`} className="btn btn--s" style={{ padding: '6px 10px', fontSize: 12 }}><SetuIcon.edit/> Edit</Link>
                   </div>
+                  {m.nameMissing && m.isCurrent && (
+                    <Link href={`/family/members/${m.mid}/edit`} style={{ display: 'block', padding: '10px 14px', background: 'var(--accentSoft)', border: '1px solid var(--accent)', borderRadius: 'var(--radiusSm)', textDecoration: 'none', color: 'var(--accentDeep)', marginBottom: 10, fontSize: 13, fontWeight: 600 }}>
+                      Add your name & details →
+                    </Link>
+                  )}
                   {m.warn && (
                     <div style={{ padding: '8px 12px', background: '#fff3ec', border: '1px solid var(--err)', borderRadius: 'var(--radiusSm)', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
                       <SetuIcon.warn color="var(--err)"/>
