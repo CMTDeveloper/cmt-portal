@@ -7,11 +7,16 @@ import { hashContactKey } from '@/features/setu/registration/hash-contact-key';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+// Emergency contact: only `relation` is required to be non-empty when the
+// object is present. Phone and email are independently optional (you may have
+// one, both, or neither — Bala Vihar families often have a relation name we
+// know without their digital contact info on file). The client should send
+// `null` when the user filled in nothing.
 const emergencyContactSchema = z
   .object({
-    relation: z.string(),
-    phone: z.string(),
-    email: z.string(),
+    relation: z.string().min(1),
+    phone: z.string().optional().default(''),
+    email: z.string().optional().default(''),
   })
   .nullable();
 

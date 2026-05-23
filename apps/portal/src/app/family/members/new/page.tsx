@@ -46,6 +46,17 @@ export default function AddMemberPage() {
     setSaving(true);
     setError(null);
 
+    // Build the emergency contact object only when at least one field is
+    // filled. If only relation is filled, phone/email become empty strings
+    // which the server accepts (schema treats them as optional).
+    const ec1Trim = {
+      relation: ec1Relation.trim(),
+      phone: ec1Phone.trim(),
+      email: ec1Email.trim(),
+    };
+    const ec1Empty = !ec1Trim.relation && !ec1Trim.phone && !ec1Trim.email;
+    const ec1 = ec1Empty ? null : ec1Trim;
+
     const body = {
       firstName,
       lastName,
@@ -59,10 +70,7 @@ export default function AddMemberPage() {
         : [],
       email: email || null,
       phone: phone || null,
-      emergencyContacts: [
-        ec1Relation ? { relation: ec1Relation, phone: ec1Phone, email: ec1Email } : null,
-        null,
-      ],
+      emergencyContacts: [ec1, null],
     };
 
     const res = await fetch('/api/setu/members', {
@@ -77,9 +85,20 @@ export default function AddMemberPage() {
     }
 
     const json = await res.json().catch(() => ({}));
-    const msg = (json as { error?: string }).error ?? 'Failed to add member';
-    setError(msg);
+    const code = (json as { error?: string }).error ?? 'unknown';
+    setError(friendlyError(code));
     setSaving(false);
+  }
+
+  function friendlyError(code: string): string {
+    const map: Record<string, string> = {
+      'bad-request': 'Please check the highlighted fields and try again.',
+      'no-session': 'Your session expired. Please sign in again.',
+      'manager-required': 'Only family managers can add members.',
+      'contact-already-registered': 'This email or phone is already linked to another family. Use a different one.',
+      'family-not-found': 'We couldn\'t find your family record. Try signing in again.',
+    };
+    return map[code] ?? 'Couldn\'t add the member. Please try again.';
   }
 
   const formBody = (
@@ -167,19 +186,22 @@ export default function AddMemberPage() {
         </>
       )}
 
-      <SectionLabel>Emergency contact 1 <span className="req">·</span></SectionLabel>
+      <SectionLabel>Emergency contact (optional)</SectionLabel>
+      <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: -6, marginBottom: 8 }}>
+        Someone we can reach if we can&apos;t reach the member directly. Skip this section if you don&apos;t want to add one.
+      </p>
       <div style={{ padding: 14, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radius)' }}>
         <div className="field" style={{ marginBottom: 10 }}>
           <label>Relation</label>
-          <input className="input" value={ec1Relation} onChange={(e) => setEc1Relation(e.target.value)} placeholder="e.g. Mother"/>
+          <input className="input" value={ec1Relation} onChange={(e) => setEc1Relation(e.target.value)} placeholder="e.g. Mother, Spouse, Neighbour"/>
         </div>
         <div className="field" style={{ marginBottom: 10 }}>
-          <label>Phone</label>
-          <input className="input" type="tel" value={ec1Phone} onChange={(e) => setEc1Phone(e.target.value)}/>
+          <label>Their phone</label>
+          <input className="input" type="tel" value={ec1Phone} onChange={(e) => setEc1Phone(e.target.value)} placeholder="(416) 555-0000"/>
         </div>
         <div className="field">
-          <label>Email</label>
-          <input className="input" type="email" value={ec1Email} onChange={(e) => setEc1Email(e.target.value)}/>
+          <label>Their email</label>
+          <input className="input" type="email" value={ec1Email} onChange={(e) => setEc1Email(e.target.value)} placeholder="contact@example.com"/>
         </div>
       </div>
     </>

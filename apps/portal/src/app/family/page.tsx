@@ -13,6 +13,7 @@ export default async function FamilyDashboardPage() {
   let displayMembers: { name: string }[] = mockFamily.members.map((m) => ({ name: m.name }));
   let sidebarDisplayName: string | undefined;
   let sidebarSubtitle: string | undefined;
+  let currentMid: string | null = null;
 
   if (flags.setuAuth) {
     const data = await getCurrentFamily();
@@ -22,6 +23,7 @@ export default async function FamilyDashboardPage() {
         managerName = `${currentMember.firstName} ${currentMember.lastName}`;
         sidebarDisplayName = managerName;
       }
+      currentMid = data.currentMid;
       familyName = data.family.name;
       memberCount = data.members.length;
       displayMembers = data.members.map((m) => ({ name: `${m.firstName} ${m.lastName}` }));
@@ -29,7 +31,12 @@ export default async function FamilyDashboardPage() {
     }
   }
 
-  const firstName = managerName.split(' ')[0];
+  // Handle the lazy-migrated placeholder manager whose firstName is still
+  // empty: show a neutral greeting and surface a Complete-your-profile CTA
+  // (rendered below) so the user knows what to do next.
+  const trimmedFirst = (managerName.split(' ')[0] ?? '').trim();
+  const firstName = trimmedFirst || null;
+  const needsProfile = !trimmedFirst;
   // Date rendered in America/Toronto so the dashboard greeting matches what
   // a sevak in the lobby sees on their clock (per CLAUDE.md B2 note 4).
   const todayLabel = new Date().toLocaleDateString('en-CA', {
@@ -55,9 +62,15 @@ export default async function FamilyDashboardPage() {
             <div style={{ marginBottom: 22 }}>
               <p style={{ fontSize: 12, color: 'var(--muted)', letterSpacing: '.02em' }}>{todayLabel}</p>
               <h1 style={{ fontSize: 28, lineHeight: 1.15, fontWeight: 600, marginTop: 4, letterSpacing: '-0.02em' }}>
-                Namaste, {firstName}.
+                {firstName ? `Namaste, ${firstName}.` : 'Namaste!'}
               </h1>
             </div>
+            {needsProfile && currentMid && (
+              <Link href={`/family/members/${currentMid}/edit`} style={{ display: 'block', padding: '14px 16px', background: 'var(--accentSoft)', border: '1px solid var(--accent)', borderRadius: 'var(--radius)', textDecoration: 'none', color: 'var(--accentDeep)', marginBottom: 18 }}>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>Complete your profile →</div>
+                <div style={{ fontSize: 12, marginTop: 2 }}>We don&apos;t have your name on file yet. Add it so sevaks know who to greet on Sunday.</div>
+              </Link>
+            )}
 
             <div className="card" style={{ padding: 16, marginBottom: 12 }}>
               <div className="between" style={{ marginBottom: 14 }}>
@@ -160,13 +173,20 @@ export default async function FamilyDashboardPage() {
             <header className="between" style={{ marginBottom: 28 }}>
               <div>
                 <p style={{ fontSize: 12, color: 'var(--muted)' }}>{todayLabel}</p>
-                <h1 style={{ fontSize: 32, fontWeight: 600, marginTop: 4, letterSpacing: '-0.02em' }}>Namaste, {firstName}.</h1>
+                <h1 style={{ fontSize: 32, fontWeight: 600, marginTop: 4, letterSpacing: '-0.02em' }}>{firstName ? `Namaste, ${firstName}.` : 'Namaste!'}</h1>
               </div>
               <div className="row" style={{ gap: 10 }}>
                 <button className="btn btn--s" disabled style={{ cursor: 'not-allowed', opacity: 0.5 }}><SetuIcon.search/> Search</button>
                 <Link href="/family/donate" className="btn btn--p">Give donation</Link>
               </div>
             </header>
+
+            {needsProfile && currentMid && (
+              <Link href={`/family/members/${currentMid}/edit`} style={{ display: 'block', padding: '16px 20px', background: 'var(--accentSoft)', border: '1px solid var(--accent)', borderRadius: 'var(--radius)', textDecoration: 'none', color: 'var(--accentDeep)', marginBottom: 24 }}>
+                <div style={{ fontSize: 14, fontWeight: 600 }}>Complete your profile →</div>
+                <div style={{ fontSize: 13, marginTop: 2 }}>We don&apos;t have your name on file yet. Add it so sevaks know who to greet on Sunday.</div>
+              </Link>
+            )}
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 18 }}>
               <MetricCard label="Attendance" value="92%" sub="14 / 15 classes" tone="ok"/>

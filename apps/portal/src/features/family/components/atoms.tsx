@@ -249,7 +249,12 @@ const WELCOME_NAV_ITEMS: [SidebarTab, string, keyof typeof SetuIcon, string, boo
 
 export function DesktopSidebar({ active, role = 'family', displayName, subtitle, showSignOut }: DesktopSidebarProps) {
   const navItems = role === 'welcome-team' ? WELCOME_NAV_ITEMS : FAMILY_NAV_ITEMS;
-  const name = displayName ?? 'Family member';
+  // displayName can be passed in as " " (just a space) by callers that join an
+  // empty firstName + empty lastName from a lazy-migrated placeholder member.
+  // Trim and fall back to a neutral label so the sidebar never shows a blank
+  // avatar with a stray member id underneath.
+  const trimmed = (displayName ?? '').trim();
+  const name = trimmed || (role === 'welcome-team' ? 'Welcome team' : 'Family manager');
 
   return (
     <aside style={{ width: 248, background: 'var(--surface)', borderRight: '1px solid var(--line)', padding: '22px 18px', display: 'flex', flexDirection: 'column' }}>
