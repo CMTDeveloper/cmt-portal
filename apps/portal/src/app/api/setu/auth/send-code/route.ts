@@ -1,4 +1,4 @@
-import { randomInt } from 'node:crypto';
+import { createHash, randomInt } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { flags } from '@/lib/flags';
@@ -35,14 +35,21 @@ export async function POST(req: Request) {
 
   const { type, value } = parsed.data;
   const normalized = normalizeContact(type, value);
+  const hashPrefix = createHash('sha256').update(normalized).digest('hex').slice(0, 8);
+
   const rate = await checkAndRecordOtpRateLimit(normalized);
   if (!rate.allowed) {
+    console.log(`[send-code] hash=${hashPrefix} type=${type} → rate-limited`);
     return NextResponse.json({ error: 'rate-limited', resetAt: rate.resetAt }, { status: 429 });
   }
 
   // Look up Setu family first; fall back to legacy roster.
   // Always return 200 regardless — no contact enumeration.
   const result = await findSetuFamilyByContact(type, value);
+  console.log(
+    `[send-code] hash=${hashPrefix} type=${type} source=${result.source ?? 'null'} fid=${result.fid ?? result.legacyFid ?? '-'}`,
+  );
+
   if (result.source === null) {
     return NextResponse.json({ success: true }, { status: 200 });
   }
@@ -63,5 +70,6 @@ export async function POST(req: Request) {
     });
   }
 
+  console.log(`[send-code] hash=${hashPrefix} → sent (source=${result.source})`);
   return NextResponse.json({ success: true }, { status: 200 });
 }
