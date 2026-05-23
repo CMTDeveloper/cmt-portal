@@ -254,7 +254,7 @@ export function DesktopSidebar({ active, role = 'family', displayName, subtitle,
   // Trim and fall back to a neutral label so the sidebar never shows a blank
   // avatar with a stray member id underneath.
   const trimmed = (displayName ?? '').trim();
-  const name = trimmed || (role === 'welcome-team' ? 'Welcome team' : 'Family manager');
+  const name = trimmed || (role === 'welcome-team' ? 'Welcome team' : 'Family member');
 
   return (
     <aside style={{ width: 248, background: 'var(--surface)', borderRight: '1px solid var(--line)', padding: '22px 18px', display: 'flex', flexDirection: 'column' }}>
