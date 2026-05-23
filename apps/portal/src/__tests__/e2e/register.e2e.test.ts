@@ -7,7 +7,7 @@
  * Cleanup: all test docs carry `_test: true`. afterAll runs cleanupTestData().
  */
 
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { describe, it, expect, afterAll, vi } from 'vitest';
 
 // ── Guard: skip if UAT creds are missing ────────────────────────────────────
 const hasUatCreds =

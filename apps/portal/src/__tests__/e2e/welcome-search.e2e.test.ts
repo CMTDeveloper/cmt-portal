@@ -37,14 +37,16 @@ describe.skipIf(!hasUatCreds)(
     const RUN_ID = (Date.now().toString(36) + Math.random().toString(36).slice(2, 6)).toUpperCase();
     // Both families share this unique prefix so the search query only hits test data
     const SEARCH_PREFIX = `e2esrch${RUN_ID.toLowerCase()}`;
+    // Use timestamp digits directly so phones are numeric and unique per run
+    const TS = Date.now().toString();
 
     const FAMILY_A_NAME = `${SEARCH_PREFIX} alpha family`;
     const FAMILY_A_EMAIL = `${SEARCH_PREFIX}.alpha@test.cmt.invalid`;
-    const FAMILY_A_PHONE = `416${RUN_ID.slice(0, 7).replace(/[^0-9]/g, '5')}`;
+    const FAMILY_A_PHONE = `416${TS.slice(-7)}`;
 
     const FAMILY_B_NAME = `${SEARCH_PREFIX} beta family`;
     const FAMILY_B_EMAIL = `${SEARCH_PREFIX}.beta@test.cmt.invalid`;
-    const FAMILY_B_PHONE = `647${RUN_ID.slice(0, 7).replace(/[^0-9]/g, '6')}`;
+    const FAMILY_B_PHONE = `647${TS.slice(-7)}`;
 
     let fidA: string;
     let fidB: string;

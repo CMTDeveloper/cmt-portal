@@ -9,12 +9,6 @@
 
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 
-const hasUatCreds =
-  !!process.env['PORTAL_FIREBASE_PROJECT_ID'] &&
-  !!process.env['PORTAL_FIREBASE_CLIENT_EMAIL'] &&
-  !!process.env['PORTAL_FIREBASE_PRIVATE_KEY'] &&
-  !!process.env['NEXT_PUBLIC_PORTAL_FIREBASE_API_KEY'];
-
 // No real SES traffic
 vi.mock('@/lib/aws/resolve-sender', () => ({
   resolveSender: () => ({
