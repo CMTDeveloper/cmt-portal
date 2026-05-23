@@ -226,9 +226,10 @@ type SidebarTab = 'home' | 'family' | 'bv' | 'giving' | 'receipts';
 
 interface DesktopSidebarProps {
   active: SidebarTab;
+  role?: 'family' | 'welcome-team';
 }
 
-const NAV_ITEMS: [SidebarTab, string, keyof typeof SetuIcon, string][] = [
+const FAMILY_NAV_ITEMS: [SidebarTab, string, keyof typeof SetuIcon, string][] = [
   ['home',     'Home',       'home',    '/family'],
   ['family',   'My family',  'people',  '/family/members'],
   ['bv',       'Bala Vihar', 'calendar','/family/enroll'],
@@ -236,15 +237,32 @@ const NAV_ITEMS: [SidebarTab, string, keyof typeof SetuIcon, string][] = [
   ['receipts', 'Receipts',   'receipt', '/family/donations'],
 ];
 
-export function DesktopSidebar({ active }: DesktopSidebarProps) {
+const WELCOME_NAV_ITEMS: [SidebarTab, string, keyof typeof SetuIcon, string, boolean?][] = [
+  ['home', 'Search',           'search',  '/welcome'],
+  ['family', 'Pending',        'people',  '/welcome', true],
+  ['bv',     'Donation periods','calendar','/welcome', true],
+];
+
+export function DesktopSidebar({ active, role = 'family' }: DesktopSidebarProps) {
+  const navItems = role === 'welcome-team' ? WELCOME_NAV_ITEMS : FAMILY_NAV_ITEMS;
+
   return (
     <aside style={{ width: 248, background: 'var(--surface)', borderRight: '1px solid var(--line)', padding: '22px 18px', display: 'flex', flexDirection: 'column' }}>
       <div style={{ marginBottom: 28 }}><SetuLogo size={20}/></div>
       <nav style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 14 }}>
-        {NAV_ITEMS.map(([id, label, iconKey, href]) => {
+        {navItems.map(([id, label, iconKey, href, disabled]) => {
           const Icon = SetuIcon[iconKey];
-          const a = id === active;
-          return (
+          const a = id === active && !disabled;
+          return disabled ? (
+            <div key={id} style={{
+              display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px',
+              borderRadius: 'var(--radiusSm)',
+              color: 'var(--muted)', fontWeight: 500, opacity: 0.5, cursor: 'not-allowed',
+            }}>
+              <Icon/> {label}
+              <span style={{ marginLeft: 'auto', fontSize: 10, letterSpacing: '.06em', textTransform: 'uppercase' }}>Soon</span>
+            </div>
+          ) : (
             <Link key={id} href={href} style={{
               display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px',
               borderRadius: 'var(--radiusSm)',
