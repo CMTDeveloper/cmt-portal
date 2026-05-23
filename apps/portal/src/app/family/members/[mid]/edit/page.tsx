@@ -177,9 +177,15 @@ export default function EditMemberPage() {
     }
   }
 
-  // Member not found in family — render nothing (notFound() not available in client components)
+  // Member not found in family — show explicit message (notFound() not available in client components)
   if (!loading && (!data || !data.members.find((m) => m.mid === mid))) {
-    return null;
+    return (
+      <div style={{ padding: 32 }}>
+        <h2>Member not found</h2>
+        <p>This member may have been removed.</p>
+        <Link href="/family/members">← Back to members</Link>
+      </div>
+    );
   }
 
   const formBody = loading ? (
@@ -359,7 +365,12 @@ export default function EditMemberPage() {
       {/* Desktop */}
       <div className="hidden md:flex" style={{ minHeight: '100dvh' }}>
         <CspRoot style={{ display: 'flex', width: '100%', minHeight: '100dvh' }}>
-          <DesktopSidebar active="family"/>
+          <DesktopSidebar
+            active="family"
+            displayName={data ? (() => { const m = data.members.find((m) => m.mid === data.currentMid); return m ? `${m.firstName} ${m.lastName}` : undefined; })() : undefined}
+            subtitle={data ? `${data.family.name}${data.family.legacyFid ? ` · FID ${data.family.fid} · Legacy ${data.family.legacyFid}` : ` · FID ${data.family.fid}`}` : undefined}
+            showSignOut
+          />
           <main style={{ flex: 1, padding: '32px 48px', overflow: 'auto' }}>
             <header style={{ marginBottom: 28 }}>
               <Link href={`/family/members/${mid}`} className="focus-ring" style={{ background: 'transparent', border: 0, color: 'var(--body-text)', fontSize: 13, padding: 0, marginBottom: 10, display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none' }}>

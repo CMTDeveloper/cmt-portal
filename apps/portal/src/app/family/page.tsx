@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { SetuLogo, SetuAvatar, SetuIcon } from '@cmt/ui';
 import { CspRoot, Stat, MetricCard, DesktopSidebar } from '@/features/family/components/atoms';
+import { SignOutButton } from '@/features/family/components/sign-out-button';
 import { flags } from '@/lib/flags';
 import { mockFamily } from '@/features/family/data/mock';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
@@ -10,6 +11,8 @@ export default async function FamilyDashboardPage() {
   let familyName = mockFamily.name;
   let memberCount = mockFamily.members.length;
   let displayMembers: { name: string }[] = mockFamily.members.map((m) => ({ name: m.name }));
+  let sidebarDisplayName: string | undefined;
+  let sidebarSubtitle: string | undefined;
 
   if (flags.setuAuth) {
     const data = await getCurrentFamily();
@@ -17,10 +20,12 @@ export default async function FamilyDashboardPage() {
       const currentMember = data.members.find((m) => m.mid === data.currentMid);
       if (currentMember) {
         managerName = `${currentMember.firstName} ${currentMember.lastName}`;
+        sidebarDisplayName = managerName;
       }
       familyName = data.family.name;
       memberCount = data.members.length;
       displayMembers = data.members.map((m) => ({ name: `${m.firstName} ${m.lastName}` }));
+      sidebarSubtitle = `${data.family.name}${data.family.legacyFid ? ` · FID ${data.family.fid} · Legacy ${data.family.legacyFid}` : ` · FID ${data.family.fid}`}`;
     }
   }
 
@@ -57,7 +62,10 @@ export default async function FamilyDashboardPage() {
             <div className="card" style={{ padding: 16, marginBottom: 12 }}>
               <div className="between" style={{ marginBottom: 14 }}>
                 <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink)' }}><em className="sa">Bala Vihar</em></span>
-                <span className="pill" style={{ background: 'var(--accentSoft)', color: 'var(--accentDeep)' }}>Enrolled</span>
+                <div className="row" style={{ gap: 6 }}>
+                  <span className="pill" style={{ background: 'var(--surface2)', color: 'var(--muted)', fontSize: 10 }}>Sample data — real data coming soon</span>
+                  <span className="pill" style={{ background: 'var(--accentSoft)', color: 'var(--accentDeep)' }}>Enrolled</span>
+                </div>
               </div>
               <div className="row" style={{ gap: 14, marginBottom: 14 }}>
                 <Stat label="Next" value="Sun 10:00"/>
@@ -66,7 +74,7 @@ export default async function FamilyDashboardPage() {
                 <div style={{ width: 1, height: 36, background: 'var(--line)' }}/>
                 <Stat label="Kids" value="2"/>
               </div>
-              <button className="btn btn--s btn--block">Open class</button>
+              <button className="btn btn--s btn--block" disabled style={{ cursor: 'not-allowed', opacity: 0.5 }}>Open class</button>
             </div>
 
             <div className="card" style={{ padding: 16, marginBottom: 12 }}>
@@ -85,8 +93,11 @@ export default async function FamilyDashboardPage() {
 
             <div className="card" style={{ padding: 16, marginBottom: 12 }}>
               <div className="between" style={{ marginBottom: 12 }}>
-                <span style={{ fontSize: 12, fontWeight: 600 }}>Upcoming</span>
-                <button className="focus-ring" style={{ background: 'transparent', border: 0, color: 'var(--accent)', fontSize: 12, fontWeight: 600 }}>View all</button>
+                <div className="row" style={{ gap: 8 }}>
+                  <span style={{ fontSize: 12, fontWeight: 600 }}>Upcoming</span>
+                  <span className="pill" style={{ background: 'var(--surface2)', color: 'var(--muted)', fontSize: 10 }}>Sample data — real data coming soon</span>
+                </div>
+                <button className="focus-ring" disabled style={{ background: 'transparent', border: 0, color: 'var(--accent)', fontSize: 12, fontWeight: 600, cursor: 'not-allowed', opacity: 0.5 }}>View all</button>
               </div>
               <div className="col" style={{ gap: 10 }}>
                 {[
@@ -136,9 +147,7 @@ export default async function FamilyDashboardPage() {
             <Link href="/family/donate" style={{ background: 'transparent', border: 0, color: 'var(--muted)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 600, textDecoration: 'none' }}>
               <SetuIcon.heart/> Giving
             </Link>
-            <button style={{ background: 'transparent', border: 0, color: 'var(--muted)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 600 }}>
-              <SetuIcon.user/> Me
-            </button>
+            <SignOutButton style={{ background: 'transparent', border: 0, color: 'var(--muted)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 600 }}/>
           </div>
         </CspRoot>
       </div>
@@ -146,7 +155,7 @@ export default async function FamilyDashboardPage() {
       {/* Desktop */}
       <div className="hidden md:flex" style={{ minHeight: '100dvh' }}>
         <CspRoot style={{ display: 'flex', width: '100%', minHeight: '100dvh' }}>
-          <DesktopSidebar active="home"/>
+          <DesktopSidebar active="home" displayName={sidebarDisplayName} subtitle={sidebarSubtitle} showSignOut/>
           <main style={{ flex: 1, padding: '32px 40px', overflow: 'auto' }}>
             <header className="between" style={{ marginBottom: 28 }}>
               <div>
@@ -154,7 +163,7 @@ export default async function FamilyDashboardPage() {
                 <h1 style={{ fontSize: 32, fontWeight: 600, marginTop: 4, letterSpacing: '-0.02em' }}>Namaste, {firstName}.</h1>
               </div>
               <div className="row" style={{ gap: 10 }}>
-                <button className="btn btn--s"><SetuIcon.search/> Search</button>
+                <button className="btn btn--s" disabled style={{ cursor: 'not-allowed', opacity: 0.5 }}><SetuIcon.search/> Search</button>
                 <Link href="/family/donate" className="btn btn--p">Give donation</Link>
               </div>
             </header>
@@ -170,7 +179,10 @@ export default async function FamilyDashboardPage() {
               <div className="card" style={{ padding: 24 }}>
                 <div className="between" style={{ marginBottom: 18 }}>
                   <h3 style={{ fontSize: 14, fontWeight: 600 }}><em className="sa">Bala Vihar</em> · Fall 2026</h3>
-                  <span className="pill" style={{ background: 'var(--accentSoft)', color: 'var(--accentDeep)' }}>Enrolled</span>
+                  <div className="row" style={{ gap: 6 }}>
+                    <span className="pill" style={{ background: 'var(--surface2)', color: 'var(--muted)', fontSize: 10 }}>Sample data — real data coming soon</span>
+                    <span className="pill" style={{ background: 'var(--accentSoft)', color: 'var(--accentDeep)' }}>Enrolled</span>
+                  </div>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(16, 1fr)', gap: 4, marginBottom: 18 }}>
                   {Array.from({ length: 16 }).map((_, i) => {
@@ -192,7 +204,10 @@ export default async function FamilyDashboardPage() {
               <div className="card" style={{ padding: 24 }}>
                 <div className="between" style={{ marginBottom: 14 }}>
                   <span style={{ fontSize: 14, fontWeight: 600 }}>Donation</span>
-                  <SetuIcon.info color="var(--muted)"/>
+                  <div className="row" style={{ gap: 6 }}>
+                    <span className="pill" style={{ background: 'var(--surface2)', color: 'var(--muted)', fontSize: 10 }}>Sample data — real data coming soon</span>
+                    <SetuIcon.info color="var(--muted)"/>
+                  </div>
                 </div>
                 <div style={{ marginBottom: 14 }}>
                   <span style={{ fontSize: 36, fontWeight: 600, letterSpacing: '-0.02em' }}>$500</span>

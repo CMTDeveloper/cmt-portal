@@ -2,8 +2,23 @@ import Link from 'next/link';
 import { SetuAvatar, SetuIcon, Rosette } from '@cmt/ui';
 import { CspRoot, SectionLabel, DesktopSidebar } from '@/features/family/components/atoms';
 import { mockEnrollment } from '@/features/family/data/mock';
+import { flags } from '@/lib/flags';
+import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 
-export default function EnrollPage() {
+export default async function EnrollPage() {
+  let sidebarDisplayName: string | undefined;
+  let sidebarSubtitle: string | undefined;
+
+  if (flags.setuAuth) {
+    const data = await getCurrentFamily();
+    if (data) {
+      const currentMember = data.members.find((m) => m.mid === data.currentMid);
+      if (currentMember) {
+        sidebarDisplayName = `${currentMember.firstName} ${currentMember.lastName}`;
+      }
+      sidebarSubtitle = `${data.family.name}${data.family.legacyFid ? ` · FID ${data.family.fid} · Legacy ${data.family.legacyFid}` : ` · FID ${data.family.fid}`}`;
+    }
+  }
   return (
     <>
       {/* Mobile */}
@@ -18,6 +33,9 @@ export default function EnrollPage() {
               <span style={{ width: 32 }}/>
             </div>
             <div style={{ flex: 1, overflowY: 'auto', padding: '20px 18px 100px' }}>
+              <div style={{ padding: '14px 18px', background: 'var(--accentSoft)', color: 'var(--accentDeep)', border: '1px solid var(--accent)', borderRadius: 'var(--radius)', marginBottom: 20, fontSize: 14, fontWeight: 600 }}>
+                Coming soon — online enrollment isn&apos;t live yet. Your family will be auto-enrolled as donation periods open.
+              </div>
               <div style={{ padding: '18px', background: 'var(--accent)', color: '#fff', borderRadius: 'var(--radius)', marginBottom: 16, position: 'relative', overflow: 'hidden' }}>
                 <div style={{ position: 'absolute', right: -20, top: -20, opacity: .2 }}>
                   <Rosette size={120} color="#fff" stroke={.8}/>
@@ -73,7 +91,7 @@ export default function EnrollPage() {
               </div>
             </div>
             <div style={{ position: 'sticky', bottom: 0, left: 0, right: 0, padding: '14px 18px', background: 'var(--surface)', borderTop: '1px solid var(--line)' }}>
-              <Link href="/family/donate" className="btn btn--p btn--block" style={{ display: 'flex' }}>Enroll & continue to donation →</Link>
+              <button className="btn btn--p btn--block" disabled style={{ cursor: 'not-allowed', opacity: 0.6 }}>Enroll &amp; continue to donation →</button>
             </div>
           </div>
         </CspRoot>
@@ -82,7 +100,7 @@ export default function EnrollPage() {
       {/* Desktop */}
       <div className="hidden md:flex" style={{ minHeight: '100dvh' }}>
         <CspRoot style={{ display: 'flex', width: '100%', minHeight: '100dvh' }}>
-          <DesktopSidebar active="bv"/>
+          <DesktopSidebar active="bv" displayName={sidebarDisplayName} subtitle={sidebarSubtitle} showSignOut/>
           <main style={{ flex: 1, padding: '28px 48px', overflow: 'auto' }}>
             <header style={{ marginBottom: 26 }}>
               <Link href="/family" className="focus-ring" style={{ background: 'transparent', border: 0, color: 'var(--body-text)', fontSize: 13, padding: 0, marginBottom: 8, display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none' }}>
@@ -98,6 +116,10 @@ export default function EnrollPage() {
                 <span className="pill" style={{ background: 'var(--accentSoft)', color: 'var(--accentDeep)', padding: '6px 12px', fontSize: 12 }}>Brampton hall</span>
               </div>
             </header>
+
+            <div style={{ padding: '14px 18px', background: 'var(--accentSoft)', color: 'var(--accentDeep)', border: '1px solid var(--accent)', borderRadius: 'var(--radius)', marginBottom: 20, fontSize: 14, fontWeight: 600 }}>
+              Coming soon — online enrollment isn&apos;t live yet. Your family will be auto-enrolled as donation periods open.
+            </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: 22 }}>
               <div>
@@ -158,9 +180,9 @@ export default function EnrollPage() {
                   <p style={{ fontSize: 13, color: 'var(--body-text)', lineHeight: 1.55, marginBottom: 18 }}>
                     This is a suggested donation, not a fee. The program runs entirely on family donations. <em className="sa">Sevaks</em> teach without pay. Any amount is welcome; giving more keeps the lights on.
                   </p>
-                  <Link href="/family/donate" className="btn btn--p btn--block" style={{ display: 'flex' }}>Enroll & continue to donation →</Link>
+                  <button className="btn btn--p btn--block" disabled style={{ cursor: 'not-allowed', opacity: 0.6 }}>Enroll &amp; continue to donation →</button>
                   <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 10, textAlign: 'center' }}>
-                    Donations are tax-deductible · Charity reg. CA-XXX-XXXX
+                    Donations are tax-deductible · Chinmaya Mission Toronto
                   </p>
                 </div>
               </aside>

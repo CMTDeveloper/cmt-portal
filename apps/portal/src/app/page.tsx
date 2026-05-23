@@ -24,6 +24,7 @@ export default function HomePage() {
           <div style={{ flex: '0 0 auto' }}>
             <Link href="/sign-in" className="btn btn--p btn--block" style={{ marginBottom: 10 }}>Sign in or register →</Link>
             <a href="https://chinmayatoronto.org" className="btn btn--g btn--block" style={{ fontSize: 13 }}>Visit chinmayatoronto.org</a>
+            <p style={{ marginTop: 12, fontSize: 12, color: 'var(--muted)', textAlign: 'center' }}>Have an invite? Open the link from your email.</p>
           </div>
         </CspRoot>
       </div>
@@ -35,9 +36,9 @@ export default function HomePage() {
             <div className="between" style={{ marginBottom: 'auto' }}>
               <SetuLogo size={22}/>
               <div className="row" style={{ gap: 18, fontSize: 13, color: 'var(--body-text)' }}>
-                <a href="#" style={{ color: 'inherit' }}>About</a>
-                <a href="#" style={{ color: 'inherit' }}>Events ↗</a>
-                <a href="#" style={{ color: 'inherit' }}>Contact</a>
+                <span style={{ color: 'inherit' }}>About</span>
+                <a href="https://events.chinmayatoronto.org/" style={{ color: 'inherit' }}>Events ↗</a>
+                <a href="mailto:info@chinmayatoronto.org" style={{ color: 'inherit' }}>Contact</a>
               </div>
             </div>
             <div style={{ maxWidth: 520, paddingBottom: 80 }}>
@@ -50,13 +51,13 @@ export default function HomePage() {
               </p>
               <div className="row" style={{ marginTop: 32, gap: 12 }}>
                 <Link href="/sign-in" className="btn btn--p" style={{ padding: '14px 22px' }}>Sign in or register →</Link>
-                <button className="btn btn--g" style={{ fontSize: 14 }}>Invited by someone? Use your link</button>
               </div>
+              <p style={{ marginTop: 12, fontSize: 13, color: 'var(--muted)' }}>Have an invite link? Open it from your email.</p>
             </div>
             <div style={{ marginTop: 'auto', fontSize: 12, color: 'var(--muted)', display: 'flex', gap: 18 }}>
               <span>setu.chinmayatoronto.org</span>
               <span>·</span>
-              <span>Charity reg. CA-XXX-XXXX</span>
+              <span>Chinmaya Mission Toronto</span>
               <span style={{ marginLeft: 'auto' }}>© 2026 CMT</span>
             </div>
           </div>

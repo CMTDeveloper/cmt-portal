@@ -14,10 +14,25 @@ vi.mock('@/features/setu/auth/get-current-session-email', () => ({
 vi.mock('@/features/setu/registration/hash-contact-key', () => ({
   hashContactKey: vi.fn((type: string, value: string) => `hash:${type}:${value}`),
 }));
+vi.mock('@cmt/firebase-shared/admin/auth', () => ({
+  portalAuth: vi.fn(),
+}));
+vi.mock('@cmt/firebase-shared/admin/session', () => ({
+  createPortalSessionCookie: vi.fn(),
+  exchangeCustomTokenForIdToken: vi.fn(),
+}));
 
 import { POST } from '../route';
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
 import { getCurrentSessionContact } from '@/features/setu/auth/get-current-session-email';
+import { portalAuth } from '@cmt/firebase-shared/admin/auth';
+import {
+  createPortalSessionCookie,
+  exchangeCustomTokenForIdToken,
+} from '@cmt/firebase-shared/admin/session';
+
+const mockSetCustomUserClaims = vi.fn();
+const mockCreateCustomToken = vi.fn();
 
 const mockGetSession = vi.mocked(getCurrentSessionContact);
 const mockRunTransaction = vi.fn();
@@ -64,6 +79,15 @@ const validSession = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+
+  (portalAuth as ReturnType<typeof vi.fn>).mockReturnValue({
+    setCustomUserClaims: mockSetCustomUserClaims,
+    createCustomToken: mockCreateCustomToken,
+  });
+  mockSetCustomUserClaims.mockResolvedValue(undefined);
+  mockCreateCustomToken.mockResolvedValue('custom-token');
+  (exchangeCustomTokenForIdToken as ReturnType<typeof vi.fn>).mockResolvedValue('id-token');
+  (createPortalSessionCookie as ReturnType<typeof vi.fn>).mockResolvedValue('session-cookie');
 
   mockRunTransaction.mockImplementation(async (fn: (txn: unknown) => unknown) => {
     const txn = { get: mockGet, set: mockSet, update: mockUpdate };
@@ -204,9 +228,28 @@ describe('POST /api/setu/invite/accept', () => {
     expect(body.mid).toBeDefined();
     expect(body.fid).toBe('FAM001ABCD12');
     expect(body.mid).toMatch(/^FAM001ABCD12-/);
+    expect(body.redirectTo).toBe('/family');
     // Verify FieldValue.arrayUnion was called (for managers update)
     expect(FieldValue.arrayUnion).toHaveBeenCalled();
     // Verify set was called (for member + contactKey + invite update)
     expect(mockSet).toHaveBeenCalled();
+  });
+
+  it('happy path: sets __session cookie with refreshed claims after invite accept', async () => {
+    mockGetSession.mockResolvedValueOnce(validSession);
+    mockRunTransaction.mockImplementationOnce(async (fn: (txn: unknown) => unknown) => {
+      const txn = { get: mockGet, set: mockSet, update: mockUpdate };
+      return fn(txn);
+    });
+    const res = await POST(makeRequest({ token: 'tok-abc123' }));
+    expect(res.status).toBe(200);
+    const setCookie = res.headers.get('set-cookie');
+    expect(setCookie).toContain('__session');
+    expect(mockSetCustomUserClaims).toHaveBeenCalledWith(
+      validSession.uid,
+      expect.objectContaining({ role: 'family-manager', fid: 'FAM001ABCD12', email: validSession.value }),
+    );
+    expect(exchangeCustomTokenForIdToken).toHaveBeenCalledWith('custom-token');
+    expect(createPortalSessionCookie).toHaveBeenCalledWith('id-token', expect.any(Number));
   });
 });

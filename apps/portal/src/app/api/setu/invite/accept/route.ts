@@ -2,6 +2,11 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { flags } from '@/lib/flags';
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
+import { portalAuth } from '@cmt/firebase-shared/admin/auth';
+import {
+  createPortalSessionCookie,
+  exchangeCustomTokenForIdToken,
+} from '@cmt/firebase-shared/admin/session';
 import { getCurrentSessionContact } from '@/features/setu/auth/get-current-session-email';
 import { hashContactKey } from '@/features/setu/registration/hash-contact-key';
 
@@ -171,8 +176,29 @@ export async function POST(req: Request) {
     throw err;
   }
 
-  // NOTE: Session claims are now stale (invitee's cookie still shows old fid/mid).
-  // The page should redirect to /family; middleware will handle sign-in if cookie
-  // is invalid. A dedicated session-refresh endpoint is a follow-up for Slice 2e+.
-  return NextResponse.json({ mid: result.mid, fid: result.fid }, { status: 200 });
+  const { mid, fid } = result;
+  const auth = portalAuth();
+
+  const claims: Record<string, unknown> = {
+    role: 'family-manager',
+    fid,
+    mid,
+    ...(session.type === 'email' ? { email: session.value } : { phone: session.value }),
+  };
+  await auth.setCustomUserClaims(session.uid, claims);
+  const customToken = await auth.createCustomToken(session.uid, claims);
+  const idToken = await exchangeCustomTokenForIdToken(customToken);
+
+  const expiresInDays = Number(process.env.SESSION_COOKIE_EXPIRES_DAYS ?? '5');
+  const sessionCookie = await createPortalSessionCookie(idToken, expiresInDays);
+
+  const res = NextResponse.json({ mid, fid, redirectTo: '/family' }, { status: 200 });
+  res.cookies.set('__session', sessionCookie, {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'lax',
+    path: '/',
+    maxAge: expiresInDays * 24 * 60 * 60,
+  });
+  return res;
 }

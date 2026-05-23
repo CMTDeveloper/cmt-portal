@@ -50,6 +50,8 @@ export default async function FamilyRosterPage() {
     phone: m.phone,
     role: m.role,
   }));
+  let sidebarDisplayName: string | undefined;
+  let sidebarSubtitle: string | undefined;
 
   if (flags.setuAuth) {
     const data = await getCurrentFamily();
@@ -59,6 +61,11 @@ export default async function FamilyRosterPage() {
       familyLocation = data.family.location;
       familyJoinedYear = data.family.createdAt.getFullYear();
       members = data.members.map(memberToDisplay);
+      const currentMember = data.members.find((m) => m.mid === data.currentMid);
+      if (currentMember) {
+        sidebarDisplayName = `${currentMember.firstName} ${currentMember.lastName}`;
+      }
+      sidebarSubtitle = `${data.family.name}${data.family.legacyFid ? ` · FID ${data.family.fid} · Legacy ${data.family.legacyFid}` : ` · FID ${data.family.fid}`}`;
     }
   }
 
@@ -111,7 +118,7 @@ export default async function FamilyRosterPage() {
       {/* Desktop */}
       <div className="hidden md:flex" style={{ minHeight: '100dvh' }}>
         <CspRoot style={{ display: 'flex', width: '100%', minHeight: '100dvh' }}>
-          <DesktopSidebar active="family"/>
+          <DesktopSidebar active="family" displayName={sidebarDisplayName} subtitle={sidebarSubtitle} showSignOut/>
           <main style={{ flex: 1, padding: '32px 48px', overflow: 'auto' }}>
             <header className="between" style={{ marginBottom: 24 }}>
               <div>

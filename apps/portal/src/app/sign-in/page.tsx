@@ -11,6 +11,7 @@ type ContactType = 'email' | 'phone';
 type PageState = 'form' | 'code' | 'verifying';
 
 // ─── Flag-off fallback (visual-only prototype) ────────────────────────────────
+// @deprecated Never rendered in prod (flags.setuAuth is always true in production).
 
 function SignInPrototype() {
   const [state, setState] = useState<'form' | 'sent'>('form');
@@ -285,6 +286,7 @@ function SignInReal() {
               <div style={{ marginTop: 24, padding: 14, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radiusSm)', fontSize: 12, color: 'var(--body-text)', lineHeight: 1.5 }}>
                 <strong>New to Setu?</strong> Use the same form — if we don't find an account we'll walk you through registering your family.
               </div>
+              <Link href="/register" className="btn btn--g btn--block" style={{ marginTop: 10, fontSize: 13, display: 'flex' }}>Register your family →</Link>
             </>
           )}
           {(pageState === 'code' || pageState === 'verifying') && (
@@ -313,6 +315,10 @@ function SignInReal() {
               <button className="btn btn--g btn--block" onClick={() => { setPageState('form'); setOtp(''); }} disabled={isVerifying}>
                 Use a different address
               </button>
+              <p style={{ marginTop: 14, fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>
+                Didn&apos;t get a code? Make sure your email is registered or{' '}
+                <Link href="/register" style={{ color: 'var(--accent)', textDecoration: 'underline' }}>register a new family →</Link>
+              </p>
             </>
           )}
         </div>
@@ -374,6 +380,7 @@ function SignInReal() {
               <div style={{ marginTop: 28, padding: 16, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radiusSm)', fontSize: 13, color: 'var(--body-text)', lineHeight: 1.5 }}>
                 <strong>New to Setu?</strong> Use the same form — if we don't find an account we'll walk you through registering your family.
               </div>
+              <Link href="/register" className="btn btn--g btn--block" style={{ marginTop: 10, fontSize: 13, display: 'flex' }}>Register your family →</Link>
             </>
           )}
           {(pageState === 'code' || pageState === 'verifying') && (
@@ -402,6 +409,10 @@ function SignInReal() {
               <button className="btn btn--g btn--block" onClick={() => { setPageState('form'); setOtp(''); }} disabled={isVerifying}>
                 Use a different address
               </button>
+              <p style={{ marginTop: 16, fontSize: 13, color: 'var(--muted)', lineHeight: 1.5 }}>
+                Didn&apos;t get a code? Make sure your email is registered or{' '}
+                <Link href="/register" style={{ color: 'var(--accent)', textDecoration: 'underline' }}>register a new family →</Link>
+              </p>
             </>
           )}
         </div>

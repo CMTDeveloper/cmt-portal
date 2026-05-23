@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { toast, SetuLogo, SetuAvatar, SetuIcon, Rosette } from '@cmt/ui';
 import { CspRoot, StepHeader } from '@/features/family/components/atoms';
@@ -145,6 +146,27 @@ function RightPane() {
   );
 }
 
+// ─── Contact-verified banner (reads searchParams — must be inside Suspense) ───
+
+function ContactVerifiedBanner() {
+  const searchParams = useSearchParams();
+  if (searchParams.get('contact') !== 'verified') return null;
+  return (
+    <div style={{
+      padding: '12px 16px',
+      background: '#edfaf3',
+      color: '#1a6b3c',
+      border: '1px solid #6dd49a',
+      borderRadius: 'var(--radiusSm)',
+      marginBottom: 16,
+      fontSize: 13,
+      fontWeight: 600,
+    }}>
+      Your contact is verified. Complete your family details to finish.
+    </div>
+  );
+}
+
 // ─── Real register page ───────────────────────────────────────────────────────
 
 function RegisterReal() {
@@ -228,6 +250,7 @@ function RegisterReal() {
 
   const formContent = (
     <>
+      <Suspense fallback={null}><ContactVerifiedBanner/></Suspense>
       <StepHeader step={1} of={2} label="Your contact"/>
       <h1 style={{ fontSize: 26, fontWeight: 400, marginTop: 18, marginBottom: 8 }}>Let's find your family.</h1>
       <p style={{ fontSize: 14, color: 'var(--body-text)', marginBottom: 22, lineHeight: 1.5 }}>
@@ -292,7 +315,13 @@ function RegisterReal() {
           >
             Join the {match.name} family →
           </Link>
-          <button className="btn btn--g btn--block" style={{ fontSize: 13 }}>That's not me — contact admin</button>
+          <a
+            href="mailto:info@chinmayatoronto.org?subject=Setu%20account%20issue"
+            className="btn btn--g btn--block"
+            style={{ fontSize: 13, display: 'flex' }}
+          >
+            That&apos;s not me — contact admin
+          </a>
         </div>
       )}
 
@@ -336,6 +365,7 @@ function RegisterReal() {
             <Link href="/sign-in" className="focus-ring" style={{ background: 'transparent', border: 0, padding: 6, marginLeft: -6, marginBottom: 12, color: 'var(--body-text)', display: 'inline-flex' }}>
               <SetuIcon.back/>
             </Link>
+            <Suspense>{/* reads searchParams */}<ContactVerifiedBanner /></Suspense>
             {formContent}
           </div>
         </CspRoot>
@@ -352,6 +382,7 @@ function RegisterReal() {
               <SetuLogo size={22}/>
             </div>
             <div style={{ maxWidth: 480, width: '100%', alignSelf: 'center', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', paddingBottom: 60 }}>
+              <Suspense>{/* reads searchParams */}<ContactVerifiedBanner /></Suspense>
               {formContent}
             </div>
             <div style={{ fontSize: 12, color: 'var(--muted)', display: 'flex', gap: 18 }}>

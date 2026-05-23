@@ -112,8 +112,15 @@ export async function POST(req: Request) {
   await auth.setCustomUserClaims(uid, claims);
   const customToken = await auth.createCustomToken(uid, claims);
 
-  const urlMode = new URL(req.url).searchParams.get('mode');
+  const reqUrl = new URL(req.url);
+  const urlMode = reqUrl.searchParams.get('mode');
   const mode = urlMode === 'mobile' || parsed.data.mode === 'mobile' ? 'mobile' : 'web';
+
+  // Honor same-origin `from=` param (e.g. set by invite-accept redirect).
+  const fromParam = reqUrl.searchParams.get('from');
+  if (fromParam && fromParam.startsWith('/') && !fromParam.startsWith('//')) {
+    redirectTo = fromParam;
+  }
 
   if (mode === 'mobile') {
     return NextResponse.json({ customToken }, { status: 200 });

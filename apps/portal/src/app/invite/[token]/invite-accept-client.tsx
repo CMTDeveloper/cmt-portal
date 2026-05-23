@@ -17,6 +17,10 @@ export function InviteAcceptClient({ token, mobile }: Props) {
     try {
       const result = await acceptInviteClient(token);
       if (!result.ok) {
+        if (result.error === 'no-session') {
+          window.location.href = `/sign-in?from=/invite/${encodeURIComponent(token)}`;
+          return;
+        }
         toast.error(errorMessage(result.error));
         setAccepting(false);
         return;
@@ -30,7 +34,6 @@ export function InviteAcceptClient({ token, mobile }: Props) {
 
   function errorMessage(code: string): string {
     const map: Record<string, string> = {
-      'no-session': 'Please sign in first using the email this invite was sent to.',
       'email-mismatch': 'Sign in with the email address this invite was sent to.',
       'contact-already-registered': 'This email is already linked to another family. Contact the family manager.',
       expired: 'This invite has expired. Ask the family manager to send a new one.',

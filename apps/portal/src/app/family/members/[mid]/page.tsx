@@ -28,6 +28,10 @@ export default async function MemberDetailPage({ params }: Props) {
     const typeLabel = member.type === 'Child' ? `Child${member.schoolGrade ? ` · ${member.schoolGrade}` : ''}` : 'Adult';
     const canEdit = data.isManager || mid === data.currentMid;
 
+    const currentMember = data.members.find((m) => m.mid === data.currentMid);
+    const sidebarDisplayName = currentMember ? `${currentMember.firstName} ${currentMember.lastName}` : undefined;
+    const sidebarSubtitle = `${data.family.name}${data.family.legacyFid ? ` · FID ${data.family.fid} · Legacy ${data.family.legacyFid}` : ` · FID ${data.family.fid}`}`;
+
     return (
       <>
         {/* Mobile */}
@@ -78,10 +82,8 @@ export default async function MemberDetailPage({ params }: Props) {
                   </>
                 )}
 
-                {data.isManager && (
-                  <button className="focus-ring" style={{ width: '100%', marginTop: 22, background: 'transparent', border: '1px solid var(--err)', color: 'var(--err)', padding: '12px 16px', borderRadius: 'var(--radiusSm)', fontWeight: 600, fontSize: 13 }}>
-                    Remove from family
-                  </button>
+                {canEdit && (
+                  <Link href={`/family/members/${mid}/edit`} className="btn btn--s" style={{ marginTop: 22, display: 'inline-flex' }}>Manage member</Link>
                 )}
               </div>
             </div>
@@ -91,7 +93,7 @@ export default async function MemberDetailPage({ params }: Props) {
         {/* Desktop */}
         <div className="hidden md:flex" style={{ minHeight: '100dvh' }}>
           <CspRoot style={{ display: 'flex', width: '100%', minHeight: '100dvh' }}>
-            <DesktopSidebar active="family"/>
+            <DesktopSidebar active="family" displayName={sidebarDisplayName} subtitle={sidebarSubtitle} showSignOut/>
             <main style={{ flex: 1, padding: '32px 48px', overflow: 'auto' }}>
               <header style={{ marginBottom: 28 }}>
                 <Link href="/family/members" className="focus-ring" style={{ background: 'transparent', border: 0, color: 'var(--body-text)', fontSize: 13, padding: 0, marginBottom: 10, display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none' }}>
@@ -137,10 +139,8 @@ export default async function MemberDetailPage({ params }: Props) {
                   </>
                 )}
 
-                {data.isManager && (
-                  <button className="focus-ring" style={{ marginTop: 28, background: 'transparent', border: '1px solid var(--err)', color: 'var(--err)', padding: '12px 20px', borderRadius: 'var(--radiusSm)', fontWeight: 600, fontSize: 13 }}>
-                    Remove from family
-                  </button>
+                {canEdit && (
+                  <Link href={`/family/members/${mid}/edit`} className="btn btn--s" style={{ marginTop: 28, display: 'inline-flex' }}>Manage member</Link>
                 )}
               </div>
             </main>
@@ -196,9 +196,6 @@ export default async function MemberDetailPage({ params }: Props) {
                 ['Contact 2', 'Raj Patel (father) · (416) 555-2204'],
               ]}/>
 
-              <button className="focus-ring" style={{ width: '100%', marginTop: 22, background: 'transparent', border: '1px solid var(--err)', color: 'var(--err)', padding: '12px 16px', borderRadius: 'var(--radiusSm)', fontWeight: 600, fontSize: 13 }}>
-                Remove from family
-              </button>
             </div>
           </div>
         </CspRoot>
@@ -246,9 +243,6 @@ export default async function MemberDetailPage({ params }: Props) {
                 ['Contact 2', 'Raj Patel (father) · (416) 555-2204'],
               ]}/>
 
-              <button className="focus-ring" style={{ marginTop: 28, background: 'transparent', border: '1px solid var(--err)', color: 'var(--err)', padding: '12px 20px', borderRadius: 'var(--radiusSm)', fontWeight: 600, fontSize: 13 }}>
-                Remove from family
-              </button>
             </div>
           </main>
         </CspRoot>

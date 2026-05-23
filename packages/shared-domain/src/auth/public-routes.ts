@@ -21,6 +21,12 @@ export const PUBLIC_ROUTES = [
   '/api/setu/auth/verify-code',
   '/api/setu/auth/signout',
 
+  // Setu registration APIs (public — unauthenticated callers begin the
+  // sign-up flow here; these routes enforce their own rate limiting and
+  // input validation, so middleware must not 401 them before they're reached)
+  '/api/setu/family-lookup',
+  '/api/setu/register',
+
   // Kiosk (public) — feature-flagged in the app layer
   '/check-in',
   '/check-in/guest',

@@ -2,6 +2,8 @@ import Link from 'next/link';
 import { SetuIcon } from '@cmt/ui';
 import { CspRoot, SectionLabel, YearTile, DesktopSidebar } from '@/features/family/components/atoms';
 import { mockDonations } from '@/features/family/data/mock';
+import { flags } from '@/lib/flags';
+import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 
 const YEAR_TOTALS = [
   { year: '2026', total: 500, count: 1 },
@@ -17,7 +19,21 @@ const ALL_ROWS: [string, string, string, number][] = [
   ["14 Feb 2024", "Bala Vihar · Brampton Spring '24", "e-Transfer",   400],
 ];
 
-export default function DonationsPage() {
+export default async function DonationsPage() {
+  let sidebarDisplayName: string | undefined;
+  let sidebarSubtitle: string | undefined;
+
+  if (flags.setuAuth) {
+    const data = await getCurrentFamily();
+    if (data) {
+      const currentMember = data.members.find((m) => m.mid === data.currentMid);
+      if (currentMember) {
+        sidebarDisplayName = `${currentMember.firstName} ${currentMember.lastName}`;
+      }
+      sidebarSubtitle = `${data.family.name}${data.family.legacyFid ? ` · FID ${data.family.fid} · Legacy ${data.family.legacyFid}` : ` · FID ${data.family.fid}`}`;
+    }
+  }
+
   return (
     <>
       {/* Mobile */}
@@ -32,6 +48,9 @@ export default function DonationsPage() {
               <span style={{ width: 32 }}/>
             </div>
             <div style={{ flex: 1, overflowY: 'auto', padding: '18px 18px 30px' }}>
+              <div style={{ padding: '14px 18px', background: 'var(--accentSoft)', color: 'var(--accentDeep)', border: '1px solid var(--accent)', borderRadius: 'var(--radius)', marginBottom: 20, fontSize: 14, fontWeight: 600 }}>
+                Coming soon — online donations isn&apos;t live yet. Receipts for past donations will appear here once the system is live.
+              </div>
               <div style={{ padding: '14px 16px', background: 'var(--accent)', color: '#fff', borderRadius: 'var(--radius)', marginBottom: 18 }}>
                 <div style={{ fontSize: 11, opacity: .85, letterSpacing: '.1em', textTransform: 'uppercase', marginBottom: 6 }}>2026 total</div>
                 <div className="between">
@@ -54,7 +73,7 @@ export default function DonationsPage() {
                         </div>
                         <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
                           <div style={{ fontFamily: 'var(--display)', fontSize: 16 }}>${it.amount}</div>
-                          <button className="focus-ring" style={{ background: 'transparent', border: 0, color: 'var(--accent)', fontSize: 11, fontWeight: 600, padding: 0, marginTop: 2 }}>
+                          <button className="focus-ring" disabled style={{ background: 'transparent', border: 0, color: 'var(--accent)', fontSize: 11, fontWeight: 600, padding: 0, marginTop: 2, cursor: 'not-allowed', opacity: 0.5 }}>
                             <SetuIcon.dl/> Receipt
                           </button>
                         </div>
@@ -71,14 +90,17 @@ export default function DonationsPage() {
       {/* Desktop */}
       <div className="hidden md:flex" style={{ minHeight: '100dvh' }}>
         <CspRoot style={{ display: 'flex', width: '100%', minHeight: '100dvh' }}>
-          <DesktopSidebar active="receipts"/>
+          <DesktopSidebar active="receipts" displayName={sidebarDisplayName} subtitle={sidebarSubtitle} showSignOut/>
           <main style={{ flex: 1, padding: '32px 48px', overflow: 'auto' }}>
+            <div style={{ padding: '14px 18px', background: 'var(--accentSoft)', color: 'var(--accentDeep)', border: '1px solid var(--accent)', borderRadius: 'var(--radius)', marginBottom: 20, fontSize: 14, fontWeight: 600 }}>
+              Coming soon — online donations isn&apos;t live yet. Receipts for past donations will appear here once the system is live.
+            </div>
             <header className="between" style={{ marginBottom: 24 }}>
               <div>
                 <p style={{ fontSize: 11, letterSpacing: '.16em', textTransform: 'uppercase', color: 'var(--muted)' }}>Donation history</p>
                 <h1 style={{ fontSize: 38, fontWeight: 400, marginTop: 6 }}>Your receipts</h1>
               </div>
-              <button className="btn btn--p"><SetuIcon.dl/> Download all (2026)</button>
+              <button className="btn btn--p" disabled style={{ cursor: 'not-allowed', opacity: 0.6 }}><SetuIcon.dl/> Download all (2026)</button>
             </header>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 24 }}>
@@ -106,7 +128,7 @@ export default function DonationsPage() {
                       <td style={{ padding: '14px 18px', color: 'var(--body-text)' }}>{r[2]}</td>
                       <td style={{ padding: '14px 18px', textAlign: 'right', fontFamily: 'var(--display)', fontSize: 16 }}>${r[3]}.00</td>
                       <td style={{ padding: '14px 18px', textAlign: 'right' }}>
-                        <button className="btn btn--s" style={{ padding: '6px 10px', fontSize: 12 }}><SetuIcon.dl/> PDF</button>
+                        <button className="btn btn--s" disabled style={{ padding: '6px 10px', fontSize: 12, cursor: 'not-allowed', opacity: 0.5 }}><SetuIcon.dl/> PDF</button>
                       </td>
                     </tr>
                   ))}

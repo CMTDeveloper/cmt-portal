@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { SetuIcon } from '@cmt/ui';
 import { CspRoot, SectionLabel, DesktopSidebar } from '@/features/family/components/atoms';
+import { getCurrentFamilyClient } from '@/features/setu/members/get-current-family-client';
 
 type MemberType = 'Adult' | 'Child';
 type Gender = 'Male' | 'Female' | 'PreferNotToSay';
@@ -12,6 +13,19 @@ type Gender = 'Male' | 'Female' | 'PreferNotToSay';
 export default function AddMemberPage() {
   const router = useRouter();
   const [mode, setMode] = useState<MemberType>('Child');
+  const [sidebarDisplayName, setSidebarDisplayName] = useState<string | undefined>();
+  const [sidebarSubtitle, setSidebarSubtitle] = useState<string | undefined>();
+
+  useEffect(() => {
+    getCurrentFamilyClient().then((data) => {
+      if (!data) return;
+      const currentMember = data.members.find((m) => m.mid === data.currentMid);
+      if (currentMember) {
+        setSidebarDisplayName(`${currentMember.firstName} ${currentMember.lastName}`);
+      }
+      setSidebarSubtitle(`${data.family.name}${data.family.legacyFid ? ` · FID ${data.family.fid} · Legacy ${data.family.legacyFid}` : ` · FID ${data.family.fid}`}`);
+    }).catch(() => { /* non-fatal */ });
+  }, []);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [gender, setGender] = useState<Gender>('Male');
@@ -199,7 +213,7 @@ export default function AddMemberPage() {
       {/* Desktop */}
       <div className="hidden md:flex" style={{ minHeight: '100dvh' }}>
         <CspRoot style={{ display: 'flex', width: '100%', minHeight: '100dvh' }}>
-          <DesktopSidebar active="family"/>
+          <DesktopSidebar active="family" displayName={sidebarDisplayName} subtitle={sidebarSubtitle} showSignOut/>
           <main style={{ flex: 1, padding: '32px 48px', overflow: 'auto' }}>
             <header style={{ marginBottom: 28 }}>
               <Link href="/family/members" className="focus-ring" style={{ background: 'transparent', border: 0, color: 'var(--body-text)', fontSize: 13, padding: 0, marginBottom: 10, display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none' }}>
@@ -207,7 +221,6 @@ export default function AddMemberPage() {
               </Link>
               <div className="between">
                 <div>
-                  <p style={{ fontSize: 11, letterSpacing: '.16em', textTransform: 'uppercase', color: 'var(--muted)' }}>The Family</p>
                   <h1 style={{ fontSize: 38, fontWeight: 400, marginTop: 6 }}>Add member</h1>
                 </div>
               </div>

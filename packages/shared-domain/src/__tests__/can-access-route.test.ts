@@ -77,6 +77,29 @@ describe('canAccessRoute — API surface mirrors pages', () => {
   });
 });
 
+describe('canAccessRoute — /api/setu/family-lookup is public', () => {
+  it('allows unauthenticated (no session) via isPublicRoute', () => {
+    // Middleware calls isPublicRoute before canAccessRoute; canAccessRoute is
+    // only reached for authenticated sessions. These tests confirm the route
+    // passes for every authenticated role too (no accidental denial).
+    expect(canAccessRoute(admin, '/api/setu/family-lookup')).toBe(true);
+    expect(canAccessRoute(manager, '/api/setu/family-lookup')).toBe(true);
+    expect(canAccessRoute(welcomeTeam, '/api/setu/family-lookup')).toBe(true);
+    expect(canAccessRoute(family, '/api/setu/family-lookup')).toBe(true);
+    expect(canAccessRoute(member, '/api/setu/family-lookup')).toBe(true);
+  });
+});
+
+describe('canAccessRoute — /api/setu/register is public', () => {
+  it('allows every authenticated role via isPublicRoute', () => {
+    expect(canAccessRoute(admin, '/api/setu/register')).toBe(true);
+    expect(canAccessRoute(manager, '/api/setu/register')).toBe(true);
+    expect(canAccessRoute(welcomeTeam, '/api/setu/register')).toBe(true);
+    expect(canAccessRoute(family, '/api/setu/register')).toBe(true);
+    expect(canAccessRoute(member, '/api/setu/register')).toBe(true);
+  });
+});
+
 describe('canAccessRoute — unknown routes default-deny', () => {
   it('denies an unknown protected route', () => {
     expect(canAccessRoute(admin, '/some/unknown/area')).toBe(false);

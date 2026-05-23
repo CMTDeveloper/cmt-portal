@@ -1,14 +1,28 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { SetuIcon, Rosette } from '@cmt/ui';
 import { CspRoot, SectionLabel, PayMethod, DesktopSidebar } from '@/features/family/components/atoms';
+import { getCurrentFamilyClient } from '@/features/setu/members/get-current-family-client';
 
 type PayMethodId = 'card' | 'etransfer' | 'cheque';
 
 export default function DonatePage() {
   const [payMethod, setPayMethod] = useState<PayMethodId>('card');
+  const [sidebarDisplayName, setSidebarDisplayName] = useState<string | undefined>();
+  const [sidebarSubtitle, setSidebarSubtitle] = useState<string | undefined>();
+
+  useEffect(() => {
+    getCurrentFamilyClient().then((data) => {
+      if (!data) return;
+      const currentMember = data.members.find((m) => m.mid === data.currentMid);
+      if (currentMember) {
+        setSidebarDisplayName(`${currentMember.firstName} ${currentMember.lastName}`);
+      }
+      setSidebarSubtitle(`${data.family.name}${data.family.legacyFid ? ` · FID ${data.family.fid} · Legacy ${data.family.legacyFid}` : ` · FID ${data.family.fid}`}`);
+    }).catch(() => { /* identity fetch failure is non-fatal */ });
+  }, []);
 
   const amountBlock = (
     <div style={{ padding: '22px 18px', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radius)', marginBottom: 14 }}>
@@ -92,7 +106,7 @@ export default function DonatePage() {
         <span style={{ fontFamily: 'var(--display)', fontSize: 20 }}>$500.00</span>
       </div>
       <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-        <SetuIcon.receipt/> Tax receipt will be emailed to aarti@…
+        <SetuIcon.receipt/> Tax receipt will be emailed to your registered email address
       </div>
     </div>
   );
@@ -111,6 +125,9 @@ export default function DonatePage() {
               <span style={{ width: 32 }}/>
             </div>
             <div style={{ flex: 1, overflowY: 'auto', padding: '20px 18px 110px' }}>
+              <div style={{ padding: '14px 18px', background: 'var(--accentSoft)', color: 'var(--accentDeep)', border: '1px solid var(--accent)', borderRadius: 'var(--radius)', marginBottom: 20, fontSize: 14, fontWeight: 600 }}>
+                Coming soon — online donate isn&apos;t live yet. In the meantime, bring a cheque on Sunday or pay via e-Transfer (donations@chinmayatoronto.org).
+              </div>
               <h1 style={{ fontSize: 26, fontWeight: 400, marginBottom: 6 }}>Your <em className="sa">dakshina</em></h1>
               <p style={{ fontSize: 13, color: 'var(--body-text)', marginBottom: 18, lineHeight: 1.5 }}>
                 For <strong>Bala Vihar · Brampton Fall '26</strong>. This is a charitable donation — you'll receive a tax receipt.
@@ -121,7 +138,7 @@ export default function DonatePage() {
               {orderSummary}
             </div>
             <div style={{ position: 'sticky', bottom: 0, left: 0, right: 0, padding: '14px 18px', background: 'var(--surface)', borderTop: '1px solid var(--line)' }}>
-              <button className="btn btn--p btn--block">Give $500 →</button>
+              <button className="btn btn--p btn--block" disabled style={{ cursor: 'not-allowed', opacity: 0.6 }}>Give $500 →</button>
               <p style={{ marginTop: 8, fontSize: 10, color: 'var(--muted)', textAlign: 'center' }}>
                 Secured by Stripe · You'll receive a tax receipt automatically
               </p>
@@ -133,7 +150,7 @@ export default function DonatePage() {
       {/* Desktop — two column layout */}
       <div className="hidden md:flex" style={{ minHeight: '100dvh' }}>
         <CspRoot style={{ display: 'flex', width: '100%', minHeight: '100dvh' }}>
-          <DesktopSidebar active="giving"/>
+          <DesktopSidebar active="giving" displayName={sidebarDisplayName} subtitle={sidebarSubtitle} showSignOut/>
           <main style={{ flex: 1, padding: '32px 48px', overflow: 'auto' }}>
             <header style={{ marginBottom: 28 }}>
               <Link href="/family/enroll" className="focus-ring" style={{ background: 'transparent', border: 0, color: 'var(--body-text)', fontSize: 13, padding: 0, marginBottom: 10, display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none' }}>
@@ -144,6 +161,10 @@ export default function DonatePage() {
                 <h1 style={{ fontSize: 38, fontWeight: 400, marginTop: 6 }}>Your <em className="sa">dakshina</em></h1>
               </div>
             </header>
+
+            <div style={{ padding: '14px 18px', background: 'var(--accentSoft)', color: 'var(--accentDeep)', border: '1px solid var(--accent)', borderRadius: 'var(--radius)', marginBottom: 20, fontSize: 14, fontWeight: 600 }}>
+              Coming soon — online donate isn&apos;t live yet. In the meantime, bring a cheque on Sunday or pay via e-Transfer (donations@chinmayatoronto.org).
+            </div>
 
             {/* Two-column content */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: 22 }}>
@@ -159,7 +180,7 @@ export default function DonatePage() {
                 <div className="card" style={{ padding: 24, position: 'sticky', top: 0 }}>
                   {paymentMethods}
                   {orderSummary}
-                  <button className="btn btn--p btn--block" style={{ marginTop: 18, padding: '14px' }}>Give $500 →</button>
+                  <button className="btn btn--p btn--block" style={{ marginTop: 18, padding: '14px', cursor: 'not-allowed', opacity: 0.6 }} disabled>Give $500 →</button>
                   <p style={{ marginTop: 10, fontSize: 11, color: 'var(--muted)', textAlign: 'center', lineHeight: 1.5 }}>
                     Secured by Stripe · Tax receipt emailed automatically
                   </p>

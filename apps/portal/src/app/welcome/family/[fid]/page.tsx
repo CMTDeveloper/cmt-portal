@@ -39,6 +39,7 @@ export default async function WelcomeFamilyDetailPage({
 
   const { fid } = await params;
   const data = await getFamilyForWelcome(fid);
+  const welcomeDisplayName = 'Welcome team';
 
   if (!data) notFound();
 
@@ -69,7 +70,7 @@ export default async function WelcomeFamilyDetailPage({
       {/* Desktop */}
       <div className="hidden md:flex" style={{ minHeight: '100dvh' }}>
         <CspRoot style={{ display: 'flex', width: '100%', minHeight: '100dvh' }}>
-          <DesktopSidebar active="home" role="welcome-team"/>
+          <DesktopSidebar active="home" role="welcome-team" displayName={welcomeDisplayName} subtitle="Welcome team" showSignOut/>
           <main style={{ flex: 1, padding: '32px 48px', overflow: 'auto' }}>
             <header style={{ marginBottom: 24 }}>
               <Link href="/welcome" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--muted)', textDecoration: 'none', marginBottom: 12 }}>

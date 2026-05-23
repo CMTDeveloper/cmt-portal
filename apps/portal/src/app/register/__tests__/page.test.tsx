@@ -13,6 +13,12 @@ vi.mock('next/link', () => ({
   ),
 }));
 
+vi.mock('next/navigation', () => ({
+  useSearchParams: () => new URLSearchParams(),
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  usePathname: () => '/',
+}));
+
 // ── CMT UI ────────────────────────────────────────────────────────────────────
 const toastMock = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
 vi.mock('@cmt/ui', () => ({

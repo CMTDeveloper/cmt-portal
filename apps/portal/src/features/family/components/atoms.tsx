@@ -3,6 +3,7 @@
 import type { ReactNode, CSSProperties } from 'react';
 import Link from 'next/link';
 import { SetuLogo, SetuAvatar, SetuIcon } from '@cmt/ui';
+import { signOut } from './sign-out-button';
 
 // ─── CspRoot ─────────────────────────────────────────────────────────────────
 
@@ -227,6 +228,9 @@ type SidebarTab = 'home' | 'family' | 'bv' | 'giving' | 'receipts';
 interface DesktopSidebarProps {
   active: SidebarTab;
   role?: 'family' | 'welcome-team';
+  displayName?: string | undefined;
+  subtitle?: string | undefined;
+  showSignOut?: boolean;
 }
 
 const FAMILY_NAV_ITEMS: [SidebarTab, string, keyof typeof SetuIcon, string][] = [
@@ -243,8 +247,9 @@ const WELCOME_NAV_ITEMS: [SidebarTab, string, keyof typeof SetuIcon, string, boo
   ['bv',     'Donation periods','calendar','/welcome', true],
 ];
 
-export function DesktopSidebar({ active, role = 'family' }: DesktopSidebarProps) {
+export function DesktopSidebar({ active, role = 'family', displayName, subtitle, showSignOut }: DesktopSidebarProps) {
   const navItems = role === 'welcome-team' ? WELCOME_NAV_ITEMS : FAMILY_NAV_ITEMS;
+  const name = displayName ?? 'Family member';
 
   return (
     <aside style={{ width: 248, background: 'var(--surface)', borderRight: '1px solid var(--line)', padding: '22px 18px', display: 'flex', flexDirection: 'column' }}>
@@ -277,12 +282,24 @@ export function DesktopSidebar({ active, role = 'family' }: DesktopSidebarProps)
       </nav>
       <div style={{ marginTop: 'auto', padding: 14, background: 'var(--bg)', borderRadius: 'var(--radiusSm)', border: '1px solid var(--line)' }}>
         <div className="row" style={{ gap: 10 }}>
-          <SetuAvatar name="Aarti Patel" size={32}/>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 600 }}>Aarti Patel</div>
-            <div style={{ fontSize: 11, color: 'var(--muted)' }}>Patel · FID 4421</div>
+          <SetuAvatar name={name} size={32}/>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
+            {subtitle && <div style={{ fontSize: 11, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{subtitle}</div>}
           </div>
         </div>
+        {showSignOut && (
+          <button
+            onClick={() => { void signOut(); }}
+            style={{
+              marginTop: 10, width: '100%', background: 'transparent', border: '1px solid var(--line2)',
+              borderRadius: 'var(--radiusSm)', padding: '6px 10px', fontSize: 12, color: 'var(--muted)',
+              cursor: 'pointer', fontFamily: 'var(--body)', fontWeight: 500,
+            }}
+          >
+            Sign out
+          </button>
+        )}
       </div>
     </aside>
   );
