@@ -52,6 +52,13 @@ export const portalEnvSchema = z.object({
   SETU_OTP_RATE_LIMIT_PER_MIN: z.coerce.number().int().min(1).default(5),
   SETU_INVITE_TTL_DAYS: z.coerce.number().int().min(1).max(30).default(14),
 
+  // UAT safety net: comma-separated allowlist of recipients (email + phone)
+  // that may receive REAL email/SMS. Anything else routes to mockSender even
+  // when NEXT_PUBLIC_FEATURE_CHECK_IN_NOTIFY=true. Empty / unset means prod
+  // behavior (no filter — everyone gets real mail). Read directly from
+  // process.env in resolveSender(); listed here for schema completeness.
+  SETU_EMAIL_ALLOWLIST: z.string().optional(),
+
 });
 
 export type PortalEnv = z.infer<typeof portalEnvSchema>;
