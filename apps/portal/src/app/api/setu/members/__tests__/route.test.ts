@@ -139,4 +139,69 @@ describe('POST /api/setu/members', () => {
     const body = await res.json();
     expect(body.error).toBe('missing-fid');
   });
+
+  // ── Regression tests for schema fixes ─────────────────────────────────────
+  // Guard the .nullish() schema (commit ac85d6c) and emergency-contact
+  // relation-only allowance (commit 33a8891). Both bugs shipped as silent
+  // 400 "bad-request" responses with no useful detail.
+
+  it('accepts null for all optional string fields (.nullish() regression)', async () => {
+    const bodyWithNulls = {
+      ...validBody,
+      schoolGrade: null,
+      birthMonthYear: null,
+      foodAllergies: null,
+      email: null,
+      phone: null,
+      volunteeringSkills: null,
+      emergencyContacts: null,
+    };
+    const res = await POST(makeRequest(bodyWithNulls, managerHeaders()));
+    expect(res.status).toBe(201);
+  });
+
+  it('accepts emergency contact with only relation filled (phone+email empty)', async () => {
+    const body = {
+      ...validBody,
+      emergencyContacts: [
+        { relation: 'Mother', phone: '', email: '' },
+        null,
+      ],
+    };
+    const res = await POST(makeRequest(body, managerHeaders()));
+    expect(res.status).toBe(201);
+  });
+
+  it('accepts emergencyContacts: [null, null] when no emergency contact', async () => {
+    const body = { ...validBody, emergencyContacts: [null, null] };
+    const res = await POST(makeRequest(body, managerHeaders()));
+    expect(res.status).toBe(201);
+  });
+
+  it('400 bad-request response includes an issues array for client to surface', async () => {
+    const { firstName: _firstName, ...rest } = validBody;
+    void _firstName;
+    const res = await POST(makeRequest(rest, managerHeaders()));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe('bad-request');
+    expect(Array.isArray(body.issues)).toBe(true);
+    expect(body.issues.length).toBeGreaterThan(0);
+    expect(body.issues[0]).toHaveProperty('path');
+    expect(body.issues[0]).toHaveProperty('message');
+  });
+
+  it('rejects emergency contact with empty relation (relation is the one required EC field)', async () => {
+    const body = {
+      ...validBody,
+      emergencyContacts: [
+        { relation: '', phone: '(416) 555-0000', email: '' },
+        null,
+      ],
+    };
+    const res = await POST(makeRequest(body, managerHeaders()));
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toBe('bad-request');
+  });
 });

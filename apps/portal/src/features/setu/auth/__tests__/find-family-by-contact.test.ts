@@ -85,3 +85,46 @@ describe('findSetuFamilyByContact — no hit', () => {
     expect(result.member).toBeUndefined();
   });
 });
+
+describe('findSetuFamilyByContact — hash unification (regression)', () => {
+  // Regression test for commit 9d4fbb5. findSetuFamilyByContact used to compute
+  // its own sha256(normalized) without the `${type}:` prefix that hashContactKey
+  // uses on every WRITER (register-family, lazy-migrate, accept-invite,
+  // members CRUD). The mismatched hash meant the lookup always missed Setu
+  // docs and silently fell back to the legacy RTDB. This test pins the
+  // lookup-doc-id to the same helper every writer uses so the mismatch
+  // can't come back.
+  it('looks up contactKeys/{hashContactKey(type, value)} — same doc id used by all writers', async () => {
+    const { hashContactKey } = await import('@/features/setu/registration/hash-contact-key');
+    const expectedHash = hashContactKey('email', 'raj.patel@gmail.com');
+
+    const docFn = vi.fn().mockReturnValue({
+      get: vi.fn().mockResolvedValueOnce({ exists: false }),
+    });
+    const collectionFn = vi.fn().mockReturnValue({ doc: docFn });
+
+    (portalFirestore as ReturnType<typeof vi.fn>).mockReturnValue({
+      collection: collectionFn,
+    });
+    (legacyFindFamilyByContact as ReturnType<typeof vi.fn>).mockResolvedValueOnce(null);
+
+    await findSetuFamilyByContact('email', 'raj.patel@gmail.com');
+
+    expect(collectionFn).toHaveBeenCalledWith('contactKeys');
+    // The exact hash must be the one hashContactKey produces — NOT a separate
+    // sha256(normalized) without the type prefix.
+    expect(docFn).toHaveBeenCalledWith(expectedHash);
+  });
+
+  it('hash for the same email matches what hashContactKey computes (round-trip)', async () => {
+    const { hashContactKey } = await import('@/features/setu/registration/hash-contact-key');
+    // sha256("email:raj.patel@gmail.com") prefixed form — confirm it differs
+    // from the un-prefixed legacy hash so this test fails loudly if the
+    // prefix is removed.
+    const prefixed = hashContactKey('email', 'raj.patel@gmail.com');
+    const { createHash } = await import('node:crypto');
+    const unprefixed = createHash('sha256').update('raj.patel@gmail.com').digest('hex');
+    expect(prefixed).not.toBe(unprefixed);
+    expect(prefixed.length).toBe(64); // sha256 hex = 64 chars
+  });
+});
