@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { sendPaymentReminder } from '@/features/check-in/notifications/payment-reminder-service';
 
-export const runtime = 'nodejs';
 
 const bodySchema = z.object({
   familyId: z.string().min(1),

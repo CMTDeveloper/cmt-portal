@@ -14,7 +14,6 @@ import {
 import { findSetuFamilyByContact } from '@/features/setu/auth/find-family-by-contact';
 import { lazyMigrateLegacyFamily } from '@/features/setu/registration/lazy-migrate';
 
-export const runtime = 'nodejs';
 
 const bodySchema = z.object({
   type: z.enum(['email', 'phone']),

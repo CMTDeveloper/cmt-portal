@@ -10,7 +10,6 @@ import {
 import { sha256Hex } from '@/features/check-in/shared';
 import { normalizeContact } from '@/features/check-in/shared';
 
-export const runtime = 'nodejs';
 
 const additionalMemberSchema = z.object({
   firstName: z.string().min(1),

@@ -6,7 +6,6 @@ import {
 } from '@cmt/firebase-shared/admin/session';
 import { getPortalUserWithClaims } from '@cmt/firebase-shared/admin/claims';
 
-export const runtime = 'nodejs';
 
 const bodySchema = z.object({
   email: z.string().email(),

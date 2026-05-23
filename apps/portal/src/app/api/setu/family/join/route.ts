@@ -9,7 +9,6 @@ import {
 } from '@cmt/firebase-shared/admin/session';
 import { normalizeContact, sha256Hex } from '@/features/check-in/shared';
 
-export const runtime = 'nodejs';
 
 const bodySchema = z.object({
   fid: z.string().min(1),

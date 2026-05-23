@@ -5,7 +5,6 @@ import { flags } from '@/lib/flags';
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
 import { hashContactKey } from '@/features/setu/registration/hash-contact-key';
 
-export const runtime = 'nodejs';
 
 // Emergency contact: only `relation` is required to be non-empty when the
 // object is present. Phone and email are independently optional (you may have

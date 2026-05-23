@@ -11,7 +11,6 @@ import {
 import { getCurrentSessionContact } from '@/features/setu/auth/get-current-session-email';
 import { hashContactKey } from '@/features/setu/registration/hash-contact-key';
 
-export const runtime = 'nodejs';
 
 const bodySchema = z.object({
   token: z.string().min(1),

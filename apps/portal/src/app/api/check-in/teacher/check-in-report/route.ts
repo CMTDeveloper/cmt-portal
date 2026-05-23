@@ -3,7 +3,6 @@ import { flags } from '@/lib/flags';
 import { readRtdb } from '@cmt/firebase-shared/admin/rtdb';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 
-export const runtime = 'nodejs';
 
 interface LegacyRosterStudent {
   sid?: string | number;

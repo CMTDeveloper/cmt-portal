@@ -3,7 +3,6 @@ import { findFamilyById, loadRecentFamilyCheckIns } from '@/features/check-in/sh
 import { flags } from '@/lib/flags';
 import type { FamilyDashboardResponse } from '@cmt/shared-domain/check-in';
 
-export const runtime = 'nodejs';
 
 export async function GET(req: Request) {
   if (!flags.checkInFamily) {

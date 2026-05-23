@@ -3,7 +3,6 @@ import { z } from 'zod';
 import { portalAuth } from '@cmt/firebase-shared/admin/auth';
 import { getOrCreateAdminUser } from '@cmt/firebase-shared/admin/claims';
 
-export const runtime = 'nodejs';
 
 export async function GET() {
   const result = await portalAuth().listUsers(1000);

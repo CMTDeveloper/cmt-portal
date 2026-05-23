@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 
-export const runtime = 'nodejs';
 
 type Kind = 'check-ins' | 'guests';
 

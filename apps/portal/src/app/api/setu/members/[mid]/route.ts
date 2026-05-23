@@ -6,7 +6,6 @@ import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { assertNotLastManager, LastManagerError } from '@/features/setu/members';
 import { hashContactKey } from '@/features/setu/registration/hash-contact-key';
 
-export const runtime = 'nodejs';
 
 type RouteContext = { params: Promise<{ mid: string }> };
 

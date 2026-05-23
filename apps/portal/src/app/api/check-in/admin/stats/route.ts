@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { listAllFamilies } from '@/features/check-in/shared';
 
-export const runtime = 'nodejs';
 
 function startOfTodayIso(): string {
   const d = new Date();

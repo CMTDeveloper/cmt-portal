@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { timingSafeEqual } from 'node:crypto';
 
-export const runtime = 'nodejs';
 
 function verifyCronAuth(req: Request): boolean {
   const secret = process.env.CRON_SECRET;

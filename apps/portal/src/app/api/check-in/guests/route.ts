@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { recordGuestCheckIn } from '@/features/check-in/shared';
 
-export const runtime = 'nodejs';
 
 const bodySchema = z.object({
   firstName: z.string().min(1),

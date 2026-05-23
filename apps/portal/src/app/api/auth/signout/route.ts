@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 
-export const runtime = 'nodejs';
 
 export async function POST(req: Request) {
   // 303 See Other so HTML <form method="post"> submits land on /login via GET.

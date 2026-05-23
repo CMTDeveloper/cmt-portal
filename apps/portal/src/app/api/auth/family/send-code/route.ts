@@ -10,7 +10,6 @@ import {
 } from '@/features/check-in/shared';
 import { resolveSender } from '@/lib/aws/resolve-sender';
 
-export const runtime = 'nodejs';
 
 const bodySchema = z.object({
   type: z.enum(['email', 'phone']),

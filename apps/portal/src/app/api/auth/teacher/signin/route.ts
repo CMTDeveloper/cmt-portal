@@ -10,7 +10,6 @@ import {
   createPortalSessionCookie,
 } from '@cmt/firebase-shared/admin/session';
 
-export const runtime = 'nodejs';
 
 const bodySchema = z.object({ passphrase: z.string().min(1) });
 

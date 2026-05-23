@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { findFamilyById } from '@/features/check-in/shared';
 
-export const runtime = 'nodejs';
 
 export async function GET(
   _req: Request,

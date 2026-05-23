@@ -4,7 +4,6 @@ import { flags } from '@/lib/flags';
 import { checkAndRecordOtpRateLimit } from '@/features/check-in/shared';
 import { lookupFamilyByContacts } from '@/features/setu/registration/family-lookup';
 
-export const runtime = 'nodejs';
 
 const bodySchema = z.object({
   email: z.string().email(),

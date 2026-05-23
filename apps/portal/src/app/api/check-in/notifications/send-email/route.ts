@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { sendTemplatedEmail } from '@/features/check-in/notifications/send-email-service';
 
-export const runtime = 'nodejs';
 
 const bodySchema = z.object({
   to: z.string().email(),

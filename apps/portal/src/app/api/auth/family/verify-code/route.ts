@@ -17,7 +17,6 @@ import {
   exchangeCustomTokenForIdToken,
 } from '@cmt/firebase-shared/admin/session';
 
-export const runtime = 'nodejs';
 
 const bodySchema = z.object({
   type: z.enum(['email', 'phone']),

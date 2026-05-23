@@ -8,7 +8,6 @@ import { portalEnv } from '@/lib/env';
 import { resolveSender } from '@/lib/aws/resolve-sender';
 import { setuInviteEmail } from '@/lib/aws/templates/setu-invite-email';
 
-export const runtime = 'nodejs';
 
 const bodySchema = z.object({
   email: z.string().email(),

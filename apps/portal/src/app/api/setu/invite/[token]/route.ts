@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import { flags } from '@/lib/flags';
 import { getInviteByToken } from '@/features/setu/invite/get-invite';
 
-export const runtime = 'nodejs';
 
 export async function GET(
   _req: Request,

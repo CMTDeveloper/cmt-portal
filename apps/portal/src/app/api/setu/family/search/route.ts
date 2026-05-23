@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import { flags } from '@/lib/flags';
 import { searchFamilies } from '@/features/setu/search/search-families';
 
-export const runtime = 'nodejs';
 
 export async function GET(req: Request) {
   if (!flags.setuAuth) {

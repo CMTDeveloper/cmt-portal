@@ -3,7 +3,6 @@ import { timingSafeEqual } from 'node:crypto';
 import { sendPaymentReminder } from '@/features/check-in/notifications/payment-reminder-service';
 import { listAllFamilies } from '@/features/check-in/shared';
 
-export const runtime = 'nodejs';
 
 function verifyCronAuth(req: Request): boolean {
   const secret = process.env.CRON_SECRET;

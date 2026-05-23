@@ -8,7 +8,6 @@ import type {
   TeacherReportResponse,
 } from '@cmt/shared-domain/check-in';
 
-export const runtime = 'nodejs';
 
 export async function GET(req: Request) {
   const url = new URL(req.url);

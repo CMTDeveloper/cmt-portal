@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { findFamilyByContact } from '@/features/check-in/shared';
 
-export const runtime = 'nodejs';
 
 const bodySchema = z.object({
   type: z.enum(['email', 'phone']),
