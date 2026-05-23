@@ -62,6 +62,7 @@ A Turborepo monorepo for the Chinmaya Mission Toronto unified portal. One Next.j
 - **Frequent commits** — Each task in the implementation plan corresponds to one (or a few) commits. Don't bundle unrelated changes.
 - **Commit author** — Always `CMT Developer <developer@chinmayatoronto.org>` (set in local `.git/config`, not global).
 - **Never bypass `--no-verify`** on commits or pushes unless explicitly told.
+- **`pnpm test:e2e`** — runs the E2E integration suite against real UAT Firestore (`chinmaya-setu-uat`). Run on-demand before releases. NOT included in the pre-push hook. Requires `.env.local` with `PORTAL_FIREBASE_PROJECT_ID=chinmaya-setu-uat` and matching service account creds. Files live in `apps/portal/src/__tests__/e2e/`.
 
 ## Reading the prototype
 
