@@ -219,7 +219,15 @@ function SignInReal() {
         return;
       }
       const { redirectTo } = (await res.json()) as { redirectTo?: string };
-      window.location.href = redirectTo ?? '/family';
+      // Honor ?from= when it's a safe internal path (e.g. /invite/{token}).
+      // This lets users land back on the page that bounced them to sign-in.
+      const fromParam = new URLSearchParams(window.location.search).get('from');
+      const fromIsSafe =
+        fromParam !== null &&
+        fromParam.startsWith('/') &&
+        !fromParam.startsWith('//') &&
+        !fromParam.includes('://');
+      window.location.href = fromIsSafe ? fromParam : (redirectTo ?? '/family');
     } catch {
       toast.error('Network error. Check your connection and try again.');
       setPageState('code');

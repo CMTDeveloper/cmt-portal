@@ -398,4 +398,37 @@ describe('Auth-entry pages redirect signed-in users to their dashboard', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('location')).toBeNull();
   });
+
+  it('honors ?from= when signed-in user lands on /sign-in (invite-accept flow)', async () => {
+    (verifyPortalSessionCookie as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      uid: 'u-1', role: 'family-manager', fid: 'FAM001', mid: 'FAM001-01',
+    });
+    const res = await middleware(
+      makeReq('http://localhost/sign-in?from=/invite/abc123', { cookie: 'good' }),
+    );
+    expect(res.status).toBe(307);
+    expect(res.headers.get('location')).toBe('http://localhost/invite/abc123');
+  });
+
+  it('rejects protocol-relative ?from= (open-redirect guard)', async () => {
+    (verifyPortalSessionCookie as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      uid: 'u-1', role: 'family-manager', fid: 'FAM001', mid: 'FAM001-01',
+    });
+    const res = await middleware(
+      makeReq('http://localhost/sign-in?from=//evil.com/bad', { cookie: 'good' }),
+    );
+    expect(res.status).toBe(307);
+    expect(res.headers.get('location')).toBe('http://localhost/family');
+  });
+
+  it('rejects absolute URL ?from= (open-redirect guard)', async () => {
+    (verifyPortalSessionCookie as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      uid: 'u-1', role: 'welcome-team',
+    });
+    const res = await middleware(
+      makeReq('http://localhost/?from=https://evil.com', { cookie: 'good' }),
+    );
+    expect(res.status).toBe(307);
+    expect(res.headers.get('location')).toBe('http://localhost/welcome');
+  });
 });

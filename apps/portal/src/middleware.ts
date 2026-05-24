@@ -18,7 +18,13 @@ export async function middleware(req: NextRequest) {
       const decoded = await verifyPortalSessionCookie(cookie).catch(() => null);
       const dashboard = dashboardForRole(decoded?.role);
       if (dashboard) {
-        return NextResponse.redirect(new URL(dashboard, req.nextUrl.origin));
+        // Honor ?from= for the invite/accept flow: a signed-out user clicks
+        // "Accept" → 401 → bounced to /sign-in?from=/invite/{token}. After
+        // they sign in (which arrives back here as a signed-in user), we
+        // need to send them BACK to the invite page, not their dashboard.
+        const from = req.nextUrl.searchParams.get('from');
+        const target = safeFrom(from) ?? dashboard;
+        return NextResponse.redirect(new URL(target, req.nextUrl.origin));
       }
     }
     return NextResponse.next();
@@ -61,6 +67,16 @@ function dashboardForRole(role: unknown): string | null {
   if (role === 'family-manager' || role === 'family-member') return '/family';
   if (role === 'welcome-team') return '/welcome';
   return null;
+}
+
+// Only allow internal, non-protocol-relative paths. Rejects ?from=//evil.com
+// and ?from=https://evil.com to avoid open-redirect issues.
+function safeFrom(from: string | null): string | null {
+  if (!from) return null;
+  if (!from.startsWith('/')) return null;
+  if (from.startsWith('//')) return null;
+  if (from.includes('://')) return null;
+  return from;
 }
 
 function deny(req: NextRequest, reason: 'no-session' | 'unauthorized') {
