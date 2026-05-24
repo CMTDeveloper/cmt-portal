@@ -9,6 +9,7 @@ import {
 } from '@/features/check-in/shared';
 import { resolveSender } from '@/lib/aws/resolve-sender';
 import { findSetuFamilyByContact } from '@/features/setu/auth/find-family-by-contact';
+import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 
 
 const bodySchema = z.object({
@@ -48,7 +49,38 @@ export async function POST(req: Request) {
     `[send-code] hash=${hashPrefix} type=${type} source=${result.source ?? 'null'} fid=${result.fid ?? result.legacyFid ?? '-'}`,
   );
 
-  if (result.source === null) {
+  // Invitee path: no existing family, but there might be a pending invite
+  // for this email. Without this branch, invitees stare at "Enter your code"
+  // with no OTP ever arriving.
+  let hasPendingInvite = false;
+  if (result.source === null && type === 'email') {
+    try {
+      const db = portalFirestore();
+      const snap = await db
+        .collectionGroup('invites')
+        .where('email', '==', normalized)
+        .where('acceptedAt', '==', null)
+        .limit(1)
+        .get();
+      if (!snap.empty) {
+        const inviteDoc = snap.docs[0];
+        const data = inviteDoc?.data() as { expiresAt?: { toDate?: () => Date } | string } | undefined;
+        const expiresAt = data?.expiresAt && typeof data.expiresAt === 'object' && data.expiresAt.toDate
+          ? data.expiresAt.toDate()
+          : data?.expiresAt
+            ? new Date(data.expiresAt as string)
+            : null;
+        if (expiresAt && expiresAt > new Date()) {
+          hasPendingInvite = true;
+          console.log(`[send-code] hash=${hashPrefix} → pending invite found`);
+        }
+      }
+    } catch (err) {
+      console.error(`[send-code] hash=${hashPrefix} invite lookup failed:`, err);
+    }
+  }
+
+  if (result.source === null && !hasPendingInvite) {
     return NextResponse.json({ success: true }, { status: 200 });
   }
 
