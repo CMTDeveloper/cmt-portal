@@ -9,6 +9,14 @@
 
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 
+// revalidateTag throws "Invariant: static generation store missing" outside
+// a Next.js request context. The send + accept routes both call it after
+// their writes — without this mock the route 500s and post-commit reads
+// fail mysteriously. (This was the root cause of the entire flake!)
+vi.mock('next/cache', () => ({
+  revalidateTag: vi.fn(),
+}));
+
 // No real SES traffic
 vi.mock('@/lib/aws/resolve-sender', () => ({
   resolveSender: () => ({
@@ -37,14 +45,13 @@ vi.mock('@/features/setu/auth/get-current-session-email', () => ({
   getCurrentSessionContact: mockGetCurrentSessionContact,
 }));
 
-// SKIPPED — invite-flow e2e has a flaky interaction between the accept
-// route's atomic txn (combination of txn.set + txn.update + collectionGroup
-// query) and post-commit reads in the e2e harness. Different tests fail on
-// different runs. Production flow works (UAT manually verified). Needs an
-// interactive debug session with live Firestore SDK tracing to root-cause
-// before re-enabling. Tracked in:
-// apps/portal/docs/2026-05-23-e2e-suite-verification.md
-describe.skip(
+const hasUatCreds = Boolean(
+  process.env.PORTAL_FIREBASE_PROJECT_ID === 'chinmaya-setu-uat' &&
+    process.env.PORTAL_FIREBASE_CLIENT_EMAIL &&
+    process.env.PORTAL_FIREBASE_PRIVATE_KEY,
+);
+
+(hasUatCreds ? describe : describe.skip)(
   'E2E: Invite flow — real UAT Firestore',
   () => {
     const RUN_ID = (Date.now().toString(36) + Math.random().toString(36).slice(2, 6)).toUpperCase();
@@ -67,6 +74,21 @@ describe.skip(
       });
       fid = result.fid;
       managerMid = result.mid;
+
+      // Pre-create the invitee Firebase auth user — the accept route's
+      // setCustomUserClaims/createCustomToken assume the uid exists
+      // (production creates it during OTP sign-in, which the e2e bypasses).
+      const { portalAuth } = await import('@cmt/firebase-shared/admin/auth');
+      const auth = portalAuth();
+      try {
+        await auth.getUser(INVITEE_UID);
+      } catch (err) {
+        if ((err as { code?: string }).code === 'auth/user-not-found') {
+          await auth.createUser({ uid: INVITEE_UID, email: INVITEE_EMAIL, disabled: false });
+        } else {
+          throw err;
+        }
+      }
     });
 
     afterAll(async () => {
@@ -76,6 +98,9 @@ describe.skip(
       } catch (err) {
         console.error('[e2e invite-flow] cleanup error (non-fatal):', err);
       }
+      // Best-effort: remove the invitee auth user.
+      const { portalAuth } = await import('@cmt/firebase-shared/admin/auth');
+      try { await portalAuth().deleteUser(INVITEE_UID); } catch { /* ignore */ }
     });
 
     it('POST /api/setu/invite/send returns 201 + token', async () => {
@@ -171,16 +196,21 @@ describe.skip(
       newMid = json.mid;
     });
 
-    // KNOWN OPEN ISSUE — surfaced by the e2e suite, not blocking production.
-    // The accept route's `txn.update(inviteDoc.ref, { acceptedAt, acceptedByMid })`
-    // commits inside the same atomic transaction that ALSO writes the new
-    // member doc + contactKey via `txn.set(...)`. Post-commit reads from this
-    // harness see the set() writes but NOT the update() writes on docs whose
-    // ref came from a collectionGroup query.
-    // Production flow works (UAT manually verified). Suspect a Firestore
-    // admin SDK quirk with collectionGroup-derived refs in transactions.
-    // Marked as todo so it shows up in test output as a TODO line item.
-    it.todo('invite doc has acceptedAt set and acceptedByMid matches new mid');
+    it('invite doc has acceptedAt set and acceptedByMid matches new mid', async () => {
+      expect(newMid).toBeTruthy();
+      const { portalFirestore } = await import('@cmt/firebase-shared/admin/firestore');
+      // Read via direct ref (built from path strings) — the issue was never
+      // collectionGroup-related; it was that revalidateTag was throwing in
+      // the route handler before this test could observe the writes.
+      const snap = await portalFirestore()
+        .collection('families').doc(fid)
+        .collection('invites').doc(inviteToken)
+        .get();
+      expect(snap.exists).toBe(true);
+      const data = snap.data() as Record<string, unknown>;
+      expect(data['acceptedAt']).toBeTruthy();
+      expect(data['acceptedByMid']).toBe(newMid);
+    });
 
     it('new member doc is created with manager: true', async () => {
       expect(newMid).toBeTruthy();
@@ -202,12 +232,15 @@ describe.skip(
       await snap.ref.set({ _test: true }, { merge: true });
     });
 
-    // KNOWN OPEN ISSUE — same root cause as the acceptedAt todo above.
-    // The accept txn's `txn.update(familyRef, { managers: arrayUnion(newMid) })`
-    // commits but the post-commit read doesn't see the array update. The
-    // contactKey and new member doc writes from the SAME transaction ARE
-    // visible. Production family-managers flow works.
-    it.todo('family.managers array includes new mid');
+    it('family.managers array includes new mid', async () => {
+      expect(newMid).toBeTruthy();
+      const { portalFirestore } = await import('@cmt/firebase-shared/admin/firestore');
+      const snap = await portalFirestore().collection('families').doc(fid).get();
+      expect(snap.exists).toBe(true);
+      const data = snap.data() as Record<string, unknown>;
+      const managers = data['managers'] as string[] | undefined;
+      expect(managers).toContain(newMid);
+    });
 
     it('contactKey for invitee email points to new fid + mid', async () => {
       expect(newMid).toBeTruthy();

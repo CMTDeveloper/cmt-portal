@@ -8,6 +8,10 @@ export default defineConfig({
     testTimeout: 60000,
     pool: 'forks',
     singleFork: true,
+    // Run files sequentially. Without this, file A's afterAll cleanupTestData()
+    // can wipe file B's _test:true docs mid-flight (cleanup is a global sweep,
+    // not RUN_ID-scoped). Each file already runs <10s, total ~30s — fine.
+    fileParallelism: false,
     // setupFiles runs in each worker before test files are imported.
     // This ensures PORTAL_FIREBASE_* vars from .env.local are in process.env
     // when the module-level hasUatCreds const is evaluated.

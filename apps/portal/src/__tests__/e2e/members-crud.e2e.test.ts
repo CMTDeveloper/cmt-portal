@@ -11,6 +11,13 @@
 
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 
+// revalidateTag throws "Invariant: static generation store missing" when
+// called outside a Next.js request context. The members POST/PATCH/DELETE
+// routes all call it after their writes.
+vi.mock('next/cache', () => ({
+  revalidateTag: vi.fn(),
+}));
+
 vi.mock('@/lib/aws/resolve-sender', () => ({
   resolveSender: () => ({
     sendEmail: vi.fn().mockResolvedValue(undefined),
@@ -25,14 +32,13 @@ vi.mock('next/headers', () => ({
   headers: vi.fn(() => new Headers()),
 }));
 
-// SKIPPED — PATCH/DELETE flow has the same flaky post-commit-read issue as
-// invite-flow. The PATCH route's txn.update commits and returns 200, but the
-// post-commit read shows firstName === undefined, and subsequent DELETE
-// returns 404 as if the doc was wiped. POST + GET work; PATCH + DELETE
-// flake. Production members CRUD works (UAT manually verified — Noopur was
-// added and persists). Needs a live debug session with admin SDK tracing.
-// Tracked in: apps/portal/docs/2026-05-23-e2e-suite-verification.md
-describe.skip(
+const hasUatCreds = Boolean(
+  process.env.PORTAL_FIREBASE_PROJECT_ID === 'chinmaya-setu-uat' &&
+    process.env.PORTAL_FIREBASE_CLIENT_EMAIL &&
+    process.env.PORTAL_FIREBASE_PRIVATE_KEY,
+);
+
+(hasUatCreds ? describe : describe.skip)(
   'E2E: Members CRUD — real UAT Firestore',
   () => {
     const RUN_ID = (Date.now().toString(36) + Math.random().toString(36).slice(2, 6)).toUpperCase();

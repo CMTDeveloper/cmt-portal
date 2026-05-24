@@ -231,8 +231,27 @@ const hasUatCreds = Boolean(
       await snap.ref.set({ _test: true }, { merge: true });
     });
 
-    // Two post-commit assertions deliberately not covered here — see
-    // invite-flow.e2e.test.ts `it.todo` lines for the txn.update visibility
-    // issue that flakes in the harness but works in production.
+    it('invite doc has acceptedAt + acceptedByMid (via direct ref)', async () => {
+      expect(newMid).toBeTruthy();
+      const { portalFirestore } = await import('@cmt/firebase-shared/admin/firestore');
+      const snap = await portalFirestore()
+        .collection('families').doc(fid)
+        .collection('invites').doc(inviteToken)
+        .get();
+      expect(snap.exists).toBe(true);
+      const data = snap.data() as Record<string, unknown>;
+      expect(data['acceptedAt']).toBeTruthy();
+      expect(data['acceptedByMid']).toBe(newMid);
+    });
+
+    it('family.managers array includes new mid (via direct ref)', async () => {
+      expect(newMid).toBeTruthy();
+      const { portalFirestore } = await import('@cmt/firebase-shared/admin/firestore');
+      const snap = await portalFirestore().collection('families').doc(fid).get();
+      expect(snap.exists).toBe(true);
+      const data = snap.data() as Record<string, unknown>;
+      const managers = data['managers'] as string[] | undefined;
+      expect(managers).toContain(newMid);
+    });
   },
 );
