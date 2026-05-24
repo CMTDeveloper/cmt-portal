@@ -5,8 +5,24 @@ import {
 } from '@cmt/firebase-shared/admin/session';
 import { isPublicRoute, canAccessRoute, type SessionClaims } from '@cmt/shared-domain';
 
+// Public auth-entry pages. If a signed-in user lands on one of these, send
+// them straight to their dashboard instead of showing the marketing/sign-in UI.
+const AUTH_ENTRY_ROUTES = new Set(['/', '/sign-in', '/register', '/register/family']);
+
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+
+  if (AUTH_ENTRY_ROUTES.has(pathname)) {
+    const cookie = req.cookies.get('__session')?.value;
+    if (cookie) {
+      const decoded = await verifyPortalSessionCookie(cookie).catch(() => null);
+      const dashboard = dashboardForRole(decoded?.role);
+      if (dashboard) {
+        return NextResponse.redirect(new URL(dashboard, req.nextUrl.origin));
+      }
+    }
+    return NextResponse.next();
+  }
 
   if (isPublicRoute(pathname)) return NextResponse.next();
 
@@ -39,6 +55,12 @@ export async function middleware(req: NextRequest) {
   if (claims.fid) res.headers.set('x-portal-fid', claims.fid);
   if (claims.mid) res.headers.set('x-portal-mid', claims.mid);
   return res;
+}
+
+function dashboardForRole(role: unknown): string | null {
+  if (role === 'family-manager' || role === 'family-member') return '/family';
+  if (role === 'welcome-team') return '/welcome';
+  return null;
 }
 
 function deny(req: NextRequest, reason: 'no-session' | 'unauthorized') {

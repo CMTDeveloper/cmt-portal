@@ -353,3 +353,49 @@ describe('Method-aware: /api/setu/members mutations denied for family-member', (
     expect(res.status).toBe(200);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Auth-entry pages — redirect signed-in users to their dashboard
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('Auth-entry pages redirect signed-in users to their dashboard', () => {
+  it.each([
+    ['/', 'family-manager', '/family'],
+    ['/', 'family-member', '/family'],
+    ['/', 'welcome-team', '/welcome'],
+    ['/sign-in', 'family-manager', '/family'],
+    ['/sign-in', 'welcome-team', '/welcome'],
+    ['/register', 'family-manager', '/family'],
+    ['/register/family', 'family-member', '/family'],
+  ])('%s with role=%s → redirects to %s', async (from, role, expected) => {
+    (verifyPortalSessionCookie as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      uid: 'u-1',
+      role,
+      ...(role.startsWith('family') ? { fid: 'FAM001', mid: 'FAM001-01' } : {}),
+    });
+    const res = await middleware(makeReq(`http://localhost${from}`, { cookie: 'good' }));
+    expect(res.status).toBe(307);
+    expect(res.headers.get('location')).toBe(`http://localhost${expected}`);
+  });
+
+  it('signed-out visitor to / passes through (no redirect)', async () => {
+    const res = await middleware(makeReq('http://localhost/'));
+    expect(res.status).toBe(200);
+    expect(res.headers.get('location')).toBeNull();
+    expect(verifyPortalSessionCookie).not.toHaveBeenCalled();
+  });
+
+  it('invalid session cookie on / passes through (no redirect)', async () => {
+    (verifyPortalSessionCookie as ReturnType<typeof vi.fn>).mockResolvedValueOnce(null);
+    const res = await middleware(makeReq('http://localhost/', { cookie: 'bad' }));
+    expect(res.status).toBe(200);
+    expect(res.headers.get('location')).toBeNull();
+  });
+
+  it('verify throwing on / passes through (no redirect)', async () => {
+    (verifyPortalSessionCookie as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('boom'));
+    const res = await middleware(makeReq('http://localhost/', { cookie: 'maybe' }));
+    expect(res.status).toBe(200);
+    expect(res.headers.get('location')).toBeNull();
+  });
+});
