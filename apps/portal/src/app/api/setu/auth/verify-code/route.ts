@@ -13,6 +13,7 @@ import {
 } from '@cmt/firebase-shared/admin/session';
 import { findSetuFamilyByContact } from '@/features/setu/auth/find-family-by-contact';
 import { lazyMigrateLegacyFamily } from '@/features/setu/registration/lazy-migrate';
+import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 
 
 const bodySchema = z.object({
@@ -42,8 +43,38 @@ export async function POST(req: Request) {
 
   const result = await findSetuFamilyByContact(type, value);
 
-  // No family found — OTP was valid but no matching family; send to registration (no session)
-  if (result.source === null) {
+  // No family found in Setu OR legacy. Check for a pending invite — if one
+  // exists, the OTP-verified user is a legitimate invitee and needs a session
+  // (with role='family') to call POST /api/setu/invite/accept. Without a
+  // session, accept would 401 in a loop. If no invite either, fall through
+  // to the original /register flow (no session — they're a brand-new family).
+  let hasPendingInvite = false;
+  if (result.source === null && type === 'email') {
+    try {
+      const db = portalFirestore();
+      const snap = await db
+        .collectionGroup('invites')
+        .where('email', '==', normalized)
+        .where('acceptedAt', '==', null)
+        .limit(1)
+        .get();
+      if (!snap.empty) {
+        const data = snap.docs[0]?.data() as { expiresAt?: { toDate?: () => Date } | string } | undefined;
+        const expiresAt = data?.expiresAt && typeof data.expiresAt === 'object' && data.expiresAt.toDate
+          ? data.expiresAt.toDate()
+          : data?.expiresAt
+            ? new Date(data.expiresAt as string)
+            : null;
+        if (expiresAt && expiresAt > new Date()) hasPendingInvite = true;
+      }
+    } catch (err) {
+      console.error('[verify-code] invite lookup failed:', err);
+    }
+  }
+
+  if (result.source === null && !hasPendingInvite) {
+    // Brand-new family path (no invite) — keep the old behavior of redirecting
+    // to /register without a session. Registration flow creates the session.
     return NextResponse.json({ redirectTo: '/register?contact=verified' }, { status: 200 });
   }
 
