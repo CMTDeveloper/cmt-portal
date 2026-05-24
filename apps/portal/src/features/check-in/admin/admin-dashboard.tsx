@@ -37,6 +37,9 @@ export function AdminDashboard({ stats }: Props) {
         <Link href="/check-in/admin/reports" className="underline">
           Reports
         </Link>
+        <Link href="/check-in/admin/welcome-team" className="underline">
+          Welcome team
+        </Link>
       </nav>
 
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
