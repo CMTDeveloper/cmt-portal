@@ -7,6 +7,7 @@ import { SetuIcon, toast } from '@cmt/ui';
 import { CspRoot, SectionLabel, FieldError } from '@/features/family/components/atoms';
 import { getCurrentFamilyClient } from '@/features/setu/members/get-current-family-client';
 import type { FamilyWithMembers } from '@/features/setu/members/get-current-family';
+import { LoadingOm } from '@/components/chrome/loading-om';
 
 type MemberType = 'Adult' | 'Child';
 type Gender = 'Male' | 'Female' | 'PreferNotToSay';
@@ -189,7 +190,7 @@ export default function EditMemberPage() {
   }
 
   const formBody = loading ? (
-    <div style={{ color: 'var(--muted)', padding: '40px 0', textAlign: 'center' }}>Loading…</div>
+    <LoadingOm padding={40} />
   ) : (
     <>
       <div className="field" style={{ marginBottom: 16 }}>

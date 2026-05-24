@@ -2,6 +2,7 @@ import { Suspense } from 'react';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 import { CspRoot } from '@/features/family/components/atoms';
 import { DesktopSidebar, DesktopSidebarLive } from '@/features/family/components/desktop-sidebar';
+import { LoadingOm } from '@/components/chrome/loading-om';
 
 // The layout itself stays synchronous so cacheComponents:true can stream the
 // static shell. The two awaited data fetches (sidebar identity, page body) are
@@ -26,7 +27,7 @@ export default function FamilyLayout({ children }: { children: React.ReactNode }
       {/* Mobile: pass-through. Each page renders its own mobile chrome.
           Wrapped in <Suspense> so dynamic children stream under cacheComponents. */}
       <div className="block md:hidden">
-        <Suspense fallback={<div style={{ padding: 32, color: 'var(--muted)' }}>Loading…</div>}>
+        <Suspense fallback={<LoadingOm />}>
           {children}
         </Suspense>
       </div>
@@ -38,7 +39,7 @@ export default function FamilyLayout({ children }: { children: React.ReactNode }
             <SidebarWithIdentity />
           </Suspense>
           <main style={{ flex: 1, padding: '32px 48px', overflow: 'auto' }}>
-            <Suspense fallback={<div style={{ padding: 32, color: 'var(--muted)' }}>Loading…</div>}>
+            <Suspense fallback={<LoadingOm />}>
               {children}
             </Suspense>
           </main>

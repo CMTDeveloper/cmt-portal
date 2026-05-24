@@ -64,7 +64,7 @@ export default async function FamilyDashboardPage() {
             <div style={{ marginBottom: 22 }}>
               <p style={{ fontSize: 12, color: 'var(--muted)', letterSpacing: '.02em' }}>{todayLabel}</p>
               <h1 style={{ fontSize: 28, lineHeight: 1.15, fontWeight: 600, marginTop: 4, letterSpacing: '-0.02em' }}>
-                {firstName ? `Namaste, ${firstName}.` : 'Namaste!'}
+                {firstName ? `Hari OM, ${firstName}.` : 'Hari OM!'}
               </h1>
             </div>
             {needsProfile && currentMid && (
@@ -172,7 +172,7 @@ export default async function FamilyDashboardPage() {
         <header className="between" style={{ marginBottom: 28 }}>
           <div>
             <p style={{ fontSize: 12, color: 'var(--muted)' }}>{todayLabel}</p>
-            <h1 style={{ fontSize: 32, fontWeight: 600, marginTop: 4, letterSpacing: '-0.02em' }}>{firstName ? `Namaste, ${firstName}.` : 'Namaste!'}</h1>
+            <h1 style={{ fontSize: 32, fontWeight: 600, marginTop: 4, letterSpacing: '-0.02em' }}>{firstName ? `Hari OM, ${firstName}.` : 'Hari OM!'}</h1>
           </div>
           <div className="row" style={{ gap: 10 }}>
             <button className="btn btn--s" disabled style={{ cursor: 'not-allowed', opacity: 0.5 }}><SetuIcon.search/> Search</button>

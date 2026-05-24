@@ -119,8 +119,12 @@ export async function POST(req: Request) {
       txn.set(memberRef, {
         mid: newMid,
         uid: session.uid,
-        firstName: 'New',
-        lastName: 'Member',
+        // Placeholder by absence — empty firstName/lastName triggers the
+        // "Complete your profile" CTA on the dashboard (family/page.tsx
+        // needsProfile = !trimmedFirst). The co-manager fills in their
+        // real name in /family/members/[mid]/edit.
+        firstName: '',
+        lastName: '',
         type: 'Adult',
         gender: 'PreferNotToSay',
         manager: true,

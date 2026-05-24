@@ -4,6 +4,7 @@ import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
 import { SetuSessionClaimsSchema } from '@cmt/shared-domain/setu';
 import { CspRoot } from '@/features/family/components/atoms';
 import { DesktopSidebarLive } from '@/features/family/components/desktop-sidebar';
+import { LoadingOm } from '@/components/chrome/loading-om';
 
 // The layout is synchronous so cacheComponents:true can stream the shell.
 // The role check is async (cookies + session verify) so it lives inside its
@@ -50,7 +51,7 @@ export default function WelcomeLayout({ children }: { children: React.ReactNode 
       {/* Mobile: pass-through. Each page renders its own mobile chrome.
           Wrapped in <Suspense> so dynamic children stream under cacheComponents. */}
       <div className="block md:hidden">
-        <Suspense fallback={<div style={{ padding: 32, color: 'var(--muted)' }}>Loading…</div>}>
+        <Suspense fallback={<LoadingOm />}>
           {children}
         </Suspense>
       </div>
