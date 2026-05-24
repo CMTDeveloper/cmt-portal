@@ -1,3 +1,4 @@
+import { connection } from 'next/server';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
@@ -10,6 +11,9 @@ export const metadata = { title: 'Uninformed absentees — CMT Portal' };
 
 export default async function UninformedPage() {
   if (!flags.checkInTeacher) notFound();
+  // connection() marks the page dynamic so Firebase Admin SDK's internal
+  // crypto.randomBytes() call doesn't trip the cacheComponents prerender check.
+  await connection();
 
   const classes = await listClasses();
   const entries: TeacherReportEntry[] = [];
