@@ -18,7 +18,6 @@ export function LoadingOm({ size = 64, padding = 32 }: LoadingOmProps) {
         minHeight: padding * 2 + size,
       }}
     >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src="/chinmaya-om.png"
         alt="Loading"
