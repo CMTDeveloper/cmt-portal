@@ -1,8 +1,44 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "globalEnv": [
+    "NODE_ENV",
+    "VERCEL",
+    "VERCEL_ENV",
+    "VERCEL_URL"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
+      "env": [
+        "PORTAL_FIREBASE_PROJECT_ID",
+        "PORTAL_FIREBASE_CLIENT_EMAIL",
+        "PORTAL_FIREBASE_PRIVATE_KEY",
+        "MASTER_FIREBASE_PROJECT_ID",
+        "MASTER_FIREBASE_CLIENT_EMAIL",
+        "MASTER_FIREBASE_PRIVATE_KEY",
+        "MASTER_FIREBASE_DATABASE_URL",
+        "TEACHER_PASSPHRASE",
+        "SESSION_COOKIE_EXPIRES_DAYS",
+        "AWS_SES_REGION",
+        "AWS_SNS_REGION",
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_SES_FROM_EMAIL",
+        "CRON_SECRET",
+        "STRIPE_CHECKOUT_URL",
+        "STRIPE_API_KEY",
+        "WEBHOOK_API_KEY",
+        "EVENT_REGISTRATION_RATE_LIMIT_PER_MIN",
+        "SETU_EMAIL_ALLOWLIST",
+        "NEXT_PUBLIC_PORTAL_FIREBASE_PROJECT_ID",
+        "NEXT_PUBLIC_PORTAL_FIREBASE_API_KEY",
+        "NEXT_PUBLIC_PORTAL_FIREBASE_AUTH_DOMAIN",
+        "NEXT_PUBLIC_FEATURE_CHECK_IN_NOTIFY",
+        "NEXT_PUBLIC_FEATURE_CHECK_IN_TEACHER",
+        "NEXT_PUBLIC_FEATURE_CHECK_IN_ADMIN",
+        "NEXT_PUBLIC_FEATURE_CHECK_IN_KIOSK",
+        "NEXT_PUBLIC_FEATURE_SETU_AUTH"
+      ],
       "outputs": [".next/**", "!.next/cache/**", "dist/**"]
     },
     "dev": {
