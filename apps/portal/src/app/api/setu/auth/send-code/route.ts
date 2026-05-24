@@ -10,6 +10,7 @@ import {
 import { resolveSender } from '@/lib/aws/resolve-sender';
 import { findSetuFamilyByContact } from '@/features/setu/auth/find-family-by-contact';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
+import { portalAuth } from '@cmt/firebase-shared/admin/auth';
 
 
 const bodySchema = z.object({
@@ -80,7 +81,21 @@ export async function POST(req: Request) {
     }
   }
 
-  if (result.source === null && !hasPendingInvite) {
+  // Welcome-team path: admin granted role='welcome-team' to a Firebase auth
+  // user (no family attached). Without this branch they'd get the anti-enum
+  // silent-200 just like an unknown contact.
+  let hasWelcomeTeamUser = false;
+  if (result.source === null && type === 'email') {
+    try {
+      const user = await portalAuth().getUserByEmail(value).catch(() => null);
+      const role = (user?.customClaims as Record<string, unknown> | undefined)?.role;
+      if (role === 'welcome-team') hasWelcomeTeamUser = true;
+    } catch (err) {
+      console.error(`[send-code] hash=${hashPrefix} welcome-team lookup failed:`, err);
+    }
+  }
+
+  if (result.source === null && !hasPendingInvite && !hasWelcomeTeamUser) {
     return NextResponse.json({ success: true }, { status: 200 });
   }
 

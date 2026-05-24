@@ -72,23 +72,30 @@ export async function POST(req: Request) {
     }
   }
 
-  if (result.source === null && !hasPendingInvite) {
-    // Brand-new family path (no invite) — keep the old behavior of redirecting
-    // to /register without a session. Registration flow creates the session.
-    return NextResponse.json({ redirectTo: '/register?contact=verified' }, { status: 200 });
-  }
-
+  // Look up Firebase auth user BEFORE the early-return so we can detect
+  // welcome-team users granted via the admin tooling. Welcome-team uids are
+  // created with the same sha256Hex(normalized-email) scheme used here.
   const uid = sha256Hex(normalized);
   const auth = portalAuth();
-
+  let existingClaimsRole: string | undefined;
   try {
-    await auth.getUser(uid);
+    const existing = await auth.getUser(uid);
+    const c = (existing.customClaims as Record<string, unknown> | undefined) ?? {};
+    if (typeof c.role === 'string') existingClaimsRole = c.role;
   } catch (err) {
     if ((err as { code?: string }).code === 'auth/user-not-found') {
       await auth.createUser({ uid, disabled: false });
     } else {
       throw err;
     }
+  }
+  const isWelcomeTeamUser = existingClaimsRole === 'welcome-team';
+
+  if (result.source === null && !hasPendingInvite && !isWelcomeTeamUser) {
+    // Brand-new family path (no invite, not welcome-team) — keep the old
+    // behavior of redirecting to /register without a session. Registration
+    // flow creates the session.
+    return NextResponse.json({ redirectTo: '/register?contact=verified' }, { status: 200 });
   }
 
   // Build claims — Setu roles extend beyond the legacy PortalClaims type so we
@@ -136,6 +143,16 @@ export async function POST(req: Request) {
       claims = { role: 'family', familyId: legacyFid, ...contactClaim };
       redirectTo = '/register?contact=verified';
     }
+  }
+
+  // Welcome-team is the LAST priority — only applies when the user has NO
+  // family attached. A family-manager who also happens to have welcome-team
+  // claim continues to sign in as their family role (welcome-team is for
+  // non-family CMT volunteers). If a multi-role need emerges later, this
+  // is the spot to introduce a claims.roles[] array.
+  if (result.source === null && !hasPendingInvite && isWelcomeTeamUser) {
+    claims = { role: 'welcome-team', ...contactClaim };
+    redirectTo = '/welcome';
   }
 
   await auth.setCustomUserClaims(uid, claims);

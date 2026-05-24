@@ -85,9 +85,12 @@ function deny(req: NextRequest, reason: 'no-session' | 'unauthorized') {
   if (isApi) {
     return NextResponse.json({ error: reason }, { status: 401 });
   }
-  // Setu family routes redirect to /sign-in; legacy check-in routes keep /login
-  const isSetuFamily = pathname === '/family' || pathname.startsWith('/family/');
-  const loginPath = isSetuFamily ? '/sign-in' : '/login';
+  // Setu routes (family + welcome-team) redirect to the new /sign-in. Legacy
+  // check-in routes still go to /login (will be retired in Slice 5 cutover).
+  const isSetuRoute =
+    pathname === '/family' || pathname.startsWith('/family/') ||
+    pathname === '/welcome' || pathname.startsWith('/welcome/');
+  const loginPath = isSetuRoute ? '/sign-in' : '/login';
   const redirect = new URL(loginPath, req.nextUrl.origin);
   redirect.searchParams.set('from', pathname);
   redirect.searchParams.set('error', reason === 'no-session' ? 'session-expired' : 'unauthorized');
