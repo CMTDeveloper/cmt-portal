@@ -15,6 +15,7 @@ import { findSetuFamilyByContact } from '@/features/setu/auth/find-family-by-con
 import { lazyMigrateLegacyFamily } from '@/features/setu/registration/lazy-migrate';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { normalizeContactForKey } from '@cmt/shared-domain/setu';
+import { getMemberRoles } from '@/features/setu/auth/member-roles';
 
 
 const bodySchema = z.object({
@@ -105,8 +106,16 @@ export async function POST(req: Request) {
     ...(existingPrimaryRole ? [existingPrimaryRole] : []),
     ...existingExtraRoles,
   ]);
-  const isAdminUser = allExistingRoles.has('admin');
-  const isWelcomeTeamUser = allExistingRoles.has('welcome-team');
+
+  // Member-id-keyed role assignments (canonical source for family-member
+  // admins). Decouples "is this person admin" from "which auth uid signed
+  // in" — same mid for email + phone sign-in means one grant covers both.
+  // Legacy auth-claim grants on the auth user still count as a fallback.
+  const memberRoles = result.mid ? await getMemberRoles(result.mid) : [];
+
+  const isAdminUser = allExistingRoles.has('admin') || memberRoles.includes('admin');
+  const isWelcomeTeamUser =
+    allExistingRoles.has('welcome-team') || memberRoles.includes('welcome-team');
 
   // extraRoles to attach to the new claims. Family takes the primary slot
   // (it's their main UI surface), and we preserve admin/welcome-team as

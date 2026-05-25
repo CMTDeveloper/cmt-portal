@@ -21,6 +21,9 @@ vi.mock('@/features/setu/auth/find-family-by-contact', () => ({
 vi.mock('@/features/setu/registration/lazy-migrate', () => ({
   lazyMigrateLegacyFamily: vi.fn(),
 }));
+vi.mock('@/features/setu/auth/member-roles', () => ({
+  getMemberRoles: vi.fn(async () => []),
+}));
 
 import { POST } from '../route';
 import { verifyCode } from '@/features/check-in/shared';

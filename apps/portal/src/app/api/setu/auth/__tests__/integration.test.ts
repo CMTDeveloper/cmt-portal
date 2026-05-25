@@ -19,6 +19,9 @@ vi.mock('@/features/check-in/shared', () => ({
 vi.mock('@/features/setu/auth/find-family-by-contact', () => ({
   findSetuFamilyByContact: vi.fn(),
 }));
+vi.mock('@/features/setu/auth/member-roles', () => ({
+  getMemberRoles: vi.fn(async () => []),
+}));
 
 // ── AWS sender ────────────────────────────────────────────────────────────────
 const fakeSender = { sendEmail: vi.fn(), sendSMS: vi.fn() };
