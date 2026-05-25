@@ -25,8 +25,14 @@ export default function AdminPage() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
         <Tile
+          href="/welcome"
+          title="Family search"
+          sub="Look up any family by name, FID, legacy FID, email, or phone. Read-only family detail. Admins inherit welcome-team capability automatically."
+          tone="primary"
+        />
+        <Tile
           href="/admin/welcome-team"
-          title="Welcome team"
+          title="Welcome-team grants"
           sub="Grant + revoke welcome-team access for CMT volunteers helping families on Sunday."
           tone="primary"
         />

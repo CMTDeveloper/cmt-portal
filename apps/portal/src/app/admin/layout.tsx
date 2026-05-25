@@ -46,12 +46,13 @@ async function AdminChromeAndChildren({ children }: { children: React.ReactNode 
 
 function AdminSidebar({ displayEmail }: { displayEmail: string }) {
   const items: Array<{ label: string; href: string; legacy?: boolean }> = [
-    { label: 'Dashboard',    href: '/admin' },
-    { label: 'Welcome team', href: '/admin/welcome-team' },
-    { label: 'Admin users',  href: '/check-in/admin/users',   legacy: true },
-    { label: 'Guests',       href: '/check-in/admin/guests',  legacy: true },
-    { label: 'Unpaid',       href: '/check-in/admin/unpaid',  legacy: true },
-    { label: 'Reports',      href: '/check-in/admin/reports', legacy: true },
+    { label: 'Dashboard',          href: '/admin' },
+    { label: 'Family search',      href: '/welcome' },
+    { label: 'Welcome-team grants',href: '/admin/welcome-team' },
+    { label: 'Admin users',        href: '/check-in/admin/users',   legacy: true },
+    { label: 'Guests',             href: '/check-in/admin/guests',  legacy: true },
+    { label: 'Unpaid',             href: '/check-in/admin/unpaid',  legacy: true },
+    { label: 'Reports',            href: '/check-in/admin/reports', legacy: true },
   ];
   return (
     <aside style={{ width: 248, background: 'var(--surface)', borderRight: '1px solid var(--line)', padding: '22px 18px', display: 'flex', flexDirection: 'column' }}>
