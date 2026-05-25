@@ -357,10 +357,17 @@ function SignInReal() {
               <button className="btn btn--g btn--block" onClick={() => { setPageState('form'); setOtp(''); }} disabled={isVerifying}>
                 Use a different address
               </button>
-              <p style={{ marginTop: 14, fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>
-                Didn&apos;t get a code? Make sure your email is registered or{' '}
-                <Link href="/register" style={{ color: 'var(--accent)', textDecoration: 'underline' }}>register a new family →</Link>
-              </p>
+              {!staffFlow && (
+                <div style={{ marginTop: 18, padding: 14, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radiusSm)' }}>
+                  <p style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Didn&apos;t get a code?</p>
+                  <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5, marginBottom: 10 }}>
+                    Codes only go to emails that already belong to a family on Setu. If this is your first time, register your family below.
+                  </p>
+                  <Link href="/register" className="btn btn--s btn--block" style={{ display: 'flex', fontSize: 13 }}>
+                    Register a new family →
+                  </Link>
+                </div>
+              )}
             </>
           )}
         </div>
@@ -455,10 +462,17 @@ function SignInReal() {
               <button className="btn btn--g btn--block" onClick={() => { setPageState('form'); setOtp(''); }} disabled={isVerifying}>
                 Use a different address
               </button>
-              <p style={{ marginTop: 16, fontSize: 13, color: 'var(--muted)', lineHeight: 1.5 }}>
-                Didn&apos;t get a code? Make sure your email is registered or{' '}
-                <Link href="/register" style={{ color: 'var(--accent)', textDecoration: 'underline' }}>register a new family →</Link>
-              </p>
+              {!staffFlow && (
+                <div style={{ marginTop: 20, padding: 16, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radiusSm)' }}>
+                  <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Didn&apos;t get a code?</p>
+                  <p style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.55, marginBottom: 12 }}>
+                    Codes only go to emails that already belong to a family on Setu. If this is your first time, register your family below.
+                  </p>
+                  <Link href="/register" className="btn btn--s btn--block" style={{ display: 'flex' }}>
+                    Register a new family →
+                  </Link>
+                </div>
+              )}
             </>
           )}
         </div>

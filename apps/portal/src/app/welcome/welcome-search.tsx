@@ -13,6 +13,11 @@ export function WelcomeSearch() {
   const [error, setError] = useState<string | null>(null);
   const [searched, setSearched] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Monotonic sequence counter — drops responses from older queries when a
+  // newer one has already fired. Without this, a slow response from "patel"
+  // could clobber the screen after the user typed "patel-extended" and got
+  // its fresher results back.
+  const seqRef = useRef(0);
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -26,18 +31,21 @@ export function WelcomeSearch() {
     }
 
     debounceRef.current = setTimeout(async () => {
+      const mySeq = ++seqRef.current;
       setLoading(true);
       setError(null);
       try {
         const results = await searchFamiliesClient(trimmed);
+        if (mySeq !== seqRef.current) return; // stale — newer query has fired
         setHits(results);
         setSearched(true);
       } catch {
+        if (mySeq !== seqRef.current) return;
         setError('Search failed. Please try again.');
         setHits([]);
         setSearched(true);
       } finally {
-        setLoading(false);
+        if (mySeq === seqRef.current) setLoading(false);
       }
     }, 300);
 

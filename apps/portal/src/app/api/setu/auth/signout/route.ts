@@ -20,7 +20,7 @@ export async function POST(req: Request) {
   const res = NextResponse.redirect(new URL('/', req.url), { status: 303 });
   res.cookies.set('__session', '', {
     httpOnly: true,
-    secure: true,
+    secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
     path: '/',
     maxAge: 0,

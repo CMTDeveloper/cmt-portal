@@ -209,7 +209,7 @@ export async function POST(req: Request) {
   const res = NextResponse.json({ redirectTo }, { status: 200 });
   res.cookies.set('__session', session, {
     httpOnly: true,
-    secure: true,
+    secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
     path: '/',
     maxAge: expiresInDays * 24 * 60 * 60,
