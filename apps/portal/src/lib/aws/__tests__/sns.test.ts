@@ -27,4 +27,16 @@ describe('sendSMS', () => {
     const input = snsMock.commandCalls(PublishCommand)[0]!.args[0].input as { PhoneNumber: string };
     expect(input.PhoneNumber).toBe('+16475550100');
   });
+
+  it('tags the message as Transactional for OTP delivery priority', async () => {
+    snsMock.on(PublishCommand).resolves({ MessageId: 'sms-3' });
+    await sendSMS({ phone: '+16475550100', message: 'x' });
+    const input = snsMock.commandCalls(PublishCommand)[0]!.args[0].input as {
+      MessageAttributes?: Record<string, { DataType: string; StringValue: string }>;
+    };
+    expect(input.MessageAttributes?.['AWS.SNS.SMS.SMSType']).toEqual({
+      DataType: 'String',
+      StringValue: 'Transactional',
+    });
+  });
 });
