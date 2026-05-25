@@ -16,6 +16,12 @@ export function LoadingOm({ size = 64, padding = 32 }: LoadingOmProps) {
         justifyContent: 'center',
         padding,
         minHeight: padding * 2 + size,
+        // Fill the available space so the OM lands at the visual center
+        // whether the parent is a flex row, flex column, or block. Without
+        // these, the wrapper shrink-wraps to its content and lands at the
+        // top-left of any flex container.
+        width: '100%',
+        flexGrow: 1,
       }}
     >
       <img
