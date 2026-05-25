@@ -188,7 +188,7 @@ function SignInReal() {
 
   const contactLabel = contactType === 'email' ? 'Email address' : 'Phone number';
   const contactInputType = contactType === 'email' ? 'email' : 'tel';
-  const contactPlaceholder = contactType === 'email' ? 'you@example.com' : '(437) 971-2609 or +14379712609';
+  const contactPlaceholder = contactType === 'email' ? 'you@example.com' : '(416) 555-0100 or +14165550100';
   const contactHint = contactType === 'phone'
     ? "Canadian / US numbers — we'll add +1 automatically if you don't type it."
     : null;
