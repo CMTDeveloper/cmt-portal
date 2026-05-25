@@ -2,25 +2,51 @@
 
 **Reviewer:** Cursor agent (read-only audit)  
 **Scope:** Full monorepo — Slice 2 Setu auth/family API, legacy check-in, shared packages, middleware, tests, Firestore indexes  
-**Baseline:** `pnpm typecheck` PASS · `pnpm lint` PASS · `pnpm test` PASS (789 tests, 111 suites)  
+**Baseline (initial audit):** `pnpm typecheck` PASS · `pnpm lint` PASS · `pnpm test` PASS (789 tests, 111 suites)  
+**Baseline (re-verification 2026-05-25):** `pnpm test` PASS (755 tests, 109 suites)  
+**Fix commits:** `98a360d` (B1/B2/H1) · `b2b29dd` (H2/H3/L2) · `267839b` (M4/M5/L1/L3)  
 **Prior audits:** `2026-05-23-portal-flow-audit.md`, slice-2a through slice-2e reviews, `2026-05-23-fix-batch-verification.md`
 
 Severity: **B** = Blocker · **H** = High · **M** = Medium · **L** = Low · **Praise** = Good pattern
 
 ---
 
-## Executive summary
+## Re-verification summary (2026-05-25)
+
+**Verdict: All blockers and high-severity items from this review are closed.** Claude Code landed three commits addressing every item in the recommended fix order except doc-only follow-ups.
+
+| ID | Issue | Status | Evidence |
+|---|---|---|---|
+| B1 | Register join GET → 405 | ✅ Fixed | `register/page.tsx` → `/sign-in?email=…` |
+| B2 | `family/join` not public | ✅ N/A | Route deleted (`98a360d`) |
+| H1 | `family/join` takeover vector | ✅ Fixed | Route + `family-join.ts` deleted |
+| H2 | New user stuck on OTP screen | ✅ Fixed | Bordered “Didn’t get a code?” card + register CTA (`b2b29dd`) |
+| H3 | `secure: true` breaks localhost | ✅ Fixed | `NODE_ENV === 'production'` on all session cookies |
+| M2 | E2E dedupe gap | ✅ Fixed | `registration-dedupe.e2e.test.ts` added |
+| M4 | Stale `AGENTS.md` | ✅ Fixed | Pointer to `CLAUDE.md` |
+| M5 | Orphan Slice C index | ✅ Fixed | Removed from `firestore.indexes.json` |
+| L1 | Double semicolon | ✅ Fixed | `invite/accept/route.ts` |
+| L2 | Welcome search stale flash | ✅ Fixed | `seqRef` guard in `welcome-search.tsx` |
+| L3 | `Aarti Patel` fallback | ✅ Fixed | `'Family member'` in `family/page.tsx` |
+| M1 | PII in `/register/family` URL | ⚠️ Open | Still passes email+phone as query params |
+| M3 | Sample dashboard metrics | ⚠️ Open | Labeled “Sample data”; expected until Slices 3–4 |
+| — | Stale `mobile-api-integration.md` | ⚠️ Open | Still documents deleted `/api/setu/family/join` |
+| — | Stale `CLAUDE.md` Slice 2b bullet | ⚠️ Open | Still lists `POST /api/setu/family/join` |
+
+**New dedupe flow (verified in code + tests):**
+
+```
+/register → family-lookup match → /sign-in?email=… → send-code → verify-code
+  → findSetuFamilyByContact → session → /family
+```
+
+---
+
+## Executive summary (initial audit — historical)
 
 Slice 2 (Setu auth + family CRUD + invite + welcome search) is **architecturally sound and well-tested**. Auth middleware, method-aware `canAccessRoute`, Firestore transactions, and session cookie patterns are consistently applied. Most blockers from the 2026-05-23 flow audit have been fixed (public registration APIs, invite accept session refresh, sign-out, dynamic sidebar identity, `ContactVerifiedBanner`).
 
-**Two registration-dedupe issues remain open and should be treated as release blockers for the Setu family onboarding path:**
-
-1. The register page “Join the family” control is still a **GET `<Link>` to a POST-only API** — it 405s in the browser.
-2. Even if rewired to `fetch` POST, **`/api/setu/family/join` is not public** — middleware returns 401 before the handler runs.
-
-Additionally, **`family/join` accepts `contactProof` without OTP verification**, which is an account-takeover vector if the route is opened to unauthenticated callers. The secure dedupe path already exists: redirect matched users to `/sign-in` → OTP → `verify-code` finds the Setu family and issues a session.
-
-**Recommended next action for Claude Code:** Fix the register dedupe UX (sign-in redirect, not raw join API), then decide whether to deprecate or harden `family/join`.
+~~**Two registration-dedupe issues remain open…**~~ **Closed in `98a360d`.** The register match panel now redirects to OTP sign-in; `/api/setu/family/join` was deleted entirely rather than hardened.
 
 ---
 
@@ -292,15 +318,24 @@ Also fixed from slice-2b review:
 
 ## Recommended fix order for Claude Code
 
-| Priority | Task | Files | Effort |
-|---|---|---|---|
-| 1 | Replace register join `<Link>` with sign-in redirect (fixes B1, avoids H1) | `register/page.tsx` | Small |
-| 2 | Add “Didn’t get a code? Register →” on sign-in OTP screen (H2) | `sign-in/page.tsx` | Small |
-| 3 | Decide fate of `/api/setu/family/join` — deprecate vs OTP-gate (B2/H1) | `public-routes.ts`, `family/join/route.ts`, spec | Medium |
-| 4 | Add e2e for registration dedupe (M2) | `__tests__/e2e/` | Medium |
-| 5 | Sync `AGENTS.md` (M4) | `AGENTS.md` | Small |
-| 6 | `secure` cookie env toggle for local dev (H3) | session-setting routes | Small |
-| 7 | Welcome search stale-result guard (L2) | `welcome-search.tsx` | Small |
+| Priority | Task | Status |
+|---|---|---|
+| 1 | Replace register join `<Link>` with sign-in redirect | ✅ `98a360d` |
+| 2 | “Didn’t get a code?” card on sign-in OTP screen | ✅ `b2b29dd` |
+| 3 | Deprecate `/api/setu/family/join` (deleted, not gated) | ✅ `98a360d` |
+| 4 | E2E for registration dedupe | ✅ `98a360d` |
+| 5 | Sync `AGENTS.md` | ✅ `267839b` |
+| 6 | `secure` cookie env toggle for local dev | ✅ `b2b29dd` |
+| 7 | Welcome search stale-result guard | ✅ `b2b29dd` |
+
+### Remaining doc/hygiene (optional)
+
+| Task | Files |
+|---|---|
+| Remove `family/join` from `mobile-api-integration.md` | `apps/portal/docs/mobile-api-integration.md` |
+| Update Slice 2b bullet in `CLAUDE.md` (dedupe via sign-in, not join) | `CLAUDE.md` |
+| Add `registration-dedupe.e2e.test.ts` to e2e README table | `__tests__/e2e/README.md` |
+| Pass contact to `/register/family` via sessionStorage instead of query params (M1) | `register/page.tsx`, `register/family/page.tsx` |
 
 ---
 
