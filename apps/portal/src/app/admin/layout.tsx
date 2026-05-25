@@ -17,6 +17,7 @@ async function AdminChromeAndChildren({ children }: { children: React.ReactNode 
   const sessionCookie = cookieStore.get('__session')?.value;
   let allowed = false;
   let displayEmail = 'Admin';
+  let hasFamily = false;
   if (sessionCookie) {
     const raw = await verifyPortalSessionCookie(sessionCookie).catch(() => null);
     // isAdmin() checks role OR extraRoles — a family-manager with
@@ -25,6 +26,10 @@ async function AdminChromeAndChildren({ children }: { children: React.ReactNode 
       allowed = true;
       const email = (raw as { email?: string }).email;
       if (email) displayEmail = email;
+      // A family-manager-also-admin has fid in their claims; pure CMT staff
+      // admins don't. We use this to show a "Back to family" link in the
+      // sidebar so dual-role users can hop back to /family quickly.
+      hasFamily = typeof (raw as { fid?: unknown }).fid === 'string';
     }
   }
 
@@ -38,13 +43,13 @@ async function AdminChromeAndChildren({ children }: { children: React.ReactNode 
 
   return (
     <CspRoot style={{ display: 'flex', width: '100%', minHeight: '100dvh' }}>
-      <AdminSidebar displayEmail={displayEmail}/>
+      <AdminSidebar displayEmail={displayEmail} hasFamily={hasFamily}/>
       <main style={{ flex: 1, padding: '32px 40px', overflow: 'auto' }}>{children}</main>
     </CspRoot>
   );
 }
 
-function AdminSidebar({ displayEmail }: { displayEmail: string }) {
+function AdminSidebar({ displayEmail, hasFamily }: { displayEmail: string; hasFamily: boolean }) {
   const items: Array<{ label: string; href: string; legacy?: boolean }> = [
     { label: 'Dashboard',          href: '/admin' },
     { label: 'Family search',      href: '/welcome' },
@@ -58,6 +63,22 @@ function AdminSidebar({ displayEmail }: { displayEmail: string }) {
     <aside style={{ width: 248, background: 'var(--surface)', borderRight: '1px solid var(--line)', padding: '22px 18px', display: 'flex', flexDirection: 'column' }}>
       <div style={{ marginBottom: 28 }}><SetuLogo size={20}/></div>
       <nav style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 14 }}>
+        {hasFamily && (
+          <>
+            <Link
+              href="/family"
+              style={{
+                display: 'flex', alignItems: 'center', gap: 10,
+                padding: '10px 12px', borderRadius: 'var(--radiusSm)',
+                color: 'var(--body-text)', fontWeight: 500, textDecoration: 'none',
+              }}
+            >
+              <SetuIcon.back/>
+              <span>Back to my family</span>
+            </Link>
+            <div style={{ height: 1, background: 'var(--line)', margin: '8px 12px' }}/>
+          </>
+        )}
         {items.map(({ label, href, legacy }) => (
           <Link key={href} href={href} style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
