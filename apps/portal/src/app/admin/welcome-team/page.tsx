@@ -2,6 +2,7 @@ import { connection } from 'next/server';
 import Link from 'next/link';
 import { portalAuth } from '@cmt/firebase-shared/admin/auth';
 import { SetuIcon } from '@cmt/ui';
+import { hasCapability, type ClaimsShape } from '@/lib/auth/role-claims';
 import { ThemedAddWelcomeTeamForm } from '@/features/admin/welcome-team/themed-add-form';
 import { ThemedWelcomeTeamList } from '@/features/admin/welcome-team/themed-list';
 
@@ -13,8 +14,11 @@ export default async function AdminWelcomeTeamPage() {
   await connection();
 
   const result = await portalAuth().listUsers(1000);
+  // hasCapability honors extraRoles — a family-manager who was granted
+  // welcome-team also shows up in this list, not just users whose PRIMARY
+  // role is welcome-team.
   const users = result.users
-    .filter((u) => ((u.customClaims as Record<string, unknown> | undefined) ?? {}).role === 'welcome-team')
+    .filter((u) => hasCapability((u.customClaims as ClaimsShape | undefined) ?? null, 'welcome-team'))
     .map((u) => {
       const claims = (u.customClaims as Record<string, unknown> | undefined) ?? {};
       const claimsEmail = typeof claims.email === 'string' ? claims.email : '';

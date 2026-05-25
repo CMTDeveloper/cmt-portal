@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { portalAuth } from '@cmt/firebase-shared/admin/auth';
 import { AdminUserList } from '@/features/check-in/admin/admin-user-list';
 import { AddAdminForm } from '@/features/check-in/admin/add-admin-form';
+import { hasCapability, type ClaimsShape } from '@/lib/auth/role-claims';
 import { flags } from '@/lib/flags';
 
 export const metadata = { title: 'Admin users — CMT Portal' };
@@ -15,7 +16,7 @@ export default async function AdminUsersPage() {
 
   const result = await portalAuth().listUsers(1000);
   const users = result.users
-    .filter((u) => (u.customClaims as { role?: string } | undefined)?.role === 'admin')
+    .filter((u) => hasCapability((u.customClaims as ClaimsShape | undefined) ?? null, 'admin'))
     .map((u) => ({ uid: u.uid, email: u.email ?? '' }));
 
   return (

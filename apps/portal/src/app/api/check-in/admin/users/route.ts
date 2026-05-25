@@ -2,12 +2,15 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { portalAuth } from '@cmt/firebase-shared/admin/auth';
 import { getOrCreateAdminUser } from '@cmt/firebase-shared/admin/claims';
+import { hasCapability, type ClaimsShape } from '@/lib/auth/role-claims';
 
 
 export async function GET() {
   const result = await portalAuth().listUsers(1000);
+  // hasCapability honors extraRoles so a family-manager with admin extra
+  // shows up in the admin list, not just primary-role admins.
   const users = result.users
-    .filter((u) => (u.customClaims as { role?: string } | undefined)?.role === 'admin')
+    .filter((u) => hasCapability((u.customClaims as ClaimsShape | undefined) ?? null, 'admin'))
     .map((u) => ({ uid: u.uid, email: u.email ?? '' }));
   return NextResponse.json({ users }, { status: 200 });
 }

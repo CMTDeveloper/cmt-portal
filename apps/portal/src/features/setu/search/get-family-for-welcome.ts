@@ -1,5 +1,6 @@
 import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
 import { SetuSessionClaimsSchema } from '@cmt/shared-domain/setu';
+import { isWelcomeTeam, type WithRole } from '@cmt/shared-domain';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import type { FamilyDoc, MemberDoc } from '@cmt/shared-domain/setu';
 
@@ -21,7 +22,9 @@ export async function getFamilyForWelcome(fid: string): Promise<FamilyForWelcome
   if (!parsed.success) return null;
 
   const claims = parsed.data;
-  if (claims.role !== 'welcome-team') return null;
+  // isWelcomeTeam honors extraRoles AND admin inheritance — a family-manager
+  // with extraRoles=['welcome-team'] or an admin both pass this defensive check.
+  if (!isWelcomeTeam(claims as unknown as WithRole)) return null;
 
   const db = portalFirestore();
 

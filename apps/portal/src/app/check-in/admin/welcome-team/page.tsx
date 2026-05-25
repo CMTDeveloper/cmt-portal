@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { portalAuth } from '@cmt/firebase-shared/admin/auth';
 import { AddWelcomeTeamForm } from '@/features/check-in/admin/add-welcome-team-form';
 import { WelcomeTeamList } from '@/features/check-in/admin/welcome-team-list';
+import { hasCapability, type ClaimsShape } from '@/lib/auth/role-claims';
 import { flags } from '@/lib/flags';
 
 export const metadata = { title: 'Welcome team — CMT Portal admin' };
@@ -16,7 +17,7 @@ export default async function AdminWelcomeTeamPage() {
 
   const result = await portalAuth().listUsers(1000);
   const users = result.users
-    .filter((u) => ((u.customClaims as Record<string, unknown> | undefined) ?? {}).role === 'welcome-team')
+    .filter((u) => hasCapability((u.customClaims as ClaimsShape | undefined) ?? null, 'welcome-team'))
     .map((u) => {
       const claims = (u.customClaims as Record<string, unknown> | undefined) ?? {};
       const claimsEmail = typeof claims.email === 'string' ? claims.email : '';
