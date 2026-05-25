@@ -69,14 +69,28 @@ describe('POST /api/setu/auth/send-code', () => {
     expect(mockSendSMS).not.toHaveBeenCalled();
   });
 
-  it('accepts phone contact, calls SNS sender', async () => {
+  it('accepts phone contact, calls SNS sender with E.164-canonical phone', async () => {
     (findSetuFamilyByContact as ReturnType<typeof vi.fn>).mockResolvedValue({
       source: 'legacy', fid: null, mid: null, legacyFid: '42', family: {},
     });
     const res = await POST(makeRequest({ type: 'phone', value: '4165551234' }));
     expect(res.status).toBe(200);
-    expect(mockSendSMS).toHaveBeenCalledWith(expect.objectContaining({ phone: '4165551234' }));
+    // Phone is canonicalized to +1XXXXXXXXXX before SNS publish so AWS
+    // doesn't misinterpret the country code on raw 10-digit input.
+    expect(mockSendSMS).toHaveBeenCalledWith(expect.objectContaining({ phone: '+14165551234' }));
     expect(mockSendEmail).not.toHaveBeenCalled();
+  });
+
+  it('phone variations all canonicalize to the same E.164 form', async () => {
+    (findSetuFamilyByContact as ReturnType<typeof vi.fn>).mockResolvedValue({
+      source: 'legacy', fid: null, mid: null, legacyFid: '42', family: {},
+    });
+    for (const raw of ['4165551234', '+14165551234', '14165551234', '(416) 555-1234', '416-555-1234']) {
+      mockSendSMS.mockClear();
+      const res = await POST(makeRequest({ type: 'phone', value: raw }));
+      expect(res.status).toBe(200);
+      expect(mockSendSMS).toHaveBeenCalledWith(expect.objectContaining({ phone: '+14165551234' }));
+    }
   });
 
   it('returns 429 with resetAt when rate limited', async () => {

@@ -11,6 +11,7 @@ import { resolveSender } from '@/lib/aws/resolve-sender';
 import { findSetuFamilyByContact } from '@/features/setu/auth/find-family-by-contact';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { portalAuth } from '@cmt/firebase-shared/admin/auth';
+import { normalizeContactForKey } from '@cmt/shared-domain/setu';
 
 
 const bodySchema = z.object({
@@ -105,13 +106,18 @@ export async function POST(req: Request) {
 
   if (type === 'email') {
     await resolveSender().sendEmail({
-      to: value,
+      to: normalizeContactForKey('email', value),
       subject: 'Your CMT portal verification code',
       text: `Your verification code is ${code}. It expires in 10 minutes.`,
     });
   } else {
+    // Canonicalize to E.164 (+1XXXXXXXXXX). Without this, users who enter
+    // "4379712609" (no +1) get the raw value passed to SNS where sns.ts
+    // naively prepends "+" → "+4379712609" → AWS misinterprets the country
+    // code or rejects. Now any of "4379712609" / "+14379712609" /
+    // "(437) 971-2609" all publish to the same E.164 number.
     await resolveSender().sendSMS({
-      phone: value,
+      phone: normalizeContactForKey('phone', value),
       message: `CMT portal code: ${code} (10 min)`,
     });
   }

@@ -14,6 +14,7 @@ import {
 import { findSetuFamilyByContact } from '@/features/setu/auth/find-family-by-contact';
 import { lazyMigrateLegacyFamily } from '@/features/setu/registration/lazy-migrate';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
+import { normalizeContactForKey } from '@cmt/shared-domain/setu';
 
 
 const bodySchema = z.object({
@@ -120,7 +121,11 @@ export async function POST(req: Request) {
 
   // Build claims — Setu roles extend beyond the legacy PortalClaims type so we
   // set custom claims directly via the Firebase Admin SDK.
-  const contactClaim = type === 'email' ? { email: value } : { phone: value };
+  // Canonicalize the contact for the session claim so it doesn't matter
+  // whether the user entered "4379712609" or "+14379712609" — the claim
+  // always carries the E.164 form for downstream use (display, mobile API).
+  const canonicalContact = normalizeContactForKey(type, value);
+  const contactClaim = type === 'email' ? { email: canonicalContact } : { phone: canonicalContact };
   let claims: Record<string, unknown> = { role: 'family', familyId: '', ...contactClaim };
   let redirectTo: string = '/register?contact=verified';
 

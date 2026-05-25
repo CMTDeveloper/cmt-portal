@@ -188,7 +188,10 @@ function SignInReal() {
 
   const contactLabel = contactType === 'email' ? 'Email address' : 'Phone number';
   const contactInputType = contactType === 'email' ? 'email' : 'tel';
-  const contactPlaceholder = contactType === 'email' ? 'you@example.com' : '+1 (416) 555-0100';
+  const contactPlaceholder = contactType === 'email' ? 'you@example.com' : '(437) 971-2609 or +14379712609';
+  const contactHint = contactType === 'phone'
+    ? "Canadian / US numbers — we'll add +1 automatically if you don't type it."
+    : null;
 
   async function handleSendCode() {
     const trimmed = contactValue.trim();
@@ -301,6 +304,9 @@ function SignInReal() {
                   autoComplete={contactType === 'email' ? 'email' : 'tel'}
                   disabled={loading}
                 />
+                {contactHint && (
+                  <p style={{ fontSize: 12, color: 'var(--muted-text)', marginTop: 6, lineHeight: 1.4 }}>{contactHint}</p>
+                )}
               </div>
               <button
                 className="btn btn--p btn--block"
@@ -406,6 +412,9 @@ function SignInReal() {
                   autoComplete={contactType === 'email' ? 'email' : 'tel'}
                   disabled={loading}
                 />
+                {contactHint && (
+                  <p style={{ fontSize: 12, color: 'var(--muted-text)', marginTop: 6, lineHeight: 1.4 }}>{contactHint}</p>
+                )}
               </div>
               <button
                 className="btn btn--p btn--block"
