@@ -1,6 +1,6 @@
-import { randomBytes } from 'node:crypto';
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
 import { hashContactKey } from './hash-contact-key';
+import { generateFid } from './generate-fid';
 
 export type Location = 'Brampton' | 'Mississauga' | 'Scarborough' | 'Markham';
 export type Gender = 'Male' | 'Female' | 'PreferNotToSay';
@@ -30,19 +30,6 @@ export interface RegisterFamilyInput {
 export interface RegisterFamilyResult {
   fid: string;
   mid: string;
-}
-
-function generateFid(): string {
-  // Cryptographic randomness for unpredictability. Math.random's V8 PRNG state
-  // is only ~64 bits and can theoretically collide across rapid deploys.
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  const bytes = randomBytes(12);
-  let result = '';
-  for (let i = 0; i < 12; i++) {
-    const b = bytes[i] ?? 0;
-    result += chars[b % chars.length];
-  }
-  return result;
 }
 
 function zeroPad(n: number): string {

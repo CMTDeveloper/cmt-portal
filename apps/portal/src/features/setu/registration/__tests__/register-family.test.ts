@@ -62,15 +62,14 @@ describe('registerFamily — happy path', () => {
     expect(mockRunTransaction).toHaveBeenCalledOnce();
   });
 
-  it('fid is a non-empty string matching the 12-char base32-ish format', async () => {
+  it('fid uses the CMT- prefix followed by 8 random A-Z0-9 chars', async () => {
     mockRunTransaction.mockImplementation(async (fn: (txn: unknown) => Promise<unknown>) => {
       const txn = { get: vi.fn().mockResolvedValue({ exists: false }), set: vi.fn() };
       return fn(txn);
     });
 
     const { fid } = await registerFamily(baseInput);
-    // 12 uppercase alphanumeric chars
-    expect(fid).toMatch(/^[A-Z0-9]{12}$/);
+    expect(fid).toMatch(/^CMT-[A-Z0-9]{8}$/);
   });
 
   it('creates contactKey docs inside the transaction for both email and phone', async () => {

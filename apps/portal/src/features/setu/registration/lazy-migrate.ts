@@ -1,24 +1,12 @@
-import { randomBytes } from 'node:crypto';
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
 import { findFamilyById } from '@/features/check-in/shared/rtdb/family-lookup';
 import { hashContactKey } from './hash-contact-key';
+import { generateFid } from './generate-fid';
 
 export interface LazyMigrateResult {
   migrated: boolean;
   fid: string;
   legacyFid: string;
-}
-
-function generateFid(): string {
-  // Crypto randomness to keep FIDs unpredictable. Same generator as register-family.ts.
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  const bytes = randomBytes(12);
-  let result = '';
-  for (let i = 0; i < 12; i++) {
-    const b = bytes[i] ?? 0;
-    result += chars[b % chars.length];
-  }
-  return result;
 }
 
 function zeroPad(n: number): string {

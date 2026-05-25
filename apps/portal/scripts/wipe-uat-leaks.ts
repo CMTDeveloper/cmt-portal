@@ -11,6 +11,9 @@ import { portalAuth } from '@cmt/firebase-shared/admin/auth';
 const PROTECTED_FIDS = new Set(['GY9OART03HDC']);
 
 async function main() {
+  const wipeAll = process.argv.includes('--all');
+  const protectedFids: Set<string> = wipeAll ? new Set<string>() : PROTECTED_FIDS;
+
   const projectId = process.env.PORTAL_FIREBASE_PROJECT_ID;
   if (projectId !== 'chinmaya-setu-uat') {
     console.error(`REFUSED: PORTAL_FIREBASE_PROJECT_ID is "${projectId}", expected "chinmaya-setu-uat"`);
@@ -20,12 +23,16 @@ async function main() {
   const db = portalFirestore();
   const refs = await db.collection('families').listDocuments();
   console.log(`\nFound ${refs.length} family doc refs in ${projectId}`);
-  console.log(`Protected (will NOT delete): ${[...PROTECTED_FIDS].join(', ')}\n`);
+  if (wipeAll) {
+    console.log(`Mode: --all → wiping EVERYTHING (no protected fids)\n`);
+  } else {
+    console.log(`Protected (will NOT delete): ${[...protectedFids].join(', ')}\n`);
+  }
 
   const fidsToWipe: string[] = [];
 
   for (const ref of refs) {
-    if (PROTECTED_FIDS.has(ref.id)) {
+    if (protectedFids.has(ref.id)) {
       console.log(`SKIP   fid=${ref.id} (protected)`);
       continue;
     }
