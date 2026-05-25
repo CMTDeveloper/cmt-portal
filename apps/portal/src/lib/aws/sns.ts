@@ -21,7 +21,8 @@ export async function sendSMS(args: SendSMSArgs): Promise<void> {
   // gets the high-priority delivery path. (Confirmed root cause when the
   // portal's first prod OTP SMS to +14379712609 was accepted by SNS but
   // never reached the carrier.)
-  await client().send(
+  console.log(`[sns] publish region=${snsRegion()} phone=${phone}`);
+  const result = await client().send(
     new PublishCommand({
       PhoneNumber: phone,
       Message: args.message,
@@ -33,4 +34,5 @@ export async function sendSMS(args: SendSMSArgs): Promise<void> {
       },
     }),
   );
+  console.log(`[sns] published MessageId=${result.MessageId ?? '?'}`);
 }
