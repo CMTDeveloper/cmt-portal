@@ -9,8 +9,40 @@ import { isPublicRoute, canAccessRoute, type SessionClaims } from '@cmt/shared-d
 // them straight to their dashboard instead of showing the marketing/sign-in UI.
 const AUTH_ENTRY_ROUTES = new Set(['/', '/sign-in', '/register', '/register/family']);
 
+// Parsed once per cold start. Comma-separated list of origins allowed to call
+// /api/*. Empty/unset → no CORS headers emitted (same-origin web only).
+// Used by mobile dev (Expo dev server, Capacitor file://) and any future
+// non-portal client.
+function corsOrigins(): Set<string> {
+  return new Set(
+    (process.env.MOBILE_CORS_ORIGINS ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
+  );
+}
+
+function applyCors(req: NextRequest, res: NextResponse): NextResponse {
+  const origin = req.headers.get('origin');
+  if (!origin) return res;
+  const allowed = corsOrigins();
+  if (allowed.size === 0 || !allowed.has(origin)) return res;
+  res.headers.set('access-control-allow-origin', origin);
+  res.headers.set('vary', 'Origin');
+  res.headers.set('access-control-allow-credentials', 'true');
+  res.headers.set('access-control-allow-methods', 'GET,POST,PATCH,DELETE,OPTIONS');
+  res.headers.set('access-control-allow-headers', 'authorization,content-type');
+  res.headers.set('access-control-max-age', '86400');
+  return res;
+}
+
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+
+  // CORS preflight for /api/*. Mobile dev origins call /api/setu/* + bearer.
+  if (req.method === 'OPTIONS' && pathname.startsWith('/api/')) {
+    return applyCors(req, new NextResponse(null, { status: 204 }));
+  }
 
   if (AUTH_ENTRY_ROUTES.has(pathname)) {
     const cookie = req.cookies.get('__session')?.value;
@@ -30,7 +62,11 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  if (isPublicRoute(pathname)) return NextResponse.next();
+  if (isPublicRoute(pathname)) {
+    return pathname.startsWith('/api/')
+      ? applyCors(req, NextResponse.next())
+      : NextResponse.next();
+  }
 
   const bearer = req.headers.get('authorization')?.match(/^Bearer (.+)$/)?.[1];
   const cookie = req.cookies.get('__session')?.value;
@@ -44,8 +80,14 @@ export async function middleware(req: NextRequest) {
     if (decoded && decoded.role) claims = decoded as unknown as SessionClaims;
   }
 
-  if (!claims) return deny(req, 'no-session');
-  if (!canAccessRoute(claims, pathname, req.method)) return deny(req, 'unauthorized');
+  if (!claims) {
+    const denied = deny(req, 'no-session');
+    return pathname.startsWith('/api/') ? applyCors(req, denied) : denied;
+  }
+  if (!canAccessRoute(claims, pathname, req.method)) {
+    const denied = deny(req, 'unauthorized');
+    return pathname.startsWith('/api/') ? applyCors(req, denied) : denied;
+  }
 
   const reqHeaders = new Headers(req.headers);
   reqHeaders.set('x-portal-role', claims.role);
@@ -68,7 +110,7 @@ export async function middleware(req: NextRequest) {
   if (Array.isArray(claims.extraRoles) && claims.extraRoles.length > 0) {
     res.headers.set('x-portal-extra-roles', claims.extraRoles.join(','));
   }
-  return res;
+  return pathname.startsWith('/api/') ? applyCors(req, res) : res;
 }
 
 function dashboardForRole(role: unknown): string | null {

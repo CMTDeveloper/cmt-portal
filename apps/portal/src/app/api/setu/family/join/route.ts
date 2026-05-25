@@ -16,6 +16,8 @@ const bodySchema = z.object({
     type: z.enum(['email', 'phone']),
     value: z.string().min(3),
   }),
+  // Mobile: see apps/portal/docs/mobile-api-integration.md
+  mode: z.enum(['web', 'mobile']).optional(),
 });
 
 export async function POST(req: Request) {
@@ -70,8 +72,18 @@ export async function POST(req: Request) {
   };
   await auth.setCustomUserClaims(uid, claims);
   const customToken = await auth.createCustomToken(uid, claims);
-  const idToken = await exchangeCustomTokenForIdToken(customToken);
 
+  const urlMode = new URL(req.url).searchParams.get('mode');
+  const mode = parsed.data.mode === 'mobile' || urlMode === 'mobile' ? 'mobile' : 'web';
+
+  if (mode === 'mobile') {
+    return NextResponse.json(
+      { fid: joinResult.fid, mid: joinResult.mid, customToken },
+      { status: 200 },
+    );
+  }
+
+  const idToken = await exchangeCustomTokenForIdToken(customToken);
   const expiresInDays = Number(process.env.SESSION_COOKIE_EXPIRES_DAYS ?? '5');
   const session = await createPortalSessionCookie(idToken, expiresInDays);
 

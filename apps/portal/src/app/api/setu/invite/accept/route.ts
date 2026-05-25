@@ -14,6 +14,8 @@ import { hashContactKey } from '@/features/setu/registration/hash-contact-key';
 
 const bodySchema = z.object({
   token: z.string().min(1),
+  // Mobile: see apps/portal/docs/mobile-api-integration.md
+  mode: z.enum(['web', 'mobile']).optional(),
 });
 
 function zeroPad(n: number): string {
@@ -191,8 +193,18 @@ export async function POST(req: Request) {
   };
   await auth.setCustomUserClaims(session.uid, claims);
   const customToken = await auth.createCustomToken(session.uid, claims);
-  const idToken = await exchangeCustomTokenForIdToken(customToken);
 
+  const urlMode = new URL(req.url).searchParams.get('mode');
+  const mode = parsed.data.mode === 'mobile' || urlMode === 'mobile' ? 'mobile' : 'web';
+
+  if (mode === 'mobile') {
+    return NextResponse.json(
+      { mid, fid, redirectTo: '/family', customToken },
+      { status: 200 },
+    );
+  }
+
+  const idToken = await exchangeCustomTokenForIdToken(customToken);
   const expiresInDays = Number(process.env.SESSION_COOKIE_EXPIRES_DAYS ?? '5');
   const sessionCookie = await createPortalSessionCookie(idToken, expiresInDays);
 
