@@ -76,7 +76,28 @@ describe('isWelcomeTeam', () => {
   it('returns true for welcome-team', () => {
     expect(isWelcomeTeam({ role: 'welcome-team' })).toBe(true);
   });
-  it('returns false for admin', () => {
-    expect(isWelcomeTeam({ role: 'admin' })).toBe(false);
+  it('returns true for admin (admin inherits welcome-team capability)', () => {
+    expect(isWelcomeTeam({ role: 'admin' })).toBe(true);
+  });
+  it('returns false for family-manager without welcome-team in extras', () => {
+    expect(isWelcomeTeam({ role: 'family-manager' })).toBe(false);
+  });
+});
+
+describe('multi-role via extraRoles', () => {
+  it('isAdmin: true when admin is in extraRoles', () => {
+    expect(isAdmin({ role: 'family-manager', extraRoles: ['admin'] })).toBe(true);
+  });
+  it('isWelcomeTeam: true when welcome-team is in extraRoles', () => {
+    expect(isWelcomeTeam({ role: 'family-manager', extraRoles: ['welcome-team'] })).toBe(true);
+  });
+  it('isSetuFamily: still true even with admin extra', () => {
+    expect(isSetuFamily({ role: 'family-manager', extraRoles: ['admin'] })).toBe(true);
+  });
+  it('isAdmin: false when extraRoles is empty', () => {
+    expect(isAdmin({ role: 'family-manager', extraRoles: [] })).toBe(false);
+  });
+  it('isAdmin: false when only welcome-team is in extraRoles', () => {
+    expect(isAdmin({ role: 'family-manager', extraRoles: ['welcome-team'] })).toBe(false);
   });
 });
