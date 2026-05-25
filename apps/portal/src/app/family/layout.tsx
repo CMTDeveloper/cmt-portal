@@ -1,8 +1,11 @@
 import { Suspense } from 'react';
+import { cookies } from 'next/headers';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 import { CspRoot } from '@/features/family/components/atoms';
 import { DesktopSidebar, DesktopSidebarLive } from '@/features/family/components/desktop-sidebar';
 import { LoadingOm } from '@/components/chrome/loading-om';
+import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
+import { isAdmin, type WithRole } from '@cmt/shared-domain';
 
 // The layout itself stays synchronous so cacheComponents:true can stream the
 // static shell. The two awaited data fetches (sidebar identity, page body) are
@@ -10,7 +13,7 @@ import { LoadingOm } from '@/components/chrome/loading-om';
 // renders immediately.
 
 async function SidebarWithIdentity() {
-  const data = await getCurrentFamily();
+  const [data, admin] = await Promise.all([getCurrentFamily(), readIsAdminFromCookie()]);
   let displayName: string | undefined;
   let subtitle: string | undefined;
   if (data) {
@@ -18,7 +21,24 @@ async function SidebarWithIdentity() {
     if (currentMember) displayName = `${currentMember.firstName} ${currentMember.lastName}`;
     subtitle = `${data.family.name}${data.family.legacyFid ? ` · FID ${data.family.fid} · Legacy ${data.family.legacyFid}` : ` · FID ${data.family.fid}`}`;
   }
-  return <DesktopSidebarLive displayName={displayName} subtitle={subtitle} showSignOut/>;
+  return <DesktopSidebarLive displayName={displayName} subtitle={subtitle} showSignOut isAdmin={admin}/>;
+}
+
+// Reads the session cookie and runs isAdmin() so the sidebar can decide whether
+// to show the Admin shortcut. Returns false on any error (missing cookie,
+// expired session, etc.) — silent failure is fine here because middleware
+// already gates access to /admin itself.
+async function readIsAdminFromCookie(): Promise<boolean> {
+  try {
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get('__session')?.value;
+    if (!sessionCookie) return false;
+    const claims = await verifyPortalSessionCookie(sessionCookie).catch(() => null);
+    if (!claims) return false;
+    return isAdmin(claims as unknown as WithRole);
+  } catch {
+    return false;
+  }
 }
 
 export default function FamilyLayout({ children }: { children: React.ReactNode }) {

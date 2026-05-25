@@ -13,6 +13,11 @@ interface DesktopSidebarProps {
   displayName?: string | undefined;
   subtitle?: string | undefined;
   showSignOut?: boolean;
+  // When true, a separate "Admin" link appears at the bottom of the family
+  // nav. The family layout passes this based on isAdmin(claims), which is
+  // true for both primary admins and family members with admin in extraRoles
+  // (via roleAssignments/{mid}). Welcome-team-only sidebar ignores this flag.
+  isAdmin?: boolean;
 }
 
 const FAMILY_NAV_ITEMS: [SidebarTab, string, keyof typeof SetuIcon, string][] = [
@@ -42,10 +47,14 @@ function deriveActiveFromPathname(pathname: string): SidebarTab {
 // DesktopSidebar is pure — it does not call hooks. This lets it render inside
 // Suspense fallbacks (which Next.js 16 cacheComponents prerenders statically).
 // For pathname-driven self-highlighting, use DesktopSidebarLive instead.
-export function DesktopSidebar({ active, role = 'family', displayName, subtitle, showSignOut }: DesktopSidebarProps) {
+export function DesktopSidebar({ active, role = 'family', displayName, subtitle, showSignOut, isAdmin }: DesktopSidebarProps) {
   const navItems = role === 'welcome-team' ? WELCOME_NAV_ITEMS : FAMILY_NAV_ITEMS;
   const trimmed = (displayName ?? '').trim();
   const name = trimmed || (role === 'welcome-team' ? 'Welcome team' : 'Family member');
+  // Only show the admin shortcut on the family sidebar (welcome-team already
+  // has its own routes). Admins still navigate via /admin URLs — this is
+  // just a convenience link so they don't have to type the path.
+  const showAdminLink = role === 'family' && isAdmin === true;
 
   return (
     <aside style={{ width: 248, background: 'var(--surface)', borderRight: '1px solid var(--line)', padding: '22px 18px', display: 'flex', flexDirection: 'column' }}>
@@ -75,6 +84,25 @@ export function DesktopSidebar({ active, role = 'family', displayName, subtitle,
             </Link>
           );
         })}
+        {showAdminLink && (
+          <>
+            <div style={{ marginTop: 14, marginBottom: 6, padding: '0 12px', fontSize: 10, fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--muted)' }}>
+              Staff
+            </div>
+            <Link
+              href="/admin"
+              style={{
+                display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px',
+                borderRadius: 'var(--radiusSm)',
+                background: 'transparent',
+                color: 'var(--body-text)',
+                fontWeight: 500, textDecoration: 'none',
+              }}
+            >
+              <SetuIcon.shield/> Admin
+            </Link>
+          </>
+        )}
       </nav>
       <div style={{ marginTop: 'auto', padding: 14, background: 'var(--bg)', borderRadius: 'var(--radiusSm)', border: '1px solid var(--line)' }}>
         <div className="row" style={{ gap: 10 }}>
