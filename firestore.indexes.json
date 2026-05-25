@@ -9,14 +9,6 @@
       ]
     },
     {
-      "collectionGroup": "registrations",
-      "queryScope": "COLLECTION_GROUP",
-      "fields": [
-        { "fieldPath": "email", "order": "ASCENDING" },
-        { "fieldPath": "category", "order": "ASCENDING" }
-      ]
-    },
-    {
       "collectionGroup": "families",
       "queryScope": "COLLECTION",
       "fields": [

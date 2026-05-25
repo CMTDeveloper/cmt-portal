@@ -13,7 +13,7 @@ export default async function FamilyDashboardPage() {
   // awaited request-data access happens before the request-time new Date()
   // below. connection() makes the rest of this component request-time only.
   await connection();
-  let managerName = 'Aarti Patel';
+  let managerName = 'Family member';
   let familyName = mockFamily.name;
   let memberCount = mockFamily.members.length;
   let displayMembers: { name: string }[] = mockFamily.members.map((m) => ({ name: m.name }));
