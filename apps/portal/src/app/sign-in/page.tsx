@@ -164,9 +164,13 @@ function SignInReal() {
   const adminFlow = fromParam === '/admin' || fromParam.startsWith('/admin/');
   const staffFlow = welcomeFlow || adminFlow;
 
+  // /register dedupe sends the user here as /sign-in?email=foo when a
+  // matching family is found, so we can pre-fill and skip a step.
+  const prefillEmail = searchParams?.get('email') ?? '';
+
   const [pageState, setPageState] = useState<PageState>('form');
   const [contactType, setContactType] = useState<ContactType>('email');
-  const [contactValue, setContactValue] = useState('');
+  const [contactValue, setContactValue] = useState(prefillEmail);
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const contactRef = useRef<HTMLInputElement>(null);

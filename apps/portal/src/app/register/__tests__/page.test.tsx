@@ -145,10 +145,14 @@ describe('RegisterPage — lookup returns match', () => {
     // Shows the family name
     expect(screen.getAllByText(/The Patel Family/i).length).toBeGreaterThan(0);
 
-    // Join button is present
-    const joinLinks = screen.getAllByRole('link', { name: /join the patel family/i });
+    // "Sign in to join the Patel family →" Link is present, points to /sign-in
+    // with the email pre-filled. The old /api/setu/family/join POST is gone —
+    // OTP sign-in proves contact ownership.
+    const joinLinks = screen.getAllByRole('link', { name: /sign in to join the patel family/i });
     expect(joinLinks.length).toBeGreaterThan(0);
-    expect(joinLinks[0]?.getAttribute('href')).toContain('FAM001');
+    const href = joinLinks[0]?.getAttribute('href') ?? '';
+    expect(href).toMatch(/^\/sign-in\?email=/);
+    expect(decodeURIComponent(href)).toContain('raj@example.com');
   });
 });
 

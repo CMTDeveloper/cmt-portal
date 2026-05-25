@@ -308,12 +308,17 @@ function RegisterReal() {
               </div>
             </div>
           </div>
+          {/* SIGN-IN, NOT a direct join POST. The previous /api/setu/family/join
+              endpoint accepted an unverified contactProof and was an account-
+              takeover vector. OTP sign-in proves ownership of the contact,
+              and verify-code resolves the existing family via contactKey →
+              sets family-manager/member claims → /family. Same result, secure. */}
           <Link
-            href={`/api/setu/family/join?fid=${encodeURIComponent(match.fid)}&email=${encodeURIComponent(email)}&phone=${encodeURIComponent(phone)}`}
+            href={`/sign-in?email=${encodeURIComponent(email)}`}
             className="btn btn--p btn--block"
             style={{ marginBottom: 8, display: 'flex' }}
           >
-            Join the {match.name} family →
+            Sign in to join the {match.name} family →
           </Link>
           <a
             href="mailto:info@chinmayatoronto.org?subject=Setu%20account%20issue"
