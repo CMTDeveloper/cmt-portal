@@ -5,7 +5,7 @@ import { SetuAvatar, SetuIcon } from '@cmt/ui';
 import { CspRoot } from '@/features/family/components/atoms';
 import { getFamilyForWelcome } from '@/features/setu/search/get-family-for-welcome';
 import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
-import { SetuSessionClaimsSchema } from '@cmt/shared-domain/setu';
+import { isWelcomeTeam, type WithRole } from '@cmt/shared-domain';
 import type { FamilyDoc, MemberDoc } from '@cmt/shared-domain/setu';
 import { cookies } from 'next/headers';
 
@@ -34,17 +34,16 @@ export async function WelcomeFamilyDetailBody({
   // data until welcome-team is positively confirmed.
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get('__session')?.value;
-  let isWelcomeTeam = false;
+  // isWelcomeTeam() helper handles multi-role: admin inherits welcome-team,
+  // and a family-manager with extraRoles=['welcome-team'] also passes.
+  let allowed = false;
   if (sessionCookie) {
     const raw = await verifyPortalSessionCookie(sessionCookie);
-    if (raw) {
-      const parsed = SetuSessionClaimsSchema.safeParse(raw);
-      if (parsed.success && parsed.data.role === 'welcome-team') {
-        isWelcomeTeam = true;
-      }
+    if (raw && isWelcomeTeam(raw as unknown as WithRole)) {
+      allowed = true;
     }
   }
-  if (!isWelcomeTeam) {
+  if (!allowed) {
     return (
       <div style={{ padding: 32, fontFamily: 'var(--body)' }}>
         <p style={{ color: 'var(--err)', fontSize: 14 }}>Access denied. Welcome-team role required.</p>

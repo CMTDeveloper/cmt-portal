@@ -1,10 +1,16 @@
 import { z } from 'zod';
+import { ROLES } from '../auth/role';
+
+// extraRoles can carry any role string — capability stacks (e.g. a
+// family-manager with admin access). Optional + permissive enum.
+const ExtraRolesField = z.array(z.enum(ROLES)).optional();
 
 const FamilyManagerClaimsSchema = z.object({
   uid: z.string(),
   role: z.literal('family-manager'),
   fid: z.string(),
   mid: z.string(),
+  extraRoles: ExtraRolesField,
   iat: z.number().optional(),
   exp: z.number().optional(),
 });
@@ -14,6 +20,7 @@ const FamilyMemberClaimsSchema = z.object({
   role: z.literal('family-member'),
   fid: z.string(),
   mid: z.string(),
+  extraRoles: ExtraRolesField,
   iat: z.number().optional(),
   exp: z.number().optional(),
 });
@@ -23,6 +30,7 @@ const WelcomeTeamClaimsSchema = z.object({
   role: z.literal('welcome-team'),
   fid: z.string().optional(),
   mid: z.string().optional(),
+  extraRoles: ExtraRolesField,
   iat: z.number().optional(),
   exp: z.number().optional(),
 });
@@ -34,6 +42,7 @@ const LegacyFamilyClaimsSchema = z.object({
   familyId: z.string().optional(),
   email: z.string().optional(),
   phone: z.string().optional(),
+  extraRoles: ExtraRolesField,
   iat: z.number().optional(),
   exp: z.number().optional(),
 });
@@ -41,6 +50,7 @@ const LegacyFamilyClaimsSchema = z.object({
 const LegacyTeacherClaimsSchema = z.object({
   uid: z.string(),
   role: z.literal('teacher'),
+  extraRoles: ExtraRolesField,
   iat: z.number().optional(),
   exp: z.number().optional(),
 });
@@ -48,6 +58,7 @@ const LegacyTeacherClaimsSchema = z.object({
 const LegacyAdminClaimsSchema = z.object({
   uid: z.string(),
   role: z.literal('admin'),
+  extraRoles: ExtraRolesField,
   iat: z.number().optional(),
   exp: z.number().optional(),
 });

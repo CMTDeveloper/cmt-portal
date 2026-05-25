@@ -2,6 +2,7 @@ import { Suspense } from 'react';
 import { cookies } from 'next/headers';
 import Link from 'next/link';
 import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
+import { isAdmin, type WithRole } from '@cmt/shared-domain';
 import { SetuLogo, SetuIcon } from '@cmt/ui';
 import { CspRoot } from '@/features/family/components/atoms';
 import { LoadingOm } from '@/components/chrome/loading-om';
@@ -14,18 +15,20 @@ import { SignOutButton } from '@/features/family/components/sign-out-button';
 async function AdminChromeAndChildren({ children }: { children: React.ReactNode }) {
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get('__session')?.value;
-  let isAdmin = false;
+  let allowed = false;
   let displayEmail = 'Admin';
   if (sessionCookie) {
     const raw = await verifyPortalSessionCookie(sessionCookie).catch(() => null);
-    if (raw && (raw as { role?: string }).role === 'admin') {
-      isAdmin = true;
+    // isAdmin() checks role OR extraRoles — a family-manager with
+    // extraRoles=['admin'] passes here even though primary role is family.
+    if (raw && isAdmin(raw as unknown as WithRole)) {
+      allowed = true;
       const email = (raw as { email?: string }).email;
       if (email) displayEmail = email;
     }
   }
 
-  if (!isAdmin) {
+  if (!allowed) {
     return (
       <div style={{ padding: 32, fontFamily: 'var(--body)' }}>
         <p style={{ color: 'var(--err)', fontSize: 14 }}>Access denied. Admin role required.</p>
