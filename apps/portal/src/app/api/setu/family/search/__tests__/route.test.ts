@@ -12,13 +12,16 @@ vi.mock('@/features/setu/search/search-families', () => ({
 
 import { GET } from '../route';
 
-function makeRequest(q?: string, role?: string): Request {
+function makeRequest(q?: string, role?: string, extraRoles?: string[]): Request {
   const url = q !== undefined
     ? `http://localhost/api/setu/family/search?q=${encodeURIComponent(q)}`
     : 'http://localhost/api/setu/family/search';
   const headers: Record<string, string> = {};
   if (role !== undefined) {
     headers['x-portal-role'] = role;
+  }
+  if (extraRoles && extraRoles.length > 0) {
+    headers['x-portal-extra-roles'] = extraRoles.join(',');
   }
   return new Request(url, { method: 'GET', headers });
 }
@@ -70,8 +73,23 @@ describe('GET /api/setu/family/search', () => {
     expect(body.error).toBe('forbidden');
   });
 
-  it('returns 403 when role is admin', async () => {
+  it('returns 200 when role is admin (admin inherits welcome-team capability)', async () => {
     const res = await GET(makeRequest('patel', 'admin'));
+    expect(res.status).toBe(200);
+  });
+
+  it('returns 200 when role=family-manager with extraRoles=[admin]', async () => {
+    const res = await GET(makeRequest('patel', 'family-manager', ['admin']));
+    expect(res.status).toBe(200);
+  });
+
+  it('returns 200 when role=family-manager with extraRoles=[welcome-team]', async () => {
+    const res = await GET(makeRequest('patel', 'family-manager', ['welcome-team']));
+    expect(res.status).toBe(200);
+  });
+
+  it('returns 403 when role=family-manager with empty extraRoles', async () => {
+    const res = await GET(makeRequest('patel', 'family-manager', []));
     expect(res.status).toBe(403);
     const body = await res.json();
     expect(body.error).toBe('forbidden');

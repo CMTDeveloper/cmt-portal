@@ -53,6 +53,11 @@ export async function middleware(req: NextRequest) {
   if (claims.familyId) reqHeaders.set('x-portal-family-id', claims.familyId);
   if (claims.fid) reqHeaders.set('x-portal-fid', claims.fid);
   if (claims.mid) reqHeaders.set('x-portal-mid', claims.mid);
+  // Multi-role: comma-separated extras so downstream routes can build a full
+  // claims object via the role helpers (hasRole / isAdmin / isWelcomeTeam).
+  if (Array.isArray(claims.extraRoles) && claims.extraRoles.length > 0) {
+    reqHeaders.set('x-portal-extra-roles', claims.extraRoles.join(','));
+  }
 
   const res = NextResponse.next({ request: { headers: reqHeaders } });
   res.headers.set('x-portal-role', claims.role);
@@ -60,6 +65,9 @@ export async function middleware(req: NextRequest) {
   if (claims.familyId) res.headers.set('x-portal-family-id', claims.familyId);
   if (claims.fid) res.headers.set('x-portal-fid', claims.fid);
   if (claims.mid) res.headers.set('x-portal-mid', claims.mid);
+  if (Array.isArray(claims.extraRoles) && claims.extraRoles.length > 0) {
+    res.headers.set('x-portal-extra-roles', claims.extraRoles.join(','));
+  }
   return res;
 }
 
