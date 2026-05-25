@@ -73,15 +73,21 @@ export async function POST(req: Request) {
   }
 
   // Look up Firebase auth user BEFORE the early-return so we can detect
-  // welcome-team users granted via the admin tooling. Welcome-team uids are
-  // created with the same sha256Hex(normalized-email) scheme used here.
+  // admin / welcome-team grants. Roles can live on `role` OR `extraRoles`
+  // (multi-role: e.g. a family-manager who is also an admin has
+  // role='family-manager', extraRoles=['admin']). Uids use the same
+  // sha256Hex(normalized-email) scheme so grants survive OTP sign-in.
   const uid = sha256Hex(normalized);
   const auth = portalAuth();
-  let existingClaimsRole: string | undefined;
+  let existingPrimaryRole: string | undefined;
+  let existingExtraRoles: string[] = [];
   try {
     const existing = await auth.getUser(uid);
     const c = (existing.customClaims as Record<string, unknown> | undefined) ?? {};
-    if (typeof c.role === 'string') existingClaimsRole = c.role;
+    if (typeof c.role === 'string') existingPrimaryRole = c.role;
+    if (Array.isArray(c.extraRoles)) {
+      existingExtraRoles = c.extraRoles.filter((r): r is string => typeof r === 'string');
+    }
   } catch (err) {
     if ((err as { code?: string }).code === 'auth/user-not-found') {
       await auth.createUser({ uid, disabled: false });
@@ -89,8 +95,22 @@ export async function POST(req: Request) {
       throw err;
     }
   }
-  const isWelcomeTeamUser = existingClaimsRole === 'welcome-team';
-  const isAdminUser = existingClaimsRole === 'admin';
+  const allExistingRoles = new Set<string>([
+    ...(existingPrimaryRole ? [existingPrimaryRole] : []),
+    ...existingExtraRoles,
+  ]);
+  const isAdminUser = allExistingRoles.has('admin');
+  const isWelcomeTeamUser = allExistingRoles.has('welcome-team');
+
+  // extraRoles to attach to the new claims. Family takes the primary slot
+  // (it's their main UI surface), and we preserve admin/welcome-team as
+  // extras so capability checks (isAdmin etc) still pass.
+  function preservedExtras(): string[] {
+    const extras: string[] = [];
+    if (isAdminUser) extras.push('admin');
+    if (isWelcomeTeamUser && !isAdminUser) extras.push('welcome-team');
+    return extras;
+  }
 
   if (result.source === null && !hasPendingInvite && !isWelcomeTeamUser && !isAdminUser) {
     // Brand-new family path (no invite, not admin/welcome-team) — keep the
@@ -106,11 +126,13 @@ export async function POST(req: Request) {
 
   if (result.source === 'setu' && result.fid && result.mid) {
     const isManager = result.member?.manager === true;
+    const extras = preservedExtras();
     claims = {
       role: isManager ? 'family-manager' : 'family-member',
       fid: result.fid,
       mid: result.mid,
       ...contactClaim,
+      ...(extras.length > 0 ? { extraRoles: extras } : {}),
     };
     redirectTo = '/family';
   } else {
@@ -124,11 +146,13 @@ export async function POST(req: Request) {
         // Re-lookup to get the new Setu fid/mid after migration
         const setuResult = await findSetuFamilyByContact(type, value);
         if (setuResult.source === 'setu' && setuResult.fid && setuResult.mid) {
+          const extras = preservedExtras();
           claims = {
             role: setuResult.member?.manager === true ? 'family-manager' : 'family-member',
             fid: setuResult.fid,
             mid: setuResult.mid,
             ...contactClaim,
+            ...(extras.length > 0 ? { extraRoles: extras } : {}),
           };
           redirectTo = '/family';
           migratedToSetu = true;

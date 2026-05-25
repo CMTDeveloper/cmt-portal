@@ -3,28 +3,50 @@ export type Role = (typeof ROLES)[number];
 
 export interface WithRole {
   role?: Role;
+  /** Additional capabilities on top of primary `role`. See SessionClaims. */
+  extraRoles?: Role[];
+}
+
+// Return ALL roles a user has — primary + extras. Used by capability checks.
+function rolesOf(claims: WithRole): Role[] {
+  const out: Role[] = [];
+  if (claims.role) out.push(claims.role);
+  if (Array.isArray(claims.extraRoles)) {
+    for (const r of claims.extraRoles) {
+      if (!out.includes(r)) out.push(r);
+    }
+  }
+  return out;
+}
+
+export function hasRole(claims: WithRole, role: Role): boolean {
+  return rolesOf(claims).includes(role);
 }
 
 export function isAdmin(claims: WithRole): boolean {
-  return claims.role === 'admin';
+  return hasRole(claims, 'admin');
 }
 
+// Teachers + admins can do teacher things. Multi-role: an admin who is ALSO
+// a teacher (role='admin', extraRoles=['teacher']) still passes.
 export function isTeacher(claims: WithRole): boolean {
-  return claims.role === 'teacher' || claims.role === 'admin';
+  return hasRole(claims, 'teacher') || hasRole(claims, 'admin');
 }
 
 export function isFamily(claims: WithRole): boolean {
-  return claims.role === 'family';
+  return hasRole(claims, 'family');
 }
 
 export function isSetuFamily(claims: WithRole): boolean {
-  return claims.role === 'family-manager' || claims.role === 'family-member';
+  return hasRole(claims, 'family-manager') || hasRole(claims, 'family-member');
 }
 
 export function isSetuManager(claims: WithRole): boolean {
-  return claims.role === 'family-manager';
+  return hasRole(claims, 'family-manager');
 }
 
 export function isWelcomeTeam(claims: WithRole): boolean {
-  return claims.role === 'welcome-team';
+  // Admins implicitly get welcome-team capability — they can do anything
+  // a welcome-team volunteer can. This avoids needing to grant both.
+  return hasRole(claims, 'welcome-team') || hasRole(claims, 'admin');
 }

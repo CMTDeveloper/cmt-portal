@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { portalAuth } from '@cmt/firebase-shared/admin/auth';
 import { sha256Hex, normalizeContact } from '@/features/check-in/shared';
+import { addCapability, hasCapability, type ClaimsShape } from '@/lib/auth/role-claims';
 
 // Admin-only — canAccessRoute routes /api/check-in/admin/* to isAdmin(claims).
 // Middleware enforces this BEFORE we get here.
@@ -17,9 +18,9 @@ export async function GET() {
   do {
     const page = await auth.listUsers(1000, pageToken);
     for (const u of page.users) {
-      const claims = (u.customClaims as Record<string, unknown> | undefined) ?? {};
-      if (claims.role === 'welcome-team') {
-        const email = typeof claims.email === 'string' ? claims.email : (u.email ?? '');
+      const claims = (u.customClaims as ClaimsShape | undefined) ?? null;
+      if (hasCapability(claims, 'welcome-team')) {
+        const email = typeof claims?.email === 'string' ? claims.email : (u.email ?? '');
         users.push({ uid: u.uid, email });
       }
     }
@@ -43,8 +44,10 @@ export async function POST(req: Request) {
   const uid = sha256Hex(normalized);
 
   const auth = portalAuth();
+  let existingClaims: ClaimsShape | null = null;
   try {
-    await auth.getUser(uid);
+    const u = await auth.getUser(uid);
+    existingClaims = (u.customClaims as ClaimsShape | undefined) ?? null;
   } catch (err) {
     if ((err as { code?: string }).code === 'auth/user-not-found') {
       await auth.createUser({ uid, email, disabled: false });
@@ -52,6 +55,7 @@ export async function POST(req: Request) {
       throw err;
     }
   }
-  await auth.setCustomUserClaims(uid, { role: 'welcome-team', email });
-  return NextResponse.json({ uid, email }, { status: 201 });
+  const newClaims = addCapability(existingClaims, 'welcome-team', email);
+  await auth.setCustomUserClaims(uid, newClaims);
+  return NextResponse.json({ uid, email, claims: newClaims }, { status: 201 });
 }

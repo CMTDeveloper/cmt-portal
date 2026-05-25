@@ -16,6 +16,7 @@
 
 import { portalAuth } from '@cmt/firebase-shared/admin/auth';
 import { sha256Hex, normalizeContact } from '@/features/check-in/shared';
+import { addCapability, removeCapability, hasCapability, type ClaimsShape } from '@/lib/auth/role-claims';
 
 type Cmd = 'grant' | 'revoke' | 'list';
 
@@ -38,9 +39,9 @@ async function main() {
     do {
       const page = await auth.listUsers(1000, token);
       for (const u of page.users) {
-        const claims = (u.customClaims as Record<string, unknown> | undefined) ?? {};
-        if (claims.role === 'admin') {
-          const claimsEmail = typeof claims.email === 'string' ? claims.email : null;
+        const claims = (u.customClaims as ClaimsShape | undefined) ?? null;
+        if (hasCapability(claims, 'admin')) {
+          const claimsEmail = typeof claims?.email === 'string' ? claims.email : null;
           found.push({ uid: u.uid, email: u.email ?? claimsEmail });
         }
       }
@@ -63,8 +64,10 @@ async function main() {
   const uid = sha256Hex(normalized);
 
   if (cmd === 'grant' as Cmd) {
+    let existingClaims: ClaimsShape | null = null;
     try {
-      await auth.getUser(uid);
+      const u = await auth.getUser(uid);
+      existingClaims = (u.customClaims as ClaimsShape | undefined) ?? null;
     } catch (err) {
       if ((err as { code?: string }).code === 'auth/user-not-found') {
         await auth.createUser({ uid, email, disabled: false });
@@ -73,22 +76,26 @@ async function main() {
         throw err;
       }
     }
-    await auth.setCustomUserClaims(uid, { role: 'admin', email });
+    const newClaims = addCapability(existingClaims, 'admin', email);
+    await auth.setCustomUserClaims(uid, newClaims);
     console.log(`✓ Granted admin to ${email} (uid=${uid})`);
-    console.log(`  They sign in at /sign-in via OTP and land at /admin.`);
+    console.log(`  Claims: role=${newClaims.role}${newClaims.extraRoles ? ` extraRoles=[${newClaims.extraRoles.join(',')}]` : ''}`);
+    console.log(`  They sign in at /sign-in via OTP. If they have a family, they land on /family with admin capability; otherwise /admin.`);
     process.exit(0);
   }
 
   if (cmd === 'revoke' as Cmd) {
     try {
       const existing = await auth.getUser(uid);
-      const role = (existing.customClaims as Record<string, unknown> | undefined)?.role;
-      if (role !== 'admin') {
-        console.log(`User ${email} does not have admin role (current role=${role ?? 'none'})`);
+      const existingClaims = (existing.customClaims as ClaimsShape | undefined) ?? null;
+      if (!hasCapability(existingClaims, 'admin')) {
+        console.log(`User ${email} does not have admin role (current role=${existingClaims?.role ?? 'none'})`);
         process.exit(0);
       }
-      await auth.setCustomUserClaims(uid, {});
+      const newClaims = removeCapability(existingClaims, 'admin');
+      await auth.setCustomUserClaims(uid, newClaims);
       console.log(`✓ Revoked admin from ${email} (uid=${uid})`);
+      console.log(`  Claims: ${JSON.stringify(newClaims)}`);
       console.log(`  Note: any existing session cookie is still valid until expiry.`);
       process.exit(0);
     } catch (err) {

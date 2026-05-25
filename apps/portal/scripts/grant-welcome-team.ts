@@ -17,6 +17,7 @@
 
 import { portalAuth } from '@cmt/firebase-shared/admin/auth';
 import { sha256Hex, normalizeContact } from '@/features/check-in/shared';
+import { addCapability, removeCapability, hasCapability, type ClaimsShape } from '@/lib/auth/role-claims';
 
 type Cmd = 'grant' | 'revoke' | 'list';
 
@@ -40,10 +41,9 @@ async function main() {
     do {
       page = await auth.listUsers(1000, token);
       for (const u of page.users) {
-        const claims = (u.customClaims as Record<string, unknown> | undefined) ?? {};
-        if (claims.role === 'welcome-team') {
-          // Email lives in customClaims, not on the auth record itself.
-          const claimsEmail = typeof claims.email === 'string' ? claims.email : null;
+        const claims = (u.customClaims as ClaimsShape | undefined) ?? null;
+        if (hasCapability(claims, 'welcome-team')) {
+          const claimsEmail = typeof claims?.email === 'string' ? claims.email : null;
           found.push({ uid: u.uid, email: u.email ?? claimsEmail });
         }
       }
@@ -66,8 +66,10 @@ async function main() {
   const uid = sha256Hex(normalized);
 
   if (cmd === 'grant' as Cmd) {
+    let existingClaims: ClaimsShape | null = null;
     try {
-      await auth.getUser(uid);
+      const u = await auth.getUser(uid);
+      existingClaims = (u.customClaims as ClaimsShape | undefined) ?? null;
     } catch (err) {
       if ((err as { code?: string }).code === 'auth/user-not-found') {
         await auth.createUser({ uid, email, disabled: false });
@@ -76,27 +78,27 @@ async function main() {
         throw err;
       }
     }
-    await auth.setCustomUserClaims(uid, { role: 'welcome-team', email });
+    const newClaims = addCapability(existingClaims, 'welcome-team', email);
+    await auth.setCustomUserClaims(uid, newClaims);
     console.log(`✓ Granted welcome-team to ${email} (uid=${uid})`);
-    console.log(`  They can now sign in at https://cmt-portal-portal.vercel.app/sign-in (any sign-in route)`);
-    console.log(`  and land at /welcome with read access to all families.`);
+    console.log(`  Claims: role=${newClaims.role}${newClaims.extraRoles ? ` extraRoles=[${newClaims.extraRoles.join(',')}]` : ''}`);
+    console.log(`  They sign in at /sign-in via OTP. They land at /family if they have one, otherwise /welcome.`);
     process.exit(0);
   }
 
   if (cmd === 'revoke' as Cmd) {
     try {
       const existing = await auth.getUser(uid);
-      const role = (existing.customClaims as Record<string, unknown> | undefined)?.role;
-      if (role !== 'welcome-team') {
-        console.log(`User ${email} does not have welcome-team role (current role=${role ?? 'none'})`);
+      const existingClaims = (existing.customClaims as ClaimsShape | undefined) ?? null;
+      if (!hasCapability(existingClaims, 'welcome-team')) {
+        console.log(`User ${email} does not have welcome-team role (current role=${existingClaims?.role ?? 'none'})`);
         process.exit(0);
       }
-      // Drop the role claim entirely. Their session keeps working until expiry
-      // (Firebase doesn't auto-revoke), but new sign-ins won't get welcome-team.
-      await auth.setCustomUserClaims(uid, {});
+      const newClaims = removeCapability(existingClaims, 'welcome-team');
+      await auth.setCustomUserClaims(uid, newClaims);
       console.log(`✓ Revoked welcome-team from ${email} (uid=${uid})`);
+      console.log(`  Claims: ${JSON.stringify(newClaims)}`);
       console.log(`  Note: any existing session cookie is still valid until expiry.`);
-      console.log(`  To force-revoke immediately, call auth.revokeRefreshTokens(uid).`);
       process.exit(0);
     } catch (err) {
       if ((err as { code?: string }).code === 'auth/user-not-found') {
