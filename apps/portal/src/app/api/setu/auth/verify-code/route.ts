@@ -76,9 +76,14 @@ export async function POST(req: Request) {
   // Look up Firebase auth user BEFORE the early-return so we can detect
   // admin / welcome-team grants. Roles can live on `role` OR `extraRoles`
   // (multi-role: e.g. a family-manager who is also an admin has
-  // role='family-manager', extraRoles=['admin']). Uids use the same
-  // sha256Hex(normalized-email) scheme so grants survive OTP sign-in.
-  const uid = sha256Hex(normalized);
+  // role='family-manager', extraRoles=['admin']).
+  //
+  // uid derives from the *canonical* contact form (E.164 for phone, lowercase
+  // for email) so a user who signs in with "4379712609", "+14379712609", or
+  // "(437) 971-2609" all map to the same auth user — and grant-admin can
+  // pre-create that uid by looking at member.phone (any format) and getting
+  // the same canonical hash.
+  const uid = sha256Hex(normalizeContactForKey(type, value));
   const auth = portalAuth();
   let existingPrimaryRole: string | undefined;
   let existingExtraRoles: string[] = [];
