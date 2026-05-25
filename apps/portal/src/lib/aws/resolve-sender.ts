@@ -8,13 +8,15 @@ export interface ResolvedSender {
   sendSMS(args: SendSMSArgs): Promise<void>;
 }
 
-// SETU_EMAIL_ALLOWLIST is a comma-separated list of recipients (email
-// addresses and/or phone numbers) that are allowed to receive REAL email/SMS
-// in environments like UAT. When the env var is set and non-empty, any
-// recipient NOT on the list silently routes to mockSender — so testing
-// against UAT can't accidentally email real families. An empty / unset
-// allowlist preserves prod behavior (everyone gets real mail).
-function parseAllowlist(): Set<string> {
+// UAT safety net. Each list is a comma-separated allowlist of recipients
+// that may receive REAL email or SMS. Anything else silently routes to
+// mockSender even when NEXT_PUBLIC_FEATURE_CHECK_IN_NOTIFY=true. Empty /
+// unset means prod behavior (no filter — everyone gets real mail).
+//
+//   SETU_EMAIL_ALLOWLIST — emails only (e.g. dineshdm7@gmail.com)
+//   SETU_PHONE_ALLOWLIST — phones only; non-digits are stripped on compare
+//                           so +1 (437) 555-1212 and 14375551212 both match
+function parseEmailAllowlist(): Set<string> {
   const raw = process.env.SETU_EMAIL_ALLOWLIST ?? '';
   return new Set(
     raw
@@ -25,17 +27,24 @@ function parseAllowlist(): Set<string> {
   );
 }
 
-function normalizeRecipient(s: string): string {
-  // Strip non-digits for phone-like comparison; keep email as lowercase trim.
-  const lower = s.toLowerCase().trim();
-  if (lower.includes('@')) return lower;
-  return lower.replace(/[^\d]/g, '');
+function parsePhoneAllowlist(): Set<string> {
+  const raw = process.env.SETU_PHONE_ALLOWLIST ?? '';
+  return new Set(
+    raw
+      .split(',')
+      .map((s) => s.replace(/[^\d]/g, ''))
+      .filter(Boolean),
+  );
 }
 
-function isAllowed(recipient: string, allowlist: Set<string>): boolean {
+function isEmailAllowed(email: string, allowlist: Set<string>): boolean {
   if (allowlist.size === 0) return true;
-  if (allowlist.has(recipient.toLowerCase().trim())) return true;
-  return allowlist.has(normalizeRecipient(recipient));
+  return allowlist.has(email.toLowerCase().trim());
+}
+
+function isPhoneAllowed(phone: string, allowlist: Set<string>): boolean {
+  if (allowlist.size === 0) return true;
+  return allowlist.has(phone.replace(/[^\d]/g, ''));
 }
 
 export function resolveSender(): ResolvedSender {
@@ -44,11 +53,12 @@ export function resolveSender(): ResolvedSender {
     return mockSender;
   }
 
-  const allowlist = parseAllowlist();
+  const emailAllowlist = parseEmailAllowlist();
+  const phoneAllowlist = parsePhoneAllowlist();
   return {
     sendEmail: async (args) => {
-      if (!isAllowed(args.to, allowlist)) {
-        console.log(`[resolveSender] allowlist filter: skipping real email to ${args.to} → mock`);
+      if (!isEmailAllowed(args.to, emailAllowlist)) {
+        console.log(`[resolveSender] email allowlist filter: skipping ${args.to} → mock`);
         await mockSender.sendEmail(args);
         return;
       }
@@ -63,12 +73,20 @@ export function resolveSender(): ResolvedSender {
       }
     },
     sendSMS: async (args) => {
-      if (!isAllowed(args.phone, allowlist)) {
-        console.log(`[resolveSender] allowlist filter: skipping real SMS to ${args.phone} → mock`);
+      if (!isPhoneAllowed(args.phone, phoneAllowlist)) {
+        console.log(`[resolveSender] phone allowlist filter: skipping ${args.phone} → mock`);
         await mockSender.sendSMS(args);
         return;
       }
-      await realSendSMS(args);
+      console.log(`[resolveSender] real SNS send → ${args.phone}`);
+      try {
+        await realSendSMS(args);
+        console.log(`[resolveSender] SNS send OK → ${args.phone}`);
+      } catch (e) {
+        const err = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+        console.error(`[resolveSender] SNS send FAILED → ${args.phone}: ${err}`);
+        throw e;
+      }
     },
   };
 }

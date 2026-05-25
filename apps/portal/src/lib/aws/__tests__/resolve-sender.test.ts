@@ -21,6 +21,7 @@ beforeEach(() => {
 afterEach(() => {
   delete process.env.NEXT_PUBLIC_FEATURE_CHECK_IN_NOTIFY;
   delete process.env.SETU_EMAIL_ALLOWLIST;
+  delete process.env.SETU_PHONE_ALLOWLIST;
 });
 
 describe('resolveSender', () => {
@@ -40,7 +41,7 @@ describe('resolveSender', () => {
     expect(mockSender.sendEmail).not.toHaveBeenCalled();
   });
 
-  it('routes SMS accordingly', async () => {
+  it('routes SMS to real SNS when NOTIFY=true and no phone allowlist', async () => {
     process.env.NEXT_PUBLIC_FEATURE_CHECK_IN_NOTIFY = 'true';
     const sender = resolveSender();
     await sender.sendSMS({ phone: '+1', message: 'x' });
@@ -49,7 +50,7 @@ describe('resolveSender', () => {
 });
 
 describe('resolveSender — SETU_EMAIL_ALLOWLIST', () => {
-  it('with NOTIFY=true and an empty allowlist, all recipients get real mail (prod behavior)', async () => {
+  it('with NOTIFY=true and empty allowlist, all recipients get real mail (prod behavior)', async () => {
     process.env.NEXT_PUBLIC_FEATURE_CHECK_IN_NOTIFY = 'true';
     process.env.SETU_EMAIL_ALLOWLIST = '';
     const sender = resolveSender();
@@ -58,7 +59,7 @@ describe('resolveSender — SETU_EMAIL_ALLOWLIST', () => {
     expect(mockSender.sendEmail).not.toHaveBeenCalled();
   });
 
-  it('with NOTIFY=true and allowlist set, allowlisted recipient gets real mail', async () => {
+  it('allowlisted recipient gets real mail', async () => {
     process.env.NEXT_PUBLIC_FEATURE_CHECK_IN_NOTIFY = 'true';
     process.env.SETU_EMAIL_ALLOWLIST = 'dineshdm7@gmail.com';
     const sender = resolveSender();
@@ -67,7 +68,7 @@ describe('resolveSender — SETU_EMAIL_ALLOWLIST', () => {
     expect(mockSender.sendEmail).not.toHaveBeenCalled();
   });
 
-  it('with NOTIFY=true and allowlist set, non-allowlisted recipient routes to mock', async () => {
+  it('non-allowlisted recipient routes to mock', async () => {
     process.env.NEXT_PUBLIC_FEATURE_CHECK_IN_NOTIFY = 'true';
     process.env.SETU_EMAIL_ALLOWLIST = 'dineshdm7@gmail.com';
     const sender = resolveSender();
@@ -76,7 +77,7 @@ describe('resolveSender — SETU_EMAIL_ALLOWLIST', () => {
     expect(mockSender.sendEmail).toHaveBeenCalled();
   });
 
-  it('allowlist is case-insensitive and tolerates trailing spaces in env list', async () => {
+  it('email allowlist is case-insensitive and tolerates whitespace', async () => {
     process.env.NEXT_PUBLIC_FEATURE_CHECK_IN_NOTIFY = 'true';
     process.env.SETU_EMAIL_ALLOWLIST = ' DineshDM7@Gmail.com , extra@example.com ';
     const sender = resolveSender();
@@ -84,21 +85,44 @@ describe('resolveSender — SETU_EMAIL_ALLOWLIST', () => {
     expect(realSendEmail).toHaveBeenCalled();
   });
 
-  it('SMS allowlist normalizes phone digits', async () => {
+  it('email allowlist does NOT affect SMS routing', async () => {
+    // The split fixed a bug where any email-only allowlist blocked SMS too.
     process.env.NEXT_PUBLIC_FEATURE_CHECK_IN_NOTIFY = 'true';
-    process.env.SETU_EMAIL_ALLOWLIST = '16471234567';
+    process.env.SETU_EMAIL_ALLOWLIST = 'dineshdm7@gmail.com';
+    // SETU_PHONE_ALLOWLIST intentionally unset → no phone filter → real SNS.
     const sender = resolveSender();
-    await sender.sendSMS({ phone: '+1 (647) 123-4567', message: 'x' });
+    await sender.sendSMS({ phone: '+14379712609', message: 'x' });
+    expect(realSendSMS).toHaveBeenCalled();
+    expect(mockSender.sendSMS).not.toHaveBeenCalled();
+  });
+});
+
+describe('resolveSender — SETU_PHONE_ALLOWLIST', () => {
+  it('allowlisted phone gets real SMS (digits-only compare)', async () => {
+    process.env.NEXT_PUBLIC_FEATURE_CHECK_IN_NOTIFY = 'true';
+    process.env.SETU_PHONE_ALLOWLIST = '+1 (647) 123-4567';
+    const sender = resolveSender();
+    await sender.sendSMS({ phone: '+16471234567', message: 'x' });
     expect(realSendSMS).toHaveBeenCalled();
     expect(mockSender.sendSMS).not.toHaveBeenCalled();
   });
 
-  it('SMS with non-allowlisted phone routes to mock', async () => {
+  it('non-allowlisted phone routes to mock', async () => {
     process.env.NEXT_PUBLIC_FEATURE_CHECK_IN_NOTIFY = 'true';
-    process.env.SETU_EMAIL_ALLOWLIST = '16471234567';
+    process.env.SETU_PHONE_ALLOWLIST = '16471234567';
     const sender = resolveSender();
     await sender.sendSMS({ phone: '+19999999999', message: 'x' });
     expect(realSendSMS).not.toHaveBeenCalled();
     expect(mockSender.sendSMS).toHaveBeenCalled();
+  });
+
+  it('phone allowlist does NOT affect email routing', async () => {
+    process.env.NEXT_PUBLIC_FEATURE_CHECK_IN_NOTIFY = 'true';
+    process.env.SETU_PHONE_ALLOWLIST = '14379712609';
+    // SETU_EMAIL_ALLOWLIST intentionally unset → no email filter → real SES.
+    const sender = resolveSender();
+    await sender.sendEmail({ to: 'random@example.com', subject: 's', text: 't' });
+    expect(realSendEmail).toHaveBeenCalled();
+    expect(mockSender.sendEmail).not.toHaveBeenCalled();
   });
 });
