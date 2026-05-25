@@ -1,7 +1,10 @@
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
-import { findFamilyById } from '@/features/check-in/shared/rtdb/family-lookup';
 import { hashContactKey } from './hash-contact-key';
 import { generateFid } from './generate-fid';
+import {
+  fetchLegacyFamilyForMigration,
+  type LegacyFamilyForMigration,
+} from './legacy-parser';
 
 export interface LazyMigrateResult {
   migrated: boolean;
@@ -13,16 +16,35 @@ function zeroPad(n: number): string {
   return n.toString().padStart(2, '0');
 }
 
+function searchKeysFor(legacy: LegacyFamilyForMigration, fid: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  function add(v: string | null | undefined) {
+    if (!v) return;
+    const lower = v.toLowerCase();
+    if (seen.has(lower)) return;
+    seen.add(lower);
+    out.push(lower);
+  }
+  add(legacy.familyName);
+  add(legacy.primaryLastName);
+  add(legacy.primaryFirstName);
+  for (const a of legacy.adults) add(`${a.firstName} ${a.lastName}`.trim());
+  for (const c of legacy.children) add(`${c.firstName} ${c.lastName}`.trim());
+  add(fid);
+  add(legacy.legacyFid);
+  return out;
+}
+
 export async function lazyMigrateLegacyFamily(legacyFid: string): Promise<LazyMigrateResult> {
-  const legacyFamily = await findFamilyById(legacyFid);
-  if (!legacyFamily) {
+  const legacy = await fetchLegacyFamilyForMigration(legacyFid);
+  if (!legacy) {
     throw new Error(`Legacy family not found: fid=${legacyFid}`);
   }
 
   const db = portalFirestore();
 
   const result = await db.runTransaction(async (txn) => {
-    // Idempotency check: query for an existing Setu family with this legacyFid
     const existingSnap = await txn.get(
       db.collection('families').where('legacyFid', '==', legacyFid).limit(1),
     );
@@ -36,58 +58,31 @@ export async function lazyMigrateLegacyFamily(legacyFid: string): Promise<LazyMi
 
     const fid = generateFid();
     const now = FieldValue.serverTimestamp();
+    let seq = 1;
+    const managerIds: string[] = [];
+    const memberMids: string[] = [];
 
-    // Derive a manager from the family contacts (use the first contact as the family name source)
-    const familyName = legacyFamily.name ?? `Family ${legacyFid}`;
-    const searchKeys = [familyName.toLowerCase(), fid, legacyFid];
-
-    const managerMid = `${fid}-01`;
-
-    txn.set(db.collection('families').doc(fid), {
-      fid,
-      legacyFid,
-      name: familyName,
-      location: 'Brampton', // default — no location in legacy schema
-      createdAt: now,
-      managers: [managerMid],
-      searchKeys,
-    });
-
-    // Create a placeholder manager member from legacy data
-    txn.set(db.collection('families').doc(fid).collection('members').doc(managerMid), {
-      mid: managerMid,
-      uid: null,
-      firstName: '',
-      lastName: '',
-      type: 'Adult',
-      gender: 'PreferNotToSay',
-      manager: true,
-      joinedAt: now,
-      email: null,
-      phone: null,
-      schoolGrade: null,
-      birthMonthYear: null,
-      volunteeringSkills: [],
-      foodAllergies: null,
-      emergencyContacts: [null, null],
-    });
-
-    // Create members for each legacy student
-    let seq = 2;
-    for (const student of legacyFamily.students ?? []) {
+    // Adults — the primary (sorted to position 0 by the parser) is the manager.
+    // Other adult rows become non-manager Adult members so spouses/parents who
+    // were in legacy don't silently disappear.
+    for (const adult of legacy.adults) {
       const mid = `${fid}-${zeroPad(seq++)}`;
+      memberMids.push(mid);
+      const isManager = adult.isPrimary;
+      if (isManager) managerIds.push(mid);
+
       txn.set(db.collection('families').doc(fid).collection('members').doc(mid), {
         mid,
         uid: null,
-        firstName: student.firstName,
-        lastName: student.lastName,
-        type: 'Child',
-        gender: 'PreferNotToSay',
-        manager: false,
+        firstName: adult.firstName || legacy.primaryFirstName,
+        lastName: adult.lastName || legacy.primaryLastName,
+        type: 'Adult',
+        gender: adult.gender,
+        manager: isManager,
         joinedAt: now,
-        email: null,
-        phone: null,
-        schoolGrade: student.level ?? null,
+        email: adult.email,
+        phone: adult.phone,
+        schoolGrade: null,
         birthMonthYear: null,
         volunteeringSkills: [],
         foodAllergies: null,
@@ -95,17 +90,91 @@ export async function lazyMigrateLegacyFamily(legacyFid: string): Promise<LazyMi
       });
     }
 
-    // Create contactKey docs for known contacts
-    for (const contact of legacyFamily.contacts ?? []) {
-      if (!contact.value) continue;
-      const hash = hashContactKey(contact.type, contact.value);
-      txn.set(db.collection('contactKeys').doc(hash), {
-        contactKey: hash,
-        type: contact.type,
-        fid,
-        mid: managerMid,
+    // If there were no adult rows at all, synthesize a manager from the
+    // primary-contact tuple so the family is signable-in-able.
+    if (managerIds.length === 0) {
+      const mid = `${fid}-${zeroPad(seq++)}`;
+      memberMids.push(mid);
+      managerIds.push(mid);
+
+      txn.set(db.collection('families').doc(fid).collection('members').doc(mid), {
+        mid,
+        uid: null,
+        firstName: legacy.primaryFirstName,
+        lastName: legacy.primaryLastName,
+        type: 'Adult',
+        gender: 'PreferNotToSay',
+        manager: true,
+        joinedAt: now,
+        email: legacy.primaryEmail,
+        phone: legacy.primaryPhone,
+        schoolGrade: null,
+        birthMonthYear: null,
+        volunteeringSkills: [],
+        foodAllergies: null,
+        emergencyContacts: [null, null],
       });
     }
+
+    // Children
+    for (const child of legacy.children) {
+      const mid = `${fid}-${zeroPad(seq++)}`;
+      memberMids.push(mid);
+      txn.set(db.collection('families').doc(fid).collection('members').doc(mid), {
+        mid,
+        uid: null,
+        firstName: child.firstName,
+        lastName: child.lastName,
+        type: 'Child',
+        gender: child.gender,
+        manager: false,
+        joinedAt: now,
+        email: null,
+        phone: null,
+        schoolGrade: child.schoolGrade,
+        birthMonthYear: null,
+        volunteeringSkills: [],
+        foodAllergies: null,
+        emergencyContacts: [null, null],
+      });
+    }
+
+    txn.set(db.collection('families').doc(fid), {
+      fid,
+      legacyFid,
+      name: legacy.familyName,
+      location: legacy.location,
+      createdAt: now,
+      managers: managerIds,
+      searchKeys: searchKeysFor(legacy, fid),
+    });
+
+    // ContactKey docs — primary tuple plus each adult's own email/phone. The
+    // manager owns the primary keys; other adults own theirs. Dedupe so we
+    // don't write the same contactKey doc twice in one txn (Firestore would
+    // throw "set called twice on doc").
+    const writtenKeys = new Set<string>();
+    function writeKey(type: 'email' | 'phone', value: string | null, mid: string) {
+      if (!value) return;
+      const hash = hashContactKey(type, value);
+      if (writtenKeys.has(hash)) return;
+      writtenKeys.add(hash);
+      txn.set(db.collection('contactKeys').doc(hash), {
+        contactKey: hash,
+        type,
+        fid,
+        mid,
+      });
+    }
+
+    const managerMid = managerIds[0]!;
+    writeKey('email', legacy.primaryEmail, managerMid);
+    writeKey('phone', legacy.primaryPhone, managerMid);
+    legacy.adults.forEach((adult, idx) => {
+      const mid = memberMids[idx]!;
+      writeKey('email', adult.email, mid);
+      writeKey('phone', adult.phone, mid);
+    });
 
     return { migrated: true, fid, legacyFid };
   });
