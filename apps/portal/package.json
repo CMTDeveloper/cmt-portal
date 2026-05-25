@@ -11,7 +11,12 @@
     "test": "vitest run",
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "seed:admin": "tsx --env-file=.env.local scripts/seed-admin.ts",
-    "attendance:report": "tsx --env-file=.env.local scripts/attendance-report.ts"
+    "attendance:report": "tsx --env-file=.env.local scripts/attendance-report.ts",
+    "grant:admin": "tsx --env-file=.env.local scripts/grant-admin.ts",
+    "grant:welcome-team": "tsx --env-file=.env.local scripts/grant-welcome-team.ts",
+    "migrate:legacy-families": "tsx --env-file=.env.local scripts/migrate-legacy-families.ts",
+    "list:uat-families": "tsx --env-file=.env.local scripts/list-uat-families.ts",
+    "wipe:uat-leaks": "tsx --env-file=.env.local scripts/wipe-uat-leaks.ts"
   },
   "dependencies": {
     "@aws-sdk/client-ses": "^3.700.0",
