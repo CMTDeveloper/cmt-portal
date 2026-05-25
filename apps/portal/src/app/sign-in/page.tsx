@@ -128,26 +128,28 @@ function SignInPrototype() {
 
 // ─── Right decorative pane (shared) ──────────────────────────────────────────
 
-function RightPane({ welcomeFlow }: { welcomeFlow: boolean }) {
+function RightPane({ welcomeFlow, adminFlow = false }: { welcomeFlow: boolean; adminFlow?: boolean }) {
+  const label = adminFlow ? 'Admin access' : welcomeFlow ? 'Welcome team' : 'Member access';
+  const quote = adminFlow
+    ? '"Sign in to manage admins, welcome-team grants, reports, and family-roster operations across CMT."'
+    : welcomeFlow
+      ? '"For CMT volunteers helping families on Sunday — sign in to look up any family by name, FID, or contact."'
+      : '"We\'ll send a one-time code to your email — no password to remember."';
+  const footnote = adminFlow
+    ? "Admin access is granted by an existing admin. Ask one to add your email if you don't see it."
+    : welcomeFlow
+      ? "Don't have welcome-team access? Ask the admin to grant your email."
+      : "New to Setu? The same form handles registration — just enter your email and we'll guide you from there.";
+
   return (
     <div style={{ flex: '1 1 0', background: 'var(--accent)', position: 'relative', overflow: 'hidden', display: 'flex', alignItems: 'flex-end', padding: 48 }}>
       <div style={{ position: 'absolute', inset: 0, opacity: .15, display: 'grid', placeItems: 'center' }}>
         <Rosette size={520} color="#fff" stroke={.5}/>
       </div>
       <div style={{ position: 'relative', color: '#fff' }}>
-        <p style={{ fontSize: 11, letterSpacing: '.2em', textTransform: 'uppercase', opacity: .7, marginBottom: 8 }}>
-          {welcomeFlow ? 'Welcome team' : 'Member access'}
-        </p>
-        <p style={{ fontFamily: 'var(--display)', fontSize: 26, fontStyle: 'italic', lineHeight: 1.35, fontWeight: 400 }}>
-          {welcomeFlow
-            ? '"For CMT volunteers helping families on Sunday — sign in to look up any family by name, FID, or contact."'
-            : '"We\'ll send a one-time code to your email — no password to remember."'}
-        </p>
-        <p style={{ marginTop: 16, fontSize: 13, opacity: .75, lineHeight: 1.55 }}>
-          {welcomeFlow
-            ? "Don't have welcome-team access? Ask the admin to grant your email."
-            : "New to Setu? The same form handles registration — just enter your email and we'll guide you from there."}
-        </p>
+        <p style={{ fontSize: 11, letterSpacing: '.2em', textTransform: 'uppercase', opacity: .7, marginBottom: 8 }}>{label}</p>
+        <p style={{ fontFamily: 'var(--display)', fontSize: 26, fontStyle: 'italic', lineHeight: 1.35, fontWeight: 400 }}>{quote}</p>
+        <p style={{ marginTop: 16, fontSize: 13, opacity: .75, lineHeight: 1.55 }}>{footnote}</p>
       </div>
     </div>
   );
@@ -159,6 +161,8 @@ function SignInReal() {
   const searchParams = useSearchParams();
   const fromParam = searchParams?.get('from') ?? '';
   const welcomeFlow = fromParam.startsWith('/welcome');
+  const adminFlow = fromParam === '/admin' || fromParam.startsWith('/admin/');
+  const staffFlow = welcomeFlow || adminFlow;
 
   const [pageState, setPageState] = useState<PageState>('form');
   const [contactType, setContactType] = useState<ContactType>('email');
@@ -167,10 +171,16 @@ function SignInReal() {
   const [loading, setLoading] = useState(false);
   const contactRef = useRef<HTMLInputElement>(null);
 
-  const headline = welcomeFlow ? 'Welcome team sign-in' : 'Sign in';
-  const subhead = welcomeFlow
-    ? "We'll send a 6-digit code to the email your admin granted welcome-team access to."
-    : "We'll send you a 6-digit code. No password to remember.";
+  const headline = adminFlow
+    ? 'Admin sign-in'
+    : welcomeFlow
+      ? 'Welcome team sign-in'
+      : 'Sign in';
+  const subhead = adminFlow
+    ? "We'll send a 6-digit code to the email your admin account is registered under."
+    : welcomeFlow
+      ? "We'll send a 6-digit code to the email your admin granted welcome-team access to."
+      : "We'll send you a 6-digit code. No password to remember.";
 
   const contactLabel = contactType === 'email' ? 'Email address' : 'Phone number';
   const contactInputType = contactType === 'email' ? 'email' : 'tel';
@@ -307,7 +317,7 @@ function SignInReal() {
               >
                 {contactType === 'email' ? 'Use phone number instead' : 'Use email instead'}
               </button>
-              {!welcomeFlow && (
+              {!staffFlow && (
                 <>
                   <div style={{ marginTop: 24, padding: 14, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radiusSm)', fontSize: 12, color: 'var(--body-text)', lineHeight: 1.5 }}>
                     <strong>New to Setu?</strong> Use the same form — if we don't find an account we'll walk you through registering your family.
@@ -405,7 +415,7 @@ function SignInReal() {
               >
                 {contactType === 'email' ? 'Use phone number instead' : 'Use email instead'}
               </button>
-              {!welcomeFlow && (
+              {!staffFlow && (
                 <>
                   <div style={{ marginTop: 28, padding: 16, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radiusSm)', fontSize: 13, color: 'var(--body-text)', lineHeight: 1.5 }}>
                     <strong>New to Setu?</strong> Use the same form — if we don't find an account we'll walk you through registering your family.
@@ -455,7 +465,7 @@ function SignInReal() {
           <span>© 2026 CMT</span>
         </div>
       </div>
-      <RightPane welcomeFlow={welcomeFlow}/>
+      <RightPane welcomeFlow={welcomeFlow} adminFlow={adminFlow}/>
     </CspRoot>
   );
 

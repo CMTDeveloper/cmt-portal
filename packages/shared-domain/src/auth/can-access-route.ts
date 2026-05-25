@@ -24,6 +24,10 @@ export function canAccessRoute(
   if (pathname.startsWith('/api/check-in/family/')) return isFamily(claims);
   if (pathname.startsWith('/api/check-in/notifications/')) return isAdmin(claims);
 
+  // New /admin/* surface (Setu-themed). Pages and APIs both admin-only.
+  if (pathname === '/admin' || pathname.startsWith('/admin/')) return isAdmin(claims);
+  if (pathname.startsWith('/api/admin/')) return isAdmin(claims);
+
   // Setu family portal pages
   if (pathname === '/family' || pathname.startsWith('/family/')) {
     return isSetuFamily(claims);

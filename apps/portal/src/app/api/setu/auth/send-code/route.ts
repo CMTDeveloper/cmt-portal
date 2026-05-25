@@ -81,21 +81,22 @@ export async function POST(req: Request) {
     }
   }
 
-  // Welcome-team path: admin granted role='welcome-team' to a Firebase auth
-  // user (no family attached). Without this branch they'd get the anti-enum
-  // silent-200 just like an unknown contact.
-  let hasWelcomeTeamUser = false;
+  // Admin / welcome-team path: a Firebase auth user with the admin or
+  // welcome-team claim (granted by admin tooling — no family attached).
+  // Without this branch they'd get the anti-enum silent-200 just like an
+  // unknown contact.
+  let hasAdminRoleUser = false;
   if (result.source === null && type === 'email') {
     try {
       const user = await portalAuth().getUserByEmail(value).catch(() => null);
       const role = (user?.customClaims as Record<string, unknown> | undefined)?.role;
-      if (role === 'welcome-team') hasWelcomeTeamUser = true;
+      if (role === 'welcome-team' || role === 'admin') hasAdminRoleUser = true;
     } catch (err) {
-      console.error(`[send-code] hash=${hashPrefix} welcome-team lookup failed:`, err);
+      console.error(`[send-code] hash=${hashPrefix} role lookup failed:`, err);
     }
   }
 
-  if (result.source === null && !hasPendingInvite && !hasWelcomeTeamUser) {
+  if (result.source === null && !hasPendingInvite && !hasAdminRoleUser) {
     return NextResponse.json({ success: true }, { status: 200 });
   }
 

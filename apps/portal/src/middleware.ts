@@ -65,6 +65,7 @@ export async function middleware(req: NextRequest) {
 
 function dashboardForRole(role: unknown): string | null {
   if (role === 'family-manager' || role === 'family-member') return '/family';
+  if (role === 'admin') return '/admin';
   if (role === 'welcome-team') return '/welcome';
   return null;
 }
@@ -85,11 +86,13 @@ function deny(req: NextRequest, reason: 'no-session' | 'unauthorized') {
   if (isApi) {
     return NextResponse.json({ error: reason }, { status: 401 });
   }
-  // Setu routes (family + welcome-team) redirect to the new /sign-in. Legacy
-  // check-in routes still go to /login (will be retired in Slice 5 cutover).
+  // Setu routes (family + welcome-team + new /admin) redirect to the new
+  // /sign-in. Legacy /check-in/admin still goes to legacy /login (will be
+  // retired in Slice 5 cutover).
   const isSetuRoute =
     pathname === '/family' || pathname.startsWith('/family/') ||
-    pathname === '/welcome' || pathname.startsWith('/welcome/');
+    pathname === '/welcome' || pathname.startsWith('/welcome/') ||
+    pathname === '/admin' || pathname.startsWith('/admin/');
   const loginPath = isSetuRoute ? '/sign-in' : '/login';
   const redirect = new URL(loginPath, req.nextUrl.origin);
   redirect.searchParams.set('from', pathname);

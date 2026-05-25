@@ -90,11 +90,11 @@ export async function POST(req: Request) {
     }
   }
   const isWelcomeTeamUser = existingClaimsRole === 'welcome-team';
+  const isAdminUser = existingClaimsRole === 'admin';
 
-  if (result.source === null && !hasPendingInvite && !isWelcomeTeamUser) {
-    // Brand-new family path (no invite, not welcome-team) — keep the old
-    // behavior of redirecting to /register without a session. Registration
-    // flow creates the session.
+  if (result.source === null && !hasPendingInvite && !isWelcomeTeamUser && !isAdminUser) {
+    // Brand-new family path (no invite, not admin/welcome-team) — keep the
+    // old behavior of redirecting to /register without a session.
     return NextResponse.json({ redirectTo: '/register?contact=verified' }, { status: 200 });
   }
 
@@ -145,14 +145,20 @@ export async function POST(req: Request) {
     }
   }
 
-  // Welcome-team is the LAST priority — only applies when the user has NO
-  // family attached. A family-manager who also happens to have welcome-team
-  // claim continues to sign in as their family role (welcome-team is for
-  // non-family CMT volunteers). If a multi-role need emerges later, this
-  // is the spot to introduce a claims.roles[] array.
-  if (result.source === null && !hasPendingInvite && isWelcomeTeamUser) {
-    claims = { role: 'welcome-team', ...contactClaim };
-    redirectTo = '/welcome';
+  // Admin / welcome-team are the LAST priority — only apply when the user
+  // has NO family attached. A family-manager who also happens to have
+  // admin/welcome-team claim continues to sign in as their family role
+  // (these admin roles are for non-family CMT staff). Admin beats
+  // welcome-team because admin can do everything welcome-team can.
+  // If a multi-role need emerges later, introduce a claims.roles[] array.
+  if (result.source === null && !hasPendingInvite) {
+    if (isAdminUser) {
+      claims = { role: 'admin', ...contactClaim };
+      redirectTo = '/admin';
+    } else if (isWelcomeTeamUser) {
+      claims = { role: 'welcome-team', ...contactClaim };
+      redirectTo = '/welcome';
+    }
   }
 
   await auth.setCustomUserClaims(uid, claims);
