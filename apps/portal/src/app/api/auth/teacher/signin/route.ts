@@ -38,7 +38,7 @@ export async function POST(req: Request) {
   const user = await getOrCreateSharedTeacherUser();
   const customTok = await createPortalCustomToken(user.uid, { role: 'teacher' });
   const idTok = await exchangeCustomTokenForIdToken(customTok);
-  const expiresInDays = Number(process.env.SESSION_COOKIE_EXPIRES_DAYS ?? '30');
+  const expiresInDays = Number(process.env.SESSION_COOKIE_EXPIRES_DAYS ?? '14');
   const session = await createPortalSessionCookie(idTok, expiresInDays);
 
   const res = NextResponse.json({ redirectTo: '/check-in/teacher' }, { status: 200 });

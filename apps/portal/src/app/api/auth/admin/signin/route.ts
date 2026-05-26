@@ -28,7 +28,7 @@ export async function POST(req: Request) {
     if (user.claims.role !== 'admin') {
       return NextResponse.json({ error: 'forbidden' }, { status: 403 });
     }
-    const expiresInDays = Number(process.env.SESSION_COOKIE_EXPIRES_DAYS ?? '30');
+    const expiresInDays = Number(process.env.SESSION_COOKIE_EXPIRES_DAYS ?? '14');
     const session = await createPortalSessionCookie(idToken, expiresInDays);
 
     const res = NextResponse.json({ redirectTo: '/check-in/admin' }, { status: 200 });

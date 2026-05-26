@@ -23,7 +23,11 @@ export const portalEnvSchema = z.object({
 
   // Auth
   TEACHER_PASSPHRASE: z.string().min(6),
-  SESSION_COOKIE_EXPIRES_DAYS: z.coerce.number().int().min(1).max(30).default(30),
+  // Firebase Auth's createSessionCookie has a hard 14-day max — anything
+  // above that throws auth/invalid-session-cookie-duration. Don't bump this
+  // above 14 without first replacing the Firebase session cookie with a
+  // refresh-token rotation flow.
+  SESSION_COOKIE_EXPIRES_DAYS: z.coerce.number().int().min(1).max(14).default(14),
 
   // AWS (declared now; real consumers in slice B5)
   AWS_SES_REGION: z.string().default('ca-central-1'),

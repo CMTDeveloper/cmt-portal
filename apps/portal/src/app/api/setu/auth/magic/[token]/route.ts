@@ -60,7 +60,7 @@ export async function GET(
   const customToken = await auth.createCustomToken(uid, claims);
   const idToken = await exchangeCustomTokenForIdToken(customToken);
 
-  const expiresInDays = Number(process.env.SESSION_COOKIE_EXPIRES_DAYS ?? '30');
+  const expiresInDays = Number(process.env.SESSION_COOKIE_EXPIRES_DAYS ?? '14');
   const session = await createPortalSessionCookie(idToken, expiresInDays);
 
   const res = NextResponse.redirect(new URL(redirectTo, req.url));
