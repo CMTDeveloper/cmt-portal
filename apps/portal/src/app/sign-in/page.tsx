@@ -401,7 +401,7 @@ function SignInReal() {
             disabled={pwLoading}
           />
         </div>
-        <div className="field" style={{ marginBottom: mb }}>
+        <div className="field" style={{ marginBottom: 6 }}>
           <label>Password</label>
           <input
             className="input"
@@ -413,6 +413,23 @@ function SignInReal() {
             autoComplete="current-password"
             disabled={pwLoading}
           />
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: mb }}>
+          <button
+            type="button"
+            onClick={() => {
+              switchMode('otp', pwEmail);
+              toast.info('Sign in with a code, then set a new password from Sign-in security.');
+            }}
+            disabled={pwLoading}
+            style={{
+              background: 'transparent', border: 0, padding: 0, cursor: 'pointer',
+              fontSize: 12, color: 'var(--accentDeep)', textDecoration: 'underline',
+              fontFamily: 'var(--body)',
+            }}
+          >
+            Forgot password?
+          </button>
         </div>
         <button
           className="btn btn--p btn--block"
