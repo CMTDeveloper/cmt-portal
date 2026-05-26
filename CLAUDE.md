@@ -64,6 +64,18 @@ A Turborepo monorepo for the Chinmaya Mission Toronto unified portal. One Next.j
 - **Never bypass `--no-verify`** on commits or pushes unless explicitly told.
 - **`pnpm test:e2e`** — runs the E2E integration suite against real UAT Firestore (`chinmaya-setu-uat`). Run on-demand before releases. NOT included in the pre-push hook. Requires `.env.local` with `PORTAL_FIREBASE_PROJECT_ID=chinmaya-setu-uat` and matching service account creds. Files live in `apps/portal/src/__tests__/e2e/`.
 
+## Pre-ship verification (don't skip)
+
+Green `pnpm test` does NOT mean shipped working. Unit tests with mocks verify code correctness — they don't verify feature correctness. Several Slice B/C bugs landed in prod despite green CI because the actual user flow was never exercised. To avoid the cycle of *push → 500 → fix → push → 500 → fix*:
+
+1. **Pre-code constraint check.** Before writing code that touches a third-party API or framework boundary, spend 5 minutes verifying its constraints. Firebase Auth's `createSessionCookie` has a hard 14-day cap. AWS SNS publishes to Canadian numbers need an Origination Number per region. Sonner toast variants vary by version. Read the docs first — fix-after-500 is 5× more expensive than read-before-code.
+2. **Mock-free walkthrough.** After `pnpm test` passes, walk the user's exact path in UAT before declaring done. For sign-in: open `/sign-in`, enter creds, follow each redirect, land where you expect. For a route change: click through it as a user would. Mocks lie; browsers don't.
+3. **Audit config when porting.** If a legacy app works with the same credentials but the new code doesn't — the answer is almost always config (region, env var, allowlist, sender identity), not code. Audit the working app's config first; don't spend an hour rewriting the publish path.
+4. **Explicit verification status in summaries.** End-of-task summaries must distinguish "tests pass" from "end-to-end verified in UAT." Never bury an "I think this works" behind a "all checks green." If you can't or didn't test the UI, say so plainly.
+5. **Carry intent through multi-step flows.** When wiring a UX path (forgot-password → OTP → reset), think about where the user ends up at every step, not just whether the API returns 200. Walk the whole flow as the user, not just the route handler.
+
+This list is open — when a new "green tests but broken in prod" pattern bites, add the rule here.
+
 ## Reading the prototype
 
 The original 4-phase product brief is in `docs/superpowers/specs/reference/Chinmaya Setu Prototype.{md,pdf}`. **Phase 1 of that brief is already implemented as the standalone `chinmaya-family-check-in` app and will be ported into this portal in slice B.** The Setu prototype's `chinmaya-setu` repo (a different prior-dev attempt with a Supabase schema and ~83 shadcn components) is REFERENCE ONLY — its data model is intentionally NOT being adopted because it reinvents what production already has. We did salvage the 12 shadcn components in slice A.
