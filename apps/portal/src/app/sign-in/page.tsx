@@ -419,7 +419,15 @@ function SignInReal() {
             type="button"
             onClick={() => {
               switchMode('otp', pwEmail);
-              toast.info('Sign in with a code, then set a new password from Sign-in security.');
+              // Carry the reset-password intent through the OTP flow. The
+              // verify-code redirect logic reads ?from= from window.location.search
+              // (lines 284-290) and lands the user at the target after sign-in.
+              if (typeof window !== 'undefined') {
+                const url = new URL(window.location.href);
+                url.searchParams.set('from', '/family/settings/security');
+                window.history.replaceState({}, '', url.toString());
+              }
+              toast.info('Sign in with a code below — we’ll take you to set a new password.');
             }}
             disabled={pwLoading}
             style={{
