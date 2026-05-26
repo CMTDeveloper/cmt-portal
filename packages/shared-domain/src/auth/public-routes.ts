@@ -20,6 +20,8 @@ export const PUBLIC_ROUTES = [
   '/api/setu/auth/send-code',
   '/api/setu/auth/verify-code',
   '/api/setu/auth/signout',
+  // Magic-link redemption (the token itself is the credential — no session needed)
+  '/api/setu/auth/magic/:token',
 
   // Setu registration APIs (public — unauthenticated callers begin the
   // sign-up flow here; these routes enforce their own rate limiting and

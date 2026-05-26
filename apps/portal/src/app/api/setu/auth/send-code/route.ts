@@ -9,9 +9,11 @@ import {
 } from '@/features/check-in/shared';
 import { resolveSender } from '@/lib/aws/resolve-sender';
 import { findSetuFamilyByContact } from '@/features/setu/auth/find-family-by-contact';
+import { createMagicLink } from '@/features/setu/auth/magic-links';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { portalAuth } from '@cmt/firebase-shared/admin/auth';
 import { normalizeContactForKey } from '@cmt/shared-domain/setu';
+import { portalEnv } from '@/lib/env';
 
 
 const bodySchema = z.object({
@@ -105,10 +107,19 @@ export async function POST(req: Request) {
   await storeVerificationCode(normalized, code, type);
 
   if (type === 'email') {
+    const canonicalEmail = normalizeContactForKey('email', value);
+    const magicLink = await createMagicLink(canonicalEmail);
+    const baseUrl = portalEnv().NEXT_PUBLIC_PORTAL_BASE_URL ?? '';
+    const magicUrl = `${baseUrl}/api/setu/auth/magic/${magicLink.token}`;
     await resolveSender().sendEmail({
-      to: normalizeContactForKey('email', value),
-      subject: 'Your CMT portal verification code',
-      text: `Your verification code is ${code}. It expires in 10 minutes.`,
+      to: canonicalEmail,
+      subject: 'Your CMT portal sign-in link',
+      text: [
+        `Sign in with this link (expires in 10 minutes):`,
+        magicUrl,
+        ``,
+        `Or enter your verification code: ${code}`,
+      ].join('\n'),
     });
   } else {
     // Canonicalize to E.164 (+1XXXXXXXXXX). Without this, users who enter

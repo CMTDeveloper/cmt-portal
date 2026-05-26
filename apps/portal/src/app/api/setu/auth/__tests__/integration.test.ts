@@ -22,6 +22,12 @@ vi.mock('@/features/setu/auth/find-family-by-contact', () => ({
 vi.mock('@/features/setu/auth/member-roles', () => ({
   getMemberRoles: vi.fn(async () => []),
 }));
+vi.mock('@/features/setu/auth/magic-links', () => ({
+  createMagicLink: vi.fn().mockResolvedValue({ token: 'mock-token', expiresAt: new Date() }),
+}));
+vi.mock('@/lib/env', () => ({
+  portalEnv: () => ({ NEXT_PUBLIC_PORTAL_BASE_URL: 'https://portal.example.com' }),
+}));
 
 // ── AWS sender ────────────────────────────────────────────────────────────────
 const fakeSender = { sendEmail: vi.fn(), sendSMS: vi.fn() };

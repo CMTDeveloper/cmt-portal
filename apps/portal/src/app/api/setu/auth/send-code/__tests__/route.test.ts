@@ -14,11 +14,18 @@ vi.mock('@/lib/aws/resolve-sender', () => ({
 vi.mock('@/features/setu/auth/find-family-by-contact', () => ({
   findSetuFamilyByContact: vi.fn(),
 }));
+vi.mock('@/features/setu/auth/magic-links', () => ({
+  createMagicLink: vi.fn(),
+}));
+vi.mock('@/lib/env', () => ({
+  portalEnv: () => ({ NEXT_PUBLIC_PORTAL_BASE_URL: 'https://portal.example.com' }),
+}));
 
 import { POST } from '../route';
 import { checkAndRecordOtpRateLimit, storeVerificationCode } from '@/features/check-in/shared';
 import { resolveSender } from '@/lib/aws/resolve-sender';
 import { findSetuFamilyByContact } from '@/features/setu/auth/find-family-by-contact';
+import { createMagicLink } from '@/features/setu/auth/magic-links';
 
 const mockSendEmail = vi.fn();
 const mockSendSMS = vi.fn();
@@ -39,6 +46,10 @@ beforeEach(() => {
   });
   (checkAndRecordOtpRateLimit as ReturnType<typeof vi.fn>).mockResolvedValue({ allowed: true });
   (storeVerificationCode as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+  (createMagicLink as ReturnType<typeof vi.fn>).mockResolvedValue({
+    token: 'test-magic-token-abc123',
+    expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+  });
   mockSendEmail.mockResolvedValue(undefined);
   mockSendSMS.mockResolvedValue(undefined);
 });
@@ -67,6 +78,16 @@ describe('POST /api/setu/auth/send-code', () => {
     expect(res.status).toBe(200);
     expect(mockSendEmail).toHaveBeenCalledWith(expect.objectContaining({ to: 'raj@example.com' }));
     expect(mockSendSMS).not.toHaveBeenCalled();
+  });
+
+  it('email body contains magic link URL and 6-digit code', async () => {
+    (findSetuFamilyByContact as ReturnType<typeof vi.fn>).mockResolvedValue({
+      source: 'setu', fid: 'FAM001', mid: 'FAM001-01', legacyFid: null, family: {},
+    });
+    await POST(makeRequest({ type: 'email', value: 'raj@example.com' }));
+    const [emailArg] = (mockSendEmail as ReturnType<typeof vi.fn>).mock.calls[0] as [{ text: string }];
+    expect(emailArg.text).toContain('https://portal.example.com/api/setu/auth/magic/test-magic-token-abc123');
+    expect(emailArg.text).toMatch(/\d{6}/);
   });
 
   it('accepts phone contact, calls SNS sender with E.164-canonical phone', async () => {

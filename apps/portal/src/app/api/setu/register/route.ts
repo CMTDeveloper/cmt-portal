@@ -120,7 +120,7 @@ export async function POST(req: Request) {
   }
 
   const idToken = await exchangeCustomTokenForIdToken(customToken);
-  const expiresInDays = Number(process.env.SESSION_COOKIE_EXPIRES_DAYS ?? '5');
+  const expiresInDays = Number(process.env.SESSION_COOKIE_EXPIRES_DAYS ?? '30');
   const session = await createPortalSessionCookie(idToken, expiresInDays);
 
   const res = NextResponse.json({ fid, mid }, { status: 200 });
