@@ -374,7 +374,12 @@ function SignInReal() {
   ) : null;
 
   // ── Password form (shared between mobile / desktop, caller controls sizing) ─
-  function PasswordForm({ compact }: { compact: boolean }) {
+  // IMPORTANT: declared as a render helper (called as renderPasswordForm(...)),
+  // NOT a nested function component used as <PasswordForm ... />. Nested-function
+  // components are recreated on every parent render → React sees a new component
+  // identity → the input gets unmounted/remounted → focus is lost between keystrokes.
+  // Calling as a function inlines the JSX so the input stays mounted across renders.
+  function renderPasswordForm(compact: boolean) {
     const mb = compact ? 14 : 16;
     const btnPad = compact ? undefined : '14px 22px';
     return (
@@ -462,7 +467,7 @@ function SignInReal() {
         <SetuLogo size={18}/>
         <div style={{ marginTop: 36 }}>
           {signInMode === 'password' ? (
-            <PasswordForm compact={true} />
+            renderPasswordForm(true)
           ) : (
             <>
               {pageState === 'form' && (
@@ -577,7 +582,7 @@ function SignInReal() {
 
         <div style={{ maxWidth: 480, width: '100%', alignSelf: 'center', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', paddingBottom: 60 }}>
           {signInMode === 'password' ? (
-            <PasswordForm compact={false} />
+            renderPasswordForm(false)
           ) : (
             <>
               {pageState === 'form' && (
