@@ -207,16 +207,27 @@ function RegisterReal() {
     }
   }, []);
 
+  // Only fire the lookup once both inputs look complete enough to be worth
+  // an API call. Avoids per-keystroke 429s while users type their phone.
+  function isCompleteEnough(emailVal: string, phoneVal: string): boolean {
+    const e = emailVal.trim();
+    const p = phoneVal.replace(/\D/g, '');
+    return e.includes('@') && e.includes('.') && p.length >= 10;
+  }
+
   function scheduleLookup(emailVal: string, phoneVal: string) {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (!emailVal.trim() || !phoneVal.trim()) {
+    if (!isCompleteEnough(emailVal, phoneVal)) {
       setLookupState('idle');
       setMatch(null);
       return;
     }
+    // 1500ms is long enough to ride out normal typing pauses (e.g. looking
+    // at the keyboard between phone digits) but short enough that the user
+    // sees the match panel before they reach for Continue.
     debounceRef.current = setTimeout(() => {
       void runLookup(emailVal, phoneVal);
-    }, 400);
+    }, 1500);
   }
 
   function handleEmailChange(v: string) {
@@ -231,12 +242,12 @@ function RegisterReal() {
 
   function handleEmailBlur() {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (email.trim() && phone.trim()) void runLookup(email, phone);
+    if (isCompleteEnough(email, phone)) void runLookup(email, phone);
   }
 
   function handlePhoneBlur() {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (email.trim() && phone.trim()) void runLookup(email, phone);
+    if (isCompleteEnough(email, phone)) void runLookup(email, phone);
   }
 
   const isLoading = lookupState === 'loading';
