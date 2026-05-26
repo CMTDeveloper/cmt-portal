@@ -47,17 +47,29 @@ export default function SecuritySettingsPage() {
       </p>
 
       {passwordSet && !showForm ? (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radiusSm)', marginBottom: 14 }}>
-          <SetuIcon.shield/>
-          <span style={{ fontSize: 14, fontWeight: 500, flex: 1 }}>Password is set</span>
-          <button
-            type="button"
-            onClick={() => setShowForm(true)}
-            style={{ background: 'transparent', border: 0, color: 'var(--accent)', fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: 0 }}
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radiusSm)', marginBottom: 14 }}>
+            <SetuIcon.shield/>
+            <span style={{ fontSize: 14, fontWeight: 500, flex: 1 }}>Password is set</span>
+            <button
+              type="button"
+              onClick={() => setShowForm(true)}
+              style={{ background: 'transparent', border: 0, color: 'var(--accent)', fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: 0 }}
+            >
+              Change password
+            </button>
+          </div>
+          <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 16, lineHeight: 1.5 }}>
+            Next time you sign in, use email + password from the sign-in screen — no OTP needed.
+          </p>
+          <Link
+            href="/family"
+            className="btn btn--p"
+            style={{ padding: '12px 24px', display: 'inline-flex', alignItems: 'center', gap: 8, textDecoration: 'none' }}
           >
-            Change password
-          </button>
-        </div>
+            Done · Back to family →
+          </Link>
+        </>
       ) : (
         <form onSubmit={handleSubmit}>
           <div className="field" style={{ marginBottom: 8 }}>
