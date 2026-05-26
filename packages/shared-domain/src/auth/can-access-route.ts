@@ -80,6 +80,11 @@ export function canAccessRoute(
     return claims.role != null;
   }
 
+  // Setu API — set-password is reachable by any authenticated Setu user (self-service)
+  if (pathname === '/api/setu/auth/set-password') {
+    return isSetuFamily(claims) || isWelcomeTeam(claims) || isAdmin(claims);
+  }
+
   // Setu API — remaining paths (invite/send, register, etc.): manager + welcome-team + admin
   // family-member is NOT included here; manager-level is the safe default for unknown setu paths
   if (pathname.startsWith('/api/setu/')) {

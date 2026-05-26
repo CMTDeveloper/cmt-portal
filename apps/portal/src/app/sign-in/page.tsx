@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useState, useRef } from 'react';
+import { Suspense, useState, useRef, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { toast, SetuLogo, SetuIcon, Rosette } from '@cmt/ui';
@@ -10,6 +10,9 @@ import { flags } from '@/lib/flags';
 
 type ContactType = 'email' | 'phone';
 type PageState = 'form' | 'code' | 'verifying';
+type SignInMode = 'otp' | 'password';
+
+const MODE_STORAGE_KEY = 'setu-signin-mode';
 
 // ─── Flag-off fallback (visual-only prototype) ────────────────────────────────
 // @deprecated Never rendered in prod (flags.setuAuth is always true in production).
@@ -155,7 +158,7 @@ function RightPane({ welcomeFlow, adminFlow = false }: { welcomeFlow: boolean; a
   );
 }
 
-// ─── Real OTP flow ────────────────────────────────────────────────────────────
+// ─── Real OTP + Password flow ─────────────────────────────────────────────────
 
 function SignInReal() {
   const searchParams = useSearchParams();
@@ -164,9 +167,28 @@ function SignInReal() {
   const adminFlow = fromParam === '/admin' || fromParam.startsWith('/admin/');
   const staffFlow = welcomeFlow || adminFlow;
 
-  // /register dedupe sends the user here as /sign-in?email=foo when a
-  // matching family is found, so we can pre-fill and skip a step.
   const prefillEmail = searchParams?.get('email') ?? '';
+
+  // Read localStorage preference once on mount; default to 'otp'.
+  const [signInMode, setSignInMode] = useState<SignInMode>('otp');
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(MODE_STORAGE_KEY);
+      if (stored === 'password') setSignInMode('password');
+    } catch {
+      // localStorage unavailable (private browsing, SSR) — stay 'otp'
+    }
+  }, []);
+
+  function switchMode(next: SignInMode, prefill?: string) {
+    setSignInMode(next);
+    try { localStorage.setItem(MODE_STORAGE_KEY, next); } catch { /* ignore */ }
+    if (prefill !== undefined) setContactValue(prefill);
+    // Reset OTP state when switching modes
+    setPageState('form');
+    setOtp('');
+    setPwError('');
+  }
 
   const [pageState, setPageState] = useState<PageState>('form');
   const [contactType, setContactType] = useState<ContactType>('email');
@@ -175,12 +197,19 @@ function SignInReal() {
   const [loading, setLoading] = useState(false);
   const contactRef = useRef<HTMLInputElement>(null);
 
+  // Password mode state
+  const [pwEmail, setPwEmail] = useState(prefillEmail);
+  const [pwPassword, setPwPassword] = useState('');
+  const [pwLoading, setPwLoading] = useState(false);
+  const [pwError, setPwError] = useState('');
+  const pwEmailRef = useRef<HTMLInputElement>(null);
+
   const headline = adminFlow
     ? 'Admin sign-in'
     : welcomeFlow
       ? 'Welcome team sign-in'
       : 'Sign in';
-  const subhead = adminFlow
+  const otpSubhead = adminFlow
     ? "We'll send a 6-digit code to the email your admin account is registered under."
     : welcomeFlow
       ? "We'll send a 6-digit code to the email your admin granted welcome-team access to."
@@ -252,15 +281,13 @@ function SignInReal() {
         return;
       }
       const { redirectTo } = (await res.json()) as { redirectTo?: string };
-      // Honor ?from= when it's a safe internal path (e.g. /invite/{token}).
-      // This lets users land back on the page that bounced them to sign-in.
-      const fromParam = new URLSearchParams(window.location.search).get('from');
+      const fromQ = new URLSearchParams(window.location.search).get('from');
       const fromIsSafe =
-        fromParam !== null &&
-        fromParam.startsWith('/') &&
-        !fromParam.startsWith('//') &&
-        !fromParam.includes('://');
-      window.location.href = fromIsSafe ? fromParam : (redirectTo ?? '/family');
+        fromQ !== null &&
+        fromQ.startsWith('/') &&
+        !fromQ.startsWith('//') &&
+        !fromQ.includes('://');
+      window.location.href = fromIsSafe ? fromQ : (redirectTo ?? '/family');
     } catch {
       toast.error('Network error. Check your connection and try again.');
       setPageState('code');
@@ -269,12 +296,136 @@ function SignInReal() {
 
   async function handleResend() {
     setOtp('');
-    // Call send-code with current contactValue; on success handleSendCode sets 'code' state.
-    // We don't pre-set 'form' so the user stays on the code screen if the resend fails.
     await handleSendCode();
   }
 
+  async function handlePasswordSignIn() {
+    const email = pwEmail.trim();
+    const password = pwPassword;
+    if (!email) {
+      setPwError('Enter your email address.');
+      pwEmailRef.current?.focus();
+      return;
+    }
+    if (!password) {
+      setPwError('Enter your password.');
+      return;
+    }
+    setPwError('');
+    setPwLoading(true);
+    try {
+      const res = await fetch('/api/setu/auth/password-sign-in', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      if (!res.ok) {
+        if (res.status === 401) {
+          toast.error('Incorrect email or password.');
+        } else if (res.status === 403) {
+          toast.error('Your account has been disabled. Contact your family manager.');
+        } else if (res.status === 429) {
+          toast.error('Too many attempts. Please wait a minute and try again.');
+        } else {
+          toast.error('Something went wrong. Please try again.');
+        }
+        return;
+      }
+      const { redirectTo } = (await res.json()) as { redirectTo?: string };
+      const fromQ = new URLSearchParams(window.location.search).get('from');
+      const fromIsSafe =
+        fromQ !== null &&
+        fromQ.startsWith('/') &&
+        !fromQ.startsWith('//') &&
+        !fromQ.includes('://');
+      window.location.assign(fromIsSafe ? fromQ : (redirectTo ?? '/family'));
+    } catch {
+      toast.error('Network error. Check your connection and try again.');
+    } finally {
+      setPwLoading(false);
+    }
+  }
+
   const isVerifying = pageState === 'verifying';
+
+  // ── Mode toggle (rendered above the contact field) ───────────────────────────
+  const modeToggle = !staffFlow ? (
+    <div style={{ marginBottom: 18 }}>
+      {signInMode === 'otp' ? (
+        <button
+          className="btn btn--g"
+          style={{ fontSize: 13 }}
+          onClick={() => switchMode('password', contactType === 'email' ? contactValue : '')}
+          type="button"
+        >
+          Have a password? Sign in faster →
+        </button>
+      ) : (
+        <button
+          className="btn btn--g"
+          style={{ fontSize: 13 }}
+          onClick={() => { switchMode('otp'); }}
+          type="button"
+        >
+          Or sign in with a code →
+        </button>
+      )}
+    </div>
+  ) : null;
+
+  // ── Password form (shared between mobile / desktop, caller controls sizing) ─
+  function PasswordForm({ compact }: { compact: boolean }) {
+    const mb = compact ? 14 : 16;
+    const btnPad = compact ? undefined : '14px 22px';
+    return (
+      <>
+        <h1 style={{ fontSize: compact ? 30 : 44, fontWeight: 400, marginBottom: compact ? 10 : 12, lineHeight: compact ? undefined : 1.08 }}>{headline}</h1>
+        <p style={{ fontSize: compact ? 14 : 15, color: 'var(--body-text)', marginBottom: compact ? 20 : 28, lineHeight: 1.5 }}>
+          Sign in with your email and password.
+        </p>
+        {modeToggle}
+        {pwError && (
+          <p style={{ fontSize: 13, color: 'var(--danger, #c0392b)', marginBottom: 10 }}>{pwError}</p>
+        )}
+        <div className="field" style={{ marginBottom: mb }}>
+          <label>Email address</label>
+          <input
+            ref={pwEmailRef}
+            className="input"
+            type="email"
+            placeholder="you@example.com"
+            value={pwEmail}
+            onChange={(e) => setPwEmail(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handlePasswordSignIn()}
+            autoComplete="email"
+            disabled={pwLoading}
+          />
+        </div>
+        <div className="field" style={{ marginBottom: mb }}>
+          <label>Password</label>
+          <input
+            className="input"
+            type="password"
+            placeholder="Your password"
+            value={pwPassword}
+            onChange={(e) => setPwPassword(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handlePasswordSignIn()}
+            autoComplete="current-password"
+            disabled={pwLoading}
+          />
+        </div>
+        <button
+          className="btn btn--p btn--block"
+          style={{ marginBottom: 10, ...(btnPad ? { padding: btnPad } : {}) }}
+          onClick={handlePasswordSignIn}
+          disabled={pwLoading}
+          type="button"
+        >
+          {pwLoading ? 'Signing in…' : 'Sign in →'}
+        </button>
+      </>
+    );
+  }
 
   // ── Mobile ──────────────────────────────────────────────────────────────────
   const mobileContent = (
@@ -285,94 +436,101 @@ function SignInReal() {
         </Link>
         <SetuLogo size={18}/>
         <div style={{ marginTop: 36 }}>
-          {pageState === 'form' && (
+          {signInMode === 'password' ? (
+            <PasswordForm compact={true} />
+          ) : (
             <>
-              <h1 style={{ fontSize: 30, fontWeight: 400, marginBottom: 10 }}>{headline}</h1>
-              <p style={{ fontSize: 14, color: 'var(--body-text)', marginBottom: 24, lineHeight: 1.5 }}>
-                {subhead}
-              </p>
-              <div className="field" style={{ marginBottom: 14 }}>
-                <label>{contactLabel}</label>
-                <input
-                  ref={contactRef}
-                  className="input"
-                  type={contactInputType}
-                  placeholder={contactPlaceholder}
-                  value={contactValue}
-                  onChange={(e) => setContactValue(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSendCode()}
-                  autoComplete={contactType === 'email' ? 'email' : 'tel'}
-                  disabled={loading}
-                />
-                {contactHint && (
-                  <p style={{ fontSize: 12, color: 'var(--muted-text)', marginTop: 6, lineHeight: 1.4 }}>{contactHint}</p>
-                )}
-              </div>
-              <button
-                className="btn btn--p btn--block"
-                style={{ marginBottom: 10 }}
-                onClick={handleSendCode}
-                disabled={loading}
-              >
-                {loading ? 'Sending…' : 'Send sign-in code →'}
-              </button>
-              <button
-                className="btn btn--g btn--block"
-                style={{ fontSize: 13 }}
-                onClick={() => {
-                  setContactType(contactType === 'email' ? 'phone' : 'email');
-                  setContactValue('');
-                }}
-                disabled={loading}
-              >
-                {contactType === 'email' ? 'Use phone number instead' : 'Use email instead'}
-              </button>
-              {!staffFlow && (
+              {pageState === 'form' && (
                 <>
-                  <div style={{ marginTop: 24, padding: 14, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radiusSm)', fontSize: 12, color: 'var(--body-text)', lineHeight: 1.5 }}>
-                    <strong>New to Setu?</strong> Use the same form — if we don't find an account we'll walk you through registering your family.
+                  <h1 style={{ fontSize: 30, fontWeight: 400, marginBottom: 10 }}>{headline}</h1>
+                  <p style={{ fontSize: 14, color: 'var(--body-text)', marginBottom: 24, lineHeight: 1.5 }}>
+                    {otpSubhead}
+                  </p>
+                  {modeToggle}
+                  <div className="field" style={{ marginBottom: 14 }}>
+                    <label>{contactLabel}</label>
+                    <input
+                      ref={contactRef}
+                      className="input"
+                      type={contactInputType}
+                      placeholder={contactPlaceholder}
+                      value={contactValue}
+                      onChange={(e) => setContactValue(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSendCode()}
+                      autoComplete={contactType === 'email' ? 'email' : 'tel'}
+                      disabled={loading}
+                    />
+                    {contactHint && (
+                      <p style={{ fontSize: 12, color: 'var(--muted-text)', marginTop: 6, lineHeight: 1.4 }}>{contactHint}</p>
+                    )}
                   </div>
-                  <Link href="/register" className="btn btn--g btn--block" style={{ marginTop: 10, fontSize: 13, display: 'flex' }}>Register your family →</Link>
+                  <button
+                    className="btn btn--p btn--block"
+                    style={{ marginBottom: 10 }}
+                    onClick={handleSendCode}
+                    disabled={loading}
+                  >
+                    {loading ? 'Sending…' : 'Send sign-in code →'}
+                  </button>
+                  <button
+                    className="btn btn--g btn--block"
+                    style={{ fontSize: 13 }}
+                    onClick={() => {
+                      setContactType(contactType === 'email' ? 'phone' : 'email');
+                      setContactValue('');
+                    }}
+                    disabled={loading}
+                  >
+                    {contactType === 'email' ? 'Use phone number instead' : 'Use email instead'}
+                  </button>
+                  {!staffFlow && (
+                    <>
+                      <div style={{ marginTop: 24, padding: 14, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radiusSm)', fontSize: 12, color: 'var(--body-text)', lineHeight: 1.5 }}>
+                        <strong>New to Setu?</strong> Use the same form — if we don't find an account we'll walk you through registering your family.
+                      </div>
+                      <Link href="/register" className="btn btn--g btn--block" style={{ marginTop: 10, fontSize: 13, display: 'flex' }}>Register your family →</Link>
+                    </>
+                  )}
                 </>
               )}
-            </>
-          )}
-          {(pageState === 'code' || pageState === 'verifying') && (
-            <>
-              <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'var(--accentSoft)', display: 'grid', placeItems: 'center', marginBottom: 22 }}>
-                <SetuIcon.mail color="var(--accentDeep)"/>
-              </div>
-              <h1 style={{ fontSize: 28, fontWeight: 400, marginBottom: 10 }}>Enter your code</h1>
-              <p style={{ fontSize: 14, color: 'var(--body-text)', lineHeight: 1.6, marginBottom: 24 }}>
-                We sent a 6-digit code to <strong>{contactValue.trim()}</strong>. Enter it below.
-              </p>
-              <div style={{ marginBottom: 20 }}>
-                <OtpEntry value={otp} onChange={setOtp} disabled={isVerifying} />
-              </div>
-              <button
-                className="btn btn--p btn--block"
-                style={{ marginBottom: 8 }}
-                onClick={handleVerifyCode}
-                disabled={isVerifying || otp.length < 6}
-              >
-                {isVerifying ? 'Verifying…' : 'Verify code →'}
-              </button>
-              <button className="btn btn--s btn--block" style={{ marginBottom: 8 }} onClick={handleResend} disabled={isVerifying}>
-                Re-send code
-              </button>
-              <button className="btn btn--g btn--block" onClick={() => { setPageState('form'); setOtp(''); }} disabled={isVerifying}>
-                Use a different address
-              </button>
-              {!staffFlow && (
-                <div style={{ marginTop: 18, padding: 14, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radiusSm)' }}>
-                  <p style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Didn&apos;t get a code?</p>
-                  <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5, marginBottom: 10 }}>
-                    Codes only go to emails that already belong to a family on Setu. If this is your first time, register your family below.
+              {(pageState === 'code' || pageState === 'verifying') && (
+                <>
+                  <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'var(--accentSoft)', display: 'grid', placeItems: 'center', marginBottom: 22 }}>
+                    <SetuIcon.mail color="var(--accentDeep)"/>
+                  </div>
+                  <h1 style={{ fontSize: 28, fontWeight: 400, marginBottom: 10 }}>Enter your code</h1>
+                  <p style={{ fontSize: 14, color: 'var(--body-text)', lineHeight: 1.6, marginBottom: 24 }}>
+                    We sent a 6-digit code to <strong>{contactValue.trim()}</strong>. Enter it below.
                   </p>
-                  <Link href="/register" className="btn btn--s btn--block" style={{ display: 'flex', fontSize: 13 }}>
-                    Register a new family →
-                  </Link>
-                </div>
+                  <div style={{ marginBottom: 20 }}>
+                    <OtpEntry value={otp} onChange={setOtp} disabled={isVerifying} />
+                  </div>
+                  <button
+                    className="btn btn--p btn--block"
+                    style={{ marginBottom: 8 }}
+                    onClick={handleVerifyCode}
+                    disabled={isVerifying || otp.length < 6}
+                  >
+                    {isVerifying ? 'Verifying…' : 'Verify code →'}
+                  </button>
+                  <button className="btn btn--s btn--block" style={{ marginBottom: 8 }} onClick={handleResend} disabled={isVerifying}>
+                    Re-send code
+                  </button>
+                  <button className="btn btn--g btn--block" onClick={() => { setPageState('form'); setOtp(''); }} disabled={isVerifying}>
+                    Use a different address
+                  </button>
+                  {!staffFlow && (
+                    <div style={{ marginTop: 18, padding: 14, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radiusSm)' }}>
+                      <p style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Didn&apos;t get a code?</p>
+                      <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5, marginBottom: 10 }}>
+                        Codes only go to emails that already belong to a family on Setu. If this is your first time, register your family below.
+                      </p>
+                      <Link href="/register" className="btn btn--s btn--block" style={{ display: 'flex', fontSize: 13 }}>
+                        Register a new family →
+                      </Link>
+                    </div>
+                  )}
+                </>
               )}
             </>
           )}
@@ -393,94 +551,101 @@ function SignInReal() {
         </div>
 
         <div style={{ maxWidth: 480, width: '100%', alignSelf: 'center', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', paddingBottom: 60 }}>
-          {pageState === 'form' && (
+          {signInMode === 'password' ? (
+            <PasswordForm compact={false} />
+          ) : (
             <>
-              <h1 style={{ fontSize: 44, fontWeight: 400, marginBottom: 12, lineHeight: 1.08 }}>{headline}</h1>
-              <p style={{ fontSize: 15, color: 'var(--body-text)', marginBottom: 32, lineHeight: 1.6 }}>
-                {subhead}
-              </p>
-              <div className="field" style={{ marginBottom: 16 }}>
-                <label>{contactLabel}</label>
-                <input
-                  ref={contactRef}
-                  className="input"
-                  type={contactInputType}
-                  placeholder={contactPlaceholder}
-                  value={contactValue}
-                  onChange={(e) => setContactValue(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSendCode()}
-                  autoComplete={contactType === 'email' ? 'email' : 'tel'}
-                  disabled={loading}
-                />
-                {contactHint && (
-                  <p style={{ fontSize: 12, color: 'var(--muted-text)', marginTop: 6, lineHeight: 1.4 }}>{contactHint}</p>
-                )}
-              </div>
-              <button
-                className="btn btn--p btn--block"
-                style={{ marginBottom: 10, padding: '14px 22px' }}
-                onClick={handleSendCode}
-                disabled={loading}
-              >
-                {loading ? 'Sending…' : 'Send sign-in code →'}
-              </button>
-              <button
-                className="btn btn--g btn--block"
-                style={{ fontSize: 13 }}
-                onClick={() => {
-                  setContactType(contactType === 'email' ? 'phone' : 'email');
-                  setContactValue('');
-                }}
-                disabled={loading}
-              >
-                {contactType === 'email' ? 'Use phone number instead' : 'Use email instead'}
-              </button>
-              {!staffFlow && (
+              {pageState === 'form' && (
                 <>
-                  <div style={{ marginTop: 28, padding: 16, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radiusSm)', fontSize: 13, color: 'var(--body-text)', lineHeight: 1.5 }}>
-                    <strong>New to Setu?</strong> Use the same form — if we don't find an account we'll walk you through registering your family.
+                  <h1 style={{ fontSize: 44, fontWeight: 400, marginBottom: 12, lineHeight: 1.08 }}>{headline}</h1>
+                  <p style={{ fontSize: 15, color: 'var(--body-text)', marginBottom: 32, lineHeight: 1.6 }}>
+                    {otpSubhead}
+                  </p>
+                  {modeToggle}
+                  <div className="field" style={{ marginBottom: 16 }}>
+                    <label>{contactLabel}</label>
+                    <input
+                      ref={contactRef}
+                      className="input"
+                      type={contactInputType}
+                      placeholder={contactPlaceholder}
+                      value={contactValue}
+                      onChange={(e) => setContactValue(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSendCode()}
+                      autoComplete={contactType === 'email' ? 'email' : 'tel'}
+                      disabled={loading}
+                    />
+                    {contactHint && (
+                      <p style={{ fontSize: 12, color: 'var(--muted-text)', marginTop: 6, lineHeight: 1.4 }}>{contactHint}</p>
+                    )}
                   </div>
-                  <Link href="/register" className="btn btn--g btn--block" style={{ marginTop: 10, fontSize: 13, display: 'flex' }}>Register your family →</Link>
+                  <button
+                    className="btn btn--p btn--block"
+                    style={{ marginBottom: 10, padding: '14px 22px' }}
+                    onClick={handleSendCode}
+                    disabled={loading}
+                  >
+                    {loading ? 'Sending…' : 'Send sign-in code →'}
+                  </button>
+                  <button
+                    className="btn btn--g btn--block"
+                    style={{ fontSize: 13 }}
+                    onClick={() => {
+                      setContactType(contactType === 'email' ? 'phone' : 'email');
+                      setContactValue('');
+                    }}
+                    disabled={loading}
+                  >
+                    {contactType === 'email' ? 'Use phone number instead' : 'Use email instead'}
+                  </button>
+                  {!staffFlow && (
+                    <>
+                      <div style={{ marginTop: 28, padding: 16, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radiusSm)', fontSize: 13, color: 'var(--body-text)', lineHeight: 1.5 }}>
+                        <strong>New to Setu?</strong> Use the same form — if we don't find an account we'll walk you through registering your family.
+                      </div>
+                      <Link href="/register" className="btn btn--g btn--block" style={{ marginTop: 10, fontSize: 13, display: 'flex' }}>Register your family →</Link>
+                    </>
+                  )}
                 </>
               )}
-            </>
-          )}
-          {(pageState === 'code' || pageState === 'verifying') && (
-            <>
-              <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'var(--accentSoft)', display: 'grid', placeItems: 'center', marginBottom: 28 }}>
-                <SetuIcon.mail color="var(--accentDeep)"/>
-              </div>
-              <h1 style={{ fontSize: 40, fontWeight: 400, marginBottom: 12, lineHeight: 1.1 }}>Enter your code</h1>
-              <p style={{ fontSize: 15, color: 'var(--body-text)', lineHeight: 1.6, marginBottom: 32 }}>
-                We sent a 6-digit code to <strong>{contactValue.trim()}</strong>. Enter it below to continue.
-              </p>
-              <div style={{ marginBottom: 24 }}>
-                <OtpEntry value={otp} onChange={setOtp} disabled={isVerifying} />
-              </div>
-              <button
-                className="btn btn--p btn--block"
-                style={{ marginBottom: 10, padding: '14px 22px' }}
-                onClick={handleVerifyCode}
-                disabled={isVerifying || otp.length < 6}
-              >
-                {isVerifying ? 'Verifying…' : 'Verify code →'}
-              </button>
-              <button className="btn btn--s btn--block" style={{ marginBottom: 10, padding: '14px' }} onClick={handleResend} disabled={isVerifying}>
-                Re-send code
-              </button>
-              <button className="btn btn--g btn--block" onClick={() => { setPageState('form'); setOtp(''); }} disabled={isVerifying}>
-                Use a different address
-              </button>
-              {!staffFlow && (
-                <div style={{ marginTop: 20, padding: 16, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radiusSm)' }}>
-                  <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Didn&apos;t get a code?</p>
-                  <p style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.55, marginBottom: 12 }}>
-                    Codes only go to emails that already belong to a family on Setu. If this is your first time, register your family below.
+              {(pageState === 'code' || pageState === 'verifying') && (
+                <>
+                  <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'var(--accentSoft)', display: 'grid', placeItems: 'center', marginBottom: 28 }}>
+                    <SetuIcon.mail color="var(--accentDeep)"/>
+                  </div>
+                  <h1 style={{ fontSize: 40, fontWeight: 400, marginBottom: 12, lineHeight: 1.1 }}>Enter your code</h1>
+                  <p style={{ fontSize: 15, color: 'var(--body-text)', lineHeight: 1.6, marginBottom: 32 }}>
+                    We sent a 6-digit code to <strong>{contactValue.trim()}</strong>. Enter it below to continue.
                   </p>
-                  <Link href="/register" className="btn btn--s btn--block" style={{ display: 'flex' }}>
-                    Register a new family →
-                  </Link>
-                </div>
+                  <div style={{ marginBottom: 24 }}>
+                    <OtpEntry value={otp} onChange={setOtp} disabled={isVerifying} />
+                  </div>
+                  <button
+                    className="btn btn--p btn--block"
+                    style={{ marginBottom: 10, padding: '14px 22px' }}
+                    onClick={handleVerifyCode}
+                    disabled={isVerifying || otp.length < 6}
+                  >
+                    {isVerifying ? 'Verifying…' : 'Verify code →'}
+                  </button>
+                  <button className="btn btn--s btn--block" style={{ marginBottom: 10, padding: '14px' }} onClick={handleResend} disabled={isVerifying}>
+                    Re-send code
+                  </button>
+                  <button className="btn btn--g btn--block" onClick={() => { setPageState('form'); setOtp(''); }} disabled={isVerifying}>
+                    Use a different address
+                  </button>
+                  {!staffFlow && (
+                    <div style={{ marginTop: 20, padding: 16, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radiusSm)' }}>
+                      <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Didn&apos;t get a code?</p>
+                      <p style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.55, marginBottom: 12 }}>
+                        Codes only go to emails that already belong to a family on Setu. If this is your first time, register your family below.
+                      </p>
+                      <Link href="/register" className="btn btn--s btn--block" style={{ display: 'flex' }}>
+                        Register a new family →
+                      </Link>
+                    </div>
+                  )}
+                </>
               )}
             </>
           )}

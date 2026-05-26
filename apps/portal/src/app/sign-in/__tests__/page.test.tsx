@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 // ── Feature flag ──────────────────────────────────────────────────────────────
@@ -40,9 +40,21 @@ vi.stubGlobal('fetch', fetchMock);
 // ── window.location ───────────────────────────────────────────────────────────
 const locationAssignMock = vi.fn();
 Object.defineProperty(window, 'location', {
-  value: { href: '', assign: locationAssignMock },
+  value: { href: '', assign: locationAssignMock, search: '' },
   writable: true,
 });
+
+// ── localStorage ──────────────────────────────────────────────────────────────
+const localStorageMock = (() => {
+  let store: Record<string, string> = {};
+  return {
+    getItem: (key: string) => store[key] ?? null,
+    setItem: (key: string, val: string) => { store[key] = val; },
+    removeItem: (key: string) => { delete store[key]; },
+    clear: () => { store = {}; },
+  };
+})();
+Object.defineProperty(window, 'localStorage', { value: localStorageMock });
 
 import SignInPage from '../page';
 
@@ -50,6 +62,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   flagsMock.setuAuth = true;
   window.location.href = '';
+  localStorageMock.clear();
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -365,5 +378,175 @@ describe('SignInPage — flag off renders prototype', () => {
 
     // No fetch calls at all
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Password mode toggle
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('SignInPage — password mode toggle', () => {
+  it('clicking "Have a password?" switches to password mode and shows email+password fields', async () => {
+    const user = userEvent.setup();
+    render(<SignInPage />);
+
+    // Default is OTP mode — "Have a password?" link should be present
+    const toggleBtns = screen.getAllByText(/have a password\? sign in faster/i);
+    expect(toggleBtns.length).toBeGreaterThan(0);
+
+    await user.click(toggleBtns[0]!);
+
+    // Password mode: password inputs should appear
+    const pwInputs = document.querySelectorAll('input[type="password"]');
+    expect(pwInputs.length).toBeGreaterThan(0);
+
+    // OTP send-code button should NOT be visible
+    expect(screen.queryByText(/send sign-in code/i)).toBeNull();
+
+    // "Or sign in with a code" link should appear
+    expect(screen.getAllByText(/or sign in with a code/i).length).toBeGreaterThan(0);
+  });
+
+  it('clicking "Or sign in with a code" switches back to OTP mode', async () => {
+    const user = userEvent.setup();
+    render(<SignInPage />);
+
+    // Switch to password mode
+    const toggleBtns = screen.getAllByText(/have a password\? sign in faster/i);
+    await user.click(toggleBtns[0]!);
+
+    // Now switch back to OTP
+    const backBtns = screen.getAllByText(/or sign in with a code/i);
+    await user.click(backBtns[0]!);
+
+    // OTP send-code button should be back
+    expect(screen.getAllByText(/send sign-in code/i).length).toBeGreaterThan(0);
+    expect(document.querySelectorAll('input[type="password"]').length).toBe(0);
+  });
+
+  it('persists password mode preference in localStorage', async () => {
+    const user = userEvent.setup();
+    render(<SignInPage />);
+
+    const toggleBtns = screen.getAllByText(/have a password\? sign in faster/i);
+    await user.click(toggleBtns[0]!);
+
+    expect(localStorageMock.getItem('setu-signin-mode')).toBe('password');
+  });
+
+  it('reads localStorage on mount and defaults to password mode if stored', async () => {
+    localStorageMock.setItem('setu-signin-mode', 'password');
+    render(<SignInPage />);
+
+    // After mount the useEffect fires; wait for re-render
+    await waitFor(() => {
+      expect(document.querySelectorAll('input[type="password"]').length).toBeGreaterThan(0);
+    });
+
+    // OTP send-code button should NOT appear
+    expect(screen.queryByText(/send sign-in code/i)).toBeNull();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Password sign-in flow
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('SignInPage — password sign-in flow', () => {
+  async function renderInPasswordMode() {
+    const user = userEvent.setup();
+    render(<SignInPage />);
+
+    const toggleBtns = screen.getAllByText(/have a password\? sign in faster/i);
+    await user.click(toggleBtns[0]!);
+
+    await waitFor(() => {
+      expect(document.querySelectorAll('input[type="password"]').length).toBeGreaterThan(0);
+    });
+
+    return user;
+  }
+
+  it('successful sign-in calls /api/setu/auth/password-sign-in and navigates to redirectTo', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ redirectTo: '/family' }),
+    });
+
+    const user = await renderInPasswordMode();
+
+    // Use fireEvent.change to set values — email input type validation in jsdom
+    // causes userEvent.type to drop characters beyond the first.
+    const emailInput = document.querySelectorAll('input[type="email"]')[0] as HTMLInputElement;
+    fireEvent.change(emailInput, { target: { value: 'test@example.com' } });
+
+    const pwInput = document.querySelectorAll('input[type="password"]')[0] as HTMLInputElement;
+    fireEvent.change(pwInput, { target: { value: 'correct-password' } });
+
+    const signInBtns = screen.getAllByText(/^sign in →$/i);
+    await user.click(signInBtns[0]!);
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/setu/auth/password-sign-in',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining('test@example.com'),
+        }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(locationAssignMock).toHaveBeenCalledWith('/family');
+    });
+  });
+
+  it('401 from password-sign-in shows "Incorrect email or password" toast', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+      json: async () => ({ error: 'invalid-credentials' }),
+    });
+
+    const user = await renderInPasswordMode();
+
+    const emailInput = document.querySelectorAll('input[type="email"]')[0] as HTMLInputElement;
+    fireEvent.change(emailInput, { target: { value: 'test@example.com' } });
+
+    const pwInput = document.querySelectorAll('input[type="password"]')[0] as HTMLInputElement;
+    fireEvent.change(pwInput, { target: { value: 'wrong-password' } });
+
+    const signInBtns = screen.getAllByText(/^sign in →$/i);
+    await user.click(signInBtns[0]!);
+
+    await waitFor(() => {
+      expect(toastMock.error).toHaveBeenCalledWith('Incorrect email or password.');
+    });
+
+    // Should NOT navigate
+    expect(locationAssignMock).not.toHaveBeenCalled();
+  });
+
+  it('429 from password-sign-in shows rate-limit toast', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      status: 429,
+      json: async () => ({ error: 'too-many-requests' }),
+    });
+
+    const user = await renderInPasswordMode();
+
+    const emailInput = document.querySelectorAll('input[type="email"]')[0] as HTMLInputElement;
+    fireEvent.change(emailInput, { target: { value: 'test@example.com' } });
+
+    const pwInput = document.querySelectorAll('input[type="password"]')[0] as HTMLInputElement;
+    fireEvent.change(pwInput, { target: { value: 'somepassword' } });
+
+    const signInBtns = screen.getAllByText(/^sign in →$/i);
+    await user.click(signInBtns[0]!);
+
+    await waitFor(() => {
+      expect(toastMock.error).toHaveBeenCalledWith(expect.stringMatching(/too many attempts/i));
+    });
   });
 });

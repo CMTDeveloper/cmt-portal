@@ -9,7 +9,7 @@ import { lazyMigrateLegacyFamily } from '@/features/setu/registration/lazy-migra
 export interface BuildSessionClaimsArgs {
   type: 'email' | 'phone';
   value: string;
-  contactProvenance: 'otp' | 'magic-link';
+  contactProvenance: 'otp' | 'magic-link' | 'password';
 }
 
 export type BuildSessionClaimsResult =

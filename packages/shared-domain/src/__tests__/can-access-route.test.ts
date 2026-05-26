@@ -290,3 +290,34 @@ describe('canAccessRoute — /welcome/* — welcome-team', () => {
     expect(canAccessRoute(teacher, '/welcome')).toBe(false);
   });
 });
+
+describe('canAccessRoute — /api/setu/auth/password-sign-in — public', () => {
+  it('allows any authenticated role (public route passes before canAccessRoute)', () => {
+    expect(canAccessRoute(manager, '/api/setu/auth/password-sign-in', 'POST')).toBe(true);
+    expect(canAccessRoute(member, '/api/setu/auth/password-sign-in', 'POST')).toBe(true);
+    expect(canAccessRoute(family, '/api/setu/auth/password-sign-in', 'POST')).toBe(true);
+    expect(canAccessRoute(welcomeTeam, '/api/setu/auth/password-sign-in', 'POST')).toBe(true);
+    expect(canAccessRoute(admin, '/api/setu/auth/password-sign-in', 'POST')).toBe(true);
+  });
+});
+
+describe('canAccessRoute — /api/setu/auth/set-password — any authenticated Setu user', () => {
+  it('allows family-manager', () => {
+    expect(canAccessRoute(manager, '/api/setu/auth/set-password', 'POST')).toBe(true);
+  });
+  it('allows family-member', () => {
+    expect(canAccessRoute(member, '/api/setu/auth/set-password', 'POST')).toBe(true);
+  });
+  it('allows welcome-team', () => {
+    expect(canAccessRoute(welcomeTeam, '/api/setu/auth/set-password', 'POST')).toBe(true);
+  });
+  it('allows admin', () => {
+    expect(canAccessRoute(admin, '/api/setu/auth/set-password', 'POST')).toBe(true);
+  });
+  it('denies legacy family role (no fid)', () => {
+    expect(canAccessRoute(family, '/api/setu/auth/set-password', 'POST')).toBe(false);
+  });
+  it('denies teacher', () => {
+    expect(canAccessRoute(teacher, '/api/setu/auth/set-password', 'POST')).toBe(false);
+  });
+});
