@@ -23,7 +23,7 @@ export const portalEnvSchema = z.object({
 
   // Auth
   TEACHER_PASSPHRASE: z.string().min(6),
-  SESSION_COOKIE_EXPIRES_DAYS: z.coerce.number().int().min(1).max(14).default(5),
+  SESSION_COOKIE_EXPIRES_DAYS: z.coerce.number().int().min(1).max(30).default(30),
 
   // AWS (declared now; real consumers in slice B5)
   AWS_SES_REGION: z.string().default('ca-central-1'),

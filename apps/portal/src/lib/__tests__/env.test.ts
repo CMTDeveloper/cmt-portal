@@ -25,9 +25,9 @@ describe('portalEnvSchema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('defaults SESSION_COOKIE_EXPIRES_DAYS to 5', () => {
+  it('defaults SESSION_COOKIE_EXPIRES_DAYS to 30', () => {
     const result = portalEnvSchema.parse(base);
-    expect(result.SESSION_COOKIE_EXPIRES_DAYS).toBe(5);
+    expect(result.SESSION_COOKIE_EXPIRES_DAYS).toBe(30);
   });
 
   it('coerces SESSION_COOKIE_EXPIRES_DAYS from string', () => {
@@ -35,8 +35,8 @@ describe('portalEnvSchema', () => {
     expect(result.SESSION_COOKIE_EXPIRES_DAYS).toBe(7);
   });
 
-  it('rejects SESSION_COOKIE_EXPIRES_DAYS > 14', () => {
-    const result = portalEnvSchema.safeParse({ ...base, SESSION_COOKIE_EXPIRES_DAYS: '30' });
+  it('rejects SESSION_COOKIE_EXPIRES_DAYS > 30', () => {
+    const result = portalEnvSchema.safeParse({ ...base, SESSION_COOKIE_EXPIRES_DAYS: '31' });
     expect(result.success).toBe(false);
   });
 
