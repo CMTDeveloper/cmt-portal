@@ -17,9 +17,6 @@ vi.mock('@/features/setu/auth/find-family-by-contact', () => ({
 vi.mock('@/features/setu/auth/magic-links', () => ({
   createMagicLink: vi.fn(),
 }));
-vi.mock('@/lib/env', () => ({
-  portalEnv: () => ({ NEXT_PUBLIC_PORTAL_BASE_URL: 'https://portal.example.com' }),
-}));
 
 import { POST } from '../route';
 import { checkAndRecordOtpRateLimit, storeVerificationCode } from '@/features/check-in/shared';
@@ -86,7 +83,9 @@ describe('POST /api/setu/auth/send-code', () => {
     });
     await POST(makeRequest({ type: 'email', value: 'raj@example.com' }));
     const [emailArg] = (mockSendEmail as ReturnType<typeof vi.fn>).mock.calls[0] as [{ text: string }];
-    expect(emailArg.text).toContain('https://portal.example.com/api/setu/auth/magic/test-magic-token-abc123');
+    // URL is derived from the request host (no NEXT_PUBLIC_PORTAL_BASE_URL needed).
+    // makeRequest uses 'http://localhost/...' so host=localhost → proto=http.
+    expect(emailArg.text).toContain('http://localhost:3000/api/setu/auth/magic/test-magic-token-abc123');
     expect(emailArg.text).toMatch(/\d{6}/);
   });
 

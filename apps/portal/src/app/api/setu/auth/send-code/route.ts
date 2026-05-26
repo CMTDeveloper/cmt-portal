@@ -13,7 +13,6 @@ import { createMagicLink } from '@/features/setu/auth/magic-links';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { portalAuth } from '@cmt/firebase-shared/admin/auth';
 import { normalizeContactForKey } from '@cmt/shared-domain/setu';
-import { portalEnv } from '@/lib/env';
 
 
 const bodySchema = z.object({
@@ -109,8 +108,15 @@ export async function POST(req: Request) {
   if (type === 'email') {
     const canonicalEmail = normalizeContactForKey('email', value);
     const magicLink = await createMagicLink(canonicalEmail);
-    const baseUrl = portalEnv().NEXT_PUBLIC_PORTAL_BASE_URL ?? '';
-    const magicUrl = `${baseUrl}/api/setu/auth/magic/${magicLink.token}`;
+    // Derive the absolute URL from the request itself so the link works in
+    // every environment without needing a NEXT_PUBLIC_PORTAL_BASE_URL env
+    // var. Vercel sets `x-forwarded-host` + `x-forwarded-proto` on the
+    // incoming request; we fall back to `host` for local dev.
+    const forwardedHost = req.headers.get('x-forwarded-host');
+    const host = forwardedHost ?? req.headers.get('host') ?? 'localhost:3000';
+    const forwardedProto = req.headers.get('x-forwarded-proto');
+    const proto = forwardedProto ?? (host.startsWith('localhost') || host.startsWith('127.0.0.1') ? 'http' : 'https');
+    const magicUrl = `${proto}://${host}/api/setu/auth/magic/${magicLink.token}`;
     await resolveSender().sendEmail({
       to: canonicalEmail,
       subject: 'Your CMT portal sign-in link',
