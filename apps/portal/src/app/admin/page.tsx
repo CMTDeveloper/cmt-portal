@@ -37,6 +37,12 @@ export default function AdminPage() {
           tone="primary"
         />
         <Tile
+          href="/admin/donation-periods"
+          title="Donation periods"
+          sub="Configure Bala Vihar donation periods per location. Suggested amounts are locked at enrollment — edits don't affect existing families."
+          tone="primary"
+        />
+        <Tile
           href="/check-in/admin/users"
           title="Admin users"
           sub="Legacy: add or remove other admins. (Themed version coming.)"

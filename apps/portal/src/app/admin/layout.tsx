@@ -54,6 +54,7 @@ function AdminSidebar({ displayEmail, hasFamily }: { displayEmail: string; hasFa
     { label: 'Dashboard',          href: '/admin' },
     { label: 'Family search',      href: '/welcome' },
     { label: 'Welcome-team grants',href: '/admin/welcome-team' },
+    { label: 'Donation periods',   href: '/admin/donation-periods' },
     { label: 'Admin users',        href: '/check-in/admin/users',   legacy: true },
     { label: 'Guests',             href: '/check-in/admin/guests',  legacy: true },
     { label: 'Unpaid',             href: '/check-in/admin/unpaid',  legacy: true },
