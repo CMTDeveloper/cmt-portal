@@ -72,6 +72,10 @@ function PeriodModal({ editing, onClose, onSaved }: ModalProps) {
     const tiers = tiersRaw.split(',').map((s) => Number(s.trim())).filter(Boolean);
     const amt = Number(suggestedAmount);
 
+    if (tiers.length > 0 && tiers[0] !== amt) {
+      toast.warning(`First tier ($${tiers[0]}) doesn't match suggested amount ($${amt}). By convention the first tier should equal the suggested amount.`);
+    }
+
     startTransition(async () => {
       try {
         let res: Response;
@@ -113,21 +117,47 @@ function PeriodModal({ editing, onClose, onSaved }: ModalProps) {
           return;
         }
 
-        const json = await res.json();
+        const json = await res.json() as { pid?: string; overlapWarning?: boolean };
         if (json.overlapWarning) {
           toast.warning('Saved — but this period overlaps with an existing enabled period for the same program + location.');
         } else {
           toast.success(isEdit ? 'Period updated.' : 'Period created.');
         }
 
-        // Re-fetch to get the full updated doc from the server
-        const listRes = await fetch('/api/admin/donation-periods');
-        if (listRes.ok) {
-          const listJson = await listRes.json();
-          const fresh = (listJson.periods as PeriodRow[]).find(
-            (p) => p.pid === (isEdit ? editing.pid : json.pid),
-          );
-          if (fresh) onSaved(fresh);
+        // Build the updated row from form state + server-returned pid.
+        // Avoids a racy list-refetch (eventual consistency could return stale data).
+        const now = new Date().toISOString();
+        if (isEdit) {
+          const updated: PeriodRow = {
+            ...editing,
+            periodLabel,
+            startDate: new Date(startDate).toISOString(),
+            endDate: new Date(endDate).toISOString(),
+            suggestedAmount: amt,
+            amountTiers: tiers,
+            enabled,
+            updatedAt: now,
+          };
+          onSaved(updated);
+        } else {
+          const pid = json.pid ?? `${programKey}-${location.toLowerCase()}-${periodLabel.toLowerCase().replace(/\s+/g, '-')}`;
+          const created: PeriodRow = {
+            pid,
+            programKey,
+            programLabel: 'Bala Vihar',
+            location,
+            periodLabel,
+            startDate: new Date(startDate).toISOString(),
+            endDate: new Date(endDate).toISOString(),
+            suggestedAmount: amt,
+            amountTiers: tiers,
+            enabled,
+            createdAt: now,
+            createdBy: '',
+            updatedAt: now,
+            updatedBy: '',
+          };
+          onSaved(created);
         }
         onClose();
       } catch {

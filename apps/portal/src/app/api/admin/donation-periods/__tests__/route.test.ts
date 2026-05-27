@@ -56,7 +56,6 @@ function makeTimestamp(d: Date) {
 }
 
 beforeEach(() => {
-  vi.resetModules();
   vi.clearAllMocks();
 
   // Default GET setup: empty collection
