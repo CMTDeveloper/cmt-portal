@@ -48,11 +48,10 @@ export const PUBLIC_ROUTES = [
   '/api/check-in/lookup',
   '/api/check-in/guests',
 
-  // Stripe webhook — signature-verified at handler level, no session needed
-  '/api/webhooks/stripe',
-
-  // Vercel Cron — CRON_SECRET-verified at handler level, no session needed
-  '/api/cron/archive-pledges',
+  // NOTE: /api/webhooks/stripe and /api/cron/archive-pledges are intentionally
+  // absent until their Stripe-signature-verifying and CRON_SECRET-verifying
+  // handlers ship in slice 3c/3d. Adding them now without handlers would expose
+  // unauthenticated endpoints with no enforcement.
 ] as const;
 
 export function matchRoute(pattern: string, pathname: string): boolean {
