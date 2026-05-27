@@ -77,12 +77,14 @@ describe('CreateDonationPeriodSchema', () => {
   });
 
   it('rejects missing periodLabel', () => {
-    const { periodLabel: _periodLabel, ...rest } = validCreate;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { periodLabel, ...rest } = validCreate;
     expect(CreateDonationPeriodSchema.safeParse(rest).success).toBe(false);
   });
 
   it('defaults enabled to true when omitted', () => {
-    const { enabled: _enabled, ...rest } = validCreate;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { enabled, ...rest } = validCreate;
     const result = CreateDonationPeriodSchema.safeParse(rest);
     expect(result.success).toBe(true);
     if (result.success) expect(result.data.enabled).toBe(true);
@@ -174,12 +176,14 @@ describe('DonationPeriodDocSchema', () => {
   });
 
   it('rejects missing pid', () => {
-    const { pid: _pid, ...rest } = validDoc;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { pid, ...rest } = validDoc;
     expect(DonationPeriodDocSchema.safeParse(rest).success).toBe(false);
   });
 
   it('rejects missing createdBy', () => {
-    const { createdBy: _createdBy, ...rest } = validDoc;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { createdBy, ...rest } = validDoc;
     expect(DonationPeriodDocSchema.safeParse(rest).success).toBe(false);
   });
 
