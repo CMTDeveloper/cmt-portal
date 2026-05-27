@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { revalidateTag } from 'next/cache';
 import { flags } from '@/lib/flags';
-import { isSetuManager, PostEnrollmentBodySchema } from '@cmt/shared-domain';
+import { isSetuFamily, isSetuManager, PostEnrollmentBodySchema } from '@cmt/shared-domain';
 import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
 import { enrollFamily } from '@/features/setu/enrollment/enroll-family';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
@@ -11,12 +11,18 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'not-found' }, { status: 404 });
   }
 
-  const fid = req.headers.get('x-portal-fid');
-  if (!fid) {
+  const session = readSessionFromHeaders(req);
+  if (!session) {
     return NextResponse.json({ error: 'no-session' }, { status: 401 });
   }
+  if (!isSetuFamily(session)) {
+    return NextResponse.json({ error: 'family-required' }, { status: 403 });
+  }
+  if (!session.fid) {
+    return NextResponse.json({ error: 'missing-fid' }, { status: 400 });
+  }
 
-  const enrollments = await getEnrollments(fid);
+  const enrollments = await getEnrollments(session.fid);
   return NextResponse.json({ enrollments }, { status: 200 });
 }
 

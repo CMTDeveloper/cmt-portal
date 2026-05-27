@@ -61,7 +61,7 @@ import { DELETE as enrollmentDELETE } from '../enrollments/[eid]/route';
 
 // ── Welcome-team route handlers ────────────────────────────────────────────────
 import { POST as welcomeEnrollPOST } from '../../welcome/enrollments/route';
-import { PATCH as welcomeOverridePATCH } from '../../welcome/enrollments/[eid]/route';
+import { PATCH as welcomeOverridePATCH } from '../../welcome/enrollments/[eid]/override/route';
 
 // ── Fixtures ───────────────────────────────────────────────────────────────────
 

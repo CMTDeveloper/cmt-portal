@@ -280,7 +280,7 @@ const hasUatCreds =
 
     it('welcome-team PATCH /api/welcome/enrollments/[eid] — writes suggestedAmountOverride', async () => {
       expect(eid).toBeTruthy();
-      const { PATCH } = await import('@/app/api/welcome/enrollments/[eid]/route');
+      const { PATCH } = await import('@/app/api/welcome/enrollments/[eid]/override/route');
       const { makePortalRequest } = await import('./helpers/request');
 
       const req = makePortalRequest(
