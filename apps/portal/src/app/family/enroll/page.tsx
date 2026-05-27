@@ -41,6 +41,10 @@ export default async function EnrollPage() {
     enrollments.find((e) => e.status === 'active' && e.pid === activePeriod?.pid) ?? null;
 
   const alreadyEnrolled = activeEnrollment !== null;
+  const donationsEnabled = process.env.NEXT_PUBLIC_FEATURE_SETU_DONATIONS === 'true';
+  // Pin amount to enrollment snapshot/override; fall back to live period amount pre-enrollment.
+  const displaySuggestedAmount =
+    activeEnrollment?.effectiveSuggestedAmount ?? activePeriod?.suggestedAmount;
 
   return (
     <>
@@ -97,17 +101,23 @@ export default async function EnrollPage() {
                   )}
 
                   <SectionLabel><em className="sa">Dakshina</em> · suggested donation</SectionLabel>
-                  {renderDakshinaBlock(activePeriod.suggestedAmount, family.location, activePeriod.periodLabel)}
+                  {renderDakshinaBlock(displaySuggestedAmount ?? activePeriod.suggestedAmount, family.location, activePeriod.periodLabel)}
                 </>
               )}
             </div>
             <div style={{ position: 'sticky', bottom: 0, left: 0, right: 0, padding: '14px 18px', background: 'var(--surface)', borderTop: '1px solid var(--line)' }}>
               {alreadyEnrolled ? (
-                <Link href={`/family/donate?eid=${activeEnrollment.eid}`} className="btn btn--p btn--block" style={{ display: 'block', textAlign: 'center', textDecoration: 'none' }}>
-                  Continue to donation →
-                </Link>
+                donationsEnabled ? (
+                  <Link href={`/family/donate?eid=${activeEnrollment.eid}`} className="btn btn--p btn--block" style={{ display: 'block', textAlign: 'center', textDecoration: 'none' }}>
+                    Continue to donation →
+                  </Link>
+                ) : (
+                  <div style={{ padding: '12px 16px', background: 'var(--accentSoft)', color: 'var(--accentDeep)', borderRadius: 'var(--radiusSm)', fontSize: 14, fontWeight: 600, textAlign: 'center' }}>
+                    Your family is enrolled — donation coming soon.
+                  </div>
+                )
               ) : activePeriod && isManager ? (
-                <EnrollCta pid={activePeriod.pid}/>
+                <EnrollCta pid={activePeriod.pid} donationsEnabled={donationsEnabled}/>
               ) : activePeriod ? (
                 <button className="btn btn--p btn--block" disabled style={{ cursor: 'not-allowed', opacity: 0.5 }}>
                   Only the family manager can enroll
@@ -197,7 +207,7 @@ export default async function EnrollPage() {
                 </h3>
                 <div style={{ padding: 18, background: 'var(--accentSoft)', borderRadius: 'var(--radiusSm)', marginBottom: 18 }}>
                   <div className="row" style={{ alignItems: 'baseline', gap: 4, marginBottom: 6 }}>
-                    <span style={{ fontFamily: 'var(--display)', fontSize: 46, lineHeight: 1 }}>${activePeriod.suggestedAmount}</span>
+                    <span style={{ fontFamily: 'var(--display)', fontSize: 46, lineHeight: 1 }}>${displaySuggestedAmount ?? activePeriod.suggestedAmount}</span>
                     <span style={{ fontSize: 13, color: 'var(--body-text)' }}>· per family</span>
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--muted)' }}>
@@ -208,11 +218,17 @@ export default async function EnrollPage() {
                   This is a suggested donation, not a fee. The program runs entirely on family donations. <em className="sa">Sevaks</em> teach without pay. Any amount is welcome; giving more keeps the lights on.
                 </p>
                 {alreadyEnrolled ? (
-                  <Link href={`/family/donate?eid=${activeEnrollment.eid}`} className="btn btn--p btn--block" style={{ display: 'block', textAlign: 'center', textDecoration: 'none' }}>
-                    Continue to donation →
-                  </Link>
+                  donationsEnabled ? (
+                    <Link href={`/family/donate?eid=${activeEnrollment.eid}`} className="btn btn--p btn--block" style={{ display: 'block', textAlign: 'center', textDecoration: 'none' }}>
+                      Continue to donation →
+                    </Link>
+                  ) : (
+                    <div style={{ padding: '12px 16px', background: 'var(--accentSoft)', color: 'var(--accentDeep)', borderRadius: 'var(--radiusSm)', fontSize: 14, fontWeight: 600, textAlign: 'center' }}>
+                      Your family is enrolled — donation coming soon.
+                    </div>
+                  )
                 ) : isManager ? (
-                  <EnrollCta pid={activePeriod.pid}/>
+                  <EnrollCta pid={activePeriod.pid} donationsEnabled={donationsEnabled}/>
                 ) : (
                   <button className="btn btn--p btn--block" disabled style={{ cursor: 'not-allowed', opacity: 0.5 }}>
                     Only the family manager can enroll

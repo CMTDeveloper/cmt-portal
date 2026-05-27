@@ -26,7 +26,7 @@ beforeEach(() => {
 });
 
 describe('EnrollCta', () => {
-  it('on success: navigates to donateUrl and does not re-enable button', async () => {
+  it('donations enabled: navigates to donateUrl and does not re-enable button', async () => {
     const user = userEvent.setup();
     vi.spyOn(global, 'fetch').mockResolvedValueOnce({
       ok: true,
@@ -34,13 +34,29 @@ describe('EnrollCta', () => {
       json: async () => ({ eid: 'CMT-AAAA-bv-brampton-fall-2026', donateUrl: '/family/donate?eid=CMT-AAAA-bv-brampton-fall-2026' }),
     } as Response);
 
-    render(<EnrollCta pid={PID}/>);
+    render(<EnrollCta pid={PID} donationsEnabled={true}/>);
     await user.click(screen.getByRole('button', { name: /enroll/i }));
 
     await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/family/donate?eid=CMT-AAAA-bv-brampton-fall-2026'));
     expect(toastMock.success).toHaveBeenCalledWith('Enrolled! Continuing to donation.');
     // Button stays disabled (pending not cleared on success)
     expect(screen.getByRole('button')).toBeDisabled();
+  });
+
+  it('donations disabled: shows enrolled state and does not navigate', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ eid: 'CMT-AAAA-bv-brampton-fall-2026', donateUrl: '/family/donate?eid=CMT-AAAA-bv-brampton-fall-2026' }),
+    } as Response);
+
+    render(<EnrollCta pid={PID} donationsEnabled={false}/>);
+    await user.click(screen.getByRole('button', { name: /enroll/i }));
+
+    await waitFor(() => expect(toastMock.success).toHaveBeenCalledWith('Your family is enrolled!'));
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(screen.getByText(/donation coming soon/i)).toBeTruthy();
   });
 
   it('on 401: redirects to sign-in with safeFrom param', async () => {
@@ -51,7 +67,7 @@ describe('EnrollCta', () => {
       json: async () => ({ error: 'no-session' }),
     } as Response);
 
-    render(<EnrollCta pid={PID}/>);
+    render(<EnrollCta pid={PID} donationsEnabled={false}/>);
     await user.click(screen.getByRole('button', { name: /enroll/i }));
 
     await waitFor(() =>
@@ -74,7 +90,7 @@ describe('EnrollCta', () => {
       json: async () => ({ error: 'period-disabled' }),
     } as Response);
 
-    render(<EnrollCta pid={PID}/>);
+    render(<EnrollCta pid={PID} donationsEnabled={false}/>);
     await user.click(screen.getByRole('button', { name: /enroll/i }));
 
     await waitFor(() =>
@@ -93,7 +109,7 @@ describe('EnrollCta', () => {
       json: async () => ({ error: 'period-not-yet-open' }),
     } as Response);
 
-    render(<EnrollCta pid={PID}/>);
+    render(<EnrollCta pid={PID} donationsEnabled={false}/>);
     await user.click(screen.getByRole('button', { name: /enroll/i }));
 
     await waitFor(() =>
@@ -111,7 +127,7 @@ describe('EnrollCta', () => {
       json: async () => ({ eid: 'x', donateUrl: '/family/donate?eid=x' }),
     } as Response);
 
-    render(<EnrollCta pid={PID}/>);
+    render(<EnrollCta pid={PID} donationsEnabled={true}/>);
     const btn = screen.getByRole('button', { name: /enroll/i });
 
     // Rapid double-click

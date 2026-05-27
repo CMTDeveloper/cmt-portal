@@ -6,6 +6,7 @@ import { toast } from '@cmt/ui';
 
 interface EnrollCtaProps {
   pid: string;
+  donationsEnabled: boolean;
 }
 
 function safeFrom(path: string): string {
@@ -13,9 +14,10 @@ function safeFrom(path: string): string {
   return '/family/enroll';
 }
 
-export function EnrollCta({ pid }: EnrollCtaProps) {
+export function EnrollCta({ pid, donationsEnabled }: EnrollCtaProps) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
+  const [enrolled, setEnrolled] = useState(false);
 
   async function handleEnroll() {
     setPending(true);
@@ -49,13 +51,27 @@ export function EnrollCta({ pid }: EnrollCtaProps) {
         return;
       }
 
-      toast.success('Enrolled! Continuing to donation.');
-      // Do NOT clear pending on success — navigation unmounts the component.
-      router.push(json.donateUrl ?? '/family/donate');
+      if (donationsEnabled) {
+        toast.success('Enrolled! Continuing to donation.');
+        // Do NOT clear pending on success — navigation unmounts the component.
+        router.push(json.donateUrl ?? '/family/donate');
+      } else {
+        toast.success('Your family is enrolled!');
+        setEnrolled(true);
+        setPending(false);
+      }
     } catch {
       toast.error('Network error — please try again.');
       setPending(false);
     }
+  }
+
+  if (enrolled) {
+    return (
+      <div style={{ padding: '12px 16px', background: 'var(--accentSoft)', color: 'var(--accentDeep)', borderRadius: 'var(--radiusSm)', fontSize: 14, fontWeight: 600, textAlign: 'center' }}>
+        Your family is enrolled — donation coming soon.
+      </div>
+    );
   }
 
   return (
@@ -65,7 +81,7 @@ export function EnrollCta({ pid }: EnrollCtaProps) {
       onClick={handleEnroll}
       style={{ opacity: pending ? 0.6 : 1 }}
     >
-      {pending ? 'Enrolling…' : 'Enroll & continue to donation →'}
+      {pending ? 'Enrolling…' : 'Enroll →'}
     </button>
   );
 }
