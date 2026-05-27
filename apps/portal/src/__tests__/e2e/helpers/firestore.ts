@@ -40,4 +40,27 @@ export async function cleanupTestData(): Promise<void> {
   } catch (err) {
     console.error('[e2e cleanup] contactKeys cleanup failed:', err);
   }
+
+  try {
+    // Delete test donationPeriods
+    const periodsSnap = await db.collection('donationPeriods').where('_test', '==', true).get();
+    for (const periodDoc of periodsSnap.docs) {
+      await periodDoc.ref.delete();
+    }
+  } catch (err) {
+    console.error('[e2e cleanup] donationPeriods cleanup failed:', err);
+  }
+
+  try {
+    // Delete test enrollments — sub-collection under test families.
+    // Test families are already deleted above, but enrollment docs inside them
+    // may persist in Firestore if the family delete didn't cascade.
+    // We use a collectionGroup query tagged with _test: true.
+    const enrollmentsSnap = await db.collectionGroup('enrollments').where('_test', '==', true).get();
+    for (const enrollmentDoc of enrollmentsSnap.docs) {
+      await enrollmentDoc.ref.delete();
+    }
+  } catch (err) {
+    console.error('[e2e cleanup] enrollments cleanup failed:', err);
+  }
 }
