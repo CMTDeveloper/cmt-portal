@@ -2,27 +2,20 @@ import { NextResponse } from 'next/server';
 import { portalFirestore, FieldValue, Timestamp } from '@cmt/firebase-shared/admin/firestore';
 import {
   isAdmin,
-  ROLES,
-  type Role,
   UpdateDonationPeriodSchema,
   type DonationPeriodDoc,
 } from '@cmt/shared-domain';
+import { readSessionFromHeaders } from '@/lib/auth/headers';
 
 export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ pid: string }> },
 ) {
-  const uid = req.headers.get('x-portal-uid');
-  const role = req.headers.get('x-portal-role');
-  if (!uid || !role) {
+  const session = readSessionFromHeaders(req);
+  if (!session || !session.uid) {
     return NextResponse.json({ error: 'no-session' }, { status: 401 });
   }
-  const extrasHeader = req.headers.get('x-portal-extra-roles') ?? '';
-  const extraRoles = extrasHeader
-    .split(',')
-    .map((s) => s.trim())
-    .filter((s): s is Role => (ROLES as readonly string[]).includes(s));
-  if (!isAdmin({ role: role as Role, extraRoles })) {
+  if (!isAdmin(session)) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
 
@@ -63,7 +56,7 @@ export async function PATCH(
     );
   }
 
-  const update: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp(), updatedBy: uid };
+  const update: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp(), updatedBy: session.uid };
   if (data.periodLabel !== undefined) update.periodLabel = data.periodLabel;
   if (data.startDate !== undefined) update.startDate = Timestamp.fromDate(new Date(data.startDate));
   if (data.endDate !== undefined) update.endDate = Timestamp.fromDate(new Date(data.endDate));

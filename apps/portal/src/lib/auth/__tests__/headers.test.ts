@@ -6,11 +6,6 @@ function makeReq(headers: Record<string, string>): Request {
 }
 
 describe('readSessionFromHeaders', () => {
-  it('returns null when x-portal-uid is missing', () => {
-    const result = readSessionFromHeaders(makeReq({ 'x-portal-role': 'admin' }));
-    expect(result).toBeNull();
-  });
-
   it('returns null when x-portal-role is missing', () => {
     const result = readSessionFromHeaders(makeReq({ 'x-portal-uid': 'uid-1' }));
     expect(result).toBeNull();
@@ -19,6 +14,14 @@ describe('readSessionFromHeaders', () => {
   it('returns null when x-portal-role is not a valid Role', () => {
     const result = readSessionFromHeaders(makeReq({ 'x-portal-uid': 'uid-1', 'x-portal-role': 'hacker' }));
     expect(result).toBeNull();
+  });
+
+  it('returns session with uid null when x-portal-uid is absent (family routes only need role+fid)', () => {
+    const result = readSessionFromHeaders(makeReq({ 'x-portal-role': 'family-manager', 'x-portal-fid': 'CMT-FAM-001' }));
+    expect(result).not.toBeNull();
+    expect(result!.uid).toBeNull();
+    expect(result!.role).toBe('family-manager');
+    expect(result!.fid).toBe('CMT-FAM-001');
   });
 
   it('returns session with empty extraRoles when header absent', () => {

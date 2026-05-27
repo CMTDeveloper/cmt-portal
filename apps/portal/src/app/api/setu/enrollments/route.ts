@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
 import { revalidateTag } from 'next/cache';
 import { flags } from '@/lib/flags';
-import { isSetuManager, ROLES, type Role, PostEnrollmentBodySchema } from '@cmt/shared-domain';
+import { isSetuManager, PostEnrollmentBodySchema } from '@cmt/shared-domain';
 import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
 import { enrollFamily } from '@/features/setu/enrollment/enroll-family';
+import { readSessionFromHeaders } from '@/lib/auth/headers';
 
 export async function GET(req: Request) {
   if (!flags.setuAuth) {
@@ -24,22 +25,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'not-found' }, { status: 404 });
   }
 
-  const role = req.headers.get('x-portal-role');
-  const fid = req.headers.get('x-portal-fid');
-  const mid = req.headers.get('x-portal-mid');
-
-  if (!role) {
+  const session = readSessionFromHeaders(req);
+  if (!session) {
     return NextResponse.json({ error: 'no-session' }, { status: 401 });
   }
-  const extrasHeader = req.headers.get('x-portal-extra-roles') ?? '';
-  const extraRoles = extrasHeader
-    .split(',')
-    .map((s) => s.trim())
-    .filter((s): s is Role => (ROLES as readonly string[]).includes(s));
-  if (!isSetuManager({ role: role as Role, extraRoles })) {
+  if (!isSetuManager(session)) {
     return NextResponse.json({ error: 'manager-required' }, { status: 403 });
   }
-  if (!fid) {
+  if (!session.fid) {
     return NextResponse.json({ error: 'missing-fid' }, { status: 400 });
   }
 
@@ -55,10 +48,10 @@ export async function POST(req: Request) {
   let result: Awaited<ReturnType<typeof enrollFamily>>;
   try {
     result = await enrollFamily({
-      fid,
+      fid: session.fid,
       pid: parsed.data.pid,
       enrolledVia: 'family-initiated',
-      enrolledByMid: mid ?? null,
+      enrolledByMid: session.mid,
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -80,7 +73,7 @@ export async function POST(req: Request) {
     throw err;
   }
 
-  revalidateTag(`family-${fid}`, 'max');
+  revalidateTag(`family-${session.fid}`, 'max');
   const status = result.created ? 201 : 200;
   return NextResponse.json(
     {

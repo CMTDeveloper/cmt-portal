@@ -4,19 +4,16 @@ import {
   CreateDonationPeriodSchema,
   type DonationPeriodDoc,
   isAdmin,
-  ROLES,
-  type Role,
 } from '@cmt/shared-domain';
+import { readSessionFromHeaders } from '@/lib/auth/headers';
 
 const PROGRAM_LABELS: Record<string, string> = {
   'bala-vihar': 'Bala Vihar',
 };
 
 export async function GET(req: Request) {
-  const role = req.headers.get('x-portal-role');
-  const extrasHeader = req.headers.get('x-portal-extra-roles') ?? '';
-  const extraRoles = extrasHeader.split(',').map((s) => s.trim()).filter((s): s is Role => (ROLES as readonly string[]).includes(s));
-  if (!isAdmin({ role: role as Role, extraRoles })) {
+  const session = readSessionFromHeaders(req);
+  if (!session || !isAdmin(session)) {
     return NextResponse.json({ error: 'admin-required' }, { status: 403 });
   }
 
@@ -36,16 +33,12 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const role = req.headers.get('x-portal-role');
-  const extrasHeader = req.headers.get('x-portal-extra-roles') ?? '';
-  const extraRoles = extrasHeader.split(',').map((s) => s.trim()).filter((s): s is Role => (ROLES as readonly string[]).includes(s));
-  if (!isAdmin({ role: role as Role, extraRoles })) {
-    return NextResponse.json({ error: 'admin-required' }, { status: 403 });
-  }
-
-  const uid = req.headers.get('x-portal-uid');
-  if (!uid) {
+  const session = readSessionFromHeaders(req);
+  if (!session || !session.uid) {
     return NextResponse.json({ error: 'no-session' }, { status: 401 });
+  }
+  if (!isAdmin(session)) {
+    return NextResponse.json({ error: 'admin-required' }, { status: 403 });
   }
 
   const raw = await req.json().catch(() => null);
@@ -98,9 +91,9 @@ export async function POST(req: Request) {
     amountTiers: data.amountTiers,
     enabled: data.enabled,
     createdAt: now,
-    createdBy: uid,
+    createdBy: session.uid,
     updatedAt: now,
-    updatedBy: uid,
+    updatedBy: session.uid,
   });
 
   return NextResponse.json({ pid, overlapWarning: overlaps }, { status: 201 });

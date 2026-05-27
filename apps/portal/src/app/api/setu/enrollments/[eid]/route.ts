@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { revalidateTag } from 'next/cache';
 import { flags } from '@/lib/flags';
-import { isSetuManager, ROLES, type Role } from '@cmt/shared-domain';
+import { isSetuManager } from '@cmt/shared-domain';
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
+import { readSessionFromHeaders } from '@/lib/auth/headers';
 
 export async function DELETE(
   req: Request,
@@ -12,34 +13,27 @@ export async function DELETE(
     return NextResponse.json({ error: 'not-found' }, { status: 404 });
   }
 
-  const role = req.headers.get('x-portal-role');
-  const fid = req.headers.get('x-portal-fid');
-
-  if (!role) {
+  const session = readSessionFromHeaders(req);
+  if (!session) {
     return NextResponse.json({ error: 'no-session' }, { status: 401 });
   }
-  const extrasHeader = req.headers.get('x-portal-extra-roles') ?? '';
-  const extraRoles = extrasHeader
-    .split(',')
-    .map((s) => s.trim())
-    .filter((s): s is Role => (ROLES as readonly string[]).includes(s));
-  if (!isSetuManager({ role: role as Role, extraRoles })) {
+  if (!isSetuManager(session)) {
     return NextResponse.json({ error: 'manager-required' }, { status: 403 });
   }
-  if (!fid) {
+  if (!session.fid) {
     return NextResponse.json({ error: 'missing-fid' }, { status: 400 });
   }
 
   const { eid } = await params;
 
-  if (!eid.startsWith(`${fid}-`)) {
+  if (!eid.startsWith(`${session.fid}-`)) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
 
   const db = portalFirestore();
   const enrollmentRef = db
     .collection('families')
-    .doc(fid)
+    .doc(session.fid)
     .collection('enrollments')
     .doc(eid);
 
@@ -67,6 +61,6 @@ export async function DELETE(
     throw err;
   }
 
-  revalidateTag(`family-${fid}`, 'max');
+  revalidateTag(`family-${session.fid}`, 'max');
   return NextResponse.json({ ok: true }, { status: 200 });
 }

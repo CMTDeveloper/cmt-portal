@@ -1,17 +1,21 @@
 import { ROLES, type Role } from '@cmt/shared-domain';
 
 export interface PortalSessionHeaders {
-  uid: string;
+  uid: string | null;
   role: Role;
   extraRoles: Role[];
   fid: string | null;
   mid: string | null;
 }
 
+/**
+ * Reads portal session headers set by middleware. Returns null only when
+ * x-portal-role is missing or not a known Role — uid absence is allowed
+ * because family-role routes authenticate via fid, not uid.
+ */
 export function readSessionFromHeaders(req: Request): PortalSessionHeaders | null {
-  const uid = req.headers.get('x-portal-uid');
   const role = req.headers.get('x-portal-role');
-  if (!uid || !role || !(ROLES as readonly string[]).includes(role)) return null;
+  if (!role || !(ROLES as readonly string[]).includes(role)) return null;
 
   const extrasHeader = req.headers.get('x-portal-extra-roles') ?? '';
   const extraRoles = extrasHeader
@@ -20,7 +24,7 @@ export function readSessionFromHeaders(req: Request): PortalSessionHeaders | nul
     .filter((s): s is Role => (ROLES as readonly string[]).includes(s));
 
   return {
-    uid,
+    uid: req.headers.get('x-portal-uid'),
     role: role as Role,
     extraRoles,
     fid: req.headers.get('x-portal-fid'),

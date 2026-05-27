@@ -1,24 +1,20 @@
 import { NextResponse } from 'next/server';
 import { revalidateTag } from 'next/cache';
 import { flags } from '@/lib/flags';
-import { isWelcomeTeam, ROLES, type Role, WelcomePostEnrollmentBodySchema } from '@cmt/shared-domain';
+import { isWelcomeTeam, WelcomePostEnrollmentBodySchema } from '@cmt/shared-domain';
 import { enrollFamily } from '@/features/setu/enrollment/enroll-family';
+import { readSessionFromHeaders } from '@/lib/auth/headers';
 
 export async function POST(req: Request) {
   if (!flags.setuAuth) {
     return NextResponse.json({ error: 'not-found' }, { status: 404 });
   }
 
-  const role = req.headers.get('x-portal-role');
-  if (!role) {
+  const session = readSessionFromHeaders(req);
+  if (!session) {
     return NextResponse.json({ error: 'no-session' }, { status: 401 });
   }
-  const extrasHeader = req.headers.get('x-portal-extra-roles') ?? '';
-  const extraRoles = extrasHeader
-    .split(',')
-    .map((s) => s.trim())
-    .filter((s): s is Role => (ROLES as readonly string[]).includes(s));
-  if (!isWelcomeTeam({ role: role as Role, extraRoles })) {
+  if (!isWelcomeTeam(session)) {
     return NextResponse.json({ error: 'welcome-team-required' }, { status: 403 });
   }
 
