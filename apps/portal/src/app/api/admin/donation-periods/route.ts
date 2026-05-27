@@ -4,6 +4,7 @@ import {
   CreateDonationPeriodSchema,
   type DonationPeriodDoc,
   isAdmin,
+  toSafeSlug,
 } from '@cmt/shared-domain';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
 
@@ -71,30 +72,45 @@ export async function POST(req: Request) {
     return newStart <= existEnd && newEnd >= existStart;
   });
 
-  const pid = `${data.programKey}-${data.location.toLowerCase()}-${data.periodLabel.toLowerCase().replace(/\s+/g, '-')}`;
-  const periodRef = db.collection('donationPeriods').doc(pid);
+  const pid = [
+    toSafeSlug(data.programKey),
+    toSafeSlug(data.location),
+    toSafeSlug(data.periodLabel),
+  ].join('-');
 
-  const existing = await periodRef.get();
-  if (existing.exists) {
-    return NextResponse.json({ error: 'pid-conflict', pid }, { status: 409 });
+  if (!pid) {
+    return NextResponse.json(
+      { error: 'bad-request', issues: [{ message: 'periodLabel produces empty slug' }] },
+      { status: 400 },
+    );
   }
 
-  await periodRef.set({
-    pid,
-    programKey: data.programKey,
-    programLabel: PROGRAM_LABELS[data.programKey] ?? data.programKey,
-    location: data.location,
-    periodLabel: data.periodLabel,
-    startDate: Timestamp.fromDate(new Date(data.startDate)),
-    endDate: Timestamp.fromDate(new Date(data.endDate)),
-    suggestedAmount: data.suggestedAmount,
-    amountTiers: data.amountTiers,
-    enabled: data.enabled,
-    createdAt: now,
-    createdBy: session.uid,
-    updatedAt: now,
-    updatedBy: session.uid,
-  });
+  const periodRef = db.collection('donationPeriods').doc(pid);
+
+  try {
+    await periodRef.create({
+      pid,
+      programKey: data.programKey,
+      programLabel: PROGRAM_LABELS[data.programKey] ?? data.programKey,
+      location: data.location,
+      periodLabel: data.periodLabel,
+      startDate: Timestamp.fromDate(new Date(data.startDate)),
+      endDate: Timestamp.fromDate(new Date(data.endDate)),
+      suggestedAmount: data.suggestedAmount,
+      amountTiers: data.amountTiers,
+      enabled: data.enabled,
+      createdAt: now,
+      createdBy: session.uid,
+      updatedAt: now,
+      updatedBy: session.uid,
+    });
+  } catch (err) {
+    // Firestore ALREADY_EXISTS gRPC code = 6
+    if ((err as { code?: number }).code === 6) {
+      return NextResponse.json({ error: 'pid-conflict', pid }, { status: 409 });
+    }
+    throw err;
+  }
 
   return NextResponse.json({ pid, overlapWarning: overlaps }, { status: 201 });
 }

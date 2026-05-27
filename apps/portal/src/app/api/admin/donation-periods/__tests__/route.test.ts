@@ -5,6 +5,7 @@ vi.mock('next/cache', () => ({ revalidateTag: vi.fn(), cacheTag: vi.fn(), cacheL
 // ── Firestore mock ─────────────────────────────────────────────────────────────
 const mockGet = vi.fn();
 const mockSet = vi.fn();
+const mockCreate = vi.fn();
 const mockOrderBy = vi.fn();
 const mockWhere = vi.fn();
 const mockDoc = vi.fn();
@@ -63,6 +64,7 @@ beforeEach(() => {
   mockWhere.mockReturnThis();
   mockDoc.mockReturnValue({
     set: mockSet,
+    create: mockCreate,
     get: mockGet,
   });
   mockCollection.mockReturnValue({
@@ -73,6 +75,7 @@ beforeEach(() => {
   });
   mockGet.mockResolvedValue({ docs: [] });
   mockSet.mockResolvedValue(undefined);
+  mockCreate.mockResolvedValue(undefined);
 });
 
 // ── GET /api/admin/donation-periods ───────────────────────────────────────────
@@ -225,16 +228,41 @@ describe('POST /api/admin/donation-periods', () => {
     expect(body.pid).toBe('bala-vihar-brampton-spring-2028');
   });
 
-  it('returns 409 when a period with the same derived pid already exists (L1)', async () => {
+  it('returns 409 when create() throws ALREADY_EXISTS (code 6)', async () => {
     const overlapGet = vi.fn().mockResolvedValue({ docs: [] });
     mockWhere.mockReturnValue({ where: vi.fn().mockReturnValue({ where: vi.fn().mockReturnValue({ get: overlapGet }) }) });
-    // doc.get() returns exists:true — pid already taken
-    mockDoc.mockReturnValue({ set: mockSet, get: vi.fn().mockResolvedValue({ exists: true }) });
+    // Simulate Firestore ALREADY_EXISTS gRPC error
+    const alreadyExists = Object.assign(new Error('Document already exists'), { code: 6 });
+    mockDoc.mockReturnValue({ create: vi.fn().mockRejectedValue(alreadyExists), get: mockGet });
 
     const { POST } = await import('../route');
     const res = await POST(makeRequest('POST', validBody, 'uid-admin'));
     expect(res.status).toBe(409);
     const body = await res.json() as { error: string };
     expect(body.error).toBe('pid-conflict');
+  });
+
+  it('derives safe slug from periodLabel with slash (Fall/2027)', async () => {
+    const overlapGet = vi.fn().mockResolvedValue({ docs: [] });
+    mockWhere.mockReturnValue({ where: vi.fn().mockReturnValue({ where: vi.fn().mockReturnValue({ get: overlapGet }) }) });
+
+    const { POST } = await import('../route');
+    const res = await POST(
+      makeRequest('POST', { ...validBody, periodLabel: 'Fall/2027' }, 'uid-admin'),
+    );
+    const body = await res.json() as { pid: string };
+    expect(body.pid).toBe('bala-vihar-brampton-fall-2027');
+  });
+
+  it('derives safe slug from periodLabel with extra punctuation', async () => {
+    const overlapGet = vi.fn().mockResolvedValue({ docs: [] });
+    mockWhere.mockReturnValue({ where: vi.fn().mockReturnValue({ where: vi.fn().mockReturnValue({ get: overlapGet }) }) });
+
+    const { POST } = await import('../route');
+    const res = await POST(
+      makeRequest('POST', { ...validBody, periodLabel: 'Spring & Summer (2028)' }, 'uid-admin'),
+    );
+    const body = await res.json() as { pid: string };
+    expect(body.pid).toBe('bala-vihar-brampton-spring-summer-2028');
   });
 });
