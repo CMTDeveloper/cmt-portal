@@ -14,22 +14,13 @@
 
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { getPortalApp } from '@cmt/firebase-shared/admin/apps';
+import { toTorontoStartOfDay, toTorontoEndOfDay } from '../src/lib/toronto-date';
 
 function parseArgs(argv: string[]): { dryRun: boolean; allowProd: boolean } {
   return {
     dryRun: argv.includes('--dry-run'),
     allowProd: argv.includes('--allow-prod'),
   };
-}
-
-// Toronto local midnight for a given ISO date string.
-// We store as UTC Timestamp; the app renders in America/Toronto.
-function torontoMidnight(isoDate: string): Date {
-  // Append Toronto offset for "start of day" (UTC-4 during EDT)
-  return new Date(`${isoDate}T00:00:00-04:00`);
-}
-function torontoEndOfDay(isoDate: string): Date {
-  return new Date(`${isoDate}T23:59:59-04:00`);
 }
 
 interface PeriodSeed {
@@ -53,8 +44,8 @@ const PERIODS: PeriodSeed[] = [
     programLabel: 'Bala Vihar',
     location: 'Brampton',
     periodLabel: 'Fall 2025',
-    startDate: torontoMidnight('2025-09-07'),
-    endDate: torontoEndOfDay('2026-01-26'),
+    startDate: toTorontoStartOfDay('2025-09-07'),
+    endDate: toTorontoEndOfDay('2026-01-26'),
     suggestedAmount: 500,
     amountTiers: [500, 750, 1000, 1500],
     enabled: true,
@@ -65,8 +56,8 @@ const PERIODS: PeriodSeed[] = [
     programLabel: 'Bala Vihar',
     location: 'Brampton',
     periodLabel: 'Winter 2026',
-    startDate: torontoMidnight('2026-02-01'),
-    endDate: torontoEndOfDay('2026-06-28'),
+    startDate: toTorontoStartOfDay('2026-02-01'),
+    endDate: toTorontoEndOfDay('2026-06-28'),
     suggestedAmount: 500,
     amountTiers: [500, 750, 1000, 1500],
     enabled: true,
@@ -77,8 +68,8 @@ const PERIODS: PeriodSeed[] = [
     programLabel: 'Bala Vihar',
     location: 'Mississauga',
     periodLabel: 'Fall 2025',
-    startDate: torontoMidnight('2025-09-07'),
-    endDate: torontoEndOfDay('2026-01-26'),
+    startDate: toTorontoStartOfDay('2025-09-07'),
+    endDate: toTorontoEndOfDay('2026-01-26'),
     suggestedAmount: 500,
     amountTiers: [500, 750, 1000, 1500],
     enabled: true,
@@ -89,8 +80,8 @@ const PERIODS: PeriodSeed[] = [
     programLabel: 'Bala Vihar',
     location: 'Mississauga',
     periodLabel: 'Winter 2026',
-    startDate: torontoMidnight('2026-02-01'),
-    endDate: torontoEndOfDay('2026-06-28'),
+    startDate: toTorontoStartOfDay('2026-02-01'),
+    endDate: toTorontoEndOfDay('2026-06-28'),
     suggestedAmount: 500,
     amountTiers: [500, 750, 1000, 1500],
     enabled: true,
