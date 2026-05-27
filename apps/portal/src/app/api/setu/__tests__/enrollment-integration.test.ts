@@ -159,28 +159,19 @@ function setupEnrollTransaction({
 
     const membersDocs = childMids.map((mid) => ({ data: () => ({ type: 'Child', mid }) }));
 
+    // Call order from enroll-family.ts:
+    //   Promise.all([period, enrollment, family]) → calls 1, 2, 3 (in parallel, resolved in any order)
+    //   members subcollection query               → call 4
     const txn = {
       get: vi.fn()
         .mockResolvedValueOnce({ exists: periodExists, data: () => ({ ...period, enabled: periodEnabled }) })
         .mockResolvedValueOnce({ exists: enrollmentExists, data: () => ({ ...ACTIVE_ENROLLMENT, status: enrollmentStatus }) })
-        .mockResolvedValueOnce({ exists: familyExists }),
+        .mockResolvedValueOnce({ exists: familyExists })
+        .mockResolvedValue({ docs: membersDocs, size: membersDocs.length }),
       set: vi.fn(),
       update: vi.fn(),
       delete: vi.fn(),
     };
-
-    // members subcollection get (for childrenMids derivation)
-    vi.spyOn(txn, 'get').mockImplementation((_ref: unknown) => {
-      // First call: period doc
-      // Second call: enrollment doc
-      // Third call: family doc
-      // Subcollection get via txn.get on members
-      const callCount = (txn.get as ReturnType<typeof vi.fn>).mock.calls.length;
-      if (callCount === 1) return Promise.resolve({ exists: periodExists, data: () => ({ ...period, enabled: periodEnabled }) });
-      if (callCount === 2) return Promise.resolve({ exists: enrollmentExists, data: () => ({ ...ACTIVE_ENROLLMENT, status: enrollmentStatus }) });
-      if (callCount === 3) return Promise.resolve({ exists: familyExists });
-      return Promise.resolve({ docs: membersDocs, size: membersDocs.length });
-    });
 
     return fn(txn);
   });
