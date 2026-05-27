@@ -4,6 +4,7 @@ import {
   toTorontoEndOfDay,
   toTorontoStartOfDayISO,
   toTorontoEndOfDayISO,
+  isoToTorontoDateInput,
 } from '../toronto-date';
 
 // EDT = UTC-4, EST = UTC-5
@@ -62,5 +63,22 @@ describe('ISO helpers', () => {
 
   it('toTorontoEndOfDayISO returns string form of end-of-day', () => {
     expect(toTorontoEndOfDayISO('2026-01-26')).toBe('2026-01-27T04:59:59.000Z');
+  });
+});
+
+describe('isoToTorontoDateInput', () => {
+  it('end-of-day Toronto EDT: 2026-09-15T03:59:59.000Z → 2026-09-14', () => {
+    // 03:59:59 UTC = 23:59:59 Toronto EDT (-04:00) on Sep 14
+    expect(isoToTorontoDateInput('2026-09-15T03:59:59.000Z')).toBe('2026-09-14');
+  });
+
+  it('end-of-day Toronto EST: 2027-01-26T04:59:59.000Z → 2027-01-25', () => {
+    // 04:59:59 UTC = 23:59:59 Toronto EST (-05:00) on Jan 25
+    expect(isoToTorontoDateInput('2027-01-26T04:59:59.000Z')).toBe('2027-01-25');
+  });
+
+  it('start-of-day Toronto EDT: 2026-09-15T04:00:00.000Z → 2026-09-15', () => {
+    // 04:00:00 UTC = 00:00:00 Toronto EDT (-04:00) on Sep 15
+    expect(isoToTorontoDateInput('2026-09-15T04:00:00.000Z')).toBe('2026-09-15');
   });
 });

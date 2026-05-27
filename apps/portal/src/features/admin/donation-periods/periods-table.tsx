@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import { toast } from '@cmt/ui';
 import type { DonationPeriodDoc, CreateDonationPeriodInput, UpdateDonationPeriodInput, Location, ProgramKey } from '@cmt/shared-domain';
-import { toTorontoStartOfDayISO, toTorontoEndOfDayISO } from '@/lib/toronto-date';
+import { toTorontoStartOfDayISO, toTorontoEndOfDayISO, isoToTorontoDateInput } from '@/lib/toronto-date';
 
 // Serialised shape returned by GET /api/admin/donation-periods
 // (Timestamps converted to ISO strings by the route handler)
@@ -45,8 +45,8 @@ function PeriodModal({ editing, onClose, onSaved }: ModalProps) {
   const [programKey, setProgramKey] = useState<ProgramKey>(editing?.programKey ?? 'bala-vihar');
   const [location, setLocation] = useState<Location>(editing?.location ?? 'Brampton');
   const [periodLabel, setPeriodLabel] = useState(editing?.periodLabel ?? '');
-  const [startDate, setStartDate] = useState(editing ? editing.startDate.slice(0, 10) : '');
-  const [endDate, setEndDate] = useState(editing ? editing.endDate.slice(0, 10) : '');
+  const [startDate, setStartDate] = useState(editing ? isoToTorontoDateInput(editing.startDate) : '');
+  const [endDate, setEndDate] = useState(editing ? isoToTorontoDateInput(editing.endDate) : '');
   const [suggestedAmount, setSuggestedAmount] = useState(String(editing?.suggestedAmount ?? 500));
   const [tiersRaw, setTiersRaw] = useState(editing ? fmtTiers(editing.amountTiers).replace(/\$/g, '') : '500, 750, 1000, 1500');
   const [enabled, setEnabled] = useState(editing?.enabled ?? true);
@@ -83,8 +83,8 @@ function PeriodModal({ editing, onClose, onSaved }: ModalProps) {
         if (isEdit) {
           const body: UpdateDonationPeriodInput = {};
           if (periodLabel !== editing.periodLabel) body.periodLabel = periodLabel;
-          if (startDate !== editing.startDate.slice(0, 10)) body.startDate = toTorontoStartOfDayISO(startDate);
-          if (endDate !== editing.endDate.slice(0, 10)) body.endDate = toTorontoEndOfDayISO(endDate);
+          if (startDate !== isoToTorontoDateInput(editing.startDate)) body.startDate = toTorontoStartOfDayISO(startDate);
+          if (endDate !== isoToTorontoDateInput(editing.endDate)) body.endDate = toTorontoEndOfDayISO(endDate);
           if (amt !== editing.suggestedAmount) body.suggestedAmount = amt;
           if (JSON.stringify(tiers) !== JSON.stringify(editing.amountTiers)) body.amountTiers = tiers;
           if (enabled !== editing.enabled) body.enabled = enabled;

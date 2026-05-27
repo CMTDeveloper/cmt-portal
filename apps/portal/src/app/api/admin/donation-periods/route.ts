@@ -72,18 +72,18 @@ export async function POST(req: Request) {
     return newStart <= existEnd && newEnd >= existStart;
   });
 
-  const pid = [
-    toSafeSlug(data.programKey),
-    toSafeSlug(data.location),
-    toSafeSlug(data.periodLabel),
-  ].join('-');
-
-  if (!pid) {
+  const periodSlug = toSafeSlug(data.periodLabel);
+  if (!periodSlug) {
     return NextResponse.json(
-      { error: 'bad-request', issues: [{ message: 'periodLabel produces empty slug' }] },
+      {
+        error: 'invalid-period-label',
+        message: 'Period label must contain alphanumeric characters',
+      },
       { status: 400 },
     );
   }
+
+  const pid = `${toSafeSlug(data.programKey)}-${toSafeSlug(data.location)}-${periodSlug}`;
 
   const periodRef = db.collection('donationPeriods').doc(pid);
 

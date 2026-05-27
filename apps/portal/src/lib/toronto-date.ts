@@ -47,6 +47,27 @@ export function toTorontoEndOfDayISO(isoDate: string): string {
   return toTorontoEndOfDay(isoDate).toISOString();
 }
 
+/**
+ * Given a UTC ISO timestamp (e.g. from Firestore), returns the YYYY-MM-DD
+ * string in Toronto local time. Use this to pre-populate `<input type="date">`
+ * fields so the displayed date matches the Toronto wall-clock date the user
+ * originally picked, not the UTC calendar date.
+ *
+ * Example: '2026-09-15T03:59:59.000Z' (= 2026-09-14 23:59:59 Toronto EDT)
+ * returns '2026-09-14', not '2026-09-15'.
+ */
+export function isoToTorontoDateInput(iso: string): string {
+  const date = new Date(iso);
+  const fmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: TZ,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  // en-CA produces "YYYY-MM-DD" naturally
+  return fmt.format(date);
+}
+
 // ── Internal ──────────────────────────────────────────────────────────────────
 
 /**

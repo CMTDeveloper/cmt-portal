@@ -35,6 +35,26 @@ const BASE_PERIOD: PeriodRow = {
   updatedBy: 'admin-uid',
 };
 
+// A period whose endDate is an end-of-day Toronto EDT timestamp.
+// 2026-09-15T03:59:59.000Z = 2026-09-14 23:59:59 Toronto EDT.
+// The edit modal must show "2026-09-14", not the UTC-sliced "2026-09-15".
+const EDT_END_PERIOD: PeriodRow = {
+  pid: 'bv-brampton-summer-2026',
+  programKey: 'bala-vihar',
+  programLabel: 'Bala Vihar',
+  location: 'Brampton',
+  periodLabel: 'Summer 2026',
+  startDate: '2026-06-01T04:00:00.000Z', // 2026-06-01 00:00 Toronto EDT
+  endDate: '2026-09-15T03:59:59.000Z',   // 2026-09-14 23:59:59 Toronto EDT
+  suggestedAmount: 500,
+  amountTiers: [500, 750, 1000, 1500],
+  enabled: true,
+  createdAt: NOW,
+  createdBy: 'admin-uid',
+  updatedAt: NOW,
+  updatedBy: 'admin-uid',
+};
+
 beforeEach(() => {
   vi.spyOn(global, 'fetch').mockReset();
   toastMock.success.mockReset();
@@ -194,6 +214,25 @@ describe('PeriodsTable — modal save flow', () => {
     await waitFor(() => {
       expect(toastMock.error).toHaveBeenCalledWith('bad-request');
     });
+  });
+
+  it('edit modal: date inputs show Toronto-local YYYY-MM-DD, not UTC-sliced date', async () => {
+    const user = userEvent.setup();
+
+    render(<PeriodsTable initialPeriods={[EDT_END_PERIOD]}/>);
+
+    // Open the edit modal for the EDT_END_PERIOD row
+    const editButtons = screen.getAllByRole('button', { name: /edit/i });
+    await user.click(editButtons[0]!);
+
+    // The modal should be open — find all date inputs
+    const dateInputs = document.querySelectorAll('input[type="date"]');
+    expect(dateInputs).toHaveLength(2);
+
+    // startDate: 2026-06-01T04:00:00.000Z = 2026-06-01 00:00 Toronto EDT → '2026-06-01'
+    expect((dateInputs[0] as HTMLInputElement).value).toBe('2026-06-01');
+    // endDate: 2026-09-15T03:59:59.000Z = 2026-09-14 23:59:59 Toronto EDT → '2026-09-14' (not '2026-09-15')
+    expect((dateInputs[1] as HTMLInputElement).value).toBe('2026-09-14');
   });
 
   it('create: POST body uses Toronto midnight, not UTC midnight', async () => {

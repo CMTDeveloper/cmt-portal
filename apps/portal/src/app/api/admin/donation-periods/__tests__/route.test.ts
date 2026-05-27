@@ -265,4 +265,56 @@ describe('POST /api/admin/donation-periods', () => {
     const body = await res.json() as { pid: string };
     expect(body.pid).toBe('bala-vihar-brampton-spring-summer-2028');
   });
+
+  // ── empty-slug rejection tests ──────────────────────────────────────────────
+
+  it('returns 400 invalid-period-label when periodLabel is "///"', async () => {
+    const { POST } = await import('../route');
+    const res = await POST(makeRequest('POST', { ...validBody, periodLabel: '///' }, 'uid-admin'));
+    expect(res.status).toBe(400);
+    const body = await res.json() as { error: string };
+    expect(body.error).toBe('invalid-period-label');
+  });
+
+  it('returns 400 invalid-period-label when periodLabel is whitespace only', async () => {
+    const { POST } = await import('../route');
+    const res = await POST(makeRequest('POST', { ...validBody, periodLabel: '   ' }, 'uid-admin'));
+    expect(res.status).toBe(400);
+    const body = await res.json() as { error: string };
+    expect(body.error).toBe('invalid-period-label');
+  });
+
+  it('returns 400 invalid-period-label when periodLabel is all special chars', async () => {
+    const { POST } = await import('../route');
+    const res = await POST(makeRequest('POST', { ...validBody, periodLabel: '!@#$%' }, 'uid-admin'));
+    expect(res.status).toBe(400);
+    const body = await res.json() as { error: string };
+    expect(body.error).toBe('invalid-period-label');
+  });
+
+  it('returns 201 with correct pid for periodLabel "Fall 2026"', async () => {
+    const overlapGet = vi.fn().mockResolvedValue({ docs: [] });
+    mockWhere.mockReturnValue({ where: vi.fn().mockReturnValue({ where: vi.fn().mockReturnValue({ get: overlapGet }) }) });
+
+    const { POST } = await import('../route');
+    const res = await POST(
+      makeRequest('POST', { ...validBody, periodLabel: 'Fall 2026', startDate: '2026-09-01T04:00:00.000Z', endDate: '2026-12-31T04:59:59.000Z' }, 'uid-admin'),
+    );
+    expect(res.status).toBe(201);
+    const body = await res.json() as { pid: string };
+    expect(body.pid).toBe('bala-vihar-brampton-fall-2026');
+  });
+
+  it('returns 201 with pid with leading/trailing dashes stripped from periodLabel "-fall-2026-"', async () => {
+    const overlapGet = vi.fn().mockResolvedValue({ docs: [] });
+    mockWhere.mockReturnValue({ where: vi.fn().mockReturnValue({ where: vi.fn().mockReturnValue({ get: overlapGet }) }) });
+
+    const { POST } = await import('../route');
+    const res = await POST(
+      makeRequest('POST', { ...validBody, periodLabel: '-fall-2026-', startDate: '2026-09-01T04:00:00.000Z', endDate: '2026-12-31T04:59:59.000Z' }, 'uid-admin'),
+    );
+    expect(res.status).toBe(201);
+    const body = await res.json() as { pid: string };
+    expect(body.pid).toBe('bala-vihar-brampton-fall-2026');
+  });
 });
