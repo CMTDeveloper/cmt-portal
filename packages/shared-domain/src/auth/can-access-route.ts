@@ -85,6 +85,40 @@ export function canAccessRoute(
     return isSetuFamily(claims) || isWelcomeTeam(claims) || isAdmin(claims);
   }
 
+  // Setu API — enrollments: GET is any setu family; POST/DELETE is manager-only
+  if (pathname === '/api/setu/enrollments' || pathname.startsWith('/api/setu/enrollments/')) {
+    if (!isSetuFamily(claims)) return false;
+    if (method === 'POST' || method === 'DELETE') return isSetuManager(claims);
+    return true;
+  }
+
+  // Setu API — donations: GET is any setu family; POST (intent) is manager-only
+  if (pathname === '/api/setu/donations' || pathname.startsWith('/api/setu/donations/')) {
+    if (!isSetuFamily(claims)) return false;
+    if (method === 'POST') return isSetuManager(claims);
+    return true;
+  }
+
+  // Welcome-team API — donations + enrollments
+  if (
+    pathname.startsWith('/api/welcome/donations/') ||
+    pathname === '/api/welcome/donations' ||
+    pathname.startsWith('/api/welcome/enrollments/') ||
+    pathname === '/api/welcome/enrollments'
+  ) {
+    return isWelcomeTeam(claims);
+  }
+
+  // Admin API — donation-periods + admin donations list
+  if (
+    pathname.startsWith('/api/admin/donation-periods/') ||
+    pathname === '/api/admin/donation-periods' ||
+    pathname === '/api/admin/donations' ||
+    pathname.startsWith('/api/admin/donations/')
+  ) {
+    return isAdmin(claims);
+  }
+
   // Setu API — remaining paths (invite/send, register, etc.): manager + welcome-team + admin
   // family-member is NOT included here; manager-level is the safe default for unknown setu paths
   if (pathname.startsWith('/api/setu/')) {

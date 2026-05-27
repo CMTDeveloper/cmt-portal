@@ -47,6 +47,12 @@ export const PUBLIC_ROUTES = [
   '/api/check-in/families/:familyId/check-in',
   '/api/check-in/lookup',
   '/api/check-in/guests',
+
+  // Stripe webhook — signature-verified at handler level, no session needed
+  '/api/webhooks/stripe',
+
+  // Vercel Cron — CRON_SECRET-verified at handler level, no session needed
+  '/api/cron/archive-pledges',
 ] as const;
 
 export function matchRoute(pattern: string, pathname: string): boolean {

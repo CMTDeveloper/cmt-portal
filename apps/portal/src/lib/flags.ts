@@ -15,6 +15,7 @@ export const flags = {
   checkInAdmin: master && process.env.NEXT_PUBLIC_FEATURE_CHECK_IN_ADMIN === 'true',
   checkInNotify: master && process.env.NEXT_PUBLIC_FEATURE_CHECK_IN_NOTIFY === 'true',
   setuAuth: process.env.NEXT_PUBLIC_FEATURE_SETU_AUTH === 'true',
+  setuDonations: process.env.NEXT_PUBLIC_FEATURE_SETU_DONATIONS === 'true',
 } as const;
 
 export type FeatureFlags = typeof flags;
