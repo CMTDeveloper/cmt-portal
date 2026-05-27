@@ -137,6 +137,14 @@ function welcomeHeaders(): Record<string, string> {
   return { 'x-portal-role': 'welcome-team' };
 }
 
+function adminAsWelcomeHeaders(): Record<string, string> {
+  return { 'x-portal-role': 'admin' };
+}
+
+function managerViaExtraRoleHeaders(): Record<string, string> {
+  return { 'x-portal-role': 'family-member', 'x-portal-fid': FID, 'x-portal-mid': MID, 'x-portal-extra-roles': 'family-manager' };
+}
+
 type RouteCtx<K extends string> = { params: Promise<Record<K, string>> };
 function makeCtx<K extends string>(key: K, value: string): RouteCtx<K> {
   return { params: Promise.resolve({ [key]: value } as Record<K, string>) };
@@ -353,6 +361,14 @@ describe('POST /api/setu/enrollments', () => {
     expect(res.status).toBe(403);
   });
 
+  it('multi-role: family-member with extraRoles=family-manager can enroll (201)', async () => {
+    setupEnrollTransaction();
+    const res = await enrollmentsPOST(
+      makeRequest('POST', '/api/setu/enrollments', { pid: PID }, managerViaExtraRoleHeaders()),
+    );
+    expect(res.status).toBe(201);
+  });
+
   it('returns 401 when no auth headers', async () => {
     const res = await enrollmentsPOST(
       makeRequest('POST', '/api/setu/enrollments', { pid: PID }),
@@ -475,6 +491,14 @@ describe('POST /api/welcome/enrollments', () => {
       makeRequest('POST', '/api/welcome/enrollments', { fid: FID, pid: PID }, managerHeaders()),
     );
     expect(res.status).toBe(403);
+  });
+
+  it('multi-role: admin (primary role=admin) can enroll via welcome endpoint', async () => {
+    setupEnrollTransaction();
+    const res = await welcomeEnrollPOST(
+      makeRequest('POST', '/api/welcome/enrollments', { fid: FID, pid: PID }, adminAsWelcomeHeaders()),
+    );
+    expect(res.status).toBe(201);
   });
 
   it('returns 400 on missing fid or pid', async () => {
