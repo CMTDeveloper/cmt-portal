@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { revalidateTag } from 'next/cache';
 import { flags } from '@/lib/flags';
-import { OverrideEnrollmentBodySchema } from '@cmt/shared-domain';
+import { isWelcomeTeam, ROLES, type Role, OverrideEnrollmentBodySchema } from '@cmt/shared-domain';
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
 
 export async function PATCH(
@@ -16,7 +16,12 @@ export async function PATCH(
   if (!role) {
     return NextResponse.json({ error: 'no-session' }, { status: 401 });
   }
-  if (role !== 'welcome-team' && role !== 'admin') {
+  const extrasHeader = req.headers.get('x-portal-extra-roles') ?? '';
+  const extraRoles = extrasHeader
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s): s is Role => (ROLES as readonly string[]).includes(s));
+  if (!isWelcomeTeam({ role: role as Role, extraRoles })) {
     return NextResponse.json({ error: 'welcome-team-required' }, { status: 403 });
   }
 

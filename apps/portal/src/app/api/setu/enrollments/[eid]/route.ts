@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { revalidateTag } from 'next/cache';
 import { flags } from '@/lib/flags';
+import { isSetuManager, ROLES, type Role } from '@cmt/shared-domain';
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
 
 export async function DELETE(
@@ -17,7 +18,12 @@ export async function DELETE(
   if (!role) {
     return NextResponse.json({ error: 'no-session' }, { status: 401 });
   }
-  if (role !== 'family-manager') {
+  const extrasHeader = req.headers.get('x-portal-extra-roles') ?? '';
+  const extraRoles = extrasHeader
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s): s is Role => (ROLES as readonly string[]).includes(s));
+  if (!isSetuManager({ role: role as Role, extraRoles })) {
     return NextResponse.json({ error: 'manager-required' }, { status: 403 });
   }
   if (!fid) {

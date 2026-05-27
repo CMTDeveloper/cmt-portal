@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { revalidateTag } from 'next/cache';
 import { flags } from '@/lib/flags';
-import { PostEnrollmentBodySchema } from '@cmt/shared-domain';
+import { isSetuManager, ROLES, type Role, PostEnrollmentBodySchema } from '@cmt/shared-domain';
 import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
 import { enrollFamily } from '@/features/setu/enrollment/enroll-family';
 
@@ -31,7 +31,12 @@ export async function POST(req: Request) {
   if (!role) {
     return NextResponse.json({ error: 'no-session' }, { status: 401 });
   }
-  if (role !== 'family-manager') {
+  const extrasHeader = req.headers.get('x-portal-extra-roles') ?? '';
+  const extraRoles = extrasHeader
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s): s is Role => (ROLES as readonly string[]).includes(s));
+  if (!isSetuManager({ role: role as Role, extraRoles })) {
     return NextResponse.json({ error: 'manager-required' }, { status: 403 });
   }
   if (!fid) {
@@ -65,6 +70,9 @@ export async function POST(req: Request) {
     }
     if (msg === 'period-disabled') {
       return NextResponse.json({ error: 'period-disabled' }, { status: 422 });
+    }
+    if (msg === 'period-not-yet-open') {
+      return NextResponse.json({ error: 'period-not-yet-open' }, { status: 422 });
     }
     if (msg === 'period-expired') {
       return NextResponse.json({ error: 'period-expired' }, { status: 422 });

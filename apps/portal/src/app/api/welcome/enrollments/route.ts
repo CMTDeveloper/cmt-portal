@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { revalidateTag } from 'next/cache';
 import { flags } from '@/lib/flags';
-import { WelcomePostEnrollmentBodySchema } from '@cmt/shared-domain';
+import { isWelcomeTeam, ROLES, type Role, WelcomePostEnrollmentBodySchema } from '@cmt/shared-domain';
 import { enrollFamily } from '@/features/setu/enrollment/enroll-family';
 
 export async function POST(req: Request) {
@@ -13,7 +13,12 @@ export async function POST(req: Request) {
   if (!role) {
     return NextResponse.json({ error: 'no-session' }, { status: 401 });
   }
-  if (role !== 'welcome-team' && role !== 'admin') {
+  const extrasHeader = req.headers.get('x-portal-extra-roles') ?? '';
+  const extraRoles = extrasHeader
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s): s is Role => (ROLES as readonly string[]).includes(s));
+  if (!isWelcomeTeam({ role: role as Role, extraRoles })) {
     return NextResponse.json({ error: 'welcome-team-required' }, { status: 403 });
   }
 
@@ -46,6 +51,9 @@ export async function POST(req: Request) {
     }
     if (msg === 'period-disabled') {
       return NextResponse.json({ error: 'period-disabled' }, { status: 422 });
+    }
+    if (msg === 'period-not-yet-open') {
+      return NextResponse.json({ error: 'period-not-yet-open' }, { status: 422 });
     }
     if (msg === 'period-expired') {
       return NextResponse.json({ error: 'period-expired' }, { status: 422 });
