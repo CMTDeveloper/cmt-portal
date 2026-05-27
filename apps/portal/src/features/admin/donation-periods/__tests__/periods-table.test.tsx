@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { CreateDonationPeriodInput } from '@cmt/shared-domain';
 
 // next/navigation mock (PeriodsTable doesn't use it but components in scope may)
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
@@ -193,5 +194,32 @@ describe('PeriodsTable — modal save flow', () => {
     await waitFor(() => {
       expect(toastMock.error).toHaveBeenCalledWith('bad-request');
     });
+  });
+
+  it('create: POST body uses Toronto midnight, not UTC midnight', async () => {
+    const user = userEvent.setup();
+
+    let capturedBody: CreateDonationPeriodInput | null = null;
+    vi.spyOn(global, 'fetch').mockImplementationOnce(async (_url, init) => {
+      capturedBody = JSON.parse((init?.body as string) ?? '{}') as CreateDonationPeriodInput;
+      return { ok: true, json: async () => ({ pid: 'bv-brampton-fall-2026', overlapWarning: false }) } as Response;
+    });
+
+    render(<PeriodsTable initialPeriods={[]}/>);
+    await user.click(screen.getByRole('button', { name: /new period/i }));
+
+    await user.type(screen.getByPlaceholderText('Fall 2026'), 'Fall 2026');
+    const dateInputs = document.querySelectorAll('input[type="date"]');
+    await user.type(dateInputs[0] as HTMLElement, '2026-09-01');
+    await user.type(dateInputs[1] as HTMLElement, '2027-01-25');
+
+    await user.click(screen.getByRole('button', { name: /create period/i }));
+
+    await waitFor(() => expect(capturedBody).not.toBeNull());
+
+    // 2026-09-01 is in EDT (-04:00): Toronto midnight = 04:00 UTC
+    expect(capturedBody!.startDate).toBe('2026-09-01T04:00:00.000Z');
+    // 2027-01-25 is in EST (-05:00): Toronto 23:59:59 = next day 04:59:59 UTC
+    expect(capturedBody!.endDate).toBe('2027-01-26T04:59:59.000Z');
   });
 });

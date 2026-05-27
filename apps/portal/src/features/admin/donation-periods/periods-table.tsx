@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { toast } from '@cmt/ui';
 import type { DonationPeriodDoc, CreateDonationPeriodInput, UpdateDonationPeriodInput, Location, ProgramKey } from '@cmt/shared-domain';
+import { toTorontoStartOfDayISO, toTorontoEndOfDayISO } from '@/lib/toronto-date';
 
 // Serialised shape returned by GET /api/admin/donation-periods
 // (Timestamps converted to ISO strings by the route handler)
@@ -82,8 +83,8 @@ function PeriodModal({ editing, onClose, onSaved }: ModalProps) {
         if (isEdit) {
           const body: UpdateDonationPeriodInput = {};
           if (periodLabel !== editing.periodLabel) body.periodLabel = periodLabel;
-          if (startDate !== editing.startDate.slice(0, 10)) body.startDate = new Date(startDate).toISOString();
-          if (endDate !== editing.endDate.slice(0, 10)) body.endDate = new Date(endDate).toISOString();
+          if (startDate !== editing.startDate.slice(0, 10)) body.startDate = toTorontoStartOfDayISO(startDate);
+          if (endDate !== editing.endDate.slice(0, 10)) body.endDate = toTorontoEndOfDayISO(endDate);
           if (amt !== editing.suggestedAmount) body.suggestedAmount = amt;
           if (JSON.stringify(tiers) !== JSON.stringify(editing.amountTiers)) body.amountTiers = tiers;
           if (enabled !== editing.enabled) body.enabled = enabled;
@@ -98,8 +99,8 @@ function PeriodModal({ editing, onClose, onSaved }: ModalProps) {
             programKey: programKey as 'bala-vihar',
             location,
             periodLabel,
-            startDate: new Date(startDate).toISOString(),
-            endDate: new Date(endDate).toISOString(),
+            startDate: toTorontoStartOfDayISO(startDate),
+            endDate: toTorontoEndOfDayISO(endDate),
             suggestedAmount: amt,
             amountTiers: tiers,
             enabled,
@@ -131,8 +132,8 @@ function PeriodModal({ editing, onClose, onSaved }: ModalProps) {
           const updated: PeriodRow = {
             ...editing,
             periodLabel,
-            startDate: new Date(startDate).toISOString(),
-            endDate: new Date(endDate).toISOString(),
+            startDate: toTorontoStartOfDayISO(startDate),
+            endDate: toTorontoEndOfDayISO(endDate),
             suggestedAmount: amt,
             amountTiers: tiers,
             enabled,
@@ -147,8 +148,8 @@ function PeriodModal({ editing, onClose, onSaved }: ModalProps) {
             programLabel: 'Bala Vihar',
             location,
             periodLabel,
-            startDate: new Date(startDate).toISOString(),
-            endDate: new Date(endDate).toISOString(),
+            startDate: toTorontoStartOfDayISO(startDate),
+            endDate: toTorontoEndOfDayISO(endDate),
             suggestedAmount: amt,
             amountTiers: tiers,
             enabled,
