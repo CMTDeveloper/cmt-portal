@@ -8,6 +8,11 @@ interface EnrollCtaProps {
   pid: string;
 }
 
+function safeFrom(path: string): string {
+  if (path.startsWith('/') && !path.startsWith('//') && !path.includes('://')) return path;
+  return '/family/enroll';
+}
+
 export function EnrollCta({ pid }: EnrollCtaProps) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
@@ -20,20 +25,35 @@ export function EnrollCta({ pid }: EnrollCtaProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pid }),
       });
-      const json = await res.json() as { eid?: string; donateUrl?: string; error?: string };
-      if (!res.ok) {
-        toast.error(json.error === 'period-expired'
-          ? 'This period is no longer active.'
-          : json.error === 'period-disabled'
-            ? 'This period is currently disabled.'
-            : 'Enrollment failed — please try again.');
+
+      if (res.status === 401) {
+        router.push(`/sign-in?from=${encodeURIComponent(safeFrom('/family/enroll'))}`);
         return;
       }
+
+      const json = await res.json() as { eid?: string; donateUrl?: string; error?: string };
+
+      if (!res.ok) {
+        const err = json.error;
+        if (err === 'period-disabled' || err === 'period-expired') {
+          toast.error('This period is no longer enrolling — please contact the welcome team.');
+        } else if (err === 'period-not-yet-open') {
+          toast.error('This enrollment period has not opened yet — please check back soon.');
+        } else if (err === 'family-not-found' || err === 'missing-fid') {
+          console.error('[EnrollCta] unexpected error:', err);
+          toast.error('Something went wrong — please sign out and sign in again.');
+        } else {
+          toast.error('Enrollment failed — please try again.');
+        }
+        setPending(false);
+        return;
+      }
+
       toast.success('Enrolled! Continuing to donation.');
+      // Do NOT clear pending on success — navigation unmounts the component.
       router.push(json.donateUrl ?? '/family/donate');
     } catch {
       toast.error('Network error — please try again.');
-    } finally {
       setPending(false);
     }
   }

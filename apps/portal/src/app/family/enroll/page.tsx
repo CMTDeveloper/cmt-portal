@@ -35,10 +35,10 @@ export default async function EnrollPage() {
     resolveActivePeriod({ programKey: 'bala-vihar', location: family.location }),
   ]);
 
+  // Only consider an enrollment "current" if it matches the active period.
+  // A stale enrollment from a prior semester must not block the enroll/no-period states.
   const activeEnrollment =
-    enrollments.find((e) => e.status === 'active' && e.pid === activePeriod?.pid) ??
-    enrollments.find((e) => e.status === 'active') ??
-    null;
+    enrollments.find((e) => e.status === 'active' && e.pid === activePeriod?.pid) ?? null;
 
   const alreadyEnrolled = activeEnrollment !== null;
 
