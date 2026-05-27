@@ -46,6 +46,7 @@ function makeRequest(pid: string, body?: unknown, uid?: string): Request {
 }
 
 beforeEach(() => {
+  vi.resetModules();
   vi.clearAllMocks();
   mockGet.mockResolvedValue({ exists: true, data: () => existingPeriodData });
   mockUpdate.mockResolvedValue(undefined);

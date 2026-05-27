@@ -3,13 +3,23 @@ import { portalFirestore, FieldValue, Timestamp } from '@cmt/firebase-shared/adm
 import {
   CreateDonationPeriodSchema,
   type DonationPeriodDoc,
+  isAdmin,
+  ROLES,
+  type Role,
 } from '@cmt/shared-domain';
 
 const PROGRAM_LABELS: Record<string, string> = {
   'bala-vihar': 'Bala Vihar',
 };
 
-export async function GET(_req: Request) {
+export async function GET(req: Request) {
+  const role = req.headers.get('x-portal-role');
+  const extrasHeader = req.headers.get('x-portal-extra-roles') ?? '';
+  const extraRoles = extrasHeader.split(',').map((s) => s.trim()).filter((s): s is Role => (ROLES as readonly string[]).includes(s));
+  if (!isAdmin({ role: role as Role, extraRoles })) {
+    return NextResponse.json({ error: 'admin-required' }, { status: 403 });
+  }
+
   const db = portalFirestore();
   const snap = await db.collection('donationPeriods').orderBy('startDate', 'desc').get();
   const periods = snap.docs.map((d) => {
@@ -26,6 +36,13 @@ export async function GET(_req: Request) {
 }
 
 export async function POST(req: Request) {
+  const role = req.headers.get('x-portal-role');
+  const extrasHeader = req.headers.get('x-portal-extra-roles') ?? '';
+  const extraRoles = extrasHeader.split(',').map((s) => s.trim()).filter((s): s is Role => (ROLES as readonly string[]).includes(s));
+  if (!isAdmin({ role: role as Role, extraRoles })) {
+    return NextResponse.json({ error: 'admin-required' }, { status: 403 });
+  }
+
   const uid = req.headers.get('x-portal-uid');
   if (!uid) {
     return NextResponse.json({ error: 'no-session' }, { status: 401 });
@@ -63,6 +80,11 @@ export async function POST(req: Request) {
 
   const pid = `${data.programKey}-${data.location.toLowerCase()}-${data.periodLabel.toLowerCase().replace(/\s+/g, '-')}`;
   const periodRef = db.collection('donationPeriods').doc(pid);
+
+  const existing = await periodRef.get();
+  if (existing.exists) {
+    return NextResponse.json({ error: 'pid-conflict', pid }, { status: 409 });
+  }
 
   await periodRef.set({
     pid,

@@ -41,8 +41,8 @@ const validBody = {
   enabled: true,
 };
 
-function makeRequest(method: string, body?: unknown, uid?: string): Request {
-  const headers: Record<string, string> = { 'content-type': 'application/json' };
+function makeRequest(method: string, body?: unknown, uid?: string, role = 'admin'): Request {
+  const headers: Record<string, string> = { 'content-type': 'application/json', 'x-portal-role': role };
   if (uid) headers['x-portal-uid'] = uid;
   return new Request('http://localhost/api/admin/donation-periods', {
     method,
@@ -56,6 +56,7 @@ function makeTimestamp(d: Date) {
 }
 
 beforeEach(() => {
+  vi.resetModules();
   vi.clearAllMocks();
 
   // Default GET setup: empty collection
@@ -78,6 +79,14 @@ beforeEach(() => {
 // ── GET /api/admin/donation-periods ───────────────────────────────────────────
 
 describe('GET /api/admin/donation-periods', () => {
+  it('returns 403 for non-admin role', async () => {
+    const { GET } = await import('../route');
+    const res = await GET(makeRequest('GET', undefined, undefined, 'family-manager'));
+    expect(res.status).toBe(403);
+    const body = await res.json() as { error: string };
+    expect(body.error).toBe('admin-required');
+  });
+
   it('returns 200 with empty periods array when collection is empty', async () => {
     const { GET } = await import('../route');
     const res = await GET(makeRequest('GET'));
@@ -123,6 +132,14 @@ describe('GET /api/admin/donation-periods', () => {
 // ── POST /api/admin/donation-periods ──────────────────────────────────────────
 
 describe('POST /api/admin/donation-periods', () => {
+  it('returns 403 for non-admin role', async () => {
+    const { POST } = await import('../route');
+    const res = await POST(makeRequest('POST', validBody, 'uid-admin', 'family-manager'));
+    expect(res.status).toBe(403);
+    const body = await res.json() as { error: string };
+    expect(body.error).toBe('admin-required');
+  });
+
   it('returns 401 when no x-portal-uid header', async () => {
     const { POST } = await import('../route');
     const res = await POST(makeRequest('POST', validBody));
@@ -135,7 +152,7 @@ describe('POST /api/admin/donation-periods', () => {
     const { POST } = await import('../route');
     const req = new Request('http://localhost/api/admin/donation-periods', {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-portal-uid': 'uid-admin' },
+      headers: { 'content-type': 'application/json', 'x-portal-uid': 'uid-admin', 'x-portal-role': 'admin' },
       body: 'not-json',
     });
     const res = await POST(req);
@@ -207,5 +224,18 @@ describe('POST /api/admin/donation-periods', () => {
     );
     const body = await res.json() as { pid: string };
     expect(body.pid).toBe('bala-vihar-brampton-spring-2028');
+  });
+
+  it('returns 409 when a period with the same derived pid already exists (L1)', async () => {
+    const overlapGet = vi.fn().mockResolvedValue({ docs: [] });
+    mockWhere.mockReturnValue({ where: vi.fn().mockReturnValue({ where: vi.fn().mockReturnValue({ get: overlapGet }) }) });
+    // doc.get() returns exists:true — pid already taken
+    mockDoc.mockReturnValue({ set: mockSet, get: vi.fn().mockResolvedValue({ exists: true }) });
+
+    const { POST } = await import('../route');
+    const res = await POST(makeRequest('POST', validBody, 'uid-admin'));
+    expect(res.status).toBe(409);
+    const body = await res.json() as { error: string };
+    expect(body.error).toBe('pid-conflict');
   });
 });

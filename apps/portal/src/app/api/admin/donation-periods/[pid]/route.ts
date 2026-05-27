@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { portalFirestore, FieldValue, Timestamp } from '@cmt/firebase-shared/admin/firestore';
 import {
+  isAdmin,
+  ROLES,
+  type Role,
   UpdateDonationPeriodSchema,
   type DonationPeriodDoc,
 } from '@cmt/shared-domain';
@@ -10,8 +13,17 @@ export async function PATCH(
   { params }: { params: Promise<{ pid: string }> },
 ) {
   const uid = req.headers.get('x-portal-uid');
-  if (!uid) {
+  const role = req.headers.get('x-portal-role');
+  if (!uid || !role) {
     return NextResponse.json({ error: 'no-session' }, { status: 401 });
+  }
+  const extrasHeader = req.headers.get('x-portal-extra-roles') ?? '';
+  const extraRoles = extrasHeader
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s): s is Role => (ROLES as readonly string[]).includes(s));
+  if (!isAdmin({ role: role as Role, extraRoles })) {
+    return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
 
   const { pid } = await params;
@@ -34,9 +46,16 @@ export async function PATCH(
   const data = parsed.data;
   const existing = snap.data() as DonationPeriodDoc;
 
+  function tsToDate(v: unknown): Date {
+    if (v !== null && typeof v === 'object' && typeof (v as { toDate?: unknown }).toDate === 'function') {
+      return (v as { toDate: () => Date }).toDate();
+    }
+    return v instanceof Date ? v : new Date(v as string);
+  }
+
   // Validate date ordering when only one side is provided
-  const startDate = data.startDate ? new Date(data.startDate) : (existing.startDate as unknown as Date);
-  const endDate = data.endDate ? new Date(data.endDate) : (existing.endDate as unknown as Date);
+  const startDate = data.startDate ? new Date(data.startDate) : tsToDate(existing.startDate);
+  const endDate = data.endDate ? new Date(data.endDate) : tsToDate(existing.endDate);
   if (endDate <= startDate) {
     return NextResponse.json(
       { error: 'bad-request', issues: [{ path: ['endDate'], message: 'endDate must be after startDate' }] },
