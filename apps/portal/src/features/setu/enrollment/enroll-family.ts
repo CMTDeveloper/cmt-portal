@@ -24,8 +24,8 @@ export type EnrollFamilyResult =
  *   is a no-op that returns created:false.
  * - childrenMids is derived from members with type='Child' inside the txn.
  *
- * Throws with message 'period-not-found' | 'period-disabled' | 'period-expired'
- * | 'family-not-found' for caller to translate to HTTP errors.
+ * Throws with message 'period-not-found' | 'period-disabled' | 'period-not-yet-open'
+ * | 'period-expired' | 'family-not-found' for caller to translate to HTTP errors.
  */
 export async function enrollFamily(params: EnrollFamilyParams): Promise<EnrollFamilyResult> {
   const { fid, pid, enrolledVia, enrolledByMid } = params;
@@ -73,7 +73,8 @@ export async function enrollFamily(params: EnrollFamilyParams): Promise<EnrollFa
     if (!period.enabled) throw new Error('period-disabled');
 
     const now = new Date();
-    if (period.startDate > now || period.endDate < now) throw new Error('period-expired');
+    if (period.startDate > now) throw new Error('period-not-yet-open');
+    if (period.endDate < now) throw new Error('period-expired');
 
     if (enrollmentSnap.exists) {
       const existing = enrollmentSnap.data() as { status: string; suggestedAmountSnapshot: number };

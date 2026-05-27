@@ -72,6 +72,7 @@ const MID = `${FID}-01`;
 
 const NOW = new Date();
 const PAST = new Date(NOW.getTime() - 86400_000 * 30);
+const PAST_FAR = new Date(NOW.getTime() - 86400_000 * 60);
 const FUTURE = new Date(NOW.getTime() + 86400_000 * 30);
 
 const ACTIVE_PERIOD = {
@@ -148,14 +149,22 @@ function setupEnrollTransaction({
   periodExists = true,
   periodEnabled = true,
   periodCurrent = true,
+  periodFuture = false,
+  periodExpired = false,
   enrollmentExists = false,
   enrollmentStatus = 'active',
   childMids = [] as string[],
 } = {}) {
   mockRunTransaction.mockImplementation(async (fn: (txn: unknown) => Promise<unknown>) => {
-    const period = periodCurrent
-      ? ACTIVE_PERIOD
-      : { ...ACTIVE_PERIOD, startDate: { toDate: () => FUTURE }, endDate: { toDate: () => FUTURE } };
+    let period = ACTIVE_PERIOD;
+    if (periodFuture) {
+      period = { ...ACTIVE_PERIOD, startDate: { toDate: () => FUTURE }, endDate: { toDate: () => new Date(FUTURE.getTime() + 86400_000 * 30) } };
+    } else if (periodExpired) {
+      period = { ...ACTIVE_PERIOD, startDate: { toDate: () => PAST_FAR }, endDate: { toDate: () => PAST } };
+    } else if (!periodCurrent) {
+      // legacy: treated as future (startDate > now)
+      period = { ...ACTIVE_PERIOD, startDate: { toDate: () => FUTURE }, endDate: { toDate: () => FUTURE } };
+    }
 
     const membersDocs = childMids.map((mid) => ({ data: () => ({ type: 'Child', mid }) }));
 
@@ -315,8 +324,19 @@ describe('POST /api/setu/enrollments', () => {
     expect(body.error).toBe('period-disabled');
   });
 
-  it('returns 422 when period is not current (expired/future)', async () => {
-    setupEnrollTransaction({ periodCurrent: false });
+  it('returns 422 with period-not-yet-open when period starts in the future', async () => {
+    setupEnrollTransaction({ periodFuture: true });
+
+    const res = await enrollmentsPOST(
+      makeRequest('POST', '/api/setu/enrollments', { pid: PID }, managerHeaders()),
+    );
+    expect(res.status).toBe(422);
+    const body = await res.json() as { error: string };
+    expect(body.error).toBe('period-not-yet-open');
+  });
+
+  it('returns 422 with period-expired when period end date is in the past', async () => {
+    setupEnrollTransaction({ periodExpired: true });
 
     const res = await enrollmentsPOST(
       makeRequest('POST', '/api/setu/enrollments', { pid: PID }, managerHeaders()),
