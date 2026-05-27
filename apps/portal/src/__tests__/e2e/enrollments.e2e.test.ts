@@ -256,8 +256,8 @@ const hasUatCreds =
       });
 
       const res = await POST(req);
-      // Created fresh (status was 'cancelled', so txn creates a new doc)
-      expect([200, 201]).toContain(res.status);
+      // Cancelled enrollment → txn creates a fresh doc → must be 201
+      expect(res.status).toBe(201);
 
       const body = (await res.json()) as { eid: string; suggestedAmount: number };
       expect(body.eid).toBe(`${fid}-${pid}`);
@@ -278,14 +278,14 @@ const hasUatCreds =
       await enrollSnap.ref.set({ _test: true }, { merge: true });
     });
 
-    it('welcome-team PATCH /api/welcome/enrollments/[eid]/override — writes suggestedAmountOverride', async () => {
+    it('welcome-team PATCH /api/welcome/enrollments/[eid] — writes suggestedAmountOverride', async () => {
       expect(eid).toBeTruthy();
       const { PATCH } = await import('@/app/api/welcome/enrollments/[eid]/route');
       const { makePortalRequest } = await import('./helpers/request');
 
       const req = makePortalRequest(
         'PATCH',
-        `/api/welcome/enrollments/${eid}/override`,
+        `/api/welcome/enrollments/${eid}`,
         { suggestedAmountOverride: 750 },
         { role: 'welcome-team' },
       );
