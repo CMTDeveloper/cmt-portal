@@ -1,4 +1,4 @@
-import { portalFirestore, FieldValue, Timestamp } from '@cmt/firebase-shared/admin/firestore';
+import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
 import type { EnrollmentDoc, DonationPeriodDoc } from '@cmt/shared-domain';
 
 type EnrollVia = EnrollmentDoc['enrolledVia'];
@@ -40,9 +40,6 @@ export async function enrollFamily(params: EnrollFamilyParams): Promise<EnrollFa
       .collection('enrollments')
       .doc(eid);
     const familyRef = db.collection('families').doc(fid);
-    const membersSnap = await txn.get(
-      db.collection('families').doc(fid).collection('members'),
-    );
 
     const [periodSnap, enrollmentSnap, familySnap] = await Promise.all([
       txn.get(periodRef),
@@ -54,14 +51,19 @@ export async function enrollFamily(params: EnrollFamilyParams): Promise<EnrollFa
     if (!periodSnap.exists) throw new Error('period-not-found');
 
     const periodData = periodSnap.data() as Record<string, unknown>;
+
+    function toDate(v: unknown): Date {
+      if (v !== null && typeof v === 'object' && typeof (v as { toDate?: unknown }).toDate === 'function') {
+        return (v as { toDate: () => Date }).toDate();
+      }
+      if (v instanceof Date) return v;
+      return new Date(v as string);
+    }
+
     const period: Pick<DonationPeriodDoc, 'enabled' | 'startDate' | 'endDate' | 'suggestedAmount' | 'programLabel' | 'periodLabel' | 'location'> = {
       enabled: periodData['enabled'] as boolean,
-      startDate: periodData['startDate'] instanceof Timestamp
-        ? (periodData['startDate'] as Timestamp).toDate()
-        : new Date(periodData['startDate'] as string),
-      endDate: periodData['endDate'] instanceof Timestamp
-        ? (periodData['endDate'] as Timestamp).toDate()
-        : new Date(periodData['endDate'] as string),
+      startDate: toDate(periodData['startDate']),
+      endDate: toDate(periodData['endDate']),
       suggestedAmount: periodData['suggestedAmount'] as number,
       programLabel: periodData['programLabel'] as string,
       periodLabel: periodData['periodLabel'] as string,
@@ -79,6 +81,11 @@ export async function enrollFamily(params: EnrollFamilyParams): Promise<EnrollFa
         return { created: false as const, eid, suggestedAmountSnapshot: existing.suggestedAmountSnapshot };
       }
     }
+
+    // Read children AFTER early-exit checks so we only pay the cost when actually enrolling
+    const membersSnap = await txn.get(
+      db.collection('families').doc(fid).collection('members'),
+    );
 
     const childrenMids: string[] = [];
     for (const memberDoc of membersSnap.docs) {
