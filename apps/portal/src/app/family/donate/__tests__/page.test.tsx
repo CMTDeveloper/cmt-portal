@@ -1,110 +1,95 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 
-// ── next/navigation — redirect ────────────────────────────────────────────────
 const redirectMock = vi.fn();
-vi.mock('next/navigation', () => ({
-  redirect: (...args: unknown[]) => redirectMock(...args),
-}));
-
-// ── next/link ─────────────────────────────────────────────────────────────────
+vi.mock('next/navigation', () => ({ redirect: (...a: unknown[]) => redirectMock(...a) }));
+vi.mock('next/server', () => ({ connection: vi.fn(async () => undefined) }));
 vi.mock('next/link', () => ({
-  default: ({ children, href, className, style }: { children: React.ReactNode; href: string; className?: string; style?: React.CSSProperties }) => (
-    <a href={href} className={className} style={style}>{children}</a>
-  ),
+  default: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a>,
 }));
-
-// ── CMT UI ────────────────────────────────────────────────────────────────────
 vi.mock('@cmt/ui', () => ({
-  SetuIcon: {
-    back: () => <span>back</span>,
-    card: () => <span>card</span>,
-    mail: () => <span>mail</span>,
-    receipt: () => <span>receipt</span>,
-  },
+  SetuIcon: { back: () => <span>back</span> },
   Rosette: () => <div />,
 }));
-
-// ── Chrome atoms ──────────────────────────────────────────────────────────────
 vi.mock('@/features/family/components/atoms', () => ({
   CspRoot: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  SectionLabel: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  PayMethod: ({ label }: { label: string }) => <div>{label}</div>,
+}));
+vi.mock('@/features/family/components/donate-form', () => ({
+  DonateForm: (props: { mode: string }) => <div data-testid="donate-form">donate-form:{props.mode}</div>,
+}));
+
+const mockGetCurrentFamily = vi.fn();
+const mockGetEnrollments = vi.fn();
+vi.mock('@/features/setu/members/get-current-family', () => ({
+  getCurrentFamily: (...a: unknown[]) => mockGetCurrentFamily(...a),
+}));
+vi.mock('@/features/setu/enrollment/get-enrollments', () => ({
+  getEnrollments: (...a: unknown[]) => mockGetEnrollments(...a),
 }));
 
 import DonatePage from '../page';
 
+const FAMILY = { family: { fid: 'fid1', location: 'Brampton' }, members: [], isManager: true };
+
 beforeEach(() => {
   vi.clearAllMocks();
+  mockGetCurrentFamily.mockResolvedValue(FAMILY);
+  mockGetEnrollments.mockResolvedValue([]);
 });
+afterEach(() => vi.unstubAllEnvs());
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Flag off → redirect
-// ─────────────────────────────────────────────────────────────────────────────
-
-describe('DonatePage — flag off', () => {
-  beforeEach(() => {
+describe('DonatePage — flag gate', () => {
+  it('redirects to /family/enroll when flag is off', async () => {
     vi.stubEnv('NEXT_PUBLIC_FEATURE_SETU_DONATIONS', 'false');
-  });
-
-  afterEach(() => {
-    vi.unstubAllEnvs();
-  });
-
-  it('redirects to /family/enroll when donations flag is false', async () => {
-    await DonatePage();
+    await DonatePage({ searchParams: Promise.resolve({}) });
     expect(redirectMock).toHaveBeenCalledWith('/family/enroll');
   });
 
-  it('does not render page UI when flag is off', async () => {
-    await DonatePage();
-    expect(screen.queryByText(/dakshina/i)).toBeNull();
-  });
-});
-
-describe('DonatePage — flag unset (defaults to off)', () => {
-  beforeEach(() => {
+  it('redirects when flag is empty', async () => {
     vi.stubEnv('NEXT_PUBLIC_FEATURE_SETU_DONATIONS', '');
-  });
-
-  afterEach(() => {
-    vi.unstubAllEnvs();
-  });
-
-  it('redirects to /family/enroll when donations flag is empty string', async () => {
-    await DonatePage();
+    await DonatePage({ searchParams: Promise.resolve({}) });
     expect(redirectMock).toHaveBeenCalledWith('/family/enroll');
   });
 });
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Flag on → renders content
-// ─────────────────────────────────────────────────────────────────────────────
 
 describe('DonatePage — flag on', () => {
-  beforeEach(() => {
-    vi.stubEnv('NEXT_PUBLIC_FEATURE_SETU_DONATIONS', 'true');
-  });
+  beforeEach(() => vi.stubEnv('NEXT_PUBLIC_FEATURE_SETU_DONATIONS', 'true'));
 
-  afterEach(() => {
-    vi.unstubAllEnvs();
-  });
-
-  it('does not redirect when donations flag is true', async () => {
-    const page = await DonatePage();
+  it('renders the general donate form when no eid', async () => {
+    const page = await DonatePage({ searchParams: Promise.resolve({}) });
     render(page);
     expect(redirectMock).not.toHaveBeenCalled();
+    expect(screen.getAllByText(/donate-form:general/).length).toBeGreaterThan(0);
   });
 
-  it('renders the donation placeholder UI', async () => {
-    const page = await DonatePage();
+  it('renders the bala-vihar form when a valid active eid is given', async () => {
+    mockGetEnrollments.mockResolvedValue([
+      { eid: 'fid1-pid1', status: 'active', effectiveSuggestedAmount: 500, period: { periodLabel: 'Fall 2026', amountTiers: [500, 750] } },
+    ]);
+    const page = await DonatePage({ searchParams: Promise.resolve({ eid: 'fid1-pid1' }) });
     render(page);
-    expect(screen.getAllByText(/dakshina/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/donate-form:bala-vihar/).length).toBeGreaterThan(0);
   });
 
-  it('renders the "Coming soon" banner', async () => {
-    const page = await DonatePage();
+  it('falls back to general giving when the eid is stale/unknown', async () => {
+    mockGetEnrollments.mockResolvedValue([]);
+    const page = await DonatePage({ searchParams: Promise.resolve({ eid: 'missing' }) });
     render(page);
-    expect(screen.getAllByText(/coming soon/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/donate-form:general/).length).toBeGreaterThan(0);
+  });
+
+  it('shows the manager-only message to a non-manager', async () => {
+    mockGetCurrentFamily.mockResolvedValue({ ...FAMILY, isManager: false });
+    const page = await DonatePage({ searchParams: Promise.resolve({}) });
+    render(page);
+    expect(screen.getAllByText(/only the family manager/i).length).toBeGreaterThan(0);
+    expect(screen.queryByTestId('donate-form')).toBeNull();
+  });
+
+  it('shows session-expired when no family', async () => {
+    mockGetCurrentFamily.mockResolvedValue(null);
+    const page = await DonatePage({ searchParams: Promise.resolve({}) });
+    render(page);
+    expect(screen.getByText(/session expired/i)).toBeTruthy();
   });
 });
