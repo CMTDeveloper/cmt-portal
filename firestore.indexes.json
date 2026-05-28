@@ -28,9 +28,9 @@
       "collectionGroup": "donationPeriods",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "programKey", "order": "ASCENDING" },
-        { "fieldPath": "location", "order": "ASCENDING" },
         { "fieldPath": "enabled", "order": "ASCENDING" },
+        { "fieldPath": "location", "order": "ASCENDING" },
+        { "fieldPath": "programKey", "order": "ASCENDING" },
         { "fieldPath": "startDate", "order": "DESCENDING" }
       ]
     },
