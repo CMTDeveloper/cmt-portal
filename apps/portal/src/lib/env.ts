@@ -47,6 +47,18 @@ export const portalEnvSchema = z.object({
   NEXT_PUBLIC_FEATURE_CHECK_IN_ADMIN: flagString,
   NEXT_PUBLIC_FEATURE_CHECK_IN_NOTIFY: flagString,
   NEXT_PUBLIC_FEATURE_SETU_AUTH: flagString,
+  NEXT_PUBLIC_FEATURE_SETU_DONATIONS: flagString,
+
+  // Stripe checkout (Cloud Run proxy — see slice 3c revision spec).
+  // The portal forwards a payload to CMT's Stripe Cloud Run service and gets
+  // back a hosted Checkout URL; it never talks to Stripe directly. Receipts are
+  // handled out-of-band by accounting. All optional so non-donation builds and
+  // local dev without Stripe still boot; the checkout route fails closed (503)
+  // when STRIPE_API_KEY / checkout URL are unset.
+  STRIPE_API_KEY: z.string().min(1).optional(),
+  STRIPE_CHECKOUT_URL: z.string().url().optional(),
+  STRIPE_CHECKOUT_URL_TEST: z.string().url().optional(),
+  STRIPE_USE_TEST_CHECKOUT: z.enum(['true', 'false']).default('false'),
 
   // Portal public URL (used for invite links, etc.)
   NEXT_PUBLIC_PORTAL_BASE_URL: z.string().url().optional(),

@@ -321,3 +321,24 @@ describe('canAccessRoute — /api/setu/auth/set-password — any authenticated S
     expect(canAccessRoute(teacher, '/api/setu/auth/set-password', 'POST')).toBe(false);
   });
 });
+
+describe('canAccessRoute — /api/setu/donations', () => {
+  it('allows family-manager to POST /api/setu/donations/checkout', () => {
+    expect(canAccessRoute(manager, '/api/setu/donations/checkout', 'POST')).toBe(true);
+  });
+  it('denies family-member POST /api/setu/donations/checkout (manager-only)', () => {
+    expect(canAccessRoute(member, '/api/setu/donations/checkout', 'POST')).toBe(false);
+  });
+  it('allows family-member GET /api/setu/donations (read history)', () => {
+    expect(canAccessRoute(member, '/api/setu/donations', 'GET')).toBe(true);
+  });
+  it('allows family-manager GET /api/setu/donations', () => {
+    expect(canAccessRoute(manager, '/api/setu/donations', 'GET')).toBe(true);
+  });
+  it('denies legacy family role', () => {
+    expect(canAccessRoute(family, '/api/setu/donations/checkout', 'POST')).toBe(false);
+  });
+  it('denies teacher', () => {
+    expect(canAccessRoute(teacher, '/api/setu/donations', 'GET')).toBe(false);
+  });
+});

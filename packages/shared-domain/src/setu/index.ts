@@ -4,3 +4,4 @@ export * from './schemas/member';
 export * from './schemas/contact-key';
 export * from './schemas/donation-period';
 export * from './schemas/enrollment';
+export * from './schemas/donation';

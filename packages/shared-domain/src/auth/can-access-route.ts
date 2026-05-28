@@ -92,9 +92,17 @@ export function canAccessRoute(
     return true;
   }
 
-  // NOTE: /api/setu/donations/* and /api/welcome/donations/* authorization is
-  // intentionally absent until slice 3c ships the actual handlers. Authorizing
-  // paths without handlers silently passes requests that should get 404/501.
+  // Setu API — donations: GET list is any setu family; POST (checkout) is
+  // manager-only (a family-member can view history but not initiate a payment).
+  if (pathname === '/api/setu/donations' || pathname.startsWith('/api/setu/donations/')) {
+    if (!isSetuFamily(claims)) return false;
+    if (method === 'POST') return isSetuManager(claims);
+    return true;
+  }
+
+  // NOTE: /api/welcome/donations/* authorization stays absent until its handlers
+  // ship. Authorizing paths without handlers silently passes requests that
+  // should get 404/501.
 
   // Welcome-team API — enrollments only (donations routes ship in slice 3c)
   if (
