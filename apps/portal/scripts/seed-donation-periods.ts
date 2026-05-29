@@ -53,6 +53,13 @@ const PRICING_2025_26: PricingTier[] = [
   { effectiveFrom: '2026-02-01', amountCAD: 200, label: 'Joined spring' },
 ];
 
+// 2026-27 mirrors 2025-26's tiers (admins adjust in the period editor).
+const PRICING_2026_27: PricingTier[] = [
+  { effectiveFrom: '2026-09-01', amountCAD: 500, label: 'Full year (from September)' },
+  { effectiveFrom: '2026-12-01', amountCAD: 300, label: 'Joined winter' },
+  { effectiveFrom: '2027-02-01', amountCAD: 200, label: 'Joined spring' },
+];
+
 const PERIODS: PeriodSeed[] = [
   {
     pid: 'bv-brampton-2025-26',
@@ -76,6 +83,32 @@ const PERIODS: PeriodSeed[] = [
     endDate: toTorontoEndOfDay('2026-06-14'),
     pricingTiers: PRICING_2025_26,
     paymentSource: 'legacy',
+    enabled: true,
+  },
+  // 2026-27 — portal/Stripe. Enrollment opens the day after the last 2025-26
+  // class (Jun 14 2026); admin can shift these dates in the period editor.
+  {
+    pid: 'bv-brampton-2026-27',
+    programKey: 'bala-vihar',
+    programLabel: 'Bala Vihar',
+    location: 'Brampton',
+    periodLabel: '2026-27',
+    startDate: toTorontoStartOfDay('2026-06-15'),
+    endDate: toTorontoEndOfDay('2027-06-13'),
+    pricingTiers: PRICING_2026_27,
+    paymentSource: 'portal',
+    enabled: true,
+  },
+  {
+    pid: 'bv-scarborough-2026-27',
+    programKey: 'bala-vihar',
+    programLabel: 'Bala Vihar',
+    location: 'Scarborough',
+    periodLabel: '2026-27',
+    startDate: toTorontoStartOfDay('2026-06-15'),
+    endDate: toTorontoEndOfDay('2027-06-13'),
+    pricingTiers: PRICING_2026_27,
+    paymentSource: 'portal',
     enabled: true,
   },
 ];
