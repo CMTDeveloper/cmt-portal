@@ -120,7 +120,9 @@ async function main() {
   console.log(`Done. families=${processed} membersUpdated=${updated} unmatched=${unmatched}`);
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+main()
+  .then(() => process.exit(0)) // RTDB keeps a live connection; exit explicitly
+  .catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
