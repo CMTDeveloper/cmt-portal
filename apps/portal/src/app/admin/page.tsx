@@ -43,6 +43,18 @@ export default function AdminPage() {
           tone="primary"
         />
         <Tile
+          href="/admin/levels"
+          title="Levels & teachers"
+          sub="Configure Bala Vihar levels (classes) per location + period, set grade-bands, and assign teachers. Assignment grants the teacher capability on next sign-in."
+          tone="primary"
+        />
+        <Tile
+          href="/admin/calendar"
+          title="Class calendar"
+          sub="Publish the school-year Sunday schedule (class / no-class days, special events) + weekly times. Replaces the per-year PDF; families see it on their dashboard."
+          tone="primary"
+        />
+        <Tile
           href="/check-in/admin/users"
           title="Admin users"
           sub="Legacy: add or remove other admins. (Themed version coming.)"
