@@ -70,8 +70,13 @@ export function AttendanceMarker({ levelId, levelName, ageLabel, date, initialMe
     <div style={{ paddingBottom: 88 }}>
       <header style={{ marginBottom: 16 }}>
         <Link href="/teacher" style={{ fontSize: 13, color: 'var(--muted)', textDecoration: 'none' }}>← My classes</Link>
-        <h1 style={{ fontSize: 24, fontWeight: 600, marginTop: 8, letterSpacing: '-0.02em' }}>{levelName}</h1>
-        <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 2 }}>{ageLabel} · {date}</p>
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, marginTop: 8 }}>
+          <div>
+            <h1 style={{ fontSize: 24, fontWeight: 600, letterSpacing: '-0.02em' }}>{levelName}</h1>
+            <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 2 }}>{ageLabel} · {date}</p>
+          </div>
+          <Link href={`/teacher/levels/${levelId}/guests?date=${date}`} style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>Guests →</Link>
+        </div>
       </header>
 
       {total === 0 ? (

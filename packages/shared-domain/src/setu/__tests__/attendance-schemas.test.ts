@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   AttendanceEventDocSchema,
   SaveAttendanceSchema,
+  MarkGuestSchema,
   attendanceAid,
 } from '../schemas/attendance';
 
@@ -62,5 +63,19 @@ describe('SaveAttendanceSchema', () => {
   });
   it('rejects a missing levelId', () => {
     expect(SaveAttendanceSchema.safeParse({ date: '2025-09-07', marks: {} }).success).toBe(false);
+  });
+});
+
+describe('MarkGuestSchema', () => {
+  it('accepts a guest mark and defaults status to present', () => {
+    const r = MarkGuestSchema.safeParse({ levelId: 'lvl', date: '2025-09-07', mid: 'CMT-Z-09' });
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.status).toBe('present');
+  });
+  it('accepts an explicit status', () => {
+    expect(MarkGuestSchema.safeParse({ levelId: 'lvl', date: '2025-09-07', mid: 'CMT-Z-09', status: 'late' }).success).toBe(true);
+  });
+  it('rejects a missing mid', () => {
+    expect(MarkGuestSchema.safeParse({ levelId: 'lvl', date: '2025-09-07' }).success).toBe(false);
   });
 });

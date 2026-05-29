@@ -41,3 +41,13 @@ export const SaveAttendanceSchema = z.object({
 });
 
 export type SaveAttendanceInput = z.infer<typeof SaveAttendanceSchema>;
+
+// POST /api/setu/teacher/guests — mark one visiting student present at a level.
+export const MarkGuestSchema = z.object({
+  levelId: z.string().min(1),
+  date: YMD,
+  mid: z.string().min(1),
+  status: z.enum(SETU_ATTENDANCE_STATUSES).default('present'),
+});
+
+export type MarkGuestInput = z.infer<typeof MarkGuestSchema>;
