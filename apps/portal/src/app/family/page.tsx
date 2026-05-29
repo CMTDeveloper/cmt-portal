@@ -366,6 +366,35 @@ export default async function FamilyDashboardPage() {
             </div>
           </Suspense>
         </div>
+
+        <div className="card" style={{ padding: 24, marginTop: 18 }}>
+          <div className="between" style={{ marginBottom: 16 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 600 }}>Upcoming</h3>
+            <Link href="/family/calendar" className="focus-ring" style={{ background: 'transparent', border: 0, color: 'var(--accent)', fontSize: 13, fontWeight: 600, textDecoration: 'none' }}>View calendar →</Link>
+          </div>
+          {upcomingEntries.length === 0 ? (
+            <div style={{ fontSize: 13, color: 'var(--muted)' }}>No upcoming class dates published yet.</div>
+          ) : (
+            <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap' }}>
+              {upcomingEntries.map((entry) => {
+                const e = fmtUpcoming(entry);
+                const noClass = entry.kind === 'no-class';
+                return (
+                  <div key={entry.entryId} className="row" style={{ gap: 12, minWidth: 200 }}>
+                    <div style={{ width: 46, padding: '6px 0', textAlign: 'center', background: noClass ? 'var(--surface2)' : 'var(--accentSoft)', borderRadius: 'var(--radiusSm)' }}>
+                      <div style={{ fontSize: 9, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em' }}>{e.m}</div>
+                      <div style={{ fontSize: 16, fontWeight: 600, marginTop: -2, color: noClass ? 'var(--muted)' : 'var(--accentDeep)' }}>{e.d}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 500 }}>{e.t}</div>
+                      {e.sub && <div style={{ fontSize: 11, color: 'var(--muted)' }}>{e.sub}</div>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
     </>
   );
