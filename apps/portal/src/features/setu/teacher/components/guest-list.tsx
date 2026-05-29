@@ -26,6 +26,13 @@ export function GuestList({ levelId, levelName, date }: GuestListProps) {
   const [loading, setLoading] = useState(true);
   const [pending, startTransition] = useTransition();
 
+  // Add-student-on-prompt fields
+  const [asFirst, setAsFirst] = useState('');
+  const [asLast, setAsLast] = useState('');
+  const [asGrade, setAsGrade] = useState('');
+  const [asEmail, setAsEmail] = useState('');
+  const [asPhone, setAsPhone] = useState('');
+
   async function load() {
     setLoading(true);
     try {
@@ -65,6 +72,42 @@ export function GuestList({ levelId, levelName, date }: GuestListProps) {
     });
   }
 
+  function addStudent(ev: React.FormEvent) {
+    ev.preventDefault();
+    if (!asFirst.trim() || !asLast.trim() || !asEmail.trim()) {
+      toast.error('Child first/last name and parent email are required.');
+      return;
+    }
+    startTransition(async () => {
+      const res = await fetch('/api/setu/teacher/add-student', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          levelId,
+          date,
+          firstName: asFirst.trim(),
+          lastName: asLast.trim(),
+          schoolGrade: asGrade.trim() || null,
+          parentEmail: asEmail.trim(),
+          parentPhone: asPhone.trim() || null,
+        }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        toast.error(j.error === 'not-your-class' ? 'Not your class' : 'Could not add student');
+        return;
+      }
+      const j = await res.json();
+      toast.success(
+        j.createdFamily
+          ? 'Student added & marked present. The parent can sign in with that email to manage the family.'
+          : 'Student added to the parent’s existing family & marked present.',
+      );
+      setAsFirst(''); setAsLast(''); setAsGrade(''); setAsEmail(''); setAsPhone('');
+      await load();
+    });
+  }
+
   return (
     <div style={{ paddingBottom: 40 }}>
       <header style={{ marginBottom: 16 }}>
@@ -84,7 +127,22 @@ export function GuestList({ levelId, levelName, date }: GuestListProps) {
           <button type="submit" disabled={pending} className="btn btn--p" style={{ fontSize: 13, padding: '8px 18px' }}>{pending ? 'Saving…' : 'Mark guest'}</button>
         </div>
         <div style={{ fontSize: 11, color: 'var(--muted)' }}>
-          A search-and-add picker (and on-the-spot registration for unregistered children) is coming — for now enter the visiting student’s member id.
+          For a visiting student who is already registered, enter their member id. For a brand-new child, use “Add a new student” below.
+        </div>
+      </form>
+
+      <form onSubmit={addStudent} className="card" style={{ padding: 16, marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ fontSize: 13, fontWeight: 600 }}>Add a new student</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <input value={asFirst} onChange={(e) => setAsFirst(e.target.value)} placeholder="Child first name" style={asField} />
+          <input value={asLast} onChange={(e) => setAsLast(e.target.value)} placeholder="Child last name" style={asField} />
+        </div>
+        <input value={asGrade} onChange={(e) => setAsGrade(e.target.value)} placeholder="Grade (optional, e.g. Grade 2)" style={asField} />
+        <input type="email" value={asEmail} onChange={(e) => setAsEmail(e.target.value)} placeholder="Parent email" style={asField} />
+        <input value={asPhone} onChange={(e) => setAsPhone(e.target.value)} placeholder="Parent phone (optional)" style={asField} />
+        <button type="submit" disabled={pending} className="btn btn--p" style={{ fontSize: 13, padding: '8px 18px', alignSelf: 'flex-start' }}>{pending ? 'Saving…' : 'Add student & mark present'}</button>
+        <div style={{ fontSize: 11, color: 'var(--muted)' }}>
+          Creates a family the parent can claim by signing in with that email. Marks the child present and enrolls them for this period (suggested donation only — never charged).
         </div>
       </form>
 
@@ -105,3 +163,14 @@ export function GuestList({ levelId, levelName, date }: GuestListProps) {
     </div>
   );
 }
+
+const asField: React.CSSProperties = {
+  padding: '8px 10px',
+  borderRadius: 'var(--radiusSm)',
+  border: '1px solid var(--line2)',
+  background: 'var(--bg)',
+  fontSize: 13,
+  fontFamily: 'var(--body)',
+  boxSizing: 'border-box',
+  width: '100%',
+};

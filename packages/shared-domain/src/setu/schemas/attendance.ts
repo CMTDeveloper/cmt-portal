@@ -51,3 +51,19 @@ export const MarkGuestSchema = z.object({
 });
 
 export type MarkGuestInput = z.infer<typeof MarkGuestSchema>;
+
+// POST /api/setu/teacher/add-student — a teacher adds an unregistered child on
+// the spot. Creates/continues a Setu family keyed by the parent's email
+// (contactKey claim), marks the child present as a guest, auto-enrolls.
+export const AddStudentSchema = z.object({
+  levelId: z.string().min(1),
+  date: YMD,
+  firstName: z.string().min(1),
+  lastName: z.string().min(1),
+  schoolGrade: z.string().nullable().default(null),
+  gender: z.enum(['Male', 'Female', 'PreferNotToSay']).default('PreferNotToSay'),
+  parentEmail: z.string().email(),
+  parentPhone: z.string().nullable().default(null),
+});
+
+export type AddStudentInput = z.infer<typeof AddStudentSchema>;

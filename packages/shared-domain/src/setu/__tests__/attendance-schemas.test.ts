@@ -3,6 +3,7 @@ import {
   AttendanceEventDocSchema,
   SaveAttendanceSchema,
   MarkGuestSchema,
+  AddStudentSchema,
   attendanceAid,
 } from '../schemas/attendance';
 
@@ -77,5 +78,24 @@ describe('MarkGuestSchema', () => {
   });
   it('rejects a missing mid', () => {
     expect(MarkGuestSchema.safeParse({ levelId: 'lvl', date: '2025-09-07' }).success).toBe(false);
+  });
+});
+
+describe('AddStudentSchema', () => {
+  const base = { levelId: 'lvl', date: '2025-09-07', firstName: 'New', lastName: 'Kid', parentEmail: 'p@example.com' };
+  it('accepts a minimal add-student payload with defaults', () => {
+    const r = AddStudentSchema.safeParse(base);
+    expect(r.success).toBe(true);
+    if (r.success) {
+      expect(r.data.gender).toBe('PreferNotToSay');
+      expect(r.data.schoolGrade).toBeNull();
+      expect(r.data.parentPhone).toBeNull();
+    }
+  });
+  it('rejects an invalid parent email', () => {
+    expect(AddStudentSchema.safeParse({ ...base, parentEmail: 'not-an-email' }).success).toBe(false);
+  });
+  it('rejects a missing firstName', () => {
+    expect(AddStudentSchema.safeParse({ ...base, firstName: '' }).success).toBe(false);
   });
 });
