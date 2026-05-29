@@ -7,6 +7,8 @@ import { SignOutButton } from '@/features/family/components/sign-out-button';
 import { flags } from '@/lib/flags';
 import { mockFamily } from '@/features/family/data/mock';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
+import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
+import { getDonations } from '@/features/setu/donations/get-donations';
 
 export default async function FamilyDashboardPage() {
   // Mark this page as dynamic — flags.setuAuth may be false in which case no
@@ -19,6 +21,15 @@ export default async function FamilyDashboardPage() {
   let displayMembers: { name: string }[] = mockFamily.members.map((m) => ({ name: m.name }));
   let currentMid: string | null = null;
 
+  // Real Bala Vihar enrollment + donation status (Slice 3). Attendance/next-class
+  // remain placeholders until Slice 4 ships teacher attendance.
+  let isEnrolled = false;
+  let childCount = 0;
+  let enrollPeriodLabel: string | null = null;
+  let suggestedAmount: number | null = null;
+  let givenForPeriod = 0;
+  let donateUrl = '/family/donate';
+
   if (flags.setuAuth) {
     const data = await getCurrentFamily();
     if (data) {
@@ -30,8 +41,36 @@ export default async function FamilyDashboardPage() {
       familyName = data.family.name;
       memberCount = data.members.length;
       displayMembers = data.members.map((m) => ({ name: `${m.firstName} ${m.lastName}` }));
+      childCount = data.members.filter((m) => m.type === 'Child').length;
+
+      const [enrollments, donations] = await Promise.all([
+        getEnrollments(data.family.fid),
+        getDonations(data.family.fid),
+      ]);
+      const activeEnrollment = enrollments.find((e) => e.status === 'active') ?? null;
+      isEnrolled = activeEnrollment !== null;
+      if (activeEnrollment) {
+        enrollPeriodLabel = activeEnrollment.periodLabel;
+        suggestedAmount = activeEnrollment.effectiveSuggestedAmount;
+        givenForPeriod = donations
+          .filter((d) => d.status === 'completed' && d.eid === activeEnrollment.eid)
+          .reduce((s, d) => s + d.amountCAD, 0);
+        donateUrl = `/family/donate?eid=${activeEnrollment.eid}`;
+      }
     }
   }
+
+  const donationComplete = suggestedAmount !== null && givenForPeriod >= suggestedAmount;
+  const donationPct =
+    suggestedAmount && suggestedAmount > 0 ? Math.min(100, Math.round((givenForPeriod / suggestedAmount) * 100)) : 0;
+  const enrolledPill = isEnrolled
+    ? { text: 'Enrolled', bg: 'var(--accentSoft)', fg: 'var(--accentDeep)' }
+    : { text: 'Not enrolled', bg: 'var(--surface2)', fg: 'var(--muted)' };
+  const donationTone: 'ok' | 'warn' | undefined = !isEnrolled
+    ? undefined
+    : donationComplete
+      ? 'ok'
+      : 'warn';
 
   // Handle the lazy-migrated placeholder manager whose firstName is still
   // empty: show a neutral greeting and surface a Complete-your-profile CTA
@@ -76,34 +115,45 @@ export default async function FamilyDashboardPage() {
 
             <div className="card" style={{ padding: 16, marginBottom: 12 }}>
               <div className="between" style={{ marginBottom: 14 }}>
-                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink)' }}><em className="sa">Bala Vihar</em></span>
-                <div className="row" style={{ gap: 6 }}>
-                  <span className="pill" style={{ background: 'var(--surface2)', color: 'var(--muted)', fontSize: 10 }}>Sample data — real data coming soon</span>
-                  <span className="pill" style={{ background: 'var(--accentSoft)', color: 'var(--accentDeep)' }}>Enrolled</span>
-                </div>
+                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink)' }}><em className="sa">Bala Vihar</em>{enrollPeriodLabel ? ` · ${enrollPeriodLabel}` : ''}</span>
+                <span className="pill" style={{ background: enrolledPill.bg, color: enrolledPill.fg }}>{enrolledPill.text}</span>
               </div>
               <div className="row" style={{ gap: 14, marginBottom: 14 }}>
-                <Stat label="Next" value="Sun 10:00"/>
+                <Stat label="Kids enrolled" value={String(childCount)}/>
                 <div style={{ width: 1, height: 36, background: 'var(--line)' }}/>
-                <Stat label="Attendance" value="92%"/>
-                <div style={{ width: 1, height: 36, background: 'var(--line)' }}/>
-                <Stat label="Kids" value="2"/>
+                <Stat label="Attendance" value="—"/>
               </div>
-              <button className="btn btn--s btn--block" disabled style={{ cursor: 'not-allowed', opacity: 0.5 }}>Open class</button>
+              <div style={{ fontSize: 11, color: 'var(--muted)' }}>Attendance tracking arrives with Sunday class check-in.</div>
+              {!isEnrolled && (
+                <Link href="/family/enroll" className="btn btn--s btn--block" style={{ marginTop: 12, display: 'block', textAlign: 'center', textDecoration: 'none' }}>Enroll now</Link>
+              )}
             </div>
 
             <div className="card" style={{ padding: 16, marginBottom: 12 }}>
               <div className="between" style={{ marginBottom: 10 }}>
                 <div>
-                  <div style={{ fontSize: 12, color: 'var(--muted)' }}>Donation pending</div>
-                  <div style={{ fontSize: 22, fontWeight: 600, marginTop: 2, letterSpacing: '-0.01em' }}>$500.00</div>
+                  <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                    {!isEnrolled ? 'Donation' : donationComplete ? 'Thank you for your donation' : 'Donation pending'}
+                  </div>
+                  <div style={{ fontSize: 22, fontWeight: 600, marginTop: 2, letterSpacing: '-0.01em' }}>
+                    {isEnrolled ? `$${givenForPeriod}.00` : 'Give'}
+                  </div>
                 </div>
-                <Link href="/family/donate" className="btn btn--p">Give</Link>
+                <Link href={donateUrl} className="btn btn--p">{donationComplete ? 'Give more' : 'Give'}</Link>
               </div>
-              <div style={{ height: 6, background: 'var(--surface2)', borderRadius: 99, overflow: 'hidden' }}>
-                <div style={{ width: '0%', height: '100%', background: 'var(--accent)' }}/>
-              </div>
-              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 8 }}>$0 of $500 · Brampton Fall &#39;26 · suggested</div>
+              {isEnrolled && suggestedAmount !== null && (
+                <>
+                  <div style={{ height: 6, background: 'var(--surface2)', borderRadius: 99, overflow: 'hidden' }}>
+                    <div style={{ width: `${donationPct}%`, height: '100%', background: 'var(--accent)' }}/>
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 8 }}>
+                    ${givenForPeriod} of ${suggestedAmount}{enrollPeriodLabel ? ` · ${enrollPeriodLabel}` : ''} · suggested
+                  </div>
+                </>
+              )}
+              {!isEnrolled && (
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>A charitable gift to Chinmaya Mission Toronto — any amount welcome.</div>
+              )}
             </div>
 
             <div className="card" style={{ padding: 16, marginBottom: 12 }}>
@@ -176,7 +226,7 @@ export default async function FamilyDashboardPage() {
           </div>
           <div className="row" style={{ gap: 10 }}>
             <button className="btn btn--s" disabled style={{ cursor: 'not-allowed', opacity: 0.5 }}><SetuIcon.search/> Search</button>
-            <Link href="/family/donate" className="btn btn--p">Give donation</Link>
+            <Link href={donateUrl} className="btn btn--p">Give donation</Link>
           </div>
         </header>
 
@@ -188,9 +238,20 @@ export default async function FamilyDashboardPage() {
         )}
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 18 }}>
-          <MetricCard label="Attendance" value="92%" sub="14 / 15 classes" tone="ok"/>
-          <MetricCard label="Donation"   value="$500" sub="pending · Fall &#39;26" tone="warn"/>
-          <MetricCard label="Next class" value="Sun · 10:00" sub="Brampton hall"/>
+          <MetricCard
+            label="Donation"
+            value={isEnrolled ? `$${givenForPeriod}` : '—'}
+            sub={
+              !isEnrolled
+                ? 'not enrolled'
+                : donationComplete
+                  ? `received · ${enrollPeriodLabel ?? ''}`
+                  : `of $${suggestedAmount} · ${enrollPeriodLabel ?? 'suggested'}`
+            }
+            {...(donationTone ? { tone: donationTone } : {})}
+          />
+          <MetricCard label="Bala Vihar" value={isEnrolled ? 'Enrolled' : 'Not yet'} sub={enrollPeriodLabel ?? 'no active period'}/>
+          <MetricCard label="Attendance" value="—" sub="with check-in soon"/>
           <MetricCard label="Family"     value={String(memberCount)} sub={`${memberCount} member${memberCount !== 1 ? 's' : ''}`}/>
         </div>
 
@@ -226,23 +287,33 @@ export default async function FamilyDashboardPage() {
             <div className="card" style={{ padding: 24 }}>
               <div className="between" style={{ marginBottom: 14 }}>
                 <span style={{ fontSize: 14, fontWeight: 600 }}>Donation</span>
-                <div className="row" style={{ gap: 6 }}>
-                  <span className="pill" style={{ background: 'var(--surface2)', color: 'var(--muted)', fontSize: 10 }}>Sample data — real data coming soon</span>
-                  <SetuIcon.info color="var(--muted)"/>
+                <SetuIcon.info color="var(--muted)"/>
+              </div>
+              {isEnrolled && suggestedAmount !== null ? (
+                <>
+                  <div style={{ marginBottom: 14 }}>
+                    <span style={{ fontSize: 36, fontWeight: 600, letterSpacing: '-0.02em' }}>${givenForPeriod}</span>
+                    <span style={{ color: 'var(--muted)', marginLeft: 6, fontSize: 14 }}>of ${suggestedAmount} suggested</span>
+                  </div>
+                  <div style={{ height: 6, background: 'var(--surface2)', borderRadius: 99, overflow: 'hidden', marginBottom: 8 }}>
+                    <div style={{ width: `${donationPct}%`, height: '100%', background: 'var(--accent)' }}/>
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 18 }}>
+                    {donationComplete ? 'Thank you — received in full' : `$${givenForPeriod} of $${suggestedAmount}`}{enrollPeriodLabel ? ` · ${enrollPeriodLabel}` : ''}
+                  </div>
+                </>
+              ) : (
+                <div style={{ marginBottom: 18 }}>
+                  <span style={{ fontSize: 28, fontWeight: 600, letterSpacing: '-0.02em' }}>Any amount welcome</span>
+                  <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6 }}>A charitable gift to Chinmaya Mission Toronto.</div>
                 </div>
-              </div>
-              <div style={{ marginBottom: 14 }}>
-                <span style={{ fontSize: 36, fontWeight: 600, letterSpacing: '-0.02em' }}>$500</span>
-                <span style={{ color: 'var(--muted)', marginLeft: 6, fontSize: 14 }}>suggested</span>
-              </div>
-              <div style={{ height: 6, background: 'var(--surface2)', borderRadius: 99, overflow: 'hidden', marginBottom: 8 }}>
-                <div style={{ width: '0%', height: '100%', background: 'var(--accent)' }}/>
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 18 }}>$0 of $500 · {familyName} Fall &#39;26</div>
+              )}
               <p style={{ fontSize: 13, color: 'var(--body-text)', lineHeight: 1.5, marginBottom: 18 }}>
                 Suggested, not required. Any amount welcome. Donations are tax-deductible.
               </p>
-              <Link href="/family/donate" className="btn btn--p btn--block" style={{ display: 'flex' }}>Give donation</Link>
+              <Link href={donateUrl} className="btn btn--p btn--block" style={{ display: 'flex' }}>
+                {donationComplete ? 'Give more' : 'Give donation'}
+              </Link>
             </div>
           </Suspense>
         </div>
