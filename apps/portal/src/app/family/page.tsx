@@ -291,7 +291,6 @@ export default async function FamilyDashboardPage() {
             <h1 style={{ fontSize: 32, fontWeight: 600, marginTop: 4, letterSpacing: '-0.02em' }}>{firstName ? `Hari OM, ${firstName}.` : 'Hari OM!'}</h1>
           </div>
           <div className="row" style={{ gap: 10 }}>
-            <button className="btn btn--s" disabled style={{ cursor: 'not-allowed', opacity: 0.5 }}><SetuIcon.search/> Search</button>
             {showGive && <Link href={donateUrl} className="btn btn--p">Give donation</Link>}
           </div>
         </header>
