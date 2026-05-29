@@ -182,9 +182,7 @@ export default async function EnrollPage() {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
                   {([
                     ['Sunday classes', `${fmtDate(activePeriod.startDate)} – ${fmtDate(activePeriod.endDate)}`],
-                    ['Class materials & snacks', 'Books, art supplies, healthy snacks'],
                     ['Year-end performance', 'Last week of the program'],
-                    ['Insurance & venue', `Held at our ${family.location} hall`],
                   ] as [string, string][]).map(([t, sub], i) => (
                     <div key={i} className="row" style={{ gap: 12, padding: '10px 12px', background: 'var(--bg)', borderRadius: 'var(--radiusSm)' }}>
                       <div style={{ flex: '0 0 auto', width: 28, height: 28, borderRadius: '50%', background: 'var(--accentSoft)', color: 'var(--accentDeep)', display: 'grid', placeItems: 'center' }}>
