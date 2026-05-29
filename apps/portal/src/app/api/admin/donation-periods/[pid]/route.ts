@@ -62,6 +62,7 @@ export async function PATCH(
   if (data.endDate !== undefined) update.endDate = Timestamp.fromDate(new Date(data.endDate));
   if (data.pricingTiers !== undefined) update.pricingTiers = data.pricingTiers;
   if (data.amountTiers !== undefined) update.amountTiers = data.amountTiers;
+  if (data.paymentSource !== undefined) update.paymentSource = data.paymentSource;
   if (data.enabled !== undefined) update.enabled = data.enabled;
 
   await periodRef.update(update);

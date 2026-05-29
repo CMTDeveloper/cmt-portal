@@ -38,6 +38,9 @@ interface PeriodSeed {
   startDate: Date;
   endDate: Date;
   pricingTiers: PricingTier[];
+  // 'legacy' → payment status read from the prod RTDB roster (the cutover year);
+  // 'portal' → Stripe donations through the portal (2026-27 onward).
+  paymentSource: 'portal' | 'legacy';
   enabled: boolean;
 }
 
@@ -60,6 +63,7 @@ const PERIODS: PeriodSeed[] = [
     startDate: toTorontoStartOfDay('2025-09-07'),
     endDate: toTorontoEndOfDay('2026-06-14'),
     pricingTiers: PRICING_2025_26,
+    paymentSource: 'legacy',
     enabled: true,
   },
   {
@@ -71,6 +75,7 @@ const PERIODS: PeriodSeed[] = [
     startDate: toTorontoStartOfDay('2025-09-07'),
     endDate: toTorontoEndOfDay('2026-06-14'),
     pricingTiers: PRICING_2025_26,
+    paymentSource: 'legacy',
     enabled: true,
   },
 ];
@@ -113,6 +118,7 @@ async function main() {
         startDate: Timestamp.fromDate(period.startDate),
         endDate: Timestamp.fromDate(period.endDate),
         pricingTiers: period.pricingTiers,
+        paymentSource: period.paymentSource,
         enabled: period.enabled,
         createdAt: now,
         createdBy: systemUid,

@@ -6,6 +6,8 @@ import { CspRoot } from '@/features/family/components/atoms';
 import { DonateForm } from '@/features/family/components/donate-form';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
+import { paymentSourceOf } from '@cmt/shared-domain';
+import { getLegacyPaymentStatus } from '@/features/setu/donations/legacy-payment';
 
 export const metadata = { title: 'Donate — CMT Portal' };
 
@@ -39,6 +41,8 @@ export default async function DonatePage({
   let periodLabel: string | null = null;
   let tiers: number[] = [];
   let resolvedEid: string | null = null;
+  // Legacy cutover year already settled offline → block the online checkout.
+  let alreadyPaidLegacy = false;
 
   if (eid) {
     const enrollments = await getEnrollments(family.fid);
@@ -49,6 +53,10 @@ export default async function DonatePage({
       suggestedAmount = enrollment.effectiveSuggestedAmount;
       periodLabel = enrollment.period?.periodLabel ?? null;
       tiers = enrollment.period?.amountTiers ?? [];
+
+      if (enrollment.period && paymentSourceOf(enrollment.period) === 'legacy') {
+        alreadyPaidLegacy = (await getLegacyPaymentStatus(family.legacyFid)) === 'paid';
+      }
     }
     // If the eid is stale/unknown, fall through to general giving rather than erroring.
   }
@@ -59,7 +67,15 @@ export default async function DonatePage({
       ? `Bala Vihar${periodLabel ? ` · ${periodLabel}` : ''} · ${family.location}`
       : 'A charitable gift to Chinmaya Mission Toronto';
 
-  const form = isManager ? (
+  const form = alreadyPaidLegacy ? (
+    <div style={{ padding: '16px 18px', background: 'var(--accentSoft)', color: 'var(--accentDeep)', borderRadius: 'var(--radius)', fontSize: 14, lineHeight: 1.55 }}>
+      <strong>Already paid for {periodLabel}.</strong>
+      <div style={{ marginTop: 6, color: 'var(--body-text)' }}>
+        Our records show your Bala Vihar contribution for {periodLabel} is paid — thank you. There&apos;s nothing to pay here.
+        {' '}<Link href="/family" style={{ color: 'var(--accentDeep)', fontWeight: 600 }}>Back to dashboard</Link>
+      </div>
+    </div>
+  ) : isManager ? (
     <DonateForm
       mode={mode}
       eid={resolvedEid}

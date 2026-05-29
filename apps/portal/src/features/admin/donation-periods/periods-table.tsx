@@ -9,6 +9,7 @@ import type {
   PricingTier,
   Location,
   ProgramKey,
+  PaymentSource,
 } from '@cmt/shared-domain';
 import { toTorontoStartOfDayISO, toTorontoEndOfDayISO, isoToTorontoDateInput } from '@/lib/toronto-date';
 
@@ -84,6 +85,7 @@ function PeriodModal({ editing, onClose, onSaved }: ModalProps) {
   const [endDate, setEndDate] = useState(editing ? isoToTorontoDateInput(editing.endDate) : '');
   const [tierRows, setTierRows] = useState<TierRow[]>(rowsFromTiers(editing?.pricingTiers));
   const [enabled, setEnabled] = useState(editing?.enabled ?? true);
+  const [paymentSource, setPaymentSource] = useState<PaymentSource>(editing?.paymentSource ?? 'portal');
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   function updateTier(i: number, patch: Partial<TierRow>) {
@@ -137,6 +139,7 @@ function PeriodModal({ editing, onClose, onSaved }: ModalProps) {
           if (endDate !== isoToTorontoDateInput(editing.endDate)) body.endDate = toTorontoEndOfDayISO(endDate);
           if (JSON.stringify(pricingTiers) !== JSON.stringify(editing.pricingTiers)) body.pricingTiers = pricingTiers;
           if (enabled !== editing.enabled) body.enabled = enabled;
+          if (paymentSource !== (editing.paymentSource ?? 'portal')) body.paymentSource = paymentSource;
 
           res = await fetch(`/api/admin/donation-periods/${editing.pid}`, {
             method: 'PATCH',
@@ -151,6 +154,7 @@ function PeriodModal({ editing, onClose, onSaved }: ModalProps) {
             startDate: toTorontoStartOfDayISO(startDate),
             endDate: toTorontoEndOfDayISO(endDate),
             pricingTiers,
+            paymentSource,
             enabled,
           };
           res = await fetch('/api/admin/donation-periods', {
@@ -183,6 +187,7 @@ function PeriodModal({ editing, onClose, onSaved }: ModalProps) {
             endDate: toTorontoEndOfDayISO(endDate),
             pricingTiers,
             enabled,
+            paymentSource,
             updatedAt: now,
           });
         } else {
@@ -197,6 +202,7 @@ function PeriodModal({ editing, onClose, onSaved }: ModalProps) {
             endDate: toTorontoEndOfDayISO(endDate),
             pricingTiers,
             enabled,
+            paymentSource,
             createdAt: now,
             createdBy: '',
             updatedAt: now,
@@ -291,6 +297,17 @@ function PeriodModal({ editing, onClose, onSaved }: ModalProps) {
               </button>
               {errors.pricingTiers && <FieldError msg={errors.pricingTiers}/>}
             </div>
+
+            <label style={labelStyle}>
+              Payment source
+              <select value={paymentSource} onChange={(e) => setPaymentSource(e.target.value as PaymentSource)} style={fieldStyle}>
+                <option value="portal">Portal (Stripe) — families pay online here</option>
+                <option value="legacy">Legacy roster — status read from the old system</option>
+              </select>
+              <span style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4, display: 'block', lineHeight: 1.5 }}>
+                Use “Legacy roster” for the cutover year (e.g. 2025-26) where most families already paid offline — the portal shows their real paid/pending status from the roster instead of $0. Use “Portal” for 2026-27 onward.
+              </span>
+            </label>
 
             <label style={{ ...labelStyle, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
               <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} style={{ width: 16, height: 16, accentColor: 'var(--accent)' }}/>

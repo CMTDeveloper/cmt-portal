@@ -22,6 +22,7 @@ export default async function DonationPeriodsPage() {
       startDate: (data.startDate as ReturnType<typeof Timestamp.now>).toDate().toISOString(),
       endDate: (data.endDate as ReturnType<typeof Timestamp.now>).toDate().toISOString(),
       pricingTiers: (data.pricingTiers ?? []) as PeriodRow['pricingTiers'],
+      paymentSource: data.paymentSource as PeriodRow['paymentSource'],
       enabled: data.enabled as boolean,
       createdAt: (data.createdAt as ReturnType<typeof Timestamp.now>).toDate().toISOString(),
       createdBy: data.createdBy as string,

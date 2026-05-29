@@ -4,6 +4,7 @@ import {
   UpdateDonationPeriodSchema,
   DonationPeriodDocSchema,
   resolveSuggestedAmount,
+  paymentSourceOf,
   type PricingTier,
 } from '../schemas/donation-period';
 
@@ -103,6 +104,32 @@ describe('CreateDonationPeriodSchema', () => {
     const result = CreateDonationPeriodSchema.safeParse(rest);
     expect(result.success).toBe(true);
     if (result.success) expect(result.data.enabled).toBe(true);
+  });
+
+  it('defaults paymentSource to portal when omitted', () => {
+    const result = CreateDonationPeriodSchema.safeParse(validCreate);
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.paymentSource).toBe('portal');
+  });
+
+  it('accepts paymentSource legacy', () => {
+    const result = CreateDonationPeriodSchema.safeParse({ ...validCreate, paymentSource: 'legacy' });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.paymentSource).toBe('legacy');
+  });
+
+  it('rejects an unknown paymentSource', () => {
+    expect(CreateDonationPeriodSchema.safeParse({ ...validCreate, paymentSource: 'cash' }).success).toBe(false);
+  });
+});
+
+describe('paymentSourceOf', () => {
+  it('defaults to portal when unset (back-compat)', () => {
+    expect(paymentSourceOf({ paymentSource: undefined })).toBe('portal');
+  });
+  it('returns the explicit source', () => {
+    expect(paymentSourceOf({ paymentSource: 'legacy' })).toBe('legacy');
+    expect(paymentSourceOf({ paymentSource: 'portal' })).toBe('portal');
   });
 });
 

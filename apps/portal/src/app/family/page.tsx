@@ -9,6 +9,8 @@ import { mockFamily } from '@/features/family/data/mock';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
 import { getDonations } from '@/features/setu/donations/get-donations';
+import { paymentSourceOf } from '@cmt/shared-domain';
+import { getLegacyPaymentStatus } from '@/features/setu/donations/legacy-payment';
 import { getUpcoming, type CalendarEntry } from '@/features/setu/calendar/calendar';
 import { getAttendanceForFamily, summarize, type AttendanceRecord } from '@/features/setu/teacher/get-attendance';
 
@@ -50,6 +52,10 @@ export default async function FamilyDashboardPage() {
   let upcomingEntries: CalendarEntry[] = [];
   // Real attendance (Slice 4f) for the active period's children.
   let attendanceRecords: AttendanceRecord[] = [];
+  // Legacy payment bridge: for a period with paymentSource='legacy' (the
+  // 2025-26 cutover year), payment status comes from the prod RTDB roster.
+  let isLegacyPeriod = false;
+  let legacyPaid = false;
 
   if (flags.setuAuth) {
     const data = await getCurrentFamily();
@@ -77,6 +83,11 @@ export default async function FamilyDashboardPage() {
           .filter((d) => d.status === 'completed' && d.eid === activeEnrollment.eid)
           .reduce((s, d) => s + d.amountCAD, 0);
         donateUrl = `/family/donate?eid=${activeEnrollment.eid}`;
+
+        if (activeEnrollment.period && paymentSourceOf(activeEnrollment.period) === 'legacy') {
+          isLegacyPeriod = true;
+          legacyPaid = (await getLegacyPaymentStatus(data.family.legacyFid)) === 'paid';
+        }
       }
 
       const { upcoming } = await getUpcoming(data.family.location, undefined, 3);
@@ -100,9 +111,22 @@ export default async function FamilyDashboardPage() {
     : { text: 'Not enrolled', bg: 'var(--surface2)', fg: 'var(--muted)' };
   const donationTone: 'ok' | 'warn' | undefined = !isEnrolled
     ? undefined
-    : donationComplete
+    : legacyPaid || donationComplete
       ? 'ok'
       : 'warn';
+  // Legacy-paid (already paid offline for the cutover year): no Give CTA, no
+  // progress bar. Legacy-pending behaves like portal-pending (can pay online).
+  const showGive = isEnrolled ? !legacyPaid : true;
+  const showProgress = isEnrolled && suggestedAmount !== null && !legacyPaid;
+  const donationHeading = !isEnrolled
+    ? 'Donation'
+    : legacyPaid
+      ? 'Paid'
+      : isLegacyPeriod
+        ? 'Payment pending'
+        : donationComplete
+          ? 'Thank you for your donation'
+          : 'Donation pending';
 
   // Handle the lazy-migrated placeholder manager whose firstName is still
   // empty: show a neutral greeting and surface a Complete-your-profile CTA
@@ -168,22 +192,27 @@ export default async function FamilyDashboardPage() {
             <div className="card" style={{ padding: 16, marginBottom: 12 }}>
               <div className="between" style={{ marginBottom: 10 }}>
                 <div>
-                  <div style={{ fontSize: 12, color: 'var(--muted)' }}>
-                    {!isEnrolled ? 'Donation' : donationComplete ? 'Thank you for your donation' : 'Donation pending'}
-                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--muted)' }}>{donationHeading}</div>
                   <div style={{ fontSize: 22, fontWeight: 600, marginTop: 2, letterSpacing: '-0.01em' }}>
-                    {isEnrolled ? `$${givenForPeriod}.00` : 'Give'}
+                    {legacyPaid ? 'Paid' : isEnrolled ? `$${givenForPeriod}.00` : 'Give'}
                   </div>
                 </div>
-                <Link href={donateUrl} className="btn btn--p">{donationComplete ? 'Give more' : 'Give'}</Link>
+                {showGive && <Link href={donateUrl} className="btn btn--p">{donationComplete ? 'Give more' : 'Give'}</Link>}
               </div>
-              {isEnrolled && suggestedAmount !== null && (
+              {legacyPaid && (
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
+                  Paid for {enrollPeriodLabel} — thank you. Recorded from our records.
+                </div>
+              )}
+              {showProgress && (
                 <>
                   <div style={{ height: 6, background: 'var(--surface2)', borderRadius: 99, overflow: 'hidden' }}>
                     <div style={{ width: `${donationPct}%`, height: '100%', background: 'var(--accent)' }}/>
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 8 }}>
-                    ${givenForPeriod} of ${suggestedAmount}{enrollPeriodLabel ? ` · ${enrollPeriodLabel}` : ''} · suggested
+                    {isLegacyPeriod
+                      ? `Payment pending for ${enrollPeriodLabel} · $${suggestedAmount} suggested`
+                      : `$${givenForPeriod} of $${suggestedAmount}${enrollPeriodLabel ? ` · ${enrollPeriodLabel}` : ''} · suggested`}
                   </div>
                 </>
               )}
@@ -263,7 +292,7 @@ export default async function FamilyDashboardPage() {
           </div>
           <div className="row" style={{ gap: 10 }}>
             <button className="btn btn--s" disabled style={{ cursor: 'not-allowed', opacity: 0.5 }}><SetuIcon.search/> Search</button>
-            <Link href={donateUrl} className="btn btn--p">Give donation</Link>
+            {showGive && <Link href={donateUrl} className="btn btn--p">Give donation</Link>}
           </div>
         </header>
 
@@ -277,13 +306,17 @@ export default async function FamilyDashboardPage() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 18 }}>
           <MetricCard
             label="Donation"
-            value={isEnrolled ? `$${givenForPeriod}` : '—'}
+            value={legacyPaid ? 'Paid' : isEnrolled ? `$${givenForPeriod}` : '—'}
             sub={
               !isEnrolled
                 ? 'not enrolled'
-                : donationComplete
-                  ? `received · ${enrollPeriodLabel ?? ''}`
-                  : `of $${suggestedAmount} · ${enrollPeriodLabel ?? 'suggested'}`
+                : legacyPaid
+                  ? `${enrollPeriodLabel ?? ''} · paid`
+                  : isLegacyPeriod
+                    ? `${enrollPeriodLabel ?? ''} · payment pending`
+                    : donationComplete
+                      ? `received · ${enrollPeriodLabel ?? ''}`
+                      : `of $${suggestedAmount} · ${enrollPeriodLabel ?? 'suggested'}`
             }
             {...(donationTone ? { tone: donationTone } : {})}
           />
@@ -338,7 +371,14 @@ export default async function FamilyDashboardPage() {
                 <span style={{ fontSize: 14, fontWeight: 600 }}>Donation</span>
                 <SetuIcon.info color="var(--muted)"/>
               </div>
-              {isEnrolled && suggestedAmount !== null ? (
+              {legacyPaid ? (
+                <div style={{ marginBottom: 18 }}>
+                  <span className="pill" style={{ background: 'var(--accentSoft)', color: 'var(--accentDeep)', fontSize: 12 }}>Paid · {enrollPeriodLabel}</span>
+                  <div style={{ fontSize: 13, color: 'var(--body-text)', lineHeight: 1.5, marginTop: 12 }}>
+                    Your {enrollPeriodLabel} Bala Vihar contribution is recorded as paid. Thank you — no further action needed for this year.
+                  </div>
+                </div>
+              ) : isEnrolled && suggestedAmount !== null ? (
                 <>
                   <div style={{ marginBottom: 14 }}>
                     <span style={{ fontSize: 36, fontWeight: 600, letterSpacing: '-0.02em' }}>${givenForPeriod}</span>
@@ -348,7 +388,9 @@ export default async function FamilyDashboardPage() {
                     <div style={{ width: `${donationPct}%`, height: '100%', background: 'var(--accent)' }}/>
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 18 }}>
-                    {donationComplete ? 'Thank you — received in full' : `$${givenForPeriod} of $${suggestedAmount}`}{enrollPeriodLabel ? ` · ${enrollPeriodLabel}` : ''}
+                    {isLegacyPeriod
+                      ? `Payment pending · ${enrollPeriodLabel}`
+                      : `${donationComplete ? 'Thank you — received in full' : `$${givenForPeriod} of $${suggestedAmount}`}${enrollPeriodLabel ? ` · ${enrollPeriodLabel}` : ''}`}
                   </div>
                 </>
               ) : (
@@ -357,12 +399,16 @@ export default async function FamilyDashboardPage() {
                   <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6 }}>A charitable gift to Chinmaya Mission Toronto.</div>
                 </div>
               )}
-              <p style={{ fontSize: 13, color: 'var(--body-text)', lineHeight: 1.5, marginBottom: 18 }}>
-                Suggested, not required. Any amount welcome. Donations are tax-deductible.
-              </p>
-              <Link href={donateUrl} className="btn btn--p btn--block" style={{ display: 'flex' }}>
-                {donationComplete ? 'Give more' : 'Give donation'}
-              </Link>
+              {showGive && (
+                <>
+                  <p style={{ fontSize: 13, color: 'var(--body-text)', lineHeight: 1.5, marginBottom: 18 }}>
+                    Suggested, not required. Any amount welcome. Donations are tax-deductible.
+                  </p>
+                  <Link href={donateUrl} className="btn btn--p btn--block" style={{ display: 'flex' }}>
+                    {donationComplete ? 'Give more' : 'Give donation'}
+                  </Link>
+                </>
+              )}
             </div>
           </Suspense>
         </div>

@@ -98,6 +98,7 @@ export async function POST(req: Request) {
       endDate: Timestamp.fromDate(new Date(data.endDate)),
       pricingTiers: data.pricingTiers,
       ...(data.amountTiers !== undefined ? { amountTiers: data.amountTiers } : {}),
+      paymentSource: data.paymentSource,
       enabled: data.enabled,
       createdAt: now,
       createdBy: session.uid,

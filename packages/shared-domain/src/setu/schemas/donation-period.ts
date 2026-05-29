@@ -6,6 +6,14 @@ export type ProgramKey = (typeof PROGRAM_KEYS)[number];
 export const LOCATIONS = ['Brampton', 'Mississauga', 'Scarborough', 'Markham'] as const;
 export type Location = (typeof LOCATIONS)[number];
 
+// Where a family's payment status for a period comes from:
+//  - 'portal' → the Setu donations collection (Stripe checkouts through the portal).
+//  - 'legacy' → the prod RTDB roster `payment` field (the pre-portal system).
+// The 2025-26 cutover year is 'legacy' (most families already paid offline);
+// 2026-27 onward is 'portal'. Admin-set per period.
+export const PAYMENT_SOURCES = ['portal', 'legacy'] as const;
+export type PaymentSource = (typeof PAYMENT_SOURCES)[number];
+
 // A date-windowed pricing tier. The suggested donation is prorated by when a
 // family enrolls: full year from September, less if they join mid-year. Tiers
 // are ordered ascending by effectiveFrom; the first is the full-year/base.
@@ -43,6 +51,9 @@ export const DonationPeriodDocSchema = z.object({
   // Optional give-more quick-pick chips on the donate form. When absent the
   // form derives chips from the resolved suggested amount.
   amountTiers: z.array(z.number().int().min(1)).min(1).optional(),
+  // Where payment status is read from. Optional for back-compat with periods
+  // written before this field existed — absent is treated as 'portal'.
+  paymentSource: z.enum(PAYMENT_SOURCES).optional(),
   enabled: z.boolean(),
   createdAt: z.date(),
   createdBy: z.string().min(1),
@@ -51,6 +62,11 @@ export const DonationPeriodDocSchema = z.object({
 });
 
 export type DonationPeriodDoc = z.infer<typeof DonationPeriodDocSchema>;
+
+/** A period's effective payment source — defaults to 'portal' when unset. */
+export function paymentSourceOf(period: Pick<DonationPeriodDoc, 'paymentSource'>): PaymentSource {
+  return period.paymentSource ?? 'portal';
+}
 
 /** YYYY-MM-DD for a Date in America/Toronto (en-CA renders ISO-style). */
 function torontoYmd(d: Date): string {
@@ -94,6 +110,7 @@ export const CreateDonationPeriodSchema = z
     endDate: z.string().datetime({ offset: true }),
     pricingTiers: z.array(PricingTierSchema).min(1),
     amountTiers: z.array(z.number().int().min(1)).min(1).optional(),
+    paymentSource: z.enum(PAYMENT_SOURCES).default('portal'),
     enabled: z.boolean().default(true),
   })
   .refine((d) => new Date(d.endDate) > new Date(d.startDate), {
@@ -115,6 +132,7 @@ export const UpdateDonationPeriodSchema = z
     endDate: z.string().datetime({ offset: true }).optional(),
     pricingTiers: z.array(PricingTierSchema).min(1).optional(),
     amountTiers: z.array(z.number().int().min(1)).min(1).optional(),
+    paymentSource: z.enum(PAYMENT_SOURCES).optional(),
     enabled: z.boolean().optional(),
   })
   .refine(
