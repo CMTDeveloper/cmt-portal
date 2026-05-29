@@ -4,6 +4,7 @@ import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { normalizeContactForKey } from '@cmt/shared-domain/setu';
 import { findSetuFamilyByContact } from './find-family-by-contact';
 import { getMemberRoles } from './member-roles';
+import { isTeacherAssigned } from '@/features/setu/teacher/assignments';
 import { lazyMigrateLegacyFamily } from '@/features/setu/registration/lazy-migrate';
 
 export interface BuildSessionClaimsArgs {
@@ -90,11 +91,18 @@ export async function buildSessionClaimsForContact(
   const isAdminUser = allExistingRoles.has('admin') || memberRoles.includes('admin');
   const isWelcomeTeamUser =
     allExistingRoles.has('welcome-team') || memberRoles.includes('welcome-team');
+  // Teacher capability is mid-keyed in teacherAssignments (carries levelIds),
+  // so it's computed here at session-build time rather than pushed to claims at
+  // assignment time. A parent-teacher keeps their family primary role + gains
+  // 'teacher' in extraRoles; admin already inherits teacher via isTeacher.
+  const isTeacherUser =
+    allExistingRoles.has('teacher') || (result.mid ? await isTeacherAssigned(result.mid) : false);
 
   function preservedExtras(): string[] {
     const extras: string[] = [];
     if (isAdminUser) extras.push('admin');
     if (isWelcomeTeamUser && !isAdminUser) extras.push('welcome-team');
+    if (isTeacherUser && !isAdminUser) extras.push('teacher');
     return extras;
   }
 

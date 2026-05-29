@@ -322,6 +322,70 @@ describe('canAccessRoute — /api/setu/auth/set-password — any authenticated S
   });
 });
 
+describe('canAccessRoute — /teacher/* pages — teacher capability', () => {
+  const parentTeacher: SessionClaims = {
+    uid: 'pt',
+    role: 'family-manager',
+    fid: 'FAM001',
+    mid: 'FAM001-01',
+    extraRoles: ['teacher'],
+  };
+  it('allows a teacher-only sevak on /teacher', () => {
+    expect(canAccessRoute(teacher, '/teacher')).toBe(true);
+    expect(canAccessRoute(teacher, '/teacher/levels/x/attendance')).toBe(true);
+  });
+  it('allows a parent who is also a teacher (extraRoles)', () => {
+    expect(canAccessRoute(parentTeacher, '/teacher')).toBe(true);
+  });
+  it('allows admin (inherits teacher)', () => {
+    expect(canAccessRoute(admin, '/teacher')).toBe(true);
+  });
+  it('denies a plain family-manager (not a teacher)', () => {
+    expect(canAccessRoute(manager, '/teacher')).toBe(false);
+  });
+  it('denies welcome-team (read views live under /welcome, not /teacher)', () => {
+    expect(canAccessRoute(welcomeTeam, '/teacher')).toBe(false);
+  });
+  it('denies family-member', () => {
+    expect(canAccessRoute(member, '/teacher')).toBe(false);
+  });
+});
+
+describe('canAccessRoute — /api/setu/teacher/* — teacher capability', () => {
+  it('allows teacher GET /api/setu/teacher/levels', () => {
+    expect(canAccessRoute(teacher, '/api/setu/teacher/levels', 'GET')).toBe(true);
+  });
+  it('allows admin (inherits teacher)', () => {
+    expect(canAccessRoute(admin, '/api/setu/teacher/attendance', 'POST')).toBe(true);
+  });
+  it('denies family-manager (not a teacher) — does NOT fall through to manager catch-all', () => {
+    expect(canAccessRoute(manager, '/api/setu/teacher/levels', 'GET')).toBe(false);
+    expect(canAccessRoute(manager, '/api/setu/teacher/attendance', 'POST')).toBe(false);
+  });
+  it('denies welcome-team', () => {
+    expect(canAccessRoute(welcomeTeam, '/api/setu/teacher/levels', 'GET')).toBe(false);
+  });
+});
+
+describe('canAccessRoute — /api/admin/teacher-assignments — admin + welcome-team', () => {
+  it('allows admin to POST', () => {
+    expect(canAccessRoute(admin, '/api/admin/teacher-assignments', 'POST')).toBe(true);
+  });
+  it('allows welcome-team to POST (front-desk flexibility, RBB-2)', () => {
+    expect(canAccessRoute(welcomeTeam, '/api/admin/teacher-assignments', 'POST')).toBe(true);
+  });
+  it('denies family-manager', () => {
+    expect(canAccessRoute(manager, '/api/admin/teacher-assignments', 'POST')).toBe(false);
+  });
+  it('denies a teacher (assignment is a staff action)', () => {
+    expect(canAccessRoute(teacher, '/api/admin/teacher-assignments', 'POST')).toBe(false);
+  });
+  it('keeps other /api/admin/* admin-only (welcome-team denied on /api/admin/levels)', () => {
+    expect(canAccessRoute(welcomeTeam, '/api/admin/levels', 'GET')).toBe(false);
+    expect(canAccessRoute(admin, '/api/admin/levels', 'GET')).toBe(true);
+  });
+});
+
 describe('canAccessRoute — /api/setu/donations', () => {
   it('allows family-manager to POST /api/setu/donations/checkout', () => {
     expect(canAccessRoute(manager, '/api/setu/donations/checkout', 'POST')).toBe(true);

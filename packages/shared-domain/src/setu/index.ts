@@ -5,3 +5,5 @@ export * from './schemas/contact-key';
 export * from './schemas/donation-period';
 export * from './schemas/enrollment';
 export * from './schemas/donation';
+export * from './schemas/level';
+export * from './schemas/teacher';

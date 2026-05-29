@@ -26,7 +26,24 @@ export function canAccessRoute(
 
   // New /admin/* surface (Setu-themed). Pages and APIs both admin-only.
   if (pathname === '/admin' || pathname.startsWith('/admin/')) return isAdmin(claims);
+  // Teacher assignment is writable by admin AND welcome-team (RBB-2 front-desk
+  // flexibility). Must be checked BEFORE the generic admin-only /api/admin/ rule.
+  if (
+    pathname === '/api/admin/teacher-assignments' ||
+    pathname.startsWith('/api/admin/teacher-assignments/')
+  ) {
+    return isAdmin(claims) || isWelcomeTeam(claims);
+  }
   if (pathname.startsWith('/api/admin/')) return isAdmin(claims);
+
+  // Setu teacher portal — pages + APIs gated on the teacher capability
+  // (admin inherits teacher via isTeacher).
+  if (pathname === '/teacher' || pathname.startsWith('/teacher/')) {
+    return isTeacher(claims);
+  }
+  if (pathname.startsWith('/api/setu/teacher/')) {
+    return isTeacher(claims);
+  }
 
   // Setu family portal pages
   if (pathname === '/family' || pathname.startsWith('/family/')) {

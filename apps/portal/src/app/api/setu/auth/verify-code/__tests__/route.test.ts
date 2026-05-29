@@ -24,6 +24,9 @@ vi.mock('@/features/setu/registration/lazy-migrate', () => ({
 vi.mock('@/features/setu/auth/member-roles', () => ({
   getMemberRoles: vi.fn(async () => []),
 }));
+vi.mock('@/features/setu/teacher/assignments', () => ({
+  isTeacherAssigned: vi.fn(async () => false),
+}));
 
 import { POST } from '../route';
 import { verifyCode } from '@/features/check-in/shared';

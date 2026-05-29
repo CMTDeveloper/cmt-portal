@@ -22,6 +22,9 @@ vi.mock('@/features/setu/auth/find-family-by-contact', () => ({
 vi.mock('@/features/setu/auth/member-roles', () => ({
   getMemberRoles: vi.fn(async () => []),
 }));
+vi.mock('@/features/setu/teacher/assignments', () => ({
+  isTeacherAssigned: vi.fn(async () => false),
+}));
 vi.mock('@/features/setu/auth/magic-links', () => ({
   createMagicLink: vi.fn().mockResolvedValue({ token: 'mock-token', expiresAt: new Date() }),
 }));
