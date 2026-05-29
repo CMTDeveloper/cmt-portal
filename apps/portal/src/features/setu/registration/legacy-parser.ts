@@ -67,6 +67,9 @@ export interface LegacyChild {
   lastName: string;
   gender: LegacyGender;
   schoolGrade: string | null;
+  // Legacy roster student id — maps this child to the check-in app's
+  // family-check-ins records (which key students by sid).
+  legacySid: string | null;
 }
 
 export interface LegacyFamilyForMigration {
@@ -187,6 +190,7 @@ export function parseLegacyRowsForMigration(
     lastName: clean(r.lname) ?? primaryLastName,
     gender: mapGender(r.gender),
     schoolGrade: mapSchoolGrade(r),
+    legacySid: r.sid != null ? String(r.sid) : null,
   }));
 
   return {

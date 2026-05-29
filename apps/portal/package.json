@@ -19,7 +19,8 @@
     "wipe:uat-leaks": "tsx --env-file=.env.local scripts/wipe-uat-leaks.ts",
     "seed:donation-periods": "tsx --env-file=.env.local scripts/seed-donation-periods.ts",
     "seed:bala-vihar-levels": "tsx --env-file=.env.local scripts/seed-bala-vihar-levels.ts",
-    "seed:bala-vihar-calendar": "tsx --env-file=.env.local scripts/seed-bala-vihar-calendar.ts"
+    "seed:bala-vihar-calendar": "tsx --env-file=.env.local scripts/seed-bala-vihar-calendar.ts",
+    "backfill:legacy-sid": "tsx --env-file=.env.local scripts/backfill-legacy-sid.ts"
   },
   "dependencies": {
     "@aws-sdk/client-ses": "^3.700.0",

@@ -47,6 +47,7 @@ export async function getFamilyByFid(fid: string): Promise<FamilyAndMembers | nu
       email: d.email ?? null,
       phone: d.phone ?? null,
       schoolGrade: d.schoolGrade ?? null,
+      legacySid: d.legacySid ?? null,
       birthMonthYear: d.birthMonthYear ?? null,
       volunteeringSkills: d.volunteeringSkills ?? [],
       foodAllergies: d.foodAllergies ?? null,

@@ -132,6 +132,7 @@ export async function lazyMigrateLegacyFamily(legacyFid: string): Promise<LazyMi
         email: null,
         phone: null,
         schoolGrade: child.schoolGrade,
+        legacySid: child.legacySid,
         birthMonthYear: null,
         volunteeringSkills: [],
         foodAllergies: null,

@@ -19,6 +19,11 @@ export const MemberDocSchema = z.object({
   phone: z.string().nullable(),
   schoolGrade: z.string().nullable(),
   birthMonthYear: z.string().nullable(),
+  // Legacy roster student id (sid), captured at migration / backfilled, so the
+  // portal can map this member to their records in the check-in app's
+  // family-check-ins collection (which keys students by sid). Null for members
+  // with no legacy student row (new portal kids, adults).
+  legacySid: z.string().nullable().optional(),
   volunteeringSkills: z.array(z.string()),
   foodAllergies: z.string().nullable(),
   emergencyContacts: z.tuple([EmergencyContactSchema, EmergencyContactSchema.nullable()]),
