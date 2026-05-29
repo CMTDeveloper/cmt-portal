@@ -67,9 +67,18 @@ Stable across a semester (the period pins the level set). New semester → new l
 - A teacher may be a registered parent (has a family `mid`) **or** teacher-only (no family). Teacher-only sevaks get a lightweight standalone teacher record (a member-shaped doc with no family, or a `teachers/{tid}` doc) — see §5.5. Each level has multiple co-teachers (the curriculum lists 2–6 per level).
 - Assignment grants the `teacher` capability to that person's session (mid- or tid-keyed, mirroring `roleAssignments`).
 
-### RBB-3 — Class schedule / "today's class" *(not explicitly answered — keeping the default; confirm at plan time)*
+### RBB-3 — Class schedule → **managed class-date calendar, admin/welcome-team published, family-visible** ✓
 
-- **Assumed:** Bala Vihar runs **Sundays** within the period range; "today's class" = today's date if it's a class day. Attendance keyed by calendar date; no managed holiday-calendar entity in v1 (follow-up). **Confirm whether a managed class-date calendar is needed for v1.**
+CMT currently publishes a per-location PDF (e.g. "BV Calendar Brampton 2025-26") before each school year. **Slice 4 replaces the PDF** with an in-portal managed calendar that admin + welcome-team edit and families see on their dashboard (closes the fake "Upcoming" card left there).
+
+From the real PDF, each **calendar entry** is a Sunday with:
+- a **kind**: `class` (Regular / First / Short) or `no-class` (with a reason: "Thanksgiving Weekend", "Winter Break", "March Break", …)
+- free-text **special events** (festivals, yagnas, "Parent Teacher Meetings", "BV Graduation") — can appear on class **and** no-class days; purely informational.
+- an optional `shortClass` flag ("Regular Class (Short Class)").
+
+Plus a per-location **weekly time schedule** (Brampton: Assembly 10:00–10:45, Classes 10:30–12:00, Tabla & Vocals 12:15–1:15) shown as a header.
+
+The calendar spans the **school year** (Sep–Jun), crossing both donation-period semesters (Fall + Winter/Spring). Entries are keyed by `(location, date)` — period-agnostic; the period for attendance linkage is derived from the date. **"Today's class"** = a `class`-kind entry for today's date at the teacher's location → drives which dates attendance can be taken. Schema in §5.6.
 
 ### RBB-4 — Teacher auth → **Setu OTP + teacher capability** ✓
 
@@ -157,6 +166,34 @@ Composite `aid` means re-marking a student the same day overwrites (no dupes). `
 - `attendanceEvents (fid ASC, date DESC)` — family dashboard "my child's attendance" (replaces the placeholder on `/family`)
 - `levels (programKey ASC, location ASC, pid ASC, order ASC)` — admin list
 - `levels (teacherRefs ARRAY_CONTAINS, enabled ASC)` — "my levels"
+- `classCalendarEntries (location ASC, date ASC)` — calendar list + "today's class" + family upcoming
+
+### 5.5 `classCalendarEntries/{entryId}` (the managed school-year calendar)
+```ts
+type ClassCalendarEntryDoc = {
+  entryId: string;             // `{location}-{yyyy-mm-dd}`
+  programKey: 'bala-vihar';
+  location: Location;
+  date: string;                // 'YYYY-MM-DD' (a class Sunday)
+  kind: 'class' | 'no-class';
+  classType: 'regular' | 'first' | 'short' | null;   // when kind==='class'
+  noClassReason: string | null;                       // when kind==='no-class' e.g. "Winter Break"
+  specialEvents: string | null;                       // free text; may appear on class OR no-class days
+  enabled: boolean;            // published vs draft
+  createdAt; createdBy; updatedAt; updatedBy;
+};
+```
+
+### 5.5b `weeklySchedules/{location}` (the fixed time header)
+```ts
+type WeeklyScheduleDoc = {
+  location: Location;
+  rows: Array<{ time: string; label: string }>;   // e.g. {time:'10:00–10:45 am', label:'Assembly'}
+  updatedAt; updatedBy;
+};
+```
+
+Admin + welcome-team CRUD both. A `scripts/seed-bala-vihar-calendar.ts` loads the 2025-26 Brampton calendar from the PDF as the first dataset (East/Scarborough + Mississauga added via the admin UI or their own seed).
 
 ## 6. Roster derivation (per level kind)
 
@@ -204,21 +241,25 @@ A level's roster = enrolled members at that location matching the level kind. Co
 | POST | `/api/setu/teacher/guests` | teacher |
 | POST | `/api/setu/teacher/add-student` | teacher (→ invite + guest mark) |
 | GET | `/api/admin/levels` + POST/PATCH | admin |
-| POST | `/api/admin/teacher-assignments` | admin (RBB-2) |
+| POST | `/api/admin/teacher-assignments` | admin **+ welcome-team** (RBB-2) |
+| GET | `/api/setu/calendar?location=` | any signed-in (families see published entries) |
+| GET/POST/PATCH/DELETE | `/api/admin/calendar` | admin + welcome-team (manage entries + weekly schedule) |
 
-All via `readSessionFromHeaders` + role helpers (the `isTeacher` helper + assignment check). New `canAccessRoute` gates for `/teacher/*` + `/api/setu/teacher/*`.
+All via `readSessionFromHeaders` + role helpers (the `isTeacher` helper + assignment check). New `canAccessRoute` gates for `/teacher/*` + `/api/setu/teacher/*`. The calendar GET is readable by any signed-in family (published entries only); writes are admin + welcome-team.
 
-## 11. Family-side payoff (closes a Slice 3 placeholder)
+## 11. Family-side payoff (closes two placeholders)
 
-Once attendance exists, wire the `/family` dashboard + `/family/members/[mid]` attendance card to real `attendanceEvents (fid/mid)` data — replacing the "attendance with check-in soon" placeholder left in the dashboard wiring. Small, but it completes the family story.
+1. **Attendance** — wire the `/family` dashboard + `/family/members/[mid]` attendance card to real `attendanceEvents (fid/mid)` data, replacing the "attendance with check-in soon" placeholder.
+2. **Schedule/calendar** — the managed calendar (§5.5) powers a real **Upcoming** card on the dashboard (next class date, no-class notices, special events) + a full `/family/calendar` schedule page, replacing both the fake "Upcoming events" card AND the per-year PDF. This is the family-facing half of the RBB-3 calendar.
 
 ## 12. Sub-slices
-- **4a — Classes + teacher assignment** (admin schema + UI; `isTeacher` capability wiring) — foundation.
-- **4b — Roster + take attendance** (the core teacher flow + auto-enroll wire) — biggest.
-- **4c — Student detail + safety banner.**
-- **4d — Guest list + add-student-on-prompt** (reuses Slice 2d invite).
-- **4e — Family-side attendance surfacing** (closes the dashboard placeholder).
-- **4f — Welcome-team/admin class + attendance read views.**
+- **4a — Levels + teacher assignment** (admin schema + UI; `isTeacher` capability wiring) — foundation.
+- **4b — Class calendar** (admin/welcome publish + weekly schedule; seed 2025-26 from PDF; family `/family/calendar` + dashboard Upcoming card). Independent of 4a — can run in parallel. Gates valid attendance dates for 4c.
+- **4c — Roster + take attendance** (the core teacher flow + auto-enroll wire; uses 4a levels + 4b calendar dates) — biggest.
+- **4d — Student detail + safety banner.**
+- **4e — Guest list + add-student-on-prompt** (reuses Slice 2d invite).
+- **4f — Family-side attendance surfacing** (closes the dashboard attendance placeholder).
+- **4g — Welcome-team/admin level + attendance read views.**
 
 ## 13. Risks
 | Risk | Mitigation |
