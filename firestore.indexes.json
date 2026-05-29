@@ -99,6 +99,38 @@
         { "fieldPath": "location", "order": "ASCENDING" },
         { "fieldPath": "date", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "enrollments",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "pid", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "attendanceEvents",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "levelId", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "attendanceEvents",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "mid", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "attendanceEvents",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "fid", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": [
