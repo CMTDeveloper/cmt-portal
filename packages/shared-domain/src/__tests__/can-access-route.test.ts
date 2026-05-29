@@ -386,6 +386,33 @@ describe('canAccessRoute — /api/admin/teacher-assignments — admin + welcome-
   });
 });
 
+describe('canAccessRoute — /api/admin/calendar — admin + welcome-team', () => {
+  it('allows admin', () => {
+    expect(canAccessRoute(admin, '/api/admin/calendar', 'POST')).toBe(true);
+    expect(canAccessRoute(admin, '/api/admin/calendar/brampton-2025-09-07', 'PATCH')).toBe(true);
+  });
+  it('allows welcome-team', () => {
+    expect(canAccessRoute(welcomeTeam, '/api/admin/calendar', 'POST')).toBe(true);
+    expect(canAccessRoute(welcomeTeam, '/api/admin/calendar/weekly', 'PUT')).toBe(true);
+  });
+  it('denies family-manager and teacher', () => {
+    expect(canAccessRoute(manager, '/api/admin/calendar', 'POST')).toBe(false);
+    expect(canAccessRoute(teacher, '/api/admin/calendar', 'POST')).toBe(false);
+  });
+});
+
+describe('canAccessRoute — /api/setu/calendar — any signed-in user (published, read-only)', () => {
+  it('allows family-member to read', () => {
+    expect(canAccessRoute(member, '/api/setu/calendar', 'GET')).toBe(true);
+  });
+  it('allows family-manager, welcome-team, teacher, admin', () => {
+    expect(canAccessRoute(manager, '/api/setu/calendar', 'GET')).toBe(true);
+    expect(canAccessRoute(welcomeTeam, '/api/setu/calendar', 'GET')).toBe(true);
+    expect(canAccessRoute(teacher, '/api/setu/calendar', 'GET')).toBe(true);
+    expect(canAccessRoute(admin, '/api/setu/calendar', 'GET')).toBe(true);
+  });
+});
+
 describe('canAccessRoute — /api/setu/donations', () => {
   it('allows family-manager to POST /api/setu/donations/checkout', () => {
     expect(canAccessRoute(manager, '/api/setu/donations/checkout', 'POST')).toBe(true);

@@ -9,6 +9,22 @@ import { mockFamily } from '@/features/family/data/mock';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
 import { getDonations } from '@/features/setu/donations/get-donations';
+import { getUpcoming, type CalendarEntry } from '@/features/setu/calendar/calendar';
+
+function fmtUpcoming(e: CalendarEntry): { d: string; m: string; t: string; sub: string | null } {
+  const date = new Date(`${e.date}T12:00:00`);
+  const d = date.toLocaleDateString('en-CA', { day: 'numeric', timeZone: 'America/Toronto' });
+  const m = date.toLocaleDateString('en-CA', { month: 'short', timeZone: 'America/Toronto' });
+  const t =
+    e.kind === 'no-class'
+      ? `No class${e.noClassReason ? ` · ${e.noClassReason}` : ''}`
+      : e.classType === 'first'
+        ? 'First class'
+        : e.classType === 'short'
+          ? 'Short class'
+          : 'Class';
+  return { d, m, t, sub: e.specialEvents };
+}
 
 export default async function FamilyDashboardPage() {
   // Mark this page as dynamic — flags.setuAuth may be false in which case no
@@ -29,6 +45,8 @@ export default async function FamilyDashboardPage() {
   let suggestedAmount: number | null = null;
   let givenForPeriod = 0;
   let donateUrl = '/family/donate';
+  // Upcoming class dates from the managed calendar (Slice 4b), by family location.
+  let upcomingEntries: CalendarEntry[] = [];
 
   if (flags.setuAuth) {
     const data = await getCurrentFamily();
@@ -57,6 +75,9 @@ export default async function FamilyDashboardPage() {
           .reduce((s, d) => s + d.amountCAD, 0);
         donateUrl = `/family/donate?eid=${activeEnrollment.eid}`;
       }
+
+      const { upcoming } = await getUpcoming(data.family.location, undefined, 3);
+      upcomingEntries = upcoming;
     }
   }
 
@@ -158,30 +179,31 @@ export default async function FamilyDashboardPage() {
 
             <div className="card" style={{ padding: 16, marginBottom: 12 }}>
               <div className="between" style={{ marginBottom: 12 }}>
-                <div className="row" style={{ gap: 8 }}>
-                  <span style={{ fontSize: 12, fontWeight: 600 }}>Upcoming</span>
-                  <span className="pill" style={{ background: 'var(--surface2)', color: 'var(--muted)', fontSize: 10 }}>Sample data — real data coming soon</span>
+                <span style={{ fontSize: 12, fontWeight: 600 }}>Upcoming</span>
+                <Link href="/family/calendar" className="focus-ring" style={{ background: 'transparent', border: 0, color: 'var(--accent)', fontSize: 12, fontWeight: 600, textDecoration: 'none' }}>View all</Link>
+              </div>
+              {upcomingEntries.length === 0 ? (
+                <div style={{ fontSize: 12, color: 'var(--muted)' }}>No upcoming class dates published yet.</div>
+              ) : (
+                <div className="col" style={{ gap: 10 }}>
+                  {upcomingEntries.map((entry) => {
+                    const e = fmtUpcoming(entry);
+                    const noClass = entry.kind === 'no-class';
+                    return (
+                      <div key={entry.entryId} className="row" style={{ gap: 12 }}>
+                        <div style={{ width: 42, padding: '6px 0', textAlign: 'center', background: noClass ? 'var(--surface2)' : 'var(--accentSoft)', borderRadius: 'var(--radiusSm)' }}>
+                          <div style={{ fontSize: 9, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em' }}>{e.m}</div>
+                          <div style={{ fontSize: 16, fontWeight: 600, marginTop: -2, color: noClass ? 'var(--muted)' : 'var(--accentDeep)' }}>{e.d}</div>
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 13, fontWeight: 500 }}>{e.t}</div>
+                          {e.sub && <div style={{ fontSize: 11, color: 'var(--muted)' }}>{e.sub}</div>}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-                <button className="focus-ring" disabled style={{ background: 'transparent', border: 0, color: 'var(--accent)', fontSize: 12, fontWeight: 600, cursor: 'not-allowed', opacity: 0.5 }}>View all</button>
-              </div>
-              <div className="col" style={{ gap: 10 }}>
-                {[
-                  { d: '14', m: 'Jun', t: 'Class · 10:00 AM', sub: 'Brampton' },
-                  { d: '21', m: 'Jun', t: 'Class · 10:00 AM', sub: 'Brampton' },
-                  { d: '28', m: 'Jun', t: "No class · Father's Day", sub: null },
-                ].map((e, i) => (
-                  <div key={i} className="row" style={{ gap: 12 }}>
-                    <div style={{ width: 42, padding: '6px 0', textAlign: 'center', background: 'var(--surface2)', borderRadius: 'var(--radiusSm)' }}>
-                      <div style={{ fontSize: 9, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em' }}>{e.m}</div>
-                      <div style={{ fontSize: 16, fontWeight: 600, marginTop: -2 }}>{e.d}</div>
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 13, fontWeight: 500 }}>{e.t}</div>
-                      {e.sub && <div style={{ fontSize: 11, color: 'var(--muted)' }}>{e.sub}</div>}
-                    </div>
-                  </div>
-                ))}
-              </div>
+              )}
             </div>
 
             <div className="card" style={{ padding: 16 }}>

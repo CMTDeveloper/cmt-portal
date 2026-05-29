@@ -34,6 +34,11 @@ export function canAccessRoute(
   ) {
     return isAdmin(claims) || isWelcomeTeam(claims);
   }
+  // Managed class calendar is published by admin AND welcome-team. Must be
+  // checked before the generic admin-only /api/admin/ rule.
+  if (pathname === '/api/admin/calendar' || pathname.startsWith('/api/admin/calendar/')) {
+    return isAdmin(claims) || isWelcomeTeam(claims);
+  }
   if (pathname.startsWith('/api/admin/')) return isAdmin(claims);
 
   // Setu teacher portal — pages + APIs gated on the teacher capability
@@ -127,6 +132,13 @@ export function canAccessRoute(
     pathname === '/api/welcome/enrollments'
   ) {
     return isWelcomeTeam(claims);
+  }
+
+  // Setu API — published class calendar is readable by ANY signed-in user
+  // (families incl. family-member, teachers). Returns only enabled entries;
+  // writes go through /api/admin/calendar (admin + welcome-team).
+  if (pathname === '/api/setu/calendar' || pathname.startsWith('/api/setu/calendar/')) {
+    return claims.role != null;
   }
 
   // Setu API — remaining paths (invite/send, register, etc.): manager + welcome-team + admin

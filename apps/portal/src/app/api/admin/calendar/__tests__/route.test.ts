@@ -1,0 +1,65 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+const { mockCreate, mockGetSerialized } = vi.hoisted(() => ({ mockCreate: vi.fn(), mockGetSerialized: vi.fn() }));
+
+vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
+  FieldValue: { serverTimestamp: () => 'SERVER_TS' },
+  portalFirestore: () => ({ collection: () => ({ doc: () => ({ create: mockCreate }) }) }),
+}));
+vi.mock('@/features/setu/calendar/calendar', () => ({ getCalendarSerialized: mockGetSerialized }));
+
+function makeRequest(method: string, url: string, body?: unknown, uid?: string, role = 'admin'): Request {
+  const headers: Record<string, string> = { 'content-type': 'application/json', 'x-portal-role': role };
+  if (uid) headers['x-portal-uid'] = uid;
+  return new Request(`http://localhost${url}`, { method, headers, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
+}
+
+const classBody = { location: 'Brampton', date: '2025-09-07', kind: 'class', classType: 'first' };
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockCreate.mockResolvedValue(undefined);
+  mockGetSerialized.mockResolvedValue([]);
+});
+
+describe('GET /api/admin/calendar', () => {
+  it('403 for family-manager', async () => {
+    const { GET } = await import('../route');
+    expect((await GET(makeRequest('GET', '/api/admin/calendar?location=Brampton', undefined, 'uid-m', 'family-manager'))).status).toBe(403);
+  });
+  it('allows welcome-team', async () => {
+    const { GET } = await import('../route');
+    const res = await GET(makeRequest('GET', '/api/admin/calendar?location=Brampton', undefined, 'uid-w', 'welcome-team'));
+    expect(res.status).toBe(200);
+    expect(mockGetSerialized).toHaveBeenCalledWith('Brampton');
+  });
+  it('400 without a valid location', async () => {
+    const { GET } = await import('../route');
+    expect((await GET(makeRequest('GET', '/api/admin/calendar', undefined, 'uid-a'))).status).toBe(400);
+  });
+});
+
+describe('POST /api/admin/calendar', () => {
+  it('401 without uid', async () => {
+    const { POST } = await import('../route');
+    expect((await POST(makeRequest('POST', '/api/admin/calendar', classBody))).status).toBe(401);
+  });
+  it('allows welcome-team to create a class day → 201 entryId', async () => {
+    const { POST } = await import('../route');
+    const res = await POST(makeRequest('POST', '/api/admin/calendar', classBody, 'uid-w', 'welcome-team'));
+    expect(res.status).toBe(201);
+    expect((await res.json()).entryId).toBe('brampton-2025-09-07');
+  });
+  it('400 for a class day with no classType', async () => {
+    const { POST } = await import('../route');
+    const res = await POST(makeRequest('POST', '/api/admin/calendar', { location: 'Brampton', date: '2025-09-07', kind: 'class' }, 'uid-a'));
+    expect(res.status).toBe(400);
+  });
+  it('409 on duplicate entry (code 6)', async () => {
+    mockCreate.mockRejectedValue(Object.assign(new Error('exists'), { code: 6 }));
+    const { POST } = await import('../route');
+    const res = await POST(makeRequest('POST', '/api/admin/calendar', classBody, 'uid-a'));
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toBe('entry-conflict');
+  });
+});
