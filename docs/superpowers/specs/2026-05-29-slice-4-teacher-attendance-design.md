@@ -41,67 +41,102 @@ Family + family-member roles do **not** access `/teacher/*`.
 
 These shape the schema; only CMT knows the real-world answer. Recommendations given so we can move on sign-off.
 
-### RBB-1 — What IS a "class"?
+> **RESOLVED by CMT 2026-05-29** (curriculum table attached to the answer — Bala Vihar West/Brampton + East/Scarborough 2025-26). The class unit is a **Level**, not a grade. See §4.6 for the seed data.
 
-- **Recommendation:** a class = **(programKey, location, gradeLabel)** for a given **donation period** (semester). e.g. "Bala Vihar · Brampton · Grade 2 · Fall 2026". Students in it = enrolled children (`members.type==='Child'`) at that location whose `schoolGrade` matches, for families enrolled in that period.
-- **Alternatives:** (a) grade-*bands* ("Grades 1–2") if CMT combines grades; (b) named classes ("Sandeepany Group A") decoupled from grade.
-- **Why it matters:** determines whether a class is auto-derived from `(location, schoolGrade, period)` or an explicitly-created admin entity with manual student assignment.
-- **Question for you:** Does CMT group Bala Vihar by single grade, by grade-band, or by named groups? Are groupings stable across a semester?
+### RBB-1 — What IS a "class"? → A **Level** (location-specific, admin-configured)
 
-### RBB-2 — How are teachers assigned to classes?
+Bala Vihar groups students into named **Levels**, and the level names + grade-bands **differ by location**:
 
-- **Recommendation:** an admin screen (`/admin/teachers`) assigns a teacher (a member `mid`, or a standalone teacher account) to one or more classes. Stored in a new `teacherAssignments/{mid}` doc (mid-keyed, mirroring how admin/welcome-team roles live in `roleAssignments/{mid}` from Slice 2). A teacher can teach multiple classes; a class can have multiple teachers (co-teachers).
-- **Question for you:** Who assigns teachers — admin only, or welcome-team too? Are teachers always also family members (have a `mid`), or can a sevak be teacher-only (no family)?
+| | Brampton (Bala Vihar West) | Scarborough (Bala Vihar East) |
+|---|---|---|
+| names | Shishu Vihar, Pre-Level 1, Level 1…7, Parents | Shishu Vihar, Pre-Level A, Level A…E, Parents |
+| banding | Level 2 = Gr 2&3 | Level A = Gr 1&2 |
 
-### RBB-3 — Class schedule / "today's class"
+So the **same school grade maps to a different level at a different location** — the grade→level mapping is NOT global; it lives on each level. A class is therefore an **explicit admin-configured entity** (seeded from the curriculum table), one per **(location, level, period)**, carrying its own grade-band, curriculum title, and teachers.
 
-- **Recommendation:** Bala Vihar runs **Sundays** within the period's `[startDate, endDate]`. "Today's class" = the most recent/!current Sunday in range. No per-week calendar entity in v1 — attendance is keyed by calendar date. A simple `classMeetings` list (admin-managed exceptions like "no class — holiday") is a follow-up.
-- **Question for you:** Is it always Sunday? Do you need a managed class calendar (specific dates, holiday skips) in v1, or is "any date the teacher takes attendance" enough?
+Three level *kinds* drive roster matching (a child's `schoolGrade` alone isn't enough):
+- `shishu` — Shishu Vihar (age 1.5–4) → match by age (from `birthMonthYear`), no school grade.
+- `pre-level` / `level` — match children whose `schoolGrade` ∈ the level's `gradeBand`.
+- `parents` — match **adults** (`members.type==='Adult'`) in enrolled families. (Yes — adults attend a Gita/Dharmashastra class and get attendance too.)
 
-### RBB-4 — Teacher authentication
+Stable across a semester (the period pins the level set). New semester → new level docs (admin clones + edits).
 
-- **Recommendation:** teachers sign in with the **same Setu OTP** (email/phone) as families. A `teacher` capability is added to their session via `roleAssignments/{mid}` (extends the multi-role `extraRoles` mechanism from Slice 2). A sevak who is also a parent gets both `family-manager` + `teacher`. Teacher-only sevaks (no family) get a minimal member record or a standalone teacher record (depends on RBB-2).
-- **Question for you:** OK to reuse Setu OTP for teachers (vs the legacy `TEACHER_PASSPHRASE` shared login)? Recommended yes — per-person accounts give real audit trails on who marked attendance.
+### RBB-2 — Teacher assignment → **admin OR welcome-team assigns; teachers may be parents or teacher-only**
 
-### RBB-5 — Attendance statuses
+- Both admin and welcome-team can assign teachers to levels (front-desk flexibility).
+- A teacher may be a registered parent (has a family `mid`) **or** teacher-only (no family). Teacher-only sevaks get a lightweight standalone teacher record (a member-shaped doc with no family, or a `teachers/{tid}` doc) — see §5.5. Each level has multiple co-teachers (the curriculum lists 2–6 per level).
+- Assignment grants the `teacher` capability to that person's session (mid- or tid-keyed, mirroring `roleAssignments`).
 
-- **Recommendation:** `present | absent | late` per the brief §6.3.3. The legacy model also has `uninformed` (absent without notice) — useful for the "who's unaccounted for" view. Keep all four: teacher taps present/absent/late; `uninformed` is a derived/default state for enrolled students never marked.
-- **Question for you:** Three states (present/absent/late) or keep the legacy fourth (`uninformed`) for the unaccounted view?
+### RBB-3 — Class schedule / "today's class" *(not explicitly answered — keeping the default; confirm at plan time)*
 
-Defaults assumed below: RBB-1 = (program, location, grade, period); RBB-2 = admin-assigns, teachers are members; RBB-3 = Sundays, no managed calendar v1; RBB-4 = Setu OTP + teacher capability; RBB-5 = present/absent/late + derived uninformed.
+- **Assumed:** Bala Vihar runs **Sundays** within the period range; "today's class" = today's date if it's a class day. Attendance keyed by calendar date; no managed holiday-calendar entity in v1 (follow-up). **Confirm whether a managed class-date calendar is needed for v1.**
 
-## 5. Data model — Firestore (assuming the §4 defaults)
+### RBB-4 — Teacher auth → **Setu OTP + teacher capability** ✓
 
-### 5.1 `classes/{classId}`
+Teachers sign in with the same email/phone OTP as families. A `teacher` capability is granted per-person (mid/tid-keyed), so attendance carries a real per-sevak audit trail. A parent-and-teacher gets both `family-manager` + `teacher`. Replaces the legacy shared `TEACHER_PASSPHRASE`.
+
+### RBB-5 — Attendance statuses → **present / absent / late, + derived `unaccounted`** ✓
+
+Teacher taps one of `present | absent | late`. An enrolled student in the level with **no** event for a class date is **`unaccounted`** (derived, not stored) — drives a "who's unmarked" view for the teacher to chase before leaving.
+
+### 4.6 — Seed data (from the CMT 2025-26 curriculum table)
+
+Levels to seed per location per period (West = Brampton, East = Scarborough; Mississauga/Markham TBD if they run Bala Vihar):
+
+**Brampton (West):** Shishu Vihar (1.5–4y · Devatas) · Pre-Level 1 (JK/SK · Bala Ramayana) · Level 1 (Gr 1 · Krishna Krishna) · Level 2 (Gr 2–3 · Hanuman) · Level 3 (Gr 4–5 · Symbolism in Hinduism) · Level 4 (Gr 6–7 · Vibhishana Gita) · Level 5 (Gr 8–9 · Hindu Culture) · Level 6 (Gr 10 · Mahabharata) · Level 7 (Gr 11–12 · Essence of Gita for Youth) · Parents (Adults · Gita)
+
+**Scarborough (East):** Shishu Vihar (1.5–4y · Devatas) · Pre-Level A (JK/SK · Alphabet Safari) · Level A (Gr 1–2 · Hanuman) · Level B (Gr 3–4 · Krishna Krishna) · Level C (Gr 5–6 · India) · Level D (Gr 7–8 · Yatho Dharma) · Level E (Gr 9–12 · Essence of Gita for Youth) · Parents (Adults · Dharmashastra)
+
+Teacher names from the curriculum table seed the initial `teacherAssignments` once those sevaks have Setu accounts (names → matched to member/teacher records during onboarding; not auto-linked). A `scripts/seed-bala-vihar-levels.ts` (mirroring the donation-periods seed) loads these per active period.
+
+## 5. Data model — Firestore
+
+### 5.1 `levels/{levelId}` (a class = a Level at a location for a period)
 ```ts
-type ClassDoc = {
-  classId: string;              // `{programKey}-{location}-{gradeSlug}-{pid}` e.g. bala-vihar-brampton-gr2-bv-brampton-fall-2026
+type LevelDoc = {
+  levelId: string;              // `{location}-{levelSlug}-{pid}` e.g. brampton-level-2-bv-brampton-fall-2026
   programKey: 'bala-vihar';
   location: Location;
-  gradeLabel: string;           // "Grade 2" (or band "Grades 1-2" per RBB-1)
+  levelName: string;            // "Level 2" (West) / "Level A" (East) / "Shishu Vihar" / "Parents"
+  levelKind: 'shishu' | 'pre-level' | 'level' | 'parents';
+  order: number;                // display order within a location (Shishu=0 … Parents=last)
+  gradeBand: string[];          // school grades this level covers, e.g. ['Gr 2','Gr 3']; [] for shishu/parents
+  ageLabel: string;             // "Gr 2 & 3" / "1.5 to 4 years" / "All Adults" (display)
+  curriculum: string;          // "Hanuman" / "Gita" (display)
   pid: string;                  // → donationPeriods (the semester)
   periodLabel: string;          // snapshot
-  teacherMids: string[];        // denormalized for fast "my classes" lookup
+  teacherRefs: string[];        // mids/tids of assigned teachers (denormalized for "my levels")
   enabled: boolean;
   createdAt; createdBy; updatedAt; updatedBy;
 };
 ```
+Roster matching by `levelKind` (see §6) — `gradeBand` for level/pre-level, age for shishu, member-type=Adult for parents. The grade→level mapping is **per-location** (it lives on each level's `gradeBand`), because West and East band grades differently.
 
-### 5.2 `teacherAssignments/{mid}`
+### 5.2 `teacherAssignments/{ref}` (ref = mid for parent-teachers, tid for teacher-only)
 ```ts
 type TeacherAssignmentDoc = {
-  mid: string;                  // the teacher's member id
-  classIds: string[];          // classes this teacher is assigned to
-  updatedAt; updatedBy;
+  ref: string;                  // member mid OR standalone teacher tid
+  levelIds: string[];          // levels this teacher is assigned to
+  updatedAt; updatedByUid;
 };
 ```
-Mirrors `roleAssignments/{mid}` (Slice 2). Granting a teacher assignment also adds the `teacher` capability to their session claims (via the existing addCapability path).
+Mirrors `roleAssignments/{mid}` (Slice 2). Assigning grants the `teacher` capability to that person's session (via the existing addCapability path). Admin **and** welcome-team can write these (RBB-2).
+
+### 5.2b `teachers/{tid}` (teacher-only sevaks, no family)
+```ts
+type TeacherDoc = {
+  tid: string; firstName: string; lastName: string;
+  email: string | null; phone: string | null;   // for OTP sign-in (contactKeys entry like members)
+  createdAt; createdByUid;
+};
+```
+A sevak who is also a parent uses their existing `mid` and needs no `teachers/` doc — the teacher capability attaches to their member. Teacher-only sevaks get a `tid` here + a `contactKeys` entry so the existing OTP path resolves them to a teacher session.
 
 ### 5.3 `attendanceEvents/{aid}`
 ```ts
 type AttendanceEventDoc = {
-  aid: string;                  // `{classId}-{mid}-{yyyy-mm-dd}` — composite → idempotent, one row per student per class-day
-  classId: string;
+  aid: string;                  // `{levelId}-{mid}-{yyyy-mm-dd}` — composite → idempotent, one row per student per class-day
+  levelId: string;
   mid: string;                  // the student member id
   fid: string;                  // denormalized for family-side "my child's attendance"
   pid: string;                  // period, denormalized
@@ -114,32 +149,36 @@ type AttendanceEventDoc = {
   updatedAt: Timestamp;
 };
 ```
-Composite `aid` means re-marking a student the same day overwrites (no dupes). `uninformed` is NOT stored — it's derived (enrolled child in the class with no event for that date).
+Composite `aid` means re-marking a student the same day overwrites (no dupes). `unaccounted` is NOT stored — derived (a matched member with no event for that date).
 
 ### 5.4 Indexes (`firestore.indexes.json`, UAT-only deploy)
-- `attendanceEvents (classId ASC, date DESC)` — take-attendance + class history
-- `attendanceEvents (mid ASC, date DESC)` — student/family attendance history
-- `attendanceEvents (fid ASC, date DESC)` — family dashboard "my child's attendance" (replaces the placeholder we left on `/family`)
-- `classes (programKey ASC, location ASC, pid ASC)` — admin list
-- `classes (teacherMids ARRAY_CONTAINS, enabled ASC)` — "my classes"
+- `attendanceEvents (levelId ASC, date DESC)` — take-attendance + level history
+- `attendanceEvents (mid ASC, date DESC)` — student attendance history
+- `attendanceEvents (fid ASC, date DESC)` — family dashboard "my child's attendance" (replaces the placeholder on `/family`)
+- `levels (programKey ASC, location ASC, pid ASC, order ASC)` — admin list
+- `levels (teacherRefs ARRAY_CONTAINS, enabled ASC)` — "my levels"
 
-## 6. Roster derivation
+## 6. Roster derivation (per level kind)
 
-A class roster = enrolled children matching the class. Given the §4-default model:
-1. Find families enrolled in the class's `pid` (query `enrollments` collectionGroup where `pid == X, status == 'active'`).
-2. For each, the children (`members.type==='Child'`) whose `schoolGrade` maps to the class `gradeLabel` and whose family `location` matches.
-3. Merge with `attendanceEvents` for the selected date to show current marks.
+A level's roster = enrolled members at that location matching the level kind. Computed, not stored — stays consistent as families enroll / edit members / change grade.
 
-Roster is computed, not stored — keeps it consistent as families enroll/edit members. (If RBB-1 → named groups with manual assignment, we'd instead store `classId` on the member or a `classMembers` join — flag during sign-off.)
+1. Find families enrolled in the level's `pid` at the level's `location` (`enrollments` collectionGroup where `pid == X, status == 'active'`, joined to family `location`).
+2. Match members per `levelKind`:
+   - **`level` / `pre-level`** → children (`type==='Child'`) whose `schoolGrade` ∈ `level.gradeBand`.
+   - **`shishu`** → children aged 1.5–4 (derive from `birthMonthYear`); typically no school grade yet.
+   - **`parents`** → adults (`type==='Adult'`) in the enrolled family.
+3. Merge with `attendanceEvents` for the selected date to show current marks; matched members with no event = `unaccounted`.
+
+**Edge cases to handle:** a child whose `schoolGrade` matches no level at their location (data gap → surface in a welcome-team "unassigned students" view); a family enrolled but child grade blank (prompt to complete profile). Because banding is per-location, roster logic reads `gradeBand` off the level doc — never a hardcoded grade→level map.
 
 ## 7. Take-attendance flow (the core UX)
 
-`/teacher/classes/[classId]/attendance?date=YYYY-MM-DD` (defaults to today, Toronto).
+`/teacher/levels/[levelId]/attendance?date=YYYY-MM-DD` (defaults to today, Toronto).
 
 1. Server loads roster (§6) + existing `attendanceEvents` for the date.
 2. Mobile-first list, one row per student: avatar, name, grade, three-state toggle (present/absent/late). Big tap targets. Safety: a child with allergies/emergency info shows a red dot → tap reveals the banner.
 3. Sticky footer: "`12 / 18 marked` · Save attendance". Optimistic UI; save batches all marks.
-4. `POST /api/setu/teacher/attendance` body `{ classId, date, marks: Record<mid, status> }` → upserts `attendanceEvents` (composite aid) in a batched write. Manager... teacher-only + must be assigned to `classId`.
+4. `POST /api/setu/teacher/attendance` body `{ levelId, date, marks: Record<mid, status> }` → upserts `attendanceEvents` (composite aid) in a batched write. Teacher capability + must be assigned to `levelId`.
 5. **First-attendance auto-enroll:** if a marked child's family has no active enrollment for the period, call `enrollFamilyOnFirstAttendance({ fid, pid, markedByTeacherUid })` (Slice 3b helper) inside the same flow — pins the donation snapshot to the current period.
 6. Microcopy on save: "Thank you for taking attendance today." (brief §9 tone).
 
@@ -152,19 +191,19 @@ Roster is computed, not stored — keeps it consistent as families enroll/edit m
 
 ## 9. Guest list + add-student-on-prompt
 
-- **Guest list** (`/teacher/classes/[classId]/guests`): children marked present at this location/date who belong to a *different* class (visiting). One-tap "mark guest attendance" → `attendanceEvent` with `isGuest:true`.
+- **Guest list** (`/teacher/levels/[levelId]/guests`): children marked present at this location/date who belong to a *different* level (visiting). One-tap "mark guest attendance" → `attendanceEvent` with `isGuest:true`.
 - **Add student on prompt** (sheet from take-attendance): child first/last + grade + parent email/phone → creates a pending member + fires the Slice 2d invite to the parent + marks the child present (guest). Shows a "pending invite" badge until the parent completes registration.
 
 ## 10. Endpoint inventory
 | Method | Path | Auth |
 |---|---|---|
-| GET | `/api/setu/teacher/classes` | teacher (own classes) |
-| GET | `/api/setu/teacher/classes/:classId/roster?date=` | teacher (assigned) |
+| GET | `/api/setu/teacher/levels` | teacher (own levels) |
+| GET | `/api/setu/teacher/levels/:levelId/roster?date=` | teacher (assigned) |
 | POST | `/api/setu/teacher/attendance` | teacher (assigned) |
 | GET | `/api/setu/teacher/students/:mid` | teacher (student in their class) |
 | POST | `/api/setu/teacher/guests` | teacher |
 | POST | `/api/setu/teacher/add-student` | teacher (→ invite + guest mark) |
-| GET | `/api/admin/classes` + POST/PATCH | admin |
+| GET | `/api/admin/levels` + POST/PATCH | admin |
 | POST | `/api/admin/teacher-assignments` | admin (RBB-2) |
 
 All via `readSessionFromHeaders` + role helpers (the `isTeacher` helper + assignment check). New `canAccessRoute` gates for `/teacher/*` + `/api/setu/teacher/*`.
