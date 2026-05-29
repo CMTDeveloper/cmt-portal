@@ -71,8 +71,9 @@ beforeEach(() => {
     members: [DONOR],
   });
   mockCreateDonation.mockResolvedValue({ did: 'don_generated' });
-  // global fetch → Stripe Cloud Run service returns a checkout url
-  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ url: 'https://checkout.stripe.com/x' }), { status: 200 })));
+  // global fetch → Stripe Cloud Run service returns { checkoutUrl, sessionId }
+  // (the REAL response shape — verified against the live test endpoint).
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ checkoutUrl: 'https://checkout.stripe.com/x', sessionId: 'cs_test_x' }), { status: 200 })));
 });
 
 describe('POST /api/setu/donations/checkout', () => {

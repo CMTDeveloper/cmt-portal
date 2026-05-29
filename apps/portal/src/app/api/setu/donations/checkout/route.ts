@@ -191,11 +191,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'checkout-failed' }, { status: 502 });
   }
 
-  const data = (await resp.json().catch(() => ({}))) as { url?: string };
-  if (!data.url) {
-    console.error('[donations/checkout] Stripe service returned no url');
+  // The Cloud Run service returns { checkoutUrl, sessionId }. Accept `url` too
+  // for forward-compat in case the contract changes.
+  const data = (await resp.json().catch(() => ({}))) as { checkoutUrl?: string; url?: string };
+  const checkoutLink = data.checkoutUrl ?? data.url;
+  if (!checkoutLink) {
+    console.error('[donations/checkout] Stripe service returned no checkout url');
     return NextResponse.json({ error: 'checkout-failed' }, { status: 502 });
   }
 
-  return NextResponse.json({ url: data.url, did: donation.did }, { status: 200 });
+  return NextResponse.json({ url: checkoutLink, did: donation.did }, { status: 200 });
 }
