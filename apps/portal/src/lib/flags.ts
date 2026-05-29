@@ -16,6 +16,10 @@ export const flags = {
   checkInNotify: master && process.env.NEXT_PUBLIC_FEATURE_CHECK_IN_NOTIFY === 'true',
   setuAuth: process.env.NEXT_PUBLIC_FEATURE_SETU_AUTH === 'true',
   setuDonations: process.env.NEXT_PUBLIC_FEATURE_SETU_DONATIONS === 'true',
+  // Portal-native teacher attendance (Slice 4c). OFF by default — the standalone
+  // check-in app owns attendance; the portal only READS family-check-ins. Kept
+  // behind a flag so we can re-enable the portal teacher flow later.
+  setuTeacher: process.env.NEXT_PUBLIC_FEATURE_SETU_TEACHER === 'true',
 } as const;
 
 export type FeatureFlags = typeof flags;

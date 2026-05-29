@@ -68,6 +68,20 @@ export async function middleware(req: NextRequest) {
       : NextResponse.next();
   }
 
+  // Portal-native teacher attendance (Slice 4c) is hidden by default — the
+  // standalone check-in app owns attendance; the portal only reads
+  // family-check-ins. Flip NEXT_PUBLIC_FEATURE_SETU_TEACHER=true to re-enable.
+  if (
+    process.env.NEXT_PUBLIC_FEATURE_SETU_TEACHER !== 'true' &&
+    (pathname === '/teacher' ||
+      pathname.startsWith('/teacher/') ||
+      pathname.startsWith('/api/setu/teacher/'))
+  ) {
+    return pathname.startsWith('/api/')
+      ? applyCors(req, NextResponse.json({ error: 'not-found' }, { status: 404 }))
+      : NextResponse.redirect(new URL('/family', req.nextUrl.origin));
+  }
+
   const bearer = req.headers.get('authorization')?.match(/^Bearer (.+)$/)?.[1];
   const cookie = req.cookies.get('__session')?.value;
 

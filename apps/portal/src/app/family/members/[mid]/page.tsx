@@ -5,7 +5,7 @@ import { CspRoot, AllergyCallout, SectionLabel, DetailGroup } from '@/features/f
 import { mockFamily } from '@/features/family/data/mock';
 import { flags } from '@/lib/flags';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
-import { getAttendanceForMember, summarize, type AttendanceSummary } from '@/features/setu/teacher/get-attendance';
+import { getCheckInAttendance, summarizeMemberCheckIns, type CheckInSummary } from '@/features/setu/attendance/check-in-attendance';
 interface Props {
   params: Promise<{ mid: string }>;
 }
@@ -15,20 +15,22 @@ function formatEmergencyContact(ec: { relation: string; phone: string; email: st
   return `${ec.relation} · ${ec.phone}`;
 }
 
-function AttendanceSummaryBlock({ summary }: { summary: AttendanceSummary }) {
+function AttendanceSummaryBlock({ summary, hasSid }: { summary: CheckInSummary; hasSid: boolean }) {
   return (
     <>
       <SectionLabel>Bala Vihar attendance</SectionLabel>
-      {summary.total === 0 ? (
+      {!hasSid ? (
+        <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 8 }}>
+          Per-child attendance isn&apos;t linked for this member yet.
+        </div>
+      ) : summary.recorded === 0 ? (
         <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 8 }}>
           No attendance recorded yet — it appears once Sunday classes begin.
         </div>
       ) : (
         <DetailGroup rows={[
-          ['Attended', `${summary.attendedPct}% (${summary.present + summary.late} of ${summary.total})`],
-          ['Present', String(summary.present)],
-          ['Late', String(summary.late)],
-          ['Absent', String(summary.absent)],
+          ['Attended', `${summary.attended} of ${summary.recorded} Sundays`],
+          ['Last class', summary.lastDate ?? '—'],
         ]}/>
       )}
     </>
@@ -48,7 +50,10 @@ export default async function MemberDetailPage({ params }: Props) {
     const name = `${member.firstName} ${member.lastName}`;
     const typeLabel = member.type === 'Child' ? `Child${member.schoolGrade ? ` · ${member.schoolGrade}` : ''}` : 'Adult';
     const canEdit = data.isManager || mid === data.currentMid;
-    const attendanceSummary = summarize(await getAttendanceForMember(mid));
+    const attendanceSummary = summarizeMemberCheckIns(
+      await getCheckInAttendance(data.family.legacyFid),
+      member.legacySid,
+    );
 
     return (
       <>
@@ -100,7 +105,7 @@ export default async function MemberDetailPage({ params }: Props) {
                   </>
                 )}
 
-                {member.type === 'Child' && <AttendanceSummaryBlock summary={attendanceSummary}/>}
+                {member.type === 'Child' && <AttendanceSummaryBlock summary={attendanceSummary} hasSid={Boolean(member.legacySid)}/>}
 
                 {canEdit && (
                   <Link href={`/family/members/${mid}/edit`} className="btn btn--s" style={{ marginTop: 22, display: 'inline-flex' }}>Manage member</Link>
@@ -156,7 +161,7 @@ export default async function MemberDetailPage({ params }: Props) {
               </>
             )}
 
-            {member.type === 'Child' && <AttendanceSummaryBlock summary={attendanceSummary}/>}
+            {member.type === 'Child' && <AttendanceSummaryBlock summary={attendanceSummary} hasSid={Boolean(member.legacySid)}/>}
 
             {canEdit && (
               <Link href={`/family/members/${mid}/edit`} className="btn btn--s" style={{ marginTop: 28, display: 'inline-flex' }}>Manage member</Link>

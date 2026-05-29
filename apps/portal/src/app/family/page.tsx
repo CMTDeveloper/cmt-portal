@@ -12,7 +12,7 @@ import { getDonations } from '@/features/setu/donations/get-donations';
 import { paymentSourceOf } from '@cmt/shared-domain';
 import { getLegacyPaymentStatus } from '@/features/setu/donations/legacy-payment';
 import { getUpcoming, type CalendarEntry } from '@/features/setu/calendar/calendar';
-import { getAttendanceForFamily, summarize, type AttendanceRecord } from '@/features/setu/teacher/get-attendance';
+import { getCheckInAttendance, summarizeFamilyCheckIns, type CheckInSummary } from '@/features/setu/attendance/check-in-attendance';
 
 function fmtUpcoming(e: CalendarEntry): { d: string; m: string; t: string; sub: string | null } {
   const date = new Date(`${e.date}T12:00:00`);
@@ -51,7 +51,8 @@ export default async function FamilyDashboardPage() {
   // Upcoming class dates from the managed calendar (Slice 4b), by family location.
   let upcomingEntries: CalendarEntry[] = [];
   // Real attendance (Slice 4f) for the active period's children.
-  let attendanceRecords: AttendanceRecord[] = [];
+  // Real attendance from the live check-in app (family-check-ins), read-only.
+  let ci: CheckInSummary = { attended: 0, recorded: 0, lastDate: null, marks: [] };
   // Legacy payment bridge: for a period with paymentSource='legacy' (the
   // 2025-26 cutover year), payment status comes from the prod RTDB roster.
   let isLegacyPeriod = false;
@@ -93,15 +94,12 @@ export default async function FamilyDashboardPage() {
       const { upcoming } = await getUpcoming(data.family.location, undefined, 3);
       upcomingEntries = upcoming;
 
-      if (activeEnrollment) {
-        const all = await getAttendanceForFamily(data.family.fid);
-        attendanceRecords = all.filter((r) => r.pid === activeEnrollment.pid && !r.isGuest);
-      }
+      ci = summarizeFamilyCheckIns(await getCheckInAttendance(data.family.legacyFid));
     }
   }
 
-  const attendance = summarize(attendanceRecords);
-  const hasAttendance = attendance.total > 0;
+  const hasAttendance = ci.recorded > 0;
+  const attendancePct = ci.recorded > 0 ? Math.round((ci.attended / ci.recorded) * 100) : 0;
 
   const donationComplete = suggestedAmount !== null && givenForPeriod >= suggestedAmount;
   const donationPct =
@@ -177,11 +175,11 @@ export default async function FamilyDashboardPage() {
               <div className="row" style={{ gap: 14, marginBottom: 14 }}>
                 <Stat label="Kids enrolled" value={String(childCount)}/>
                 <div style={{ width: 1, height: 36, background: 'var(--line)' }}/>
-                <Stat label="Attendance" value={hasAttendance ? `${attendance.attendedPct}%` : '—'}/>
+                <Stat label="Attendance" value={hasAttendance ? String(ci.attended) : '—'}/>
               </div>
               <div style={{ fontSize: 11, color: 'var(--muted)' }}>
                 {hasAttendance
-                  ? `${attendance.present + attendance.late} of ${attendance.total} classes attended this year.`
+                  ? `Attended ${ci.attended} of ${ci.recorded} Sunday classes.`
                   : 'Attendance appears here once Sunday classes begin.'}
               </div>
               {!isEnrolled && (
@@ -322,9 +320,9 @@ export default async function FamilyDashboardPage() {
           <MetricCard label="Bala Vihar" value={isEnrolled ? 'Enrolled' : 'Not yet'} sub={enrollPeriodLabel ?? 'no active period'}/>
           <MetricCard
             label="Attendance"
-            value={hasAttendance ? `${attendance.attendedPct}%` : '—'}
-            sub={hasAttendance ? `${attendance.present + attendance.late} of ${attendance.total} attended` : 'no classes yet'}
-            {...(hasAttendance ? { tone: attendance.attendedPct >= 75 ? ('ok' as const) : ('warn' as const) } : {})}
+            value={hasAttendance ? String(ci.attended) : '—'}
+            sub={hasAttendance ? `of ${ci.recorded} Sundays` : 'no classes yet'}
+            {...(hasAttendance ? { tone: attendancePct >= 75 ? ('ok' as const) : ('warn' as const) } : {})}
           />
           <MetricCard label="Family"     value={String(memberCount)} sub={`${memberCount} member${memberCount !== 1 ? 's' : ''}`}/>
         </div>
@@ -339,21 +337,18 @@ export default async function FamilyDashboardPage() {
               {hasAttendance ? (
                 <>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(16, 1fr)', gap: 4, marginBottom: 18 }}>
-                    {attendanceRecords
-                      .slice()
-                      .reverse()
-                      .slice(-32)
-                      .map((r) => {
-                        const bg = r.status === 'absent' ? 'var(--err)' : r.status === 'late' ? 'var(--warn, #a06410)' : 'var(--accent)';
-                        const op = r.status === 'present' ? 0.75 : 1;
-                        return <div key={r.aid} title={`${r.date} · ${r.status}`} style={{ aspectRatio: '1', borderRadius: 4, background: bg, opacity: op }} />;
-                      })}
+                    {ci.marks.slice(-32).map((m) => (
+                      <div
+                        key={m.date}
+                        title={`${m.date} · ${m.present ? 'present' : 'absent'}`}
+                        style={{ aspectRatio: '1', borderRadius: 4, background: m.present ? 'var(--accent)' : 'var(--err)', opacity: m.present ? 0.75 : 1 }}
+                      />
+                    ))}
                   </div>
                   <div className="row" style={{ gap: 18, fontSize: 11, color: 'var(--muted)' }}>
                     <span className="row" style={{ gap: 6 }}><span style={{ width: 10, height: 10, background: 'var(--accent)', borderRadius: 2, opacity: .75 }}/> present</span>
-                    <span className="row" style={{ gap: 6 }}><span style={{ width: 10, height: 10, background: 'var(--warn, #a06410)', borderRadius: 2 }}/> late</span>
                     <span className="row" style={{ gap: 6 }}><span style={{ width: 10, height: 10, background: 'var(--err)', borderRadius: 2 }}/> absent</span>
-                    <span style={{ marginLeft: 'auto' }}>{attendance.present + attendance.late} of {attendance.total} attended{attendance.absent > 0 ? ` · ${attendance.absent} absence${attendance.absent !== 1 ? 's' : ''}` : ''}</span>
+                    <span style={{ marginLeft: 'auto' }}>Attended {ci.attended} of {ci.recorded} Sundays</span>
                   </div>
                 </>
               ) : (
