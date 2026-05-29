@@ -60,7 +60,7 @@ export async function PATCH(
   if (data.periodLabel !== undefined) update.periodLabel = data.periodLabel;
   if (data.startDate !== undefined) update.startDate = Timestamp.fromDate(new Date(data.startDate));
   if (data.endDate !== undefined) update.endDate = Timestamp.fromDate(new Date(data.endDate));
-  if (data.suggestedAmount !== undefined) update.suggestedAmount = data.suggestedAmount;
+  if (data.pricingTiers !== undefined) update.pricingTiers = data.pricingTiers;
   if (data.amountTiers !== undefined) update.amountTiers = data.amountTiers;
   if (data.enabled !== undefined) update.enabled = data.enabled;
 

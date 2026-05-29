@@ -32,7 +32,7 @@ const existingPeriodData = {
   pid: 'bala-vihar-brampton-fall-2027',
   startDate: { toDate: () => new Date(FUTURE_START) },
   endDate: { toDate: () => new Date(FUTURE_END) },
-  suggestedAmount: 500,
+  pricingTiers: [{ effectiveFrom: '2027-09-01', amountCAD: 500, label: 'Full year' }],
   enabled: true,
 };
 
@@ -97,10 +97,10 @@ describe('PATCH /api/admin/donation-periods/[pid]', () => {
     expect(res.status).toBe(400);
   });
 
-  it('returns 400 when suggestedAmount is 0', async () => {
+  it('returns 400 when a pricing tier amount is 0', async () => {
     const { PATCH } = await import('../route');
     const res = await PATCH(
-      makeRequest('bala-vihar-brampton-fall-2027', { suggestedAmount: 0 }, 'uid-admin'),
+      makeRequest('bala-vihar-brampton-fall-2027', { pricingTiers: [{ effectiveFrom: '2027-09-01', amountCAD: 0, label: 'x' }] }, 'uid-admin'),
       { params: Promise.resolve({ pid: 'bala-vihar-brampton-fall-2027' }) },
     );
     expect(res.status).toBe(400);
@@ -144,16 +144,17 @@ describe('PATCH /api/admin/donation-periods/[pid]', () => {
     expect(body.pid).toBe('bala-vihar-brampton-fall-2027');
   });
 
-  it('returns 200 on valid suggestedAmount update', async () => {
+  it('returns 200 on valid pricingTiers update', async () => {
     const { PATCH } = await import('../route');
+    const newTiers = [{ effectiveFrom: '2027-09-01', amountCAD: 750, label: 'Full year' }];
     const res = await PATCH(
-      makeRequest('bala-vihar-brampton-fall-2027', { suggestedAmount: 750 }, 'uid-admin'),
+      makeRequest('bala-vihar-brampton-fall-2027', { pricingTiers: newTiers }, 'uid-admin'),
       { params: Promise.resolve({ pid: 'bala-vihar-brampton-fall-2027' }) },
     );
     expect(res.status).toBe(200);
     expect(mockUpdate).toHaveBeenCalledOnce();
     const updateArg = mockUpdate.mock.calls[0]![0] as Record<string, unknown>;
-    expect(updateArg['suggestedAmount']).toBe(750);
+    expect(updateArg['pricingTiers']).toEqual(newTiers);
     expect(updateArg['updatedBy']).toBe('uid-admin');
   });
 
@@ -175,7 +176,7 @@ describe('PATCH /api/admin/donation-periods/[pid]', () => {
       { params: Promise.resolve({ pid: 'bala-vihar-brampton-fall-2027' }) },
     );
     const updateArg = mockUpdate.mock.calls[0]![0] as Record<string, unknown>;
-    expect('suggestedAmount' in updateArg).toBe(false);
+    expect('pricingTiers' in updateArg).toBe(false);
     expect('amountTiers' in updateArg).toBe(false);
     expect('periodLabel' in updateArg).toBe(false);
   });

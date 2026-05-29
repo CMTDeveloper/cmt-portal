@@ -83,8 +83,8 @@ const hasUatCreds =
         periodLabel: PERIOD_LABEL,
         startDate: new Date(START_DATE),
         endDate: new Date(END_DATE),
-        suggestedAmount: SUGGESTED_AMOUNT,
-        amountTiers: [500, 750, 1000],
+        // Far-past tier so resolveSuggestedAmount(period, now) === SUGGESTED_AMOUNT
+        pricingTiers: [{ effectiveFrom: '2020-01-01', amountCAD: SUGGESTED_AMOUNT, label: 'Full year' }],
         enabled: true,
         createdAt: new Date(),
         createdBy: `e2e-setup-${RUN_ID}`,
@@ -156,7 +156,7 @@ const hasUatCreds =
 
     // ── Snapshot invariant ──────────────────────────────────────────────────
 
-    it('snapshot invariant — mutating period.suggestedAmount does NOT change effectiveSuggestedAmount on existing enrollment', async () => {
+    it('snapshot invariant — mutating period.pricingTiers does NOT change effectiveSuggestedAmount on existing enrollment', async () => {
       expect(eid).toBeTruthy();
 
       // Step 1: assert enrollment snapshot is pinned at 500
@@ -173,8 +173,10 @@ const hasUatCreds =
       const enrollData = enrollSnap.data() as Record<string, unknown>;
       expect(enrollData['suggestedAmountSnapshot']).toBe(500);
 
-      // Step 2: directly mutate period.suggestedAmount in Firestore (bypass API)
-      await db.collection('donationPeriods').doc(pid).update({ suggestedAmount: 800 });
+      // Step 2: directly mutate period.pricingTiers in Firestore (bypass API)
+      await db.collection('donationPeriods').doc(pid).update({
+        pricingTiers: [{ effectiveFrom: '2020-01-01', amountCAD: 800, label: 'Full year' }],
+      });
 
       // Step 3: re-fetch enrollment via GET /api/setu/enrollments
       const { GET } = await import('@/app/api/setu/enrollments/route');
@@ -245,8 +247,10 @@ const hasUatCreds =
         .doc(eid)
         .update({ status: 'cancelled', cancelledAt: new Date(), cancelledReason: 'test-reset' });
 
-      // Also reset the period suggestedAmount so the welcome enroll snapshot is predictable
-      await db.collection('donationPeriods').doc(pid).update({ suggestedAmount: SUGGESTED_AMOUNT });
+      // Also reset the period pricing so the welcome enroll snapshot is predictable
+      await db.collection('donationPeriods').doc(pid).update({
+        pricingTiers: [{ effectiveFrom: '2020-01-01', amountCAD: SUGGESTED_AMOUNT, label: 'Full year' }],
+      });
 
       const { POST } = await import('@/app/api/welcome/enrollments/route');
       const { makePortalRequest } = await import('./helpers/request');

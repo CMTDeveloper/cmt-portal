@@ -23,6 +23,12 @@ function parseArgs(argv: string[]): { dryRun: boolean; allowProd: boolean } {
   };
 }
 
+interface PricingTier {
+  effectiveFrom: string; // YYYY-MM-DD
+  amountCAD: number;
+  label: string;
+}
+
 interface PeriodSeed {
   pid: string;
   programKey: 'bala-vihar';
@@ -31,59 +37,40 @@ interface PeriodSeed {
   periodLabel: string;
   startDate: Date;
   endDate: Date;
-  suggestedAmount: number;
-  amountTiers: number[];
+  pricingTiers: PricingTier[];
   enabled: boolean;
 }
 
-// Current periods for go-live. Update before each semester.
+// Bala Vihar is one continuous school year (Sept → June), one period per
+// location. The suggested donation is prorated by enrollment date — admins
+// adjust these tiers/amounts in the admin panel. Example amounts below.
+const PRICING_2025_26: PricingTier[] = [
+  { effectiveFrom: '2025-09-01', amountCAD: 500, label: 'Full year (from September)' },
+  { effectiveFrom: '2025-12-01', amountCAD: 300, label: 'Joined winter' },
+  { effectiveFrom: '2026-02-01', amountCAD: 200, label: 'Joined spring' },
+];
+
 const PERIODS: PeriodSeed[] = [
   {
-    pid: 'bv-brampton-fall-2025',
+    pid: 'bv-brampton-2025-26',
     programKey: 'bala-vihar',
     programLabel: 'Bala Vihar',
     location: 'Brampton',
-    periodLabel: 'Fall 2025',
+    periodLabel: '2025-26',
     startDate: toTorontoStartOfDay('2025-09-07'),
-    endDate: toTorontoEndOfDay('2026-01-26'),
-    suggestedAmount: 500,
-    amountTiers: [500, 750, 1000, 1500],
+    endDate: toTorontoEndOfDay('2026-06-14'),
+    pricingTiers: PRICING_2025_26,
     enabled: true,
   },
   {
-    pid: 'bv-brampton-winter-2026',
+    pid: 'bv-scarborough-2025-26',
     programKey: 'bala-vihar',
     programLabel: 'Bala Vihar',
-    location: 'Brampton',
-    periodLabel: 'Winter 2026',
-    startDate: toTorontoStartOfDay('2026-02-01'),
-    endDate: toTorontoEndOfDay('2026-06-28'),
-    suggestedAmount: 500,
-    amountTiers: [500, 750, 1000, 1500],
-    enabled: true,
-  },
-  {
-    pid: 'bv-mississauga-fall-2025',
-    programKey: 'bala-vihar',
-    programLabel: 'Bala Vihar',
-    location: 'Mississauga',
-    periodLabel: 'Fall 2025',
+    location: 'Scarborough',
+    periodLabel: '2025-26',
     startDate: toTorontoStartOfDay('2025-09-07'),
-    endDate: toTorontoEndOfDay('2026-01-26'),
-    suggestedAmount: 500,
-    amountTiers: [500, 750, 1000, 1500],
-    enabled: true,
-  },
-  {
-    pid: 'bv-mississauga-winter-2026',
-    programKey: 'bala-vihar',
-    programLabel: 'Bala Vihar',
-    location: 'Mississauga',
-    periodLabel: 'Winter 2026',
-    startDate: toTorontoStartOfDay('2026-02-01'),
-    endDate: toTorontoEndOfDay('2026-06-28'),
-    suggestedAmount: 500,
-    amountTiers: [500, 750, 1000, 1500],
+    endDate: toTorontoEndOfDay('2026-06-14'),
+    pricingTiers: PRICING_2025_26,
     enabled: true,
   },
 ];
@@ -125,8 +112,7 @@ async function main() {
         periodLabel: period.periodLabel,
         startDate: Timestamp.fromDate(period.startDate),
         endDate: Timestamp.fromDate(period.endDate),
-        suggestedAmount: period.suggestedAmount,
-        amountTiers: period.amountTiers,
+        pricingTiers: period.pricingTiers,
         enabled: period.enabled,
         createdAt: now,
         createdBy: systemUid,

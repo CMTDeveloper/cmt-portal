@@ -1,5 +1,5 @@
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
-import type { EnrollmentDoc, DonationPeriodDoc } from '@cmt/shared-domain';
+import { resolveSuggestedAmount, type EnrollmentDoc, type DonationPeriodDoc, type PricingTier } from '@cmt/shared-domain';
 
 type EnrollVia = EnrollmentDoc['enrolledVia'];
 
@@ -60,11 +60,11 @@ export async function enrollFamily(params: EnrollFamilyParams): Promise<EnrollFa
       return new Date(v as string);
     }
 
-    const period: Pick<DonationPeriodDoc, 'enabled' | 'startDate' | 'endDate' | 'suggestedAmount' | 'programLabel' | 'periodLabel' | 'location'> = {
+    const period: Pick<DonationPeriodDoc, 'enabled' | 'startDate' | 'endDate' | 'pricingTiers' | 'programLabel' | 'periodLabel' | 'location'> = {
       enabled: periodData['enabled'] as boolean,
       startDate: toDate(periodData['startDate']),
       endDate: toDate(periodData['endDate']),
-      suggestedAmount: periodData['suggestedAmount'] as number,
+      pricingTiers: periodData['pricingTiers'] as PricingTier[],
       programLabel: periodData['programLabel'] as string,
       periodLabel: periodData['periodLabel'] as string,
       location: periodData['location'] as DonationPeriodDoc['location'],
@@ -75,6 +75,10 @@ export async function enrollFamily(params: EnrollFamilyParams): Promise<EnrollFa
     const now = new Date();
     if (period.startDate > now) throw new Error('period-not-yet-open');
     if (period.endDate < now) throw new Error('period-expired');
+
+    // Suggested amount is prorated by enrollment date (school-year tier schedule),
+    // pinned onto the snapshot here so later admin tier edits never change it.
+    const suggestedAmountSnapshot = resolveSuggestedAmount(period, now);
 
     if (enrollmentSnap.exists) {
       const existing = enrollmentSnap.data() as { status: string; suggestedAmountSnapshot: number };
@@ -105,14 +109,14 @@ export async function enrollFamily(params: EnrollFamilyParams): Promise<EnrollFa
       enrolledVia,
       enrolledByMid,
       childrenMids,
-      suggestedAmountSnapshot: period.suggestedAmount,
+      suggestedAmountSnapshot,
       suggestedAmountOverride: null,
       status: 'active',
       cancelledAt: null,
       cancelledReason: null,
     });
 
-    return { created: true as const, eid, suggestedAmountSnapshot: period.suggestedAmount };
+    return { created: true as const, eid, suggestedAmountSnapshot };
   });
 
   return result;

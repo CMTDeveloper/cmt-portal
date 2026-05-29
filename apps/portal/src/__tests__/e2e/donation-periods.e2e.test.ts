@@ -85,8 +85,10 @@ const hasUatCreds = Boolean(
           periodLabel: PERIOD_LABEL,
           startDate: START_DATE,
           endDate: END_DATE,
-          suggestedAmount: 500,
-          amountTiers: [500, 750, 1000],
+          pricingTiers: [
+            { effectiveFrom: '2027-09-01', amountCAD: 500, label: 'Full year' },
+            { effectiveFrom: '2027-12-01', amountCAD: 300, label: 'Joined winter' },
+          ],
           enabled: true,
         }),
       );
@@ -110,7 +112,8 @@ const hasUatCreds = Boolean(
       expect(data['programKey']).toBe(PROGRAM_KEY);
       expect(data['location']).toBe(LOCATION);
       expect(data['periodLabel']).toBe(PERIOD_LABEL);
-      expect(data['suggestedAmount']).toBe(500);
+      expect(Array.isArray(data['pricingTiers'])).toBe(true);
+      expect((data['pricingTiers'] as unknown[]).length).toBe(2);
       expect(data['enabled']).toBe(true);
       expect(data['createdBy']).toBe(ADMIN_UID);
 
@@ -130,13 +133,13 @@ const hasUatCreds = Boolean(
       expect(pids).toContain(createdPid);
     });
 
-    it('PATCH /api/admin/donation-periods/[pid] — updates suggestedAmount, returns 200', async () => {
+    it('PATCH /api/admin/donation-periods/[pid] — updates pricingTiers, returns 200', async () => {
       expect(createdPid).toBeTruthy();
       const { PATCH } = await import('@/app/api/admin/donation-periods/[pid]/route');
 
       const res = await PATCH(
         makeAdminRequest('PATCH', `/api/admin/donation-periods/${createdPid}`, {
-          suggestedAmount: 750,
+          pricingTiers: [{ effectiveFrom: '2027-09-01', amountCAD: 750, label: 'Full year' }],
         }),
         { params: Promise.resolve({ pid: createdPid }) },
       );
@@ -146,7 +149,7 @@ const hasUatCreds = Boolean(
       expect(body.pid).toBe(createdPid);
     });
 
-    it('updated suggestedAmount is persisted in Firestore', async () => {
+    it('updated pricingTiers is persisted in Firestore', async () => {
       expect(createdPid).toBeTruthy();
       const { portalFirestore } = await import('@cmt/firebase-shared/admin/firestore');
       const db = portalFirestore();
@@ -154,7 +157,9 @@ const hasUatCreds = Boolean(
       const snap = await db.collection('donationPeriods').doc(createdPid).get();
       expect(snap.exists).toBe(true);
       const data = snap.data() as Record<string, unknown>;
-      expect(data['suggestedAmount']).toBe(750);
+      const tiers = data['pricingTiers'] as Array<{ amountCAD: number }>;
+      expect(tiers).toHaveLength(1);
+      expect(tiers[0]!.amountCAD).toBe(750);
       expect(data['updatedBy']).toBe(ADMIN_UID);
     });
 
@@ -196,8 +201,7 @@ const hasUatCreds = Boolean(
           periodLabel: `No Auth ${RUN_ID}`,
           startDate: START_DATE,
           endDate: END_DATE,
-          suggestedAmount: 500,
-          amountTiers: [500],
+          pricingTiers: [{ effectiveFrom: '2027-09-01', amountCAD: 500, label: 'Full year' }],
           enabled: true,
         }),
       );

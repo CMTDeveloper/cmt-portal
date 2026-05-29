@@ -83,8 +83,8 @@ const ACTIVE_PERIOD = {
   periodLabel: 'Fall 2026',
   startDate: { toDate: () => PAST },
   endDate: { toDate: () => FUTURE },
-  suggestedAmount: 500,
-  amountTiers: [500, 750, 1000],
+  // Tier effectiveFrom in the far past so resolveSuggestedAmount(period, now) = 500
+  pricingTiers: [{ effectiveFrom: '2020-01-01', amountCAD: 500, label: 'Full year' }],
   enabled: true,
   createdAt: { toDate: () => PAST },
   updatedAt: { toDate: () => PAST },
@@ -298,16 +298,17 @@ describe('POST /api/setu/enrollments', () => {
     expect(body.eid).toBe(EID);
   });
 
-  it('snapshot invariant: suggestedAmount on response matches period.suggestedAmount at txn time', async () => {
-    // Even if suggestedAmount were later updated, the txn pins it at create time
+  it('snapshot invariant: suggestedAmount is the tier resolved at txn time', async () => {
+    // The snapshot pins the resolved tier amount at create time; later admin
+    // tier edits never change an existing enrollment.
     setupEnrollTransaction();
 
     const res = await enrollmentsPOST(
       makeRequest('POST', '/api/setu/enrollments', { pid: PID }, managerHeaders()),
     );
     const body = await res.json() as { suggestedAmount: number };
-    // The pinned snapshot must equal what the period had at enrollment time
-    expect(body.suggestedAmount).toBe(ACTIVE_PERIOD.suggestedAmount);
+    // The single far-past tier resolves to 500 regardless of enrollment date.
+    expect(body.suggestedAmount).toBe(500);
   });
 
   it('returns 404 when period does not exist', async () => {

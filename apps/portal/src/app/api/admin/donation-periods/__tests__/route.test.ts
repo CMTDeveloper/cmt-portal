@@ -34,11 +34,13 @@ const FUTURE_END = '2027-12-31T04:59:59.000Z';
 const validBody = {
   programKey: 'bala-vihar',
   location: 'Brampton',
-  periodLabel: 'Fall 2027',
+  periodLabel: '2027-28',
   startDate: FUTURE_START,
   endDate: FUTURE_END,
-  suggestedAmount: 500,
-  amountTiers: [500, 750, 1000],
+  pricingTiers: [
+    { effectiveFrom: '2027-09-01', amountCAD: 500, label: 'Full year' },
+    { effectiveFrom: '2027-12-01', amountCAD: 300, label: 'Joined winter' },
+  ],
   enabled: true,
 };
 
@@ -107,8 +109,7 @@ describe('GET /api/admin/donation-periods', () => {
       periodLabel: 'Fall 2027',
       startDate: makeTimestamp(new Date(FUTURE_START)),
       endDate: makeTimestamp(new Date(FUTURE_END)),
-      suggestedAmount: 500,
-      amountTiers: [500, 750, 1000],
+      pricingTiers: [{ effectiveFrom: '2027-09-01', amountCAD: 500, label: 'Full year' }],
       enabled: true,
       createdAt: makeTimestamp(now),
       createdBy: 'uid-admin',
@@ -161,9 +162,9 @@ describe('POST /api/admin/donation-periods', () => {
     expect(res.status).toBe(400);
   });
 
-  it('returns 400 when suggestedAmount is 0', async () => {
+  it('returns 400 when a pricing tier amount is 0', async () => {
     const { POST } = await import('../route');
-    const res = await POST(makeRequest('POST', { ...validBody, suggestedAmount: 0 }, 'uid-admin'));
+    const res = await POST(makeRequest('POST', { ...validBody, pricingTiers: [{ effectiveFrom: '2027-09-01', amountCAD: 0, label: 'x' }] }, 'uid-admin'));
     expect(res.status).toBe(400);
     const body = await res.json() as { error: string };
     expect(body.error).toBe('bad-request');
@@ -177,9 +178,9 @@ describe('POST /api/admin/donation-periods', () => {
     expect(res.status).toBe(400);
   });
 
-  it('returns 400 when amountTiers is empty', async () => {
+  it('returns 400 when pricingTiers is empty', async () => {
     const { POST } = await import('../route');
-    const res = await POST(makeRequest('POST', { ...validBody, amountTiers: [] }, 'uid-admin'));
+    const res = await POST(makeRequest('POST', { ...validBody, pricingTiers: [] }, 'uid-admin'));
     expect(res.status).toBe(400);
   });
 

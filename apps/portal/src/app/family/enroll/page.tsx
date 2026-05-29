@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { SetuAvatar, SetuIcon, Rosette } from '@cmt/ui';
 import { CspRoot, SectionLabel } from '@/features/family/components/atoms';
 import { EnrollCta } from '@/features/family/components/enroll-cta';
+import { resolveSuggestedAmount } from '@cmt/shared-domain';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
 import { resolveActivePeriod } from '@/features/setu/enrollment/resolve-active-period';
@@ -42,9 +43,11 @@ export default async function EnrollPage() {
 
   const alreadyEnrolled = activeEnrollment !== null;
   const donationsEnabled = process.env.NEXT_PUBLIC_FEATURE_SETU_DONATIONS === 'true';
-  // Pin amount to enrollment snapshot/override; fall back to live period amount pre-enrollment.
+  // Pin amount to enrollment snapshot/override; before enrolling, show the tier
+  // a family enrolling today would get (prorated by date).
   const displaySuggestedAmount =
-    activeEnrollment?.effectiveSuggestedAmount ?? activePeriod?.suggestedAmount;
+    activeEnrollment?.effectiveSuggestedAmount ??
+    (activePeriod ? resolveSuggestedAmount(activePeriod, new Date()) : undefined);
 
   return (
     <>
@@ -101,7 +104,7 @@ export default async function EnrollPage() {
                   )}
 
                   <SectionLabel><em className="sa">Dakshina</em> · suggested donation</SectionLabel>
-                  {renderDakshinaBlock(displaySuggestedAmount ?? activePeriod.suggestedAmount, family.location, activePeriod.periodLabel)}
+                  {renderDakshinaBlock(displaySuggestedAmount ?? 0, family.location, activePeriod.periodLabel)}
                 </>
               )}
             </div>
@@ -205,7 +208,7 @@ export default async function EnrollPage() {
                 </h3>
                 <div style={{ padding: 18, background: 'var(--accentSoft)', borderRadius: 'var(--radiusSm)', marginBottom: 18 }}>
                   <div className="row" style={{ alignItems: 'baseline', gap: 4, marginBottom: 6 }}>
-                    <span style={{ fontFamily: 'var(--display)', fontSize: 46, lineHeight: 1 }}>${displaySuggestedAmount ?? activePeriod.suggestedAmount}</span>
+                    <span style={{ fontFamily: 'var(--display)', fontSize: 46, lineHeight: 1 }}>${displaySuggestedAmount ?? 0}</span>
                     <span style={{ fontSize: 13, color: 'var(--body-text)' }}>· per family</span>
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--muted)' }}>

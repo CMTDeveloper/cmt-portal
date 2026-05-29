@@ -29,6 +29,15 @@ export function DonateForm({ mode, eid, suggestedAmount, periodLabel, tiers }: D
 
   const belowFloor = mode === 'bala-vihar' && amount < floor;
   const invalid = amount < 1 || belowFloor;
+
+  // Give-more quick-pick chips: explicit amountTiers if provided, else derived
+  // from the (possibly prorated) suggested amount.
+  const chipValues =
+    tiers.length > 0
+      ? tiers
+      : suggestedAmount && suggestedAmount > 0
+        ? [suggestedAmount, Math.round(suggestedAmount * 1.5), suggestedAmount * 2]
+        : [];
   const fee = coverFee && amount >= 1 ? processingFeeCAD(amount) : 0;
   const total = amount + fee;
 
@@ -105,9 +114,9 @@ export function DonateForm({ mode, eid, suggestedAmount, periodLabel, tiers }: D
           <span style={{ fontSize: 13, color: 'var(--muted)' }}> CAD</span>
         </div>
 
-        {tiers.length > 0 && (
+        {chipValues.length > 0 && (
           <div className="row" style={{ gap: 6, justifyContent: 'center', marginTop: 14, flexWrap: 'wrap' }}>
-            {tiers.map((v) => (
+            {chipValues.map((v) => (
               <button
                 key={v}
                 type="button"

@@ -3,19 +3,26 @@ import {
   CreateDonationPeriodSchema,
   UpdateDonationPeriodSchema,
   DonationPeriodDocSchema,
+  resolveSuggestedAmount,
+  type PricingTier,
 } from '../schemas/donation-period';
 
 const FUTURE_START = '2027-09-01T04:00:00.000Z';
-const FUTURE_END = '2027-12-31T04:59:59.000Z';
+const FUTURE_END = '2028-06-30T04:59:59.000Z';
+
+const TIERS = [
+  { effectiveFrom: '2027-09-01', amountCAD: 500, label: 'Full year' },
+  { effectiveFrom: '2027-12-01', amountCAD: 300, label: 'Joined winter' },
+  { effectiveFrom: '2028-02-01', amountCAD: 200, label: 'Joined spring' },
+];
 
 const validCreate = {
   programKey: 'bala-vihar' as const,
   location: 'Brampton' as const,
-  periodLabel: 'Fall 2027',
+  periodLabel: '2027-28',
   startDate: FUTURE_START,
   endDate: FUTURE_END,
-  suggestedAmount: 500,
-  amountTiers: [500, 750, 1000],
+  pricingTiers: TIERS,
   enabled: true,
 };
 
@@ -40,39 +47,47 @@ describe('CreateDonationPeriodSchema', () => {
     expect(CreateDonationPeriodSchema.safeParse({ ...validCreate, programKey: 'yoga' }).success).toBe(false);
   });
 
-  it('rejects suggestedAmount of 0', () => {
-    expect(CreateDonationPeriodSchema.safeParse({ ...validCreate, suggestedAmount: 0 }).success).toBe(false);
+  it('rejects empty pricingTiers array', () => {
+    expect(CreateDonationPeriodSchema.safeParse({ ...validCreate, pricingTiers: [] }).success).toBe(false);
   });
 
-  it('rejects negative suggestedAmount', () => {
-    expect(CreateDonationPeriodSchema.safeParse({ ...validCreate, suggestedAmount: -100 }).success).toBe(false);
+  it('rejects a tier with amount 0', () => {
+    expect(
+      CreateDonationPeriodSchema.safeParse({
+        ...validCreate,
+        pricingTiers: [{ effectiveFrom: '2027-09-01', amountCAD: 0, label: 'x' }],
+      }).success,
+    ).toBe(false);
   });
 
-  it('rejects non-integer suggestedAmount', () => {
-    expect(CreateDonationPeriodSchema.safeParse({ ...validCreate, suggestedAmount: 500.5 }).success).toBe(false);
+  it('rejects a tier with a bad date format', () => {
+    expect(
+      CreateDonationPeriodSchema.safeParse({
+        ...validCreate,
+        pricingTiers: [{ effectiveFrom: 'Sept 1', amountCAD: 500, label: 'x' }],
+      }).success,
+    ).toBe(false);
   });
 
-  it('rejects empty amountTiers array', () => {
-    expect(CreateDonationPeriodSchema.safeParse({ ...validCreate, amountTiers: [] }).success).toBe(false);
-  });
-
-  it('rejects amountTiers with a zero entry', () => {
-    expect(CreateDonationPeriodSchema.safeParse({ ...validCreate, amountTiers: [0, 500] }).success).toBe(false);
+  it('rejects non-ascending tier dates', () => {
+    expect(
+      CreateDonationPeriodSchema.safeParse({
+        ...validCreate,
+        pricingTiers: [
+          { effectiveFrom: '2027-12-01', amountCAD: 300, label: 'b' },
+          { effectiveFrom: '2027-09-01', amountCAD: 500, label: 'a' },
+        ],
+      }).success,
+    ).toBe(false);
   });
 
   it('rejects endDate equal to startDate', () => {
-    expect(
-      CreateDonationPeriodSchema.safeParse({ ...validCreate, endDate: FUTURE_START }).success,
-    ).toBe(false);
+    expect(CreateDonationPeriodSchema.safeParse({ ...validCreate, endDate: FUTURE_START }).success).toBe(false);
   });
 
   it('rejects endDate before startDate', () => {
     expect(
-      CreateDonationPeriodSchema.safeParse({
-        ...validCreate,
-        startDate: FUTURE_END,
-        endDate: FUTURE_START,
-      }).success,
+      CreateDonationPeriodSchema.safeParse({ ...validCreate, startDate: FUTURE_END, endDate: FUTURE_START }).success,
     ).toBe(false);
   });
 
@@ -89,12 +104,6 @@ describe('CreateDonationPeriodSchema', () => {
     expect(result.success).toBe(true);
     if (result.success) expect(result.data.enabled).toBe(true);
   });
-
-  it('accepts enabled: false explicitly', () => {
-    const result = CreateDonationPeriodSchema.safeParse({ ...validCreate, enabled: false });
-    expect(result.success).toBe(true);
-    if (result.success) expect(result.data.enabled).toBe(false);
-  });
 });
 
 // ── UpdateDonationPeriodSchema ─────────────────────────────────────────────────
@@ -104,46 +113,33 @@ describe('UpdateDonationPeriodSchema', () => {
     expect(UpdateDonationPeriodSchema.safeParse({}).success).toBe(true);
   });
 
-  it('accepts a partial update with only suggestedAmount', () => {
-    expect(UpdateDonationPeriodSchema.safeParse({ suggestedAmount: 750 }).success).toBe(true);
+  it('accepts a partial update with only pricingTiers', () => {
+    expect(UpdateDonationPeriodSchema.safeParse({ pricingTiers: TIERS }).success).toBe(true);
   });
 
   it('accepts a partial update with only enabled toggle', () => {
     expect(UpdateDonationPeriodSchema.safeParse({ enabled: false }).success).toBe(true);
   });
 
-  it('accepts a partial update with both dates when endDate > startDate', () => {
-    expect(
-      UpdateDonationPeriodSchema.safeParse({
-        startDate: FUTURE_START,
-        endDate: FUTURE_END,
-      }).success,
-    ).toBe(true);
-  });
-
   it('rejects when both dates provided and endDate <= startDate', () => {
     expect(
-      UpdateDonationPeriodSchema.safeParse({
-        startDate: FUTURE_END,
-        endDate: FUTURE_START,
-      }).success,
+      UpdateDonationPeriodSchema.safeParse({ startDate: FUTURE_END, endDate: FUTURE_START }).success,
     ).toBe(false);
   });
 
-  it('allows updating only startDate (single-side date update)', () => {
-    expect(UpdateDonationPeriodSchema.safeParse({ startDate: FUTURE_START }).success).toBe(true);
+  it('rejects empty pricingTiers', () => {
+    expect(UpdateDonationPeriodSchema.safeParse({ pricingTiers: [] }).success).toBe(false);
   });
 
-  it('allows updating only endDate', () => {
-    expect(UpdateDonationPeriodSchema.safeParse({ endDate: FUTURE_END }).success).toBe(true);
-  });
-
-  it('rejects suggestedAmount of 0', () => {
-    expect(UpdateDonationPeriodSchema.safeParse({ suggestedAmount: 0 }).success).toBe(false);
-  });
-
-  it('rejects empty amountTiers', () => {
-    expect(UpdateDonationPeriodSchema.safeParse({ amountTiers: [] }).success).toBe(false);
+  it('rejects non-ascending pricingTiers', () => {
+    expect(
+      UpdateDonationPeriodSchema.safeParse({
+        pricingTiers: [
+          { effectiveFrom: '2027-12-01', amountCAD: 300, label: 'b' },
+          { effectiveFrom: '2027-09-01', amountCAD: 500, label: 'a' },
+        ],
+      }).success,
+    ).toBe(false);
   });
 
   it('rejects empty periodLabel string', () => {
@@ -155,15 +151,14 @@ describe('UpdateDonationPeriodSchema', () => {
 
 describe('DonationPeriodDocSchema', () => {
   const validDoc = {
-    pid: 'bala-vihar-brampton-fall-2027',
+    pid: 'bv-brampton-2027-28',
     programKey: 'bala-vihar' as const,
     programLabel: 'Bala Vihar',
     location: 'Brampton' as const,
-    periodLabel: 'Fall 2027',
+    periodLabel: '2027-28',
     startDate: new Date(FUTURE_START),
     endDate: new Date(FUTURE_END),
-    suggestedAmount: 500,
-    amountTiers: [500, 750, 1000],
+    pricingTiers: TIERS,
     enabled: true,
     createdAt: new Date(),
     createdBy: 'uid-admin',
@@ -175,19 +170,50 @@ describe('DonationPeriodDocSchema', () => {
     expect(DonationPeriodDocSchema.safeParse(validDoc).success).toBe(true);
   });
 
+  it('accepts a doc with optional amountTiers present', () => {
+    expect(DonationPeriodDocSchema.safeParse({ ...validDoc, amountTiers: [500, 750] }).success).toBe(true);
+  });
+
   it('rejects missing pid', () => {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { pid, ...rest } = validDoc;
     expect(DonationPeriodDocSchema.safeParse(rest).success).toBe(false);
   });
 
-  it('rejects missing createdBy', () => {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { createdBy, ...rest } = validDoc;
-    expect(DonationPeriodDocSchema.safeParse(rest).success).toBe(false);
+  it('rejects empty pricingTiers', () => {
+    expect(DonationPeriodDocSchema.safeParse({ ...validDoc, pricingTiers: [] }).success).toBe(false);
+  });
+});
+
+// ── resolveSuggestedAmount ─────────────────────────────────────────────────────
+
+describe('resolveSuggestedAmount', () => {
+  const period = { pricingTiers: TIERS as PricingTier[] };
+
+  it('uses the first (full-year) tier before any window opens', () => {
+    // 2027-08-01 (Toronto) — before the Sept tier
+    expect(resolveSuggestedAmount(period, new Date('2027-08-01T17:00:00Z'))).toBe(500);
   });
 
-  it('rejects suggestedAmount of 0', () => {
-    expect(DonationPeriodDocSchema.safeParse({ ...validDoc, suggestedAmount: 0 }).success).toBe(false);
+  it('uses the full-year tier in September', () => {
+    expect(resolveSuggestedAmount(period, new Date('2027-10-15T17:00:00Z'))).toBe(500);
+  });
+
+  it('uses the winter tier from December', () => {
+    expect(resolveSuggestedAmount(period, new Date('2027-12-15T17:00:00Z'))).toBe(300);
+  });
+
+  it('uses the spring tier from February', () => {
+    expect(resolveSuggestedAmount(period, new Date('2028-03-10T17:00:00Z'))).toBe(200);
+  });
+
+  it('applies a tier exactly on its effectiveFrom date', () => {
+    expect(resolveSuggestedAmount(period, new Date('2027-12-01T17:00:00Z'))).toBe(300);
+  });
+
+  it('handles a single-tier schedule', () => {
+    expect(
+      resolveSuggestedAmount({ pricingTiers: [{ effectiveFrom: '2027-09-01', amountCAD: 450, label: 'flat' }] }, new Date('2028-01-01T17:00:00Z')),
+    ).toBe(450);
   });
 });

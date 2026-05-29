@@ -2,7 +2,14 @@
 
 import { useState, useTransition } from 'react';
 import { toast } from '@cmt/ui';
-import type { DonationPeriodDoc, CreateDonationPeriodInput, UpdateDonationPeriodInput, Location, ProgramKey } from '@cmt/shared-domain';
+import type {
+  DonationPeriodDoc,
+  CreateDonationPeriodInput,
+  UpdateDonationPeriodInput,
+  PricingTier,
+  Location,
+  ProgramKey,
+} from '@cmt/shared-domain';
 import { toTorontoStartOfDayISO, toTorontoEndOfDayISO, isoToTorontoDateInput } from '@/lib/toronto-date';
 
 // Serialised shape returned by GET /api/admin/donation-periods
@@ -18,6 +25,13 @@ interface PeriodsTableProps {
   initialPeriods: PeriodRow[];
 }
 
+// Editable tier row (string fields for form inputs)
+interface TierRow {
+  effectiveFrom: string; // YYYY-MM-DD
+  amountCAD: string;
+  label: string;
+}
+
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
 function fmtDate(iso: string) {
@@ -26,8 +40,29 @@ function fmtDate(iso: string) {
   });
 }
 
-function fmtTiers(tiers: number[]) {
-  return tiers.map((t) => `$${t}`).join(', ');
+function fmtTierShort(t: PricingTier) {
+  // effectiveFrom is YYYY-MM-DD; show the month name
+  const d = new Date(`${t.effectiveFrom}T12:00:00`);
+  const mon = d.toLocaleDateString('en-CA', { month: 'short', timeZone: 'America/Toronto' });
+  return `${mon} $${t.amountCAD}`;
+}
+
+function fmtPricing(tiers: PricingTier[]) {
+  if (!tiers || tiers.length === 0) return '—';
+  return tiers.map(fmtTierShort).join(' · ');
+}
+
+function tiersFromRows(rows: TierRow[]): PricingTier[] {
+  return rows
+    .filter((r) => r.effectiveFrom && r.amountCAD)
+    .map((r) => ({ effectiveFrom: r.effectiveFrom, amountCAD: Number(r.amountCAD), label: r.label.trim() || 'Tier' }));
+}
+
+function rowsFromTiers(tiers: PricingTier[] | undefined): TierRow[] {
+  if (!tiers || tiers.length === 0) {
+    return [{ effectiveFrom: '', amountCAD: '500', label: 'Full year' }];
+  }
+  return tiers.map((t) => ({ effectiveFrom: t.effectiveFrom, amountCAD: String(t.amountCAD), label: t.label }));
 }
 
 // ─── Modal form ──────────────────────────────────────────────────────────────
@@ -47,10 +82,19 @@ function PeriodModal({ editing, onClose, onSaved }: ModalProps) {
   const [periodLabel, setPeriodLabel] = useState(editing?.periodLabel ?? '');
   const [startDate, setStartDate] = useState(editing ? isoToTorontoDateInput(editing.startDate) : '');
   const [endDate, setEndDate] = useState(editing ? isoToTorontoDateInput(editing.endDate) : '');
-  const [suggestedAmount, setSuggestedAmount] = useState(String(editing?.suggestedAmount ?? 500));
-  const [tiersRaw, setTiersRaw] = useState(editing ? fmtTiers(editing.amountTiers).replace(/\$/g, '') : '500, 750, 1000, 1500');
+  const [tierRows, setTierRows] = useState<TierRow[]>(rowsFromTiers(editing?.pricingTiers));
   const [enabled, setEnabled] = useState(editing?.enabled ?? true);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  function updateTier(i: number, patch: Partial<TierRow>) {
+    setTierRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+  }
+  function addTier() {
+    setTierRows((prev) => [...prev, { effectiveFrom: '', amountCAD: '', label: '' }]);
+  }
+  function removeTier(i: number) {
+    setTierRows((prev) => (prev.length > 1 ? prev.filter((_, idx) => idx !== i) : prev));
+  }
 
   function validate(): boolean {
     const e: Record<string, string> = {};
@@ -58,24 +102,30 @@ function PeriodModal({ editing, onClose, onSaved }: ModalProps) {
     if (!startDate) e.startDate = 'Required';
     if (!endDate) e.endDate = 'Required';
     if (startDate && endDate && new Date(endDate) <= new Date(startDate)) e.endDate = 'Must be after start date';
-    const amt = Number(suggestedAmount);
-    if (!Number.isInteger(amt) || amt < 1) e.suggestedAmount = 'Must be a positive integer';
-    const tiers = tiersRaw.split(',').map((s) => Number(s.trim())).filter(Boolean);
-    if (tiers.length === 0) e.amountTiers = 'At least one tier required';
+
+    const tiers = tiersFromRows(tierRows);
+    if (tiers.length === 0) {
+      e.pricingTiers = 'At least one pricing tier required';
+    } else {
+      for (const t of tiers) {
+        if (!Number.isInteger(t.amountCAD) || t.amountCAD < 1) { e.pricingTiers = 'Each tier needs a positive whole-dollar amount'; break; }
+      }
+      // ascending by effectiveFrom
+      for (let i = 1; i < tiers.length; i++) {
+        const prev = tiers[i - 1];
+        const cur = tiers[i];
+        if (prev && cur && cur.effectiveFrom <= prev.effectiveFrom) { e.pricingTiers = 'Tier dates must be in ascending order'; break; }
+      }
+    }
     setErrors(e);
     return Object.keys(e).length === 0;
   }
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  function handleSubmit(ev: React.FormEvent) {
+    ev.preventDefault();
     if (!validate()) return;
 
-    const tiers = tiersRaw.split(',').map((s) => Number(s.trim())).filter(Boolean);
-    const amt = Number(suggestedAmount);
-
-    if (tiers.length > 0 && tiers[0] !== amt) {
-      toast.warning(`First tier ($${tiers[0]}) doesn't match suggested amount ($${amt}). By convention the first tier should equal the suggested amount.`);
-    }
+    const pricingTiers = tiersFromRows(tierRows);
 
     startTransition(async () => {
       try {
@@ -85,8 +135,7 @@ function PeriodModal({ editing, onClose, onSaved }: ModalProps) {
           if (periodLabel !== editing.periodLabel) body.periodLabel = periodLabel;
           if (startDate !== isoToTorontoDateInput(editing.startDate)) body.startDate = toTorontoStartOfDayISO(startDate);
           if (endDate !== isoToTorontoDateInput(editing.endDate)) body.endDate = toTorontoEndOfDayISO(endDate);
-          if (amt !== editing.suggestedAmount) body.suggestedAmount = amt;
-          if (JSON.stringify(tiers) !== JSON.stringify(editing.amountTiers)) body.amountTiers = tiers;
+          if (JSON.stringify(pricingTiers) !== JSON.stringify(editing.pricingTiers)) body.pricingTiers = pricingTiers;
           if (enabled !== editing.enabled) body.enabled = enabled;
 
           res = await fetch(`/api/admin/donation-periods/${editing.pid}`, {
@@ -101,8 +150,7 @@ function PeriodModal({ editing, onClose, onSaved }: ModalProps) {
             periodLabel,
             startDate: toTorontoStartOfDayISO(startDate),
             endDate: toTorontoEndOfDayISO(endDate),
-            suggestedAmount: amt,
-            amountTiers: tiers,
+            pricingTiers,
             enabled,
           };
           res = await fetch('/api/admin/donation-periods', {
@@ -125,24 +173,21 @@ function PeriodModal({ editing, onClose, onSaved }: ModalProps) {
           toast.success(isEdit ? 'Period updated.' : 'Period created.');
         }
 
-        // Build the updated row from form state + server-returned pid.
-        // Avoids a racy list-refetch (eventual consistency could return stale data).
+        // Build the updated row from form state + server-returned pid (no racy refetch).
         const now = new Date().toISOString();
         if (isEdit) {
-          const updated: PeriodRow = {
+          onSaved({
             ...editing,
             periodLabel,
             startDate: toTorontoStartOfDayISO(startDate),
             endDate: toTorontoEndOfDayISO(endDate),
-            suggestedAmount: amt,
-            amountTiers: tiers,
+            pricingTiers,
             enabled,
             updatedAt: now,
-          };
-          onSaved(updated);
+          });
         } else {
           const pid = json.pid ?? `${programKey}-${location.toLowerCase()}-${periodLabel.toLowerCase().replace(/\s+/g, '-')}`;
-          const created: PeriodRow = {
+          onSaved({
             pid,
             programKey,
             programLabel: 'Bala Vihar',
@@ -150,15 +195,13 @@ function PeriodModal({ editing, onClose, onSaved }: ModalProps) {
             periodLabel,
             startDate: toTorontoStartOfDayISO(startDate),
             endDate: toTorontoEndOfDayISO(endDate),
-            suggestedAmount: amt,
-            amountTiers: tiers,
+            pricingTiers,
             enabled,
             createdAt: now,
             createdBy: '',
             updatedAt: now,
             updatedBy: '',
-          };
-          onSaved(created);
+          });
         }
         onClose();
       } catch {
@@ -180,147 +223,88 @@ function PeriodModal({ editing, onClose, onSaved }: ModalProps) {
     >
       <div style={{
         background: 'var(--surface)', borderRadius: 'var(--radius)', padding: 28,
-        width: '100%', maxWidth: 520, boxShadow: '0 8px 32px rgba(0,0,0,.18)',
+        width: '100%', maxWidth: 560, boxShadow: '0 8px 32px rgba(0,0,0,.18)',
         maxHeight: '90dvh', overflowY: 'auto',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
           <h2 style={{ fontSize: 18, fontWeight: 600 }}>{isEdit ? 'Edit period' : 'New donation period'}</h2>
-          <button
-            onClick={onClose}
-            style={{ background: 'transparent', border: 0, fontSize: 20, cursor: 'pointer', color: 'var(--muted)', padding: 4 }}
-            aria-label="Close"
-          >
-            ×
-          </button>
+          <button onClick={onClose} style={{ background: 'transparent', border: 0, fontSize: 20, cursor: 'pointer', color: 'var(--muted)', padding: 4 }} aria-label="Close">×</button>
         </div>
 
         <form onSubmit={handleSubmit}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
 
-            {/* Program */}
-            <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em' }}>
+            <label style={labelStyle}>
               Program
-              <select
-                value={programKey}
-                onChange={(e) => setProgramKey(e.target.value as ProgramKey)}
-                disabled={isEdit}
-                style={fieldStyle}
-              >
+              <select value={programKey} onChange={(e) => setProgramKey(e.target.value as ProgramKey)} disabled={isEdit} style={fieldStyle}>
                 <option value="bala-vihar">Bala Vihar</option>
               </select>
             </label>
 
-            {/* Location */}
-            <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em' }}>
+            <label style={labelStyle}>
               Location
-              <select
-                value={location}
-                onChange={(e) => setLocation(e.target.value as Location)}
-                disabled={isEdit}
-                style={fieldStyle}
-              >
+              <select value={location} onChange={(e) => setLocation(e.target.value as Location)} disabled={isEdit} style={fieldStyle}>
                 {(['Brampton', 'Mississauga', 'Scarborough', 'Markham'] as Location[]).map((l) => (
                   <option key={l} value={l}>{l}</option>
                 ))}
               </select>
             </label>
 
-            {/* Period label */}
-            <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em' }}>
-              Period label
-              <input
-                value={periodLabel}
-                onChange={(e) => setPeriodLabel(e.target.value)}
-                placeholder="Fall 2026"
-                style={fieldStyle}
-              />
+            <label style={labelStyle}>
+              School year label
+              <input value={periodLabel} onChange={(e) => setPeriodLabel(e.target.value)} placeholder="2025-26" style={fieldStyle}/>
               {errors.periodLabel && <FieldError msg={errors.periodLabel}/>}
             </label>
 
-            {/* Dates */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em' }}>
+              <label style={labelStyle}>
                 Start date
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  style={fieldStyle}
-                />
+                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} style={fieldStyle}/>
                 {errors.startDate && <FieldError msg={errors.startDate}/>}
               </label>
-              <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em' }}>
+              <label style={labelStyle}>
                 End date
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  style={fieldStyle}
-                />
+                <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} style={fieldStyle}/>
                 {errors.endDate && <FieldError msg={errors.endDate}/>}
               </label>
             </div>
 
-            {/* Suggested amount */}
-            <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em' }}>
-              Suggested amount (CAD $)
-              <input
-                type="number"
-                min={1}
-                step={1}
-                value={suggestedAmount}
-                onChange={(e) => setSuggestedAmount(e.target.value)}
-                style={fieldStyle}
-              />
-              {errors.suggestedAmount && <FieldError msg={errors.suggestedAmount}/>}
-            </label>
+            {/* Pricing tiers (prorated by enrollment date) */}
+            <div>
+              <div style={{ ...labelStyle, marginBottom: 8 }}>Suggested donation by enrollment date</div>
+              <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 10, lineHeight: 1.5 }}>
+                A family&apos;s suggested amount is the last tier whose date is on/before when they enroll. First tier = full year.
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {tierRows.map((row, i) => (
+                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '1.1fr 0.7fr 1.1fr auto', gap: 8, alignItems: 'center' }}>
+                    <input type="date" value={row.effectiveFrom} onChange={(e) => updateTier(i, { effectiveFrom: e.target.value })} aria-label="Effective from" style={tierFieldStyle}/>
+                    <input type="number" min={1} step={1} value={row.amountCAD} onChange={(e) => updateTier(i, { amountCAD: e.target.value })} placeholder="$" aria-label="Amount CAD" style={tierFieldStyle}/>
+                    <input value={row.label} onChange={(e) => updateTier(i, { label: e.target.value })} placeholder="Full year" aria-label="Label" style={tierFieldStyle}/>
+                    <button type="button" onClick={() => removeTier(i)} disabled={tierRows.length === 1} aria-label="Remove tier"
+                      style={{ background: 'transparent', border: 0, color: tierRows.length === 1 ? 'var(--line2)' : 'var(--muted)', fontSize: 18, cursor: tierRows.length === 1 ? 'not-allowed' : 'pointer', padding: '0 4px' }}>×</button>
+                  </div>
+                ))}
+              </div>
+              <button type="button" onClick={addTier} style={{ marginTop: 8, background: 'transparent', border: 0, color: 'var(--accent)', fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: 0 }}>
+                + Add tier
+              </button>
+              {errors.pricingTiers && <FieldError msg={errors.pricingTiers}/>}
+            </div>
 
-            {/* Tiers */}
-            <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em' }}>
-              Amount tiers (comma-separated)
-              <input
-                value={tiersRaw}
-                onChange={(e) => setTiersRaw(e.target.value)}
-                placeholder="500, 750, 1000, 1500"
-                style={fieldStyle}
-              />
-              {errors.amountTiers && <FieldError msg={errors.amountTiers}/>}
-              <span style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4, display: 'block' }}>
-                First tier should match the suggested amount.
-              </span>
-            </label>
-
-            {/* Enabled toggle */}
-            <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
-              <input
-                type="checkbox"
-                checked={enabled}
-                onChange={(e) => setEnabled(e.target.checked)}
-                style={{ width: 16, height: 16, accentColor: 'var(--accent)' }}
-              />
+            <label style={{ ...labelStyle, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+              <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} style={{ width: 16, height: 16, accentColor: 'var(--accent)' }}/>
               Enabled (new enrollments allowed)
             </label>
 
           </div>
 
           <div style={{ display: 'flex', gap: 10, marginTop: 22, justifyContent: 'flex-end' }}>
-            <button
-              type="button"
-              onClick={onClose}
-              style={{
-                padding: '9px 18px', borderRadius: 'var(--radiusSm)', fontSize: 13, fontWeight: 500,
-                background: 'var(--bg)', border: '1px solid var(--line2)', cursor: 'pointer', color: 'var(--body-text)',
-                fontFamily: 'var(--body)',
-              }}
-            >
+            <button type="button" onClick={onClose}
+              style={{ padding: '9px 18px', borderRadius: 'var(--radiusSm)', fontSize: 13, fontWeight: 500, background: 'var(--bg)', border: '1px solid var(--line2)', cursor: 'pointer', color: 'var(--body-text)', fontFamily: 'var(--body)' }}>
               Cancel
             </button>
-            <button
-              type="submit"
-              disabled={pending}
-              className="btn btn--p"
-              style={{ padding: '9px 22px', fontSize: 13, opacity: pending ? 0.6 : 1 }}
-            >
+            <button type="submit" disabled={pending} className="btn btn--p" style={{ padding: '9px 22px', fontSize: 13, opacity: pending ? 0.6 : 1 }}>
               {pending ? 'Saving…' : isEdit ? 'Save changes' : 'Create period'}
             </button>
           </div>
@@ -334,11 +318,20 @@ function FieldError({ msg }: { msg: string }) {
   return <span style={{ fontSize: 11, color: 'var(--err)', marginTop: 4, display: 'block' }}>{msg}</span>;
 }
 
+const labelStyle: React.CSSProperties = {
+  fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em',
+};
+
 const fieldStyle: React.CSSProperties = {
   display: 'block', width: '100%', marginTop: 6, padding: '8px 10px',
   borderRadius: 'var(--radiusSm)', border: '1px solid var(--line2)',
   background: 'var(--bg)', fontSize: 13, color: 'var(--ink)',
   fontFamily: 'var(--body)', boxSizing: 'border-box',
+};
+
+const tierFieldStyle: React.CSSProperties = {
+  padding: '7px 9px', borderRadius: 'var(--radiusSm)', border: '1px solid var(--line2)',
+  background: 'var(--bg)', fontSize: 13, color: 'var(--ink)', fontFamily: 'var(--body)', boxSizing: 'border-box', width: '100%',
 };
 
 // ─── Main table ──────────────────────────────────────────────────────────────
@@ -351,20 +344,9 @@ export function PeriodsTable({ initialPeriods }: PeriodsTableProps) {
 
   const displayed = showDisabled ? periods : periods.filter((p) => p.enabled);
 
-  function openCreate() {
-    setEditing(null);
-    setModalOpen(true);
-  }
-
-  function openEdit(p: PeriodRow) {
-    setEditing(p);
-    setModalOpen(true);
-  }
-
-  function closeModal() {
-    setModalOpen(false);
-    setEditing(null);
-  }
+  function openCreate() { setEditing(null); setModalOpen(true); }
+  function openEdit(p: PeriodRow) { setEditing(p); setModalOpen(true); }
+  function closeModal() { setModalOpen(false); setEditing(null); }
 
   function handleSaved(updated: PeriodRow) {
     setPeriods((prev) => {
@@ -386,9 +368,7 @@ export function PeriodsTable({ initialPeriods }: PeriodsTableProps) {
         body: JSON.stringify({ enabled: !row.enabled }),
       });
       if (!res.ok) { toast.error('Toggle failed'); return; }
-      setPeriods((prev) =>
-        prev.map((p) => p.pid === row.pid ? { ...p, enabled: !p.enabled } : p),
-      );
+      setPeriods((prev) => prev.map((p) => p.pid === row.pid ? { ...p, enabled: !p.enabled } : p));
       toast.success(row.enabled ? 'Period disabled.' : 'Period enabled.');
     } catch {
       toast.error('Network error');
@@ -397,77 +377,45 @@ export function PeriodsTable({ initialPeriods }: PeriodsTableProps) {
 
   return (
     <>
-      {/* Controls bar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18, flexWrap: 'wrap' }}>
         <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, cursor: 'pointer', color: 'var(--body-text)' }}>
-          <input
-            type="checkbox"
-            checked={showDisabled}
-            onChange={(e) => setShowDisabled(e.target.checked)}
-            style={{ accentColor: 'var(--accent)' }}
-          />
+          <input type="checkbox" checked={showDisabled} onChange={(e) => setShowDisabled(e.target.checked)} style={{ accentColor: 'var(--accent)' }}/>
           Show disabled periods
         </label>
         <div style={{ flex: 1 }}/>
-        <button className="btn btn--p" onClick={openCreate} style={{ fontSize: 13, padding: '8px 18px' }}>
-          + New period
-        </button>
+        <button className="btn btn--p" onClick={openCreate} style={{ fontSize: 13, padding: '8px 18px' }}>+ New period</button>
       </div>
 
       {displayed.length === 0 ? (
         <div style={{ padding: 32, textAlign: 'center', color: 'var(--muted)', fontSize: 14 }}>
-          {periods.length === 0
-            ? 'No donation periods yet. Create one to get started.'
-            : 'No enabled periods. Toggle "Show disabled" to see all.'}
+          {periods.length === 0 ? 'No donation periods yet. Create one to get started.' : 'No enabled periods. Toggle "Show disabled" to see all.'}
         </div>
       ) : (
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ borderBottom: '2px solid var(--line)' }}>
-                {['Program', 'Location', 'Period', 'Dates', 'Suggested $', 'Tiers', 'Status', 'Actions'].map((h) => (
-                  <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontSize: 11, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--muted)', fontWeight: 700, whiteSpace: 'nowrap' }}>
-                    {h}
-                  </th>
+                {['Program', 'Location', 'Year', 'Dates', 'Pricing (by join date)', 'Status', 'Actions'].map((h) => (
+                  <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontSize: 11, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--muted)', fontWeight: 700, whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {displayed.map((p, i) => (
-                <tr
-                  key={p.pid}
-                  style={{ borderBottom: '1px solid var(--line)', background: i % 2 === 0 ? 'transparent' : 'var(--bg)' }}
-                >
+                <tr key={p.pid} style={{ borderBottom: '1px solid var(--line)', background: i % 2 === 0 ? 'transparent' : 'var(--bg)' }}>
                   <td style={tdStyle}>{p.programLabel}</td>
                   <td style={tdStyle}>{p.location}</td>
                   <td style={{ ...tdStyle, fontWeight: 600 }}>{p.periodLabel}</td>
-                  <td style={{ ...tdStyle, whiteSpace: 'nowrap', color: 'var(--body-text)' }}>
-                    {fmtDate(p.startDate)} – {fmtDate(p.endDate)}
-                  </td>
-                  <td style={{ ...tdStyle, fontFamily: 'var(--display)' }}>${p.suggestedAmount}</td>
-                  <td style={{ ...tdStyle, color: 'var(--body-text)' }}>{fmtTiers(p.amountTiers)}</td>
+                  <td style={{ ...tdStyle, whiteSpace: 'nowrap', color: 'var(--body-text)' }}>{fmtDate(p.startDate)} – {fmtDate(p.endDate)}</td>
+                  <td style={{ ...tdStyle, color: 'var(--body-text)' }}>{fmtPricing(p.pricingTiers)}</td>
                   <td style={tdStyle}>
-                    <span style={{
-                      display: 'inline-block', padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 600,
-                      background: p.enabled ? 'var(--accentSoft)' : 'var(--surface2)',
-                      color: p.enabled ? 'var(--accentDeep)' : 'var(--muted)',
-                    }}>
+                    <span style={{ display: 'inline-block', padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 600, background: p.enabled ? 'var(--accentSoft)' : 'var(--surface2)', color: p.enabled ? 'var(--accentDeep)' : 'var(--muted)' }}>
                       {p.enabled ? 'Enabled' : 'Disabled'}
                     </span>
                   </td>
                   <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>
-                    <button
-                      onClick={() => openEdit(p)}
-                      style={actionBtnStyle}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => handleToggleEnabled(p)}
-                      style={{ ...actionBtnStyle, marginLeft: 6 }}
-                    >
-                      {p.enabled ? 'Disable' : 'Enable'}
-                    </button>
+                    <button onClick={() => openEdit(p)} style={actionBtnStyle}>Edit</button>
+                    <button onClick={() => handleToggleEnabled(p)} style={{ ...actionBtnStyle, marginLeft: 6 }}>{p.enabled ? 'Disable' : 'Enable'}</button>
                   </td>
                 </tr>
               ))}
@@ -476,13 +424,7 @@ export function PeriodsTable({ initialPeriods }: PeriodsTableProps) {
         </div>
       )}
 
-      {modalOpen && (
-        <PeriodModal
-          editing={editing}
-          onClose={closeModal}
-          onSaved={handleSaved}
-        />
-      )}
+      {modalOpen && <PeriodModal editing={editing} onClose={closeModal} onSaved={handleSaved}/>}
     </>
   );
 }

@@ -64,7 +64,7 @@ const ACTIVE_PERIOD = {
   periodLabel: 'Fall 2026',
   startDate: new Date('2026-09-01'),
   endDate: new Date('2027-01-25'),
-  suggestedAmount: 500,
+  pricingTiers: [{ effectiveFrom: '2020-01-01', amountCAD: 500, label: 'Full year' }],
 };
 
 beforeEach(() => {
