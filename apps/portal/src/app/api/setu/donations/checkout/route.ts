@@ -159,7 +159,6 @@ export async function POST(req: Request) {
     amountCAD: input.amountCAD,
     coverFee: input.coverFee,
     feeCAD,
-    clientReferenceId: `SETU-${input.type === 'bala-vihar' ? 'BV' : 'GD'}`,
   });
 
   const lineItems: Array<{ name: string; amount: number; quantity: number }> = [

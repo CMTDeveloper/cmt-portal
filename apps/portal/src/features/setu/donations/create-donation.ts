@@ -14,7 +14,6 @@ export interface CreateDonationParams {
   amountCAD: number;
   coverFee: boolean;
   feeCAD: number;
-  clientReferenceId: string;
 }
 
 /**
@@ -40,7 +39,9 @@ export async function createDonation(params: CreateDonationParams): Promise<Dona
     amountCAD: params.amountCAD,
     coverFee: params.coverFee,
     feeCAD: params.feeCAD,
-    clientReferenceId: params.clientReferenceId,
+    // The did IS the client_reference_id we send to Stripe — store it so the
+    // Stripe dashboard row maps 1:1 back to this donation doc.
+    clientReferenceId: ref.id,
     status: 'redirected',
     createdAt: now,
     updatedAt: now,
