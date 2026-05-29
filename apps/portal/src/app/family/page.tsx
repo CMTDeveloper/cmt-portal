@@ -10,6 +10,7 @@ import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
 import { getDonations } from '@/features/setu/donations/get-donations';
 import { getUpcoming, type CalendarEntry } from '@/features/setu/calendar/calendar';
+import { getAttendanceForFamily, summarize, type AttendanceRecord } from '@/features/setu/teacher/get-attendance';
 
 function fmtUpcoming(e: CalendarEntry): { d: string; m: string; t: string; sub: string | null } {
   const date = new Date(`${e.date}T12:00:00`);
@@ -47,6 +48,8 @@ export default async function FamilyDashboardPage() {
   let donateUrl = '/family/donate';
   // Upcoming class dates from the managed calendar (Slice 4b), by family location.
   let upcomingEntries: CalendarEntry[] = [];
+  // Real attendance (Slice 4f) for the active period's children.
+  let attendanceRecords: AttendanceRecord[] = [];
 
   if (flags.setuAuth) {
     const data = await getCurrentFamily();
@@ -78,8 +81,16 @@ export default async function FamilyDashboardPage() {
 
       const { upcoming } = await getUpcoming(data.family.location, undefined, 3);
       upcomingEntries = upcoming;
+
+      if (activeEnrollment) {
+        const all = await getAttendanceForFamily(data.family.fid);
+        attendanceRecords = all.filter((r) => r.pid === activeEnrollment.pid && !r.isGuest);
+      }
     }
   }
+
+  const attendance = summarize(attendanceRecords);
+  const hasAttendance = attendance.total > 0;
 
   const donationComplete = suggestedAmount !== null && givenForPeriod >= suggestedAmount;
   const donationPct =
@@ -142,9 +153,13 @@ export default async function FamilyDashboardPage() {
               <div className="row" style={{ gap: 14, marginBottom: 14 }}>
                 <Stat label="Kids enrolled" value={String(childCount)}/>
                 <div style={{ width: 1, height: 36, background: 'var(--line)' }}/>
-                <Stat label="Attendance" value="—"/>
+                <Stat label="Attendance" value={hasAttendance ? `${attendance.attendedPct}%` : '—'}/>
               </div>
-              <div style={{ fontSize: 11, color: 'var(--muted)' }}>Attendance tracking arrives with Sunday class check-in.</div>
+              <div style={{ fontSize: 11, color: 'var(--muted)' }}>
+                {hasAttendance
+                  ? `${attendance.present + attendance.late} of ${attendance.total} classes attended this year.`
+                  : 'Attendance appears here once Sunday classes begin.'}
+              </div>
               {!isEnrolled && (
                 <Link href="/family/enroll" className="btn btn--s btn--block" style={{ marginTop: 12, display: 'block', textAlign: 'center', textDecoration: 'none' }}>Enroll now</Link>
               )}
@@ -273,7 +288,12 @@ export default async function FamilyDashboardPage() {
             {...(donationTone ? { tone: donationTone } : {})}
           />
           <MetricCard label="Bala Vihar" value={isEnrolled ? 'Enrolled' : 'Not yet'} sub={enrollPeriodLabel ?? 'no active period'}/>
-          <MetricCard label="Attendance" value="—" sub="with check-in soon"/>
+          <MetricCard
+            label="Attendance"
+            value={hasAttendance ? `${attendance.attendedPct}%` : '—'}
+            sub={hasAttendance ? `${attendance.present + attendance.late} of ${attendance.total} attended` : 'no classes yet'}
+            {...(hasAttendance ? { tone: attendance.attendedPct >= 75 ? ('ok' as const) : ('warn' as const) } : {})}
+          />
           <MetricCard label="Family"     value={String(memberCount)} sub={`${memberCount} member${memberCount !== 1 ? 's' : ''}`}/>
         </div>
 
@@ -281,27 +301,34 @@ export default async function FamilyDashboardPage() {
           <Suspense fallback={<SkeletonCard />}>
             <div className="card" style={{ padding: 24 }}>
               <div className="between" style={{ marginBottom: 18 }}>
-                <h3 style={{ fontSize: 14, fontWeight: 600 }}><em className="sa">Bala Vihar</em> · Fall 2026</h3>
-                <div className="row" style={{ gap: 6 }}>
-                  <span className="pill" style={{ background: 'var(--surface2)', color: 'var(--muted)', fontSize: 10 }}>Sample data — real data coming soon</span>
-                  <span className="pill" style={{ background: 'var(--accentSoft)', color: 'var(--accentDeep)' }}>Enrolled</span>
+                <h3 style={{ fontSize: 14, fontWeight: 600 }}><em className="sa">Bala Vihar</em>{enrollPeriodLabel ? ` · ${enrollPeriodLabel}` : ''}</h3>
+                {isEnrolled && <span className="pill" style={{ background: 'var(--accentSoft)', color: 'var(--accentDeep)' }}>Enrolled</span>}
+              </div>
+              {hasAttendance ? (
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(16, 1fr)', gap: 4, marginBottom: 18 }}>
+                    {attendanceRecords
+                      .slice()
+                      .reverse()
+                      .slice(-32)
+                      .map((r) => {
+                        const bg = r.status === 'absent' ? 'var(--err)' : r.status === 'late' ? 'var(--warn, #a06410)' : 'var(--accent)';
+                        const op = r.status === 'present' ? 0.75 : 1;
+                        return <div key={r.aid} title={`${r.date} · ${r.status}`} style={{ aspectRatio: '1', borderRadius: 4, background: bg, opacity: op }} />;
+                      })}
+                  </div>
+                  <div className="row" style={{ gap: 18, fontSize: 11, color: 'var(--muted)' }}>
+                    <span className="row" style={{ gap: 6 }}><span style={{ width: 10, height: 10, background: 'var(--accent)', borderRadius: 2, opacity: .75 }}/> present</span>
+                    <span className="row" style={{ gap: 6 }}><span style={{ width: 10, height: 10, background: 'var(--warn, #a06410)', borderRadius: 2 }}/> late</span>
+                    <span className="row" style={{ gap: 6 }}><span style={{ width: 10, height: 10, background: 'var(--err)', borderRadius: 2 }}/> absent</span>
+                    <span style={{ marginLeft: 'auto' }}>{attendance.present + attendance.late} of {attendance.total} attended{attendance.absent > 0 ? ` · ${attendance.absent} absence${attendance.absent !== 1 ? 's' : ''}` : ''}</span>
+                  </div>
+                </>
+              ) : (
+                <div style={{ padding: '24px 0', color: 'var(--muted)', fontSize: 13 }}>
+                  Attendance will appear here once Sunday classes begin.
                 </div>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(16, 1fr)', gap: 4, marginBottom: 18 }}>
-                {Array.from({ length: 16 }).map((_, i) => {
-                  const states = ['p','p','p','p','a','p','p','p','p','p','p','p','p','f','f','f'];
-                  const s = states[i];
-                  const bg = s === 'p' ? 'var(--accent)' : s === 'a' ? 'var(--err)' : 'var(--surface2)';
-                  const op = s === 'p' ? 0.75 : 1;
-                  return <div key={i} style={{ aspectRatio: '1', borderRadius: 4, background: bg, opacity: op, border: s === 'f' ? '1px dashed var(--line2)' : undefined }} title={`Week ${i + 1}`}/>;
-                })}
-              </div>
-              <div className="row" style={{ gap: 18, fontSize: 11, color: 'var(--muted)' }}>
-                <span className="row" style={{ gap: 6 }}><span style={{ width: 10, height: 10, background: 'var(--accent)', borderRadius: 2, opacity: .75 }}/> present</span>
-                <span className="row" style={{ gap: 6 }}><span style={{ width: 10, height: 10, background: 'var(--err)', borderRadius: 2 }}/> absent</span>
-                <span className="row" style={{ gap: 6 }}><span style={{ width: 10, height: 10, background: 'var(--surface2)', borderRadius: 2, border: '1px dashed var(--line2)' }}/> upcoming</span>
-                <span style={{ marginLeft: 'auto' }}>14 of 15 attended · 1 absence</span>
-              </div>
+              )}
             </div>
           </Suspense>
 
