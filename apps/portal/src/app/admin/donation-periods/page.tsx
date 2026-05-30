@@ -43,7 +43,7 @@ export default async function DonationPeriodsPage() {
         <p style={{ fontSize: 11, letterSpacing: '.16em', textTransform: 'uppercase', color: 'var(--muted)' }}>
           Admin · Bala Vihar
         </p>
-        <h1 style={{ fontSize: 38, fontWeight: 400, marginTop: 6, lineHeight: 1.1 }}>Donation periods</h1>
+        <h1 style={{ fontSize: 'clamp(28px, 7vw, 38px)', fontWeight: 400, marginTop: 6, lineHeight: 1.1 }}>Donation periods</h1>
         <p style={{ fontSize: 14, color: 'var(--body-text)', marginTop: 10, maxWidth: 640, lineHeight: 1.55 }}>
           Configure per-program, per-location donation periods. Families see the active period for their
           location when they enroll. Suggested amounts are locked at the moment a family enrolls — editing
@@ -51,7 +51,7 @@ export default async function DonationPeriodsPage() {
         </p>
       </header>
 
-      <div className="card" style={{ padding: 22 }}>
+      <div className="card" style={{ padding: 'clamp(14px, 4vw, 22px)' }}>
         <PeriodsTable initialPeriods={periods}/>
       </div>
     </>

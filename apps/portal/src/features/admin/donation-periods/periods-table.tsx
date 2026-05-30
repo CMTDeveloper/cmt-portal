@@ -408,7 +408,39 @@ export function PeriodsTable({ initialPeriods }: PeriodsTableProps) {
           {periods.length === 0 ? 'No donation periods yet. Create one to get started.' : 'No enabled periods. Toggle "Show disabled" to see all.'}
         </div>
       ) : (
-        <div style={{ overflowX: 'auto' }}>
+        <>
+        {/* Mobile: stacked rows (the table overflows a phone width). Lightweight
+            dividers rather than nested cards — this list already sits in a card. */}
+        <div className="block md:hidden">
+          {displayed.map((p, i) => (
+            <div key={p.pid} style={{ padding: '16px 0', borderTop: i > 0 ? '1px solid var(--line)' : undefined }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 12 }}>
+                <div>
+                  <div style={{ fontSize: 16, fontWeight: 600 }}>{p.periodLabel}</div>
+                  <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{p.programLabel} · {p.location}</div>
+                </div>
+                <span style={{ flex: '0 0 auto', padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 600, background: p.enabled ? 'var(--accentSoft)' : 'var(--surface2)', color: p.enabled ? 'var(--accentDeep)' : 'var(--muted)' }}>
+                  {p.enabled ? 'Enabled' : 'Disabled'}
+                </span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '8px 14px', fontSize: 13 }}>
+                <span style={cardKeyStyle}>Dates</span>
+                <span style={{ color: 'var(--body-text)' }}>{fmtDate(p.startDate)} – {fmtDate(p.endDate)}</span>
+                <span style={cardKeyStyle}>Pricing</span>
+                <span style={{ color: 'var(--body-text)' }}>{fmtPricing(p.pricingTiers)}</span>
+                <span style={cardKeyStyle}>Payment</span>
+                <span style={{ color: 'var(--body-text)' }}>{(p.paymentSource ?? 'portal') === 'legacy' ? 'Legacy roster' : 'Portal (Stripe)'}</span>
+              </div>
+              <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+                <button onClick={() => openEdit(p)} style={{ ...actionBtnStyle, flex: 1, textAlign: 'center', padding: '9px 12px' }}>Edit</button>
+                <button onClick={() => handleToggleEnabled(p)} style={{ ...actionBtnStyle, flex: 1, textAlign: 'center', padding: '9px 12px' }}>{p.enabled ? 'Disable' : 'Enable'}</button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Desktop: full table. */}
+        <div className="hidden md:block" style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ borderBottom: '2px solid var(--line)' }}>
@@ -439,6 +471,7 @@ export function PeriodsTable({ initialPeriods }: PeriodsTableProps) {
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       {modalOpen && <PeriodModal editing={editing} onClose={closeModal} onSaved={handleSaved}/>}
@@ -447,6 +480,11 @@ export function PeriodsTable({ initialPeriods }: PeriodsTableProps) {
 }
 
 const tdStyle: React.CSSProperties = { padding: '12px 12px', verticalAlign: 'middle' };
+
+const cardKeyStyle: React.CSSProperties = {
+  fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase',
+  letterSpacing: '.06em', whiteSpace: 'nowrap', paddingTop: 1,
+};
 
 const actionBtnStyle: React.CSSProperties = {
   padding: '5px 12px', borderRadius: 'var(--radiusSm)', fontSize: 12, fontWeight: 500,
