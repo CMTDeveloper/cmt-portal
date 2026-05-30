@@ -8,7 +8,7 @@ export default async function WelcomeDashboardPage() {
       {/* Mobile */}
       <div className="block md:hidden">
         <CspRoot style={{ minHeight: '100dvh' }}>
-          <div style={{ padding: '14px 18px 32px', overflowY: 'auto', minHeight: '100dvh' }}>
+          <div style={{ padding: '14px 18px 90px', overflowY: 'auto', minHeight: '100dvh' }}>
             <div style={{ marginBottom: 22 }}>
               <SetuLogo size={18}/>
             </div>

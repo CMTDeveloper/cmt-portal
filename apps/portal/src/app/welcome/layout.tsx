@@ -1,9 +1,10 @@
 import { Suspense } from 'react';
 import { cookies } from 'next/headers';
 import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
-import { isWelcomeTeam, type WithRole } from '@cmt/shared-domain';
+import { isWelcomeTeam, isAdmin, type WithRole } from '@cmt/shared-domain';
 import { CspRoot } from '@/features/family/components/atoms';
 import { DesktopSidebarLive } from '@/features/family/components/desktop-sidebar';
+import { WelcomeMobileNav } from '@/features/family/components/welcome-mobile-nav';
 import { LoadingOm } from '@/components/chrome/loading-om';
 
 // The layout is synchronous so cacheComponents:true can stream the shell.
@@ -45,14 +46,35 @@ async function WelcomeChromeAndChildren({ children }: { children: React.ReactNod
   );
 }
 
+// Mobile bottom nav for the welcome section. Confirms welcome-team access and
+// passes isAdmin/hasFamily so the nav shows the right "back" tab.
+async function WelcomeMobileNavWithIdentity() {
+  const cookieStore = await cookies();
+  const sessionCookie = cookieStore.get('__session')?.value;
+  if (!sessionCookie) return null;
+  const raw = await verifyPortalSessionCookie(sessionCookie).catch(() => null);
+  if (!raw || !isWelcomeTeam(raw as unknown as WithRole)) return null;
+  const admin = isAdmin(raw as unknown as WithRole);
+  const hasFamily = typeof (raw as { fid?: unknown }).fid === 'string';
+  return <WelcomeMobileNav isAdmin={admin} hasFamily={hasFamily} />;
+}
+
 export default function WelcomeLayout({ children }: { children: React.ReactNode }) {
   return (
     <>
       {/* Mobile: pass-through. Each page renders its own mobile chrome.
           Wrapped in <Suspense> so dynamic children stream under cacheComponents. */}
       <div className="block md:hidden">
-        <Suspense fallback={<LoadingOm />}>
-          {children}
+        {/* CspRoot so brand tokens resolve for welcome pages that don't wrap
+            themselves (e.g. /welcome/levels). Pages that self-wrap just nest
+            harmlessly. No padding here — pages own their own. */}
+        <CspRoot style={{ minHeight: '100dvh' }}>
+          <Suspense fallback={<LoadingOm />}>
+            {children}
+          </Suspense>
+        </CspRoot>
+        <Suspense fallback={null}>
+          <WelcomeMobileNavWithIdentity />
         </Suspense>
       </div>
 

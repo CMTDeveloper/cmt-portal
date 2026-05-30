@@ -20,7 +20,7 @@ export default async function WelcomeLevelsPage() {
   );
 
   return (
-    <div style={{ maxWidth: 760 }}>
+    <div className="px-[18px] pt-[14px] pb-[90px] md:p-0" style={{ maxWidth: 760 }}>
       <header style={{ marginBottom: 24 }}>
         <h1 style={{ fontSize: 30, fontWeight: 600, letterSpacing: '-0.02em' }}>Levels &amp; rosters</h1>
         <p style={{ fontSize: 14, color: 'var(--muted)', marginTop: 4 }}>
