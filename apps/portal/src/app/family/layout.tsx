@@ -25,6 +25,13 @@ async function SidebarWithIdentity() {
   return <DesktopSidebarLive displayName={displayName} subtitle={subtitle} showSignOut isAdmin={admin}/>;
 }
 
+// Mobile bottom nav needs isAdmin to decide whether the "More" sheet shows the
+// Admin shortcut. Computed the same way as the desktop sidebar.
+async function MobileNavWithIdentity() {
+  const admin = await readIsAdminFromCookie();
+  return <MobileBottomNav isAdmin={admin} />;
+}
+
 // Reads the session cookie and runs isAdmin() so the sidebar can decide whether
 // to show the Admin shortcut. Returns false on any error (missing cookie,
 // expired session, etc.) — silent failure is fine here because middleware
@@ -52,7 +59,7 @@ export default function FamilyLayout({ children }: { children: React.ReactNode }
           {children}
         </Suspense>
         <Suspense fallback={null}>
-          <MobileBottomNav />
+          <MobileNavWithIdentity />
         </Suspense>
       </div>
 

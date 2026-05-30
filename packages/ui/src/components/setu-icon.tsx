@@ -109,6 +109,13 @@ export const SetuIcon = {
       <line x1="12" y1="8" x2="12.01" y2="8" />
     </svg>
   ),
+  dots: (p: IconProps) => (
+    <svg width="18" height="18" viewBox="0 0 24 24" {...base} {...p}>
+      <circle cx="5" cy="12" r="1" />
+      <circle cx="12" cy="12" r="1" />
+      <circle cx="19" cy="12" r="1" />
+    </svg>
+  ),
   edit: (p: IconProps) => (
     <svg width="14" height="14" viewBox="0 0 24 24" {...base} {...p}>
       <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
