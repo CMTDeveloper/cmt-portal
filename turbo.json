@@ -41,7 +41,8 @@
         "NEXT_PUBLIC_FEATURE_CHECK_IN_ADMIN",
         "NEXT_PUBLIC_FEATURE_CHECK_IN_KIOSK",
         "NEXT_PUBLIC_FEATURE_SETU_AUTH",
-        "NEXT_PUBLIC_FEATURE_SETU_DONATIONS"
+        "NEXT_PUBLIC_FEATURE_SETU_DONATIONS",
+        "NEXT_PUBLIC_PORTAL_BASE_URL"
       ],
       "outputs": [".next/**", "!.next/cache/**", "dist/**"]
     },
