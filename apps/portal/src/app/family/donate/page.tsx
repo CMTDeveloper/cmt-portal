@@ -114,7 +114,7 @@ export default async function DonatePage({
               <span style={{ fontSize: 14, fontWeight: 600 }}>{mode === 'bala-vihar' ? 'Donation' : 'Giving'}</span>
               <span style={{ width: 32 }} />
             </div>
-            <div style={{ flex: 1, overflowY: 'auto', padding: '20px 18px 40px' }}>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '20px 18px 84px' }}>
               <h1 style={{ fontSize: 26, fontWeight: 400, marginBottom: 6 }}>
                 {mode === 'bala-vihar' ? <>Your <em className="sa">dakshina</em></> : heading}
               </h1>

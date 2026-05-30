@@ -3,7 +3,6 @@ import { connection } from 'next/server';
 import Link from 'next/link';
 import { SetuLogo, SetuAvatar, SetuIcon } from '@cmt/ui';
 import { CspRoot, Stat, MetricCard, SkeletonCard } from '@/features/family/components/atoms';
-import { SignOutButton } from '@/features/family/components/sign-out-button';
 import { flags } from '@/lib/flags';
 import { mockFamily } from '@/features/family/data/mock';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
@@ -297,20 +296,6 @@ export default async function FamilyDashboardPage() {
                 ))}
               </div>
             </div>
-          </div>
-
-          {/* Mobile bottom nav */}
-          <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, background: 'var(--surface)', borderTop: '1px solid var(--line)', display: 'flex', justifyContent: 'space-around', padding: '10px 8px 16px' }}>
-            <Link href="/family" style={{ background: 'transparent', border: 0, color: 'var(--accent)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 600, textDecoration: 'none' }}>
-              <SetuIcon.home/> Home
-            </Link>
-            <Link href="/family/members" style={{ background: 'transparent', border: 0, color: 'var(--muted)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 600, textDecoration: 'none' }}>
-              <SetuIcon.people/> Family
-            </Link>
-            <Link href="/family/donate" style={{ background: 'transparent', border: 0, color: 'var(--muted)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 600, textDecoration: 'none' }}>
-              <SetuIcon.heart/> Giving
-            </Link>
-            <SignOutButton style={{ background: 'transparent', border: 0, color: 'var(--muted)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 600 }}/>
           </div>
         </CspRoot>
       </div>

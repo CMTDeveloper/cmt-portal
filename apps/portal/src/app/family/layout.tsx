@@ -3,6 +3,7 @@ import { cookies } from 'next/headers';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 import { CspRoot } from '@/features/family/components/atoms';
 import { DesktopSidebar, DesktopSidebarLive } from '@/features/family/components/desktop-sidebar';
+import { MobileBottomNav } from '@/features/family/components/mobile-bottom-nav';
 import { LoadingOm } from '@/components/chrome/loading-om';
 import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
 import { isAdmin, type WithRole } from '@cmt/shared-domain';
@@ -49,6 +50,9 @@ export default function FamilyLayout({ children }: { children: React.ReactNode }
       <div className="block md:hidden">
         <Suspense fallback={<LoadingOm />}>
           {children}
+        </Suspense>
+        <Suspense fallback={null}>
+          <MobileBottomNav />
         </Suspense>
       </div>
 

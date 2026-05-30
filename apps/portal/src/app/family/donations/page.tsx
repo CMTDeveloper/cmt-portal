@@ -110,7 +110,7 @@ export default async function DonationsPage() {
               <span style={{ fontSize: 14, fontWeight: 600 }}>My donations</span>
               <span style={{ width: 32 }} />
             </div>
-            <div style={{ flex: 1, overflowY: 'auto', padding: '18px 18px 40px' }}>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '18px 18px 84px' }}>
               {ACCOUNTING_CALLOUT}
               {groups.length === 0 ? emptyState : list}
             </div>
