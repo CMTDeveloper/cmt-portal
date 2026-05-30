@@ -29,7 +29,11 @@ function isRateLimited(ip: string): boolean {
   return entry.count > RATE_LIMIT_MAX;
 }
 
-const PORTAL_VERCEL_PATTERN = /^https:\/\/cmt-portal[a-z0-9-]*\.vercel\.app$/;
+// The portal is deployed at cmt-setu.vercel.app (and preview deploys like
+// cmt-setu-git-<branch>.vercel.app). cmt-portal* is kept for the older alias.
+// A custom production domain should be set via NEXT_PUBLIC_PORTAL_BASE_URL,
+// which is also accepted below.
+const PORTAL_VERCEL_PATTERN = /^https:\/\/cmt-(setu|portal)[a-z0-9-]*\.vercel\.app$/;
 
 // Anti-phishing: successUrl/cancelUrl are built server-side from a validated
 // origin so a tampered client cannot redirect the donor to a malicious site.

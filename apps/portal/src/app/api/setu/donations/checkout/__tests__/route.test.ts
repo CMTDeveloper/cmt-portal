@@ -166,4 +166,28 @@ describe('POST /api/setu/donations/checkout', () => {
     const headers = lastFetchInit().headers;
     expect(headers['x-api-key']).toBe('sk_test_x');
   });
+
+  it('accepts the cmt-setu.vercel.app deployment origin without a base-url env', async () => {
+    // Regression: the origin allowlist used to match only cmt-portal*.vercel.app,
+    // so checkout failed with invalid-origin on the real cmt-setu domain.
+    delete process.env.NEXT_PUBLIC_PORTAL_BASE_URL;
+    const req = new Request('https://cmt-setu.vercel.app/api/setu/donations/checkout', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        origin: 'https://cmt-setu.vercel.app',
+        'x-forwarded-host': 'cmt-setu.vercel.app',
+        'x-forwarded-proto': 'https',
+        'x-forwarded-for': `10.0.0.${++ipCounter}`,
+        'x-portal-role': 'family-manager',
+        'x-portal-fid': 'fid1',
+        'x-portal-mid': 'fid1-01',
+      },
+      body: JSON.stringify({ type: 'general', amountCAD: 100 }),
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const fetchBody = JSON.parse(lastFetchInit().body);
+    expect(fetchBody.successUrl).toBe('https://cmt-setu.vercel.app/family/donate/success?did=don_generated');
+  });
 });
