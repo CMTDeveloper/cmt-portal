@@ -12,7 +12,13 @@ import { SignOutButton } from '@/features/family/components/sign-out-button';
 // blocks non-admin, but the role check inside Suspense protects against
 // future routing changes). Mirrors apps/portal/src/app/welcome/layout.tsx.
 
-async function AdminChromeAndChildren({ children }: { children: React.ReactNode }) {
+interface AdminIdentity {
+  allowed: boolean;
+  displayEmail: string;
+  hasFamily: boolean;
+}
+
+async function resolveAdminIdentity(): Promise<AdminIdentity> {
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get('__session')?.value;
   let allowed = false;
@@ -27,24 +33,64 @@ async function AdminChromeAndChildren({ children }: { children: React.ReactNode 
       const email = (raw as { email?: string }).email;
       if (email) displayEmail = email;
       // A family-manager-also-admin has fid in their claims; pure CMT staff
-      // admins don't. We use this to show a "Back to family" link in the
-      // sidebar so dual-role users can hop back to /family quickly.
+      // admins don't. We use this to show a "Back to family" link so dual-role
+      // users can hop back to /family quickly.
       hasFamily = typeof (raw as { fid?: unknown }).fid === 'string';
     }
   }
+  return { allowed, displayEmail, hasFamily };
+}
 
-  if (!allowed) {
-    return (
-      <div style={{ padding: 32, fontFamily: 'var(--body)' }}>
-        <p style={{ color: 'var(--err)', fontSize: 14 }}>Access denied. Admin role required.</p>
-      </div>
-    );
-  }
+function AccessDenied() {
+  return (
+    <div style={{ padding: 32, fontFamily: 'var(--body)' }}>
+      <p style={{ color: 'var(--err)', fontSize: 14 }}>Access denied. Admin role required.</p>
+    </div>
+  );
+}
+
+async function AdminChromeAndChildren({ children }: { children: React.ReactNode }) {
+  const { allowed, displayEmail, hasFamily } = await resolveAdminIdentity();
+  if (!allowed) return <AccessDenied />;
 
   return (
     <CspRoot style={{ display: 'flex', width: '100%', minHeight: '100dvh' }}>
       <AdminSidebar displayEmail={displayEmail} hasFamily={hasFamily}/>
       <main style={{ flex: 1, padding: '32px 40px', overflow: 'auto' }}>{children}</main>
+    </CspRoot>
+  );
+}
+
+// Mobile admin chrome: a CspRoot wrapper (so brand tokens resolve — without it
+// the page renders unstyled, tiles lose their card backgrounds/borders) with a
+// sticky top bar and a padded scroll area.
+async function AdminMobileChrome({ children }: { children: React.ReactNode }) {
+  const { allowed, hasFamily } = await resolveAdminIdentity();
+  if (!allowed) return <AccessDenied />;
+
+  return (
+    <CspRoot style={{ minHeight: '100dvh' }}>
+      <div style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column' }}>
+        <div className="between" style={{ position: 'sticky', top: 0, zIndex: 10, padding: '12px 18px', background: 'var(--surface)', borderBottom: '1px solid var(--line)' }}>
+          <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+            <SetuLogo size={18}/>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--muted)', letterSpacing: '.04em' }}>Admin</span>
+          </div>
+          <SignOutButton showIcon style={{
+            background: 'transparent', border: '1px solid var(--line2)', borderRadius: 'var(--radiusSm)',
+            padding: '5px 10px', fontSize: 12, color: 'var(--muted)', fontFamily: 'var(--body)', fontWeight: 500,
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+          }}/>
+        </div>
+        <main style={{ flex: 1, overflowY: 'auto', padding: '18px 18px 40px' }}>
+          {hasFamily && (
+            <Link href="/family" className="focus-ring" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--body-text)', textDecoration: 'none', marginBottom: 16 }}>
+              <SetuIcon.back/> Back to my family
+            </Link>
+          )}
+          {children}
+        </main>
+      </div>
     </CspRoot>
   );
 }
@@ -116,9 +162,11 @@ function AdminSidebar({ displayEmail, hasFamily }: { displayEmail: string; hasFa
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
     <>
-      {/* Mobile: pass-through */}
+      {/* Mobile: themed chrome (CspRoot + top bar). */}
       <div className="block md:hidden">
-        <Suspense fallback={<LoadingOm />}>{children}</Suspense>
+        <Suspense fallback={<LoadingOm />}>
+          <AdminMobileChrome>{children}</AdminMobileChrome>
+        </Suspense>
       </div>
       {/* Desktop: themed chrome */}
       <div className="hidden md:flex" style={{ minHeight: '100dvh' }}>
