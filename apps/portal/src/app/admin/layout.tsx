@@ -7,6 +7,7 @@ import { SetuLogo, SetuIcon } from '@cmt/ui';
 import { CspRoot } from '@/features/family/components/atoms';
 import { LoadingOm } from '@/components/chrome/loading-om';
 import { SignOutButton } from '@/features/family/components/sign-out-button';
+import { AdminMobileNav } from '@/features/admin/components/admin-mobile-nav';
 
 // Themed admin chrome. Re-verifies admin role defensively (middleware already
 // blocks non-admin, but the role check inside Suspense protects against
@@ -62,35 +63,17 @@ async function AdminChromeAndChildren({ children }: { children: React.ReactNode 
 }
 
 // Mobile admin chrome: a CspRoot wrapper (so brand tokens resolve — without it
-// the page renders unstyled, tiles lose their card backgrounds/borders) with a
-// sticky top bar and a padded scroll area.
+// the page renders unstyled, tiles lose their card backgrounds/borders) plus a
+// fixed bottom nav. Sign out + Back-to-family live in the nav's "More" sheet,
+// mirroring the family mobile chrome.
 async function AdminMobileChrome({ children }: { children: React.ReactNode }) {
   const { allowed, hasFamily } = await resolveAdminIdentity();
   if (!allowed) return <AccessDenied />;
 
   return (
     <CspRoot style={{ minHeight: '100dvh' }}>
-      <div style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column' }}>
-        <div className="between" style={{ position: 'sticky', top: 0, zIndex: 10, padding: '12px 18px', background: 'var(--surface)', borderBottom: '1px solid var(--line)' }}>
-          <div className="row" style={{ gap: 8, alignItems: 'center' }}>
-            <SetuLogo size={18}/>
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--muted)', letterSpacing: '.04em' }}>Admin</span>
-          </div>
-          <SignOutButton showIcon style={{
-            background: 'transparent', border: '1px solid var(--line2)', borderRadius: 'var(--radiusSm)',
-            padding: '5px 10px', fontSize: 12, color: 'var(--muted)', fontFamily: 'var(--body)', fontWeight: 500,
-            display: 'inline-flex', alignItems: 'center', gap: 6,
-          }}/>
-        </div>
-        <main style={{ flex: 1, overflowY: 'auto', padding: '18px 18px 40px' }}>
-          {hasFamily && (
-            <Link href="/family" className="focus-ring" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--body-text)', textDecoration: 'none', marginBottom: 16 }}>
-              <SetuIcon.back/> Back to my family
-            </Link>
-          )}
-          {children}
-        </main>
-      </div>
+      <div style={{ padding: '18px 18px 90px' }}>{children}</div>
+      <AdminMobileNav hasFamily={hasFamily} />
     </CspRoot>
   );
 }

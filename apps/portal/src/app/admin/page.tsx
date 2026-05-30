@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Rosette } from '@cmt/ui';
+import { Rosette, SetuIcon } from '@cmt/ui';
 
 export const metadata = { title: 'Admin — CMT Portal' };
 
@@ -14,7 +14,7 @@ export default function AdminPage() {
         <p style={{ fontSize: 11, letterSpacing: '.16em', textTransform: 'uppercase', color: 'var(--muted)' }}>
           Chinmaya Mission Toronto · Admin
         </p>
-        <h1 style={{ fontSize: 38, fontWeight: 400, marginTop: 6, lineHeight: 1.1 }}>
+        <h1 style={{ fontSize: 'clamp(28px, 7vw, 38px)', fontWeight: 400, marginTop: 6, lineHeight: 1.1 }}>
           Hari OM, admin.
         </h1>
         <p style={{ fontSize: 14, color: 'var(--body-text)', marginTop: 10, maxWidth: 620, lineHeight: 1.55 }}>
@@ -23,64 +23,74 @@ export default function AdminPage() {
         </p>
       </header>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
         <Tile
           href="/welcome"
           title="Family search"
+          icon="search"
           sub="Look up any family by name, FID, legacy FID, email, or phone. Read-only family detail. Admins inherit welcome-team capability automatically."
           tone="primary"
         />
         <Tile
           href="/admin/welcome-team"
           title="Welcome-team grants"
+          icon="people"
           sub="Grant + revoke welcome-team access for CMT volunteers helping families on Sunday."
           tone="primary"
         />
         <Tile
           href="/admin/donation-periods"
           title="Donation periods"
+          icon="receipt"
           sub="Configure Bala Vihar donation periods per location. Suggested amounts are locked at enrollment — edits don't affect existing families."
           tone="primary"
         />
         <Tile
           href="/admin/levels"
           title="Levels & teachers"
+          icon="check"
           sub="Configure Bala Vihar levels (classes) per location + period, set grade-bands, and assign teachers. Assignment grants the teacher capability on next sign-in."
           tone="primary"
         />
         <Tile
           href="/admin/calendar"
           title="Class calendar"
+          icon="calendar"
           sub="Publish the school-year Sunday schedule (class / no-class days, special events) + weekly times. Replaces the per-year PDF; families see it on their dashboard."
           tone="primary"
         />
         <Tile
           href="/check-in/admin/users"
           title="Admin users"
+          icon="shield"
           sub="Legacy: add or remove other admins. (Themed version coming.)"
           tone="legacy"
         />
         <Tile
           href="/check-in/admin/unpaid"
           title="Unpaid families"
+          icon="warn"
           sub="Legacy: list of families whose dakshina is outstanding."
           tone="legacy"
         />
         <Tile
           href="/check-in/admin/guests"
           title="Guests"
+          icon="people"
           sub="Legacy: recent guest check-ins from the Sunday kiosk."
           tone="legacy"
         />
         <Tile
           href="/check-in/admin/reports"
           title="Reports"
+          icon="info"
           sub="Legacy: attendance and engagement reports."
           tone="legacy"
         />
         <Tile
           href="/check-in/admin"
           title="Check-in dashboard"
+          icon="home"
           sub="Legacy: live check-in counts and operational stats."
           tone="legacy"
         />
@@ -103,23 +113,35 @@ export default function AdminPage() {
   );
 }
 
-function Tile({ href, title, sub, tone }: { href: string; title: string; sub: string; tone: 'primary' | 'legacy' }) {
+function Tile({ href, title, sub, tone, icon }: { href: string; title: string; sub: string; tone: 'primary' | 'legacy'; icon: keyof typeof SetuIcon }) {
   const isPrimary = tone === 'primary';
+  const Icon = SetuIcon[icon];
   return (
-    <Link href={href} style={{
-      display: 'block', padding: 18, borderRadius: 'var(--radius)',
+    <Link href={href} className="focus-ring" style={{
+      display: 'flex', alignItems: 'flex-start', gap: 14, padding: 16, borderRadius: 'var(--radius)',
       background: isPrimary ? 'var(--accentSoft)' : 'var(--surface)',
       border: `1px solid ${isPrimary ? 'var(--accent)' : 'var(--line)'}`,
       textDecoration: 'none', color: 'var(--body-text)',
-      transition: 'transform 120ms ease',
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-        <span style={{ fontSize: 14, fontWeight: 600, color: isPrimary ? 'var(--accentDeep)' : 'var(--ink)' }}>{title}</span>
-        {tone === 'legacy' && (
-          <span style={{ fontSize: 10, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--muted)' }}>Legacy</span>
-        )}
+      <div style={{
+        flex: '0 0 auto', width: 38, height: 38, borderRadius: 10, display: 'grid', placeItems: 'center',
+        background: isPrimary ? 'var(--surface)' : 'var(--surface2)',
+        color: isPrimary ? 'var(--accentDeep)' : 'var(--muted)',
+      }}>
+        <Icon />
       </div>
-      <p style={{ fontSize: 12, color: 'var(--body-text)', lineHeight: 1.5, marginTop: 6 }}>{sub}</p>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <span style={{ fontSize: 15, fontWeight: 600, color: isPrimary ? 'var(--accentDeep)' : 'var(--ink)' }}>{title}</span>
+          {tone === 'legacy' && (
+            <span style={{ fontSize: 10, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--muted)' }}>Legacy</span>
+          )}
+        </div>
+        <p style={{ fontSize: 12.5, color: 'var(--body-text)', lineHeight: 1.5 }}>{sub}</p>
+      </div>
+      <div style={{ flex: '0 0 auto', alignSelf: 'center', color: 'var(--muted)' }}>
+        <SetuIcon.chevron />
+      </div>
     </Link>
   );
 }
