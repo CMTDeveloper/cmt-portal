@@ -33,7 +33,7 @@ export default async function AdminWelcomeTeamPage() {
           <SetuIcon.back/> Back to admin
         </Link>
         <p style={{ fontSize: 11, letterSpacing: '.16em', textTransform: 'uppercase', color: 'var(--muted)' }}>Admin · Welcome team</p>
-        <h1 style={{ fontSize: 38, fontWeight: 400, marginTop: 6, lineHeight: 1.1 }}>Welcome team grants</h1>
+        <h1 style={{ fontSize: 'clamp(28px, 7vw, 38px)', fontWeight: 400, marginTop: 6, lineHeight: 1.1 }}>Welcome team grants</h1>
         <p style={{ fontSize: 14, color: 'var(--body-text)', marginTop: 10, maxWidth: 640, lineHeight: 1.55 }}>
           Welcome-team volunteers can search any family at <code>/welcome</code> but cannot modify
           family records. Granted by admins. Volunteers sign in via OTP (no password).

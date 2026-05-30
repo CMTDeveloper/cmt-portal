@@ -416,8 +416,11 @@ export function PeriodsTable({ initialPeriods }: PeriodsTableProps) {
             <div key={p.pid} style={{ padding: '16px 0', borderTop: i > 0 ? '1px solid var(--line)' : undefined }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 12 }}>
                 <div>
-                  <div style={{ fontSize: 16, fontWeight: 600 }}>{p.periodLabel}</div>
-                  <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{p.programLabel} · {p.location}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 16, fontWeight: 600 }}>{p.periodLabel}</span>
+                    <span style={{ padding: '2px 9px', borderRadius: 99, fontSize: 11, fontWeight: 700, background: 'var(--surface2)', color: 'var(--ink)', border: '1px solid var(--line2)' }}>{p.location}</span>
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 3 }}>{p.programLabel}</div>
                 </div>
                 <span style={{ flex: '0 0 auto', padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 600, background: p.enabled ? 'var(--accentSoft)' : 'var(--surface2)', color: p.enabled ? 'var(--accentDeep)' : 'var(--muted)' }}>
                   {p.enabled ? 'Enabled' : 'Disabled'}

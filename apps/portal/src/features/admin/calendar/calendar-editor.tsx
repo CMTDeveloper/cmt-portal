@@ -189,7 +189,35 @@ export function CalendarEditor({ locations }: CalendarEditorProps) {
         {entries.length === 0 && !loading ? (
           <div style={{ fontSize: 13, color: 'var(--muted)' }}>No entries yet. Add one above or run the seed script.</div>
         ) : (
-          <div style={{ overflowX: 'auto' }}>
+          <>
+          {/* Mobile: stacked rows (the table overflows a phone width). */}
+          <div className="block md:hidden">
+            {entries.map((e, i) => (
+              <div key={e.entryId} style={{ padding: '14px 0', borderTop: i > 0 ? '1px solid var(--line)' : undefined }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                  <span style={{ fontSize: 14, fontWeight: 600 }}>{e.date}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <button onClick={() => toggleEnabled(e)} style={{ ...pill, background: e.enabled ? 'var(--accentSoft)' : 'var(--surface2)', color: e.enabled ? 'var(--accentDeep)' : 'var(--muted)', cursor: 'pointer', border: 0 }}>
+                      {e.enabled ? 'Published' : 'Draft'}
+                    </button>
+                    <button onClick={() => remove(e)} style={removeBtn} aria-label="Delete entry">×</button>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 7 }}>
+                  <span style={{ ...pill, background: e.kind === 'class' ? 'var(--accentSoft)' : 'var(--surface2)', color: e.kind === 'class' ? 'var(--accentDeep)' : 'var(--muted)' }}>
+                    {e.kind === 'class' ? 'Class' : 'No class'}
+                  </span>
+                  <span style={{ fontSize: 13, color: 'var(--body-text)' }}>{e.kind === 'class' ? e.classType : e.noClassReason ?? '—'}</span>
+                </div>
+                {e.specialEvents && (
+                  <div style={{ fontSize: 13, color: 'var(--body-text)', marginTop: 6, lineHeight: 1.45 }}>{e.specialEvents}</div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop: full table. */}
+          <div className="hidden md:block" style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
                 <tr style={{ borderBottom: '2px solid var(--line)' }}>
@@ -216,6 +244,7 @@ export function CalendarEditor({ locations }: CalendarEditorProps) {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </div>
     </div>
