@@ -39,6 +39,11 @@ export function MobileBottomNav() {
 
   return (
     <div
+      // `csp` scopes the brand CSS tokens (--surface, --accent, …). Without it
+      // this fixed bar renders outside any CspRoot, so the tokens resolve to
+      // nothing — transparent background, default colors, content showing
+      // through. Keep the class on the rendered bar.
+      className="csp"
       style={{
         position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 50,
         background: 'var(--surface)', borderTop: '1px solid var(--line)',
