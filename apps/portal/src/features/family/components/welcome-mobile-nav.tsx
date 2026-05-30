@@ -5,22 +5,15 @@ import Link from 'next/link';
 import { SetuIcon } from '@cmt/ui';
 import { signOut } from './sign-out-button';
 
-// Bottom nav for the welcome-team section (/welcome). Shown on the search hero
-// and the levels/rosters list; hidden on drill-down detail pages that own their
-// back chrome (family detail, a single level roster).
-function shouldHide(pathname: string): boolean {
-  if (pathname.startsWith('/welcome/family/')) return true;
-  if (/^\/welcome\/levels\/.+/.test(pathname)) return true; // single-level detail
-  return false;
-}
-
+// Bottom nav for the welcome-team section (/welcome). Shown on every welcome
+// page, including the drill-down detail pages (family detail, single-level
+// roster) which also keep their own back arrow.
 function isSearchActive(pathname: string): boolean {
   return !pathname.startsWith('/welcome/levels');
 }
 
 export function WelcomeMobileNav({ isAdmin = false, hasFamily = false }: { isAdmin?: boolean; hasFamily?: boolean }) {
   const pathname = usePathname();
-  if (shouldHide(pathname)) return null;
   const searchActive = isSearchActive(pathname);
 
   const itemStyle = (on: boolean): React.CSSProperties => ({

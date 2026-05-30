@@ -30,7 +30,7 @@ export default async function WelcomeRosterPage({
   if (!roster) return <p style={{ color: 'var(--muted)', fontSize: 14 }}>That class doesn’t exist.</p>;
 
   return (
-    <div style={{ maxWidth: 720 }}>
+    <div className="px-[18px] pt-[14px] pb-[90px] md:p-0" style={{ maxWidth: 720 }}>
       <Link href="/welcome/levels" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--muted)', textDecoration: 'none', marginBottom: 12 }}>
         <SetuIcon.back /> All levels
       </Link>

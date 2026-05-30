@@ -73,7 +73,7 @@ export async function WelcomeFamilyDetailBody({
               <span style={{ fontSize: 14, fontWeight: 600 }}>Family detail</span>
               <div style={{ width: 32 }}/>
             </div>
-            <div style={{ flex: 1, overflowY: 'auto', padding: '18px 18px 32px' }}>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '18px 18px 90px' }}>
               <FamilyDetailBody family={family} members={members} adults={adults} children={children}/>
             </div>
           </div>
