@@ -11,8 +11,16 @@ import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
 import { getDonations } from '@/features/setu/donations/get-donations';
 import { paymentSourceOf } from '@cmt/shared-domain';
 import { getLegacyPaymentStatus } from '@/features/setu/donations/legacy-payment';
-import { getUpcoming, type CalendarEntry } from '@/features/setu/calendar/calendar';
+import { getUpcoming, getClassDatesHeld, type CalendarEntry } from '@/features/setu/calendar/calendar';
 import { getCheckInAttendance, summarizeFamilyCheckIns, type CheckInSummary } from '@/features/setu/attendance/check-in-attendance';
+
+function fmtSunday(ymd: string): string {
+  return new Date(`${ymd}T12:00:00`).toLocaleDateString('en-CA', {
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'America/Toronto',
+  });
+}
 
 function fmtUpcoming(e: CalendarEntry): { d: string; m: string; t: string; sub: string | null } {
   const date = new Date(`${e.date}T12:00:00`);
@@ -50,9 +58,10 @@ export default async function FamilyDashboardPage() {
   let donateUrl = '/family/donate';
   // Upcoming class dates from the managed calendar (Slice 4b), by family location.
   let upcomingEntries: CalendarEntry[] = [];
-  // Real attendance (Slice 4f) for the active period's children.
   // Real attendance from the live check-in app (family-check-ins), read-only.
+  // Denominator = class Sundays held so far this year (from the calendar).
   let ci: CheckInSummary = { attended: 0, recorded: 0, lastDate: null, marks: [] };
+  let classSundaysHeld = 0;
   // Legacy payment bridge: for a period with paymentSource='legacy' (the
   // 2025-26 cutover year), payment status comes from the prod RTDB roster.
   let isLegacyPeriod = false;
@@ -95,11 +104,15 @@ export default async function FamilyDashboardPage() {
       upcomingEntries = upcoming;
 
       ci = summarizeFamilyCheckIns(await getCheckInAttendance(data.family.legacyFid));
+      classSundaysHeld = (await getClassDatesHeld(data.family.location)).length;
     }
   }
 
   const hasAttendance = ci.recorded > 0;
-  const attendancePct = ci.recorded > 0 ? Math.round((ci.attended / ci.recorded) * 100) : 0;
+  // Honest denominator: class Sundays held so far (calendar). Fall back to the
+  // count of recorded check-ins only if the calendar isn't published.
+  const attendanceTotal = classSundaysHeld > 0 ? classSundaysHeld : ci.recorded;
+  const attendancePct = attendanceTotal > 0 ? Math.round((ci.attended / attendanceTotal) * 100) : 0;
 
   const donationComplete = suggestedAmount !== null && givenForPeriod >= suggestedAmount;
   const donationPct =
@@ -179,7 +192,7 @@ export default async function FamilyDashboardPage() {
               </div>
               <div style={{ fontSize: 11, color: 'var(--muted)' }}>
                 {hasAttendance
-                  ? `Attended ${ci.attended} of ${ci.recorded} Sunday classes.`
+                  ? `Attended ${ci.attended} of ${attendanceTotal} Sunday classes.`
                   : 'Attendance appears here once Sunday classes begin.'}
               </div>
               {!isEnrolled && (
@@ -321,7 +334,7 @@ export default async function FamilyDashboardPage() {
           <MetricCard
             label="Attendance"
             value={hasAttendance ? String(ci.attended) : '—'}
-            sub={hasAttendance ? `of ${ci.recorded} Sundays` : 'no classes yet'}
+            sub={hasAttendance ? `of ${attendanceTotal} Sundays` : 'no classes yet'}
             {...(hasAttendance ? { tone: attendancePct >= 75 ? ('ok' as const) : ('warn' as const) } : {})}
           />
           <MetricCard label="Family"     value={String(memberCount)} sub={`${memberCount} member${memberCount !== 1 ? 's' : ''}`}/>
@@ -336,19 +349,25 @@ export default async function FamilyDashboardPage() {
               </div>
               {hasAttendance ? (
                 <>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(16, 1fr)', gap: 4, marginBottom: 18 }}>
-                    {ci.marks.slice(-32).map((m) => (
-                      <div
+                  <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 10 }}>Sundays attended</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+                    {ci.marks.map((m) => (
+                      <span
                         key={m.date}
-                        title={`${m.date} · ${m.present ? 'present' : 'absent'}`}
-                        style={{ aspectRatio: '1', borderRadius: 4, background: m.present ? 'var(--accent)' : 'var(--err)', opacity: m.present ? 0.75 : 1 }}
-                      />
+                        title={m.present ? 'Present' : 'Absent'}
+                        style={{
+                          fontSize: 12, fontWeight: 600, padding: '5px 10px', borderRadius: 8,
+                          background: m.present ? 'var(--accentSoft)' : 'var(--err-soft, #f6dcdc)',
+                          color: m.present ? 'var(--accentDeep)' : 'var(--err)',
+                          textDecoration: m.present ? 'none' : 'line-through',
+                        }}
+                      >
+                        {fmtSunday(m.date)}
+                      </span>
                     ))}
                   </div>
-                  <div className="row" style={{ gap: 18, fontSize: 11, color: 'var(--muted)' }}>
-                    <span className="row" style={{ gap: 6 }}><span style={{ width: 10, height: 10, background: 'var(--accent)', borderRadius: 2, opacity: .75 }}/> present</span>
-                    <span className="row" style={{ gap: 6 }}><span style={{ width: 10, height: 10, background: 'var(--err)', borderRadius: 2 }}/> absent</span>
-                    <span style={{ marginLeft: 'auto' }}>Attended {ci.attended} of {ci.recorded} Sundays</span>
+                  <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                    Attended <strong style={{ color: 'var(--ink)' }}>{ci.attended}</strong> of {attendanceTotal} class Sundays this year.
                   </div>
                 </>
               ) : (

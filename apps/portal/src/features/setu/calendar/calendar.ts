@@ -67,6 +67,19 @@ export async function getUpcoming(
   return { nextClass, upcoming: future.slice(0, limit) };
 }
 
+/** Published class-kind dates on/before today (Toronto), ascending — the
+ * Sundays Bala Vihar has actually held so far. The denominator for attendance. */
+export async function getClassDatesHeld(
+  location: Location,
+  todayYmd: string = torontoToday(),
+): Promise<string[]> {
+  const entries = await getPublishedCalendar(location);
+  return entries
+    .filter((e) => e.kind === 'class' && e.date <= todayYmd)
+    .map((e) => e.date)
+    .sort();
+}
+
 export async function getWeeklySchedule(location: Location): Promise<WeeklyScheduleDoc['rows']> {
   const snap = await portalFirestore().collection(SCHEDULES).doc(location).get();
   if (!snap.exists) return [];
