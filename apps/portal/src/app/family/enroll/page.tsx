@@ -3,10 +3,11 @@ import Link from 'next/link';
 import { SetuAvatar, SetuIcon, Rosette } from '@cmt/ui';
 import { CspRoot, SectionLabel } from '@/features/family/components/atoms';
 import { EnrollCta } from '@/features/family/components/enroll-cta';
-import { resolveSuggestedAmount } from '@cmt/shared-domain';
+import { resolveSuggestedAmount, paymentSourceOf } from '@cmt/shared-domain';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
 import { resolveActivePeriod } from '@/features/setu/enrollment/resolve-active-period';
+import { getLegacyPaymentStatus } from '@/features/setu/donations/legacy-payment';
 
 export const metadata = { title: 'Enroll — CMT Portal' };
 
@@ -43,6 +44,12 @@ export default async function EnrollPage() {
 
   const alreadyEnrolled = activeEnrollment !== null;
   const donationsEnabled = process.env.NEXT_PUBLIC_FEATURE_SETU_DONATIONS === 'true';
+  // Legacy cutover year: if this period's payment is tracked off-portal
+  // (paymentSource='legacy') and the roster shows the family has paid, we don't
+  // ask for a donation here — show "Paid". Giving more is always possible from
+  // the Giving tab.
+  const isLegacyPeriod = activePeriod ? paymentSourceOf(activePeriod) === 'legacy' : false;
+  const legacyPaid = isLegacyPeriod && (await getLegacyPaymentStatus(family.legacyFid)) === 'paid';
   // Pin amount to enrollment snapshot/override; before enrolling, show the tier
   // a family enrolling today would get (prorated by date).
   const displaySuggestedAmount =
@@ -63,7 +70,7 @@ export default async function EnrollPage() {
               <span style={{ width: 32 }}/>
             </div>
             <div style={{ flex: 1, overflowY: 'auto', padding: '20px 18px 100px' }}>
-              {alreadyEnrolled && renderAlreadyEnrolledBanner(activeEnrollment.periodLabel)}
+              {alreadyEnrolled && renderAlreadyEnrolledBanner(activeEnrollment.periodLabel, legacyPaid)}
               {!activePeriod && !alreadyEnrolled && renderNoPeriodBanner(family.location)}
 
               {activePeriod && (
@@ -103,14 +110,20 @@ export default async function EnrollPage() {
                     </>
                   )}
 
-                  <SectionLabel><em className="sa">Dakshina</em> · suggested donation</SectionLabel>
-                  {renderDakshinaBlock(displaySuggestedAmount ?? 0, family.location, activePeriod.periodLabel)}
+                  <SectionLabel><em className="sa">Dakshina</em>{legacyPaid ? '' : ' · suggested donation'}</SectionLabel>
+                  {legacyPaid
+                    ? renderPaidBlockMobile(activePeriod.periodLabel)
+                    : renderDakshinaBlock(displaySuggestedAmount ?? 0, family.location, activePeriod.periodLabel)}
                 </>
               )}
             </div>
             <div style={{ position: 'sticky', bottom: 0, left: 0, right: 0, padding: '14px 18px', background: 'var(--surface)', borderTop: '1px solid var(--line)' }}>
               {alreadyEnrolled ? (
-                donationsEnabled ? (
+                legacyPaid ? (
+                  <Link href="/family" className="btn btn--p btn--block" style={{ display: 'block', textAlign: 'center', textDecoration: 'none' }}>
+                    Back to dashboard
+                  </Link>
+                ) : donationsEnabled ? (
                   <Link href={`/family/donate?eid=${activeEnrollment.eid}`} className="btn btn--p btn--block" style={{ display: 'block', textAlign: 'center', textDecoration: 'none' }}>
                     Continue to donation →
                   </Link>
@@ -154,7 +167,7 @@ export default async function EnrollPage() {
           </div>
         </header>
 
-        {alreadyEnrolled && renderAlreadyEnrolledBanner(activeEnrollment.periodLabel)}
+        {alreadyEnrolled && renderAlreadyEnrolledBanner(activeEnrollment.periodLabel, legacyPaid)}
         {!activePeriod && !alreadyEnrolled && renderNoPeriodBanner(family.location)}
 
         {activePeriod && (
@@ -202,6 +215,7 @@ export default async function EnrollPage() {
             </div>
 
             <aside>
+              {legacyPaid ? renderPaidPanel(activePeriod.periodLabel) : (
               <div className="card" style={{ padding: 24, position: 'sticky', top: 0 }}>
                 <h3 style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.16em', fontWeight: 700, fontFamily: 'var(--body)', color: 'var(--muted)', marginBottom: 14 }}>
                   <em className="sa">Dakshina</em> · suggested donation
@@ -239,6 +253,7 @@ export default async function EnrollPage() {
                   Donations are tax-deductible · Chinmaya Mission Toronto
                 </p>
               </div>
+              )}
             </aside>
           </div>
         )}
@@ -247,10 +262,45 @@ export default async function EnrollPage() {
   );
 }
 
-function renderAlreadyEnrolledBanner(periodLabel: string) {
+function renderAlreadyEnrolledBanner(periodLabel: string, paid = false) {
   return (
     <div style={{ padding: '14px 18px', background: 'var(--accentSoft)', color: 'var(--accentDeep)', border: '1px solid var(--accent)', borderRadius: 'var(--radius)', marginBottom: 20, fontSize: 14, fontWeight: 600 }}>
-      Your family is already enrolled in {periodLabel}. Proceed to donate below.
+      {paid
+        ? `Your family is enrolled in ${periodLabel} and your contribution is paid. Thank you.`
+        : `Your family is already enrolled in ${periodLabel}. Proceed to donate below.`}
+    </div>
+  );
+}
+
+function renderPaidPanel(periodLabel: string) {
+  return (
+    <div className="card" style={{ padding: 24, position: 'sticky', top: 0 }}>
+      <h3 style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.16em', fontWeight: 700, fontFamily: 'var(--body)', color: 'var(--muted)', marginBottom: 14 }}>
+        <em className="sa">Dakshina</em>
+      </h3>
+      <span className="pill" style={{ background: 'var(--accentSoft)', color: 'var(--accentDeep)', padding: '6px 12px', fontSize: 12 }}>
+        Paid · {periodLabel}
+      </span>
+      <p style={{ fontSize: 13, color: 'var(--body-text)', lineHeight: 1.55, margin: '14px 0 0' }}>
+        Your {periodLabel} Bala Vihar contribution is recorded as paid — thank you. No further action needed.
+      </p>
+      <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 12 }}>
+        Want to give more? You can donate any amount any time from{' '}
+        <Link href="/family/donate" style={{ color: 'var(--accent)', fontWeight: 600, textDecoration: 'none' }}>Giving</Link>.
+      </p>
+    </div>
+  );
+}
+
+function renderPaidBlockMobile(periodLabel: string) {
+  return (
+    <div style={{ padding: 18, background: 'var(--accentSoft)', border: '1px solid var(--line2)', borderRadius: 'var(--radius)' }}>
+      <span className="pill" style={{ background: 'var(--surface)', color: 'var(--accentDeep)', padding: '6px 12px', fontSize: 12 }}>
+        Paid · {periodLabel}
+      </span>
+      <p style={{ fontSize: 13, color: 'var(--body-text)', marginTop: 12, lineHeight: 1.5 }}>
+        Your {periodLabel} contribution is recorded as paid — thank you. Want to give more? Use the <strong>Giving</strong> tab any time.
+      </p>
     </div>
   );
 }
