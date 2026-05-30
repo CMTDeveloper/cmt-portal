@@ -19,11 +19,14 @@ const TABS: { id: Tab; label: string; icon: keyof typeof SetuIcon; href: string 
 // so the bar hides on these and the user navigates back via the page's own
 // controls.
 function shouldHide(pathname: string): boolean {
-  if (pathname.startsWith('/family/enroll')) return true;
   if (pathname.startsWith('/family/settings')) return true;
   if (/^\/family\/members\/.+/.test(pathname)) return true; // detail / edit / new
   return false;
 }
+
+// The bar occupies ~64px at the bottom of the viewport. Pages with their own
+// sticky action footer (enroll) subtract that via calc(100dvh - 64px) so the
+// footer rests just above the bar instead of behind it.
 
 function activeTab(pathname: string): Tab {
   if (pathname.startsWith('/family/members')) return 'family';

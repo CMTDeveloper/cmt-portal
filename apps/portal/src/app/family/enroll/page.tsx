@@ -61,7 +61,9 @@ export default async function EnrollPage() {
       {/* Mobile */}
       <div className="block md:hidden">
         <CspRoot style={{ minHeight: '100dvh' }}>
-          <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column' }}>
+          {/* Leave room for the shared MobileBottomNav (64px) so this page's
+              sticky action footer rests just above it, not behind it. */}
+          <div style={{ height: 'calc(100dvh - 64px)', display: 'flex', flexDirection: 'column' }}>
             <div className="between" style={{ padding: '10px 18px', borderBottom: '1px solid var(--line)' }}>
               <Link href="/family" className="focus-ring" style={{ background: 'transparent', border: 0, padding: 6, marginLeft: -6, color: 'var(--body-text)', display: 'inline-flex' }}>
                 <SetuIcon.back/>
