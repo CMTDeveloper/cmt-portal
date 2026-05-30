@@ -40,7 +40,7 @@ export default async function AdminWelcomeTeamPage() {
         </p>
       </header>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: 28, alignItems: 'start' }}>
+      <div className="grid grid-cols-1 md:grid-cols-[1fr_1.4fr] gap-7 items-start">
         {/* Grant form (left) */}
         <section className="card" style={{ padding: 22 }}>
           <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 14, textTransform: 'uppercase', letterSpacing: '.12em' }}>Grant access</h2>

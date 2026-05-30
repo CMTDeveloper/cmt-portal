@@ -22,9 +22,9 @@ export function AdminUserList({ users, currentUid }: Props) {
           key={u.uid}
           className="flex items-center justify-between rounded border border-[hsl(var(--border))] p-3"
         >
-          <div>
-            <div className="font-medium">{u.email}</div>
-            <div className="text-xs text-[hsl(var(--foreground))]"><code>{u.uid}</code></div>
+          <div className="min-w-0">
+            <div className="font-medium break-all">{u.email}</div>
+            <div className="text-xs text-[hsl(var(--foreground))]"><code className="break-all">{u.uid}</code></div>
           </div>
           <DeleteAdminButton
             uid={u.uid}

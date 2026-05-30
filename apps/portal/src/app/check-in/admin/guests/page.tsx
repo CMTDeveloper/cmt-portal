@@ -39,7 +39,7 @@ export default async function AdminGuestsPage({ searchParams }: Props) {
   const nextCursor = snap.docs.length === limit ? snap.docs[snap.docs.length - 1]?.id ?? null : null;
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-5xl flex-col gap-4 p-6">
+    <main className="mx-auto flex min-h-screen max-w-5xl flex-col gap-4 p-4 sm:p-6">
       <h1 className="text-2xl font-bold text-[hsl(var(--heading))]">Guests</h1>
       <GuestList guests={guests} />
       <CursorPagination basePath="/check-in/admin/guests" nextCursor={nextCursor} />

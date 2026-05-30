@@ -16,15 +16,19 @@ export function UnpaidFamilyList({ families }: Props) {
         return (
           <li
             key={f.fid}
-            className="flex items-center justify-between rounded border border-[hsl(var(--border))] p-3"
+            className="flex flex-col gap-2 rounded border border-[hsl(var(--border))] p-3 sm:flex-row sm:items-center sm:justify-between"
           >
-            <div>
+            <div className="min-w-0">
               <div className="font-medium">{f.name}</div>
               <div className="text-xs text-[hsl(var(--foreground))]">
-                Family ID <code>{f.fid}</code> · Status: {f.paymentStatus}
+                Family ID <code className="break-all">{f.fid}</code> · Status: {f.paymentStatus}
               </div>
             </div>
-            {email && <SendDonationEmailButton email={email} familyName={f.name} />}
+            {email && (
+              <div className="shrink-0">
+                <SendDonationEmailButton email={email} familyName={f.name} />
+              </div>
+            )}
           </li>
         );
       })}

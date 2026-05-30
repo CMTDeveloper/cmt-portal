@@ -44,8 +44,9 @@ beforeEach(() => {
 describe('LevelsTable', () => {
   it('renders existing levels with teacher count', () => {
     render(<LevelsTable initialLevels={[LEVEL]} periods={PERIODS} />);
-    expect(screen.getByText('Level 2')).toBeTruthy();
-    expect(screen.getByText('Hanuman')).toBeTruthy();
+    // Rendered in both the mobile card list and the desktop table, so match all.
+    expect(screen.getAllByText('Level 2')[0]).toBeTruthy();
+    expect(screen.getAllByText('Hanuman')[0]).toBeTruthy();
   });
 
   it('POSTs a new level with the correct payload', async () => {
@@ -92,7 +93,7 @@ describe('LevelsTable', () => {
   it('PATCHes only changed fields on edit', async () => {
     const user = userEvent.setup();
     render(<LevelsTable initialLevels={[LEVEL]} periods={PERIODS} />);
-    await user.click(screen.getByText('Edit'));
+    await user.click(screen.getAllByText('Edit')[0]!);
     const nameInput = screen.getByDisplayValue('Level 2');
     await user.clear(nameInput);
     await user.type(nameInput, 'Level 2 (B)');

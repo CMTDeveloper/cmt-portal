@@ -191,7 +191,7 @@ function LevelModal({ editing, periods, onClose, onSaved }: ModalProps) {
 
             {isEdit && <div style={{ fontSize: 12, color: 'var(--muted)' }}>{selectedPeriod?.location ?? editing.location} · {editing.periodLabel}</div>}
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 0.6fr', gap: 12 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <label style={labelStyle}>
                 Level name
                 <input value={levelName} onChange={(e) => setLevelName(e.target.value)} placeholder="Level 2" style={fieldStyle} />
@@ -225,7 +225,7 @@ function LevelModal({ editing, periods, onClose, onSaved }: ModalProps) {
               {errors.gradeBand && <FieldError msg={errors.gradeBand} />}
             </label>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <label style={labelStyle}>
                 Age / grade label
                 <input value={ageLabel} onChange={(e) => setAgeLabel(e.target.value)} placeholder="Grade 2 & 3" style={fieldStyle} />
@@ -318,40 +318,77 @@ export function LevelsTable({ initialLevels, periods }: LevelsTableProps) {
           {levels.length === 0 ? 'No levels yet. Create one or run the seed script.' : 'No enabled levels. Toggle “Show disabled” to see all.'}
         </div>
       ) : (
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-            <thead>
-              <tr style={{ borderBottom: '2px solid var(--line)' }}>
-                {['Location', 'Period', '#', 'Level', 'Kind', 'Grades', 'Curriculum', 'Teachers', 'Status', 'Actions'].map((h) => (
-                  <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontSize: 11, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--muted)', fontWeight: 700, whiteSpace: 'nowrap' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {displayed.map((l, i) => (
-                <tr key={l.levelId} style={{ borderBottom: '1px solid var(--line)', background: i % 2 === 0 ? 'transparent' : 'var(--bg)' }}>
-                  <td style={tdStyle}>{l.location}</td>
-                  <td style={tdStyle}>{l.periodLabel}</td>
-                  <td style={{ ...tdStyle, color: 'var(--muted)' }}>{l.order}</td>
-                  <td style={{ ...tdStyle, fontWeight: 600 }}>{l.levelName}</td>
-                  <td style={{ ...tdStyle, color: 'var(--body-text)' }}>{l.levelKind}</td>
-                  <td style={{ ...tdStyle, color: 'var(--body-text)' }}>{l.gradeBand.length ? l.gradeBand.join(', ') : '—'}</td>
-                  <td style={{ ...tdStyle, color: 'var(--body-text)' }}>{l.curriculum}</td>
-                  <td style={{ ...tdStyle, color: 'var(--body-text)' }}>{l.teacherRefs.length}</td>
-                  <td style={tdStyle}>
-                    <span style={{ display: 'inline-block', padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 600, background: l.enabled ? 'var(--accentSoft)' : 'var(--surface2)', color: l.enabled ? 'var(--accentDeep)' : 'var(--muted)' }}>
-                      {l.enabled ? 'Enabled' : 'Disabled'}
-                    </span>
-                  </td>
-                  <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>
-                    <button onClick={() => { setEditing(l); setModalOpen(true); }} style={actionBtnStyle}>Edit</button>
-                    <button onClick={() => handleToggle(l)} style={{ ...actionBtnStyle, marginLeft: 6 }}>{l.enabled ? 'Disable' : 'Enable'}</button>
-                  </td>
+        <>
+          {/* Mobile: stacked card rows — table overflows a phone width. */}
+          <div className="block md:hidden">
+            {displayed.map((l, i) => (
+              <div key={l.levelId} style={{ padding: '16px 0', borderTop: i > 0 ? '1px solid var(--line)' : undefined }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 15, fontWeight: 600 }}>{l.levelName}</span>
+                      <span style={{ padding: '2px 9px', borderRadius: 99, fontSize: 11, fontWeight: 700, background: 'var(--surface2)', color: 'var(--ink)', border: '1px solid var(--line2)' }}>{l.location}</span>
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 3 }}>{l.periodLabel} · #{l.order}</div>
+                  </div>
+                  <span style={{ flex: '0 0 auto', padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 600, background: l.enabled ? 'var(--accentSoft)' : 'var(--surface2)', color: l.enabled ? 'var(--accentDeep)' : 'var(--muted)' }}>
+                    {l.enabled ? 'Enabled' : 'Disabled'}
+                  </span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '6px 14px', fontSize: 13 }}>
+                  <span style={cardKeyStyle}>Kind</span>
+                  <span style={{ color: 'var(--body-text)' }}>{l.levelKind}</span>
+                  <span style={cardKeyStyle}>Grades</span>
+                  <span style={{ color: 'var(--body-text)' }}>{l.gradeBand.length ? l.gradeBand.join(', ') : '—'}</span>
+                  <span style={cardKeyStyle}>Curriculum</span>
+                  <span style={{ color: 'var(--body-text)' }}>{l.curriculum}</span>
+                  <span style={cardKeyStyle}>Teachers</span>
+                  <span style={{ color: 'var(--body-text)' }}>{l.teacherRefs.length}</span>
+                </div>
+                <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                  <button onClick={() => { setEditing(l); setModalOpen(true); }} style={{ ...actionBtnStyle, flex: 1, textAlign: 'center', padding: '9px 12px' }}>Edit</button>
+                  <button onClick={() => handleToggle(l)} style={{ ...actionBtnStyle, flex: 1, textAlign: 'center', padding: '9px 12px' }}>{l.enabled ? 'Disable' : 'Enable'}</button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop: full 10-column table. */}
+          <div className="hidden md:block" style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ borderBottom: '2px solid var(--line)' }}>
+                  {['Location', 'Period', '#', 'Level', 'Kind', 'Grades', 'Curriculum', 'Teachers', 'Status', 'Actions'].map((h) => (
+                    <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontSize: 11, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--muted)', fontWeight: 700, whiteSpace: 'nowrap' }}>{h}</th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {displayed.map((l, i) => (
+                  <tr key={l.levelId} style={{ borderBottom: '1px solid var(--line)', background: i % 2 === 0 ? 'transparent' : 'var(--bg)' }}>
+                    <td style={tdStyle}>{l.location}</td>
+                    <td style={tdStyle}>{l.periodLabel}</td>
+                    <td style={{ ...tdStyle, color: 'var(--muted)' }}>{l.order}</td>
+                    <td style={{ ...tdStyle, fontWeight: 600 }}>{l.levelName}</td>
+                    <td style={{ ...tdStyle, color: 'var(--body-text)' }}>{l.levelKind}</td>
+                    <td style={{ ...tdStyle, color: 'var(--body-text)' }}>{l.gradeBand.length ? l.gradeBand.join(', ') : '—'}</td>
+                    <td style={{ ...tdStyle, color: 'var(--body-text)' }}>{l.curriculum}</td>
+                    <td style={{ ...tdStyle, color: 'var(--body-text)' }}>{l.teacherRefs.length}</td>
+                    <td style={tdStyle}>
+                      <span style={{ display: 'inline-block', padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 600, background: l.enabled ? 'var(--accentSoft)' : 'var(--surface2)', color: l.enabled ? 'var(--accentDeep)' : 'var(--muted)' }}>
+                        {l.enabled ? 'Enabled' : 'Disabled'}
+                      </span>
+                    </td>
+                    <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>
+                      <button onClick={() => { setEditing(l); setModalOpen(true); }} style={actionBtnStyle}>Edit</button>
+                      <button onClick={() => handleToggle(l)} style={{ ...actionBtnStyle, marginLeft: 6 }}>{l.enabled ? 'Disable' : 'Enable'}</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
 
       {modalOpen && <LevelModal editing={editing} periods={periods} onClose={() => { setModalOpen(false); setEditing(null); }} onSaved={handleSaved} />}
@@ -361,3 +398,4 @@ export function LevelsTable({ initialLevels, periods }: LevelsTableProps) {
 
 const tdStyle: React.CSSProperties = { padding: '12px 12px', verticalAlign: 'middle' };
 const actionBtnStyle: React.CSSProperties = { padding: '5px 12px', borderRadius: 'var(--radiusSm)', fontSize: 12, fontWeight: 500, background: 'var(--bg)', border: '1px solid var(--line2)', cursor: 'pointer', color: 'var(--body-text)', fontFamily: 'var(--body)' };
+const cardKeyStyle: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.06em', whiteSpace: 'nowrap', paddingTop: 1 };

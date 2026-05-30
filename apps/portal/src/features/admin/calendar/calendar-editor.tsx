@@ -157,7 +157,7 @@ export function CalendarEditor({ locations }: CalendarEditorProps) {
       {/* Add entry */}
       <div className="card" style={{ padding: 18 }}>
         <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>Add a calendar entry</h3>
-        <form onSubmit={addEntry} style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+        <form onSubmit={addEntry} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <label style={labelStyle}>Date<input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={fieldStyle} /></label>
           <label style={labelStyle}>Kind
             <select value={kind} onChange={(e) => setKind(e.target.value as CalendarKind)} style={fieldStyle}>

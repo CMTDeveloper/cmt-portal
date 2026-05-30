@@ -18,9 +18,10 @@ const guests = [
 describe('GuestList', () => {
   it('renders guests in a table', () => {
     render(<GuestList guests={guests} />);
-    expect(screen.getByText(/carol/i)).toBeInTheDocument();
-    expect(screen.getByText(/c@v.com/)).toBeInTheDocument();
-    expect(screen.getByText(/2 adults/i)).toBeInTheDocument();
+    // Rendered in both the mobile card list and the desktop table, so match all.
+    expect(screen.getAllByText(/carol/i)[0]).toBeInTheDocument();
+    expect(screen.getAllByText(/c@v.com/)[0]).toBeInTheDocument();
+    expect(screen.getAllByText(/2 adults/i)[0]).toBeInTheDocument();
   });
   it('shows empty state', () => {
     render(<GuestList guests={[]} />);

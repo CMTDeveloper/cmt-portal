@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useTransition, useEffect } from 'react';
 import { toast } from '@cmt/ui';
 import type {
   DonationPeriodDoc,
@@ -12,6 +12,23 @@ import type {
   PaymentSource,
 } from '@cmt/shared-domain';
 import { toTorontoStartOfDayISO, toTorontoEndOfDayISO, isoToTorontoDateInput } from '@/lib/toronto-date';
+
+// ─── responsive hook ──────────────────────────────────────────────────────────
+
+function useIsNarrow(breakpoint = 480) {
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    // Guard: jsdom (tests) and any non-browser env lack matchMedia — without
+    // this the modal render throws. Falls back to the desktop layout.
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+    const mq = window.matchMedia(`(max-width: ${breakpoint}px)`);
+    setNarrow(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setNarrow(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, [breakpoint]);
+  return narrow;
+}
 
 // Serialised shape returned by GET /api/admin/donation-periods
 // (Timestamps converted to ISO strings by the route handler)
@@ -77,6 +94,7 @@ interface ModalProps {
 function PeriodModal({ editing, onClose, onSaved }: ModalProps) {
   const isEdit = editing !== null;
   const [pending, startTransition] = useTransition();
+  const isNarrow = useIsNarrow(480);
 
   const [programKey, setProgramKey] = useState<ProgramKey>(editing?.programKey ?? 'bala-vihar');
   const [location, setLocation] = useState<Location>(editing?.location ?? 'Brampton');
@@ -283,13 +301,27 @@ function PeriodModal({ editing, onClose, onSaved }: ModalProps) {
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {tierRows.map((row, i) => (
-                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '1.1fr 0.7fr 1.1fr auto', gap: 8, alignItems: 'center' }}>
-                    <input type="date" value={row.effectiveFrom} onChange={(e) => updateTier(i, { effectiveFrom: e.target.value })} aria-label="Effective from" style={tierFieldStyle}/>
-                    <input type="number" min={1} step={1} value={row.amountCAD} onChange={(e) => updateTier(i, { amountCAD: e.target.value })} placeholder="$" aria-label="Amount CAD" style={tierFieldStyle}/>
-                    <input value={row.label} onChange={(e) => updateTier(i, { label: e.target.value })} placeholder="Full year" aria-label="Label" style={tierFieldStyle}/>
-                    <button type="button" onClick={() => removeTier(i)} disabled={tierRows.length === 1} aria-label="Remove tier"
-                      style={{ background: 'transparent', border: 0, color: tierRows.length === 1 ? 'var(--line2)' : 'var(--muted)', fontSize: 18, cursor: tierRows.length === 1 ? 'not-allowed' : 'pointer', padding: '0 4px' }}>×</button>
-                  </div>
+                  isNarrow ? (
+                    /* Mobile: 2 rows — date+amount on row 1, label+remove on row 2 */
+                    <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gridTemplateRows: 'auto auto', gap: 8, alignItems: 'center' }}>
+                      <input type="date" value={row.effectiveFrom} onChange={(e) => updateTier(i, { effectiveFrom: e.target.value })} aria-label="Effective from" style={tierFieldStyle}/>
+                      <input type="number" min={1} step={1} value={row.amountCAD} onChange={(e) => updateTier(i, { amountCAD: e.target.value })} placeholder="$" aria-label="Amount CAD" style={tierFieldStyle}/>
+                      <input value={row.label} onChange={(e) => updateTier(i, { label: e.target.value })} placeholder="Full year" aria-label="Label" style={tierFieldStyle}/>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                        <button type="button" onClick={() => removeTier(i)} disabled={tierRows.length === 1} aria-label="Remove tier"
+                          style={{ background: 'transparent', border: 0, color: tierRows.length === 1 ? 'var(--line2)' : 'var(--muted)', fontSize: 18, cursor: tierRows.length === 1 ? 'not-allowed' : 'pointer', padding: '0 4px' }}>×</button>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Desktop: single 4-column row */
+                    <div key={i} style={{ display: 'grid', gridTemplateColumns: '1.1fr 0.7fr 1.1fr auto', gap: 8, alignItems: 'center' }}>
+                      <input type="date" value={row.effectiveFrom} onChange={(e) => updateTier(i, { effectiveFrom: e.target.value })} aria-label="Effective from" style={tierFieldStyle}/>
+                      <input type="number" min={1} step={1} value={row.amountCAD} onChange={(e) => updateTier(i, { amountCAD: e.target.value })} placeholder="$" aria-label="Amount CAD" style={tierFieldStyle}/>
+                      <input value={row.label} onChange={(e) => updateTier(i, { label: e.target.value })} placeholder="Full year" aria-label="Label" style={tierFieldStyle}/>
+                      <button type="button" onClick={() => removeTier(i)} disabled={tierRows.length === 1} aria-label="Remove tier"
+                        style={{ background: 'transparent', border: 0, color: tierRows.length === 1 ? 'var(--line2)' : 'var(--muted)', fontSize: 18, cursor: tierRows.length === 1 ? 'not-allowed' : 'pointer', padding: '0 4px' }}>×</button>
+                    </div>
+                  )
                 ))}
               </div>
               <button type="button" onClick={addTier} style={{ marginTop: 8, background: 'transparent', border: 0, color: 'var(--accent)', fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: 0 }}>
