@@ -5,7 +5,9 @@ import { CspRoot, AllergyCallout, SectionLabel, DetailGroup } from '@/features/f
 import { mockFamily } from '@/features/family/data/mock';
 import { flags } from '@/lib/flags';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
+import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
 import { getCheckInAttendance, summarizeMemberCheckIns, type CheckInSummary } from '@/features/setu/attendance/check-in-attendance';
+import { isoToTorontoDateInput } from '@/lib/toronto-date';
 interface Props {
   params: Promise<{ mid: string }>;
 }
@@ -50,10 +52,21 @@ export default async function MemberDetailPage({ params }: Props) {
     const name = `${member.firstName} ${member.lastName}`;
     const typeLabel = member.type === 'Child' ? `Child${member.schoolGrade ? ` · ${member.schoolGrade}` : ''}` : 'Adult';
     const canEdit = data.isManager || mid === data.currentMid;
-    const attendanceSummary = summarizeMemberCheckIns(
-      await getCheckInAttendance(data.family.legacyFid),
-      member.legacySid,
-    );
+    // Scope check-ins to the active enrolled period's window (so a prior year's
+    // records don't show under this year's enrollment).
+    const [rawCheckIns, enrollments] = await Promise.all([
+      getCheckInAttendance(data.family.legacyFid),
+      getEnrollments(data.family.fid),
+    ]);
+    const period = enrollments.find((e) => e.status === 'active')?.period ?? null;
+    const scoped = period
+      ? rawCheckIns.filter((r) => {
+          const start = isoToTorontoDateInput(period.startDate.toISOString());
+          const end = isoToTorontoDateInput(period.endDate.toISOString());
+          return r.date >= start && r.date <= end;
+        })
+      : rawCheckIns;
+    const attendanceSummary = summarizeMemberCheckIns(scoped, member.legacySid);
 
     return (
       <>

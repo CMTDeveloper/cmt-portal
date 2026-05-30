@@ -14,6 +14,15 @@ import { getLegacyPaymentStatus } from '@/features/setu/donations/legacy-payment
 import { getUpcoming, getClassDatesHeld, type CalendarEntry } from '@/features/setu/calendar/calendar';
 import { getCheckInAttendance, summarizeFamilyCheckIns, type CheckInSummary } from '@/features/setu/attendance/check-in-attendance';
 
+function torontoYmd(d: Date): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Toronto',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(d);
+}
+
 function fmtSunday(ymd: string): string {
   return new Date(`${ymd}T12:00:00`).toLocaleDateString('en-CA', {
     month: 'short',
@@ -103,7 +112,19 @@ export default async function FamilyDashboardPage() {
       const { upcoming } = await getUpcoming(data.family.location, undefined, 3);
       upcomingEntries = upcoming;
 
-      ci = summarizeFamilyCheckIns(await getCheckInAttendance(data.family.legacyFid));
+      // Scope attendance to the ENROLLED period's window so a prior year's
+      // check-ins don't show under this year's enrollment. (UAT note: the
+      // family-check-ins snapshot is currently 2024-only; in prod it's live.)
+      const rawCheckIns = await getCheckInAttendance(data.family.legacyFid);
+      const period = activeEnrollment?.period ?? null;
+      const scoped = period
+        ? rawCheckIns.filter((r) => {
+            const start = torontoYmd(period.startDate);
+            const end = torontoYmd(period.endDate);
+            return r.date >= start && r.date <= end;
+          })
+        : rawCheckIns;
+      ci = summarizeFamilyCheckIns(scoped);
       classSundaysHeld = (await getClassDatesHeld(data.family.location)).length;
     }
   }
