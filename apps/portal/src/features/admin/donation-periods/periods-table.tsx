@@ -3,12 +3,11 @@
 import { useState, useTransition, useEffect } from 'react';
 import { toast } from '@cmt/ui';
 import type {
-  DonationPeriodDoc,
-  CreateDonationPeriodInput,
-  UpdateDonationPeriodInput,
+  OfferingDoc,
+  CreateOfferingInput,
+  UpdateOfferingInput,
   PricingTier,
   Location,
-  ProgramKey,
   PaymentSource,
 } from '@cmt/shared-domain';
 import { toTorontoStartOfDayISO, toTorontoEndOfDayISO, isoToTorontoDateInput } from '@/lib/toronto-date';
@@ -30,11 +29,14 @@ function useIsNarrow(breakpoint = 480) {
   return narrow;
 }
 
-// Serialised shape returned by GET /api/admin/donation-periods
+// Serialised shape returned by GET /api/admin/offerings
 // (Timestamps converted to ISO strings by the route handler)
-export type PeriodRow = Omit<DonationPeriodDoc, 'startDate' | 'endDate' | 'createdAt' | 'updatedAt'> & {
+export type PeriodRow = Omit<OfferingDoc, 'startDate' | 'endDate' | 'createdAt' | 'updatedAt'> & {
+  // Keep legacy pid field alias so old page.tsx still compiles during migration
+  pid: string;
+  periodLabel: string;
   startDate: string;
-  endDate: string;
+  endDate: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -52,7 +54,8 @@ interface TierRow {
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
-function fmtDate(iso: string) {
+function fmtDate(iso: string | null) {
+  if (!iso) return '—';
   return new Date(iso).toLocaleDateString('en-CA', {
     year: 'numeric', month: 'short', day: 'numeric', timeZone: 'America/Toronto',
   });
@@ -96,11 +99,11 @@ function PeriodModal({ editing, onClose, onSaved }: ModalProps) {
   const [pending, startTransition] = useTransition();
   const isNarrow = useIsNarrow(480);
 
-  const [programKey, setProgramKey] = useState<ProgramKey>(editing?.programKey ?? 'bala-vihar');
+  const [programKey, setProgramKey] = useState<string>(editing?.programKey ?? 'bala-vihar');
   const [location, setLocation] = useState<Location>(editing?.location ?? 'Brampton');
-  const [periodLabel, setPeriodLabel] = useState(editing?.periodLabel ?? '');
+  const [periodLabel, setPeriodLabel] = useState(editing?.periodLabel ?? editing?.termLabel ?? '');
   const [startDate, setStartDate] = useState(editing ? isoToTorontoDateInput(editing.startDate) : '');
-  const [endDate, setEndDate] = useState(editing ? isoToTorontoDateInput(editing.endDate) : '');
+  const [endDate, setEndDate] = useState(editing?.endDate ? isoToTorontoDateInput(editing.endDate) : '');
   const [tierRows, setTierRows] = useState<TierRow[]>(rowsFromTiers(editing?.pricingTiers));
   const [enabled, setEnabled] = useState(editing?.enabled ?? true);
   const [paymentSource, setPaymentSource] = useState<PaymentSource>(editing?.paymentSource ?? 'portal');
@@ -150,25 +153,28 @@ function PeriodModal({ editing, onClose, onSaved }: ModalProps) {
     startTransition(async () => {
       try {
         let res: Response;
+        const editingTermLabel = editing?.periodLabel ?? editing?.termLabel ?? '';
+        const editingEndDate = editing?.endDate ?? '';
         if (isEdit) {
-          const body: UpdateDonationPeriodInput = {};
-          if (periodLabel !== editing.periodLabel) body.periodLabel = periodLabel;
-          if (startDate !== isoToTorontoDateInput(editing.startDate)) body.startDate = toTorontoStartOfDayISO(startDate);
-          if (endDate !== isoToTorontoDateInput(editing.endDate)) body.endDate = toTorontoEndOfDayISO(endDate);
-          if (JSON.stringify(pricingTiers) !== JSON.stringify(editing.pricingTiers)) body.pricingTiers = pricingTiers;
-          if (enabled !== editing.enabled) body.enabled = enabled;
-          if (paymentSource !== (editing.paymentSource ?? 'portal')) body.paymentSource = paymentSource;
+          const body: UpdateOfferingInput = {};
+          if (periodLabel !== editingTermLabel) body.termLabel = periodLabel;
+          if (startDate !== isoToTorontoDateInput(editing!.startDate)) body.startDate = toTorontoStartOfDayISO(startDate);
+          if (endDate !== (editingEndDate ? isoToTorontoDateInput(editingEndDate) : '')) body.endDate = endDate ? toTorontoEndOfDayISO(endDate) : null;
+          if (JSON.stringify(pricingTiers) !== JSON.stringify(editing!.pricingTiers)) body.pricingTiers = pricingTiers;
+          if (enabled !== editing!.enabled) body.enabled = enabled;
+          if (paymentSource !== (editing!.paymentSource ?? 'portal')) body.paymentSource = paymentSource;
 
-          res = await fetch(`/api/admin/donation-periods/${editing.pid}`, {
+          res = await fetch(`/api/admin/donation-periods/${editing!.pid}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
           });
         } else {
-          const body: CreateDonationPeriodInput = {
-            programKey: programKey as 'bala-vihar',
+          const body: CreateOfferingInput = {
+            programKey,
             location,
-            periodLabel,
+            termLabel: periodLabel,
+            termType: 'term',
             startDate: toTorontoStartOfDayISO(startDate),
             endDate: toTorontoEndOfDayISO(endDate),
             pricingTiers,
@@ -188,34 +194,38 @@ function PeriodModal({ editing, onClose, onSaved }: ModalProps) {
           return;
         }
 
-        const json = await res.json() as { pid?: string; overlapWarning?: boolean };
+        const json = await res.json() as { pid?: string; oid?: string; overlapWarning?: boolean };
         if (json.overlapWarning) {
           toast.warning('Saved — but this period overlaps with an existing enabled period for the same program + location.');
         } else {
           toast.success(isEdit ? 'Period updated.' : 'Period created.');
         }
 
-        // Build the updated row from form state + server-returned pid (no racy refetch).
+        // Build the updated row from form state + server-returned pid/oid (no racy refetch).
         const now = new Date().toISOString();
         if (isEdit) {
           onSaved({
-            ...editing,
+            ...editing!,
             periodLabel,
+            termLabel: periodLabel,
             startDate: toTorontoStartOfDayISO(startDate),
-            endDate: toTorontoEndOfDayISO(endDate),
+            endDate: endDate ? toTorontoEndOfDayISO(endDate) : null,
             pricingTiers,
             enabled,
             paymentSource,
             updatedAt: now,
           });
         } else {
-          const pid = json.pid ?? `${programKey}-${location.toLowerCase()}-${periodLabel.toLowerCase().replace(/\s+/g, '-')}`;
+          const pid = json.oid ?? json.pid ?? `${programKey}-${location.toLowerCase()}-${periodLabel.toLowerCase().replace(/\s+/g, '-')}`;
           onSaved({
             pid,
+            oid: pid,
             programKey,
             programLabel: 'Bala Vihar',
             location,
             periodLabel,
+            termLabel: periodLabel,
+            termType: 'term',
             startDate: toTorontoStartOfDayISO(startDate),
             endDate: toTorontoEndOfDayISO(endDate),
             pricingTiers,
@@ -260,7 +270,7 @@ function PeriodModal({ editing, onClose, onSaved }: ModalProps) {
 
             <label style={labelStyle}>
               Program
-              <select value={programKey} onChange={(e) => setProgramKey(e.target.value as ProgramKey)} disabled={isEdit} style={fieldStyle}>
+              <select value={programKey} onChange={(e) => setProgramKey(e.target.value)} disabled={isEdit} style={fieldStyle}>
                 <option value="bala-vihar">Bala Vihar</option>
               </select>
             </label>
@@ -411,7 +421,7 @@ export function PeriodsTable({ initialPeriods }: PeriodsTableProps) {
 
   async function handleToggleEnabled(row: PeriodRow) {
     try {
-      const res = await fetch(`/api/admin/donation-periods/${row.pid}`, {
+      const res = await fetch(`/api/admin/donation-periods/${row.pid ?? row.oid}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ enabled: !row.enabled }),

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { CreateDonationPeriodInput } from '@cmt/shared-domain';
+import type { CreateOfferingInput } from '@cmt/shared-domain';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
@@ -24,10 +24,13 @@ const PRICING = [
 
 const BASE_PERIOD: PeriodRow = {
   pid: 'bv-brampton-2025-26',
+  oid: 'bv-brampton-2025-26',
   programKey: 'bala-vihar',
   programLabel: 'Bala Vihar',
   location: 'Brampton',
   periodLabel: '2025-26',
+  termLabel: '2025-26',
+  termType: 'term',
   startDate: '2025-09-07T04:00:00.000Z',
   endDate: '2026-06-14T03:59:59.000Z',
   pricingTiers: PRICING,
@@ -43,10 +46,13 @@ const BASE_PERIOD: PeriodRow = {
 // The edit modal must show "2026-09-14", not the UTC-sliced "2026-09-15".
 const EDT_END_PERIOD: PeriodRow = {
   pid: 'bv-brampton-summer',
+  oid: 'bv-brampton-summer',
   programKey: 'bala-vihar',
   programLabel: 'Bala Vihar',
   location: 'Brampton',
   periodLabel: 'Summer',
+  termLabel: 'Summer',
+  termType: 'term',
   startDate: '2026-06-01T04:00:00.000Z',
   endDate: '2026-09-15T03:59:59.000Z',
   pricingTiers: [{ effectiveFrom: '2026-06-01', amountCAD: 200, label: 'Summer' }],
@@ -97,9 +103,9 @@ describe('PeriodsTable — modal save flow', () => {
 
   it('create: POST body carries pricingTiers', async () => {
     const user = userEvent.setup();
-    let body: CreateDonationPeriodInput | null = null;
+    let body: CreateOfferingInput | null = null;
     vi.spyOn(global, 'fetch').mockImplementationOnce(async (_u, init) => {
-      body = JSON.parse((init?.body as string) ?? '{}') as CreateDonationPeriodInput;
+      body = JSON.parse((init?.body as string) ?? '{}') as CreateOfferingInput;
       return { ok: true, json: async () => ({ pid: 'x', overlapWarning: false }) } as Response;
     });
 
