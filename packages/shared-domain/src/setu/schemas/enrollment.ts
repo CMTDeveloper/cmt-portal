@@ -1,18 +1,19 @@
 import { z } from 'zod';
-import { LOCATIONS, PROGRAM_KEYS } from './donation-period';
+import { LOCATIONS, programKeySchema } from './offering';
 
 export const EnrollmentDocSchema = z.object({
   eid: z.string().min(1),
   fid: z.string().min(1),
-  pid: z.string().min(1),
+  oid: z.string().min(1),
+  programKey: programKeySchema,
   programLabel: z.string().min(1),
-  periodLabel: z.string().min(1),
-  location: z.enum(LOCATIONS),
+  termLabel: z.string().min(1),
+  location: z.enum(LOCATIONS).nullable(),
   enrolledAt: z.date(),
   enrolledVia: z.enum(['family-initiated', 'first-attendance', 'welcome-team']),
   enrolledByMid: z.string().nullable(),
-  childrenMids: z.array(z.string()),
-  suggestedAmountSnapshot: z.number().int().positive(),
+  enrolledMids: z.array(z.string()),
+  suggestedAmountSnapshot: z.number().int().nonnegative(),
   suggestedAmountOverride: z.number().int().positive().nullable(),
   status: z.enum(['active', 'cancelled']),
   cancelledAt: z.date().nullable(),
@@ -22,14 +23,14 @@ export const EnrollmentDocSchema = z.object({
 export type EnrollmentDoc = z.infer<typeof EnrollmentDocSchema>;
 
 export const PostEnrollmentBodySchema = z.object({
-  pid: z.string().min(1),
+  oid: z.string().min(1),
 });
 
 export type PostEnrollmentBody = z.infer<typeof PostEnrollmentBodySchema>;
 
 export const WelcomePostEnrollmentBodySchema = z.object({
   fid: z.string().min(1),
-  pid: z.string().min(1),
+  oid: z.string().min(1),
 });
 
 export type WelcomePostEnrollmentBody = z.infer<typeof WelcomePostEnrollmentBodySchema>;
@@ -42,7 +43,7 @@ export type OverrideEnrollmentBody = z.infer<typeof OverrideEnrollmentBodySchema
 
 export const ResolveActivePeriodParamsSchema = z.object({
   location: z.enum(LOCATIONS),
-  programKey: z.enum(PROGRAM_KEYS),
+  programKey: programKeySchema,
 });
 
 export type ResolveActivePeriodParams = z.infer<typeof ResolveActivePeriodParamsSchema>;
