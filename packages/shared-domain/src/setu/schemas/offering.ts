@@ -1,7 +1,13 @@
 import { z } from 'zod';
 
-export const PROGRAM_KEYS = ['bala-vihar'] as const;
-export type ProgramKey = (typeof PROGRAM_KEYS)[number];
+// Dynamic program key: a lowercase slug (e.g. 'bala-vihar', 'tabla').
+// Replaces the frozen PROGRAM_KEYS enum so new programs need no schema change.
+export const programKeySchema = z.string().regex(/^[a-z0-9-]+$/, 'programKey must be a lowercase slug');
+
+export const BALA_VIHAR = 'bala-vihar';
+
+export const PROGRAM_TERM_TYPES = ['term', 'one-time', 'rolling'] as const;
+export type ProgramTermType = (typeof PROGRAM_TERM_TYPES)[number];
 
 export const LOCATIONS = ['Brampton', 'Mississauga', 'Scarborough', 'Markham'] as const;
 export type Location = (typeof LOCATIONS)[number];
@@ -10,7 +16,7 @@ export type Location = (typeof LOCATIONS)[number];
 //  - 'portal' → the Setu donations collection (Stripe checkouts through the portal).
 //  - 'legacy' → the prod RTDB roster `payment` field (the pre-portal system).
 // The 2025-26 cutover year is 'legacy' (most families already paid offline);
-// 2026-27 onward is 'portal'. Admin-set per period.
+// 2026-27 onward is 'portal'. Admin-set per offering.
 export const PAYMENT_SOURCES = ['portal', 'legacy'] as const;
 export type PaymentSource = (typeof PAYMENT_SOURCES)[number];
 
@@ -27,7 +33,7 @@ export const PricingTierSchema = z.object({
 
 export type PricingTier = z.infer<typeof PricingTierSchema>;
 
-// Tiers must be non-empty and strictly ascending by effectiveFrom.
+// Tiers must be strictly ascending by effectiveFrom (only enforced when non-empty).
 function tiersAscending(tiers: PricingTier[]): boolean {
   for (let i = 1; i < tiers.length; i++) {
     const prev = tiers[i - 1];
@@ -38,20 +44,21 @@ function tiersAscending(tiers: PricingTier[]): boolean {
   return true;
 }
 
-export const DonationPeriodDocSchema = z.object({
-  pid: z.string().min(1),
-  programKey: z.enum(PROGRAM_KEYS),
+export const OfferingDocSchema = z.object({
+  oid: z.string().min(1),
+  programKey: programKeySchema,
   programLabel: z.string().min(1),
-  location: z.enum(LOCATIONS),
-  periodLabel: z.string().min(1), // school year, e.g. "2025-26"
+  location: z.enum(LOCATIONS).nullable(),
+  termLabel: z.string().min(1),
+  termType: z.enum(PROGRAM_TERM_TYPES),
   startDate: z.date(),
-  endDate: z.date(),
-  // Date-windowed suggested-donation schedule (prorated by enrollment date).
-  pricingTiers: z.array(PricingTierSchema).min(1),
+  endDate: z.date().nullable(),
+  // May be empty for free programs; ascending constraint applies when non-empty.
+  pricingTiers: z.array(PricingTierSchema),
   // Optional give-more quick-pick chips on the donate form. When absent the
   // form derives chips from the resolved suggested amount.
   amountTiers: z.array(z.number().int().min(1)).min(1).optional(),
-  // Where payment status is read from. Optional for back-compat with periods
+  // Where payment status is read from. Optional for back-compat with offerings
   // written before this field existed — absent is treated as 'portal'.
   paymentSource: z.enum(PAYMENT_SOURCES).optional(),
   enabled: z.boolean(),
@@ -61,11 +68,11 @@ export const DonationPeriodDocSchema = z.object({
   updatedBy: z.string().min(1),
 });
 
-export type DonationPeriodDoc = z.infer<typeof DonationPeriodDocSchema>;
+export type OfferingDoc = z.infer<typeof OfferingDocSchema>;
 
-/** A period's effective payment source — defaults to 'portal' when unset. */
-export function paymentSourceOf(period: Pick<DonationPeriodDoc, 'paymentSource'>): PaymentSource {
-  return period.paymentSource ?? 'portal';
+/** An offering's effective payment source — defaults to 'portal' when unset. */
+export function paymentSourceOf(offering: { paymentSource?: PaymentSource }): PaymentSource {
+  return offering.paymentSource ?? 'portal';
 }
 
 /** YYYY-MM-DD for a Date in America/Toronto (en-CA renders ISO-style). */
@@ -81,16 +88,16 @@ function torontoYmd(d: Date): string {
 /**
  * The suggested donation for a family enrolling on `enrollDate`: the last
  * pricing tier whose `effectiveFrom` is on/before the enrollment date (Toronto).
- * Before the first tier's window → the first (full-year) tier. This value is
- * pinned onto the enrollment's suggestedAmountSnapshot.
+ * Before the first tier's window → the first (full-year) tier. Returns 0 when
+ * pricingTiers is empty (free program).
  */
 export function resolveSuggestedAmount(
-  period: Pick<DonationPeriodDoc, 'pricingTiers'>,
+  offering: Pick<OfferingDoc, 'pricingTiers'>,
   enrollDate: Date,
 ): number {
-  const tiers = period.pricingTiers ?? [];
+  const tiers = offering.pricingTiers ?? [];
   const first = tiers[0];
-  if (!first) return 0; // schema enforces min(1); defensive against legacy docs
+  if (!first) return 0; // free program or defensive against legacy docs
   const ymd = torontoYmd(enrollDate);
   let chosen: PricingTier = first;
   for (const t of tiers) {
@@ -100,37 +107,44 @@ export function resolveSuggestedAmount(
   return chosen.amountCAD;
 }
 
-// Schema for POST (create) requests — pid + audit fields are server-generated
-export const CreateDonationPeriodSchema = z
+// Schema for POST (create) requests — oid + audit fields are server-generated.
+// location and endDate are nullable (location-less programs; rolling offerings).
+export const CreateOfferingSchema = z
   .object({
-    programKey: z.enum(PROGRAM_KEYS),
-    location: z.enum(LOCATIONS),
-    periodLabel: z.string().min(1),
+    programKey: programKeySchema,
+    location: z.enum(LOCATIONS).nullable(),
+    termLabel: z.string().min(1),
+    termType: z.enum(PROGRAM_TERM_TYPES),
     startDate: z.string().datetime({ offset: true }),
-    endDate: z.string().datetime({ offset: true }),
-    pricingTiers: z.array(PricingTierSchema).min(1),
+    endDate: z.string().datetime({ offset: true }).nullable(),
+    pricingTiers: z.array(PricingTierSchema),
     amountTiers: z.array(z.number().int().min(1)).min(1).optional(),
     paymentSource: z.enum(PAYMENT_SOURCES).default('portal'),
     enabled: z.boolean().default(true),
   })
-  .refine((d) => new Date(d.endDate) > new Date(d.startDate), {
-    message: 'endDate must be after startDate',
-    path: ['endDate'],
-  })
+  .refine(
+    (d) => {
+      if (d.endDate) return new Date(d.endDate) >= new Date(d.startDate);
+      return true;
+    },
+    { message: 'endDate must be on or after startDate', path: ['endDate'] },
+  )
   .refine((d) => tiersAscending(d.pricingTiers), {
     message: 'pricingTiers must be ascending by effectiveFrom',
     path: ['pricingTiers'],
   });
 
-export type CreateDonationPeriodInput = z.infer<typeof CreateDonationPeriodSchema>;
+export type CreateOfferingInput = z.infer<typeof CreateOfferingSchema>;
 
-// Schema for PATCH (update) requests — all fields optional except structural invariants
-export const UpdateDonationPeriodSchema = z
+// Schema for PATCH (update) requests — all fields optional except structural invariants.
+// programKey and location are immutable after creation (omitted from update).
+export const UpdateOfferingSchema = z
   .object({
-    periodLabel: z.string().min(1).optional(),
+    termLabel: z.string().min(1).optional(),
+    termType: z.enum(PROGRAM_TERM_TYPES).optional(),
     startDate: z.string().datetime({ offset: true }).optional(),
-    endDate: z.string().datetime({ offset: true }).optional(),
-    pricingTiers: z.array(PricingTierSchema).min(1).optional(),
+    endDate: z.string().datetime({ offset: true }).nullable().optional(),
+    pricingTiers: z.array(PricingTierSchema).optional(),
     amountTiers: z.array(z.number().int().min(1)).min(1).optional(),
     paymentSource: z.enum(PAYMENT_SOURCES).optional(),
     enabled: z.boolean().optional(),
@@ -149,4 +163,4 @@ export const UpdateDonationPeriodSchema = z
     path: ['pricingTiers'],
   });
 
-export type UpdateDonationPeriodInput = z.infer<typeof UpdateDonationPeriodSchema>;
+export type UpdateOfferingInput = z.infer<typeof UpdateOfferingSchema>;
