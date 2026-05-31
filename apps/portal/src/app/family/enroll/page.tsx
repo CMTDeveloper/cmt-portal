@@ -6,12 +6,13 @@ import { EnrollCta } from '@/features/family/components/enroll-cta';
 import { resolveSuggestedAmount, paymentSourceOf } from '@cmt/shared-domain';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
-import { resolveActivePeriod } from '@/features/setu/enrollment/resolve-active-period';
+import { getOpenOfferings } from '@/features/setu/enrollment/get-open-offerings';
 import { getLegacyPaymentStatus } from '@/features/setu/donations/legacy-payment';
 
 export const metadata = { title: 'Enroll — CMT Portal' };
 
-function fmtDate(d: Date) {
+function fmtDate(d: Date | null) {
+  if (!d) return '—';
   return d.toLocaleDateString('en-CA', {
     month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/Toronto',
   });
@@ -32,15 +33,19 @@ export default async function EnrollPage() {
   const { family, members, isManager } = familyData;
   const children = members.filter((m) => m.type === 'Child');
 
-  const [enrollments, activePeriod] = await Promise.all([
+  const [enrollments, openOfferings] = await Promise.all([
     getEnrollments(family.fid),
-    resolveActivePeriod({ programKey: 'bala-vihar', location: family.location }),
+    getOpenOfferings({ programKey: 'bala-vihar', location: family.location }),
   ]);
+
+  // BV auto-selects the single open offering. For multi-offering programs (Phase F),
+  // the parameterised /family/enroll/[programKey] page will let the family pick.
+  const activePeriod = openOfferings[0] ?? null;
 
   // Only consider an enrollment "current" if it matches the active period.
   // A stale enrollment from a prior semester must not block the enroll/no-period states.
   const activeEnrollment =
-    enrollments.find((e) => e.status === 'active' && e.pid === activePeriod?.pid) ?? null;
+    enrollments.find((e) => e.status === 'active' && e.oid === activePeriod?.oid) ?? null;
 
   const alreadyEnrolled = activeEnrollment !== null;
   const donationsEnabled = process.env.NEXT_PUBLIC_FEATURE_SETU_DONATIONS === 'true';
@@ -48,7 +53,9 @@ export default async function EnrollPage() {
   // (paymentSource='legacy') and the roster shows the family has paid, we don't
   // ask for a donation here — show "Paid". Giving more is always possible from
   // the Giving tab.
-  const isLegacyPeriod = activePeriod ? paymentSourceOf(activePeriod) === 'legacy' : false;
+  const isLegacyPeriod = activePeriod
+    ? paymentSourceOf(activePeriod.paymentSource != null ? { paymentSource: activePeriod.paymentSource } : {}) === 'legacy'
+    : false;
   const legacyPaid = isLegacyPeriod && (await getLegacyPaymentStatus(family.legacyFid)) === 'paid';
   // Pin amount to enrollment snapshot/override; before enrolling, show the tier
   // a family enrolling today would get (prorated by date).
@@ -72,7 +79,7 @@ export default async function EnrollPage() {
               <span style={{ width: 32 }}/>
             </div>
             <div style={{ flex: 1, overflowY: 'auto', padding: '20px 18px 100px' }}>
-              {alreadyEnrolled && renderAlreadyEnrolledBanner(activeEnrollment.periodLabel, legacyPaid)}
+              {alreadyEnrolled && renderAlreadyEnrolledBanner(activeEnrollment.termLabel, legacyPaid)}
               {!activePeriod && !alreadyEnrolled && renderNoPeriodBanner(family.location)}
 
               {activePeriod && (
@@ -84,7 +91,7 @@ export default async function EnrollPage() {
                     <div style={{ position: 'relative' }}>
                       <div style={{ fontSize: 11, letterSpacing: '.14em', textTransform: 'uppercase', opacity: .85, marginBottom: 6 }}>Enroll in</div>
                       <h1 style={{ fontSize: 26, fontWeight: 500, color: '#fff', fontFamily: 'var(--display)' }}>
-                        <em className="sa">Bala Vihar</em> · {activePeriod.periodLabel}
+                        <em className="sa">Bala Vihar</em> · {activePeriod.termLabel}
                       </h1>
                       <p style={{ fontSize: 13, opacity: .9, marginTop: 8 }}>
                         {fmtDate(activePeriod.startDate)} – {fmtDate(activePeriod.endDate)} · {family.location}
@@ -114,8 +121,8 @@ export default async function EnrollPage() {
 
                   <SectionLabel><em className="sa">Dakshina</em>{legacyPaid ? '' : ' · suggested donation'}</SectionLabel>
                   {legacyPaid
-                    ? renderPaidBlockMobile(activePeriod.periodLabel)
-                    : renderDakshinaBlock(displaySuggestedAmount ?? 0, family.location, activePeriod.periodLabel)}
+                    ? renderPaidBlockMobile(activePeriod.termLabel)
+                    : renderDakshinaBlock(displaySuggestedAmount ?? 0, family.location, activePeriod.termLabel)}
                 </>
               )}
             </div>
@@ -135,7 +142,7 @@ export default async function EnrollPage() {
                   </div>
                 )
               ) : activePeriod && isManager ? (
-                <EnrollCta pid={activePeriod.pid} donationsEnabled={donationsEnabled}/>
+                <EnrollCta pid={activePeriod.oid} donationsEnabled={donationsEnabled}/>
               ) : activePeriod ? (
                 <button className="btn btn--p btn--block" disabled style={{ cursor: 'not-allowed', opacity: 0.5 }}>
                   Only the family manager can enroll
@@ -160,7 +167,7 @@ export default async function EnrollPage() {
             <div>
               <p style={{ fontSize: 11, letterSpacing: '.16em', textTransform: 'uppercase', color: 'var(--muted)' }}>Program enrollment</p>
               <h1 style={{ fontSize: 40, fontWeight: 400, marginTop: 6 }}>
-                <em style={{ fontStyle: 'italic' }}>Bala Vihar</em>{activePeriod ? ` · ${activePeriod.periodLabel}` : ''}
+                <em style={{ fontStyle: 'italic' }}>Bala Vihar</em>{activePeriod ? ` · ${activePeriod.termLabel}` : ''}
               </h1>
             </div>
             <span className="pill" style={{ background: 'var(--accentSoft)', color: 'var(--accentDeep)', padding: '6px 12px', fontSize: 12 }}>
@@ -169,7 +176,7 @@ export default async function EnrollPage() {
           </div>
         </header>
 
-        {alreadyEnrolled && renderAlreadyEnrolledBanner(activeEnrollment.periodLabel, legacyPaid)}
+        {alreadyEnrolled && renderAlreadyEnrolledBanner(activeEnrollment.termLabel, legacyPaid)}
         {!activePeriod && !alreadyEnrolled && renderNoPeriodBanner(family.location)}
 
         {activePeriod && (
@@ -217,7 +224,7 @@ export default async function EnrollPage() {
             </div>
 
             <aside>
-              {legacyPaid ? renderPaidPanel(activePeriod.periodLabel) : (
+              {legacyPaid ? renderPaidPanel(activePeriod.termLabel) : (
               <div className="card" style={{ padding: 24, position: 'sticky', top: 0 }}>
                 <h3 style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.16em', fontWeight: 700, fontFamily: 'var(--body)', color: 'var(--muted)', marginBottom: 14 }}>
                   <em className="sa">Dakshina</em> · suggested donation
@@ -228,7 +235,7 @@ export default async function EnrollPage() {
                     <span style={{ fontSize: 13, color: 'var(--body-text)' }}>· per family</span>
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--muted)' }}>
-                    {family.location} {activePeriod.periodLabel} rate · locked when you first attend
+                    {family.location} {activePeriod.termLabel} rate · locked when you first attend
                   </div>
                 </div>
                 <p style={{ fontSize: 13, color: 'var(--body-text)', lineHeight: 1.55, marginBottom: 18 }}>
@@ -245,7 +252,7 @@ export default async function EnrollPage() {
                     </div>
                   )
                 ) : isManager ? (
-                  <EnrollCta pid={activePeriod.pid} donationsEnabled={donationsEnabled}/>
+                  <EnrollCta pid={activePeriod.oid} donationsEnabled={donationsEnabled}/>
                 ) : (
                   <button className="btn btn--p btn--block" disabled style={{ cursor: 'not-allowed', opacity: 0.5 }}>
                     Only the family manager can enroll

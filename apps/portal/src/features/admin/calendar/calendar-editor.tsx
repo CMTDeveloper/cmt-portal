@@ -8,6 +8,7 @@ import type {
   CreateCalendarEntryInput,
   Location,
 } from '@cmt/shared-domain';
+import type { ProgramRow } from '@/features/admin/programs/programs-table';
 
 interface EntryRow {
   entryId: string;
@@ -27,10 +28,16 @@ interface ScheduleRow {
 
 interface CalendarEditorProps {
   locations: Location[];
+  /** Optional: list of programs. When provided, shows a program selector filtered to usesCalendar programs. */
+  programs?: ProgramRow[];
 }
 
-export function CalendarEditor({ locations }: CalendarEditorProps) {
+export function CalendarEditor({ locations, programs }: CalendarEditorProps) {
   const [location, setLocation] = useState<Location>(locations[0] ?? 'Brampton');
+
+  // Programs that use calendar — for the program selector
+  const calendarPrograms = programs?.filter((p) => p.capabilities.usesCalendar) ?? [];
+  const [programKey, setProgramKey] = useState('bala-vihar');
   const [entries, setEntries] = useState<EntryRow[]>([]);
   const [weekly, setWeekly] = useState<ScheduleRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -70,7 +77,7 @@ export function CalendarEditor({ locations }: CalendarEditorProps) {
       return;
     }
     const body: CreateCalendarEntryInput = {
-      programKey: 'bala-vihar',
+      programKey,
       location,
       date,
       kind,
@@ -129,6 +136,21 @@ export function CalendarEditor({ locations }: CalendarEditorProps) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      {calendarPrograms.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em' }}>Program</span>
+          <select
+            value={programKey}
+            onChange={(e) => setProgramKey(e.target.value)}
+            style={{ ...fieldStyle, maxWidth: 240 }}
+            aria-label="Program"
+          >
+            {calendarPrograms.map((p) => (
+              <option key={p.programKey} value={p.programKey}>{p.label}</option>
+            ))}
+          </select>
+        </div>
+      )}
       <label style={labelStyle}>
         Location
         <select value={location} onChange={(e) => setLocation(e.target.value as Location)} style={{ ...fieldStyle, maxWidth: 240 }}>

@@ -87,7 +87,7 @@ export function buildRoster(
     levelId: level.levelId,
     levelName: level.levelName,
     ageLabel: level.ageLabel,
-    location: level.location,
+    location: level.location ?? '',
     pid: level.pid,
     date,
     members,

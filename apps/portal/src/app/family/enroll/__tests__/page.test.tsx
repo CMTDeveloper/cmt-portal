@@ -28,7 +28,7 @@ vi.mock('@/features/family/components/enroll-cta', () => ({
 
 const mockGetCurrentFamily = vi.fn();
 const mockGetEnrollments = vi.fn();
-const mockResolveActivePeriod = vi.fn();
+const mockGetOpenOfferings = vi.fn();
 
 vi.mock('@/features/setu/members/get-current-family', () => ({
   getCurrentFamily: (...args: unknown[]) => mockGetCurrentFamily(...args),
@@ -36,8 +36,8 @@ vi.mock('@/features/setu/members/get-current-family', () => ({
 vi.mock('@/features/setu/enrollment/get-enrollments', () => ({
   getEnrollments: (...args: unknown[]) => mockGetEnrollments(...args),
 }));
-vi.mock('@/features/setu/enrollment/resolve-active-period', () => ({
-  resolveActivePeriod: (...args: unknown[]) => mockResolveActivePeriod(...args),
+vi.mock('@/features/setu/enrollment/get-open-offerings', () => ({
+  getOpenOfferings: (...args: unknown[]) => mockGetOpenOfferings(...args),
 }));
 
 import EnrollPage from '../page';
@@ -54,14 +54,14 @@ const MEMBERS = [
 
 const STALE_ENROLLMENT = {
   eid: 'CMT-AAAA1111-bv-brampton-fall-2025',
-  pid: 'bv-brampton-fall-2025',
+  oid: 'bv-brampton-fall-2025',
   status: 'active',
-  periodLabel: 'Fall 2025',
+  termLabel: 'Fall 2025',
 };
 
 const ACTIVE_PERIOD = {
-  pid: 'bv-brampton-fall-2026',
-  periodLabel: 'Fall 2026',
+  oid: 'bv-brampton-fall-2026',
+  termLabel: 'Fall 2026',
   startDate: new Date('2026-09-01'),
   endDate: new Date('2027-01-25'),
   pricingTiers: [{ effectiveFrom: '2020-01-01', amountCAD: 500, label: 'Full year' }],
@@ -70,14 +70,14 @@ const ACTIVE_PERIOD = {
 beforeEach(() => {
   mockGetCurrentFamily.mockResolvedValue({ family: FAMILY, members: MEMBERS, isManager: true });
   mockGetEnrollments.mockResolvedValue([]);
-  mockResolveActivePeriod.mockResolvedValue(null);
+  mockGetOpenOfferings.mockResolvedValue([]);
 });
 
 const ACTIVE_ENROLLMENT_WITH_SNAPSHOT = {
   eid: 'CMT-AAAA1111-bv-brampton-fall-2026',
-  pid: 'bv-brampton-fall-2026',
+  oid: 'bv-brampton-fall-2026',
   status: 'active',
-  periodLabel: 'Fall 2026',
+  termLabel: 'Fall 2026',
   suggestedAmountSnapshot: 500,
   suggestedAmountOverride: null,
   effectiveSuggestedAmount: 500,
@@ -85,9 +85,9 @@ const ACTIVE_ENROLLMENT_WITH_SNAPSHOT = {
 
 const ACTIVE_ENROLLMENT_WITH_OVERRIDE = {
   eid: 'CMT-AAAA1111-bv-brampton-fall-2026',
-  pid: 'bv-brampton-fall-2026',
+  oid: 'bv-brampton-fall-2026',
   status: 'active',
-  periodLabel: 'Fall 2026',
+  termLabel: 'Fall 2026',
   suggestedAmountSnapshot: 500,
   suggestedAmountOverride: 250,
   effectiveSuggestedAmount: 250,
@@ -96,7 +96,7 @@ const ACTIVE_ENROLLMENT_WITH_OVERRIDE = {
 describe('EnrollPage — effectiveSuggestedAmount (T2)', () => {
   it('enrolled family sees snapshot amount even if period amount changes', async () => {
     mockGetEnrollments.mockResolvedValue([ACTIVE_ENROLLMENT_WITH_SNAPSHOT]);
-    mockResolveActivePeriod.mockResolvedValue({ ...ACTIVE_PERIOD, suggestedAmount: 600 });
+    mockGetOpenOfferings.mockResolvedValue([{ ...ACTIVE_PERIOD, suggestedAmount: 600 }]);
 
     const page = await EnrollPage();
     render(page);
@@ -108,7 +108,7 @@ describe('EnrollPage — effectiveSuggestedAmount (T2)', () => {
 
   it('welcome-team override wins over snapshot', async () => {
     mockGetEnrollments.mockResolvedValue([ACTIVE_ENROLLMENT_WITH_OVERRIDE]);
-    mockResolveActivePeriod.mockResolvedValue(ACTIVE_PERIOD);
+    mockGetOpenOfferings.mockResolvedValue([ACTIVE_PERIOD]);
 
     const page = await EnrollPage();
     render(page);
@@ -130,7 +130,7 @@ describe('EnrollPage — donation flag gating (T1)', () => {
 
   it('donations disabled + enrolled: shows "donation coming soon" instead of Continue to donation link', async () => {
     mockGetEnrollments.mockResolvedValue([ACTIVE_ENROLLMENT_WITH_SNAPSHOT]);
-    mockResolveActivePeriod.mockResolvedValue(ACTIVE_PERIOD);
+    mockGetOpenOfferings.mockResolvedValue([ACTIVE_PERIOD]);
 
     const page = await EnrollPage();
     render(page);
@@ -142,7 +142,7 @@ describe('EnrollPage — donation flag gating (T1)', () => {
   it('donations enabled + enrolled: shows Continue to donation link', async () => {
     vi.stubEnv('NEXT_PUBLIC_FEATURE_SETU_DONATIONS', 'true');
     mockGetEnrollments.mockResolvedValue([ACTIVE_ENROLLMENT_WITH_SNAPSHOT]);
-    mockResolveActivePeriod.mockResolvedValue(ACTIVE_PERIOD);
+    mockGetOpenOfferings.mockResolvedValue([ACTIVE_PERIOD]);
 
     const page = await EnrollPage();
     render(page);
@@ -155,7 +155,7 @@ describe('EnrollPage — donation flag gating (T1)', () => {
 describe('EnrollPage — stale enrollment guard (M1)', () => {
   it('stale enrollment + no active period → shows "no active period" banner, not stale banner', async () => {
     mockGetEnrollments.mockResolvedValue([STALE_ENROLLMENT]);
-    mockResolveActivePeriod.mockResolvedValue(null);
+    mockGetOpenOfferings.mockResolvedValue([]);
 
     const page = await EnrollPage();
     render(page);
@@ -166,7 +166,7 @@ describe('EnrollPage — stale enrollment guard (M1)', () => {
 
   it('stale enrollment + active period with different pid → shows enroll card, not stale banner', async () => {
     mockGetEnrollments.mockResolvedValue([STALE_ENROLLMENT]);
-    mockResolveActivePeriod.mockResolvedValue(ACTIVE_PERIOD);
+    mockGetOpenOfferings.mockResolvedValue([ACTIVE_PERIOD]);
 
     const page = await EnrollPage();
     render(page);
@@ -179,11 +179,11 @@ describe('EnrollPage — stale enrollment guard (M1)', () => {
   it('current enrollment matching active period → shows "already enrolled" banner', async () => {
     mockGetEnrollments.mockResolvedValue([{
       eid: 'CMT-AAAA1111-bv-brampton-fall-2026',
-      pid: 'bv-brampton-fall-2026',
+      oid: 'bv-brampton-fall-2026',
       status: 'active',
-      periodLabel: 'Fall 2026',
+      termLabel: 'Fall 2026',
     }]);
-    mockResolveActivePeriod.mockResolvedValue(ACTIVE_PERIOD);
+    mockGetOpenOfferings.mockResolvedValue([ACTIVE_PERIOD]);
 
     const page = await EnrollPage();
     render(page);
