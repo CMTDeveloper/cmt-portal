@@ -46,7 +46,7 @@ export const ProgramDocSchema = z.object({
 export type ProgramDoc = z.infer<typeof ProgramDocSchema>;
 
 export const CreateProgramSchema = z.object({
-  programKey: programKeySchema,
+  programKey: programKeySchema.optional(),
   label: z.string().min(1),
   shortDescription: z.string().default(''),
   status: z.enum(['active', 'draft', 'archived']).default('draft'),
