@@ -3,6 +3,7 @@ export * from './schemas/family';
 export * from './schemas/member';
 export * from './schemas/contact-key';
 export * from './schemas/offering';
+export * from './schemas/program';
 export * from './schemas/enrollment';
 export * from './schemas/donation';
 export * from './schemas/level';
