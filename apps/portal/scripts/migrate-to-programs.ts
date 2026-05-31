@@ -148,6 +148,7 @@ async function main() {
         const patch: Record<string, unknown> = {
           oid: data['pid'] ?? data['oid'],
           programKey: 'bala-vihar',
+          programLabel: data['programLabel'] ?? 'Bala Vihar',
           termLabel: data['periodLabel'] ?? data['termLabel'] ?? null,
           enrolledMids: data['childrenMids'] ?? data['enrolledMids'] ?? [],
           location: data['location'] ?? null,

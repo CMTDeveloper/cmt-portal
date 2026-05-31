@@ -6,7 +6,10 @@ import { readSessionFromHeaders } from '@/lib/auth/headers';
 
 export async function GET(req: Request) {
   const session = readSessionFromHeaders(req);
-  if (!session || !isAdmin(session)) {
+  if (!session) {
+    return NextResponse.json({ error: 'no-session' }, { status: 401 });
+  }
+  if (!isAdmin(session)) {
     return NextResponse.json({ error: 'admin-required' }, { status: 403 });
   }
 

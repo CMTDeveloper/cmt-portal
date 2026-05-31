@@ -84,6 +84,18 @@ beforeEach(() => {
 // ── GET /api/admin/programs ───────────────────────────────────────────────────
 
 describe('GET /api/admin/programs', () => {
+  it('returns 401 when there is no session (no x-portal-role header)', async () => {
+    const { GET } = await import('../route');
+    const req = new Request('http://localhost/api/admin/programs', {
+      method: 'GET',
+      headers: { 'content-type': 'application/json' },
+    });
+    const res = await GET(req);
+    expect(res.status).toBe(401);
+    const body = await res.json() as { error: string };
+    expect(body.error).toBe('no-session');
+  });
+
   it('returns 403 for non-admin role', async () => {
     const { GET } = await import('../route');
     const res = await GET(makeRequest('GET', undefined, undefined, 'family-manager'));
