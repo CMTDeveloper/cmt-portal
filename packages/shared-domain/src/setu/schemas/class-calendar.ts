@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { PROGRAM_KEYS, LOCATIONS } from './donation-period';
+import { programKeySchema, LOCATIONS } from './offering';
 import { toSafeSlug } from '../../utils/slug';
 
 // The managed school-year calendar that replaces the per-location PDF. One
@@ -20,8 +20,8 @@ export function calendarEntryId(location: string, date: string): string {
 
 export const ClassCalendarEntryDocSchema = z.object({
   entryId: z.string().min(1),
-  programKey: z.enum(PROGRAM_KEYS),
-  location: z.enum(LOCATIONS),
+  programKey: programKeySchema,
+  location: z.enum(LOCATIONS).nullable(),
   date: YMD,
   kind: z.enum(CALENDAR_KINDS),
   classType: z.enum(CLASS_TYPES).nullable(),
@@ -49,7 +49,7 @@ function kindConsistent(d: {
 
 export const CreateCalendarEntrySchema = z
   .object({
-    programKey: z.enum(PROGRAM_KEYS).default('bala-vihar'),
+    programKey: programKeySchema.default('bala-vihar'),
     location: z.enum(LOCATIONS),
     date: YMD,
     kind: z.enum(CALENDAR_KINDS),

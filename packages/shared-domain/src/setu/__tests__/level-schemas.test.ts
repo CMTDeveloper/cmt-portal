@@ -139,6 +139,10 @@ describe('LevelDocSchema', () => {
     const { levelId, ...rest } = validDoc;
     expect(LevelDocSchema.safeParse(rest).success).toBe(false);
   });
+
+  it('LevelDoc accepts null location (location-less program)', () => {
+    expect(LevelDocSchema.safeParse({ ...validDoc, location: null }).success).toBe(true);
+  });
 });
 
 // ── levelSlug ──────────────────────────────────────────────────────────────────
