@@ -1,5 +1,6 @@
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
 import { resolveSuggestedAmount, type EnrollmentDoc, type OfferingDoc, type PricingTier } from '@cmt/shared-domain';
+import { assertProgramActive } from '@/features/setu/programs/get-programs';
 
 type EnrollVia = EnrollmentDoc['enrolledVia'];
 
@@ -82,10 +83,15 @@ export async function enrollFamily(params: EnrollFamilyParams): Promise<EnrollFa
       location: (offeringData['location'] ?? null) as OfferingDoc['location'],
     };
 
+    // Assert the program is active (not draft/archived). Throws 'program-not-available' if not.
+    // Called outside the txn (uses cache) so it's cheap; failure aborts before any writes.
+    await assertProgramActive(offering.programKey);
+
     if (!offering.enabled) throw new Error('offering-disabled');
 
     const now = new Date();
-    if (offering.startDate > now) throw new Error('offering-not-yet-open');
+    // startDate gate removed per spec §5: enabled = enrollment-open (advance registration allowed).
+    // Families may enroll before the term starts; the admin's 'enabled' toggle controls enrollment windows.
     if (offering.endDate != null && offering.endDate < now) throw new Error('offering-expired');
 
     // Suggested amount is prorated by enrollment date (school-year tier schedule),

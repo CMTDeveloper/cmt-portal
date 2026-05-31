@@ -413,6 +413,27 @@ describe('canAccessRoute — /api/setu/calendar — any signed-in user (publishe
   });
 });
 
+describe('canAccessRoute — /api/setu/programs — family + welcome-team', () => {
+  it('allows family-manager GET /api/setu/programs', () => {
+    expect(canAccessRoute(manager, '/api/setu/programs', 'GET')).toBe(true);
+  });
+  it('allows family-member GET /api/setu/programs', () => {
+    expect(canAccessRoute(member, '/api/setu/programs', 'GET')).toBe(true);
+  });
+  it('allows welcome-team GET /api/setu/programs', () => {
+    expect(canAccessRoute(welcomeTeam, '/api/setu/programs', 'GET')).toBe(true);
+  });
+  it('denies legacy family role (no fid)', () => {
+    expect(canAccessRoute(family, '/api/setu/programs', 'GET')).toBe(false);
+  });
+  it('denies teacher', () => {
+    expect(canAccessRoute(teacher, '/api/setu/programs', 'GET')).toBe(false);
+  });
+  it('allows family-manager on sub-path /api/setu/programs/bala-vihar', () => {
+    expect(canAccessRoute(manager, '/api/setu/programs/bala-vihar', 'GET')).toBe(true);
+  });
+});
+
 describe('canAccessRoute — /api/setu/donations', () => {
   it('allows family-manager to POST /api/setu/donations/checkout', () => {
     expect(canAccessRoute(manager, '/api/setu/donations/checkout', 'POST')).toBe(true);

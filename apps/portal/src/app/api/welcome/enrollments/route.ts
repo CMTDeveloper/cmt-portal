@@ -48,11 +48,11 @@ export async function POST(req: Request) {
     if (msg === 'offering-disabled') {
       return NextResponse.json({ error: 'offering-disabled' }, { status: 422 });
     }
-    if (msg === 'offering-not-yet-open') {
-      return NextResponse.json({ error: 'offering-not-yet-open' }, { status: 422 });
-    }
     if (msg === 'offering-expired') {
       return NextResponse.json({ error: 'offering-expired' }, { status: 422 });
+    }
+    if (msg === 'program-not-available') {
+      return NextResponse.json({ error: 'program-not-available' }, { status: 422 });
     }
     throw err;
   }

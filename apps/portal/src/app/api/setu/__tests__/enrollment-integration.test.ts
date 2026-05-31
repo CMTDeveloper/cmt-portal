@@ -3,6 +3,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // ── next/cache ─────────────────────────────────────────────────────────────────
 vi.mock('next/cache', () => ({ revalidateTag: vi.fn(), cacheTag: vi.fn(), cacheLife: vi.fn() }));
 
+// ── assertProgramActive mock ───────────────────────────────────────────────────
+// Default: program is active. Individual tests override for the not-available case.
+const mockAssertProgramActive = vi.fn().mockResolvedValue({ programKey: 'bala-vihar', status: 'active' });
+vi.mock('@/features/setu/programs/get-programs', () => ({
+  getProgram: vi.fn().mockResolvedValue({ programKey: 'bala-vihar', status: 'active' }),
+  listPrograms: vi.fn().mockResolvedValue([]),
+  assertProgramActive: (...a: unknown[]) => mockAssertProgramActive(...a),
+}));
+
 // ── Feature flag ───────────────────────────────────────────────────────────────
 const flagsMock = vi.hoisted(() => ({ setuAuth: true }));
 vi.mock('@/lib/flags', () => ({ flags: flagsMock }));
@@ -209,6 +218,7 @@ function setupCancelTransaction({ exists = true, status = 'active' } = {}) {
 beforeEach(() => {
   vi.clearAllMocks();
   flagsMock.setuAuth = true;
+  mockAssertProgramActive.mockResolvedValue({ programKey: 'bala-vihar', status: 'active' });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -335,15 +345,16 @@ describe('POST /api/setu/enrollments', () => {
     expect(body.error).toBe('offering-disabled');
   });
 
-  it('returns 422 with offering-not-yet-open when offering starts in the future', async () => {
+  it('enrolls successfully for a future-dated enabled offering (advance registration allowed per spec §5)', async () => {
+    // startDate > now no longer blocks enrollment; enabled=true is the enrollment-open signal.
     setupEnrollTransaction({ offeringFuture: true });
 
     const res = await enrollmentsPOST(
       makeRequest('POST', '/api/setu/enrollments', { oid: OID }, managerHeaders()),
     );
-    expect(res.status).toBe(422);
-    const body = await res.json() as { error: string };
-    expect(body.error).toBe('offering-not-yet-open');
+    expect(res.status).toBe(201);
+    const body = await res.json() as { eid: string };
+    expect(body.eid).toBe(EID);
   });
 
   it('returns 422 with offering-expired when offering end date is in the past', async () => {
@@ -355,6 +366,18 @@ describe('POST /api/setu/enrollments', () => {
     expect(res.status).toBe(422);
     const body = await res.json() as { error: string };
     expect(body.error).toBe('offering-expired');
+  });
+
+  it('returns 422 with program-not-available when program is not active', async () => {
+    setupEnrollTransaction();
+    mockAssertProgramActive.mockRejectedValue(new Error('program-not-available'));
+
+    const res = await enrollmentsPOST(
+      makeRequest('POST', '/api/setu/enrollments', { oid: OID }, managerHeaders()),
+    );
+    expect(res.status).toBe(422);
+    const body = await res.json() as { error: string };
+    expect(body.error).toBe('program-not-available');
   });
 
   it('returns 403 for family-member (non-manager)', async () => {

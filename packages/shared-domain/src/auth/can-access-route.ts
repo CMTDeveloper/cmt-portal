@@ -107,6 +107,11 @@ export function canAccessRoute(
     return isSetuFamily(claims) || isWelcomeTeam(claims) || isAdmin(claims);
   }
 
+  // Setu API — programs list: readable by any setu family or welcome-team (mobile + web)
+  if (pathname === '/api/setu/programs' || pathname.startsWith('/api/setu/programs/')) {
+    return isSetuFamily(claims) || isWelcomeTeam(claims);
+  }
+
   // Setu API — enrollments: GET is any setu family; POST/DELETE is manager-only
   if (pathname === '/api/setu/enrollments' || pathname.startsWith('/api/setu/enrollments/')) {
     if (!isSetuFamily(claims)) return false;
