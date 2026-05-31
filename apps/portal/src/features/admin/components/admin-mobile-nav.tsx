@@ -6,12 +6,12 @@ import Link from 'next/link';
 import { SetuIcon } from '@cmt/ui';
 import { signOut } from '@/features/family/components/sign-out-button';
 
-type Tab = 'home' | 'periods' | 'levels' | 'calendar' | 'more';
+type Tab = 'home' | 'programs' | 'levels' | 'calendar' | 'more';
 
 const TABS: { id: Tab; label: string; icon: keyof typeof SetuIcon; href: string }[] = [
-  { id: 'home', label: 'Home', icon: 'home', href: '/admin' },
-  { id: 'periods', label: 'Periods', icon: 'receipt', href: '/admin/donation-periods' },
-  { id: 'levels', label: 'Levels', icon: 'people', href: '/admin/levels' },
+  { id: 'home',     label: 'Home',     icon: 'home',     href: '/admin' },
+  { id: 'programs', label: 'Programs', icon: 'people',   href: '/admin/programs' },
+  { id: 'levels',   label: 'Levels',   icon: 'check',    href: '/admin/levels' },
   { id: 'calendar', label: 'Calendar', icon: 'calendar', href: '/admin/calendar' },
 ];
 
@@ -28,7 +28,7 @@ const MORE_LEGACY: { label: string; href: string }[] = [
 ];
 
 function activeTab(pathname: string): Tab {
-  if (pathname.startsWith('/admin/donation-periods')) return 'periods';
+  if (pathname.startsWith('/admin/programs')) return 'programs';
   if (pathname.startsWith('/admin/levels')) return 'levels';
   if (pathname.startsWith('/admin/calendar')) return 'calendar';
   if (pathname === '/admin') return 'home';

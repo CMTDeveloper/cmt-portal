@@ -39,11 +39,18 @@ export default function AdminPage() {
           tone="primary"
         />
         <Tile
+          href="/admin/programs"
+          title="Programs"
+          icon="people"
+          sub="Manage programs (Bala Vihar, Tabla, etc.), their offerings per term, eligibility rules, and capabilities. Offerings replace the old donation-periods page."
+          tone="primary"
+        />
+        <Tile
           href="/admin/donation-periods"
           title="Donation periods"
           icon="receipt"
-          sub="Configure Bala Vihar donation periods per location. Suggested amounts are locked at enrollment — edits don't affect existing families."
-          tone="primary"
+          sub="Legacy: redirects to Programs → Offerings. Kept for bookmarks."
+          tone="legacy"
         />
         <Tile
           href="/admin/levels"
