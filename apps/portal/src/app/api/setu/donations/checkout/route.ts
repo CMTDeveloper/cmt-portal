@@ -117,9 +117,9 @@ export async function POST(req: Request) {
   }
   const donorName = `${donor.firstName} ${donor.lastName}`.trim();
 
-  // Resolve label + pid/eid per donation type, and enforce the snapshot floor
+  // Resolve label + oid/eid per donation type, and enforce the snapshot floor
   // for bala-vihar (give more is fine; give less stays welcome-team-only).
-  let pid: string | null = null;
+  let oid: string | null = null;
   let eid: string | null = null;
   let label: string;
 
@@ -135,9 +135,9 @@ export async function POST(req: Request) {
         { status: 422 },
       );
     }
-    pid = enrollment.pid;
+    oid = enrollment.oid;
     eid = enrollment.eid;
-    label = checkoutLineItemName('bala-vihar', enrollment.period?.periodLabel);
+    label = checkoutLineItemName('bala-vihar', enrollment.offering?.termLabel);
   } else {
     label = checkoutLineItemName('general');
   }
@@ -157,7 +157,7 @@ export async function POST(req: Request) {
     donorName,
     donorEmail: donor.email,
     type: input.type,
-    pid,
+    pid: oid,  // DonationDoc still stores 'pid'; oid is the generalised offering id
     eid,
     label,
     amountCAD: input.amountCAD,

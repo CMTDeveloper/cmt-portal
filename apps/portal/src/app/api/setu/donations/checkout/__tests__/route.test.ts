@@ -119,9 +119,9 @@ describe('POST /api/setu/donations/checkout', () => {
 
   it('enforces the suggested-amount floor for bala-vihar', async () => {
     mockGetEnrollments.mockResolvedValue([
-      { eid: 'fid1-pid1', status: 'active', pid: 'pid1', effectiveSuggestedAmount: 500, period: { periodLabel: 'Fall 2026' } },
+      { eid: 'fid1-oid1', status: 'active', oid: 'oid1', effectiveSuggestedAmount: 500, offering: { termLabel: 'Fall 2026' } },
     ]);
-    const res = await POST(makeReq({ type: 'bala-vihar', eid: 'fid1-pid1', amountCAD: 300 }));
+    const res = await POST(makeReq({ type: 'bala-vihar', eid: 'fid1-oid1', amountCAD: 300 }));
     expect(res.status).toBe(422);
     const json = await res.json();
     expect(json.error).toBe('amount-below-suggested');
@@ -131,9 +131,9 @@ describe('POST /api/setu/donations/checkout', () => {
 
   it('accepts a bala-vihar gift at or above the suggested amount', async () => {
     mockGetEnrollments.mockResolvedValue([
-      { eid: 'fid1-pid1', status: 'active', pid: 'pid1', effectiveSuggestedAmount: 500, period: { periodLabel: 'Fall 2026' } },
+      { eid: 'fid1-oid1', status: 'active', oid: 'oid1', effectiveSuggestedAmount: 500, offering: { termLabel: 'Fall 2026' } },
     ]);
-    const res = await POST(makeReq({ type: 'bala-vihar', eid: 'fid1-pid1', amountCAD: 750 }));
+    const res = await POST(makeReq({ type: 'bala-vihar', eid: 'fid1-oid1', amountCAD: 750 }));
     expect(res.status).toBe(200);
     const fetchBody = JSON.parse(lastFetchInit().body);
     expect(fetchBody.lineItems[0].name).toBe('Bala Vihar Donation — Fall 2026');
