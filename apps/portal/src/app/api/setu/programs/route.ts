@@ -3,7 +3,7 @@ import { flags } from '@/lib/flags';
 import { isSetuFamily } from '@cmt/shared-domain';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
 import { listPrograms } from '@/features/setu/programs/get-programs';
-import { getOpenOfferings } from '@/features/setu/enrollment/get-open-offerings';
+import { getOpenOfferings, getOpenOfferingsForFamily } from '@/features/setu/enrollment/get-open-offerings';
 import { getFamilyByFid } from '@/features/setu/members/get-family-by-fid';
 import type { OfferingDoc, Location } from '@cmt/shared-domain';
 
@@ -38,10 +38,12 @@ export async function GET(req: Request) {
 
   // Resolve the caller's location from the family doc (when available).
   // Welcome-team sessions have no fid; they see all programs regardless of location.
-  let familyLocation: string | null = null;
+  let familyLocation: Location | null = null;
+  let isLocatedFamily = false;
   if (isSetuFamily(session) && session.fid) {
+    isLocatedFamily = true;
     const familyData = await getFamilyByFid(session.fid);
-    familyLocation = familyData?.family.location ?? null;
+    familyLocation = (familyData?.family.location ?? null) as Location | null;
   }
 
   const allPrograms = await listPrograms();
@@ -58,13 +60,12 @@ export async function GET(req: Request) {
   }> = [];
 
   for (const program of activePrograms) {
-    // exactOptionalPropertyTypes: only pass location when non-null so we don't
-    // assign undefined to an optional that only accepts Location | null.
-    const openOfferings = await getOpenOfferings(
-      familyLocation != null
-        ? { programKey: program.programKey, location: familyLocation as Location }
-        : { programKey: program.programKey },
-    );
+    // Located family: union of (its-location offerings) + (location-less/online
+    // offerings), so an online program like Tabla is visible even though the
+    // family has a physical center. Welcome-team / no-fid: all open offerings.
+    const openOfferings = isLocatedFamily
+      ? await getOpenOfferingsForFamily(program.programKey, familyLocation)
+      : await getOpenOfferings({ programKey: program.programKey });
 
     if (openOfferings.length === 0) continue;
 

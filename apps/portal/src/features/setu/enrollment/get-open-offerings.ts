@@ -67,3 +67,38 @@ export async function getOpenOfferings(params: {
     .map((d) => docToOffering(d.data() as Record<string, unknown>))
     .filter((o) => o.endDate == null || o.endDate >= now);
 }
+
+/**
+ * Returns the open offerings a family can enroll in, accounting for both
+ * location-bound and location-less (online/virtual) offerings.
+ *
+ * Firestore can't OR across a single field (`location == X OR location == null`)
+ * in one query, so this issues TWO `getOpenOfferings` calls and merges:
+ *   (a) offerings at `familyLocation` (only when non-null), and
+ *   (b) location-less offerings (`location == null`).
+ *
+ * Results are deduped by `oid` and sorted by `startDate` ascending. When
+ * `familyLocation` is null, only the location-less set is returned.
+ *
+ * This fixes the bug where a located family querying `location == familyLocation`
+ * could never see online programs (spec §8.3 + the G3 acceptance walkthrough).
+ */
+export async function getOpenOfferingsForFamily(
+  programKey: string,
+  familyLocation: Location | null,
+): Promise<OpenOffering[]> {
+  const locationLess = await getOpenOfferings({ programKey, location: null });
+
+  if (familyLocation == null) {
+    return locationLess;
+  }
+
+  const located = await getOpenOfferings({ programKey, location: familyLocation });
+
+  // Dedupe by oid (located first, then any location-less not already present).
+  const byOid = new Map<string, OpenOffering>();
+  for (const o of located) byOid.set(o.oid, o);
+  for (const o of locationLess) if (!byOid.has(o.oid)) byOid.set(o.oid, o);
+
+  return [...byOid.values()].sort((a, b) => a.startDate.getTime() - b.startDate.getTime());
+}

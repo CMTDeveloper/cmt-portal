@@ -26,8 +26,8 @@ export type EnrollFamilyResult =
  * - enrolledMids is derived from members with type='Child' inside the txn
  *   (preserving BV behavior where only children are enrolled).
  *
- * Throws with message 'offering-not-found' | 'offering-disabled' | 'offering-not-yet-open'
- * | 'offering-expired' | 'family-not-found' for caller to translate to HTTP errors.
+ * Throws with message 'offering-not-found' | 'offering-disabled' | 'offering-expired'
+ * | 'family-not-found' | 'program-not-available' for caller to translate to HTTP errors.
  */
 export async function enrollFamily(params: EnrollFamilyParams): Promise<EnrollFamilyResult> {
   const { fid, oid, enrolledVia, enrolledByMid } = params;

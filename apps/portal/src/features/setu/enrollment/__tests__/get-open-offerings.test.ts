@@ -22,7 +22,7 @@ vi.mock('@cmt/firebase-shared/admin/firestore', () => {
   };
 });
 
-import { getOpenOfferings } from '../get-open-offerings';
+import { getOpenOfferings, getOpenOfferingsForFamily } from '../get-open-offerings';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -161,5 +161,92 @@ describe('getOpenOfferings', () => {
     expect(results[0]!.startDate).toBeInstanceOf(Date);
     expect(results[0]!.createdAt).toBeInstanceOf(Date);
     expect(results[0]!.updatedAt).toBeInstanceOf(Date);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// getOpenOfferingsForFamily
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('getOpenOfferingsForFamily', () => {
+  const earlier = new Date(NOW.getTime() - 86400_000 * 50);
+  const later = new Date(NOW.getTime() - 86400_000 * 10);
+
+  it('located family sees its-location offerings UNION location-less offerings', async () => {
+    // First getOpenOfferings call = located query (location == 'Brampton')
+    // Second getOpenOfferings call = location-less query (location == null)
+    mockGet
+      .mockResolvedValueOnce({
+        docs: [
+          { data: () => makeOfferingData({ oid: 'bv-brampton', location: 'Brampton', startDate: { toDate: () => earlier } }) },
+        ],
+      })
+      .mockResolvedValueOnce({
+        docs: [
+          { data: () => makeOfferingData({ oid: 'tabla-online', programKey: 'tabla', programLabel: 'Tabla', location: null, startDate: { toDate: () => later } }) },
+        ],
+      });
+
+    const results = await getOpenOfferingsForFamily('bala-vihar', 'Brampton');
+    const oids = results.map((o) => o.oid);
+    expect(oids).toContain('bv-brampton');
+    expect(oids).toContain('tabla-online');
+    expect(results).toHaveLength(2);
+  });
+
+  it('located family result is sorted by startDate ascending', async () => {
+    // Location-less offering starts earlier than the located one.
+    mockGet
+      .mockResolvedValueOnce({
+        docs: [
+          { data: () => makeOfferingData({ oid: 'located-late', location: 'Brampton', startDate: { toDate: () => later } }) },
+        ],
+      })
+      .mockResolvedValueOnce({
+        docs: [
+          { data: () => makeOfferingData({ oid: 'online-early', location: null, startDate: { toDate: () => earlier } }) },
+        ],
+      });
+
+    const results = await getOpenOfferingsForFamily('bala-vihar', 'Brampton');
+    expect(results.map((o) => o.oid)).toEqual(['online-early', 'located-late']);
+  });
+
+  it('dedupes by oid when the same offering appears in both queries', async () => {
+    // Defensive: if a doc somehow surfaced in both result sets, it must appear once.
+    mockGet
+      .mockResolvedValueOnce({
+        docs: [{ data: () => makeOfferingData({ oid: 'dup-1', location: 'Brampton' }) }],
+      })
+      .mockResolvedValueOnce({
+        docs: [{ data: () => makeOfferingData({ oid: 'dup-1', location: null }) }],
+      });
+
+    const results = await getOpenOfferingsForFamily('bala-vihar', 'Brampton');
+    expect(results).toHaveLength(1);
+    expect(results[0]!.oid).toBe('dup-1');
+  });
+
+  it('null-location family sees ONLY location-less offerings (single query)', async () => {
+    mockGet.mockResolvedValueOnce({
+      docs: [{ data: () => makeOfferingData({ oid: 'online-only', location: null }) }],
+    });
+
+    const results = await getOpenOfferingsForFamily('bala-vihar', null);
+    expect(results).toHaveLength(1);
+    expect(results[0]!.oid).toBe('online-only');
+
+    // Only the location==null query should have run — exactly one location filter
+    // (location == null), no located query.
+    const locationCalls = mockWhere.mock.calls.filter((call) => call[0] === 'location');
+    expect(locationCalls).toHaveLength(1);
+    expect(locationCalls[0]![2]).toBeNull();
+  });
+
+  it('null-location family returns empty when no location-less offerings exist', async () => {
+    mockGet.mockResolvedValueOnce({ docs: [] });
+
+    const results = await getOpenOfferingsForFamily('bala-vihar', null);
+    expect(results).toHaveLength(0);
   });
 });
