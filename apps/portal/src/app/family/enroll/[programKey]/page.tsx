@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { SetuAvatar, SetuIcon, Rosette } from '@cmt/ui';
 import { CspRoot, SectionLabel } from '@/features/family/components/atoms';
 import { EnrollCta } from '@/features/family/components/enroll-cta';
-import { OfferingPicker } from '@/features/family/components/offering-picker';
+import { EnrollPanel } from '@/features/family/components/enroll-panel';
 import { EligibleMembersList } from '@/features/family/components/eligible-members-list';
 import { resolveSuggestedAmount, paymentSourceOf, memberEligibleForProgram, BALA_VIHAR } from '@cmt/shared-domain';
 import { getProgram } from '@/features/setu/programs/get-programs';
@@ -170,6 +170,12 @@ export default async function ProgramEnrollPage({ params }: Props) {
   // The OID to use for the EnrollCta — prefer the enrolled offering when already enrolled.
   const ctaOid = enrolledOffering?.oid ?? defaultOffering?.oid ?? '';
 
+  // When MULTIPLE offerings are open and the manager can still enroll, the term
+  // picker and submit must share client state — render them together via
+  // EnrollPanel. Single-offering (BV) keeps the bare CTA path unchanged.
+  const showInlinePanel =
+    !alreadyEnrolled && isManager && Boolean(ctaOid) && openOfferings.length > 1;
+
   return (
     <>
       {/* ── Mobile ───────────────────────────────────────────────── */}
@@ -206,18 +212,6 @@ export default async function ProgramEnrollPage({ params }: Props) {
                     </div>
                   </div>
 
-                  {/* Offering picker — auto-selected when single */}
-                  {openOfferings.length > 1 && (
-                    <>
-                      <SectionLabel>Select term</SectionLabel>
-                      <OfferingPicker
-                        offerings={openOfferings}
-                        selectedOid={ctaOid}
-                        onSelect={() => { /* server page: parent picks default; client interaction is handled by EnrollCta's oid prop */ }}
-                      />
-                    </>
-                  )}
-
                   {/* Eligible members */}
                   {displayMembers.length > 0 && (
                     <>
@@ -237,6 +231,19 @@ export default async function ProgramEnrollPage({ params }: Props) {
                       {legacyPaid
                         ? renderPaidBlockMobile(activeTerm)
                         : renderDakshinaBlock(displaySuggestedAmount ?? 0, family.location, activeTerm)}
+                    </>
+                  )}
+
+                  {/* Multi-offering: term picker + submit live together (selection drives the oid).
+                      Single-offering keeps the bare CTA in the sticky footer below (BV unchanged). */}
+                  {showInlinePanel && (
+                    <>
+                      <SectionLabel>Select term</SectionLabel>
+                      <EnrollPanel
+                        offerings={openOfferings}
+                        defaultOid={ctaOid}
+                        donationsEnabled={usesDonation && donationsEnabled}
+                      />
                     </>
                   )}
                 </>
@@ -259,8 +266,12 @@ export default async function ProgramEnrollPage({ params }: Props) {
                     {usesDonation ? 'Your family is enrolled — donation coming soon.' : 'Your family is enrolled.'}
                   </div>
                 )
+              ) : showInlinePanel ? (
+                <Link href="/family" className="btn btn--s btn--block" style={{ display: 'block', textAlign: 'center', textDecoration: 'none' }}>
+                  Cancel
+                </Link>
               ) : ctaOid && isManager ? (
-                <EnrollCta pid={ctaOid} donationsEnabled={usesDonation && donationsEnabled} />
+                <EnrollCta oid={ctaOid} donationsEnabled={usesDonation && donationsEnabled} />
               ) : ctaOid ? (
                 <button className="btn btn--p btn--block" disabled style={{ cursor: 'not-allowed', opacity: 0.5 }}>
                   Only the family manager can enroll
@@ -352,20 +363,6 @@ export default async function ProgramEnrollPage({ params }: Props) {
             <aside>
               {legacyPaid ? renderPaidPanel(activeTerm) : (
                 <div className="card" style={{ padding: 24, position: 'sticky', top: 0 }}>
-                  {/* Offering picker — shown when >1 offering available */}
-                  {openOfferings.length > 1 && (
-                    <>
-                      <h3 style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.16em', fontWeight: 700, fontFamily: 'var(--body)', color: 'var(--muted)', marginBottom: 10 }}>
-                        Select term
-                      </h3>
-                      <OfferingPicker
-                        offerings={openOfferings}
-                        selectedOid={ctaOid}
-                        onSelect={() => { /* static server render — interaction via EnrollCta */ }}
-                      />
-                    </>
-                  )}
-
                   {/* Dakshina block — only for programs with usesDonation */}
                   {usesDonation ? (
                     <>
@@ -406,8 +403,19 @@ export default async function ProgramEnrollPage({ params }: Props) {
                         {usesDonation ? 'Your family is enrolled — donation coming soon.' : 'Your family is enrolled.'}
                       </div>
                     )
+                  ) : showInlinePanel ? (
+                    <EnrollPanel
+                      offerings={openOfferings}
+                      defaultOid={ctaOid}
+                      donationsEnabled={usesDonation && donationsEnabled}
+                      pickerLabel={
+                        <h3 style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.16em', fontWeight: 700, fontFamily: 'var(--body)', color: 'var(--muted)', marginBottom: 10 }}>
+                          Select term
+                        </h3>
+                      }
+                    />
                   ) : isManager ? (
-                    <EnrollCta pid={ctaOid} donationsEnabled={usesDonation && donationsEnabled} />
+                    <EnrollCta oid={ctaOid} donationsEnabled={usesDonation && donationsEnabled} />
                   ) : (
                     <button className="btn btn--p btn--block" disabled style={{ cursor: 'not-allowed', opacity: 0.5 }}>
                       Only the family manager can enroll

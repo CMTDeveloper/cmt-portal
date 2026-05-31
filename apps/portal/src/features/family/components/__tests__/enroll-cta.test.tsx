@@ -16,7 +16,7 @@ vi.mock('@cmt/ui', () => ({
 
 import { EnrollCta } from '../enroll-cta';
 
-const PID = 'bv-brampton-fall-2026';
+const OID = 'bv-brampton-fall-2026';
 
 beforeEach(() => {
   vi.spyOn(global, 'fetch').mockReset();
@@ -34,7 +34,7 @@ describe('EnrollCta', () => {
       json: async () => ({ eid: 'CMT-AAAA-bv-brampton-fall-2026', donateUrl: '/family/donate?eid=CMT-AAAA-bv-brampton-fall-2026' }),
     } as Response);
 
-    render(<EnrollCta pid={PID} donationsEnabled={true}/>);
+    render(<EnrollCta oid={OID} donationsEnabled={true}/>);
     await user.click(screen.getByRole('button', { name: /enroll/i }));
 
     await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/family/donate?eid=CMT-AAAA-bv-brampton-fall-2026'));
@@ -51,7 +51,7 @@ describe('EnrollCta', () => {
       json: async () => ({ eid: 'CMT-AAAA-bv-brampton-fall-2026', donateUrl: '/family/donate?eid=CMT-AAAA-bv-brampton-fall-2026' }),
     } as Response);
 
-    render(<EnrollCta pid={PID} donationsEnabled={false}/>);
+    render(<EnrollCta oid={OID} donationsEnabled={false}/>);
     await user.click(screen.getByRole('button', { name: /enroll/i }));
 
     await waitFor(() => expect(toastMock.success).toHaveBeenCalledWith('Your family is enrolled!'));
@@ -67,7 +67,7 @@ describe('EnrollCta', () => {
       json: async () => ({ error: 'no-session' }),
     } as Response);
 
-    render(<EnrollCta pid={PID} donationsEnabled={false}/>);
+    render(<EnrollCta oid={OID} donationsEnabled={false}/>);
     await user.click(screen.getByRole('button', { name: /enroll/i }));
 
     await waitFor(() =>
@@ -82,15 +82,31 @@ describe('EnrollCta', () => {
     expect(toastMock.error).not.toHaveBeenCalled();
   });
 
-  it('on period-disabled: shows correct toast and re-enables button', async () => {
+  it('POSTs the oid (not pid) in the request body', async () => {
+    const user = userEvent.setup();
+    const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ eid: 'x', donateUrl: '/family/donate?eid=x' }),
+    } as Response);
+
+    render(<EnrollCta oid={OID} donationsEnabled={false}/>);
+    await user.click(screen.getByRole('button', { name: /enroll/i }));
+
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
+    const [, init] = fetchSpy.mock.calls[0]!;
+    expect(JSON.parse(String(init?.body))).toEqual({ oid: OID });
+  });
+
+  it('on offering-disabled: shows correct toast and re-enables button', async () => {
     const user = userEvent.setup();
     vi.spyOn(global, 'fetch').mockResolvedValueOnce({
       ok: false,
       status: 422,
-      json: async () => ({ error: 'period-disabled' }),
+      json: async () => ({ error: 'offering-disabled' }),
     } as Response);
 
-    render(<EnrollCta pid={PID} donationsEnabled={false}/>);
+    render(<EnrollCta oid={OID} donationsEnabled={false}/>);
     await user.click(screen.getByRole('button', { name: /enroll/i }));
 
     await waitFor(() =>
@@ -101,20 +117,56 @@ describe('EnrollCta', () => {
     expect(screen.getByRole('button')).not.toBeDisabled();
   });
 
-  it('on period-not-yet-open: shows correct toast', async () => {
+  it('on offering-expired: shows correct toast', async () => {
     const user = userEvent.setup();
     vi.spyOn(global, 'fetch').mockResolvedValueOnce({
       ok: false,
       status: 422,
-      json: async () => ({ error: 'period-not-yet-open' }),
+      json: async () => ({ error: 'offering-expired' }),
     } as Response);
 
-    render(<EnrollCta pid={PID} donationsEnabled={false}/>);
+    render(<EnrollCta oid={OID} donationsEnabled={false}/>);
     await user.click(screen.getByRole('button', { name: /enroll/i }));
 
     await waitFor(() =>
       expect(toastMock.error).toHaveBeenCalledWith(
-        expect.stringContaining('not opened yet'),
+        expect.stringContaining('has ended'),
+      ),
+    );
+  });
+
+  it('on offering-not-found: shows correct toast', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+      ok: false,
+      status: 404,
+      json: async () => ({ error: 'offering-not-found' }),
+    } as Response);
+
+    render(<EnrollCta oid={OID} donationsEnabled={false}/>);
+    await user.click(screen.getByRole('button', { name: /enroll/i }));
+
+    await waitFor(() =>
+      expect(toastMock.error).toHaveBeenCalledWith(
+        expect.stringContaining('no longer available'),
+      ),
+    );
+  });
+
+  it('on program-not-available: shows correct toast', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+      ok: false,
+      status: 422,
+      json: async () => ({ error: 'program-not-available' }),
+    } as Response);
+
+    render(<EnrollCta oid={OID} donationsEnabled={false}/>);
+    await user.click(screen.getByRole('button', { name: /enroll/i }));
+
+    await waitFor(() =>
+      expect(toastMock.error).toHaveBeenCalledWith(
+        expect.stringContaining('not available right now'),
       ),
     );
   });
@@ -127,7 +179,7 @@ describe('EnrollCta', () => {
       json: async () => ({ eid: 'x', donateUrl: '/family/donate?eid=x' }),
     } as Response);
 
-    render(<EnrollCta pid={PID} donationsEnabled={true}/>);
+    render(<EnrollCta oid={OID} donationsEnabled={true}/>);
     const btn = screen.getByRole('button', { name: /enroll/i });
 
     // Rapid double-click

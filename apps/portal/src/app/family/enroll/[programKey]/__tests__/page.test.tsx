@@ -36,20 +36,21 @@ vi.mock('@/features/family/components/atoms', () => ({
 }));
 
 vi.mock('@/features/family/components/enroll-cta', () => ({
-  EnrollCta: ({ pid, donationsEnabled }: { pid: string; donationsEnabled: boolean }) => (
-    <button data-donations-enabled={String(donationsEnabled)}>Enroll {pid}</button>
+  EnrollCta: ({ oid, donationsEnabled }: { oid: string; donationsEnabled: boolean }) => (
+    <button data-donations-enabled={String(donationsEnabled)}>Enroll {oid}</button>
   ),
 }));
 
-vi.mock('@/features/family/components/offering-picker', () => ({
-  OfferingPicker: ({ offerings }: { offerings: { oid: string; termLabel: string }[] }) => (
-    <div data-testid="offering-picker">
+vi.mock('@/features/family/components/enroll-panel', () => ({
+  EnrollPanel: ({ offerings, defaultOid, donationsEnabled }: { offerings: { oid: string; termLabel: string }[]; defaultOid: string; donationsEnabled: boolean }) => (
+    <div data-testid="enroll-panel" data-donations-enabled={String(donationsEnabled)} data-default-oid={defaultOid}>
       {offerings.map((o) => (
         <label key={o.oid}>
           <input type="radio" value={o.oid} readOnly />
           {o.termLabel}
         </label>
       ))}
+      <button>Enroll {defaultOid}</button>
     </div>
   ),
 }));
