@@ -167,6 +167,18 @@ describe('UpdateOfferingSchema', () => {
     ).toBe(false);
   });
 
+  it('accepts endDate equal to startDate (one-time offering, mirrors Create)', () => {
+    expect(
+      UpdateOfferingSchema.safeParse({ startDate: FUTURE_START, endDate: FUTURE_START }).success,
+    ).toBe(true);
+  });
+
+  it('accepts null endDate alongside a startDate (rolling offering)', () => {
+    expect(
+      UpdateOfferingSchema.safeParse({ startDate: FUTURE_START, endDate: null }).success,
+    ).toBe(true);
+  });
+
   it('accepts empty pricingTiers (free program)', () => {
     expect(UpdateOfferingSchema.safeParse({ pricingTiers: [] }).success).toBe(true);
   });

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ProgramDocSchema, CreateProgramSchema, memberEligibleForProgram } from '../program';
+import { ProgramDocSchema, CreateProgramSchema, ProgramEligibilitySchema, memberEligibleForProgram } from '../program';
 
 const prog = {
   programKey: 'bala-vihar', label: 'Bala Vihar', shortDescription: 'Sunday classes',
@@ -24,6 +24,33 @@ describe('CreateProgramSchema', () => {
       capabilities: { usesOfferings: true, usesDonation: false, usesLevels: false, usesCalendar: false, attendanceMode: 'none' },
     });
     expect(r.success).toBe(true);
+  });
+});
+
+describe('ProgramEligibility min<=max guard', () => {
+  it('rejects minAgeYears > maxAgeYears', () => {
+    expect(ProgramEligibilitySchema.safeParse({ memberType: 'child', minAgeYears: 12, maxAgeYears: 8 }).success).toBe(false);
+  });
+  it('accepts minAgeYears <= maxAgeYears', () => {
+    expect(ProgramEligibilitySchema.safeParse({ memberType: 'child', minAgeYears: 8, maxAgeYears: 12 }).success).toBe(true);
+    expect(ProgramEligibilitySchema.safeParse({ memberType: 'child', minAgeYears: 8, maxAgeYears: 8 }).success).toBe(true);
+  });
+  it('accepts a single bound or no bounds', () => {
+    expect(ProgramEligibilitySchema.safeParse({ memberType: 'child', minAgeYears: 5 }).success).toBe(true);
+    expect(ProgramEligibilitySchema.safeParse({ memberType: 'child', maxAgeYears: 18 }).success).toBe(true);
+    expect(ProgramEligibilitySchema.safeParse({ memberType: 'any' }).success).toBe(true);
+  });
+  it('still validates inside CreateProgramSchema/ProgramDocSchema (embedded)', () => {
+    const bad = {
+      ...prog,
+      eligibility: { memberType: 'child', minAgeYears: 12, maxAgeYears: 8 },
+    };
+    expect(ProgramDocSchema.safeParse(bad).success).toBe(false);
+    expect(CreateProgramSchema.safeParse({
+      programKey: 'tabla', label: 'Tabla', termType: 'rolling',
+      eligibility: { memberType: 'child', minAgeYears: 12, maxAgeYears: 8 },
+      capabilities: { usesOfferings: true, usesDonation: false, usesLevels: false, usesCalendar: false, attendanceMode: 'none' },
+    }).success).toBe(false);
   });
 });
 

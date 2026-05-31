@@ -7,11 +7,16 @@ export type MemberType = (typeof MEMBER_TYPES)[number];
 export const ATTENDANCE_MODES = ['none', 'check-in', 'teacher'] as const;
 export type AttendanceMode = (typeof ATTENDANCE_MODES)[number];
 
-export const ProgramEligibilitySchema = z.object({
-  memberType: z.enum(MEMBER_TYPES),
-  minAgeYears: z.number().int().min(0).max(120).optional(),
-  maxAgeYears: z.number().int().min(0).max(120).optional(),
-});
+export const ProgramEligibilitySchema = z
+  .object({
+    memberType: z.enum(MEMBER_TYPES),
+    minAgeYears: z.number().int().min(0).max(120).optional(),
+    maxAgeYears: z.number().int().min(0).max(120).optional(),
+  })
+  .refine(
+    (e) => e.minAgeYears == null || e.maxAgeYears == null || e.minAgeYears <= e.maxAgeYears,
+    { message: 'minAgeYears must be <= maxAgeYears', path: ['maxAgeYears'] },
+  );
 export type ProgramEligibility = z.infer<typeof ProgramEligibilitySchema>;
 
 export const ProgramCapabilitiesSchema = z.object({

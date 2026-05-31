@@ -151,12 +151,14 @@ export const UpdateOfferingSchema = z
   })
   .refine(
     (d) => {
+      // Mirror Create: only enforce when both bounds are present and endDate is
+      // non-null; endDate == startDate is valid (one-time offering).
       if (d.startDate && d.endDate) {
-        return new Date(d.endDate) > new Date(d.startDate);
+        return new Date(d.endDate) >= new Date(d.startDate);
       }
       return true;
     },
-    { message: 'endDate must be after startDate', path: ['endDate'] },
+    { message: 'endDate must be on or after startDate', path: ['endDate'] },
   )
   .refine((d) => (d.pricingTiers ? tiersAscending(d.pricingTiers) : true), {
     message: 'pricingTiers must be ascending by effectiveFrom',
