@@ -180,7 +180,8 @@ describe('POST /api/admin/programs', () => {
 
   it('derives programKey from label when not supplied', async () => {
     const { POST } = await import('../route');
-    const { programKey: _pk, ...withoutKey } = validCreateBody;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { programKey, ...withoutKey } = validCreateBody;
     const res = await POST(makeRequest('POST', { ...withoutKey, label: 'Gita Chanting' }, 'uid-admin'));
     expect(res.status).toBe(201);
     const body = await res.json() as { programKey: string };

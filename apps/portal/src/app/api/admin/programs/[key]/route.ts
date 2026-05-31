@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { revalidateTag } from 'next/cache';
-import { portalFirestore, FieldValue, Timestamp } from '@cmt/firebase-shared/admin/firestore';
+import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
 import { UpdateProgramSchema, isAdmin } from '@cmt/shared-domain';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
 import { getProgram } from '@/features/setu/programs/get-programs';
