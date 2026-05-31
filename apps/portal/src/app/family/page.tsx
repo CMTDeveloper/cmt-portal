@@ -12,6 +12,9 @@ import { paymentSourceOf } from '@cmt/shared-domain';
 import { getLegacyPaymentStatus } from '@/features/setu/donations/legacy-payment';
 import { getUpcoming, getClassDatesHeld, type CalendarEntry } from '@/features/setu/calendar/calendar';
 import { getCheckInAttendance, summarizeFamilyCheckIns, type CheckInSummary } from '@/features/setu/attendance/check-in-attendance';
+import { listPrograms } from '@/features/setu/programs/get-programs';
+import { deriveProgramCards } from './_helpers/derive-program-cards';
+import type { ProgramDoc } from '@cmt/shared-domain';
 
 function torontoYmd(d: Date): string {
   return new Intl.DateTimeFormat('en-CA', {
@@ -74,6 +77,9 @@ export default async function FamilyDashboardPage() {
   // 2025-26 cutover year), payment status comes from the prod RTDB roster.
   let isLegacyPeriod = false;
   let legacyPaid = false;
+  // Per-program dashboard cards (Phase F). BV is rendered with its own bespoke
+  // card; every OTHER active enrollment gets a simple generic card below it.
+  let otherProgramCards: ReturnType<typeof deriveProgramCards> = [];
 
   if (flags.setuAuth) {
     const data = await getCurrentFamily();
@@ -88,38 +94,44 @@ export default async function FamilyDashboardPage() {
       displayMembers = data.members.map((m) => ({ name: `${m.firstName} ${m.lastName}` }));
       childCount = data.members.filter((m) => m.type === 'Child').length;
 
-      const [enrollments, donations] = await Promise.all([
+      const [enrollments, donations, allPrograms] = await Promise.all([
         getEnrollments(data.family.fid),
         getDonations(data.family.fid),
+        listPrograms(),
       ]);
+      const programsById = new Map<string, ProgramDoc>(allPrograms.map((p) => [p.programKey, p]));
       const activeEnrollment = enrollments.find((e) => e.status === 'active') ?? null;
       isEnrolled = activeEnrollment !== null;
       if (activeEnrollment) {
-        enrollPeriodLabel = activeEnrollment.periodLabel;
+        enrollPeriodLabel = activeEnrollment.termLabel;
         suggestedAmount = activeEnrollment.effectiveSuggestedAmount;
         givenForPeriod = donations
           .filter((d) => d.status === 'completed' && d.eid === activeEnrollment.eid)
           .reduce((s, d) => s + d.amountCAD, 0);
         donateUrl = `/family/donate?eid=${activeEnrollment.eid}`;
 
-        if (activeEnrollment.period && paymentSourceOf(activeEnrollment.period) === 'legacy') {
+        if (activeEnrollment.offering && paymentSourceOf({ ...(activeEnrollment.offering.paymentSource !== undefined ? { paymentSource: activeEnrollment.offering.paymentSource } : {}) }) === 'legacy') {
           isLegacyPeriod = true;
           legacyPaid = (await getLegacyPaymentStatus(data.family.legacyFid)) === 'paid';
         }
       }
 
+      // All active program cards except bala-vihar (which has its own bespoke card).
+      const allCards = deriveProgramCards(enrollments, programsById);
+      otherProgramCards = allCards.filter((c) => c.programKey !== 'bala-vihar');
+
       const { upcoming } = await getUpcoming(data.family.location, undefined, 3);
       upcomingEntries = upcoming;
 
-      // Scope attendance to the ENROLLED period's window so a prior year's
+      // Scope attendance to the ENROLLED offering's window so a prior year's
       // check-ins don't show under this year's enrollment. (UAT note: the
       // family-check-ins snapshot is currently 2024-only; in prod it's live.)
       const rawCheckIns = await getCheckInAttendance(data.family.legacyFid);
-      const period = activeEnrollment?.period ?? null;
-      const scoped = period
+      const offering = activeEnrollment?.offering ?? null;
+      const scoped = offering
         ? rawCheckIns.filter((r) => {
-            const start = torontoYmd(period.startDate);
-            const end = torontoYmd(period.endDate);
+            const start = torontoYmd(offering.startDate);
+            const end = offering.endDate ? torontoYmd(offering.endDate) : '9999-12-31';
             return r.date >= start && r.date <= end;
           })
         : rawCheckIns;
@@ -252,6 +264,24 @@ export default async function FamilyDashboardPage() {
               )}
             </div>
 
+            {/* Generic cards for non-BV active enrollments (Phase F) */}
+            {otherProgramCards.map((card) => (
+              <div key={card.eid} className="card" style={{ padding: 16, marginBottom: 12 }}>
+                <div className="between" style={{ marginBottom: 10 }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink)' }}>{card.label}{card.termLabel ? ` · ${card.termLabel}` : ''}</span>
+                  <span className="pill" style={{ background: 'var(--accentSoft)', color: 'var(--accentDeep)' }}>Enrolled</span>
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 10 }}>
+                  {card.showDonation
+                    ? 'See dashboard for donation details.'
+                    : 'No donation required for this program.'}
+                </div>
+                <Link href={`/family/enroll/${card.programKey}`} className="btn btn--s" style={{ fontSize: 12, textDecoration: 'none', display: 'inline-block' }}>
+                  View enrollment →
+                </Link>
+              </div>
+            ))}
+
             <div className="card" style={{ padding: 16, marginBottom: 12 }}>
               <div className="between" style={{ marginBottom: 12 }}>
                 <span style={{ fontSize: 12, fontWeight: 600 }}>Upcoming</span>
@@ -308,6 +338,7 @@ export default async function FamilyDashboardPage() {
             <h1 style={{ fontSize: 32, fontWeight: 600, marginTop: 4, letterSpacing: '-0.02em' }}>{firstName ? `Hari OM, ${firstName}.` : 'Hari OM!'}</h1>
           </div>
           <div className="row" style={{ gap: 10 }}>
+            <Link href="/family/programs" className="btn btn--s" style={{ textDecoration: 'none' }}>Programs</Link>
             {showGive && <Link href={donateUrl} className="btn btn--p">Give donation</Link>}
           </div>
         </header>
@@ -431,6 +462,28 @@ export default async function FamilyDashboardPage() {
             </div>
           </Suspense>
         </div>
+
+        {/* Generic cards for non-BV active enrollments (Phase F) */}
+        {otherProgramCards.length > 0 && (
+          <div style={{ marginTop: 18, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
+            {otherProgramCards.map((card) => (
+              <div key={card.eid} className="card" style={{ padding: 20 }}>
+                <div className="between" style={{ marginBottom: 10 }}>
+                  <h3 style={{ fontSize: 14, fontWeight: 600 }}>{card.label}{card.termLabel ? ` · ${card.termLabel}` : ''}</h3>
+                  <span className="pill" style={{ background: 'var(--accentSoft)', color: 'var(--accentDeep)' }}>Enrolled</span>
+                </div>
+                <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 14 }}>
+                  {card.showDonation
+                    ? 'See dashboard for donation details.'
+                    : 'No donation required for this program.'}
+                </div>
+                <Link href={`/family/enroll/${card.programKey}`} className="btn btn--s" style={{ textDecoration: 'none', display: 'inline-block' }}>
+                  View enrollment →
+                </Link>
+              </div>
+            ))}
+          </div>
+        )}
 
         <div className="card" style={{ padding: 24, marginTop: 18 }}>
           <div className="between" style={{ marginBottom: 16 }}>
