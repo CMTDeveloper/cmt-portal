@@ -27,13 +27,13 @@ export async function POST(req: Request) {
     );
   }
 
-  const { fid, pid } = parsed.data;
+  const { fid, oid } = parsed.data;
 
   let result: Awaited<ReturnType<typeof enrollFamily>>;
   try {
     result = await enrollFamily({
       fid,
-      pid,
+      oid,
       enrolledVia: 'welcome-team',
       enrolledByMid: null,
     });
@@ -42,17 +42,17 @@ export async function POST(req: Request) {
     if (msg === 'family-not-found') {
       return NextResponse.json({ error: 'family-not-found' }, { status: 404 });
     }
-    if (msg === 'period-not-found') {
-      return NextResponse.json({ error: 'period-not-found' }, { status: 404 });
+    if (msg === 'offering-not-found') {
+      return NextResponse.json({ error: 'offering-not-found' }, { status: 404 });
     }
-    if (msg === 'period-disabled') {
-      return NextResponse.json({ error: 'period-disabled' }, { status: 422 });
+    if (msg === 'offering-disabled') {
+      return NextResponse.json({ error: 'offering-disabled' }, { status: 422 });
     }
-    if (msg === 'period-not-yet-open') {
-      return NextResponse.json({ error: 'period-not-yet-open' }, { status: 422 });
+    if (msg === 'offering-not-yet-open') {
+      return NextResponse.json({ error: 'offering-not-yet-open' }, { status: 422 });
     }
-    if (msg === 'period-expired') {
-      return NextResponse.json({ error: 'period-expired' }, { status: 422 });
+    if (msg === 'offering-expired') {
+      return NextResponse.json({ error: 'offering-expired' }, { status: 422 });
     }
     throw err;
   }

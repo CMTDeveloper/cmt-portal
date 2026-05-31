@@ -66,8 +66,8 @@ import { PATCH as welcomeOverridePATCH } from '../../welcome/enrollments/[eid]/o
 // ── Fixtures ───────────────────────────────────────────────────────────────────
 
 const FID = 'CMT-AAAA1111';
-const PID = 'bv-brampton-fall-2026';
-const EID = `${FID}-${PID}`;
+const OID = 'bala-vihar-brampton-fall-2026';
+const EID = `${FID}-${OID}`;
 const MID = `${FID}-01`;
 
 const NOW = new Date();
@@ -75,15 +75,16 @@ const PAST = new Date(NOW.getTime() - 86400_000 * 30);
 const PAST_FAR = new Date(NOW.getTime() - 86400_000 * 60);
 const FUTURE = new Date(NOW.getTime() + 86400_000 * 30);
 
-const ACTIVE_PERIOD = {
-  pid: PID,
+const ACTIVE_OFFERING = {
+  oid: OID,
   programKey: 'bala-vihar',
   programLabel: 'Bala Vihar',
   location: 'Brampton',
-  periodLabel: 'Fall 2026',
+  termLabel: 'Fall 2026',
+  termType: 'term',
   startDate: { toDate: () => PAST },
   endDate: { toDate: () => FUTURE },
-  // Tier effectiveFrom in the far past so resolveSuggestedAmount(period, now) = 500
+  // Tier effectiveFrom in the far past so resolveSuggestedAmount(offering, now) = 500
   pricingTiers: [{ effectiveFrom: '2020-01-01', amountCAD: 500, label: 'Full year' }],
   enabled: true,
   createdAt: { toDate: () => PAST },
@@ -95,14 +96,15 @@ const ACTIVE_PERIOD = {
 const ACTIVE_ENROLLMENT = {
   eid: EID,
   fid: FID,
-  pid: PID,
+  oid: OID,
+  programKey: 'bala-vihar',
   programLabel: 'Bala Vihar',
-  periodLabel: 'Fall 2026',
+  termLabel: 'Fall 2026',
   location: 'Brampton',
   enrolledAt: { toDate: () => PAST },
   enrolledVia: 'family-initiated',
   enrolledByMid: MID,
-  childrenMids: [],
+  enrolledMids: [],
   suggestedAmountSnapshot: 500,
   suggestedAmountOverride: null,
   status: 'active',
@@ -154,34 +156,34 @@ function makeCtx<K extends string>(key: K, value: string): RouteCtx<K> {
 
 function setupEnrollTransaction({
   familyExists = true,
-  periodExists = true,
-  periodEnabled = true,
-  periodCurrent = true,
-  periodFuture = false,
-  periodExpired = false,
+  offeringExists = true,
+  offeringEnabled = true,
+  offeringCurrent = true,
+  offeringFuture = false,
+  offeringExpired = false,
   enrollmentExists = false,
   enrollmentStatus = 'active',
   childMids = [] as string[],
 } = {}) {
   mockRunTransaction.mockImplementation(async (fn: (txn: unknown) => Promise<unknown>) => {
-    let period = ACTIVE_PERIOD;
-    if (periodFuture) {
-      period = { ...ACTIVE_PERIOD, startDate: { toDate: () => FUTURE }, endDate: { toDate: () => new Date(FUTURE.getTime() + 86400_000 * 30) } };
-    } else if (periodExpired) {
-      period = { ...ACTIVE_PERIOD, startDate: { toDate: () => PAST_FAR }, endDate: { toDate: () => PAST } };
-    } else if (!periodCurrent) {
+    let offering = ACTIVE_OFFERING;
+    if (offeringFuture) {
+      offering = { ...ACTIVE_OFFERING, startDate: { toDate: () => FUTURE }, endDate: { toDate: () => new Date(FUTURE.getTime() + 86400_000 * 30) } };
+    } else if (offeringExpired) {
+      offering = { ...ACTIVE_OFFERING, startDate: { toDate: () => PAST_FAR }, endDate: { toDate: () => PAST } };
+    } else if (!offeringCurrent) {
       // legacy: treated as future (startDate > now)
-      period = { ...ACTIVE_PERIOD, startDate: { toDate: () => FUTURE }, endDate: { toDate: () => FUTURE } };
+      offering = { ...ACTIVE_OFFERING, startDate: { toDate: () => FUTURE }, endDate: { toDate: () => FUTURE } };
     }
 
     const membersDocs = childMids.map((mid) => ({ data: () => ({ type: 'Child', mid }) }));
 
     // Call order from enroll-family.ts:
-    //   Promise.all([period, enrollment, family]) → calls 1, 2, 3 (in parallel, resolved in any order)
-    //   members subcollection query               → call 4
+    //   Promise.all([offering, enrollment, family]) → calls 1, 2, 3 (in parallel, resolved in any order)
+    //   members subcollection query                 → call 4
     const txn = {
       get: vi.fn()
-        .mockResolvedValueOnce({ exists: periodExists, data: () => ({ ...period, enabled: periodEnabled }) })
+        .mockResolvedValueOnce({ exists: offeringExists, data: () => ({ ...offering, enabled: offeringEnabled }) })
         .mockResolvedValueOnce({ exists: enrollmentExists, data: () => ({ ...ACTIVE_ENROLLMENT, status: enrollmentStatus }) })
         .mockResolvedValueOnce({ exists: familyExists })
         .mockResolvedValue({ docs: membersDocs, size: membersDocs.length }),
@@ -228,8 +230,8 @@ describe('GET /api/setu/enrollments', () => {
       empty: false,
       docs: [{ data: () => ACTIVE_ENROLLMENT }],
     });
-    // Period lookup
-    mockDocGet.mockResolvedValue({ exists: true, data: () => ACTIVE_PERIOD });
+    // Offering lookup (by oid)
+    mockDocGet.mockResolvedValue({ exists: true, data: () => ACTIVE_OFFERING });
 
     const res = await enrollmentsGET(makeRequest('GET', '/api/setu/enrollments', null, managerHeaders()));
     expect(res.status).toBe(200);
@@ -244,7 +246,7 @@ describe('GET /api/setu/enrollments', () => {
       empty: false,
       docs: [{ data: () => enrollmentWithOverride }],
     });
-    mockDocGet.mockResolvedValue({ exists: true, data: () => ACTIVE_PERIOD });
+    mockDocGet.mockResolvedValue({ exists: true, data: () => ACTIVE_OFFERING });
 
     const res = await enrollmentsGET(makeRequest('GET', '/api/setu/enrollments', null, managerHeaders()));
     const body = await res.json() as { enrollments: { effectiveSuggestedAmount: number }[] };
@@ -278,7 +280,7 @@ describe('POST /api/setu/enrollments', () => {
     setupEnrollTransaction();
 
     const res = await enrollmentsPOST(
-      makeRequest('POST', '/api/setu/enrollments', { pid: PID }, managerHeaders()),
+      makeRequest('POST', '/api/setu/enrollments', { oid: OID }, managerHeaders()),
     );
     expect(res.status).toBe(201);
     const body = await res.json() as { eid: string; suggestedAmount: number; donateUrl: string };
@@ -291,7 +293,7 @@ describe('POST /api/setu/enrollments', () => {
     setupEnrollTransaction({ enrollmentExists: true, enrollmentStatus: 'active' });
 
     const res = await enrollmentsPOST(
-      makeRequest('POST', '/api/setu/enrollments', { pid: PID }, managerHeaders()),
+      makeRequest('POST', '/api/setu/enrollments', { oid: OID }, managerHeaders()),
     );
     expect(res.status).toBe(200);
     const body = await res.json() as { eid: string };
@@ -304,60 +306,60 @@ describe('POST /api/setu/enrollments', () => {
     setupEnrollTransaction();
 
     const res = await enrollmentsPOST(
-      makeRequest('POST', '/api/setu/enrollments', { pid: PID }, managerHeaders()),
+      makeRequest('POST', '/api/setu/enrollments', { oid: OID }, managerHeaders()),
     );
     const body = await res.json() as { suggestedAmount: number };
     // The single far-past tier resolves to 500 regardless of enrollment date.
     expect(body.suggestedAmount).toBe(500);
   });
 
-  it('returns 404 when period does not exist', async () => {
-    setupEnrollTransaction({ periodExists: false });
+  it('returns 404 when offering does not exist', async () => {
+    setupEnrollTransaction({ offeringExists: false });
 
     const res = await enrollmentsPOST(
-      makeRequest('POST', '/api/setu/enrollments', { pid: PID }, managerHeaders()),
+      makeRequest('POST', '/api/setu/enrollments', { oid: OID }, managerHeaders()),
     );
     expect(res.status).toBe(404);
     const body = await res.json() as { error: string };
-    expect(body.error).toBe('period-not-found');
+    expect(body.error).toBe('offering-not-found');
   });
 
-  it('returns 422 when period is disabled', async () => {
-    setupEnrollTransaction({ periodEnabled: false });
+  it('returns 422 when offering is disabled', async () => {
+    setupEnrollTransaction({ offeringEnabled: false });
 
     const res = await enrollmentsPOST(
-      makeRequest('POST', '/api/setu/enrollments', { pid: PID }, managerHeaders()),
+      makeRequest('POST', '/api/setu/enrollments', { oid: OID }, managerHeaders()),
     );
     expect(res.status).toBe(422);
     const body = await res.json() as { error: string };
-    expect(body.error).toBe('period-disabled');
+    expect(body.error).toBe('offering-disabled');
   });
 
-  it('returns 422 with period-not-yet-open when period starts in the future', async () => {
-    setupEnrollTransaction({ periodFuture: true });
+  it('returns 422 with offering-not-yet-open when offering starts in the future', async () => {
+    setupEnrollTransaction({ offeringFuture: true });
 
     const res = await enrollmentsPOST(
-      makeRequest('POST', '/api/setu/enrollments', { pid: PID }, managerHeaders()),
+      makeRequest('POST', '/api/setu/enrollments', { oid: OID }, managerHeaders()),
     );
     expect(res.status).toBe(422);
     const body = await res.json() as { error: string };
-    expect(body.error).toBe('period-not-yet-open');
+    expect(body.error).toBe('offering-not-yet-open');
   });
 
-  it('returns 422 with period-expired when period end date is in the past', async () => {
-    setupEnrollTransaction({ periodExpired: true });
+  it('returns 422 with offering-expired when offering end date is in the past', async () => {
+    setupEnrollTransaction({ offeringExpired: true });
 
     const res = await enrollmentsPOST(
-      makeRequest('POST', '/api/setu/enrollments', { pid: PID }, managerHeaders()),
+      makeRequest('POST', '/api/setu/enrollments', { oid: OID }, managerHeaders()),
     );
     expect(res.status).toBe(422);
     const body = await res.json() as { error: string };
-    expect(body.error).toBe('period-expired');
+    expect(body.error).toBe('offering-expired');
   });
 
   it('returns 403 for family-member (non-manager)', async () => {
     const res = await enrollmentsPOST(
-      makeRequest('POST', '/api/setu/enrollments', { pid: PID }, memberHeaders()),
+      makeRequest('POST', '/api/setu/enrollments', { oid: OID }, memberHeaders()),
     );
     expect(res.status).toBe(403);
   });
@@ -365,19 +367,19 @@ describe('POST /api/setu/enrollments', () => {
   it('multi-role: family-member with extraRoles=family-manager can enroll (201)', async () => {
     setupEnrollTransaction();
     const res = await enrollmentsPOST(
-      makeRequest('POST', '/api/setu/enrollments', { pid: PID }, managerViaExtraRoleHeaders()),
+      makeRequest('POST', '/api/setu/enrollments', { oid: OID }, managerViaExtraRoleHeaders()),
     );
     expect(res.status).toBe(201);
   });
 
   it('returns 401 when no auth headers', async () => {
     const res = await enrollmentsPOST(
-      makeRequest('POST', '/api/setu/enrollments', { pid: PID }),
+      makeRequest('POST', '/api/setu/enrollments', { oid: OID }),
     );
     expect(res.status).toBe(401);
   });
 
-  it('returns 400 on missing pid', async () => {
+  it('returns 400 on missing oid', async () => {
     const res = await enrollmentsPOST(
       makeRequest('POST', '/api/setu/enrollments', {}, managerHeaders()),
     );
@@ -387,7 +389,7 @@ describe('POST /api/setu/enrollments', () => {
   it('returns 404 when feature flag off', async () => {
     flagsMock.setuAuth = false;
     const res = await enrollmentsPOST(
-      makeRequest('POST', '/api/setu/enrollments', { pid: PID }, managerHeaders()),
+      makeRequest('POST', '/api/setu/enrollments', { oid: OID }, managerHeaders()),
     );
     expect(res.status).toBe(404);
   });
@@ -471,7 +473,7 @@ describe('POST /api/welcome/enrollments', () => {
     setupEnrollTransaction();
 
     const res = await welcomeEnrollPOST(
-      makeRequest('POST', '/api/welcome/enrollments', { fid: FID, pid: PID }, welcomeHeaders()),
+      makeRequest('POST', '/api/welcome/enrollments', { fid: FID, oid: OID }, welcomeHeaders()),
     );
     expect(res.status).toBe(201);
     const body = await res.json() as { eid: string };
@@ -482,14 +484,14 @@ describe('POST /api/welcome/enrollments', () => {
     setupEnrollTransaction({ enrollmentExists: true, enrollmentStatus: 'active' });
 
     const res = await welcomeEnrollPOST(
-      makeRequest('POST', '/api/welcome/enrollments', { fid: FID, pid: PID }, welcomeHeaders()),
+      makeRequest('POST', '/api/welcome/enrollments', { fid: FID, oid: OID }, welcomeHeaders()),
     );
     expect(res.status).toBe(200);
   });
 
   it('returns 403 for family-manager calling welcome endpoint', async () => {
     const res = await welcomeEnrollPOST(
-      makeRequest('POST', '/api/welcome/enrollments', { fid: FID, pid: PID }, managerHeaders()),
+      makeRequest('POST', '/api/welcome/enrollments', { fid: FID, oid: OID }, managerHeaders()),
     );
     expect(res.status).toBe(403);
   });
@@ -497,14 +499,14 @@ describe('POST /api/welcome/enrollments', () => {
   it('multi-role: admin (primary role=admin) can enroll via welcome endpoint', async () => {
     setupEnrollTransaction();
     const res = await welcomeEnrollPOST(
-      makeRequest('POST', '/api/welcome/enrollments', { fid: FID, pid: PID }, adminAsWelcomeHeaders()),
+      makeRequest('POST', '/api/welcome/enrollments', { fid: FID, oid: OID }, adminAsWelcomeHeaders()),
     );
     expect(res.status).toBe(201);
   });
 
-  it('returns 400 on missing fid or pid', async () => {
+  it('returns 400 on missing fid or oid', async () => {
     const res = await welcomeEnrollPOST(
-      makeRequest('POST', '/api/welcome/enrollments', { pid: PID }, welcomeHeaders()),
+      makeRequest('POST', '/api/welcome/enrollments', { oid: OID }, welcomeHeaders()),
     );
     expect(res.status).toBe(400);
   });
@@ -512,7 +514,7 @@ describe('POST /api/welcome/enrollments', () => {
   it('returns 404 when feature flag off', async () => {
     flagsMock.setuAuth = false;
     const res = await welcomeEnrollPOST(
-      makeRequest('POST', '/api/welcome/enrollments', { fid: FID, pid: PID }, welcomeHeaders()),
+      makeRequest('POST', '/api/welcome/enrollments', { fid: FID, oid: OID }, welcomeHeaders()),
     );
     expect(res.status).toBe(404);
   });
