@@ -5,7 +5,7 @@ import { readSessionFromHeaders } from '@/lib/auth/headers';
 import { listPrograms } from '@/features/setu/programs/get-programs';
 import { getOpenOfferings } from '@/features/setu/enrollment/get-open-offerings';
 import { getFamilyByFid } from '@/features/setu/members/get-family-by-fid';
-import type { OfferingDoc } from '@cmt/shared-domain';
+import type { OfferingDoc, Location } from '@cmt/shared-domain';
 
 function serializeOffering(o: OfferingDoc) {
   return {
@@ -58,10 +58,13 @@ export async function GET(req: Request) {
   }> = [];
 
   for (const program of activePrograms) {
-    const openOfferings = await getOpenOfferings({
-      programKey: program.programKey,
-      location: familyLocation as Parameters<typeof getOpenOfferings>[0]['location'],
-    });
+    // exactOptionalPropertyTypes: only pass location when non-null so we don't
+    // assign undefined to an optional that only accepts Location | null.
+    const openOfferings = await getOpenOfferings(
+      familyLocation != null
+        ? { programKey: program.programKey, location: familyLocation as Location }
+        : { programKey: program.programKey },
+    );
 
     if (openOfferings.length === 0) continue;
 

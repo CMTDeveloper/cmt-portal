@@ -1,8 +1,8 @@
 /**
- * E2E: Donation periods CRUD
+ * E2E: Offerings CRUD (formerly donation-periods)
  *
- * Exercises GET/POST/PATCH /api/admin/donation-periods against real UAT Firestore.
- * All test period docs carry `_test: true`. afterAll runs cleanupTestData().
+ * Exercises GET/POST/PATCH /api/admin/offerings against real UAT Firestore.
+ * All test offering docs carry `_test: true`. afterAll runs cleanupTestData().
  */
 
 import { describe, it, expect, afterAll, vi } from 'vitest';
@@ -20,6 +20,13 @@ vi.mock('next/headers', () => ({
   headers: vi.fn(() => new Headers()),
 }));
 
+// getProgram is called by the POST offerings route to resolve programLabel
+vi.mock('@/features/setu/programs/get-programs', () => ({
+  getProgram: vi.fn().mockResolvedValue({ programKey: 'bala-vihar', label: 'Bala Vihar', status: 'active' }),
+  listPrograms: vi.fn().mockResolvedValue([]),
+  assertProgramActive: vi.fn().mockResolvedValue({ programKey: 'bala-vihar', status: 'active' }),
+}));
+
 const hasUatCreds = Boolean(
   process.env.PORTAL_FIREBASE_PROJECT_ID === 'chinmaya-setu-uat' &&
     process.env.PORTAL_FIREBASE_CLIENT_EMAIL &&
@@ -27,21 +34,21 @@ const hasUatCreds = Boolean(
 );
 
 (hasUatCreds ? describe : describe.skip)(
-  'E2E: Donation periods CRUD — real UAT Firestore',
+  'E2E: Offerings CRUD — real UAT Firestore',
   () => {
     const RUN_ID = (Date.now().toString(36) + Math.random().toString(36).slice(2, 6)).toUpperCase();
 
-    // Dates well in the future so the period is always "active" during test runs
+    // Dates well in the future so the offering is always "active" during test runs
     const START_DATE = '2030-09-01T04:00:00.000Z';
     const END_DATE = '2030-12-31T04:59:59.000Z';
 
-    // Derive the same pid the route derives so we can read the Firestore doc directly
-    const PERIOD_LABEL = `E2E Test ${RUN_ID}`;
+    // Derive the same oid the route derives so we can read the Firestore doc directly
+    const TERM_LABEL = `E2E Test ${RUN_ID}`;
     const LOCATION = 'Mississauga';
     const PROGRAM_KEY = 'bala-vihar';
-    const EXPECTED_PID = `${PROGRAM_KEY}-${LOCATION.toLowerCase()}-e2e-test-${RUN_ID.toLowerCase()}`;
+    const EXPECTED_OID = `${PROGRAM_KEY}-${LOCATION.toLowerCase()}-e2e-test-${RUN_ID.toLowerCase()}`;
 
-    let createdPid: string;
+    let createdOid: string;
 
     const ADMIN_UID = `e2e-admin-${RUN_ID}`;
 
@@ -71,47 +78,49 @@ const hasUatCreds = Boolean(
       try {
         await cleanupTestData();
       } catch (err) {
-        console.error('[e2e donation-periods] cleanup error (non-fatal):', err);
+        console.error('[e2e offerings] cleanup error (non-fatal):', err);
       }
     });
 
-    it('POST /api/admin/donation-periods — creates period, returns 201 + pid', async () => {
-      const { POST } = await import('@/app/api/admin/donation-periods/route');
+    it('POST /api/admin/offerings — creates offering, returns 201 + oid', async () => {
+      const { POST } = await import('@/app/api/admin/offerings/route');
 
       const res = await POST(
-        makeAdminRequest('POST', '/api/admin/donation-periods', {
+        makeAdminRequest('POST', '/api/admin/offerings', {
           programKey: PROGRAM_KEY,
           location: LOCATION,
-          periodLabel: PERIOD_LABEL,
+          termLabel: TERM_LABEL,
+          termType: 'term',
           startDate: START_DATE,
           endDate: END_DATE,
           pricingTiers: [
-            { effectiveFrom: '2027-09-01', amountCAD: 500, label: 'Full year' },
-            { effectiveFrom: '2027-12-01', amountCAD: 300, label: 'Joined winter' },
+            { effectiveFrom: '2030-09-01', amountCAD: 500, label: 'Full year' },
+            { effectiveFrom: '2030-12-01', amountCAD: 300, label: 'Joined winter' },
           ],
           enabled: true,
         }),
       );
 
       expect(res.status).toBe(201);
-      const body = (await res.json()) as { pid: string; overlapWarning: boolean };
-      expect(body.pid).toBe(EXPECTED_PID);
+      const body = (await res.json()) as { oid: string; overlapWarning: boolean };
+      expect(body.oid).toBe(EXPECTED_OID);
       expect(typeof body.overlapWarning).toBe('boolean');
-      createdPid = body.pid;
+      createdOid = body.oid;
     });
 
-    it('period doc exists in Firestore with correct shape', async () => {
-      expect(createdPid).toBeTruthy();
+    it('offering doc exists in Firestore with correct shape', async () => {
+      expect(createdOid).toBeTruthy();
       const { portalFirestore } = await import('@cmt/firebase-shared/admin/firestore');
       const db = portalFirestore();
 
-      const snap = await db.collection('donationPeriods').doc(createdPid).get();
+      const snap = await db.collection('offerings').doc(createdOid).get();
       expect(snap.exists).toBe(true);
 
       const data = snap.data() as Record<string, unknown>;
       expect(data['programKey']).toBe(PROGRAM_KEY);
       expect(data['location']).toBe(LOCATION);
-      expect(data['periodLabel']).toBe(PERIOD_LABEL);
+      expect(data['termLabel']).toBe(TERM_LABEL);
+      expect(data['termType']).toBe('term');
       expect(Array.isArray(data['pricingTiers'])).toBe(true);
       expect((data['pricingTiers'] as unknown[]).length).toBe(2);
       expect(data['enabled']).toBe(true);
@@ -121,40 +130,40 @@ const hasUatCreds = Boolean(
       await snap.ref.set({ _test: true }, { merge: true });
     });
 
-    it('GET /api/admin/donation-periods — returns created period in list', async () => {
-      expect(createdPid).toBeTruthy();
-      const { GET } = await import('@/app/api/admin/donation-periods/route');
+    it('GET /api/admin/offerings — returns created offering in list', async () => {
+      expect(createdOid).toBeTruthy();
+      const { GET } = await import('@/app/api/admin/offerings/route');
 
-      const res = await GET(makeAdminRequest('GET', '/api/admin/donation-periods'));
+      const res = await GET(makeAdminRequest('GET', '/api/admin/offerings'));
       expect(res.status).toBe(200);
 
-      const body = (await res.json()) as { periods: Array<{ pid: string }> };
-      const pids = body.periods.map((p) => p.pid);
-      expect(pids).toContain(createdPid);
+      const body = (await res.json()) as { offerings: Array<{ oid: string }> };
+      const oids = body.offerings.map((o) => o.oid);
+      expect(oids).toContain(createdOid);
     });
 
-    it('PATCH /api/admin/donation-periods/[pid] — updates pricingTiers, returns 200', async () => {
-      expect(createdPid).toBeTruthy();
-      const { PATCH } = await import('@/app/api/admin/donation-periods/[pid]/route');
+    it('PATCH /api/admin/offerings/[oid] — updates pricingTiers, returns 200', async () => {
+      expect(createdOid).toBeTruthy();
+      const { PATCH } = await import('@/app/api/admin/offerings/[oid]/route');
 
       const res = await PATCH(
-        makeAdminRequest('PATCH', `/api/admin/donation-periods/${createdPid}`, {
-          pricingTiers: [{ effectiveFrom: '2027-09-01', amountCAD: 750, label: 'Full year' }],
+        makeAdminRequest('PATCH', `/api/admin/offerings/${createdOid}`, {
+          pricingTiers: [{ effectiveFrom: '2030-09-01', amountCAD: 750, label: 'Full year' }],
         }),
-        { params: Promise.resolve({ pid: createdPid }) },
+        { params: Promise.resolve({ oid: createdOid }) },
       );
 
       expect(res.status).toBe(200);
-      const body = (await res.json()) as { pid: string };
-      expect(body.pid).toBe(createdPid);
+      const body = (await res.json()) as { oid: string };
+      expect(body.oid).toBe(createdOid);
     });
 
     it('updated pricingTiers is persisted in Firestore', async () => {
-      expect(createdPid).toBeTruthy();
+      expect(createdOid).toBeTruthy();
       const { portalFirestore } = await import('@cmt/firebase-shared/admin/firestore');
       const db = portalFirestore();
 
-      const snap = await db.collection('donationPeriods').doc(createdPid).get();
+      const snap = await db.collection('offerings').doc(createdOid).get();
       expect(snap.exists).toBe(true);
       const data = snap.data() as Record<string, unknown>;
       const tiers = data['pricingTiers'] as Array<{ amountCAD: number }>;
@@ -163,45 +172,46 @@ const hasUatCreds = Boolean(
       expect(data['updatedBy']).toBe(ADMIN_UID);
     });
 
-    it('PATCH — disabling period persists enabled:false', async () => {
-      expect(createdPid).toBeTruthy();
-      const { PATCH } = await import('@/app/api/admin/donation-periods/[pid]/route');
+    it('PATCH — disabling offering persists enabled:false', async () => {
+      expect(createdOid).toBeTruthy();
+      const { PATCH } = await import('@/app/api/admin/offerings/[oid]/route');
 
       const res = await PATCH(
-        makeAdminRequest('PATCH', `/api/admin/donation-periods/${createdPid}`, {
+        makeAdminRequest('PATCH', `/api/admin/offerings/${createdOid}`, {
           enabled: false,
         }),
-        { params: Promise.resolve({ pid: createdPid }) },
+        { params: Promise.resolve({ oid: createdOid }) },
       );
       expect(res.status).toBe(200);
 
       const { portalFirestore } = await import('@cmt/firebase-shared/admin/firestore');
-      const snap = await portalFirestore().collection('donationPeriods').doc(createdPid).get();
+      const snap = await portalFirestore().collection('offerings').doc(createdOid).get();
       const data = snap.data() as Record<string, unknown>;
       expect(data['enabled']).toBe(false);
     });
 
-    it('PATCH — returns 404 for a non-existent pid', async () => {
-      const { PATCH } = await import('@/app/api/admin/donation-periods/[pid]/route');
+    it('PATCH — returns 404 for a non-existent oid', async () => {
+      const { PATCH } = await import('@/app/api/admin/offerings/[oid]/route');
 
       const res = await PATCH(
-        makeAdminRequest('PATCH', '/api/admin/donation-periods/does-not-exist', { enabled: true }),
-        { params: Promise.resolve({ pid: 'does-not-exist' }) },
+        makeAdminRequest('PATCH', '/api/admin/offerings/does-not-exist', { enabled: true }),
+        { params: Promise.resolve({ oid: 'does-not-exist' }) },
       );
       expect(res.status).toBe(404);
     });
 
     it('POST without x-portal-uid returns 401', async () => {
-      const { POST } = await import('@/app/api/admin/donation-periods/route');
+      const { POST } = await import('@/app/api/admin/offerings/route');
 
       const res = await POST(
-        makeNonAdminRequest('POST', '/api/admin/donation-periods', {
+        makeNonAdminRequest('POST', '/api/admin/offerings', {
           programKey: PROGRAM_KEY,
           location: LOCATION,
-          periodLabel: `No Auth ${RUN_ID}`,
+          termLabel: `No Auth ${RUN_ID}`,
+          termType: 'term',
           startDate: START_DATE,
           endDate: END_DATE,
-          pricingTiers: [{ effectiveFrom: '2027-09-01', amountCAD: 500, label: 'Full year' }],
+          pricingTiers: [{ effectiveFrom: '2030-09-01', amountCAD: 500, label: 'Full year' }],
           enabled: true,
         }),
       );
