@@ -1,5 +1,5 @@
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
-import type { EnrollmentDoc, DonationPeriodDoc } from '@cmt/shared-domain';
+import type { EnrollmentDoc, OfferingDoc } from '@cmt/shared-domain';
 
 function toDate(v: unknown): Date {
   if (v !== null && typeof v === 'object' && typeof (v as { toDate?: unknown }).toDate === 'function') {
@@ -17,28 +17,37 @@ function rawToEnrollment(data: Record<string, unknown>): EnrollmentDoc {
   };
 }
 
-function rawToPeriod(data: Record<string, unknown>): DonationPeriodDoc {
+function docToOffering(data: Record<string, unknown>): OfferingDoc {
   return {
-    ...(data as Omit<DonationPeriodDoc, 'startDate' | 'endDate' | 'createdAt' | 'updatedAt'>),
+    oid: data['oid'] as string,
+    programKey: data['programKey'] as string,
+    programLabel: data['programLabel'] as string,
+    location: (data['location'] ?? null) as OfferingDoc['location'],
+    termLabel: data['termLabel'] as string,
+    termType: data['termType'] as OfferingDoc['termType'],
     startDate: toDate(data['startDate']),
-    endDate: toDate(data['endDate']),
+    endDate: data['endDate'] != null ? toDate(data['endDate']) : null,
+    pricingTiers: (data['pricingTiers'] as OfferingDoc['pricingTiers']) ?? [],
+    ...(data['amountTiers'] !== undefined ? { amountTiers: data['amountTiers'] as number[] } : {}),
+    ...(data['paymentSource'] !== undefined ? { paymentSource: data['paymentSource'] as OfferingDoc['paymentSource'] } : {}),
+    enabled: data['enabled'] as boolean,
     createdAt: toDate(data['createdAt']),
+    createdBy: data['createdBy'] as string,
     updatedAt: toDate(data['updatedAt']),
+    updatedBy: data['updatedBy'] as string,
   };
 }
 
-export type EnrollmentWithPeriod = EnrollmentDoc & {
+export type EnrollmentWithOffering = EnrollmentDoc & {
   effectiveSuggestedAmount: number;
-  period: DonationPeriodDoc | null;
+  offering: OfferingDoc | null;
 };
 
 /**
- * Returns all enrollments for a family, joined with their donation period docs.
- * Sorted by enrolledAt DESC (index: status ASC, enrolledAt DESC is the composite
- * index; we query without status filter so Firestore uses a simple collection scan
- * ordered by enrolledAt DESC which doesn't require the composite index).
+ * Returns all enrollments for a family, joined with their offering docs.
+ * Sorted by enrolledAt DESC.
  */
-export async function getEnrollments(fid: string): Promise<EnrollmentWithPeriod[]> {
+export async function getEnrollments(fid: string): Promise<EnrollmentWithOffering[]> {
   const db = portalFirestore();
 
   const snap = await db
@@ -52,21 +61,21 @@ export async function getEnrollments(fid: string): Promise<EnrollmentWithPeriod[
 
   const enrollments = snap.docs.map((d) => rawToEnrollment(d.data() as Record<string, unknown>));
 
-  const uniquePids = [...new Set(enrollments.map((e) => e.pid))];
-  const periodDocs = await Promise.all(
-    uniquePids.map((pid) => db.collection('donationPeriods').doc(pid).get()),
+  const uniqueOids = [...new Set(enrollments.map((e) => e.oid))];
+  const offeringDocs = await Promise.all(
+    uniqueOids.map((oid) => db.collection('offerings').doc(oid).get()),
   );
 
-  const periodMap = new Map<string, DonationPeriodDoc>();
-  for (const doc of periodDocs) {
+  const offeringMap = new Map<string, OfferingDoc>();
+  for (const doc of offeringDocs) {
     if (doc.exists) {
-      periodMap.set(doc.id, rawToPeriod(doc.data() as Record<string, unknown>));
+      offeringMap.set(doc.id, docToOffering(doc.data() as Record<string, unknown>));
     }
   }
 
   return enrollments.map((e) => {
-    const period = periodMap.get(e.pid) ?? null;
+    const offering = offeringMap.get(e.oid) ?? null;
     const effectiveSuggestedAmount = e.suggestedAmountOverride ?? e.suggestedAmountSnapshot;
-    return { ...e, effectiveSuggestedAmount, period };
+    return { ...e, effectiveSuggestedAmount, offering };
   });
 }

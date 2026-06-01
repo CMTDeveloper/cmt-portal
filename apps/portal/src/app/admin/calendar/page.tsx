@@ -3,12 +3,20 @@ import Link from 'next/link';
 import { SetuIcon } from '@cmt/ui';
 import { LOCATIONS, type Location } from '@cmt/shared-domain';
 import { CalendarEditor } from '@/features/admin/calendar/calendar-editor';
+import { listPrograms } from '@/features/setu/programs/get-programs';
+import type { ProgramRow } from '@/features/admin/programs/programs-table';
 
 export const metadata = { title: 'Class calendar — CMT Portal admin' };
 
 export default async function AdminCalendarPage() {
   await connection();
   const locations = [...LOCATIONS] as Location[];
+  const programDocs = await listPrograms();
+  const programs: ProgramRow[] = programDocs.map((p) => ({
+    ...p,
+    createdAt: p.createdAt.toISOString(),
+    updatedAt: p.updatedAt.toISOString(),
+  }));
 
   return (
     <>
@@ -24,7 +32,7 @@ export default async function AdminCalendarPage() {
         </p>
       </header>
 
-      <CalendarEditor locations={locations} />
+      <CalendarEditor locations={locations} programs={programs} />
     </>
   );
 }

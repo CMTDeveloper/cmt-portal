@@ -58,11 +58,13 @@ export default async function MemberDetailPage({ params }: Props) {
       getCheckInAttendance(data.family.legacyFid),
       getEnrollments(data.family.fid),
     ]);
-    const period = enrollments.find((e) => e.status === 'active')?.period ?? null;
-    const scoped = period
+    const activeOffering = enrollments.find((e) => e.status === 'active')?.offering ?? null;
+    const scoped = activeOffering
       ? rawCheckIns.filter((r) => {
-          const start = isoToTorontoDateInput(period.startDate.toISOString());
-          const end = isoToTorontoDateInput(period.endDate.toISOString());
+          const start = isoToTorontoDateInput(activeOffering.startDate.toISOString());
+          const end = activeOffering.endDate
+            ? isoToTorontoDateInput(activeOffering.endDate.toISOString())
+            : '9999-12-31';
           return r.date >= start && r.date <= end;
         })
       : rawCheckIns;

@@ -51,10 +51,10 @@ export default async function DonatePage({
       mode = 'bala-vihar';
       resolvedEid = enrollment.eid;
       suggestedAmount = enrollment.effectiveSuggestedAmount;
-      periodLabel = enrollment.period?.periodLabel ?? null;
-      tiers = enrollment.period?.amountTiers ?? [];
+      periodLabel = enrollment.termLabel;
+      tiers = enrollment.offering?.amountTiers ?? [];
 
-      if (enrollment.period && paymentSourceOf(enrollment.period) === 'legacy') {
+      if (enrollment.offering && paymentSourceOf({ ...(enrollment.offering.paymentSource !== undefined ? { paymentSource: enrollment.offering.paymentSource } : {}) }) === 'legacy') {
         alreadyPaidLegacy = (await getLegacyPaymentStatus(family.legacyFid)) === 'paid';
       }
     }

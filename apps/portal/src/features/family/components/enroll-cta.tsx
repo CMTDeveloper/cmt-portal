@@ -5,7 +5,8 @@ import { useState } from 'react';
 import { toast } from '@cmt/ui';
 
 interface EnrollCtaProps {
-  pid: string;
+  /** The offering id (oid) to enroll the family in. */
+  oid: string;
   donationsEnabled: boolean;
 }
 
@@ -14,7 +15,7 @@ function safeFrom(path: string): string {
   return '/family/enroll';
 }
 
-export function EnrollCta({ pid, donationsEnabled }: EnrollCtaProps) {
+export function EnrollCta({ oid, donationsEnabled }: EnrollCtaProps) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [enrolled, setEnrolled] = useState(false);
@@ -25,7 +26,7 @@ export function EnrollCta({ pid, donationsEnabled }: EnrollCtaProps) {
       const res = await fetch('/api/setu/enrollments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pid }),
+        body: JSON.stringify({ oid }),
       });
 
       if (res.status === 401) {
@@ -37,10 +38,14 @@ export function EnrollCta({ pid, donationsEnabled }: EnrollCtaProps) {
 
       if (!res.ok) {
         const err = json.error;
-        if (err === 'period-disabled' || err === 'period-expired') {
-          toast.error('This period is no longer enrolling — please contact the welcome team.');
-        } else if (err === 'period-not-yet-open') {
-          toast.error('This enrollment period has not opened yet — please check back soon.');
+        if (err === 'offering-disabled') {
+          toast.error('This term is no longer enrolling — please contact the welcome team.');
+        } else if (err === 'offering-expired') {
+          toast.error('This term has ended — please contact the welcome team.');
+        } else if (err === 'offering-not-found') {
+          toast.error('This term is no longer available — please refresh and try again.');
+        } else if (err === 'program-not-available') {
+          toast.error('This program is not available right now — please check back soon.');
         } else if (err === 'family-not-found' || err === 'missing-fid') {
           console.error('[EnrollCta] unexpected error:', err);
           toast.error('Something went wrong — please sign out and sign in again.');

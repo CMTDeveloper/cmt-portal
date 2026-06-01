@@ -53,7 +53,8 @@ export async function markGuest(params: {
 
   let autoEnrolled = false;
   if (!(await hasActiveEnrollment(member.fid, level.pid))) {
-    await enrollFamilyOnFirstAttendance({ fid: member.fid, pid: level.pid, markedByTeacherUid: params.markedByUid });
+    // level.pid references the offering id (oid); FirstAttendanceEnrollParams uses oid.
+    await enrollFamilyOnFirstAttendance({ fid: member.fid, oid: level.pid, markedByTeacherUid: params.markedByUid });
     autoEnrolled = true;
   }
 

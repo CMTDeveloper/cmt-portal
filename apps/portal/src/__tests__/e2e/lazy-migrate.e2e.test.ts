@@ -1,8 +1,9 @@
 /**
  * E2E: Lazy migration
  *
- * Tests the lazyMigrateLegacyFamily Firestore-write path by mocking findFamilyById
- * with a synthetic legacy family. Does NOT write to RTDB (which could be prod).
+ * Tests the lazyMigrateLegacyFamily Firestore-write path by mocking
+ * fetchLegacyFamilyForMigration with a synthetic legacy family. Does NOT read or
+ * write RTDB (whose MASTER_FIREBASE_* creds point at prod).
  *
  * After migration, verifies:
  *   - families/{fid} doc exists with legacyFid set
@@ -19,11 +20,13 @@ const hasUatCreds =
   !!process.env['PORTAL_FIREBASE_CLIENT_EMAIL'] &&
   !!process.env['PORTAL_FIREBASE_PRIVATE_KEY'];
 
-// Mock findFamilyById so we never touch real RTDB (which may point to prod).
-// This exercises the full Firestore-write path of lazyMigrateLegacyFamily.
-const mockFindFamilyById = vi.fn();
-vi.mock('@/features/check-in/shared/rtdb/family-lookup', () => ({
-  findFamilyById: mockFindFamilyById,
+// Mock fetchLegacyFamilyForMigration so we never read the real RTDB (whose
+// MASTER_FIREBASE_* creds in .env.local point at prod). lazyMigrateLegacyFamily
+// calls this to load the legacy family; mocking it exercises the full
+// Firestore-write path against a synthetic family with zero prod access.
+const mockFetchLegacy = vi.fn();
+vi.mock('@/features/setu/registration/legacy-parser', () => ({
+  fetchLegacyFamilyForMigration: mockFetchLegacy,
 }));
 
 vi.mock('@/lib/flags', () => ({ flags: { setuAuth: true } }));
@@ -33,10 +36,10 @@ const LEGACY_FID = `TEST-LEGACY-${Date.now().toString(36).toUpperCase()}`;
 describe.skipIf(!hasUatCreds)(
   'E2E: lazyMigrateLegacyFamily — real UAT Firestore write path',
   () => {
-    // NOTE: RTDB writes are intentionally skipped. The MASTER_FIREBASE_* creds
-    // in .env.local point at prod RTDB. We cannot safely write test rows there.
-    // Instead we mock findFamilyById to return a synthetic legacy family and let
-    // lazyMigrateLegacyFamily exercise its full Firestore transaction path.
+    // NOTE: RTDB reads/writes are intentionally skipped. The MASTER_FIREBASE_*
+    // creds in .env.local point at prod RTDB. We cannot safely touch prod there.
+    // Instead we mock fetchLegacyFamilyForMigration to return a synthetic legacy
+    // family and let lazyMigrateLegacyFamily exercise its full Firestore txn path.
 
     const LEGACY_CONTACT_EMAIL = `e2e.legacy.${LEGACY_FID.toLowerCase()}@test.cmt.invalid`;
     const LEGACY_CONTACT_PHONE = `905${LEGACY_FID.slice(0, 7).replace(/[^0-9]/g, '4')}`;
@@ -53,16 +56,39 @@ describe.skipIf(!hasUatCreds)(
     });
 
     it('lazyMigrateLegacyFamily creates Firestore family + members + contactKeys', async () => {
-      mockFindFamilyById.mockResolvedValue({
-        id: LEGACY_FID,
-        name: 'Legacy Test Family',
-        contacts: [
-          { type: 'email' as const, value: LEGACY_CONTACT_EMAIL },
-          { type: 'phone' as const, value: LEGACY_CONTACT_PHONE },
+      mockFetchLegacy.mockResolvedValue({
+        legacyFid: LEGACY_FID,
+        familyName: 'Legacy Test Family',
+        location: 'Brampton',
+        primaryFirstName: 'Parent',
+        primaryLastName: 'Legacy',
+        primaryEmail: LEGACY_CONTACT_EMAIL,
+        primaryPhone: LEGACY_CONTACT_PHONE,
+        adults: [
+          {
+            firstName: 'Parent',
+            lastName: 'Legacy',
+            gender: 'PreferNotToSay' as const,
+            email: LEGACY_CONTACT_EMAIL,
+            phone: LEGACY_CONTACT_PHONE,
+            isPrimary: true,
+          },
         ],
-        students: [
-          { firstName: 'StudentOne', lastName: 'Legacy', level: 'Grade 4' },
-          { firstName: 'StudentTwo', lastName: 'Legacy', level: 'Grade 7' },
+        children: [
+          {
+            firstName: 'StudentOne',
+            lastName: 'Legacy',
+            gender: 'Male' as const,
+            schoolGrade: '4',
+            legacySid: null,
+          },
+          {
+            firstName: 'StudentTwo',
+            lastName: 'Legacy',
+            gender: 'Female' as const,
+            schoolGrade: '7',
+            legacySid: null,
+          },
         ],
       });
 
@@ -153,11 +179,16 @@ describe.skipIf(!hasUatCreds)(
     it('second call with same legacyFid returns migrated: false (idempotent)', async () => {
       expect(migratedFid).toBeTruthy();
 
-      mockFindFamilyById.mockResolvedValue({
-        id: LEGACY_FID,
-        name: 'Legacy Test Family',
-        contacts: [],
-        students: [],
+      mockFetchLegacy.mockResolvedValue({
+        legacyFid: LEGACY_FID,
+        familyName: 'Legacy Test Family',
+        location: 'Brampton',
+        primaryFirstName: 'Parent',
+        primaryLastName: 'Legacy',
+        primaryEmail: LEGACY_CONTACT_EMAIL,
+        primaryPhone: LEGACY_CONTACT_PHONE,
+        adults: [],
+        children: [],
       });
 
       const { lazyMigrateLegacyFamily } = await import(

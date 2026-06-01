@@ -4,6 +4,8 @@ import { portalFirestore, Timestamp } from '@cmt/firebase-shared/admin/firestore
 import { SetuIcon } from '@cmt/ui';
 import { LevelsTable, type LevelRow, type PeriodOption } from '@/features/admin/levels/levels-table';
 import { AssignTeacherForm } from '@/features/admin/levels/assign-teacher-form';
+import { listPrograms } from '@/features/setu/programs/get-programs';
+import type { ProgramRow } from '@/features/admin/programs/programs-table';
 
 export const metadata = { title: 'Levels & teachers — CMT Portal admin' };
 
@@ -13,9 +15,10 @@ export default async function LevelsPage() {
   await connection();
 
   const db = portalFirestore();
-  const [levelsSnap, periodsSnap] = await Promise.all([
+  const [levelsSnap, periodsSnap, programDocs] = await Promise.all([
     db.collection('levels').orderBy('location', 'asc').orderBy('order', 'asc').get(),
     db.collection('donationPeriods').where('enabled', '==', true).get(),
+    listPrograms(),
   ]);
 
   const levels: LevelRow[] = levelsSnap.docs.map((d) => {
@@ -52,6 +55,12 @@ export default async function LevelsPage() {
     })
     .sort((a, b) => a.location.localeCompare(b.location) || a.periodLabel.localeCompare(b.periodLabel));
 
+  const programs: ProgramRow[] = programDocs.map((p) => ({
+    ...p,
+    createdAt: p.createdAt.toISOString(),
+    updatedAt: p.updatedAt.toISOString(),
+  }));
+
   return (
     <>
       <header style={{ marginBottom: 24 }}>
@@ -68,7 +77,7 @@ export default async function LevelsPage() {
       </header>
 
       <div className="card" style={{ padding: 22, marginBottom: 24 }}>
-        <LevelsTable initialLevels={levels} periods={periods} />
+        <LevelsTable initialLevels={levels} periods={periods} programs={programs} />
       </div>
 
       <div className="card" style={{ padding: 22 }}>

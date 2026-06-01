@@ -51,7 +51,7 @@ describe('markGuest', () => {
     mockEnrollGet.mockResolvedValue({ exists: false }); // no enrollment
     const res = await markGuest({ levelId: 'lvl', date: '2025-09-07', mid: 'CMT-Z-09', status: 'present', markedByUid: 'uid-t', markedByMid: 'CMT-T-01' });
     expect(res).toEqual({ ok: true, aid: 'lvl-CMT-Z-09-2025-09-07', autoEnrolled: true });
-    expect(mockEnroll).toHaveBeenCalledWith({ fid: 'CMT-Z', pid: 'bv-brampton-2025-26', markedByTeacherUid: 'uid-t' });
+    expect(mockEnroll).toHaveBeenCalledWith({ fid: 'CMT-Z', oid: 'bv-brampton-2025-26', markedByTeacherUid: 'uid-t' });
     const payload = mockSet.mock.calls[0]![0] as Record<string, unknown>;
     expect(payload).toMatchObject({ mid: 'CMT-Z-09', fid: 'CMT-Z', isGuest: true, status: 'present' });
   });

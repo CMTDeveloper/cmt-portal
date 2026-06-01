@@ -9,6 +9,7 @@ import type {
   LevelKind,
   Location,
 } from '@cmt/shared-domain';
+import type { ProgramRow } from '@/features/admin/programs/programs-table';
 
 // Serialised shape from GET /api/admin/levels (Timestamps → ISO strings).
 export type LevelRow = Omit<LevelDoc, 'createdAt' | 'updatedAt'> & {
@@ -25,6 +26,8 @@ export interface PeriodOption {
 interface LevelsTableProps {
   initialLevels: LevelRow[];
   periods: PeriodOption[];
+  /** Optional list of programs to show a program selector (E3). When absent the selector is hidden. */
+  programs?: ProgramRow[];
 }
 
 const LEVEL_KIND_LABELS: Record<LevelKind, string> = {
@@ -50,11 +53,12 @@ function parseBand(input: string): string[] {
 interface ModalProps {
   editing: LevelRow | null;
   periods: PeriodOption[];
+  programKey?: string;
   onClose: () => void;
   onSaved: (level: LevelRow) => void;
 }
 
-function LevelModal({ editing, periods, onClose, onSaved }: ModalProps) {
+function LevelModal({ editing, periods, programKey: propProgramKey, onClose, onSaved }: ModalProps) {
   const isEdit = editing !== null;
   const [pending, startTransition] = useTransition();
 
@@ -109,7 +113,7 @@ function LevelModal({ editing, periods, onClose, onSaved }: ModalProps) {
         } else {
           const period = periods.find((p) => p.pid === pid)!;
           const body: CreateLevelInput = {
-            programKey: 'bala-vihar',
+            programKey: propProgramKey ?? 'bala-vihar',
             location: period.location,
             pid,
             levelName,
@@ -139,7 +143,7 @@ function LevelModal({ editing, periods, onClose, onSaved }: ModalProps) {
         const period = periods.find((p) => p.pid === pid);
         onSaved({
           levelId: json.levelId ?? editing?.levelId ?? '',
-          programKey: 'bala-vihar',
+          programKey: propProgramKey ?? editing?.programKey ?? 'bala-vihar',
           location: period?.location ?? editing?.location ?? 'Brampton',
           levelName,
           levelKind,
@@ -267,13 +271,19 @@ const fieldStyle: React.CSSProperties = { display: 'block', width: '100%', margi
 
 // ─── Main table ────────────────────────────────────────────────────────────────
 
-export function LevelsTable({ initialLevels, periods }: LevelsTableProps) {
+export function LevelsTable({ initialLevels, periods, programs }: LevelsTableProps) {
   const [levels, setLevels] = useState<LevelRow[]>(initialLevels);
   const [showDisabled, setShowDisabled] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<LevelRow | null>(null);
+  // Program filter: default to 'bala-vihar' if programs prop provided
+  const [selectedProgramKey, setSelectedProgramKey] = useState('bala-vihar');
 
-  const displayed = showDisabled ? levels : levels.filter((l) => l.enabled);
+  // Filter programs that use levels (for the selector)
+  const levelPrograms = programs?.filter((p) => p.capabilities.usesLevels) ?? [];
+
+  const displayed = (showDisabled ? levels : levels.filter((l) => l.enabled))
+    .filter((l) => !programs || l.programKey === selectedProgramKey);
 
   function handleSaved(updated: LevelRow) {
     setLevels((prev) => {
@@ -283,7 +293,7 @@ export function LevelsTable({ initialLevels, periods }: LevelsTableProps) {
         next[idx] = updated;
         return next;
       }
-      return [...prev, updated].sort((a, b) => a.location.localeCompare(b.location) || a.order - b.order);
+      return [...prev, updated].sort((a, b) => (a.location ?? '').localeCompare(b.location ?? '') || a.order - b.order);
     });
   }
 
@@ -305,6 +315,21 @@ export function LevelsTable({ initialLevels, periods }: LevelsTableProps) {
   return (
     <>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18, flexWrap: 'wrap' }}>
+        {levelPrograms.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, color: 'var(--body-text)' }}>
+            <span>Program</span>
+            <select
+              value={selectedProgramKey}
+              onChange={(e) => setSelectedProgramKey(e.target.value)}
+              style={{ marginLeft: 2, padding: '5px 8px', borderRadius: 'var(--radiusSm)', border: '1px solid var(--line2)', background: 'var(--bg)', fontSize: 13, fontFamily: 'var(--body)' }}
+              aria-label="Program"
+            >
+              {levelPrograms.map((p) => (
+                <option key={p.programKey} value={p.programKey}>{p.label}</option>
+              ))}
+            </select>
+          </div>
+        )}
         <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, cursor: 'pointer', color: 'var(--body-text)' }}>
           <input type="checkbox" checked={showDisabled} onChange={(e) => setShowDisabled(e.target.checked)} style={{ accentColor: 'var(--accent)' }} />
           Show disabled levels
@@ -391,7 +416,7 @@ export function LevelsTable({ initialLevels, periods }: LevelsTableProps) {
         </>
       )}
 
-      {modalOpen && <LevelModal editing={editing} periods={periods} onClose={() => { setModalOpen(false); setEditing(null); }} onSaved={handleSaved} />}
+      {modalOpen && <LevelModal editing={editing} periods={periods} programKey={selectedProgramKey} onClose={() => { setModalOpen(false); setEditing(null); }} onSaved={handleSaved} />}
     </>
   );
 }

@@ -40,5 +40,5 @@ export async function getMyLevels(ref: string | null): Promise<LevelDoc[]> {
     .get();
   return snap.docs
     .map((d) => docToLevel(d.data()))
-    .sort((a, b) => a.location.localeCompare(b.location) || a.order - b.order);
+    .sort((a, b) => (a.location ?? '').localeCompare(b.location ?? '') || a.order - b.order);
 }
