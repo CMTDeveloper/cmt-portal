@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { SetuLogo, SetuAvatar, SetuIcon } from '@cmt/ui';
 import { signOut } from './sign-out-button';
 
-type SidebarTab = 'home' | 'family' | 'bv' | 'calendar' | 'giving' | 'receipts' | 'security' | 'levels';
+type SidebarTab = 'home' | 'family' | 'bv' | 'programs' | 'calendar' | 'giving' | 'receipts' | 'security' | 'levels';
 
 interface DesktopSidebarProps {
   active?: SidebarTab;
@@ -24,6 +24,7 @@ const FAMILY_NAV_ITEMS: [SidebarTab, string, keyof typeof SetuIcon, string][] = 
   ['home',     'Home',           'home',    '/family'],
   ['family',   'My family',      'people',  '/family/members'],
   ['bv',       'Bala Vihar',     'check',   '/family/enroll'],
+  ['programs', 'Programs',       'grid',    '/family/programs'],
   ['calendar', 'Calendar',       'calendar','/family/calendar'],
   ['giving',   'Giving',         'heart',   '/family/donate'],
   ['receipts', 'Receipts',       'receipt', '/family/donations'],
@@ -41,6 +42,7 @@ function deriveActiveFromPathname(pathname: string): SidebarTab {
   if (pathname.startsWith('/family/members')) return 'family';
   if (pathname.startsWith('/family/calendar')) return 'calendar';
   if (pathname.startsWith('/family/enroll')) return 'bv';
+  if (pathname.startsWith('/family/programs')) return 'programs';
   if (pathname.startsWith('/family/donate') && !pathname.startsWith('/family/donations')) return 'giving';
   if (pathname.startsWith('/family/donations')) return 'receipts';
   if (pathname.startsWith('/family/settings/security')) return 'security';

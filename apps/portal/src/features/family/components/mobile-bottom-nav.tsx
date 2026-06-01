@@ -19,6 +19,7 @@ const TABS: { id: Tab; label: string; icon: keyof typeof SetuIcon; href: string 
 // keeps the bar to 5 slots on narrow phones while still surfacing receipts,
 // calendar, security, and (for admins) the admin area.
 const MORE_ITEMS: { label: string; icon: keyof typeof SetuIcon; href: string }[] = [
+  { label: 'Programs', icon: 'grid', href: '/family/programs' },
   { label: 'My donations', icon: 'receipt', href: '/family/donations' },
   { label: 'Calendar', icon: 'calendar', href: '/family/calendar' },
   { label: 'Sign-in security', icon: 'shield', href: '/family/settings/security' },
@@ -42,7 +43,7 @@ function activeTab(pathname: string): Tab {
   if (pathname.startsWith('/family/members')) return 'family';
   if (pathname.startsWith('/family/enroll')) return 'bv';
   if (pathname.startsWith('/family/donate') && !pathname.startsWith('/family/donations')) return 'giving';
-  if (pathname.startsWith('/family/donations') || pathname.startsWith('/family/calendar') || pathname.startsWith('/family/settings')) {
+  if (pathname.startsWith('/family/donations') || pathname.startsWith('/family/calendar') || pathname.startsWith('/family/programs') || pathname.startsWith('/family/settings')) {
     return 'more';
   }
   return 'home';

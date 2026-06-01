@@ -35,6 +35,7 @@ vi.mock('@cmt/ui', () => ({
     phone: () => <span>phone</span>,
     card: () => <span>card</span>,
     dl: () => <span>dl</span>,
+    grid: () => <span>grid</span>,
     shield: () => <span>shield</span>,
   },
   toast: { error: vi.fn() },
