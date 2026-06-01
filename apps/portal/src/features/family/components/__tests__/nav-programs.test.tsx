@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 
 // usePathname is the only hook these nav components call. Mutable so each test
 // can set the "current route" before rendering the Live/mobile variants.
@@ -38,26 +37,27 @@ describe('Programs entry in family navigation', () => {
     expect(link.style.fontWeight).toBe('600');
   });
 
-  it('desktop sidebar highlights Programs (not Bala Vihar) when enrolling in a non-BV program', () => {
+  it('has no dedicated Bala Vihar nav item (all programs route through Programs)', () => {
+    render(<DesktopSidebar role="family" />);
+    expect(screen.queryByRole('link', { name: /bala vihar/i })).toBeNull();
+  });
+
+  it('desktop sidebar highlights Programs when enrolling in bala-vihar', () => {
+    mockPathname = '/family/enroll/bala-vihar';
+    render(<DesktopSidebarLive />);
+    expect(screen.getByRole('link', { name: /programs/i }).style.fontWeight).toBe('600');
+  });
+
+  it('desktop sidebar highlights Programs when enrolling in a non-BV program', () => {
     mockPathname = '/family/enroll/tabla';
     render(<DesktopSidebarLive />);
     expect(screen.getByRole('link', { name: /programs/i }).style.fontWeight).toBe('600');
-    expect(screen.getByRole('link', { name: /bala vihar/i }).style.fontWeight).not.toBe('600');
   });
 
-  it('desktop sidebar still highlights Bala Vihar when enrolling in bala-vihar', () => {
-    mockPathname = '/family/enroll/bala-vihar';
-    render(<DesktopSidebarLive />);
-    expect(screen.getByRole('link', { name: /bala vihar/i }).style.fontWeight).toBe('600');
-    expect(screen.getByRole('link', { name: /programs/i }).style.fontWeight).not.toBe('600');
-  });
-
-  it('mobile "More" sheet links Programs → /family/programs', async () => {
-    const user = userEvent.setup();
+  it('mobile bottom bar has a Programs tab and no Bala Vihar tab', () => {
     render(<MobileBottomNav />);
-    // Programs lives in the More sheet, not the bottom bar — open it first.
-    await user.click(screen.getByRole('button', { name: /more/i }));
     const link = screen.getByRole('link', { name: /programs/i });
     expect(link.getAttribute('href')).toBe('/family/programs');
+    expect(screen.queryByRole('link', { name: /bala vihar/i })).toBeNull();
   });
 });

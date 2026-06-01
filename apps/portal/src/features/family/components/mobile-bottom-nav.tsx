@@ -6,12 +6,12 @@ import Link from 'next/link';
 import { SetuIcon } from '@cmt/ui';
 import { signOut } from './sign-out-button';
 
-type Tab = 'home' | 'family' | 'bv' | 'giving' | 'more';
+type Tab = 'home' | 'family' | 'programs' | 'giving' | 'more';
 
 const TABS: { id: Tab; label: string; icon: keyof typeof SetuIcon; href: string }[] = [
   { id: 'home', label: 'Home', icon: 'home', href: '/family' },
   { id: 'family', label: 'Family', icon: 'people', href: '/family/members' },
-  { id: 'bv', label: 'Bala Vihar', icon: 'check', href: '/family/enroll' },
+  { id: 'programs', label: 'Programs', icon: 'grid', href: '/family/programs' },
   { id: 'giving', label: 'Giving', icon: 'heart', href: '/family/donate' },
 ];
 
@@ -19,7 +19,6 @@ const TABS: { id: Tab; label: string; icon: keyof typeof SetuIcon; href: string 
 // keeps the bar to 5 slots on narrow phones while still surfacing receipts,
 // calendar, security, and (for admins) the admin area.
 const MORE_ITEMS: { label: string; icon: keyof typeof SetuIcon; href: string }[] = [
-  { label: 'Programs', icon: 'grid', href: '/family/programs' },
   { label: 'My donations', icon: 'receipt', href: '/family/donations' },
   { label: 'Calendar', icon: 'calendar', href: '/family/calendar' },
   { label: 'Sign-in security', icon: 'shield', href: '/family/settings/security' },
@@ -41,12 +40,10 @@ function shouldHide(pathname: string): boolean {
 
 function activeTab(pathname: string): Tab {
   if (pathname.startsWith('/family/members')) return 'family';
-  // BV enroll highlights the Bala Vihar tab; enrolling in any other program is
-  // reached via Programs (which lives in the More sheet) → highlight More.
-  if (pathname === '/family/enroll' || pathname.startsWith('/family/enroll/bala-vihar')) return 'bv';
-  if (pathname.startsWith('/family/enroll')) return 'more';
+  // All program enrollment (incl. Bala Vihar) lives under Programs now.
+  if (pathname.startsWith('/family/enroll') || pathname.startsWith('/family/programs')) return 'programs';
   if (pathname.startsWith('/family/donate') && !pathname.startsWith('/family/donations')) return 'giving';
-  if (pathname.startsWith('/family/donations') || pathname.startsWith('/family/calendar') || pathname.startsWith('/family/programs') || pathname.startsWith('/family/settings')) {
+  if (pathname.startsWith('/family/donations') || pathname.startsWith('/family/calendar') || pathname.startsWith('/family/settings')) {
     return 'more';
   }
   return 'home';

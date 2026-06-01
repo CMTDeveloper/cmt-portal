@@ -23,7 +23,6 @@ interface DesktopSidebarProps {
 const FAMILY_NAV_ITEMS: [SidebarTab, string, keyof typeof SetuIcon, string][] = [
   ['home',     'Home',           'home',    '/family'],
   ['family',   'My family',      'people',  '/family/members'],
-  ['bv',       'Bala Vihar',     'check',   '/family/enroll'],
   ['programs', 'Programs',       'grid',    '/family/programs'],
   ['calendar', 'Calendar',       'calendar','/family/calendar'],
   ['giving',   'Giving',         'heart',   '/family/donate'],
@@ -41,10 +40,7 @@ const WELCOME_NAV_ITEMS: [SidebarTab, string, keyof typeof SetuIcon, string, boo
 function deriveActiveFromPathname(pathname: string): SidebarTab {
   if (pathname.startsWith('/family/members')) return 'family';
   if (pathname.startsWith('/family/calendar')) return 'calendar';
-  // BV enroll (the redirect target /family/enroll and /family/enroll/bala-vihar)
-  // highlights Bala Vihar; enrolling in any OTHER program highlights Programs
-  // (that's where the family reached it from).
-  if (pathname === '/family/enroll' || pathname.startsWith('/family/enroll/bala-vihar')) return 'bv';
+  // All program enrollment (incl. Bala Vihar) routes through Programs now.
   if (pathname.startsWith('/family/enroll')) return 'programs';
   if (pathname.startsWith('/family/programs')) return 'programs';
   if (pathname.startsWith('/family/donate') && !pathname.startsWith('/family/donations')) return 'giving';
