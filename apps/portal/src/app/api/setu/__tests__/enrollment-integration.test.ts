@@ -235,7 +235,7 @@ describe('GET /api/setu/enrollments', () => {
     expect(body.enrollments).toHaveLength(0);
   });
 
-  it('returns enrollments with effectiveSuggestedAmount from snapshot when no override', async () => {
+  it('returns enrollments with effectiveSuggestedAmount from the live offering rate when no override', async () => {
     mockCollectionGet.mockResolvedValueOnce({
       empty: false,
       docs: [{ data: () => ACTIVE_ENROLLMENT }],

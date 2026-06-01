@@ -1,4 +1,5 @@
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
+import { resolveSuggestedAmount } from '@cmt/shared-domain';
 import type { EnrollmentDoc, OfferingDoc } from '@cmt/shared-domain';
 
 function toDate(v: unknown): Date {
@@ -75,7 +76,15 @@ export async function getEnrollments(fid: string): Promise<EnrollmentWithOfferin
 
   return enrollments.map((e) => {
     const offering = offeringMap.get(e.oid) ?? null;
-    const effectiveSuggestedAmount = e.suggestedAmountOverride ?? e.suggestedAmountSnapshot;
+    // Suggested amount is recomputed LIVE from the CURRENT offering, resolved at
+    // the family's enroll date. This lets an admin's later price correction (or
+    // tier edit) reach already-enrolled, unpaid families, while resolving by
+    // enrolledAt still honors the pricing tier that applied when they enrolled
+    // (early-bird fairness). A per-family override always wins; if the offering
+    // doc is gone, fall back to the enroll-time snapshot.
+    const effectiveSuggestedAmount =
+      e.suggestedAmountOverride ??
+      (offering ? resolveSuggestedAmount(offering, e.enrolledAt) : e.suggestedAmountSnapshot);
     return { ...e, effectiveSuggestedAmount, offering };
   });
 }
