@@ -80,6 +80,21 @@ describe('ProgramsTable', () => {
     expect(screen.getAllByText('draft').length).toBeGreaterThanOrEqual(1);
   });
 
+  it('flags an active program with no open offerings as hidden from families', () => {
+    render(<ProgramsTable initialPrograms={[{ ...BASE_PROGRAM, programKey: 'tabla', label: 'Tabla', openOfferingCount: 0 }]} />);
+    expect(screen.getAllByText(/no open offerings/i).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('does not flag an active program that has open offerings', () => {
+    render(<ProgramsTable initialPrograms={[{ ...BASE_PROGRAM, openOfferingCount: 2 }]} />);
+    expect(screen.queryAllByText(/no open offerings/i).length).toBe(0);
+  });
+
+  it('does not flag a draft program (its status already conveys hidden)', () => {
+    render(<ProgramsTable initialPrograms={[{ ...DRAFT_PROGRAM, openOfferingCount: 0 }]} />);
+    expect(screen.queryAllByText(/no open offerings/i).length).toBe(0);
+  });
+
   it('shows "+ New program" button', () => {
     render(<ProgramsTable initialPrograms={[]} />);
     expect(screen.getByRole('button', { name: /new program/i })).toBeTruthy();

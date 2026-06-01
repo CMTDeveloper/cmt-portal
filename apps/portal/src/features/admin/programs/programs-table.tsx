@@ -16,6 +16,10 @@ import Link from 'next/link';
 export type ProgramRow = Omit<ProgramDoc, 'createdAt' | 'updatedAt'> & {
   createdAt: string;
   updatedAt: string;
+  // Count of OPEN offerings (enabled + endDate null/future). When 0 on an active
+  // program, families can't see/enroll — surfaced as a hint badge. Optional:
+  // client-created rows (which have no offering yet) default to 0.
+  openOfferingCount?: number;
 };
 
 interface ProgramsTableProps {
@@ -39,6 +43,23 @@ function CapBadge({ label, on }: { label: string; on: boolean }) {
       marginRight: 3,
     }}>
       {label}
+    </span>
+  );
+}
+
+function VisibilityHint({ program }: { program: ProgramRow }) {
+  // Families only see/enroll in a program that is active AND has >=1 open
+  // offering (enabled + future/no end date). Flag the common gotcha: an active
+  // program with no open offering is silently invisible on /family/programs.
+  if (program.status !== 'active' || (program.openOfferingCount ?? 0) > 0) return null;
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 5,
+      padding: '2px 8px', borderRadius: 99, fontSize: 10.5, fontWeight: 600,
+      background: 'var(--warn-soft, #f7ecd2)', color: 'var(--warn, #a06410)',
+      border: '1px solid var(--line)', whiteSpace: 'nowrap',
+    }}>
+      No open offerings · hidden from families
     </span>
   );
 }
@@ -344,6 +365,7 @@ export function ProgramsTable({ initialPrograms }: ProgramsTableProps) {
                     <div>
                       <div style={{ fontSize: 16, fontWeight: 600 }}>{p.label}</div>
                       <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{p.programKey}</div>
+                      <VisibilityHint program={p} />
                     </div>
                     <span style={{ flex: '0 0 auto', padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 600, background: sc.bg, color: sc.color }}>
                       {p.status}
@@ -386,7 +408,10 @@ export function ProgramsTable({ initialPrograms }: ProgramsTableProps) {
                   const sc = statusColor(p.status);
                   return (
                     <tr key={p.programKey} style={{ borderBottom: '1px solid var(--line)', background: i % 2 === 0 ? 'transparent' : 'var(--bg)' }}>
-                      <td style={{ ...tdStyle, fontWeight: 600 }}>{p.label}</td>
+                      <td style={{ ...tdStyle, fontWeight: 600 }}>
+                        <div>{p.label}</div>
+                        <VisibilityHint program={p} />
+                      </td>
                       <td style={{ ...tdStyle, color: 'var(--muted)', fontFamily: 'monospace' }}>{p.programKey}</td>
                       <td style={tdStyle}>
                         <span style={{ display: 'inline-block', padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 600, background: sc.bg, color: sc.color }}>

@@ -57,6 +57,14 @@ export default async function AdminProgramKeyPage({ params }: { params: Promise<
     };
   });
 
+  // Families can only enroll if this program is active AND has >=1 open offering
+  // (enabled + endDate null/future). Surface the gotcha right where it's fixed.
+  const now = new Date();
+  const openOfferingCount = offerings.filter(
+    (o) => o.enabled && (o.endDate == null || new Date(o.endDate) >= now),
+  ).length;
+  const hiddenFromFamilies = program.status === 'active' && openOfferingCount === 0;
+
   return (
     <>
       <header style={{ marginBottom: 24 }}>
@@ -87,6 +95,21 @@ export default async function AdminProgramKeyPage({ params }: { params: Promise<
           into an offering, not the program directly. Use &ldquo;Duplicate&rdquo; to clone last year&apos;s
           offering with dates shifted forward.
         </p>
+        {hiddenFromFamilies && (
+          <div style={{
+            display: 'flex', gap: 10, alignItems: 'flex-start',
+            background: 'var(--warn-soft, #f7ecd2)', color: 'var(--warn, #a06410)',
+            border: '1px solid var(--line)', borderRadius: 'var(--radiusSm)',
+            padding: '10px 12px', marginBottom: 16, fontSize: 13, lineHeight: 1.5,
+          }}>
+            <span style={{ flex: '0 0 auto', marginTop: 1 }}><SetuIcon.warn /></span>
+            <span>
+              <strong>Families can&apos;t see this program yet.</strong> It&apos;s active but has no open
+              offering, so it doesn&apos;t appear on the family Programs page. Add an offering below with{' '}
+              <strong>Enabled</strong> checked and a future end date.
+            </span>
+          </div>
+        )}
         <OfferingsPanel programKey={key} initialOfferings={offerings} />
       </div>
     </>
