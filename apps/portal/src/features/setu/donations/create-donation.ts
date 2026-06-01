@@ -8,6 +8,8 @@ export interface CreateDonationParams {
   donorName: string;
   donorEmail: string;
   type: DonationType;
+  programKey: string | null;
+  programLabel: string | null;
   pid: string | null;
   eid: string | null;
   label: string;
@@ -33,6 +35,8 @@ export async function createDonation(params: CreateDonationParams): Promise<Dona
     donorName: params.donorName,
     donorEmail: params.donorEmail,
     type: params.type,
+    programKey: params.programKey,
+    programLabel: params.programLabel,
     pid: params.pid,
     eid: params.eid,
     label: params.label,

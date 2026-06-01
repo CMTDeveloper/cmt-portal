@@ -11,8 +11,8 @@ import {
 // ── CheckoutInputSchema (discriminated union) ──────────────────────────────────
 
 describe('CheckoutInputSchema', () => {
-  it('accepts a valid bala-vihar checkout', () => {
-    const r = CheckoutInputSchema.safeParse({ type: 'bala-vihar', eid: 'fid1-pid1', amountCAD: 500 });
+  it('accepts a valid enrollment checkout', () => {
+    const r = CheckoutInputSchema.safeParse({ type: 'enrollment', eid: 'fid1-oid1', amountCAD: 500 });
     expect(r.success).toBe(true);
     if (r.success) expect(r.data.coverFee).toBe(false); // default
   });
@@ -23,8 +23,8 @@ describe('CheckoutInputSchema', () => {
     if (r.success) expect(r.data.coverFee).toBe(true);
   });
 
-  it('rejects bala-vihar without eid', () => {
-    expect(CheckoutInputSchema.safeParse({ type: 'bala-vihar', amountCAD: 500 }).success).toBe(false);
+  it('rejects enrollment without eid', () => {
+    expect(CheckoutInputSchema.safeParse({ type: 'enrollment', amountCAD: 500 }).success).toBe(false);
   });
 
   it('rejects an unknown type', () => {
@@ -54,6 +54,8 @@ describe('DonationDocSchema', () => {
     donorName: 'Raj Patel',
     donorEmail: 'raj@example.com',
     type: 'general' as const,
+    programKey: null,
+    programLabel: null,
     pid: null,
     eid: null,
     label: 'General Donation — Chinmaya Mission Toronto',
@@ -70,13 +72,15 @@ describe('DonationDocSchema', () => {
     expect(DonationDocSchema.safeParse(valid).success).toBe(true);
   });
 
-  it('accepts a bala-vihar doc with pid + eid set', () => {
+  it('accepts an enrollment doc with program + pid + eid set', () => {
     const r = DonationDocSchema.safeParse({
       ...valid,
-      type: 'bala-vihar',
-      pid: 'bala-vihar-brampton-fall-2026',
-      eid: 'fid1-bala-vihar-brampton-fall-2026',
-      label: 'Bala Vihar Donation — Fall 2026',
+      type: 'enrollment',
+      programKey: 'tabla',
+      programLabel: 'Tabla classes',
+      pid: 'tabla-brampton-2026-27',
+      eid: 'fid1-tabla-brampton-2026-27',
+      label: 'Tabla classes Donation — 2026-27',
     });
     expect(r.success).toBe(true);
   });
@@ -109,12 +113,20 @@ describe('processingFeeCAD', () => {
 // ── checkoutLineItemName ────────────────────────────────────────────────────────
 
 describe('checkoutLineItemName', () => {
-  it('names a bala-vihar gift with the period label', () => {
-    expect(checkoutLineItemName('bala-vihar', 'Fall 2026')).toBe('Bala Vihar Donation — Fall 2026');
+  it('names an enrollment gift with the program + term', () => {
+    expect(checkoutLineItemName('enrollment', { programLabel: 'Bala Vihar', termLabel: 'Fall 2026' })).toBe('Bala Vihar Donation — Fall 2026');
   });
 
-  it('names a bala-vihar gift without a period label', () => {
-    expect(checkoutLineItemName('bala-vihar')).toBe('Bala Vihar Donation');
+  it('names a non-BV program gift after its own program', () => {
+    expect(checkoutLineItemName('enrollment', { programLabel: 'Tabla classes', termLabel: '2026-27' })).toBe('Tabla classes Donation — 2026-27');
+  });
+
+  it('names an enrollment gift without a term label', () => {
+    expect(checkoutLineItemName('enrollment', { programLabel: 'Bala Vihar' })).toBe('Bala Vihar Donation');
+  });
+
+  it('falls back to "Program" when the program label is missing', () => {
+    expect(checkoutLineItemName('enrollment')).toBe('Program Donation');
   });
 
   it('names a general gift', () => {

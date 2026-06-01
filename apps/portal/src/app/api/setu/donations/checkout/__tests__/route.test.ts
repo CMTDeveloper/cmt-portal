@@ -117,11 +117,11 @@ describe('POST /api/setu/donations/checkout', () => {
     expect(fetchBody.successUrl).toContain('/family/donate/success?did=don_generated');
   });
 
-  it('enforces the suggested-amount floor for bala-vihar', async () => {
+  it('enforces the suggested-amount floor for an enrollment donation', async () => {
     mockGetEnrollments.mockResolvedValue([
-      { eid: 'fid1-oid1', status: 'active', oid: 'oid1', effectiveSuggestedAmount: 500, offering: { termLabel: 'Fall 2026' } },
+      { eid: 'fid1-oid1', status: 'active', oid: 'oid1', programKey: 'bala-vihar', programLabel: 'Bala Vihar', termLabel: 'Fall 2026', effectiveSuggestedAmount: 500, offering: { programKey: 'bala-vihar', programLabel: 'Bala Vihar', termLabel: 'Fall 2026' } },
     ]);
-    const res = await POST(makeReq({ type: 'bala-vihar', eid: 'fid1-oid1', amountCAD: 300 }));
+    const res = await POST(makeReq({ type: 'enrollment', eid: 'fid1-oid1', amountCAD: 300 }));
     expect(res.status).toBe(422);
     const json = await res.json();
     expect(json.error).toBe('amount-below-suggested');
@@ -129,20 +129,37 @@ describe('POST /api/setu/donations/checkout', () => {
     expect(mockCreateDonation).not.toHaveBeenCalled();
   });
 
-  it('accepts a bala-vihar gift at or above the suggested amount', async () => {
+  it('accepts an enrollment gift at or above the suggested amount and labels it by program', async () => {
     mockGetEnrollments.mockResolvedValue([
-      { eid: 'fid1-oid1', status: 'active', oid: 'oid1', effectiveSuggestedAmount: 500, offering: { termLabel: 'Fall 2026' } },
+      { eid: 'fid1-oid1', status: 'active', oid: 'oid1', programKey: 'bala-vihar', programLabel: 'Bala Vihar', termLabel: 'Fall 2026', effectiveSuggestedAmount: 500, offering: { programKey: 'bala-vihar', programLabel: 'Bala Vihar', termLabel: 'Fall 2026' } },
     ]);
-    const res = await POST(makeReq({ type: 'bala-vihar', eid: 'fid1-oid1', amountCAD: 750 }));
+    const res = await POST(makeReq({ type: 'enrollment', eid: 'fid1-oid1', amountCAD: 750 }));
     expect(res.status).toBe(200);
     const fetchBody = JSON.parse(lastFetchInit().body);
     expect(fetchBody.lineItems[0].name).toBe('Bala Vihar Donation — Fall 2026');
     expect(fetchBody.lineItems[0].amount).toBe(750);
+    // the donation record carries the real program identity
+    expect(mockCreateDonation).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'enrollment', programKey: 'bala-vihar', programLabel: 'Bala Vihar' }),
+    );
   });
 
-  it('returns 404 when the bala-vihar enrollment is not found', async () => {
+  it('labels a non-BV program donation after its own program', async () => {
+    mockGetEnrollments.mockResolvedValue([
+      { eid: 'fid1-tabla', status: 'active', oid: 'tabla-brampton-2026-27', programKey: 'tabla', programLabel: 'Tabla classes', termLabel: '2026-27', effectiveSuggestedAmount: 0, offering: { programKey: 'tabla', programLabel: 'Tabla classes', termLabel: '2026-27' } },
+    ]);
+    const res = await POST(makeReq({ type: 'enrollment', eid: 'fid1-tabla', amountCAD: 50 }));
+    expect(res.status).toBe(200);
+    const fetchBody = JSON.parse(lastFetchInit().body);
+    expect(fetchBody.lineItems[0].name).toBe('Tabla classes Donation — 2026-27');
+    expect(mockCreateDonation).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'enrollment', programKey: 'tabla', programLabel: 'Tabla classes' }),
+    );
+  });
+
+  it('returns 404 when the enrollment is not found', async () => {
     mockGetEnrollments.mockResolvedValue([]);
-    const res = await POST(makeReq({ type: 'bala-vihar', eid: 'missing', amountCAD: 500 }));
+    const res = await POST(makeReq({ type: 'enrollment', eid: 'missing', amountCAD: 500 }));
     expect(res.status).toBe(404);
   });
 

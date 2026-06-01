@@ -6,7 +6,7 @@ import { toast } from '@cmt/ui';
 import { processingFeeCAD } from '@cmt/shared-domain';
 
 export interface DonateFormProps {
-  mode: 'bala-vihar' | 'general';
+  mode: 'enrollment' | 'general';
   eid: string | null;
   /** bala-vihar floor (give >=); null for general giving. */
   suggestedAmount: number | null;
@@ -22,12 +22,12 @@ function safeFrom(path: string): string {
 
 export function DonateForm({ mode, eid, suggestedAmount, periodLabel, tiers }: DonateFormProps) {
   const router = useRouter();
-  const floor = mode === 'bala-vihar' ? (suggestedAmount ?? 1) : 1;
-  const [amount, setAmount] = useState<number>(mode === 'bala-vihar' ? floor : 0);
+  const floor = mode === 'enrollment' ? (suggestedAmount ?? 1) : 1;
+  const [amount, setAmount] = useState<number>(mode === 'enrollment' ? floor : 0);
   const [coverFee, setCoverFee] = useState(false);
   const [pending, setPending] = useState(false);
 
-  const belowFloor = mode === 'bala-vihar' && amount < floor;
+  const belowFloor = mode === 'enrollment' && amount < floor;
   const invalid = amount < 1 || belowFloor;
 
   // Give-more quick-pick chips: explicit amountTiers if provided, else derived
@@ -46,8 +46,8 @@ export function DonateForm({ mode, eid, suggestedAmount, periodLabel, tiers }: D
     setPending(true);
     try {
       const body =
-        mode === 'bala-vihar'
-          ? { type: 'bala-vihar', eid, amountCAD: amount, coverFee }
+        mode === 'enrollment'
+          ? { type: 'enrollment', eid, amountCAD: amount, coverFee }
           : { type: 'general', amountCAD: amount, coverFee };
 
       const res = await fetch('/api/setu/donations/checkout', {
@@ -134,7 +134,7 @@ export function DonateForm({ mode, eid, suggestedAmount, periodLabel, tiers }: D
           </div>
         )}
 
-        {mode === 'bala-vihar' && (
+        {mode === 'enrollment' && (
           <div style={{ marginTop: 10, padding: '10px 12px', background: 'var(--bg)', borderRadius: 'var(--radiusSm)', fontSize: 11, color: belowFloor ? 'var(--err)' : 'var(--muted)', textAlign: 'center', lineHeight: 1.5 }}>
             {belowFloor
               ? `Suggested amount is $${floor}. To give less, please contact the welcome team.`

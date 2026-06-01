@@ -62,13 +62,13 @@ describe('DonatePage — flag on', () => {
     expect(screen.getAllByText(/donate-form:general/).length).toBeGreaterThan(0);
   });
 
-  it('renders the bala-vihar form when a valid active eid is given', async () => {
+  it('renders the enrollment donate form when a valid active eid is given', async () => {
     mockGetEnrollments.mockResolvedValue([
-      { eid: 'fid1-pid1', status: 'active', effectiveSuggestedAmount: 500, period: { periodLabel: 'Fall 2026', amountTiers: [500, 750] } },
+      { eid: 'fid1-oid1', status: 'active', programKey: 'bala-vihar', programLabel: 'Bala Vihar', termLabel: 'Fall 2026', effectiveSuggestedAmount: 500, offering: { programKey: 'bala-vihar', programLabel: 'Bala Vihar', termLabel: 'Fall 2026', amountTiers: [500, 750] } },
     ]);
-    const page = await DonatePage({ searchParams: Promise.resolve({ eid: 'fid1-pid1' }) });
+    const page = await DonatePage({ searchParams: Promise.resolve({ eid: 'fid1-oid1' }) });
     render(page);
-    expect(screen.getAllByText(/donate-form:bala-vihar/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/donate-form:enrollment/).length).toBeGreaterThan(0);
   });
 
   it('falls back to general giving when the eid is stale/unknown', async () => {

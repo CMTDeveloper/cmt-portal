@@ -121,9 +121,11 @@ export async function POST(req: Request) {
   // for bala-vihar (give more is fine; give less stays welcome-team-only).
   let oid: string | null = null;
   let eid: string | null = null;
+  let programKey: string | null = null;
+  let programLabel: string | null = null;
   let label: string;
 
-  if (input.type === 'bala-vihar') {
+  if (input.type === 'enrollment') {
     const enrollments = await getEnrollments(session.fid);
     const enrollment = enrollments.find((e) => e.eid === input.eid && e.status === 'active');
     if (!enrollment) {
@@ -137,7 +139,13 @@ export async function POST(req: Request) {
     }
     oid = enrollment.oid;
     eid = enrollment.eid;
-    label = checkoutLineItemName('bala-vihar', enrollment.offering?.termLabel);
+    // Derive the program identity from the enrollment's offering so the label +
+    // record reflect the ACTUAL program (Bala Vihar, Tabla, …), not a hardcode.
+    const pLabel = enrollment.offering?.programLabel ?? enrollment.programLabel;
+    const tLabel = enrollment.offering?.termLabel ?? enrollment.termLabel;
+    programKey = enrollment.offering?.programKey ?? enrollment.programKey;
+    programLabel = pLabel;
+    label = checkoutLineItemName('enrollment', { programLabel: pLabel, termLabel: tLabel });
   } else {
     label = checkoutLineItemName('general');
   }
@@ -157,7 +165,9 @@ export async function POST(req: Request) {
     donorName,
     donorEmail: donor.email,
     type: input.type,
-    pid: oid,  // DonationDoc still stores 'pid'; oid is the generalised offering id
+    programKey,
+    programLabel,
+    pid: oid,  // DonationDoc stores 'pid' for the offering id (legacy field name)
     eid,
     label,
     amountCAD: input.amountCAD,

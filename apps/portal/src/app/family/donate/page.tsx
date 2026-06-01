@@ -36,9 +36,11 @@ export default async function DonatePage({
 
   // Resolve mode. `?eid` → bala-vihar (amount pinned to enrollment snapshot/
   // override); no eid → general year-round giving.
-  let mode: 'bala-vihar' | 'general' = 'general';
+  let mode: 'enrollment' | 'general' = 'general';
   let suggestedAmount: number | null = null;
   let periodLabel: string | null = null;
+  let programLabel: string | null = null;
+  let programKey: string | null = null;
   let tiers: number[] = [];
   let resolvedEid: string | null = null;
   // Legacy cutover year already settled offline → block the online checkout.
@@ -48,10 +50,12 @@ export default async function DonatePage({
     const enrollments = await getEnrollments(family.fid);
     const enrollment = enrollments.find((e) => e.eid === eid && e.status === 'active');
     if (enrollment) {
-      mode = 'bala-vihar';
+      mode = 'enrollment';
       resolvedEid = enrollment.eid;
       suggestedAmount = enrollment.effectiveSuggestedAmount;
       periodLabel = enrollment.termLabel;
+      programLabel = enrollment.offering?.programLabel ?? enrollment.programLabel;
+      programKey = enrollment.programKey;
       tiers = enrollment.offering?.amountTiers ?? [];
 
       if (enrollment.offering && paymentSourceOf({ ...(enrollment.offering.paymentSource !== undefined ? { paymentSource: enrollment.offering.paymentSource } : {}) }) === 'legacy') {
@@ -61,10 +65,11 @@ export default async function DonatePage({
     // If the eid is stale/unknown, fall through to general giving rather than erroring.
   }
 
-  const heading = mode === 'bala-vihar' ? 'Your dakshina' : 'Make a donation';
+  const heading = mode === 'enrollment' ? 'Your dakshina' : 'Make a donation';
+  const backHref = mode === 'enrollment' && programKey ? `/family/enroll/${programKey}` : '/family';
   const sub =
-    mode === 'bala-vihar'
-      ? `Bala Vihar${periodLabel ? ` · ${periodLabel}` : ''} · ${family.location}`
+    mode === 'enrollment'
+      ? `${programLabel ?? 'Program'}${periodLabel ? ` · ${periodLabel}` : ''} · ${family.location}`
       : 'A charitable gift to Chinmaya Mission Toronto';
 
   const form = alreadyPaidLegacy ? (
@@ -108,15 +113,15 @@ export default async function DonatePage({
         <CspRoot style={{ minHeight: '100dvh' }}>
           <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column' }}>
             <div className="between" style={{ padding: '10px 18px', borderBottom: '1px solid var(--line)' }}>
-              <Link href={mode === 'bala-vihar' ? '/family/enroll' : '/family'} className="focus-ring" style={{ background: 'transparent', border: 0, padding: 6, marginLeft: -6, color: 'var(--body-text)', display: 'inline-flex' }}>
+              <Link href={backHref} className="focus-ring" style={{ background: 'transparent', border: 0, padding: 6, marginLeft: -6, color: 'var(--body-text)', display: 'inline-flex' }}>
                 <SetuIcon.back />
               </Link>
-              <span style={{ fontSize: 14, fontWeight: 600 }}>{mode === 'bala-vihar' ? 'Donation' : 'Giving'}</span>
+              <span style={{ fontSize: 14, fontWeight: 600 }}>{mode === 'enrollment' ? 'Donation' : 'Giving'}</span>
               <span style={{ width: 32 }} />
             </div>
             <div style={{ flex: 1, overflowY: 'auto', padding: '20px 18px 84px' }}>
               <h1 style={{ fontSize: 26, fontWeight: 400, marginBottom: 6 }}>
-                {mode === 'bala-vihar' ? <>Your <em className="sa">dakshina</em></> : heading}
+                {mode === 'enrollment' ? <>Your <em className="sa">dakshina</em></> : heading}
               </h1>
               <p style={{ fontSize: 13, color: 'var(--body-text)', marginBottom: 18, lineHeight: 1.5 }}>{sub}</p>
               {form}
@@ -129,13 +134,13 @@ export default async function DonatePage({
       {/* Desktop */}
       <div className="hidden md:block">
         <header style={{ marginBottom: 28 }}>
-          <Link href={mode === 'bala-vihar' ? '/family/enroll' : '/family'} className="focus-ring" style={{ background: 'transparent', border: 0, color: 'var(--body-text)', fontSize: 13, padding: 0, marginBottom: 10, display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none' }}>
-            <SetuIcon.back /> {mode === 'bala-vihar' ? 'Back to enrollment' : 'Back to dashboard'}
+          <Link href={backHref} className="focus-ring" style={{ background: 'transparent', border: 0, color: 'var(--body-text)', fontSize: 13, padding: 0, marginBottom: 10, display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none' }}>
+            <SetuIcon.back /> {mode === 'enrollment' ? 'Back to enrollment' : 'Back to dashboard'}
           </Link>
           <div>
             <p style={{ fontSize: 11, letterSpacing: '.16em', textTransform: 'uppercase', color: 'var(--muted)' }}>{sub}</p>
             <h1 style={{ fontSize: 38, fontWeight: 400, marginTop: 6 }}>
-              {mode === 'bala-vihar' ? <>Your <em className="sa">dakshina</em></> : heading}
+              {mode === 'enrollment' ? <>Your <em className="sa">dakshina</em></> : heading}
             </h1>
           </div>
         </header>
