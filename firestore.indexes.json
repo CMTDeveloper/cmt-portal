@@ -54,6 +54,14 @@
       ]
     },
     {
+      "collectionGroup": "offerings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "programKey", "order": "ASCENDING" },
+        { "fieldPath": "startDate", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "donations",
       "queryScope": "COLLECTION",
       "fields": [
