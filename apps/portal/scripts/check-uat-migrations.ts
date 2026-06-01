@@ -66,20 +66,30 @@ async function main(): Promise<void> {
     console.error(`  THREW  code=${String(e.code)}  ${e.message}\n`);
   }
 
-  // 5) enrollment migration — sample collectionGroup enrollments for new vs old fields
-  const enrSnap = await db.collectionGroup('enrollments').limit(25).get();
-  let oid = 0;
-  let pid = 0;
-  let programKey = 0;
+  // 5) enrollments detail (collectionGroup — few in UAT testing)
+  const enrSnap = await db.collectionGroup('enrollments').get();
+  console.log(`enrollments: ${enrSnap.size} doc(s)`);
   for (const d of enrSnap.docs) {
     const e = d.data();
-    if (e['oid'] !== undefined) oid++;
-    if (e['pid'] !== undefined) pid++;
-    if (e['programKey'] !== undefined) programKey++;
+    const fid = d.ref.parent.parent?.id ?? '?';
+    console.log(
+      `  - fid=${fid} eid=${e['eid']} programKey=${e['programKey'] ?? '(none)'} oid=${e['oid'] ?? e['pid']} term=${e['termLabel'] ?? e['periodLabel']} status=${e['status']} mids=${JSON.stringify(e['enrolledMids'] ?? e['childrenMids'])} snap=${e['suggestedAmountSnapshot']} override=${e['suggestedAmountOverride'] ?? 'null'}`,
+    );
   }
-  console.log(`enrollments (sample ${enrSnap.size}): have oid=${oid}, have programKey=${programKey}, still have pid=${pid}\n`);
+  console.log('');
 
-  // 6) families
+  // 6) donations detail
+  const donSnap = await db.collection('donations').get();
+  console.log(`donations: ${donSnap.size} doc(s)`);
+  for (const d of donSnap.docs) {
+    const x = d.data();
+    console.log(
+      `  - did=${d.id} fid=${x['fid']} type=${x['type']} programKey=${x['programKey'] ?? '(none)'} pid=${x['pid']} eid=${x['eid']} label="${x['label']}" $${x['amountCAD']} status=${x['status']}`,
+    );
+  }
+  console.log('');
+
+  // 7) families
   const famAgg = await db.collection('families').count().get();
   console.log(`families: ${famAgg.data().count}\n`);
 
