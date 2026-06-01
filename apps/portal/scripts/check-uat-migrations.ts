@@ -27,14 +27,26 @@ async function main(): Promise<void> {
   }
   console.log(`  bala-vihar program present: ${progSnap.docs.some((d) => d.id === 'bala-vihar') ? 'YES' : 'NO'}\n`);
 
-  // 2) offerings
+  // 2) offerings — per-offering detail (location/enabled/endDate decide whether
+  // a family sees the program on /family/programs).
   const offSnap = await db.collection('offerings').get();
   const byProgram: Record<string, number> = {};
+  const isoDay = (v: unknown): string =>
+    v == null
+      ? 'null'
+      : typeof (v as { toDate?: unknown }).toDate === 'function'
+        ? (v as { toDate: () => Date }).toDate().toISOString().slice(0, 10)
+        : String(v);
+  console.log(`offerings collection: ${offSnap.size} doc(s)`);
   for (const d of offSnap.docs) {
-    const k = (d.data()['programKey'] as string) ?? '(none)';
+    const o = d.data();
+    const k = (o['programKey'] as string) ?? '(none)';
     byProgram[k] = (byProgram[k] ?? 0) + 1;
+    console.log(
+      `  - ${k} | oid=${o['oid']} | location=${o['location'] ?? 'null(location-less)'} | enabled=${o['enabled']} | term=${o['termLabel']} | ${isoDay(o['startDate'])} → ${isoDay(o['endDate'])}`,
+    );
   }
-  console.log(`offerings collection: ${offSnap.size} doc(s)  by programKey: ${JSON.stringify(byProgram)}\n`);
+  console.log(`  by programKey: ${JSON.stringify(byProgram)}\n`);
 
   // 3) legacy donationPeriods (additive migration leaves these intact)
   const dpSnap = await db.collection('donationPeriods').get();
