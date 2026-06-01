@@ -68,6 +68,7 @@ const mockGetEnrollments = vi.fn();
 const mockGetOpenOfferingsForFamily = vi.fn();
 const mockGetProgram = vi.fn();
 const mockGetLegacyPaymentStatus = vi.fn();
+const mockGetDonations = vi.fn();
 
 vi.mock('@/features/setu/members/get-current-family', () => ({
   getCurrentFamily: (...args: unknown[]) => mockGetCurrentFamily(...args),
@@ -83,6 +84,9 @@ vi.mock('@/features/setu/programs/get-programs', () => ({
 }));
 vi.mock('@/features/setu/donations/legacy-payment', () => ({
   getLegacyPaymentStatus: (...args: unknown[]) => mockGetLegacyPaymentStatus(...args),
+}));
+vi.mock('@/features/setu/donations/get-donations', () => ({
+  getDonations: (...args: unknown[]) => mockGetDonations(...args),
 }));
 
 import ProgramEnrollPage from '../page';
@@ -179,6 +183,7 @@ beforeEach(() => {
   mockGetEnrollments.mockResolvedValue([]);
   mockGetOpenOfferingsForFamily.mockResolvedValue([]);
   mockGetLegacyPaymentStatus.mockResolvedValue('unpaid');
+  mockGetDonations.mockResolvedValue([]);
 });
 
 // ─── T2: effectiveSuggestedAmount ─────────────────────────────────────────────
@@ -239,6 +244,22 @@ describe('ProgramEnrollPage (bala-vihar) — donation flag gating (T1)', () => {
 
     expect(screen.getAllByRole('link', { name: /continue to donation/i }).length).toBeGreaterThan(0);
     expect(screen.queryByText(/donation coming soon/i)).toBeNull();
+  });
+
+  it('donations enabled + enrolled + already paid: shows paid panel, not Continue to donation', async () => {
+    vi.stubEnv('NEXT_PUBLIC_FEATURE_SETU_DONATIONS', 'true');
+    mockGetEnrollments.mockResolvedValue([ACTIVE_ENROLLMENT_WITH_SNAPSHOT]);
+    mockGetOpenOfferingsForFamily.mockResolvedValue([ACTIVE_PERIOD]);
+    // A completed Setu donation covering the suggested amount → "paid".
+    mockGetDonations.mockResolvedValue([
+      { status: 'completed', eid: 'CMT-AAAA1111-bv-brampton-fall-2026', amountCAD: 500 },
+    ]);
+
+    const page = await ProgramEnrollPage({ params: makeParams() });
+    render(page);
+
+    expect(screen.getAllByText(/recorded as paid|paid ·/i).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('link', { name: /continue to donation/i })).toBeNull();
   });
 });
 

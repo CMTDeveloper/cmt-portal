@@ -26,12 +26,16 @@ vi.mock('@/features/family/components/atoms', () => ({
 const mockListPrograms = vi.fn();
 const mockGetOpenOfferingsForFamily = vi.fn();
 const mockGetCurrentFamily = vi.fn();
+const mockGetEnrollments = vi.fn();
 
 vi.mock('@/features/setu/programs/get-programs', () => ({
   listPrograms: (...args: unknown[]) => mockListPrograms(...args),
 }));
 vi.mock('@/features/setu/enrollment/get-open-offerings', () => ({
   getOpenOfferingsForFamily: (...args: unknown[]) => mockGetOpenOfferingsForFamily(...args),
+}));
+vi.mock('@/features/setu/enrollment/get-enrollments', () => ({
+  getEnrollments: (...args: unknown[]) => mockGetEnrollments(...args),
 }));
 vi.mock('@/features/setu/members/get-current-family', () => ({
   getCurrentFamily: (...args: unknown[]) => mockGetCurrentFamily(...args),
@@ -115,6 +119,7 @@ beforeEach(() => {
   mockGetCurrentFamily.mockResolvedValue({ family: FAMILY, members: [], isManager: true });
   mockListPrograms.mockResolvedValue([BV_PROGRAM]);
   mockGetOpenOfferingsForFamily.mockResolvedValue([BV_OFFERING]);
+  mockGetEnrollments.mockResolvedValue([]);
 });
 
 describe('ProgramsPage', () => {
@@ -174,5 +179,17 @@ describe('ProgramsPage', () => {
     render(page);
 
     expect(screen.getAllByText(/session expired/i).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('shows an enrolled state (not "Enroll →") for a program the family is already in', async () => {
+    mockGetEnrollments.mockResolvedValue([
+      { eid: 'CMT-AAAA1111-bv-brampton-fall-2026', status: 'active', programKey: 'bala-vihar', oid: 'bv-brampton-fall-2026', termLabel: 'Fall 2026' },
+    ]);
+
+    const page = await ProgramsPage();
+    render(page);
+
+    expect(screen.getAllByText(/enrolled/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText('Enroll →')).toBeNull();
   });
 });

@@ -5,6 +5,7 @@ import { CspRoot } from '@/features/family/components/atoms';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 import { listPrograms } from '@/features/setu/programs/get-programs';
 import { getOpenOfferingsForFamily } from '@/features/setu/enrollment/get-open-offerings';
+import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
 import type { ProgramDoc, OfferingDoc } from '@cmt/shared-domain';
 
 export const metadata = { title: 'Programs — CMT Portal' };
@@ -12,6 +13,7 @@ export const metadata = { title: 'Programs — CMT Portal' };
 interface ProgramWithOfferings {
   program: ProgramDoc;
   openOfferings: OfferingDoc[];
+  enrolled: boolean;
 }
 
 function fmtDate(d: Date | null): string {
@@ -35,15 +37,22 @@ export default async function ProgramsPage() {
 
   const { family } = familyData;
 
-  // Load all active programs and their open offerings for this family.
-  const allPrograms = await listPrograms();
+  // Load active programs + their open offerings for this family, plus the
+  // family's active enrollments so each card can show "enrolled" vs "Enroll".
+  const [allPrograms, enrollments] = await Promise.all([
+    listPrograms(),
+    getEnrollments(family.fid),
+  ]);
   const activePrograms = allPrograms.filter((p) => p.status === 'active');
+  const enrolledProgramKeys = new Set(
+    enrollments.filter((e) => e.status === 'active').map((e) => e.programKey),
+  );
 
   const programsWithOfferings: ProgramWithOfferings[] = (
     await Promise.all(
       activePrograms.map(async (program) => {
         const openOfferings = await getOpenOfferingsForFamily(program.programKey, family.location);
-        return { program, openOfferings };
+        return { program, openOfferings, enrolled: enrolledProgramKeys.has(program.programKey) };
       }),
     )
   ).filter((p) => p.openOfferings.length > 0);
@@ -74,7 +83,7 @@ export default async function ProgramsPage() {
                 </div>
               ) : (
                 <div className="col" style={{ gap: 12 }}>
-                  {programsWithOfferings.map(({ program, openOfferings }) => {
+                  {programsWithOfferings.map(({ program, openOfferings, enrolled }) => {
                     const firstOffering = openOfferings[0]!;
                     return (
                       <div key={program.programKey} className="card" style={{ padding: 16 }}>
@@ -99,7 +108,7 @@ export default async function ProgramsPage() {
                           className="btn btn--s"
                           style={{ textDecoration: 'none', display: 'inline-block', fontSize: 12 }}
                         >
-                          Enroll →
+                          {enrolled ? '✓ Enrolled · View' : 'Enroll →'}
                         </Link>
                       </div>
                     );
@@ -135,7 +144,7 @@ export default async function ProgramsPage() {
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 18 }}>
-            {programsWithOfferings.map(({ program, openOfferings }) => {
+            {programsWithOfferings.map(({ program, openOfferings, enrolled }) => {
               const firstOffering = openOfferings[0]!;
               return (
                 <div key={program.programKey} className="card" style={{ padding: 24 }}>
@@ -157,10 +166,10 @@ export default async function ProgramsPage() {
                   </div>
                   <Link
                     href={`/family/enroll/${program.programKey}`}
-                    className="btn btn--p btn--block"
+                    className={enrolled ? 'btn btn--s btn--block' : 'btn btn--p btn--block'}
                     style={{ display: 'block', textAlign: 'center', textDecoration: 'none' }}
                   >
-                    Enroll →
+                    {enrolled ? '✓ Enrolled · View enrollment' : 'Enroll →'}
                   </Link>
                 </div>
               );

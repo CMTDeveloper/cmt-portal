@@ -12,6 +12,7 @@ import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
 import { getOpenOfferingsForFamily } from '@/features/setu/enrollment/get-open-offerings';
 import { getLegacyPaymentStatus } from '@/features/setu/donations/legacy-payment';
+import { getDonations } from '@/features/setu/donations/get-donations';
 
 export const metadata = { title: 'Enroll — CMT Portal' };
 
@@ -129,9 +130,10 @@ export default async function ProgramEnrollPage({ params }: Props) {
     ? members.filter((m) => m.type === 'Child')
     : eligibleMembers;
 
-  const [enrollments, openOfferings] = await Promise.all([
+  const [enrollments, openOfferings, donations] = await Promise.all([
     getEnrollments(family.fid),
     getOpenOfferingsForFamily(programKey, family.location),
+    getDonations(family.fid),
   ]);
 
   // Auto-select the first (or only) open offering. For BV this is always one.
@@ -167,6 +169,18 @@ export default async function ProgramEnrollPage({ params }: Props) {
     activeEnrollment?.effectiveSuggestedAmount ??
     (enrolledOffering ? resolveSuggestedAmount(enrolledOffering, now) : undefined);
 
+  // "Paid" = legacy-roster paid OR completed Setu donation(s) for THIS enrollment
+  // covering the suggested amount. Once paid, the page shows a thank-you panel and
+  // no donate CTA — giving more lives in the Giving tab.
+  const givenForPeriod = activeEnrollment
+    ? donations
+        .filter((d) => d.status === 'completed' && d.eid === activeEnrollment.eid)
+        .reduce((sum, d) => sum + d.amountCAD, 0)
+    : 0;
+  const donationComplete =
+    displaySuggestedAmount != null && displaySuggestedAmount > 0 && givenForPeriod >= displaySuggestedAmount;
+  const paid = legacyPaid || donationComplete;
+
   // The OID to use for the EnrollCta — prefer the enrolled offering when already enrolled.
   const ctaOid = enrolledOffering?.oid ?? defaultOffering?.oid ?? '';
 
@@ -191,7 +205,7 @@ export default async function ProgramEnrollPage({ params }: Props) {
             </div>
 
             <div style={{ flex: 1, overflowY: 'auto', padding: '20px 18px 100px' }}>
-              {alreadyEnrolled && renderAlreadyEnrolledBanner(activeTerm, legacyPaid)}
+              {alreadyEnrolled && renderAlreadyEnrolledBanner(activeTerm, paid)}
               {!enrolledOffering && !alreadyEnrolled && renderNoPeriodBanner(program.label, family.location)}
 
               {enrolledOffering && (
@@ -227,8 +241,8 @@ export default async function ProgramEnrollPage({ params }: Props) {
                   {/* Dakshina — only when program uses donation */}
                   {usesDonation && (
                     <>
-                      <SectionLabel><em className="sa">Dakshina</em>{legacyPaid ? '' : ' · suggested donation'}</SectionLabel>
-                      {legacyPaid
+                      <SectionLabel><em className="sa">Dakshina</em>{paid ? '' : ' · suggested donation'}</SectionLabel>
+                      {paid
                         ? renderPaidBlockMobile(activeTerm)
                         : renderDakshinaBlock(displaySuggestedAmount ?? 0, family.location, activeTerm)}
                     </>
@@ -253,7 +267,7 @@ export default async function ProgramEnrollPage({ params }: Props) {
             {/* Sticky CTA footer */}
             <div style={{ position: 'sticky', bottom: 0, left: 0, right: 0, padding: '14px 18px', background: 'var(--surface)', borderTop: '1px solid var(--line)' }}>
               {alreadyEnrolled ? (
-                legacyPaid ? (
+                paid ? (
                   <Link href="/family" className="btn btn--p btn--block" style={{ display: 'block', textAlign: 'center', textDecoration: 'none' }}>
                     Back to dashboard
                   </Link>
@@ -308,7 +322,7 @@ export default async function ProgramEnrollPage({ params }: Props) {
           </div>
         </header>
 
-        {alreadyEnrolled && renderAlreadyEnrolledBanner(activeTerm, legacyPaid)}
+        {alreadyEnrolled && renderAlreadyEnrolledBanner(activeTerm, paid)}
         {!enrolledOffering && !alreadyEnrolled && renderNoPeriodBanner(program.label, family.location)}
 
         {enrolledOffering && (
@@ -361,7 +375,7 @@ export default async function ProgramEnrollPage({ params }: Props) {
 
             {/* Right: offering picker + dakshina/confirm panel */}
             <aside>
-              {legacyPaid ? renderPaidPanel(activeTerm) : (
+              {paid ? renderPaidPanel(activeTerm) : (
                 <div className="card" style={{ padding: 24, position: 'sticky', top: 0 }}>
                   {/* Dakshina block — only for programs with usesDonation */}
                   {usesDonation ? (
