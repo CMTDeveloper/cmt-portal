@@ -3,11 +3,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // ── next/cache ─────────────────────────────────────────────────────────────────
 vi.mock('next/cache', () => ({ revalidateTag: vi.fn(), cacheTag: vi.fn(), cacheLife: vi.fn() }));
 
-// ── assertProgramActive mock ───────────────────────────────────────────────────
-// Default: program is active. Individual tests override for the not-available case.
+// ── get-programs mock ────────────────────────────────────────────────────────
+// enroll-family reads getProgram for BOTH the active-gate AND eligibility. Default:
+// an active BV program with child eligibility. The not-available test overrides it.
+const mockGetProgram = vi.fn().mockResolvedValue({ programKey: 'bala-vihar', status: 'active', eligibility: { memberType: 'child' } });
 const mockAssertProgramActive = vi.fn().mockResolvedValue({ programKey: 'bala-vihar', status: 'active' });
 vi.mock('@/features/setu/programs/get-programs', () => ({
-  getProgram: vi.fn().mockResolvedValue({ programKey: 'bala-vihar', status: 'active' }),
+  getProgram: (...a: unknown[]) => mockGetProgram(...a),
   listPrograms: vi.fn().mockResolvedValue([]),
   assertProgramActive: (...a: unknown[]) => mockAssertProgramActive(...a),
 }));
@@ -173,7 +175,9 @@ function setupEnrollTransaction({
   enrollmentExists = false,
   enrollmentStatus = 'active',
   childMids = [] as string[],
+  members = undefined as { type: 'Adult' | 'Child'; mid: string }[] | undefined,
 } = {}) {
+  const set = vi.fn();
   mockRunTransaction.mockImplementation(async (fn: (txn: unknown) => Promise<unknown>) => {
     let offering = ACTIVE_OFFERING;
     if (offeringFuture) {
@@ -185,7 +189,8 @@ function setupEnrollTransaction({
       offering = { ...ACTIVE_OFFERING, startDate: { toDate: () => FUTURE }, endDate: { toDate: () => FUTURE } };
     }
 
-    const membersDocs = childMids.map((mid) => ({ data: () => ({ type: 'Child', mid }) }));
+    const memberList = members ?? childMids.map((mid) => ({ type: 'Child' as const, mid }));
+    const membersDocs = memberList.map((m) => ({ data: () => m }));
 
     // Call order from enroll-family.ts:
     //   Promise.all([offering, enrollment, family]) → calls 1, 2, 3 (in parallel, resolved in any order)
@@ -196,13 +201,14 @@ function setupEnrollTransaction({
         .mockResolvedValueOnce({ exists: enrollmentExists, data: () => ({ ...ACTIVE_ENROLLMENT, status: enrollmentStatus }) })
         .mockResolvedValueOnce({ exists: familyExists })
         .mockResolvedValue({ docs: membersDocs, size: membersDocs.length }),
-      set: vi.fn(),
+      set,
       update: vi.fn(),
       delete: vi.fn(),
     };
 
     return fn(txn);
   });
+  return { set };
 }
 
 function setupCancelTransaction({ exists = true, status = 'active' } = {}) {
@@ -218,6 +224,7 @@ function setupCancelTransaction({ exists = true, status = 'active' } = {}) {
 beforeEach(() => {
   vi.clearAllMocks();
   flagsMock.setuAuth = true;
+  mockGetProgram.mockResolvedValue({ programKey: 'bala-vihar', status: 'active', eligibility: { memberType: 'child' } });
   mockAssertProgramActive.mockResolvedValue({ programKey: 'bala-vihar', status: 'active' });
 });
 
@@ -299,6 +306,37 @@ describe('POST /api/setu/enrollments', () => {
     expect(body.donateUrl).toContain(EID);
   });
 
+  it('enrolls every member that passes program eligibility — adults for an "any" program, not just children', async () => {
+    mockGetProgram.mockResolvedValue({ programKey: 'tabla', status: 'active', eligibility: { memberType: 'any' } });
+    const { set } = setupEnrollTransaction({
+      members: [{ type: 'Adult', mid: 'fid1-01' }, { type: 'Adult', mid: 'fid1-02' }, { type: 'Child', mid: 'fid1-03' }],
+    });
+
+    const res = await enrollmentsPOST(
+      makeRequest('POST', '/api/setu/enrollments', { oid: OID }, managerHeaders()),
+    );
+    expect(res.status).toBe(201);
+
+    // The enrollment doc is the txn.set write — assert it captured ALL eligible
+    // members, not just the child (the pre-fix children-only hardcode bug).
+    const enrollmentWrite = set.mock.calls[0]?.[1] as { enrolledMids: string[] };
+    expect(enrollmentWrite.enrolledMids).toEqual(['fid1-01', 'fid1-02', 'fid1-03']);
+  });
+
+  it('enrolls only children for a child-eligibility program (Bala Vihar unchanged)', async () => {
+    // mockGetProgram default = child eligibility.
+    const { set } = setupEnrollTransaction({
+      members: [{ type: 'Adult', mid: 'fid1-01' }, { type: 'Child', mid: 'fid1-03' }],
+    });
+
+    const res = await enrollmentsPOST(
+      makeRequest('POST', '/api/setu/enrollments', { oid: OID }, managerHeaders()),
+    );
+    expect(res.status).toBe(201);
+    const enrollmentWrite = set.mock.calls[0]?.[1] as { enrolledMids: string[] };
+    expect(enrollmentWrite.enrolledMids).toEqual(['fid1-03']);
+  });
+
   it('idempotent: re-enrolling active family returns 200 not 201', async () => {
     setupEnrollTransaction({ enrollmentExists: true, enrollmentStatus: 'active' });
 
@@ -370,7 +408,7 @@ describe('POST /api/setu/enrollments', () => {
 
   it('returns 422 with program-not-available when program is not active', async () => {
     setupEnrollTransaction();
-    mockAssertProgramActive.mockRejectedValue(new Error('program-not-available'));
+    mockGetProgram.mockResolvedValue(null);
 
     const res = await enrollmentsPOST(
       makeRequest('POST', '/api/setu/enrollments', { oid: OID }, managerHeaders()),

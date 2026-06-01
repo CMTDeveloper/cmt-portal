@@ -1,6 +1,6 @@
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
-import { resolveSuggestedAmount, type EnrollmentDoc, type OfferingDoc, type PricingTier } from '@cmt/shared-domain';
-import { assertProgramActive } from '@/features/setu/programs/get-programs';
+import { memberEligibleForProgram, resolveSuggestedAmount, type EnrollmentDoc, type OfferingDoc, type PricingTier } from '@cmt/shared-domain';
+import { getProgram } from '@/features/setu/programs/get-programs';
 
 type EnrollVia = EnrollmentDoc['enrolledVia'];
 
@@ -23,8 +23,9 @@ export type EnrollFamilyResult =
  *   at enrollment time (not a stale read from outside the txn).
  * - eid = `{fid}-{oid}` is deterministic — re-enrolling with status='active'
  *   is a no-op that returns created:false.
- * - enrolledMids is derived from members with type='Child' inside the txn
- *   (preserving BV behavior where only children are enrolled).
+ * - enrolledMids is derived from members that pass the program's eligibility
+ *   (memberEligibleForProgram) inside the txn — BV (child) → children, while
+ *   'any'/'adult' programs enroll all matching members.
  *
  * Throws with message 'offering-not-found' | 'offering-disabled' | 'offering-expired'
  * | 'family-not-found' | 'program-not-available' for caller to translate to HTTP errors.
@@ -83,9 +84,10 @@ export async function enrollFamily(params: EnrollFamilyParams): Promise<EnrollFa
       location: (offeringData['location'] ?? null) as OfferingDoc['location'],
     };
 
-    // Assert the program is active (not draft/archived). Throws 'program-not-available' if not.
-    // Called outside the txn (uses cache) so it's cheap; failure aborts before any writes.
-    await assertProgramActive(offering.programKey);
+    // Load the program for BOTH the active-gate AND its eligibility rules. Uses
+    // the cached reader so it's cheap; failure aborts before any writes.
+    const program = await getProgram(offering.programKey);
+    if (!program || program.status !== 'active') throw new Error('program-not-available');
 
     if (!offering.enabled) throw new Error('offering-disabled');
 
@@ -106,19 +108,22 @@ export async function enrollFamily(params: EnrollFamilyParams): Promise<EnrollFa
       }
     }
 
-    // Read eligible members AFTER early-exit checks so we only pay the cost when actually enrolling.
-    // For BV (child program): enroll children. For adult/any programs: enroll all members.
-    // This keeps BV behavior identical while supporting future program types.
+    // Read members AFTER early-exit checks so we only pay the cost when actually enrolling.
     const membersSnap = await txn.get(
       db.collection('families').doc(fid).collection('members'),
     );
 
+    // Enroll exactly the members that pass the program's eligibility — the same
+    // set the family sees on the enroll page (memberEligibleForProgram). BV
+    // (memberType 'child') → children only (unchanged); 'any'/'adult' programs →
+    // all matching members. Replaces the old children-only hardcode.
     const enrolledMids: string[] = [];
     for (const memberDoc of membersSnap.docs) {
-      const m = memberDoc.data() as { type?: string; mid?: string };
-      // For BV (child eligibility): only enroll Children. Generalised: enroll all.
-      // Phase D will thread programKey → eligibility; for now BV = children only.
-      if (m.type === 'Child' && m.mid) enrolledMids.push(m.mid);
+      const m = memberDoc.data() as { type?: 'Adult' | 'Child'; mid?: string; birthMonthYear?: string | null };
+      if (!m.mid || !m.type) continue;
+      if (memberEligibleForProgram({ type: m.type, birthMonthYear: m.birthMonthYear ?? null }, program.eligibility, now)) {
+        enrolledMids.push(m.mid);
+      }
     }
 
     txn.set(enrollmentRef, {
