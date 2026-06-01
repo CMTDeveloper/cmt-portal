@@ -41,7 +41,10 @@ function shouldHide(pathname: string): boolean {
 
 function activeTab(pathname: string): Tab {
   if (pathname.startsWith('/family/members')) return 'family';
-  if (pathname.startsWith('/family/enroll')) return 'bv';
+  // BV enroll highlights the Bala Vihar tab; enrolling in any other program is
+  // reached via Programs (which lives in the More sheet) → highlight More.
+  if (pathname === '/family/enroll' || pathname.startsWith('/family/enroll/bala-vihar')) return 'bv';
+  if (pathname.startsWith('/family/enroll')) return 'more';
   if (pathname.startsWith('/family/donate') && !pathname.startsWith('/family/donations')) return 'giving';
   if (pathname.startsWith('/family/donations') || pathname.startsWith('/family/calendar') || pathname.startsWith('/family/programs') || pathname.startsWith('/family/settings')) {
     return 'more';

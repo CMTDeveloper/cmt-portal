@@ -38,6 +38,20 @@ describe('Programs entry in family navigation', () => {
     expect(link.style.fontWeight).toBe('600');
   });
 
+  it('desktop sidebar highlights Programs (not Bala Vihar) when enrolling in a non-BV program', () => {
+    mockPathname = '/family/enroll/tabla';
+    render(<DesktopSidebarLive />);
+    expect(screen.getByRole('link', { name: /programs/i }).style.fontWeight).toBe('600');
+    expect(screen.getByRole('link', { name: /bala vihar/i }).style.fontWeight).not.toBe('600');
+  });
+
+  it('desktop sidebar still highlights Bala Vihar when enrolling in bala-vihar', () => {
+    mockPathname = '/family/enroll/bala-vihar';
+    render(<DesktopSidebarLive />);
+    expect(screen.getByRole('link', { name: /bala vihar/i }).style.fontWeight).toBe('600');
+    expect(screen.getByRole('link', { name: /programs/i }).style.fontWeight).not.toBe('600');
+  });
+
   it('mobile "More" sheet links Programs → /family/programs', async () => {
     const user = userEvent.setup();
     render(<MobileBottomNav />);

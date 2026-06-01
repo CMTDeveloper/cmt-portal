@@ -41,7 +41,11 @@ const WELCOME_NAV_ITEMS: [SidebarTab, string, keyof typeof SetuIcon, string, boo
 function deriveActiveFromPathname(pathname: string): SidebarTab {
   if (pathname.startsWith('/family/members')) return 'family';
   if (pathname.startsWith('/family/calendar')) return 'calendar';
-  if (pathname.startsWith('/family/enroll')) return 'bv';
+  // BV enroll (the redirect target /family/enroll and /family/enroll/bala-vihar)
+  // highlights Bala Vihar; enrolling in any OTHER program highlights Programs
+  // (that's where the family reached it from).
+  if (pathname === '/family/enroll' || pathname.startsWith('/family/enroll/bala-vihar')) return 'bv';
+  if (pathname.startsWith('/family/enroll')) return 'programs';
   if (pathname.startsWith('/family/programs')) return 'programs';
   if (pathname.startsWith('/family/donate') && !pathname.startsWith('/family/donations')) return 'giving';
   if (pathname.startsWith('/family/donations')) return 'receipts';
