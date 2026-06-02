@@ -1,16 +1,24 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockGet, mockDocGet } = vi.hoisted(() => ({ mockGet: vi.fn(), mockDocGet: vi.fn() }));
+const { mockGet, mockDocGet, whereCalls } = vi.hoisted(() => ({
+  mockGet: vi.fn(),
+  mockDocGet: vi.fn(),
+  whereCalls: [] as unknown[][],
+}));
 
 vi.mock('@cmt/firebase-shared/admin/firestore', () => {
   const Timestamp = { now: () => ({ toDate: () => new Date() }) };
+  const record = (...args: unknown[]) => {
+    whereCalls.push(args);
+    return whereChain;
+  };
   const orderByChain = { orderBy: () => orderByChain, get: mockGet };
-  const whereChain = { where: () => whereChain, orderBy: () => orderByChain, get: mockGet };
+  const whereChain = { where: record, orderBy: () => orderByChain, get: mockGet };
   return {
     Timestamp,
     portalFirestore: () => ({
       collection: () => ({
-        where: () => whereChain,
+        where: record,
         doc: () => ({ get: mockDocGet }),
       }),
     }),
@@ -40,6 +48,7 @@ function entryDoc(date: string, kind: 'class' | 'no-class', enabled = true, extr
 
 beforeEach(() => {
   vi.clearAllMocks();
+  whereCalls.length = 0;
 });
 
 describe('torontoToday', () => {
@@ -54,9 +63,18 @@ describe('getPublishedCalendar', () => {
     mockGet.mockResolvedValue({
       docs: [entryDoc('2025-09-07', 'class', true), entryDoc('2025-09-14', 'class', false)],
     });
-    const out = await getPublishedCalendar('Brampton');
+    const out = await getPublishedCalendar('Brampton', 'bala-vihar');
     expect(out).toHaveLength(1);
     expect(out[0]!.date).toBe('2025-09-07');
+  });
+
+  it('scopes the query to BOTH location and programKey (#2: no cross-program leak)', async () => {
+    mockGet.mockResolvedValue({ docs: [] });
+    await getPublishedCalendar('Brampton', 'tabla');
+    // Without the programKey filter, a second usesCalendar program's dates leak
+    // into a family's view and inflate the attendance denominator.
+    expect(whereCalls).toContainEqual(['location', '==', 'Brampton']);
+    expect(whereCalls).toContainEqual(['programKey', '==', 'tabla']);
   });
 });
 
@@ -70,7 +88,7 @@ describe('getUpcoming', () => {
         entryDoc('2025-10-26', 'class', true),
       ],
     });
-    const { nextClass, upcoming } = await getUpcoming('Brampton', '2025-10-10', 4);
+    const { nextClass, upcoming } = await getUpcoming('Brampton', 'bala-vihar', '2025-10-10', 4);
     // next class on/after 2025-10-10 skips the 10-12 no-class day → 10-19
     expect(nextClass?.date).toBe('2025-10-19');
     // upcoming includes the no-class notice + classes from 2025-10-10 onward
@@ -79,7 +97,7 @@ describe('getUpcoming', () => {
 
   it('returns null nextClass when nothing remains', async () => {
     mockGet.mockResolvedValue({ docs: [entryDoc('2025-09-07', 'class', true)] });
-    const { nextClass, upcoming } = await getUpcoming('Brampton', '2026-07-01');
+    const { nextClass, upcoming } = await getUpcoming('Brampton', 'bala-vihar', '2026-07-01');
     expect(nextClass).toBeNull();
     expect(upcoming).toEqual([]);
   });

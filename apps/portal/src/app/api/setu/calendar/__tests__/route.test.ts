@@ -31,7 +31,15 @@ describe('GET /api/setu/calendar', () => {
     const body = await res.json();
     expect(body.entries).toHaveLength(1);
     expect(body.weekly).toEqual([{ time: '10:00', label: 'Assembly' }]);
-    expect(mockPublished).toHaveBeenCalledWith('Brampton');
+    // Defaults to the Bala Vihar program when no ?programKey= is given.
+    expect(mockPublished).toHaveBeenCalledWith('Brampton', 'bala-vihar');
+  });
+  it('honors an explicit ?programKey= for a non-BV program', async () => {
+    const { GET } = await import('../route');
+    const res = await GET(req('/api/setu/calendar?location=Brampton&programKey=tabla', 'family-member'));
+    expect(res.status).toBe(200);
+    expect((await res.json()).programKey).toBe('tabla');
+    expect(mockPublished).toHaveBeenCalledWith('Brampton', 'tabla');
   });
   it('allows a teacher to read', async () => {
     const { GET } = await import('../route');

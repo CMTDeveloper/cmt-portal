@@ -45,8 +45,10 @@ export default async function FamilyCalendarPage() {
   const data = await getCurrentFamily();
   const location = data?.family.location ?? null;
 
+  // BV-centric family calendar — scope to 'bala-vihar' so a second usesCalendar
+  // program's dates don't appear under the Bala Vihar heading.
   const [entries, weekly] = location
-    ? await Promise.all([getPublishedCalendar(location), getWeeklySchedule(location)])
+    ? await Promise.all([getPublishedCalendar(location, 'bala-vihar'), getWeeklySchedule(location)])
     : [[], []];
 
   const months = groupByMonth(entries);

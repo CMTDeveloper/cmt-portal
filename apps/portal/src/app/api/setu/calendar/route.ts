@@ -11,14 +11,18 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'no-session' }, { status: 401 });
   }
 
-  const location = new URL(req.url).searchParams.get('location');
+  const params = new URL(req.url).searchParams;
+  const location = params.get('location');
   if (!location || !(LOCATIONS as readonly string[]).includes(location)) {
     return NextResponse.json({ error: 'location-required' }, { status: 400 });
   }
+  // Calendar is per-program. Default to Bala Vihar (the only calendar program
+  // today); a mobile client can request another via ?programKey=.
+  const programKey = params.get('programKey') || 'bala-vihar';
 
   const [entries, weekly] = await Promise.all([
-    getPublishedCalendar(location as Location),
+    getPublishedCalendar(location as Location, programKey),
     getWeeklySchedule(location as Location),
   ]);
-  return NextResponse.json({ location, entries, weekly });
+  return NextResponse.json({ location, programKey, entries, weekly });
 }

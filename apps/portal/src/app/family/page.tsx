@@ -95,10 +95,13 @@ export default async function FamilyDashboardPage() {
         ? await getLegacyPaymentStatus(data.family.legacyFid)
         : null;
 
+      // The dashboard's calendar + attendance are the Bala Vihar program's, so
+      // scope the readers to 'bala-vihar' (a second usesCalendar program must not
+      // leak dates in or inflate the attendance denominator).
       const [{ upcoming }, rawCheckIns, classSundays] = await Promise.all([
-        getUpcoming(data.family.location, undefined, 3),
+        getUpcoming(data.family.location, 'bala-vihar', undefined, 3),
         getCheckInAttendance(data.family.legacyFid),
-        getClassDatesHeld(data.family.location),
+        getClassDatesHeld(data.family.location, 'bala-vihar'),
       ]);
       upcomingEntries = upcoming;
 

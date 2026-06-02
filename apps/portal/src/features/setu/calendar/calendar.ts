@@ -34,19 +34,26 @@ export function torontoToday(now: Date = new Date()): string {
   }).format(now);
 }
 
-/** All entries for a location ordered by date (admin view — includes drafts). */
-export async function getCalendar(location: Location): Promise<CalendarEntry[]> {
+/**
+ * Entries for a (location, program) ordered by date (family/teacher chain;
+ * includes drafts). programKey is REQUIRED: families must see only their
+ * program's calendar — without it a second usesCalendar program's dates leak in
+ * and inflate the attendance denominator. Needs the composite index
+ * classCalendarEntries (location, programKey, date).
+ */
+export async function getCalendar(location: Location, programKey: string): Promise<CalendarEntry[]> {
   const snap = await portalFirestore()
     .collection(ENTRIES)
     .where('location', '==', location)
+    .where('programKey', '==', programKey)
     .orderBy('date', 'asc')
     .get();
   return snap.docs.map((d) => docToEntry(d.data()));
 }
 
-/** Published (enabled) entries only — family/teacher view. */
-export async function getPublishedCalendar(location: Location): Promise<CalendarEntry[]> {
-  const entries = await getCalendar(location);
+/** Published (enabled) entries only — family/teacher view, per program. */
+export async function getPublishedCalendar(location: Location, programKey: string): Promise<CalendarEntry[]> {
+  const entries = await getCalendar(location, programKey);
   return entries.filter((e) => e.enabled);
 }
 
@@ -55,25 +62,29 @@ export interface UpcomingSummary {
   upcoming: CalendarEntry[]; // next few enabled entries (class + no-class notices) on/after today
 }
 
-/** Drives the dashboard "Upcoming" card. */
+/** Drives the dashboard "Upcoming" card (scoped to one program). */
 export async function getUpcoming(
   location: Location,
+  programKey: string,
   todayYmd: string = torontoToday(),
   limit = 4,
 ): Promise<UpcomingSummary> {
-  const entries = await getPublishedCalendar(location);
+  const entries = await getPublishedCalendar(location, programKey);
   const future = entries.filter((e) => e.date >= todayYmd);
   const nextClass = future.find((e) => e.kind === 'class') ?? null;
   return { nextClass, upcoming: future.slice(0, limit) };
 }
 
 /** Published class-kind dates on/before today (Toronto), ascending — the
- * Sundays Bala Vihar has actually held so far. The denominator for attendance. */
+ * Sundays the given program has actually held so far. The denominator for
+ * attendance, so it MUST be program-scoped (else a second program's Sundays
+ * inflate it). */
 export async function getClassDatesHeld(
   location: Location,
+  programKey: string,
   todayYmd: string = torontoToday(),
 ): Promise<string[]> {
-  const entries = await getPublishedCalendar(location);
+  const entries = await getPublishedCalendar(location, programKey);
   return entries
     .filter((e) => e.kind === 'class' && e.date <= todayYmd)
     .map((e) => e.date)
