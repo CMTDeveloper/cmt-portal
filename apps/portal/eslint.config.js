@@ -3,6 +3,31 @@ import config from '@cmt/config/eslint';
 export default [
   ...config,
   {
+    // Tripwire for the multi-program "first active enrollment" bug class. The
+    // BV-bespoke dashboard + member surfaces must select the enrollment via
+    // selectBalaViharEnrollment()/buildFamilyDashboardModel (pinned to
+    // programKey), NEVER a raw `status === 'active'` find — a newer non-BV
+    // enrollment sorts first (enrolledAt DESC) and hijacks the section, scoping
+    // attendance to a window with no check-ins. See the memory note
+    // feedback_bespoke_section_pin_to_programkey. Enrollment selection logic
+    // lives in _helpers/ (excluded), so these page files should never compare
+    // an enrollment status inline.
+    // Globs are cwd-relative (lint runs `eslint src` from apps/portal), so match
+    // with a leading ** rather than an apps/portal/ prefix.
+    files: ['**/app/family/page.tsx', '**/app/family/members/**/page.tsx'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "BinaryExpression[operator='==='][left.property.name='status'][right.value='active']",
+          message:
+            "Don't select an enrollment by status alone in a BV-bespoke surface — a newer non-BV enrollment hijacks it. Use selectBalaViharEnrollment()/buildFamilyDashboardModel from _helpers/.",
+        },
+      ],
+    },
+  },
+  {
     files: ['apps/portal/src/features/check-in/**/*.{ts,tsx}'],
     settings: {
       'boundaries/elements': [
