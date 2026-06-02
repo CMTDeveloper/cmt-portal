@@ -44,7 +44,40 @@ const PROGRAMS: ProgramRow[] = [
     updatedAt: NOW,
     updatedBy: 'admin',
   },
+  {
+    programKey: 'om-chanting',
+    label: 'OM Chanting',
+    shortDescription: '',
+    status: 'active',
+    locations: ['Brampton'],
+    termType: 'term',
+    eligibility: { memberType: 'any' },
+    // a SECOND calendar-using program → can share a date with Bala Vihar
+    capabilities: { usesOfferings: true, usesDonation: false, usesLevels: false, usesCalendar: true, attendanceMode: 'none' },
+    displayOrder: 2,
+    createdAt: NOW,
+    createdBy: 'admin',
+    updatedAt: NOW,
+    updatedBy: 'admin',
+  },
 ];
+
+const NOW_ISO = NOW;
+function entryFixture(programKey: string, specialEvents: string) {
+  return {
+    entryId: `${programKey}-brampton-2026-11-15`,
+    programKey,
+    location: 'Brampton',
+    date: '2026-11-15',
+    kind: 'class',
+    classType: 'regular',
+    noClassReason: null,
+    specialEvents,
+    enabled: true,
+    createdAt: NOW_ISO,
+    updatedAt: NOW_ISO,
+  };
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -102,5 +135,30 @@ describe('CalendarEditor — program filter', () => {
     expect(postCall).toBeTruthy();
     const body = JSON.parse((postCall![1]).body as string);
     expect(body.programKey).toBe('bala-vihar');
+  });
+
+  it('shows only the selected program\'s entries (two programs, same date)', async () => {
+    const user = userEvent.setup();
+    // Location-wide GET returns BOTH programs' entries for the same date.
+    global.fetch = vi.fn().mockImplementation((url: string) =>
+      Promise.resolve({
+        ok: true,
+        json: async () =>
+          String(url).includes('/weekly')
+            ? { rows: [] }
+            : { entries: [entryFixture('bala-vihar', 'BV Diwali'), entryFixture('om-chanting', 'OM Session')] },
+      }),
+    ) as unknown as typeof fetch;
+
+    render(<CalendarEditor locations={['Brampton']} programs={PROGRAMS} />);
+
+    // Default selected program is bala-vihar → only its entry is listed.
+    await waitFor(() => expect(screen.getAllByText('BV Diwali').length).toBeGreaterThan(0));
+    expect(screen.queryByText('OM Session')).toBeNull();
+
+    // Switch the program selector → list re-filters to OM Chanting only.
+    await user.selectOptions(screen.getByLabelText('Program'), 'om-chanting');
+    await waitFor(() => expect(screen.getAllByText('OM Session').length).toBeGreaterThan(0));
+    expect(screen.queryByText('BV Diwali')).toBeNull();
   });
 });

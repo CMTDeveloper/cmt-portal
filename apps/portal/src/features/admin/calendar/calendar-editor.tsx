@@ -12,6 +12,7 @@ import type { ProgramRow } from '@/features/admin/programs/programs-table';
 
 interface EntryRow {
   entryId: string;
+  programKey: string;
   location: Location;
   date: string;
   kind: CalendarKind;
@@ -134,6 +135,12 @@ export function CalendarEditor({ locations, programs }: CalendarEditorProps) {
     });
   }
 
+  // The GET is location-wide (all programs), so scope the displayed list to the
+  // selected program — otherwise, now that two programs can share a date+location
+  // (program-scoped ids), the list would show indistinguishable rows. Creation,
+  // toggle, and delete already act per-row via the stored (program-scoped) entryId.
+  const visibleEntries = entries.filter((e) => e.programKey === programKey);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       {calendarPrograms.length > 0 && (
@@ -207,14 +214,14 @@ export function CalendarEditor({ locations, programs }: CalendarEditorProps) {
 
       {/* Entry list */}
       <div className="card" style={{ padding: 18 }}>
-        <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>{location} calendar {loading ? '· loading…' : `· ${entries.length} entries`}</h3>
-        {entries.length === 0 && !loading ? (
+        <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>{location} calendar {loading ? '· loading…' : `· ${visibleEntries.length} entries`}</h3>
+        {visibleEntries.length === 0 && !loading ? (
           <div style={{ fontSize: 13, color: 'var(--muted)' }}>No entries yet. Add one above or run the seed script.</div>
         ) : (
           <>
           {/* Mobile: stacked rows (the table overflows a phone width). */}
           <div className="block md:hidden">
-            {entries.map((e, i) => (
+            {visibleEntries.map((e, i) => (
               <div key={e.entryId} style={{ padding: '14px 0', borderTop: i > 0 ? '1px solid var(--line)' : undefined }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
                   <span style={{ fontSize: 14, fontWeight: 600 }}>{e.date}</span>
@@ -249,7 +256,7 @@ export function CalendarEditor({ locations, programs }: CalendarEditorProps) {
                 </tr>
               </thead>
               <tbody>
-                {entries.map((e) => (
+                {visibleEntries.map((e) => (
                   <tr key={e.entryId} style={{ borderBottom: '1px solid var(--line)' }}>
                     <td style={td}>{e.date}</td>
                     <td style={td}>{e.kind}</td>
