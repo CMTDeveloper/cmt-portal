@@ -7,7 +7,16 @@ import { toast } from '@cmt/ui';
 interface EnrollCtaProps {
   /** The offering id (oid) to enroll the family in. */
   oid: string;
+  /** usesDonation && feature-flag — when true, success redirects to donate. */
   donationsEnabled: boolean;
+  /**
+   * The program's `capabilities.usesDonation`. Controls the post-enroll message:
+   * a no-donation program says "enrolled", a donation program whose collection
+   * isn't live yet says "donation coming soon". The `enrolled` view is only
+   * reached when `donationsEnabled` is false, so this disambiguates the two
+   * reasons it can be false. Defaults to false (safe "enrolled" wording).
+   */
+  usesDonation?: boolean;
 }
 
 function safeFrom(path: string): string {
@@ -15,7 +24,7 @@ function safeFrom(path: string): string {
   return '/family/enroll';
 }
 
-export function EnrollCta({ oid, donationsEnabled }: EnrollCtaProps) {
+export function EnrollCta({ oid, donationsEnabled, usesDonation = false }: EnrollCtaProps) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [enrolled, setEnrolled] = useState(false);
@@ -74,7 +83,7 @@ export function EnrollCta({ oid, donationsEnabled }: EnrollCtaProps) {
   if (enrolled) {
     return (
       <div style={{ padding: '12px 16px', background: 'var(--accentSoft)', color: 'var(--accentDeep)', borderRadius: 'var(--radiusSm)', fontSize: 14, fontWeight: 600, textAlign: 'center' }}>
-        Your family is enrolled — donation coming soon.
+        {usesDonation ? 'Your family is enrolled — donation coming soon.' : 'Your family is enrolled.'}
       </div>
     );
   }

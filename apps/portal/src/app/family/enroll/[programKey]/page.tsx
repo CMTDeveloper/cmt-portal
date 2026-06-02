@@ -290,7 +290,7 @@ export default async function ProgramEnrollPage({ params }: Props) {
                   Cancel
                 </Link>
               ) : ctaOid && isManager ? (
-                <EnrollCta oid={ctaOid} donationsEnabled={usesDonation && donationsEnabled} />
+                <EnrollCta oid={ctaOid} donationsEnabled={usesDonation && donationsEnabled} usesDonation={usesDonation} />
               ) : ctaOid ? (
                 <button className="btn btn--p btn--block" disabled style={{ cursor: 'not-allowed', opacity: 0.5 }}>
                   Only the family manager can enroll
@@ -434,7 +434,7 @@ export default async function ProgramEnrollPage({ params }: Props) {
                       }
                     />
                   ) : isManager ? (
-                    <EnrollCta oid={ctaOid} donationsEnabled={usesDonation && donationsEnabled} />
+                    <EnrollCta oid={ctaOid} donationsEnabled={usesDonation && donationsEnabled} usesDonation={usesDonation} />
                   ) : (
                     <button className="btn btn--p btn--block" disabled style={{ cursor: 'not-allowed', opacity: 0.5 }}>
                       Only the family manager can enroll

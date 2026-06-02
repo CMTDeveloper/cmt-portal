@@ -43,7 +43,7 @@ describe('EnrollCta', () => {
     expect(screen.getByRole('button')).toBeDisabled();
   });
 
-  it('donations disabled: shows enrolled state and does not navigate', async () => {
+  it('uses-donation program with collection off: shows "donation coming soon"', async () => {
     const user = userEvent.setup();
     vi.spyOn(global, 'fetch').mockResolvedValueOnce({
       ok: true,
@@ -51,12 +51,33 @@ describe('EnrollCta', () => {
       json: async () => ({ eid: 'CMT-AAAA-bv-brampton-fall-2026', donateUrl: '/family/donate?eid=CMT-AAAA-bv-brampton-fall-2026' }),
     } as Response);
 
-    render(<EnrollCta oid={OID} donationsEnabled={false}/>);
+    // donationsEnabled=false but usesDonation=true → the flag is off, so donation
+    // collection isn't live yet: "coming soon" is the right message.
+    render(<EnrollCta oid={OID} donationsEnabled={false} usesDonation={true}/>);
     await user.click(screen.getByRole('button', { name: /enroll/i }));
 
     await waitFor(() => expect(toastMock.success).toHaveBeenCalledWith('Your family is enrolled!'));
     expect(mockPush).not.toHaveBeenCalled();
     expect(screen.getByText(/donation coming soon/i)).toBeTruthy();
+  });
+
+  it('no-donation program: shows "enrolled" WITHOUT "donation coming soon"', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ eid: 'CMT-AAAA-om-chanting-2026', donateUrl: '/family/donate' }),
+    } as Response);
+
+    // usesDonation=false (e.g. om-chanting): there is no donation, so the message
+    // must NOT promise one is "coming soon".
+    render(<EnrollCta oid={OID} donationsEnabled={false} usesDonation={false}/>);
+    await user.click(screen.getByRole('button', { name: /enroll/i }));
+
+    await waitFor(() => expect(toastMock.success).toHaveBeenCalledWith('Your family is enrolled!'));
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(screen.getByText('Your family is enrolled.')).toBeTruthy();
+    expect(screen.queryByText(/donation coming soon/i)).toBeNull();
   });
 
   it('on 401: redirects to sign-in with safeFrom param', async () => {
