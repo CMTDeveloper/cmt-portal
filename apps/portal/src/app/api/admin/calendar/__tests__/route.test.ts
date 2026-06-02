@@ -44,11 +44,21 @@ describe('POST /api/admin/calendar', () => {
     const { POST } = await import('../route');
     expect((await POST(makeRequest('POST', '/api/admin/calendar', classBody))).status).toBe(401);
   });
-  it('allows welcome-team to create a class day → 201 entryId', async () => {
+  it('allows welcome-team to create a class day → 201 entryId (programKey-scoped)', async () => {
     const { POST } = await import('../route');
     const res = await POST(makeRequest('POST', '/api/admin/calendar', classBody, 'uid-w', 'welcome-team'));
     expect(res.status).toBe(201);
-    expect((await res.json()).entryId).toBe('brampton-2025-09-07');
+    // id is now {programKey}-{location}-{date}; programKey defaults to bala-vihar.
+    expect((await res.json()).entryId).toBe('bala-vihar-brampton-2025-09-07');
+  });
+  it('gives two programs distinct ids on the same location+date (#1: no collision)', async () => {
+    const { POST } = await import('../route');
+    const bv = await POST(makeRequest('POST', '/api/admin/calendar', classBody, 'uid-a'));
+    const tabla = await POST(
+      makeRequest('POST', '/api/admin/calendar', { ...classBody, programKey: 'tabla' }, 'uid-a'),
+    );
+    expect((await bv.json()).entryId).toBe('bala-vihar-brampton-2025-09-07');
+    expect((await tabla.json()).entryId).toBe('tabla-brampton-2025-09-07');
   });
   it('400 for a class day with no classType', async () => {
     const { POST } = await import('../route');

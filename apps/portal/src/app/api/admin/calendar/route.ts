@@ -43,7 +43,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'bad-request', issues: parsed.error.issues }, { status: 400 });
   }
   const data = parsed.data;
-  const entryId = calendarEntryId(data.location, data.date);
+  const entryId = calendarEntryId(data.programKey, data.location, data.date);
   const now = FieldValue.serverTimestamp();
 
   try {

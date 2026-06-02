@@ -13,9 +13,16 @@ export type CalendarKind = (typeof CALENDAR_KINDS)[number];
 
 const YMD = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD');
 
-/** Deterministic entry id: `{location}-{YYYY-MM-DD}`. */
-export function calendarEntryId(location: string, date: string): string {
-  return `${toSafeSlug(location)}-${date}`;
+/**
+ * Deterministic entry id: `{programKey}-{location}-{YYYY-MM-DD}`.
+ *
+ * The programKey prefix is required: without it two `usesCalendar` programs
+ * (e.g. Bala Vihar + Tabla) would collide on a shared class Sunday — the second
+ * `.doc(id).create()` throws ALREADY_EXISTS, so the second program could never
+ * publish that date. Keeps the id a stable upsert key per (program, location, day).
+ */
+export function calendarEntryId(programKey: string, location: string, date: string): string {
+  return `${toSafeSlug(programKey)}-${toSafeSlug(location)}-${date}`;
 }
 
 export const ClassCalendarEntryDocSchema = z.object({

@@ -8,9 +8,15 @@ import {
 } from '../schemas/class-calendar';
 
 describe('calendarEntryId', () => {
-  it('builds {location}-{date}', () => {
-    expect(calendarEntryId('Brampton', '2025-09-07')).toBe('brampton-2025-09-07');
-    expect(calendarEntryId('Scarborough', '2026-03-15')).toBe('scarborough-2026-03-15');
+  it('builds {programKey}-{location}-{date}', () => {
+    expect(calendarEntryId('bala-vihar', 'Brampton', '2025-09-07')).toBe('bala-vihar-brampton-2025-09-07');
+    expect(calendarEntryId('tabla', 'Scarborough', '2026-03-15')).toBe('tabla-scarborough-2026-03-15');
+  });
+
+  it('lets two programs share a location+date without colliding', () => {
+    expect(calendarEntryId('bala-vihar', 'Brampton', '2026-11-15')).not.toBe(
+      calendarEntryId('tabla', 'Brampton', '2026-11-15'),
+    );
   });
 });
 
