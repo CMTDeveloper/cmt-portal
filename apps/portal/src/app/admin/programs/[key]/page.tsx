@@ -110,7 +110,7 @@ export default async function AdminProgramKeyPage({ params }: { params: Promise<
             </span>
           </div>
         )}
-        <OfferingsPanel programKey={key} initialOfferings={offerings} />
+        <OfferingsPanel programKey={key} initialOfferings={offerings} usesDonation={program.capabilities.usesDonation} />
       </div>
     </>
   );

@@ -39,6 +39,8 @@ export type OfferingRow = Omit<OfferingDoc, 'startDate' | 'endDate' | 'createdAt
 interface OfferingsPanelProps {
   programKey: string;
   initialOfferings: OfferingRow[];
+  /** program.capabilities.usesDonation — hides the donation/payment fields when false. */
+  usesDonation: boolean;
 }
 
 // Editable tier row (string fields for form inputs)
@@ -104,11 +106,12 @@ interface ModalProps {
   editing: OfferingRow | null;
   /** When set, modal is opened in "duplicate" mode with pre-filled values */
   duplicateFrom: OfferingRow | null;
+  usesDonation: boolean;
   onClose: () => void;
   onSaved: (offering: OfferingRow) => void;
 }
 
-function OfferingModal({ programKey, editing, duplicateFrom, onClose, onSaved }: ModalProps) {
+function OfferingModal({ programKey, editing, duplicateFrom, usesDonation, onClose, onSaved }: ModalProps) {
   const isEdit = editing !== null;
   const prefill = duplicateFrom ?? editing;
   const [pending, startTransition] = useTransition();
@@ -182,7 +185,10 @@ function OfferingModal({ programKey, editing, duplicateFrom, onClose, onSaved }:
   function handleSubmit(ev: React.FormEvent) {
     ev.preventDefault();
     if (!validate()) return;
-    const pricingTiers = tiersFromRows(tierRows);
+    // A program with usesDonation=false has no donation/payment: never persist a
+    // stray tier or a non-default payment source, regardless of hidden form state.
+    const pricingTiers = usesDonation ? tiersFromRows(tierRows) : [];
+    const effectivePaymentSource: PaymentSource = usesDonation ? paymentSource : 'portal';
 
     startTransition(async () => {
       try {
@@ -195,7 +201,7 @@ function OfferingModal({ programKey, editing, duplicateFrom, onClose, onSaved }:
           if (endDate !== editEndDate) body.endDate = endDate ? toTorontoEndOfDayISO(endDate) : null;
           if (JSON.stringify(pricingTiers) !== JSON.stringify(editing.pricingTiers)) body.pricingTiers = pricingTiers;
           if (enabled !== editing.enabled) body.enabled = enabled;
-          if (paymentSource !== (editing.paymentSource ?? 'portal')) body.paymentSource = paymentSource;
+          if (effectivePaymentSource !== (editing.paymentSource ?? 'portal')) body.paymentSource = effectivePaymentSource;
           res = await fetch(`/api/admin/offerings/${editing.oid}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
@@ -210,7 +216,7 @@ function OfferingModal({ programKey, editing, duplicateFrom, onClose, onSaved }:
             startDate: toTorontoStartOfDayISO(startDate),
             endDate: toTorontoEndOfDayISO(endDate),
             pricingTiers,
-            paymentSource,
+            paymentSource: effectivePaymentSource,
             enabled,
           };
           res = await fetch('/api/admin/offerings', {
@@ -242,7 +248,7 @@ function OfferingModal({ programKey, editing, duplicateFrom, onClose, onSaved }:
             endDate: endDate ? toTorontoEndOfDayISO(endDate) : null,
             pricingTiers,
             enabled,
-            paymentSource,
+            paymentSource: effectivePaymentSource,
             updatedAt: now,
           });
         } else {
@@ -258,7 +264,7 @@ function OfferingModal({ programKey, editing, duplicateFrom, onClose, onSaved }:
             endDate: toTorontoEndOfDayISO(endDate),
             pricingTiers,
             enabled,
-            paymentSource,
+            paymentSource: effectivePaymentSource,
             createdAt: now,
             createdBy: '',
             updatedAt: now,
@@ -331,7 +337,9 @@ function OfferingModal({ programKey, editing, duplicateFrom, onClose, onSaved }:
               </label>
             </div>
 
-            {/* Pricing tiers */}
+            {/* Donation/payment fields — only for programs that take a donation.
+                A free program (usesDonation=false) shows neither. */}
+            {usesDonation && (<>
             <div>
               <div style={{ ...labelStyle, marginBottom: 8 }}>Suggested donation by enrollment date</div>
               <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 10, lineHeight: 1.5 }}>
@@ -373,6 +381,7 @@ function OfferingModal({ programKey, editing, duplicateFrom, onClose, onSaved }:
                 <option value="legacy">Legacy roster — status read from the old system</option>
               </select>
             </label>
+            </>)}
 
             <label style={{ ...labelStyle, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
               <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} style={{ width: 16, height: 16, accentColor: 'var(--accent)' }} />
@@ -428,7 +437,7 @@ const actionBtnStyle: React.CSSProperties = {
 
 // ─── Main panel ──────────────────────────────────────────────────────────────
 
-export function OfferingsPanel({ programKey, initialOfferings }: OfferingsPanelProps) {
+export function OfferingsPanel({ programKey, initialOfferings, usesDonation }: OfferingsPanelProps) {
   const [offerings, setOfferings] = useState<OfferingRow[]>(initialOfferings);
   const [showDisabled, setShowDisabled] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -561,6 +570,7 @@ export function OfferingsPanel({ programKey, initialOfferings }: OfferingsPanelP
           programKey={programKey}
           editing={editing}
           duplicateFrom={duplicateFrom}
+          usesDonation={usesDonation}
           onClose={closeModal}
           onSaved={handleSaved}
         />
