@@ -340,3 +340,55 @@ describe('ProgramEnrollPage — free program (usesDonation=false)', () => {
     expect(screen.getAllByText(/no donation requirement/i).length).toBeGreaterThan(0);
   });
 });
+
+// ─── #3: legacy-payment bridge is Bala Vihar-only ─────────────────────────────
+
+describe('ProgramEnrollPage — legacy-payment bridge is Bala Vihar-only (#3)', () => {
+  const TABLA_DONATION_PROGRAM = {
+    ...BV_PROGRAM,
+    programKey: 'tabla',
+    label: 'Tabla',
+    eligibility: { memberType: 'any' as const },
+    capabilities: {
+      usesOfferings: true,
+      usesDonation: true,
+      usesLevels: false,
+      usesCalendar: false,
+      attendanceMode: 'none' as const,
+    },
+  };
+
+  // An offering mis-configured with paymentSource:'legacy' on a NON-BV program.
+  const TABLA_LEGACY_OFFERING = {
+    ...ACTIVE_PERIOD,
+    oid: 'tabla-brampton-2026-27',
+    programKey: 'tabla',
+    programLabel: 'Tabla',
+    termLabel: '2026-27',
+    paymentSource: 'legacy' as const,
+  };
+
+  const TABLA_ENROLLMENT = {
+    ...ACTIVE_ENROLLMENT_WITH_SNAPSHOT,
+    eid: 'CMT-AAAA1111-tabla-brampton-2026-27',
+    oid: 'tabla-brampton-2026-27',
+    programKey: 'tabla',
+    termLabel: '2026-27',
+  };
+
+  it('never consults the BV roster for a non-BV legacy offering (no false "Paid")', async () => {
+    mockGetProgram.mockResolvedValue(TABLA_DONATION_PROGRAM);
+    mockGetEnrollments.mockResolvedValue([TABLA_ENROLLMENT]);
+    mockGetOpenOfferingsForFamily.mockResolvedValue([TABLA_LEGACY_OFFERING]);
+    // Would wrongly mark Tabla "paid" from the BV roster if the gate were missing.
+    mockGetLegacyPaymentStatus.mockResolvedValue('paid');
+    mockGetLegacyPaymentStatus.mockClear();
+
+    const page = await ProgramEnrollPage({ params: makeParams('tabla') });
+    render(page);
+
+    // The BV-only gate means the legacy bridge is short-circuited for Tabla, so
+    // getLegacyPaymentStatus (which reads the BV roster) is never called.
+    expect(mockGetLegacyPaymentStatus).not.toHaveBeenCalled();
+  });
+});

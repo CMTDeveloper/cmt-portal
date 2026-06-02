@@ -157,10 +157,15 @@ export default async function ProgramEnrollPage({ params }: Props) {
   const donationsEnabled = process.env.NEXT_PUBLIC_FEATURE_SETU_DONATIONS === 'true';
   const usesDonation = program.capabilities.usesDonation;
 
-  // Legacy payment gate (BV-specific).
-  const isLegacyPeriod = enrolledOffering
-    ? paymentSourceOf({ ...(enrolledOffering.paymentSource !== undefined ? { paymentSource: enrolledOffering.paymentSource } : {}) }) === 'legacy'
-    : false;
+  // Legacy payment gate — BALA VIHAR ONLY. getLegacyPaymentStatus reads the BV
+  // roster's `payment` column (the 2025-26 cutover), which has no program
+  // dimension. Applying it to another program (even one whose offering is mis-set
+  // to paymentSource:'legacy') would show BV's payment status for a non-BV
+  // donation, so gate the whole bridge on programKey.
+  const isLegacyPeriod =
+    programKey === 'bala-vihar' &&
+    enrolledOffering != null &&
+    paymentSourceOf({ ...(enrolledOffering.paymentSource !== undefined ? { paymentSource: enrolledOffering.paymentSource } : {}) }) === 'legacy';
   const legacyPaid =
     isLegacyPeriod && (await getLegacyPaymentStatus(family.legacyFid)) === 'paid';
 
