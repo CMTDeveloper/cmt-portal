@@ -101,7 +101,7 @@ async function main() {
   const now = Timestamp.now();
 
   for (const e of ENTRIES) {
-    const entryId = calendarEntryId(LOCATION, e.date);
+    const entryId = calendarEntryId('bala-vihar', LOCATION, e.date);
     if (args.dryRun) {
       console.log(`[dry-run] ${entryId} — ${e.kind}${e.noClassReason ? ` (${e.noClassReason})` : ''}`);
       continue;
