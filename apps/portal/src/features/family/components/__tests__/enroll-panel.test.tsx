@@ -123,4 +123,33 @@ describe('EnrollPanel', () => {
     await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
     expect(lastPostBody(fetchSpy)).toEqual({ oid: 'bv-brampton-fall-2026' });
   });
+
+  it('forwards usesDonation to the CTA: donation program + collection off → "coming soon"', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ eid: 'x', donateUrl: '/family/donate?eid=x' }),
+    } as Response);
+
+    render(<EnrollPanel offerings={[makeOffering()]} defaultOid="bv-brampton-fall-2026" donationsEnabled={false} usesDonation={true} />);
+    await user.click(screen.getByRole('button', { name: /enroll/i }));
+
+    await waitFor(() => expect(screen.getByText(/donation coming soon/i)).toBeTruthy());
+  });
+
+  it('forwards usesDonation to the CTA: no-donation program → "enrolled" without "coming soon"', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ eid: 'x', donateUrl: '/family/donate' }),
+    } as Response);
+
+    render(<EnrollPanel offerings={[makeOffering({ programKey: 'om-chanting' })]} defaultOid="bv-brampton-fall-2026" donationsEnabled={false} usesDonation={false} />);
+    await user.click(screen.getByRole('button', { name: /enroll/i }));
+
+    await waitFor(() => expect(screen.getByText('Your family is enrolled.')).toBeTruthy());
+    expect(screen.queryByText(/donation coming soon/i)).toBeNull();
+  });
 });

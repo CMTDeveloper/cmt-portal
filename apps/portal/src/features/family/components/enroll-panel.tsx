@@ -11,6 +11,8 @@ interface EnrollPanelProps {
   /** The oid pre-selected on first render (defaults to the first offering). */
   defaultOid: string;
   donationsEnabled: boolean;
+  /** program.capabilities.usesDonation — drives the post-enroll message wording. */
+  usesDonation?: boolean;
   /** Optional heading rendered above the picker (e.g. "Select term"). */
   pickerLabel?: React.ReactNode;
 }
@@ -25,7 +27,7 @@ interface EnrollPanelProps {
  * the CTA submits that oid — identical to the prior BV behaviour. With MULTIPLE
  * offerings the radios drive the submitted oid.
  */
-export function EnrollPanel({ offerings, defaultOid, donationsEnabled, pickerLabel }: EnrollPanelProps) {
+export function EnrollPanel({ offerings, defaultOid, donationsEnabled, usesDonation = false, pickerLabel }: EnrollPanelProps) {
   const [selectedOid, setSelectedOid] = useState(defaultOid);
 
   return (
@@ -36,7 +38,7 @@ export function EnrollPanel({ offerings, defaultOid, donationsEnabled, pickerLab
         selectedOid={selectedOid}
         onSelect={setSelectedOid}
       />
-      <EnrollCta oid={selectedOid} donationsEnabled={donationsEnabled} />
+      <EnrollCta oid={selectedOid} donationsEnabled={donationsEnabled} usesDonation={usesDonation} />
     </>
   );
 }

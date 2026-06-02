@@ -267,6 +267,7 @@ export default async function ProgramEnrollPage({ params }: Props) {
                         offerings={openOfferings}
                         defaultOid={ctaOid}
                         donationsEnabled={usesDonation && donationsEnabled}
+                        usesDonation={usesDonation}
                       />
                     </>
                   )}
@@ -432,6 +433,7 @@ export default async function ProgramEnrollPage({ params }: Props) {
                       offerings={openOfferings}
                       defaultOid={ctaOid}
                       donationsEnabled={usesDonation && donationsEnabled}
+                      usesDonation={usesDonation}
                       pickerLabel={
                         <h3 style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.16em', fontWeight: 700, fontFamily: 'var(--body)', color: 'var(--muted)', marginBottom: 10 }}>
                           Select term
