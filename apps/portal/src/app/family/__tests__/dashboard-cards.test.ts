@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { deriveProgramCards } from '../_helpers/derive-program-cards';
+import { selectBalaViharEnrollment } from '../_helpers/select-bv-enrollment';
 import type { EnrollmentWithOffering } from '@/features/setu/enrollment/get-enrollments';
 import type { ProgramDoc, OfferingDoc } from '@cmt/shared-domain';
 
@@ -210,5 +211,53 @@ describe('deriveProgramCards', () => {
     expect(cards[0]!.programKey).toBe('yoga');
     expect(cards[0]!.showAttendance).toBe(false);
     expect(cards[0]!.showDonation).toBe(false);
+  });
+});
+
+describe('selectBalaViharEnrollment', () => {
+  it('returns null when there are no enrollments', () => {
+    expect(selectBalaViharEnrollment([])).toBeNull();
+  });
+
+  it('returns null when the only active enrollment is non-BV', () => {
+    const tabla = makeEnrollment({
+      eid: 'CMT-AAAA-tabla-2026-27',
+      oid: 'tabla-2026-27',
+      programKey: 'tabla',
+      programLabel: 'Tabla',
+      termLabel: '2026-27',
+    });
+    expect(selectBalaViharEnrollment([tabla])).toBeNull();
+  });
+
+  it('picks the active Bala Vihar enrollment even when a newer non-BV one sorts first', () => {
+    // getEnrollments sorts enrolledAt DESC, so a recently-added Tabla enrollment
+    // comes first in the list. The BV-bespoke section must still resolve to Bala
+    // Vihar — otherwise Tabla hijacks the card's term/amount and scopes
+    // attendance to a window with no check-ins (the regression this guards).
+    const tabla = makeEnrollment({
+      eid: 'CMT-AAAA-tabla-2026-27',
+      oid: 'tabla-2026-27',
+      programKey: 'tabla',
+      programLabel: 'Tabla',
+      termLabel: '2026-27',
+      enrolledAt: new Date('2026-05-30'),
+    });
+    const bv = makeEnrollment({
+      eid: 'CMT-AAAA-bv-2025-26',
+      oid: 'bv-2025-26',
+      termLabel: '2025-26',
+      enrolledAt: new Date('2025-09-01'),
+    });
+
+    const picked = selectBalaViharEnrollment([tabla, bv]); // Tabla first (DESC)
+    expect(picked).not.toBeNull();
+    expect(picked!.programKey).toBe('bala-vihar');
+    expect(picked!.termLabel).toBe('2025-26');
+  });
+
+  it('ignores a cancelled Bala Vihar enrollment', () => {
+    const cancelledBv = makeEnrollment({ status: 'cancelled' });
+    expect(selectBalaViharEnrollment([cancelledBv])).toBeNull();
   });
 });

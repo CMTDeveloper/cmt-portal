@@ -14,6 +14,7 @@ import { getUpcoming, getClassDatesHeld, type CalendarEntry } from '@/features/s
 import { getCheckInAttendance, summarizeFamilyCheckIns, type CheckInSummary } from '@/features/setu/attendance/check-in-attendance';
 import { listPrograms } from '@/features/setu/programs/get-programs';
 import { deriveProgramCards } from './_helpers/derive-program-cards';
+import { selectBalaViharEnrollment } from './_helpers/select-bv-enrollment';
 import type { ProgramDoc } from '@cmt/shared-domain';
 
 function torontoYmd(d: Date): string {
@@ -100,7 +101,13 @@ export default async function FamilyDashboardPage() {
         listPrograms(),
       ]);
       const programsById = new Map<string, ProgramDoc>(allPrograms.map((p) => [p.programKey, p]));
-      const activeEnrollment = enrollments.find((e) => e.status === 'active') ?? null;
+      // The bespoke top section (BV card + Donation card + attendance) is Bala
+      // Vihar-specific, so pin it to the active *Bala Vihar* enrollment. A family
+      // may hold several active enrollments (e.g. BV + Tabla); picking "first
+      // active" let a newer non-BV enrollment hijack the card and scope
+      // attendance to a window with no check-ins. Other programs render below
+      // via deriveProgramCards.
+      const activeEnrollment = selectBalaViharEnrollment(enrollments);
       isEnrolled = activeEnrollment !== null;
       if (activeEnrollment) {
         enrollPeriodLabel = activeEnrollment.termLabel;
