@@ -7,6 +7,7 @@ import { flags } from '@/lib/flags';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
 import { getCheckInAttendance, summarizeMemberCheckIns, type CheckInSummary } from '@/features/setu/attendance/check-in-attendance';
+import { selectBalaViharEnrollment } from '../../_helpers/select-bv-enrollment';
 import { isoToTorontoDateInput } from '@/lib/toronto-date';
 interface Props {
   params: Promise<{ mid: string }>;
@@ -52,13 +53,15 @@ export default async function MemberDetailPage({ params }: Props) {
     const name = `${member.firstName} ${member.lastName}`;
     const typeLabel = member.type === 'Child' ? `Child${member.schoolGrade ? ` · ${member.schoolGrade}` : ''}` : 'Adult';
     const canEdit = data.isManager || mid === data.currentMid;
-    // Scope check-ins to the active enrolled period's window (so a prior year's
-    // records don't show under this year's enrollment).
+    // Scope check-ins to the active Bala Vihar enrollment's window (so a prior
+    // year's records don't show under this year's enrollment). Per-member
+    // attendance is BV's (the check-in app), so pin to the BV enrollment — a
+    // newer non-BV enrollment (e.g. Tabla) must not scope this attendance away.
     const [rawCheckIns, enrollments] = await Promise.all([
       getCheckInAttendance(data.family.legacyFid),
       getEnrollments(data.family.fid),
     ]);
-    const activeOffering = enrollments.find((e) => e.status === 'active')?.offering ?? null;
+    const activeOffering = selectBalaViharEnrollment(enrollments)?.offering ?? null;
     const scoped = activeOffering
       ? rawCheckIns.filter((r) => {
           const start = isoToTorontoDateInput(activeOffering.startDate.toISOString());
