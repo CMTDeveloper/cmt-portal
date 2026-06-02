@@ -8,23 +8,16 @@ import { mockFamily } from '@/features/family/data/mock';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
 import { getDonations } from '@/features/setu/donations/get-donations';
-import { paymentSourceOf } from '@cmt/shared-domain';
 import { getLegacyPaymentStatus } from '@/features/setu/donations/legacy-payment';
 import { getUpcoming, getClassDatesHeld, type CalendarEntry } from '@/features/setu/calendar/calendar';
-import { getCheckInAttendance, summarizeFamilyCheckIns, type CheckInSummary } from '@/features/setu/attendance/check-in-attendance';
+import { getCheckInAttendance } from '@/features/setu/attendance/check-in-attendance';
 import { listPrograms } from '@/features/setu/programs/get-programs';
-import { deriveProgramCards } from './_helpers/derive-program-cards';
-import { selectBalaViharEnrollment } from './_helpers/select-bv-enrollment';
+import {
+  buildFamilyDashboardModel,
+  isLegacyBvPeriod,
+  type FamilyDashboardModel,
+} from './_helpers/dashboard-model';
 import type { ProgramDoc } from '@cmt/shared-domain';
-
-function torontoYmd(d: Date): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Toronto',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(d);
-}
 
 function fmtSunday(ymd: string): string {
   return new Date(`${ymd}T12:00:00`).toLocaleDateString('en-CA', {
@@ -59,28 +52,22 @@ export default async function FamilyDashboardPage() {
   let memberCount = mockFamily.members.length;
   let displayMembers: { name: string }[] = mockFamily.members.map((m) => ({ name: m.name }));
   let currentMid: string | null = null;
-
-  // Real Bala Vihar enrollment + donation status (Slice 3). Attendance/next-class
-  // remain placeholders until Slice 4 ships teacher attendance.
-  let isEnrolled = false;
-  let childCount = 0;
-  let enrollPeriodLabel: string | null = null;
-  let suggestedAmount: number | null = null;
-  let givenForPeriod = 0;
-  let donateUrl = '/family/donate';
   // Upcoming class dates from the managed calendar (Slice 4b), by family location.
   let upcomingEntries: CalendarEntry[] = [];
-  // Real attendance from the live check-in app (family-check-ins), read-only.
-  // Denominator = class Sundays held so far this year (from the calendar).
-  let ci: CheckInSummary = { attended: 0, recorded: 0, lastDate: null, marks: [] };
-  let classSundaysHeld = 0;
-  // Legacy payment bridge: for a period with paymentSource='legacy' (the
-  // 2025-26 cutover year), payment status comes from the prod RTDB roster.
-  let isLegacyPeriod = false;
-  let legacyPaid = false;
-  // Per-program dashboard cards (Phase F). BV is rendered with its own bespoke
-  // card; every OTHER active enrollment gets a simple generic card below it.
-  let otherProgramCards: ReturnType<typeof deriveProgramCards> = [];
+
+  // All BV-bespoke derivation (which enrollment drives the card, donation status,
+  // attendance scoping) lives in buildFamilyDashboardModel so it can be unit-
+  // tested with multi-enrollment fixtures (see __tests__/dashboard-model.test.ts).
+  // The default empty model renders the not-enrolled state for the mock /
+  // non-setuAuth path; the real model is built below once data is loaded.
+  let model: FamilyDashboardModel = buildFamilyDashboardModel({
+    enrollments: [],
+    donations: [],
+    programsById: new Map(),
+    rawCheckIns: [],
+    classSundaysHeld: 0,
+    legacyPaymentStatus: null,
+  });
 
   if (flags.setuAuth) {
     const data = await getCurrentFamily();
@@ -93,7 +80,6 @@ export default async function FamilyDashboardPage() {
       familyName = data.family.name;
       memberCount = data.members.length;
       displayMembers = data.members.map((m) => ({ name: `${m.firstName} ${m.lastName}` }));
-      childCount = data.members.filter((m) => m.type === 'Child').length;
 
       const [enrollments, donations, allPrograms] = await Promise.all([
         getEnrollments(data.family.fid),
@@ -101,82 +87,53 @@ export default async function FamilyDashboardPage() {
         listPrograms(),
       ]);
       const programsById = new Map<string, ProgramDoc>(allPrograms.map((p) => [p.programKey, p]));
-      // The bespoke top section (BV card + Donation card + attendance) is Bala
-      // Vihar-specific, so pin it to the active *Bala Vihar* enrollment. A family
-      // may hold several active enrollments (e.g. BV + Tabla); picking "first
-      // active" let a newer non-BV enrollment hijack the card and scope
-      // attendance to a window with no check-ins. Other programs render below
-      // via deriveProgramCards.
-      const activeEnrollment = selectBalaViharEnrollment(enrollments);
-      isEnrolled = activeEnrollment !== null;
-      if (activeEnrollment) {
-        enrollPeriodLabel = activeEnrollment.termLabel;
-        suggestedAmount = activeEnrollment.effectiveSuggestedAmount;
-        givenForPeriod = donations
-          .filter((d) => d.status === 'completed' && d.eid === activeEnrollment.eid)
-          .reduce((s, d) => s + d.amountCAD, 0);
-        donateUrl = `/family/donate?eid=${activeEnrollment.eid}`;
 
-        if (activeEnrollment.offering && paymentSourceOf({ ...(activeEnrollment.offering.paymentSource !== undefined ? { paymentSource: activeEnrollment.offering.paymentSource } : {}) }) === 'legacy') {
-          isLegacyPeriod = true;
-          legacyPaid = (await getLegacyPaymentStatus(data.family.legacyFid)) === 'paid';
-        }
-      }
+      // Legacy roster status is only relevant when the active BV offering is the
+      // 2025-26 cutover year; fetch it conditionally so other families skip the
+      // extra RTDB read. isLegacyBvPeriod uses the same predicate the model does.
+      const legacyPaymentStatus = isLegacyBvPeriod(enrollments)
+        ? await getLegacyPaymentStatus(data.family.legacyFid)
+        : null;
 
-      // All active program cards except bala-vihar (which has its own bespoke card).
-      const allCards = deriveProgramCards(enrollments, programsById);
-      otherProgramCards = allCards.filter((c) => c.programKey !== 'bala-vihar');
-
-      const { upcoming } = await getUpcoming(data.family.location, undefined, 3);
+      const [{ upcoming }, rawCheckIns, classSundays] = await Promise.all([
+        getUpcoming(data.family.location, undefined, 3),
+        getCheckInAttendance(data.family.legacyFid),
+        getClassDatesHeld(data.family.location),
+      ]);
       upcomingEntries = upcoming;
 
-      // Scope attendance to the ENROLLED offering's window so a prior year's
-      // check-ins don't show under this year's enrollment. (UAT note: the
-      // family-check-ins snapshot is currently 2024-only; in prod it's live.)
-      const rawCheckIns = await getCheckInAttendance(data.family.legacyFid);
-      const offering = activeEnrollment?.offering ?? null;
-      const scoped = offering
-        ? rawCheckIns.filter((r) => {
-            const start = torontoYmd(offering.startDate);
-            const end = offering.endDate ? torontoYmd(offering.endDate) : '9999-12-31';
-            return r.date >= start && r.date <= end;
-          })
-        : rawCheckIns;
-      ci = summarizeFamilyCheckIns(scoped);
-      classSundaysHeld = (await getClassDatesHeld(data.family.location)).length;
+      model = buildFamilyDashboardModel({
+        enrollments,
+        donations,
+        programsById,
+        rawCheckIns,
+        classSundaysHeld: classSundays.length,
+        legacyPaymentStatus,
+      });
     }
   }
 
-  const hasAttendance = ci.recorded > 0;
-  // Honest denominator: class Sundays held so far (calendar). Fall back to the
-  // count of recorded check-ins only if the calendar isn't published.
-  const attendanceTotal = classSundaysHeld > 0 ? classSundaysHeld : ci.recorded;
-  const attendancePct = attendanceTotal > 0 ? Math.round((ci.attended / attendanceTotal) * 100) : 0;
-
-  const donationComplete = suggestedAmount !== null && givenForPeriod >= suggestedAmount;
-  const donationPct =
-    suggestedAmount && suggestedAmount > 0 ? Math.min(100, Math.round((givenForPeriod / suggestedAmount) * 100)) : 0;
-  const enrolledPill = isEnrolled
-    ? { text: 'Enrolled', bg: 'var(--accentSoft)', fg: 'var(--accentDeep)' }
-    : { text: 'Not enrolled', bg: 'var(--surface2)', fg: 'var(--muted)' };
-  const donationTone: 'ok' | 'warn' | undefined = !isEnrolled
-    ? undefined
-    : legacyPaid || donationComplete
-      ? 'ok'
-      : 'warn';
-  // Legacy-paid (already paid offline for the cutover year): no Give CTA, no
-  // progress bar. Legacy-pending behaves like portal-pending (can pay online).
-  const showGive = isEnrolled ? !legacyPaid : true;
-  const showProgress = isEnrolled && suggestedAmount !== null && !legacyPaid;
-  const donationHeading = !isEnrolled
-    ? 'Donation'
-    : legacyPaid
-      ? 'Paid'
-      : isLegacyPeriod
-        ? 'Payment pending'
-        : donationComplete
-          ? 'Thank you for your donation'
-          : 'Donation pending';
+  const {
+    isEnrolled,
+    kidsEnrolled,
+    enrollPeriodLabel,
+    suggestedAmount,
+    givenForPeriod,
+    donateUrl,
+    isLegacyPeriod,
+    legacyPaid,
+    otherProgramCards,
+    enrolledPill,
+  } = model;
+  const { summary: ci, hasAttendance, total: attendanceTotal, pct: attendancePct } = model.attendance;
+  const {
+    complete: donationComplete,
+    pct: donationPct,
+    tone: donationTone,
+    showGive,
+    showProgress,
+    heading: donationHeading,
+  } = model.donation;
 
   // Handle the lazy-migrated placeholder manager whose firstName is still
   // empty: show a neutral greeting and surface a Complete-your-profile CTA
@@ -225,7 +182,7 @@ export default async function FamilyDashboardPage() {
                 <span className="pill" style={{ background: enrolledPill.bg, color: enrolledPill.fg }}>{enrolledPill.text}</span>
               </div>
               <div className="row" style={{ gap: 14, marginBottom: 14 }}>
-                <Stat label="Kids enrolled" value={String(childCount)}/>
+                <Stat label="Kids enrolled" value={String(kidsEnrolled)}/>
                 <div style={{ width: 1, height: 36, background: 'var(--line)' }}/>
                 <Stat label="Attendance" value={hasAttendance ? String(ci.attended) : '—'}/>
               </div>
