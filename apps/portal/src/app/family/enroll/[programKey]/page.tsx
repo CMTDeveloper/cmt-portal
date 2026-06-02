@@ -27,12 +27,17 @@ function fmtDate(d: Date | null) {
   });
 }
 
-function renderAlreadyEnrolledBanner(termLabel: string, paid = false) {
+function renderAlreadyEnrolledBanner(termLabel: string, paid = false, usesDonation = false) {
+  // "Proceed to donate below." only makes sense when the program actually takes
+  // a donation; a free program (usesDonation=false) just confirms enrollment.
+  const message = paid
+    ? `Your family is enrolled in ${termLabel} and your contribution is paid. Thank you.`
+    : usesDonation
+      ? `Your family is already enrolled in ${termLabel}. Proceed to donate below.`
+      : `Your family is already enrolled in ${termLabel}.`;
   return (
     <div style={{ padding: '14px 18px', background: 'var(--accentSoft)', color: 'var(--accentDeep)', border: '1px solid var(--accent)', borderRadius: 'var(--radius)', marginBottom: 20, fontSize: 14, fontWeight: 600 }}>
-      {paid
-        ? `Your family is enrolled in ${termLabel} and your contribution is paid. Thank you.`
-        : `Your family is already enrolled in ${termLabel}. Proceed to donate below.`}
+      {message}
     </div>
   );
 }
@@ -210,7 +215,7 @@ export default async function ProgramEnrollPage({ params }: Props) {
             </div>
 
             <div style={{ flex: 1, overflowY: 'auto', padding: '20px 18px 100px' }}>
-              {alreadyEnrolled && renderAlreadyEnrolledBanner(activeTerm, paid)}
+              {alreadyEnrolled && renderAlreadyEnrolledBanner(activeTerm, paid, usesDonation)}
               {!enrolledOffering && !alreadyEnrolled && renderNoPeriodBanner(program.label, family.location)}
 
               {enrolledOffering && (
@@ -327,7 +332,7 @@ export default async function ProgramEnrollPage({ params }: Props) {
           </div>
         </header>
 
-        {alreadyEnrolled && renderAlreadyEnrolledBanner(activeTerm, paid)}
+        {alreadyEnrolled && renderAlreadyEnrolledBanner(activeTerm, paid, usesDonation)}
         {!enrolledOffering && !alreadyEnrolled && renderNoPeriodBanner(program.label, family.location)}
 
         {enrolledOffering && (

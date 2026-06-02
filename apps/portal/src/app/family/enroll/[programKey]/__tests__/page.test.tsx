@@ -339,6 +339,30 @@ describe('ProgramEnrollPage — free program (usesDonation=false)', () => {
     // Confirm enrollment text is present
     expect(screen.getAllByText(/no donation requirement/i).length).toBeGreaterThan(0);
   });
+
+  it('already-enrolled banner for a free program omits "Proceed to donate below"', async () => {
+    mockGetProgram.mockResolvedValue(FREE_PROGRAM);
+    mockGetOpenOfferingsForFamily.mockResolvedValue([FREE_OFFERING]);
+    mockGetEnrollments.mockResolvedValue([
+      {
+        eid: 'CMT-AAAA1111-tabla-rolling-2026',
+        oid: 'tabla-rolling-2026',
+        programKey: 'tabla',
+        status: 'active',
+        termLabel: 'Rolling 2026',
+        suggestedAmountSnapshot: 0,
+        suggestedAmountOverride: null,
+        effectiveSuggestedAmount: 0,
+        offering: null,
+      },
+    ]);
+
+    const page = await ProgramEnrollPage({ params: makeParams('tabla') });
+    render(page);
+
+    expect(screen.getAllByText(/already enrolled in Rolling 2026/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/proceed to donate/i)).toBeNull();
+  });
 });
 
 // ─── #3: legacy-payment bridge is Bala Vihar-only ─────────────────────────────
