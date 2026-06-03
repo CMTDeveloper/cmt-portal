@@ -3,6 +3,12 @@
 Browser-level regression net for the Setu family/admin flows. On-demand only
 (NOT in the pre-push gate). Auth bypasses OTP via the password-sign-in route.
 
+> **⚠️ Re-seed before running.** The seeded family is tagged `_test:true`, and the
+> vitest integration suite's cleanup sweep deletes `_test:true` docs in UAT — so if
+> that suite ran since you last seeded, the Playwright family is gone and `setup`
+> will fail (no family → redirect to `/register`). Always run
+> `pnpm --filter @cmt/portal seed:e2e-family` first (it's idempotent).
+
 ## One-time setup
 1. `.env.local` must have UAT creds (`PORTAL_FIREBASE_*`, `NEXT_PUBLIC_PORTAL_FIREBASE_API_KEY`),
    the Setu feature flags (`NEXT_PUBLIC_FEATURE_SETU_AUTH=true`, `NEXT_PUBLIC_FEATURE_SETU_DONATIONS=true`),

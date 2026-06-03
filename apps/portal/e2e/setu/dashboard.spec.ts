@@ -12,7 +12,10 @@ test.describe('family dashboard', () => {
     await expect(visibleText(page, /Enrolled/i).first()).toBeVisible();
 
     // Attendance rendered from the seeded check-ins — the regression guard.
-    await expect(visibleText(page, /Attended \d+ of \d+ class Sundays/i)).toBeVisible();
+    // Accept either block's phrasing ("class Sundays" desktop / "Sunday classes"
+    // mobile) so a copy tweak to one doesn't break the guard; visibleText still
+    // pins it to the visible (desktop) instance.
+    await expect(visibleText(page, /Attended \d+ of \d+ (class Sundays|Sunday classes)/i)).toBeVisible();
     await expect(page.getByText(/Attendance will appear here once Sunday classes begin/i)).toHaveCount(0);
   });
 
