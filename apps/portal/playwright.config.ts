@@ -58,12 +58,16 @@ export default defineConfig({
     },
     { name: 'legacy', testMatch: /e2e\/legacy\/.*\.spec\.ts$/, use: { ...devices['Desktop Chrome'] } },
   ],
-  webServer: {
-    // dev:e2e = `next dev --port=3001`. A dedicated script avoids the
-    // `pnpm … dev -- --port` indirection, which pnpm mis-parses as a directory.
-    command: 'pnpm --filter @cmt/portal dev:e2e',
-    url: 'http://localhost:3001',
-    reuseExistingServer: !process.env.CI,
-    timeout: 120 * 1000,
-  },
+  // Skip the local dev server when targeting a deployed URL (PLAYWRIGHT_BASE_URL),
+  // e.g. PLAYWRIGHT_BASE_URL=https://cmt-setu.vercel.app pnpm test:e2e.
+  webServer: process.env.PLAYWRIGHT_BASE_URL
+    ? undefined
+    : {
+        // dev:e2e = `next dev --port=3001`. A dedicated script avoids the
+        // `pnpm … dev -- --port` indirection, which pnpm mis-parses as a directory.
+        command: 'pnpm --filter @cmt/portal dev:e2e',
+        url: 'http://localhost:3001',
+        reuseExistingServer: !process.env.CI,
+        timeout: 120 * 1000,
+      },
 });
