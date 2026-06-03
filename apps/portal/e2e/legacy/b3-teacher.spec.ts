@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { test, expect } from '../fixtures';
 
 const PASSPHRASE = process.env.E2E_TEACHER_PASSPHRASE ?? process.env.TEACHER_PASSPHRASE ?? '';
 

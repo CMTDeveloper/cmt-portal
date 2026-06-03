@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { test, expect } from '../fixtures';
 
 test.describe('B1 — kiosk', () => {
   test('/check-in is 404 when feature flag is off', async ({ page }) => {

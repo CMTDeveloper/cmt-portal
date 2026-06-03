@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { test, expect } from '../fixtures';
 
 const E2E_FAMILY_EMAIL = process.env.E2E_FAMILY_EMAIL;
 const E2E_FAMILY_FID = process.env.E2E_FAMILY_FID;

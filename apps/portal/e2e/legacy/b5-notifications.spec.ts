@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { test, expect } from '../fixtures';
 
 const CRON_SECRET = process.env.CRON_SECRET ?? '';
 

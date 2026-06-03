@@ -50,3 +50,6 @@ apps/portal/test-results/
 apps/portal/blob-report/
 apps/portal/.playwright/
 .vercel
+
+# Playwright auth storageState (contains a session cookie)
+apps/portal/e2e/.auth/
