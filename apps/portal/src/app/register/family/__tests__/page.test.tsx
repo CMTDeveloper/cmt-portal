@@ -453,4 +453,20 @@ describe('RegisterFamilyPage — additional members', () => {
       expect(anil?.phone).toBe('4165559999');
     });
   });
+
+  it('blocks adding a member with an invalid email and does not add the row', async () => {
+    const user = userEvent.setup();
+    render(<RegisterFamilyPage />);
+
+    await user.click(screen.getAllByRole('button', { name: /add another member/i })[0]!);
+    await user.type(screen.getAllByLabelText(/member first name/i)[0]!, 'Bad');
+    await user.type(screen.getAllByLabelText(/member last name/i)[0]!, 'Email');
+    await user.type(screen.getAllByLabelText(/member email/i)[0]!, 'not-an-email');
+    await user.click(screen.getAllByRole('button', { name: /^add member$/i })[0]!);
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/valid email/i).length).toBeGreaterThan(0);
+    });
+    expect(screen.queryByTestId('added-member-row')).toBeNull();
+  });
 });
