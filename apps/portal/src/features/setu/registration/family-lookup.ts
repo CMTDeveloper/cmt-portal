@@ -7,6 +7,11 @@ export interface FamilySummary {
   location: string;
   memberCount: number;
   managerInitials: string;
+  // Which of the submitted contacts actually produced the hit. A user can match
+  // via a SECONDARY contact while their primary email isn't on file — sign-in
+  // must OTP the on-file (matched) contact, not the primary.
+  matchedType: 'email' | 'phone';
+  matchedValue: string;
 }
 
 export interface ContactInput {
@@ -14,7 +19,9 @@ export interface ContactInput {
   value: string;
 }
 
-async function buildFamilySummary(fid: string): Promise<FamilySummary | null> {
+type FamilyCore = Omit<FamilySummary, 'matchedType' | 'matchedValue'>;
+
+async function buildFamilySummary(fid: string): Promise<FamilyCore | null> {
   const db = portalFirestore();
   const familySnap = await db.collection('families').doc(fid).get();
   if (!familySnap.exists) return null;
@@ -59,18 +66,38 @@ export async function lookupFamilyByContactList(
   contacts: ContactInput[],
 ): Promise<FamilySummary | null> {
   const db = portalFirestore();
-  const valid = contacts.filter((c) => c.value.trim() !== '');
+
+  // Dedupe valid contacts by their hash (keep first occurrence) so the same
+  // contact entered twice — e.g. the primary email also listed as an extra —
+  // is read from Firestore only once. Bounds the fan-out.
+  const seenHashes = new Set<string>();
+  const valid: Array<{ contact: ContactInput; hash: string }> = [];
+  for (const contact of contacts) {
+    if (contact.value.trim() === '') continue;
+    const hash = hashContactKey(contact.type, contact.value);
+    if (seenHashes.has(hash)) continue;
+    seenHashes.add(hash);
+    valid.push({ contact, hash });
+  }
   if (valid.length === 0) return null;
 
   const snaps = await Promise.all(
-    valid.map((c) => db.collection('contactKeys').doc(hashContactKey(c.type, c.value)).get()),
+    valid.map(async (v) => ({
+      contact: v.contact,
+      snap: await db.collection('contactKeys').doc(v.hash).get(),
+    })),
   );
 
-  const hit = snaps.find((s) => s.exists);
+  // snaps stays parallel to the deduped `valid` list, so the first existing
+  // snap also tells us WHICH contact matched.
+  const hit = snaps.find((s) => s.snap.exists);
   if (!hit) return null;
 
-  const { fid } = hit.data() as { fid: string };
-  return buildFamilySummary(fid);
+  const { fid } = hit.snap.data() as { fid: string };
+  const core = await buildFamilySummary(fid);
+  if (!core) return null;
+
+  return { ...core, matchedType: hit.contact.type, matchedValue: hit.contact.value };
 }
 
 // Back-compat: the original single email+phone signature still works.
