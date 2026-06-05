@@ -6,6 +6,8 @@ import { CspRoot, Stat, MetricCard, SkeletonCard } from '@/features/family/compo
 import { flags } from '@/lib/flags';
 import { mockFamily } from '@/features/family/data/mock';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
+import { ContactsNudge } from '@/features/family/components/contacts-nudge';
+import { shouldShowContactsNudge } from './_helpers/should-show-contacts-nudge';
 import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
 import { getDonations } from '@/features/setu/donations/get-donations';
 import { getLegacyPaymentStatus } from '@/features/setu/donations/legacy-payment';
@@ -54,6 +56,8 @@ export default async function FamilyDashboardPage() {
   let currentMid: string | null = null;
   // Upcoming class dates from the managed calendar (Slice 4b), by family location.
   let upcomingEntries: CalendarEntry[] = [];
+  // One-time "add your other contacts" nudge — shown until the current member dismisses it (B3).
+  let showContactsNudge = false;
 
   // All BV-bespoke derivation (which enrollment drives the card, donation status,
   // attendance scoping) lives in buildFamilyDashboardModel so it can be unit-
@@ -75,6 +79,7 @@ export default async function FamilyDashboardPage() {
       const currentMember = data.members.find((m) => m.mid === data.currentMid);
       if (currentMember) {
         managerName = `${currentMember.firstName} ${currentMember.lastName}`;
+        showContactsNudge = shouldShowContactsNudge(currentMember);
       }
       currentMid = data.currentMid;
       familyName = data.family.name;
@@ -172,6 +177,7 @@ export default async function FamilyDashboardPage() {
                 {firstName ? `Hari OM, ${firstName}.` : 'Hari OM!'}
               </h1>
             </div>
+            {showContactsNudge && <ContactsNudge />}
             {needsProfile && currentMid && (
               <Link href={`/family/members/${currentMid}/edit`} style={{ display: 'block', padding: '14px 16px', background: 'var(--accentSoft)', border: '1px solid var(--accent)', borderRadius: 'var(--radius)', textDecoration: 'none', color: 'var(--accentDeep)', marginBottom: 18 }}>
                 <div style={{ fontSize: 13, fontWeight: 600 }}>Complete your profile →</div>
@@ -310,6 +316,7 @@ export default async function FamilyDashboardPage() {
           </div>
         </header>
 
+        {showContactsNudge && <ContactsNudge />}
         {needsProfile && currentMid && (
           <Link href={`/family/members/${currentMid}/edit`} style={{ display: 'block', padding: '16px 20px', background: 'var(--accentSoft)', border: '1px solid var(--accent)', borderRadius: 'var(--radius)', textDecoration: 'none', color: 'var(--accentDeep)', marginBottom: 24 }}>
             <div style={{ fontSize: 14, fontWeight: 600 }}>Complete your profile →</div>
