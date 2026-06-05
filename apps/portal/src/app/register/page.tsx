@@ -258,21 +258,17 @@ function RegisterReal() {
   }
 
   function updateExtraEmail(i: number, v: string) {
-    setExtraEmails((prev) => {
-      const next = [...prev];
-      next[i] = v;
-      if (isCompleteEnough(email, phone)) void runLookup(email, phone, next, extraPhones);
-      return next;
-    });
+    const next = [...extraEmails];
+    next[i] = v;
+    setExtraEmails(next);
+    if (isCompleteEnough(email, phone)) void runLookup(email, phone, next, extraPhones);
   }
 
   function updateExtraPhone(i: number, v: string) {
-    setExtraPhones((prev) => {
-      const next = [...prev];
-      next[i] = v;
-      if (isCompleteEnough(email, phone)) void runLookup(email, phone, extraEmails, next);
-      return next;
-    });
+    const next = [...extraPhones];
+    next[i] = v;
+    setExtraPhones(next);
+    if (isCompleteEnough(email, phone)) void runLookup(email, phone, extraEmails, next);
   }
 
   const isLoading = lookupState === 'loading';
