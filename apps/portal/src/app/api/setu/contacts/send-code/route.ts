@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { flags } from '@/lib/flags';
 import {
   checkAndRecordOtpRateLimit,
+  CONTACTS_SEND_PER_SENDER_MAX,
   normalizeContact,
   storeVerificationCode,
 } from '@/features/check-in/shared';
@@ -45,6 +46,16 @@ export async function POST(req: Request) {
   const rate = await checkAndRecordOtpRateLimit(normalized);
   if (!rate.allowed) {
     return NextResponse.json({ error: 'rate-limited', resetAt: rate.resetAt }, { status: 429 });
+  }
+
+  // Second bucket keyed by the SENDER (the caller, not the target), so an
+  // authenticated member can't spray single OTPs to many arbitrary contacts.
+  const senderRate = await checkAndRecordOtpRateLimit(
+    `contacts-send:${current.currentMid}`,
+    CONTACTS_SEND_PER_SENDER_MAX,
+  );
+  if (!senderRate.allowed) {
+    return NextResponse.json({ error: 'rate-limited', resetAt: senderRate.resetAt }, { status: 429 });
   }
 
   const code = generateCode();

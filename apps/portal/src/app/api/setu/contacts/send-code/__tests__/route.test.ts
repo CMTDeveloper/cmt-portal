@@ -6,6 +6,7 @@ vi.mock('@/features/check-in/shared', () => ({
     type === 'email' ? value.toLowerCase().trim() : value.replace(/\D/g, ''),
   ),
   checkAndRecordOtpRateLimit: vi.fn(),
+  CONTACTS_SEND_PER_SENDER_MAX: 10,
   storeVerificationCode: vi.fn(),
 }));
 vi.mock('@/lib/aws/resolve-sender', () => ({ resolveSender: vi.fn() }));
@@ -79,6 +80,21 @@ describe('POST /api/setu/contacts/send-code', () => {
     (checkAndRecordOtpRateLimit as ReturnType<typeof vi.fn>).mockResolvedValue({ allowed: false, resetAt: '2026-06-05T12:00:00.000Z' });
     const res = await POST(makeRequest({ type: 'email', value: 'new@example.com' }));
     expect(res.status).toBe(429);
+  });
+
+  it('consults the per-sender bucket keyed by the current member id', async () => {
+    const res = await POST(makeRequest({ type: 'email', value: 'priya.work@example.com' }));
+    expect(res.status).toBe(200);
+    expect(checkAndRecordOtpRateLimit).toHaveBeenCalledWith('contacts-send:CMT-AB12CD34-02', 10);
+  });
+
+  it('returns 429 when the per-sender bucket is exhausted (per-target ok)', async () => {
+    (checkAndRecordOtpRateLimit as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({ allowed: true }) // per-target passes
+      .mockResolvedValueOnce({ allowed: false, resetAt: '2026-06-05T12:00:00.000Z' }); // per-sender exhausted
+    const res = await POST(makeRequest({ type: 'email', value: 'new@example.com' }));
+    expect(res.status).toBe(429);
+    expect(mockSendEmail).not.toHaveBeenCalled();
   });
 
   it('returns 404 when feature flag is off', async () => {

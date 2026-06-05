@@ -6,6 +6,9 @@ export const RATE_LIMIT_MAX = 5;
 // + email/phone blurs + Continue) and is not a costly OTP send, so it gets a far
 // more lenient per-IP bucket than OTP sends — still bounded for anti-enumeration.
 export const LOOKUP_RATE_LIMIT_MAX = 30;
+// Per-member ceiling on "add a contact" OTP sends (the caller, not the target),
+// so an authenticated member can't spray OTPs to many arbitrary contacts.
+export const CONTACTS_SEND_PER_SENDER_MAX = 10;
 export const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 
 export interface RateLimitResult {
