@@ -422,4 +422,35 @@ describe('RegisterFamilyPage — additional members', () => {
       expect(body.additionalMembers?.some(m => m.firstName === 'Rahul')).toBe(true);
     });
   });
+
+  it("includes a member's email and phone in the POST body", async () => {
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ redirectTo: '/family' }) });
+
+    const user = userEvent.setup();
+    render(<RegisterFamilyPage />);
+
+    const textInputs = document.querySelectorAll('input[type="text"]');
+    await user.type(textInputs[0] as HTMLElement, 'Gupta');
+    await user.click(screen.getAllByRole('button', { name: 'Brampton' })[0]!);
+    await user.type(textInputs[1] as HTMLElement, 'Sunita');
+    await user.type(textInputs[2] as HTMLElement, 'Gupta');
+
+    await user.click(screen.getAllByRole('button', { name: /add another member/i })[0]!);
+    await user.type(screen.getAllByLabelText(/member first name/i)[0]!, 'Anil');
+    await user.type(screen.getAllByLabelText(/member last name/i)[0]!, 'Gupta');
+    await user.type(screen.getAllByLabelText(/member email/i)[0]!, 'anil@example.com');
+    await user.type(screen.getAllByLabelText(/member phone/i)[0]!, '4165559999');
+    await user.click(screen.getAllByRole('button', { name: /^add member$/i })[0]!);
+
+    await user.click(screen.getAllByRole('button', { name: /create family/i })[0]!);
+
+    await waitFor(() => {
+      const body = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string) as {
+        additionalMembers?: Array<{ firstName: string; email?: string; phone?: string }>;
+      };
+      const anil = body.additionalMembers?.find((m) => m.firstName === 'Anil');
+      expect(anil?.email).toBe('anil@example.com');
+      expect(anil?.phone).toBe('4165559999');
+    });
+  });
 });

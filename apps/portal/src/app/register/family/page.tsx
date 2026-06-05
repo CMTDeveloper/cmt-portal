@@ -19,6 +19,8 @@ interface AdditionalMember {
   lastName: string;
   type: MemberType;
   gender: Gender;
+  email?: string;
+  phone?: string;
 }
 
 // ─── Flag-off fallback (visual-only prototype) ────────────────────────────────
@@ -164,9 +166,21 @@ function RegisterFamilyReal() {
   const [draftLastName, setDraftLastName] = useState('');
   const [draftType, setDraftType] = useState<MemberType>('Adult');
   const [draftGender, setDraftGender] = useState<Gender>('PreferNotToSay');
+  const [draftEmail, setDraftEmail] = useState('');
+  const [draftPhone, setDraftPhone] = useState('');
+  const [draftError, setDraftError] = useState('');
 
   const handleAddMember = useCallback(() => {
     if (!draftFirstName.trim() || !draftLastName.trim()) return;
+    const email = draftEmail.trim();
+    const phone = draftPhone.trim();
+    // A member's email is optional, but if present it must look valid — otherwise
+    // the server rejects the whole registration with a cryptic 400.
+    if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      setDraftError('Enter a valid email or leave it blank.');
+      return;
+    }
+    setDraftError('');
     setAdditionalMembers(prev => [
       ...prev,
       {
@@ -175,14 +189,18 @@ function RegisterFamilyReal() {
         lastName: draftLastName.trim(),
         type: draftType,
         gender: draftGender,
+        ...(email ? { email } : {}),
+        ...(phone ? { phone } : {}),
       },
     ]);
     setDraftFirstName('');
     setDraftLastName('');
+    setDraftEmail('');
+    setDraftPhone('');
     setDraftType('Adult');
     setDraftGender('PreferNotToSay');
     setShowAddMember(false);
-  }, [draftFirstName, draftLastName, draftType, draftGender]);
+  }, [draftFirstName, draftLastName, draftEmail, draftPhone, draftType, draftGender]);
 
   const handleRemoveMember = useCallback((id: string) => {
     setAdditionalMembers(prev => prev.filter(m => m.id !== id));
@@ -215,11 +233,13 @@ function RegisterFamilyReal() {
             lastName: managerLastName.trim(),
             gender: managerGender,
           },
-          additionalMembers: additionalMembers.map(({ firstName, lastName, type, gender }) => ({
+          additionalMembers: additionalMembers.map(({ firstName, lastName, type, gender, email, phone }) => ({
             firstName,
             lastName,
             type,
             gender,
+            ...(email ? { email } : {}),
+            ...(phone ? { phone } : {}),
           })),
         }),
       });
@@ -360,7 +380,7 @@ function RegisterFamilyReal() {
           <div key={m.id} style={{ position: 'relative' }}>
             <AddedMemberRow
               name={`${m.firstName} ${m.lastName}`}
-              type={`${m.type} · ${m.gender === 'PreferNotToSay' ? 'not specified' : m.gender}`}
+              type={`${m.type} · ${m.gender === 'PreferNotToSay' ? 'not specified' : m.gender}${m.email ? ` · ${m.email}` : ''}${m.phone ? ` · ${m.phone}` : ''}`}
             />
             <button
               className="focus-ring"
@@ -396,6 +416,30 @@ function RegisterFamilyReal() {
                 aria-label="Member last name"
               />
             </div>
+            <div className="row" style={{ gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+              <input
+                className="input"
+                type="email"
+                placeholder="Email (optional)"
+                value={draftEmail}
+                onChange={e => setDraftEmail(e.target.value)}
+                style={{ flex: '1 1 100px' }}
+                aria-label="Member email"
+              />
+              <input
+                className="input"
+                type="tel"
+                placeholder="Phone (optional)"
+                value={draftPhone}
+                onChange={e => setDraftPhone(e.target.value)}
+                style={{ flex: '1 1 100px' }}
+                aria-label="Member phone"
+              />
+            </div>
+            <div className="hint" style={{ marginBottom: 10 }}>
+              Adding a member&apos;s own email or phone helps us recognize them later and avoid a duplicate family record.
+            </div>
+            {draftError && <div className="field-error" role="alert" style={{ marginBottom: 10 }}>{draftError}</div>}
             <div className="row" style={{ gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
               {(['Adult', 'Child'] as const).map(t => (
                 <button
@@ -439,7 +483,7 @@ function RegisterFamilyReal() {
               </button>
               <button
                 className="btn btn--g"
-                onClick={() => { setShowAddMember(false); setDraftFirstName(''); setDraftLastName(''); }}
+                onClick={() => { setShowAddMember(false); setDraftFirstName(''); setDraftLastName(''); setDraftEmail(''); setDraftPhone(''); setDraftError(''); }}
                 style={{ flex: 1 }}
               >
                 Cancel
