@@ -106,6 +106,29 @@ describe('POST /api/setu/register', () => {
     expect(body.error).toBe('duplicate-contact');
   });
 
+  it('maps a pre-existing-family throw to the generic error WITHOUT leaking the message (enumeration)', async () => {
+    (registerFamily as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new Error('Contact already registered: manager email is linked to an existing family'),
+    );
+    const res = await POST(makeRequest(validBody));
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.error).toBe('duplicate-contact');
+    // The raw message must NOT be surfaced — it would reveal a contact belongs to SOME family.
+    expect(body.message).toBeUndefined();
+    expect(JSON.stringify(body)).not.toContain('existing family');
+  });
+
+  it('returns 409 with the distinct code when registerFamily throws duplicate-contact-in-form', async () => {
+    (registerFamily as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new Error('duplicate-contact-in-form'),
+    );
+    const res = await POST(makeRequest(validBody));
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.error).toBe('duplicate-contact-in-form');
+  });
+
   it('happy path: creates family, sets cookie, returns fid + mid', async () => {
     mockGetUser.mockRejectedValue({ code: 'auth/user-not-found' });
     mockCreateUser.mockResolvedValue({ uid: 'uid-raj' });

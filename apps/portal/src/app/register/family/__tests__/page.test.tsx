@@ -265,11 +265,11 @@ describe('RegisterFamilyPage — server validation errors', () => {
     });
   });
 
-  it('shows toast for generic server error (no fields)', async () => {
+  it('shows the existing fallback toast for an unrecognized server error code', async () => {
     fetchMock.mockResolvedValueOnce({
       ok: false,
       status: 409,
-      json: async () => ({ error: 'contact-already-registered' }),
+      json: async () => ({ error: 'some-unmapped-code' }),
     });
 
     const user = userEvent.setup();
@@ -288,7 +288,57 @@ describe('RegisterFamilyPage — server validation errors', () => {
     await user.click(submitBtns[0]!);
 
     await waitFor(() => {
-      expect(toastMock.error).toHaveBeenCalledWith('contact-already-registered');
+      expect(toastMock.error).toHaveBeenCalledWith('some-unmapped-code');
+    });
+  });
+
+  it('shows friendly intra-family copy for duplicate-contact-in-form', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      status: 409,
+      json: async () => ({ error: 'duplicate-contact-in-form' }),
+    });
+
+    const user = userEvent.setup();
+    render(<RegisterFamilyPage />);
+
+    const textInputs = document.querySelectorAll('input[type="text"]');
+    await user.type(textInputs[0] as HTMLElement, 'Patel');
+    await user.click(screen.getAllByRole('button', { name: 'Brampton' })[0]!);
+    await user.type(textInputs[1] as HTMLElement, 'Raj');
+    await user.type(textInputs[2] as HTMLElement, 'Patel');
+
+    await user.click(screen.getAllByRole('button', { name: /create family/i })[0]!);
+
+    await waitFor(() => {
+      expect(toastMock.error).toHaveBeenCalledWith(
+        expect.stringMatching(/same email or phone is entered for more than one family member/i),
+      );
+    });
+  });
+
+  it('shows friendly already-registered copy for duplicate-contact', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      status: 409,
+      json: async () => ({ error: 'duplicate-contact' }),
+    });
+
+    const user = userEvent.setup();
+    render(<RegisterFamilyPage />);
+
+    const textInputs = document.querySelectorAll('input[type="text"]');
+    await user.type(textInputs[0] as HTMLElement, 'Patel');
+    await user.click(screen.getAllByRole('button', { name: 'Brampton' })[0]!);
+    await user.type(textInputs[1] as HTMLElement, 'Raj');
+    await user.type(textInputs[2] as HTMLElement, 'Patel');
+
+    await user.click(screen.getAllByRole('button', { name: /create family/i })[0]!);
+
+    await waitFor(() => {
+      expect(toastMock.error).toHaveBeenCalledWith(
+        expect.stringMatching(/already registered.*sign in/i),
+      );
     });
   });
 });

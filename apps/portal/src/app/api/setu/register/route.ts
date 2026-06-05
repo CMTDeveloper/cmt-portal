@@ -79,7 +79,15 @@ export async function POST(req: Request) {
   } catch (err) {
     const code = (err as { code?: string }).code ?? '';
     const message = (err as Error).message ?? '';
+    if (message === 'duplicate-contact-in-form') {
+      // Two members of THIS submission share a normalized email/phone — a distinct
+      // client-actionable case. Safe to name explicitly: it leaks nothing about
+      // other families (unlike the pre-existing-family case below).
+      return NextResponse.json({ error: 'duplicate-contact-in-form' }, { status: 409 });
+    }
     if (code === 'duplicate-contact' || message.includes('Contact already registered')) {
+      // Keep the message generic — returning the raw text would reveal that a
+      // given contact already belongs to SOME family (an enumeration leak).
       return NextResponse.json({ error: 'duplicate-contact' }, { status: 409 });
     }
     throw err;

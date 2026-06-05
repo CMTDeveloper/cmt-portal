@@ -69,6 +69,20 @@ export async function registerFamily(input: RegisterFamilyInput): Promise<Regist
     }
   }
 
+  // Refuse if the SAME normalized contact was entered for two members of THIS
+  // family (e.g. a parent typed their own email for a child, or two adults share
+  // a phone). Writing the same contactKeys/{hash} doc twice in the transaction
+  // would let the last write silently win — binding sign-in to whichever member
+  // is written last. Throwing here (before the transaction) means no partial
+  // writes happen and each contact maps to exactly one member.
+  const seenHashes = new Set<string>();
+  for (const c of contactHashes) {
+    if (seenHashes.has(c.hash)) {
+      throw new Error('duplicate-contact-in-form');
+    }
+    seenHashes.add(c.hash);
+  }
+
   const result = await db.runTransaction(async (txn) => {
     // Read EVERY contactKey we plan to write, in parallel, inside the txn.
     // Any pre-existing key means another family already owns that contact —

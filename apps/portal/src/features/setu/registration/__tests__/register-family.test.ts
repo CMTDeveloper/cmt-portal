@@ -160,3 +160,48 @@ describe('registerFamily — duplicate detection', () => {
     await expect(registerFamily(baseInput)).rejects.toThrow(/already registered/i);
   });
 });
+
+describe('registerFamily — intra-family duplicate contact', () => {
+  it('throws BEFORE any write when manager email equals an additional member email', async () => {
+    const txnSet = vi.fn();
+    mockRunTransaction.mockImplementation(async (fn: (txn: unknown) => Promise<unknown>) => {
+      const txn = { get: vi.fn().mockResolvedValue({ exists: false }), set: txnSet };
+      return fn(txn);
+    });
+
+    await expect(
+      registerFamily({
+        ...baseInput,
+        additionalMembers: [
+          // Same email as the manager (baseInput.email) → identical normalized hash.
+          { firstName: 'Diya', lastName: 'Patel', type: 'Child', gender: 'Female', email: baseInput.email },
+        ],
+      }),
+    ).rejects.toThrow('duplicate-contact-in-form');
+
+    // The guard runs before db.runTransaction, so no transaction and no writes happened.
+    expect(mockRunTransaction).not.toHaveBeenCalled();
+    expect(txnSet).not.toHaveBeenCalled();
+  });
+
+  it('throws BEFORE any write when two additional members share the same phone', async () => {
+    const txnSet = vi.fn();
+    mockRunTransaction.mockImplementation(async (fn: (txn: unknown) => Promise<unknown>) => {
+      const txn = { get: vi.fn().mockResolvedValue({ exists: false }), set: txnSet };
+      return fn(txn);
+    });
+
+    await expect(
+      registerFamily({
+        ...baseInput,
+        additionalMembers: [
+          { firstName: 'Priya', lastName: 'Patel', type: 'Adult', gender: 'Female', phone: '+14165550199' },
+          { firstName: 'Arjun', lastName: 'Patel', type: 'Adult', gender: 'Male', phone: '+14165550199' },
+        ],
+      }),
+    ).rejects.toThrow('duplicate-contact-in-form');
+
+    expect(mockRunTransaction).not.toHaveBeenCalled();
+    expect(txnSet).not.toHaveBeenCalled();
+  });
+});

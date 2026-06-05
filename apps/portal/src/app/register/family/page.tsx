@@ -249,7 +249,15 @@ function RegisterFamilyReal() {
         if (body.fields) {
           setFieldErrors(body.fields);
         } else {
-          toast.error(body.error ?? 'Registration failed. Please try again.');
+          const messages: Record<string, string> = {
+            'duplicate-contact-in-form':
+              'The same email or phone is entered for more than one family member. Give each member a distinct email or phone, or leave it blank.',
+            'duplicate-contact':
+              "One of those contacts is already registered. If it's you, sign in instead.",
+          };
+          toast.error(
+            (body.error && messages[body.error]) ?? body.error ?? 'Registration failed. Please try again.',
+          );
         }
         return;
       }
