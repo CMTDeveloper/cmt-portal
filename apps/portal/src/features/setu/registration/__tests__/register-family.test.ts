@@ -103,6 +103,32 @@ describe('registerFamily — happy path', () => {
     // family + manager + 2 additional + 2 contactKeys (email+phone for manager) + 1 contactKey (Priya email) = 7
     expect(txnSet).toHaveBeenCalledTimes(7);
   });
+
+  it("writes a member's email + phone contactKeys pointing to THAT member (dedup invariant)", async () => {
+    const txnSet = vi.fn();
+    mockRunTransaction.mockImplementation(async (fn: (txn: unknown) => Promise<unknown>) => {
+      const txn = { get: vi.fn().mockResolvedValue({ exists: false }), set: txnSet };
+      return fn(txn);
+    });
+
+    const { fid } = await registerFamily({
+      ...baseInput,
+      additionalMembers: [
+        { firstName: 'Priya', lastName: 'Patel', type: 'Adult', gender: 'Female', email: 'priya@example.com', phone: '+14165550199' },
+      ],
+    });
+
+    // Priya is the first (only) additional member → mid `${fid}-02`.
+    const priyaMid = `${fid}-02`;
+    const contactKeyWrites = txnSet.mock.calls
+      .map((c) => c[1] as { contactKey?: string; type?: string; mid?: string } | undefined)
+      .filter((d): d is { contactKey: string; type: string; mid: string } =>
+        !!d && typeof d.contactKey === 'string',
+      );
+
+    expect(contactKeyWrites.find((d) => d.type === 'email' && d.mid === priyaMid)).toBeDefined();
+    expect(contactKeyWrites.find((d) => d.type === 'phone' && d.mid === priyaMid)).toBeDefined();
+  });
 });
 
 describe('registerFamily — duplicate detection', () => {
