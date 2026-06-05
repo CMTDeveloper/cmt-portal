@@ -15,6 +15,8 @@ type LookupMatch = {
   location: string;
   memberCount: number;
   managerInitials: string;
+  matchedType: 'email' | 'phone';
+  matchedValue: string;
 };
 
 type LookupState = 'idle' | 'loading' | 'match' | 'nomatch';
@@ -261,14 +263,14 @@ function RegisterReal() {
     const next = [...extraEmails];
     next[i] = v;
     setExtraEmails(next);
-    if (isCompleteEnough(email, phone)) void runLookup(email, phone, next, extraPhones);
+    scheduleLookup(email, phone, next, extraPhones);
   }
 
   function updateExtraPhone(i: number, v: string) {
     const next = [...extraPhones];
     next[i] = v;
     setExtraPhones(next);
-    if (isCompleteEnough(email, phone)) void runLookup(email, phone, extraEmails, next);
+    scheduleLookup(email, phone, extraEmails, next);
   }
 
   const isLoading = lookupState === 'loading';
@@ -400,7 +402,7 @@ function RegisterReal() {
               and verify-code resolves the existing family via contactKey →
               sets family-manager/member claims → /family. Same result, secure. */}
           <Link
-            href={`/sign-in?email=${encodeURIComponent(email)}`}
+            href={`/sign-in?type=${match.matchedType}&value=${encodeURIComponent(match.matchedValue)}`}
             className="btn btn--p btn--block"
             style={{ marginBottom: 8, display: 'flex' }}
           >

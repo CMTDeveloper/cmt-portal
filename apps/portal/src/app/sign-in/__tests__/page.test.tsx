@@ -13,6 +13,12 @@ vi.mock('next/link', () => ({
   ),
 }));
 
+// Controllable searchParams — default empty; tests set `.value` before render.
+const searchParamsMock = vi.hoisted(() => ({ value: '' }));
+vi.mock('next/navigation', () => ({
+  useSearchParams: () => new URLSearchParams(searchParamsMock.value),
+}));
+
 // ── CMT UI ────────────────────────────────────────────────────────────────────
 const toastMock = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
 vi.mock('@cmt/ui', () => ({
@@ -63,6 +69,7 @@ beforeEach(() => {
   flagsMock.setuAuth = true;
   window.location.href = '';
   localStorageMock.clear();
+  searchParamsMock.value = '';
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -107,6 +114,25 @@ describe('SignInPage — phone toggle', () => {
     // tel-type input now exists
     const telInputs = document.querySelectorAll('input[type="tel"]');
     expect(telInputs.length).toBeGreaterThan(0);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Prefill from ?type=&value= (arriving from a phone-matched register CTA)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('SignInPage — prefill from ?type=phone&value=', () => {
+  it('initializes the contact as phone with the matched value pre-filled', () => {
+    searchParamsMock.value = 'type=phone&value=4165550000';
+    render(<SignInPage />);
+
+    // The contact field is now a tel input (phone mode) and shows the matched value.
+    const telInputs = document.querySelectorAll('input[type="tel"]') as NodeListOf<HTMLInputElement>;
+    expect(telInputs.length).toBeGreaterThan(0);
+    expect(telInputs[0]!.value).toBe('4165550000');
+
+    // The "Use email instead" toggle confirms we started in phone mode.
+    expect(screen.getAllByText(/use email instead/i).length).toBeGreaterThan(0);
   });
 });
 

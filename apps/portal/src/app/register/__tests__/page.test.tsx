@@ -115,6 +115,8 @@ describe('RegisterPage — lookup returns match', () => {
           location: 'Brampton',
           memberCount: 3,
           managerInitials: 'R.P.',
+          matchedType: 'email',
+          matchedValue: 'raj@example.com',
         },
       }),
     });
@@ -146,13 +148,55 @@ describe('RegisterPage — lookup returns match', () => {
     expect(screen.getAllByText(/The Patel Family/i).length).toBeGreaterThan(0);
 
     // "Sign in to join the Patel family →" Link is present, points to /sign-in
-    // with the email pre-filled. The old /api/setu/family/join POST is gone —
-    // OTP sign-in proves contact ownership.
+    // with the MATCHED contact (here: email) carried via ?type=&value=. The old
+    // /api/setu/family/join POST is gone — OTP sign-in proves contact ownership.
     const joinLinks = screen.getAllByRole('link', { name: /sign in to join the patel family/i });
     expect(joinLinks.length).toBeGreaterThan(0);
     const href = joinLinks[0]?.getAttribute('href') ?? '';
-    expect(href).toMatch(/^\/sign-in\?email=/);
+    expect(href).toMatch(/^\/sign-in\?type=email&value=/);
     expect(decodeURIComponent(href)).toContain('raj@example.com');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Match CTA signs in with the MATCHED contact (not always the primary email)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('RegisterPage — match CTA uses the matched contact', () => {
+  it('sign-in link targets the matched contact when the match came via phone', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        match: {
+          fid: 'FAM001',
+          name: 'Patel',
+          location: 'Brampton',
+          memberCount: 3,
+          managerInitials: 'R.P.',
+          matchedType: 'phone',
+          matchedValue: '4165550000',
+        },
+      }),
+    });
+
+    const user = userEvent.setup();
+    render(<RegisterPage />);
+
+    const emailInputs = document.querySelectorAll('input[type="email"]');
+    const telInputs = document.querySelectorAll('input[type="tel"]');
+
+    await user.type(emailInputs[0] as HTMLElement, 'raj@example.com');
+    await user.type(telInputs[0] as HTMLElement, '4165550100');
+    await user.tab();
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/we found a family/i).length).toBeGreaterThan(0);
+    });
+
+    const joinLinks = screen.getAllByRole('link', { name: /sign in to join the patel family/i });
+    expect(joinLinks.length).toBeGreaterThan(0);
+    const href = joinLinks[0]?.getAttribute('href') ?? '';
+    expect(href).toBe('/sign-in?type=phone&value=4165550000');
   });
 });
 

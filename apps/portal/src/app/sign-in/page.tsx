@@ -167,7 +167,11 @@ function SignInReal() {
   const adminFlow = fromParam === '/admin' || fromParam.startsWith('/admin/');
   const staffFlow = welcomeFlow || adminFlow;
 
+  const prefillType = searchParams?.get('type');
+  const prefillValue = searchParams?.get('value');
   const prefillEmail = searchParams?.get('email') ?? '';
+  const initialContactType: ContactType = prefillType === 'phone' ? 'phone' : 'email';
+  const initialContactValue = prefillValue ?? prefillEmail;
 
   // Read localStorage preference once on mount; default to 'otp'.
   const [signInMode, setSignInMode] = useState<SignInMode>('otp');
@@ -191,14 +195,14 @@ function SignInReal() {
   }
 
   const [pageState, setPageState] = useState<PageState>('form');
-  const [contactType, setContactType] = useState<ContactType>('email');
-  const [contactValue, setContactValue] = useState(prefillEmail);
+  const [contactType, setContactType] = useState<ContactType>(initialContactType);
+  const [contactValue, setContactValue] = useState(initialContactValue);
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const contactRef = useRef<HTMLInputElement>(null);
 
   // Password mode state
-  const [pwEmail, setPwEmail] = useState(prefillEmail);
+  const [pwEmail, setPwEmail] = useState(initialContactType === 'email' ? initialContactValue : '');
   const [pwPassword, setPwPassword] = useState('');
   const [pwLoading, setPwLoading] = useState(false);
   const [pwError, setPwError] = useState('');
