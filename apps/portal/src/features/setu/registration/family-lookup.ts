@@ -9,23 +9,13 @@ export interface FamilySummary {
   managerInitials: string;
 }
 
-export async function lookupFamilyByContacts(
-  email: string,
-  phone: string,
-): Promise<FamilySummary | null> {
+export interface ContactInput {
+  type: 'email' | 'phone';
+  value: string;
+}
+
+async function buildFamilySummary(fid: string): Promise<FamilySummary | null> {
   const db = portalFirestore();
-  const emailHash = hashContactKey('email', email);
-  const phoneHash = hashContactKey('phone', phone);
-
-  const [emailSnap, phoneSnap] = await Promise.all([
-    db.collection('contactKeys').doc(emailHash).get(),
-    db.collection('contactKeys').doc(phoneHash).get(),
-  ]);
-
-  const hit = emailSnap.exists ? emailSnap : phoneSnap.exists ? phoneSnap : null;
-  if (!hit) return null;
-
-  const { fid } = hit.data() as { fid: string };
   const familySnap = await db.collection('families').doc(fid).get();
   if (!familySnap.exists) return null;
 
@@ -38,7 +28,6 @@ export async function lookupFamilyByContacts(
   const membersSnap = await db.collection('families').doc(fid).collection('members').get();
   const memberCount = membersSnap.size;
 
-  // Build manager initials from the first manager member doc
   let managerInitials = '';
   const firstManagerId = family.managers[0];
   if (firstManagerId) {
@@ -61,4 +50,36 @@ export async function lookupFamilyByContacts(
     memberCount,
     managerInitials,
   };
+}
+
+// Search across many contacts. Hash each non-blank contact, read the
+// contactKeys, and return the first family hit. Pure read — no auth, no writes
+// (you're searching, not associating). Blank/whitespace contacts are skipped.
+export async function lookupFamilyByContactList(
+  contacts: ContactInput[],
+): Promise<FamilySummary | null> {
+  const db = portalFirestore();
+  const valid = contacts.filter((c) => c.value.trim() !== '');
+  if (valid.length === 0) return null;
+
+  const snaps = await Promise.all(
+    valid.map((c) => db.collection('contactKeys').doc(hashContactKey(c.type, c.value)).get()),
+  );
+
+  const hit = snaps.find((s) => s.exists);
+  if (!hit) return null;
+
+  const { fid } = hit.data() as { fid: string };
+  return buildFamilySummary(fid);
+}
+
+// Back-compat: the original single email+phone signature still works.
+export async function lookupFamilyByContacts(
+  email: string,
+  phone: string,
+): Promise<FamilySummary | null> {
+  return lookupFamilyByContactList([
+    { type: 'email', value: email },
+    { type: 'phone', value: phone },
+  ]);
 }
