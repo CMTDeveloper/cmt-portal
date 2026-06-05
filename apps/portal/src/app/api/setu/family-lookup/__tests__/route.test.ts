@@ -7,11 +7,12 @@ vi.mock('@/features/check-in/shared', () => ({
 }));
 vi.mock('@/features/setu/registration/family-lookup', () => ({
   lookupFamilyByContacts: vi.fn(),
+  lookupFamilyByContactList: vi.fn(),
 }));
 
 import { POST } from '../route';
 import { checkAndRecordOtpRateLimit } from '@/features/check-in/shared';
-import { lookupFamilyByContacts } from '@/features/setu/registration/family-lookup';
+import { lookupFamilyByContactList } from '@/features/setu/registration/family-lookup';
 
 function makeRequest(body: unknown, ip = '1.2.3.4') {
   return new Request('http://localhost/api/setu/family-lookup', {
@@ -24,23 +25,18 @@ function makeRequest(body: unknown, ip = '1.2.3.4') {
 beforeEach(() => {
   vi.clearAllMocks();
   (checkAndRecordOtpRateLimit as ReturnType<typeof vi.fn>).mockResolvedValue({ allowed: true });
-  (lookupFamilyByContacts as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+  (lookupFamilyByContactList as ReturnType<typeof vi.fn>).mockResolvedValue(null);
 });
 
 describe('POST /api/setu/family-lookup', () => {
-  it('returns 400 on missing email', async () => {
+  it('accepts a phone-only legacy body', async () => {
     const res = await POST(makeRequest({ phone: '4165551234' }));
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(200);
   });
 
-  it('returns 400 on missing phone', async () => {
+  it('accepts an email-only legacy body', async () => {
     const res = await POST(makeRequest({ email: 'raj@example.com' }));
-    expect(res.status).toBe(400);
-  });
-
-  it('returns 400 on invalid email format', async () => {
-    const res = await POST(makeRequest({ email: 'not-an-email', phone: '4165551234' }));
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(200);
   });
 
   it('returns 429 when rate limited', async () => {
@@ -55,7 +51,7 @@ describe('POST /api/setu/family-lookup', () => {
   });
 
   it('returns 200 with match=null when no family found', async () => {
-    (lookupFamilyByContacts as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+    (lookupFamilyByContactList as ReturnType<typeof vi.fn>).mockResolvedValue(null);
     const res = await POST(makeRequest({ email: 'new@example.com', phone: '4165559999' }));
     expect(res.status).toBe(200);
     const body = await res.json();
@@ -63,7 +59,7 @@ describe('POST /api/setu/family-lookup', () => {
   });
 
   it('returns 200 with match summary when family found', async () => {
-    (lookupFamilyByContacts as ReturnType<typeof vi.fn>).mockResolvedValue({
+    (lookupFamilyByContactList as ReturnType<typeof vi.fn>).mockResolvedValue({
       fid: 'FAM001ABCD12',
       name: 'Patel',
       location: 'Brampton',
@@ -82,9 +78,30 @@ describe('POST /api/setu/family-lookup', () => {
     });
   });
 
-  it('calls lookupFamilyByContacts with email and phone from request', async () => {
+  it('maps legacy { email, phone } body to a contact list', async () => {
     await POST(makeRequest({ email: 'raj@example.com', phone: '4165551234' }));
-    expect(lookupFamilyByContacts).toHaveBeenCalledWith('raj@example.com', '4165551234');
+    expect(lookupFamilyByContactList).toHaveBeenCalledWith([
+      { type: 'email', value: 'raj@example.com' },
+      { type: 'phone', value: '4165551234' },
+    ]);
+  });
+
+  it('accepts { emails, phones } arrays and forwards every contact', async () => {
+    await POST(makeRequest({
+      emails: ['a@example.com', 'b@example.com'],
+      phones: ['4165550000', '4165550001'],
+    }));
+    expect(lookupFamilyByContactList).toHaveBeenCalledWith([
+      { type: 'email', value: 'a@example.com' },
+      { type: 'email', value: 'b@example.com' },
+      { type: 'phone', value: '4165550000' },
+      { type: 'phone', value: '4165550001' },
+    ]);
+  });
+
+  it('returns 400 when neither legacy pair nor arrays are present', async () => {
+    const res = await POST(makeRequest({ foo: 'bar' }));
+    expect(res.status).toBe(400);
   });
 
   it('rate-limits with the lenient lookup bucket (not the strict OTP-send limit)', async () => {
