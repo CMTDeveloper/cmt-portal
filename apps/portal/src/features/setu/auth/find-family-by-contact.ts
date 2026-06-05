@@ -7,6 +7,10 @@ export interface SetuContactKeyDoc {
   type: 'email' | 'phone';
   fid: string;
   mid: string;
+  // Audit/security on newer writes. Absent on registration-era + pre-Phase-B
+  // docs (read with safe defaults). 'self-verified' contacts carry verifiedAt.
+  source?: 'registration' | 'self-verified';
+  verifiedAt?: Date | null;
 }
 
 export interface FindSetuFamilyResult {
