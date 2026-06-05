@@ -62,10 +62,6 @@ function renderPaidPanel(termLabel: string) {
       <p style={{ fontSize: 13, color: 'var(--body-text)', lineHeight: 1.55, margin: '14px 0 0' }}>
         Your {termLabel} contribution is recorded as paid — thank you. No further action needed.
       </p>
-      <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 12 }}>
-        Want to give more? You can donate any amount any time from{' '}
-        <Link href="/family/donate" style={{ color: 'var(--accent)', fontWeight: 600, textDecoration: 'none' }}>Giving</Link>.
-      </p>
     </div>
   );
 }
@@ -77,7 +73,7 @@ function renderPaidBlockMobile(termLabel: string) {
         Paid · {termLabel}
       </span>
       <p style={{ fontSize: 13, color: 'var(--body-text)', marginTop: 12, lineHeight: 1.5 }}>
-        Your {termLabel} contribution is recorded as paid — thank you. Want to give more? Use the <strong>Giving</strong> tab any time.
+        Your {termLabel} contribution is recorded as paid — thank you. No further action needed.
       </p>
     </div>
   );

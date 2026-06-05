@@ -55,11 +55,9 @@ describe('DonatePage — flag gate', () => {
 describe('DonatePage — flag on', () => {
   beforeEach(() => vi.stubEnv('NEXT_PUBLIC_FEATURE_SETU_DONATIONS', 'true'));
 
-  it('renders the general donate form when no eid', async () => {
-    const page = await DonatePage({ searchParams: Promise.resolve({}) });
-    render(page);
-    expect(redirectMock).not.toHaveBeenCalled();
-    expect(screen.getAllByText(/donate-form:general/).length).toBeGreaterThan(0);
+  it('redirects to /family when no eid (general giving is handled off-portal)', async () => {
+    await DonatePage({ searchParams: Promise.resolve({}) });
+    expect(redirectMock).toHaveBeenCalledWith('/family');
   });
 
   it('renders the enrollment donate form when a valid active eid is given', async () => {
@@ -71,16 +69,18 @@ describe('DonatePage — flag on', () => {
     expect(screen.getAllByText(/donate-form:enrollment/).length).toBeGreaterThan(0);
   });
 
-  it('falls back to general giving when the eid is stale/unknown', async () => {
+  it('redirects to /family when the eid is stale/unknown (no general giving)', async () => {
     mockGetEnrollments.mockResolvedValue([]);
-    const page = await DonatePage({ searchParams: Promise.resolve({ eid: 'missing' }) });
-    render(page);
-    expect(screen.getAllByText(/donate-form:general/).length).toBeGreaterThan(0);
+    await DonatePage({ searchParams: Promise.resolve({ eid: 'missing' }) });
+    expect(redirectMock).toHaveBeenCalledWith('/family');
   });
 
-  it('shows the manager-only message to a non-manager', async () => {
+  it('shows the manager-only message to a non-manager (enrollment dakshina)', async () => {
     mockGetCurrentFamily.mockResolvedValue({ ...FAMILY, isManager: false });
-    const page = await DonatePage({ searchParams: Promise.resolve({}) });
+    mockGetEnrollments.mockResolvedValue([
+      { eid: 'fid1-oid1', status: 'active', programKey: 'bala-vihar', programLabel: 'Bala Vihar', termLabel: 'Fall 2026', effectiveSuggestedAmount: 500, offering: { programKey: 'bala-vihar', programLabel: 'Bala Vihar', termLabel: 'Fall 2026', amountTiers: [500, 750] } },
+    ]);
+    const page = await DonatePage({ searchParams: Promise.resolve({ eid: 'fid1-oid1' }) });
     render(page);
     expect(screen.getAllByText(/only the family manager/i).length).toBeGreaterThan(0);
     expect(screen.queryByTestId('donate-form')).toBeNull();

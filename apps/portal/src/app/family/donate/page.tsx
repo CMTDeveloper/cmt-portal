@@ -65,6 +65,13 @@ export default async function DonatePage({
     // If the eid is stale/unknown, fall through to general giving rather than erroring.
   }
 
+  // General year-round giving is handled off-portal (CMT decision 2026-06-04):
+  // only the enrollment dakshina (?eid=) collects through the portal now. A bare
+  // /family/donate (or a stale eid that fell through to 'general') redirects home.
+  if (mode === 'general') {
+    redirect('/family');
+  }
+
   const heading = mode === 'enrollment' ? 'Your dakshina' : 'Make a donation';
   const backHref = mode === 'enrollment' && programKey ? `/family/enroll/${programKey}` : '/family';
   const sub =

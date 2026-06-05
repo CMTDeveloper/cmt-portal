@@ -222,7 +222,9 @@ describe('buildFamilyDashboardModel — no BV enrollment', () => {
     expect(m.enrollPeriodLabel).toBeNull();
     expect(m.suggestedAmount).toBeNull();
     expect(m.donation.heading).toBe('Donation');
-    expect(m.donation.showGive).toBe(true);
+    // General giving moved off-portal (2026-06-04): a non-BV-enrolled family has
+    // no in-portal Give button.
+    expect(m.donation.showGive).toBe(false);
     expect(m.enrolledPill.text).toBe('Not enrolled');
     // No active BV offering → attendance is unscoped (shows all records).
     expect(m.attendance.summary.attended).toBe(2);
@@ -235,6 +237,7 @@ describe('buildFamilyDashboardModel — no BV enrollment', () => {
     expect(m.isEnrolled).toBe(false);
     expect(m.attendance.hasAttendance).toBe(false);
     expect(m.donation.tone).toBeNull();
+    expect(m.donation.showGive).toBe(false); // no general giving in-portal
   });
 });
 

@@ -146,7 +146,9 @@ export function buildFamilyDashboardModel(input: DashboardModelInput): FamilyDas
     : legacyPaid || donationComplete
       ? 'ok'
       : 'warn';
-  const showGive = isEnrolled ? !legacyPaid : true;
+  // General giving is handled off-portal (CMT decision 2026-06-04) — only an
+  // enrolled family with an unpaid dakshina sees an in-portal Give button.
+  const showGive = isEnrolled && !legacyPaid;
   const showProgress = isEnrolled && suggestedAmount !== null && !legacyPaid;
   const donationHeading = !isEnrolled
     ? 'Donation'
