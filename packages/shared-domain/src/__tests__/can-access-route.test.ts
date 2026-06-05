@@ -454,3 +454,21 @@ describe('canAccessRoute — /api/setu/donations', () => {
     expect(canAccessRoute(teacher, '/api/setu/donations', 'GET')).toBe(false);
   });
 });
+
+describe('canAccessRoute — /api/setu/contacts/* (self-service, any family role)', () => {
+  it('allows a family-member to POST send-code', () => {
+    expect(canAccessRoute(member, '/api/setu/contacts/send-code', 'POST')).toBe(true);
+  });
+  it('allows a family-member to POST verify-code', () => {
+    expect(canAccessRoute(member, '/api/setu/contacts/verify-code', 'POST')).toBe(true);
+  });
+  it('allows a family-member to POST dismiss-nudge', () => {
+    expect(canAccessRoute(member, '/api/setu/contacts/dismiss-nudge', 'POST')).toBe(true);
+  });
+  it('allows a family-manager too', () => {
+    expect(canAccessRoute(manager, '/api/setu/contacts/send-code', 'POST')).toBe(true);
+  });
+  it('denies a non-family role (welcome-team has no member contacts here)', () => {
+    expect(canAccessRoute(welcomeTeam, '/api/setu/contacts/send-code', 'POST')).toBe(false);
+  });
+});

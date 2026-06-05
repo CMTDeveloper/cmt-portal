@@ -146,6 +146,14 @@ export function canAccessRoute(
     return claims.role != null;
   }
 
+  // Setu API — "My contacts" self-service: any signed-in family role (incl.
+  // family-member) may add/verify their OWN contacts and dismiss the nudge.
+  // The route handlers bind every write to the caller's own mid and run the
+  // anti-theft contactKey check, so member-level access is safe here.
+  if (pathname === '/api/setu/contacts' || pathname.startsWith('/api/setu/contacts/')) {
+    return isSetuFamily(claims);
+  }
+
   // Setu API — remaining paths (invite/send, register, etc.): manager + welcome-team + admin
   // family-member is NOT included here; manager-level is the safe default for unknown setu paths
   if (pathname.startsWith('/api/setu/')) {
