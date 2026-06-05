@@ -271,3 +271,37 @@ describe('RegisterPage — Continue button triggers lookup', () => {
     }
   });
 });
+
+describe('RegisterReal — multi-contact find search', () => {
+  it('sends every entered contact (primary + extras) in the array lookup body', async () => {
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ match: null }) });
+
+    const user = userEvent.setup();
+    render(<RegisterPage />);
+
+    // Primary email + phone (complete enough to fire the lookup on blur).
+    const email = document.querySelector('input[type="email"]') as HTMLElement;
+    const phone = document.querySelector('input[type="tel"]') as HTMLElement;
+    await user.type(email, 'primary@example.com');
+    await user.type(phone, '4165550000');
+
+    // Reveal + fill one extra email. The page renders formContent twice
+    // (mobile + desktop responsive branches sharing one component state), so
+    // target the first rendered instance — same branch as the primary inputs
+    // selected above via querySelector.
+    await user.click(screen.getAllByRole('button', { name: /add another email/i })[0]!);
+    await user.type(screen.getAllByLabelText(/additional email 1/i)[0]!, 'second@example.com');
+
+    // Trigger the lookup deterministically via blur.
+    await user.click(document.body);
+
+    await waitFor(() => {
+      const lastCall = fetchMock.mock.calls.at(-1);
+      expect(lastCall?.[0]).toBe('/api/setu/family-lookup');
+      const body = JSON.parse(lastCall?.[1]?.body as string) as { emails: string[]; phones: string[] };
+      expect(body.emails).toContain('primary@example.com');
+      expect(body.emails).toContain('second@example.com');
+      expect(body.phones).toContain('4165550000');
+    });
+  });
+});

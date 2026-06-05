@@ -172,40 +172,47 @@ function ContactVerifiedBanner() {
 function RegisterReal() {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [extraEmails, setExtraEmails] = useState<string[]>([]);
+  const [extraPhones, setExtraPhones] = useState<string[]>([]);
   const [lookupState, setLookupState] = useState<LookupState>('idle');
   const [match, setMatch] = useState<LookupMatch | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const bothFilled = email.trim() !== '' && phone.trim() !== '';
 
-  const runLookup = useCallback(async (emailVal: string, phoneVal: string) => {
-    if (!emailVal.trim() || !phoneVal.trim()) return;
-    setLookupState('loading');
-    try {
-      const res = await fetch('/api/setu/family-lookup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: emailVal.trim(), phone: phoneVal.trim() }),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        toast.error((body as { error?: string }).error ?? 'Lookup failed. Please try again.');
+  const runLookup = useCallback(
+    async (emailVal: string, phoneVal: string, extraE: string[], extraP: string[]) => {
+      const emails = [emailVal, ...extraE].map((s) => s.trim()).filter(Boolean);
+      const phones = [phoneVal, ...extraP].map((s) => s.trim()).filter(Boolean);
+      if (emails.length === 0 && phones.length === 0) return;
+      setLookupState('loading');
+      try {
+        const res = await fetch('/api/setu/family-lookup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ emails, phones }),
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          toast.error((body as { error?: string }).error ?? 'Lookup failed. Please try again.');
+          setLookupState('idle');
+          return;
+        }
+        const body = (await res.json()) as { match: LookupMatch | null };
+        if (body.match) {
+          setMatch(body.match);
+          setLookupState('match');
+        } else {
+          setMatch(null);
+          setLookupState('nomatch');
+        }
+      } catch {
+        toast.error('Network error. Check your connection and try again.');
         setLookupState('idle');
-        return;
       }
-      const body = await res.json() as { match: LookupMatch | null };
-      if (body.match) {
-        setMatch(body.match);
-        setLookupState('match');
-      } else {
-        setMatch(null);
-        setLookupState('nomatch');
-      }
-    } catch {
-      toast.error('Network error. Check your connection and try again.');
-      setLookupState('idle');
-    }
-  }, []);
+    },
+    [],
+  );
 
   // Only fire the lookup once both inputs look complete enough to be worth
   // an API call. Avoids per-keystroke 429s while users type their phone.
@@ -215,7 +222,7 @@ function RegisterReal() {
     return e.includes('@') && e.includes('.') && p.length >= 10;
   }
 
-  function scheduleLookup(emailVal: string, phoneVal: string) {
+  function scheduleLookup(emailVal: string, phoneVal: string, extraE: string[], extraP: string[]) {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (!isCompleteEnough(emailVal, phoneVal)) {
       setLookupState('idle');
@@ -226,28 +233,46 @@ function RegisterReal() {
     // at the keyboard between phone digits) but short enough that the user
     // sees the match panel before they reach for Continue.
     debounceRef.current = setTimeout(() => {
-      void runLookup(emailVal, phoneVal);
+      void runLookup(emailVal, phoneVal, extraE, extraP);
     }, 1500);
   }
 
   function handleEmailChange(v: string) {
     setEmail(v);
-    scheduleLookup(v, phone);
+    scheduleLookup(v, phone, extraEmails, extraPhones);
   }
 
   function handlePhoneChange(v: string) {
     setPhone(v);
-    scheduleLookup(email, v);
+    scheduleLookup(email, v, extraEmails, extraPhones);
   }
 
   function handleEmailBlur() {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (isCompleteEnough(email, phone)) void runLookup(email, phone);
+    if (isCompleteEnough(email, phone)) void runLookup(email, phone, extraEmails, extraPhones);
   }
 
   function handlePhoneBlur() {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (isCompleteEnough(email, phone)) void runLookup(email, phone);
+    if (isCompleteEnough(email, phone)) void runLookup(email, phone, extraEmails, extraPhones);
+  }
+
+  function updateExtraEmail(i: number, v: string) {
+    setExtraEmails((prev) => {
+      const next = [...prev];
+      next[i] = v;
+      if (isCompleteEnough(email, phone)) void runLookup(email, phone, next, extraPhones);
+      return next;
+    });
+  }
+
+  function updateExtraPhone(i: number, v: string) {
+    setExtraPhones((prev) => {
+      const next = [...prev];
+      next[i] = v;
+      if (isCompleteEnough(email, phone)) void runLookup(email, phone, extraEmails, next);
+      return next;
+    });
   }
 
   const isLoading = lookupState === 'loading';
@@ -294,6 +319,60 @@ function RegisterReal() {
           disabled={isLoading}
         />
         <div className="hint">Canadian phone numbers only at this time.</div>
+      </div>
+
+      {extraEmails.map((val, i) => (
+        <div className="field" style={{ marginBottom: 10 }} key={`xe-${i}`}>
+          <label>Another email</label>
+          <input
+            className="input"
+            type="email"
+            placeholder="another@example.com"
+            value={val}
+            onChange={e => updateExtraEmail(i, e.target.value)}
+            onBlur={handleEmailBlur}
+            aria-label={`Additional email ${i + 1}`}
+          />
+        </div>
+      ))}
+      {extraPhones.map((val, i) => (
+        <div className="field" style={{ marginBottom: 10 }} key={`xp-${i}`}>
+          <label>Another phone</label>
+          <input
+            className="input"
+            type="tel"
+            placeholder="(416) 555-0000"
+            value={val}
+            onChange={e => updateExtraPhone(i, e.target.value)}
+            onBlur={handlePhoneBlur}
+            aria-label={`Additional phone ${i + 1}`}
+          />
+        </div>
+      ))}
+      <div className="row" style={{ gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+        {extraEmails.length < 2 && (
+          <button
+            type="button"
+            className="focus-ring"
+            style={{ background: 'transparent', border: 0, color: 'var(--accent)', fontSize: 13, fontWeight: 600, padding: 0, cursor: 'pointer' }}
+            onClick={() => setExtraEmails(prev => [...prev, ''])}
+          >
+            + Add another email
+          </button>
+        )}
+        {extraPhones.length < 2 && (
+          <button
+            type="button"
+            className="focus-ring"
+            style={{ background: 'transparent', border: 0, color: 'var(--accent)', fontSize: 13, fontWeight: 600, padding: 0, cursor: 'pointer' }}
+            onClick={() => setExtraPhones(prev => [...prev, ''])}
+          >
+            + Add another phone
+          </button>
+        )}
+      </div>
+      <div className="hint" style={{ marginTop: -6, marginBottom: 14 }}>
+        Got more than one email or phone? Add them so we can find your family even if your main one isn&apos;t on file.
       </div>
 
       {isLoading && (
@@ -351,7 +430,7 @@ function RegisterReal() {
         <button
           className="btn btn--p btn--block"
           disabled={!bothFilled}
-          onClick={() => { if (bothFilled) void runLookup(email, phone); }}
+          onClick={() => { if (bothFilled) void runLookup(email, phone, extraEmails, extraPhones); }}
         >
           Continue →
         </button>
