@@ -17,6 +17,14 @@ export const MemberDocSchema = z.object({
   joinedAt: z.date(),
   email: z.string().nullable(),
   phone: z.string().nullable(),
+  // Plaintext alternate contacts for display/management in "My contacts".
+  // contactKeys store only hashes, so the readable values must live here.
+  // Invariant: every value here has a matching contactKey → this member's mid.
+  altEmails: z.array(z.string()).default([]),
+  altPhones: z.array(z.string()).default([]),
+  // One-time post-sign-in "add your other contacts" nudge. Null/absent =
+  // not yet dismissed (show it); a Date = dismissed (never show again).
+  contactsNudgeDismissedAt: z.date().nullable().optional(),
   schoolGrade: z.string().nullable(),
   birthMonthYear: z.string().nullable(),
   // Legacy roster student id (sid), captured at migration / backfilled, so the
