@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { flags } from '@/lib/flags';
-import { checkAndRecordOtpRateLimit } from '@/features/check-in/shared';
+import { checkAndRecordOtpRateLimit, LOOKUP_RATE_LIMIT_MAX } from '@/features/check-in/shared';
 import { lookupFamilyByContacts } from '@/features/setu/registration/family-lookup';
 
 
@@ -25,7 +25,7 @@ export async function POST(req: Request) {
 
   // Rate-limit by IP — misses still consume quota (anti-enumeration)
   const ip = req.headers.get('x-forwarded-for') ?? 'unknown';
-  const rate = await checkAndRecordOtpRateLimit(`family-lookup:${ip}`);
+  const rate = await checkAndRecordOtpRateLimit(`family-lookup:${ip}`, LOOKUP_RATE_LIMIT_MAX);
   if (!rate.allowed) {
     return NextResponse.json({ error: 'rate-limited', resetAt: rate.resetAt }, { status: 429 });
   }

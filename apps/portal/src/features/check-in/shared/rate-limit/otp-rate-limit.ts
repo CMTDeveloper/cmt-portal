@@ -2,6 +2,10 @@ import { createHash } from 'node:crypto';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 
 export const RATE_LIMIT_MAX = 5;
+// Read-only family lookup fires several times per registration attempt (debounce
+// + email/phone blurs + Continue) and is not a costly OTP send, so it gets a far
+// more lenient per-IP bucket than OTP sends — still bounded for anti-enumeration.
+export const LOOKUP_RATE_LIMIT_MAX = 30;
 export const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 
 export interface RateLimitResult {
@@ -9,7 +13,7 @@ export interface RateLimitResult {
   resetAt?: string;
 }
 
-export async function checkAndRecordOtpRateLimit(contact: string): Promise<RateLimitResult> {
+export async function checkAndRecordOtpRateLimit(contact: string, max: number = RATE_LIMIT_MAX): Promise<RateLimitResult> {
   const hash = createHash('sha256').update(contact).digest('hex');
   const ref = portalFirestore().collection('otp_rate_limit').doc(hash);
 
@@ -34,7 +38,7 @@ export async function checkAndRecordOtpRateLimit(contact: string): Promise<RateL
       return { allowed: true };
     }
 
-    if (data.count >= RATE_LIMIT_MAX) {
+    if (data.count >= max) {
       const resetAt = new Date(data.windowStart + RATE_LIMIT_WINDOW_MS).toISOString();
       return { allowed: false, resetAt };
     }

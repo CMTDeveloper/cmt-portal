@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('@/lib/flags', () => ({ flags: { setuAuth: true } }));
 vi.mock('@/features/check-in/shared', () => ({
   checkAndRecordOtpRateLimit: vi.fn(),
+  LOOKUP_RATE_LIMIT_MAX: 30,
 }));
 vi.mock('@/features/setu/registration/family-lookup', () => ({
   lookupFamilyByContacts: vi.fn(),
@@ -84,6 +85,11 @@ describe('POST /api/setu/family-lookup', () => {
   it('calls lookupFamilyByContacts with email and phone from request', async () => {
     await POST(makeRequest({ email: 'raj@example.com', phone: '4165551234' }));
     expect(lookupFamilyByContacts).toHaveBeenCalledWith('raj@example.com', '4165551234');
+  });
+
+  it('rate-limits with the lenient lookup bucket (not the strict OTP-send limit)', async () => {
+    await POST(makeRequest({ email: 'raj@example.com', phone: '4165551234' }, '9.9.9.9'));
+    expect(checkAndRecordOtpRateLimit).toHaveBeenCalledWith('family-lookup:9.9.9.9', 30);
   });
 
   it('always returns 200 for unknown contacts (no enumeration difference)', async () => {
