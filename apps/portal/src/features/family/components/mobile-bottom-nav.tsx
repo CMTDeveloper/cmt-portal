@@ -12,14 +12,15 @@ const TABS: { id: Tab; label: string; icon: keyof typeof SetuIcon; href: string 
   { id: 'home', label: 'Home', icon: 'home', href: '/family' },
   { id: 'family', label: 'Family', icon: 'people', href: '/family/members' },
   { id: 'programs', label: 'Programs', icon: 'grid', href: '/family/programs' },
-  { id: 'giving', label: 'Giving', icon: 'heart', href: '/family/donate' },
+  // Giving tab intentionally omitted — see MORE_ITEMS note below.
 ];
 
-// Secondary destinations that live in the "More" sheet rather than the bar —
-// keeps the bar to 5 slots on narrow phones while still surfacing receipts,
-// calendar, security, and (for admins) the admin area.
+// Secondary destinations that live in the "More" sheet rather than the bar.
+// Giving + Receipts ("My donations") are intentionally omitted: general
+// donations are handled via a separate CMT process/site, not Stripe-in-portal
+// (CMT decision 2026-06-04). The Bala Vihar dakshina flow stays reachable from
+// the dashboard / enroll.
 const MORE_ITEMS: { label: string; icon: keyof typeof SetuIcon; href: string }[] = [
-  { label: 'My donations', icon: 'receipt', href: '/family/donations' },
   { label: 'Calendar', icon: 'calendar', href: '/family/calendar' },
   { label: 'Sign-in security', icon: 'shield', href: '/family/settings/security' },
 ];

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 
 // usePathname is the only hook these nav components call. Mutable so each test
 // can set the "current route" before rendering the Live/mobile variants.
@@ -59,5 +59,29 @@ describe('Programs entry in family navigation', () => {
     const link = screen.getByRole('link', { name: /programs/i });
     expect(link.getAttribute('href')).toBe('/family/programs');
     expect(screen.queryByRole('link', { name: /bala vihar/i })).toBeNull();
+  });
+});
+
+// CMT decision 2026-06-04: general donations are handled via a separate process,
+// not Stripe-in-portal, so the Giving + Receipts nav surfaces are hidden. The
+// Bala Vihar dakshina flow stays reachable from the dashboard / enroll (not nav).
+describe('Giving + Receipts hidden from family navigation', () => {
+  it('desktop sidebar has no Giving or Receipts links', () => {
+    render(<DesktopSidebar role="family" />);
+    expect(screen.queryByRole('link', { name: /giving/i })).toBeNull();
+    expect(screen.queryByRole('link', { name: /receipts/i })).toBeNull();
+    expect(screen.queryByRole('link', { name: /^my donations$/i })).toBeNull();
+  });
+
+  it('mobile bottom bar has no Giving tab', () => {
+    render(<MobileBottomNav />);
+    expect(screen.queryByRole('link', { name: /giving/i })).toBeNull();
+  });
+
+  it('mobile "More" sheet has no donations/receipts entry', () => {
+    render(<MobileBottomNav />);
+    fireEvent.click(screen.getByRole('button', { name: /more/i }));
+    expect(screen.queryByRole('link', { name: /my donations/i })).toBeNull();
+    expect(screen.queryByRole('link', { name: /receipts/i })).toBeNull();
   });
 });

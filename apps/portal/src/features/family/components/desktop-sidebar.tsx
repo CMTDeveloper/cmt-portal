@@ -25,8 +25,9 @@ const FAMILY_NAV_ITEMS: [SidebarTab, string, keyof typeof SetuIcon, string][] = 
   ['family',   'My family',      'people',  '/family/members'],
   ['programs', 'Programs',       'grid',    '/family/programs'],
   ['calendar', 'Calendar',       'calendar','/family/calendar'],
-  ['giving',   'Giving',         'heart',   '/family/donate'],
-  ['receipts', 'Receipts',       'receipt', '/family/donations'],
+  // Giving + Receipts intentionally omitted: general donations are handled via a
+  // separate CMT process/site, not Stripe-in-portal (CMT decision 2026-06-04).
+  // The Bala Vihar dakshina flow stays reachable from the dashboard / enroll.
   ['security', 'Sign-in security','shield', '/family/settings/security'],
 ];
 
