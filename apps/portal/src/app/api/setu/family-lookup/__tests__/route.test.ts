@@ -104,6 +104,12 @@ describe('POST /api/setu/family-lookup', () => {
     expect(res.status).toBe(400);
   });
 
+  it('returns 400 when the emails array exceeds the cap (>10)', async () => {
+    const emails = Array.from({ length: 11 }, (_, i) => `u${i}@example.com`);
+    const res = await POST(makeRequest({ emails }));
+    expect(res.status).toBe(400);
+  });
+
   it('rate-limits with the lenient lookup bucket (not the strict OTP-send limit)', async () => {
     await POST(makeRequest({ email: 'raj@example.com', phone: '4165551234' }, '9.9.9.9'));
     expect(checkAndRecordOtpRateLimit).toHaveBeenCalledWith('family-lookup:9.9.9.9', 30);

@@ -13,8 +13,8 @@ import {
 const bodySchema = z.object({
   email: z.string().optional(),
   phone: z.string().optional(),
-  emails: z.array(z.string()).optional(),
-  phones: z.array(z.string()).optional(),
+  emails: z.array(z.string()).max(10).optional(),
+  phones: z.array(z.string()).max(10).optional(),
 });
 
 export async function POST(req: Request) {
