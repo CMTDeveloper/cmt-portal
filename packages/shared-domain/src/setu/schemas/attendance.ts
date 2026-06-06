@@ -67,3 +67,23 @@ export const AddStudentSchema = z.object({
 });
 
 export type AddStudentInput = z.infer<typeof AddStudentSchema>;
+
+// Empty string → null, so the in-class quick-add can send optional fields blank.
+const emptyToNull = (v: unknown) => (typeof v === 'string' && v.trim() === '' ? null : v);
+
+// POST /api/setu/teacher/visitors — a teacher confirms a door guest or adds a
+// walk-in. Name required (firstName); EVERYTHING else optional (T3 relaxes the
+// add-student email requirement). With no email/phone the family is created
+// un-claimable until contact is added later (design §"Visitor handling").
+export const AddVisitorSchema = z.object({
+  levelId: z.string().min(1),
+  date: YMD,
+  firstName: z.string().trim().min(1),
+  lastName: z.preprocess((v) => (typeof v === 'string' ? v.trim() : v), z.string()).default(''),
+  schoolGrade: z.preprocess(emptyToNull, z.string().trim().min(1).nullable()).default(null),
+  gender: z.enum(['Male', 'Female', 'PreferNotToSay']).default('PreferNotToSay'),
+  parentEmail: z.preprocess(emptyToNull, z.string().trim().email().nullable()).default(null),
+  parentPhone: z.preprocess(emptyToNull, z.string().trim().min(1).nullable()).default(null),
+});
+
+export type AddVisitorInput = z.infer<typeof AddVisitorSchema>;
