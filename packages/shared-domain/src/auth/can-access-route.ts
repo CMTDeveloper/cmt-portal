@@ -70,6 +70,13 @@ export function canAccessRoute(
     return isSetuFamily(claims);
   }
 
+  // Member profile read — any setu family (own-family enforced in the handler)
+  // OR welcome-team/admin (front-desk family support). Must precede the
+  // members rule below (isSetuFamily-only, which would block welcome-team).
+  if (pathname.startsWith('/api/setu/members/') && pathname.endsWith('/profile')) {
+    return isSetuFamily(claims) || isWelcomeTeam(claims);
+  }
+
   // Setu API — member mutations: POST and DELETE are manager-only.
   // PATCH on /api/setu/members/{mid} allows a member to edit their own profile
   // (self-edit) — the route handler enforces that manager flag cannot change.

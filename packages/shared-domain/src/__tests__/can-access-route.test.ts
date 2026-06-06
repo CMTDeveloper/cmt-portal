@@ -191,6 +191,17 @@ describe('canAccessRoute — /api/setu/members — GET', () => {
   });
 });
 
+describe('canAccessRoute — /api/setu/members/{mid}/profile — family OR welcome-team', () => {
+  it('allows the member profile API for any setu family OR welcome-team (admin inherits)', () => {
+    expect(canAccessRoute(member, '/api/setu/members/CMT-FAM1-03/profile', 'GET')).toBe(true);
+    expect(canAccessRoute(welcomeTeam, '/api/setu/members/CMT-FAM1-03/profile', 'GET')).toBe(true);
+    expect(canAccessRoute(admin, '/api/setu/members/CMT-FAM1-03/profile', 'GET')).toBe(true);
+  });
+  it('still denies welcome-team on a non-profile member GET', () => {
+    expect(canAccessRoute(welcomeTeam, '/api/setu/members/CMT-FAM1-03', 'GET')).toBe(false);
+  });
+});
+
 describe('canAccessRoute — /api/setu/members — mutations (POST/PATCH/DELETE) manager-only', () => {
   it('allows family-manager POST /api/setu/members', () => {
     expect(canAccessRoute(manager, '/api/setu/members', 'POST')).toBe(true);
