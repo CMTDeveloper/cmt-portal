@@ -20,6 +20,8 @@ export interface RosterData {
 }
 
 // Confirmer-facing sort: outstanding sign-ups first so they're easy to action.
+// `cancelled` rows are pre-filtered out before the sort, so the cancelled entry
+// and the `?? 9` unknown-status fallback are purely defensive.
 const STATUS_ORDER: Record<string, number> = { 'signed-up': 0, completed: 1, 'no-show': 2, cancelled: 3 };
 
 export async function getOpportunityRoster(oppId: string): Promise<RosterData | null> {
