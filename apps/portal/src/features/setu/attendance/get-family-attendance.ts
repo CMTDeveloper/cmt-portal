@@ -47,7 +47,13 @@ export async function getFamilyBalaViharAttendance(args: FamilyBvAttendanceArgs)
     const resolved = resolveMemberAttendance(portalMarks, doorMarks);
     for (const m of resolved.marks) {
       const cur = byDate.get(m.date);
-      if (!cur || STATUS_RANK[m.status] > STATUS_RANK[cur.status]) byDate.set(m.date, m);
+      // Best status across children wins; on a tie, prefer a portal mark so the
+      // folded `source` reflects an authoritative teacher mark over a door one.
+      const better =
+        !cur ||
+        STATUS_RANK[m.status] > STATUS_RANK[cur.status] ||
+        (STATUS_RANK[m.status] === STATUS_RANK[cur.status] && m.source === 'portal' && cur.source === 'door');
+      if (better) byDate.set(m.date, m);
     }
   }
 

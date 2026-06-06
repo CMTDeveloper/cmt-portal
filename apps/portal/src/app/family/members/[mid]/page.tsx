@@ -59,7 +59,7 @@ export default async function MemberDetailPage({ params }: Props) {
     // attendance is BV's union of teacher marks ∪ door check-ins, so pin to the
     // BV enrollment — a newer non-BV enrollment (e.g. Tabla) must not scope this
     // attendance away.
-    const [enrollments] = await Promise.all([getEnrollments(data.family.fid)]);
+    const enrollments = await getEnrollments(data.family.fid);
     const bv = selectBalaViharEnrollment(enrollments);
     const off = bv?.offering ?? null;
     const attendanceSummary = await getMemberUnifiedAttendance({
