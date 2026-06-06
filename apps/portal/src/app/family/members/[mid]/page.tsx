@@ -6,7 +6,8 @@ import { mockFamily } from '@/features/family/data/mock';
 import { flags } from '@/lib/flags';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
-import { getCheckInAttendance, summarizeMemberCheckIns, type CheckInSummary } from '@/features/setu/attendance/check-in-attendance';
+import { getMemberUnifiedAttendance } from '@/features/setu/attendance/get-member-attendance';
+import type { ResolvedSummary } from '@/features/setu/attendance/resolve-attendance';
 import { selectBalaViharEnrollment } from '../../_helpers/select-bv-enrollment';
 import { isoToTorontoDateInput } from '@/lib/toronto-date';
 interface Props {
@@ -18,22 +19,22 @@ function formatEmergencyContact(ec: { relation: string; phone: string; email: st
   return `${ec.relation} · ${ec.phone}`;
 }
 
-function AttendanceSummaryBlock({ summary, hasSid }: { summary: CheckInSummary; hasSid: boolean }) {
+function AttendanceSummaryBlock({ summary, hasSid }: { summary: ResolvedSummary; hasSid: boolean }) {
+  const attended = summary.present + summary.late;
+  const lastDate = summary.marks.length > 0 ? summary.marks[summary.marks.length - 1]!.date : null;
   return (
     <>
       <SectionLabel>Bala Vihar attendance</SectionLabel>
-      {!hasSid ? (
+      {summary.total === 0 ? (
         <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 8 }}>
-          Per-child attendance isn&apos;t linked for this member yet.
-        </div>
-      ) : summary.recorded === 0 ? (
-        <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 8 }}>
-          No attendance recorded yet — it appears once Sunday classes begin.
+          {hasSid
+            ? 'No attendance recorded yet — it appears once Sunday classes begin.'
+            : "Per-child attendance isn't linked for this member yet."}
         </div>
       ) : (
         <DetailGroup rows={[
-          ['Attended', `${summary.attended} of ${summary.recorded} Sundays`],
-          ['Last class', summary.lastDate ?? '—'],
+          ['Attended', `${attended} of ${summary.total} Sundays`],
+          ['Last class', lastDate ?? '—'],
         ]}/>
       )}
     </>
@@ -53,25 +54,22 @@ export default async function MemberDetailPage({ params }: Props) {
     const name = `${member.firstName} ${member.lastName}`;
     const typeLabel = member.type === 'Child' ? `Child${member.schoolGrade ? ` · ${member.schoolGrade}` : ''}` : 'Adult';
     const canEdit = data.isManager || mid === data.currentMid;
-    // Scope check-ins to the active Bala Vihar enrollment's window (so a prior
+    // Scope attendance to the active Bala Vihar enrollment's window (so a prior
     // year's records don't show under this year's enrollment). Per-member
-    // attendance is BV's (the check-in app), so pin to the BV enrollment — a
-    // newer non-BV enrollment (e.g. Tabla) must not scope this attendance away.
-    const [rawCheckIns, enrollments] = await Promise.all([
-      getCheckInAttendance(data.family.legacyFid),
-      getEnrollments(data.family.fid),
-    ]);
-    const activeOffering = selectBalaViharEnrollment(enrollments)?.offering ?? null;
-    const scoped = activeOffering
-      ? rawCheckIns.filter((r) => {
-          const start = isoToTorontoDateInput(activeOffering.startDate.toISOString());
-          const end = activeOffering.endDate
-            ? isoToTorontoDateInput(activeOffering.endDate.toISOString())
-            : '9999-12-31';
-          return r.date >= start && r.date <= end;
-        })
-      : rawCheckIns;
-    const attendanceSummary = summarizeMemberCheckIns(scoped, member.legacySid);
+    // attendance is BV's union of teacher marks ∪ door check-ins, so pin to the
+    // BV enrollment — a newer non-BV enrollment (e.g. Tabla) must not scope this
+    // attendance away.
+    const [enrollments] = await Promise.all([getEnrollments(data.family.fid)]);
+    const bv = selectBalaViharEnrollment(enrollments);
+    const off = bv?.offering ?? null;
+    const attendanceSummary = await getMemberUnifiedAttendance({
+      mid,
+      legacyFid: data.family.legacyFid,
+      legacySid: member.legacySid ?? null,
+      pid: bv?.oid ?? null,
+      windowStart: off ? isoToTorontoDateInput(off.startDate.toISOString()) : null,
+      windowEnd: off?.endDate ? isoToTorontoDateInput(off.endDate.toISOString()) : null,
+    });
 
     return (
       <>
