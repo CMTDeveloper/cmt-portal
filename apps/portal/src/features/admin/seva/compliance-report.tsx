@@ -23,6 +23,9 @@ const eyebrowStyle: React.CSSProperties = {
 export function ComplianceReport({ initial }: ComplianceReportProps) {
   const { currentSevaYear, hoursPerYear, rows, summary } = initial;
   const hasYear = currentSevaYear != null && currentSevaYear !== '';
+  // "Short" is the actionable number; lead the eye to it only when there's work to do.
+  const hasShort = summary.shortCount > 0;
+  const allClear = summary.totalFamilies > 0 && summary.shortCount === 0;
 
   return (
     <>
@@ -36,6 +39,7 @@ export function ComplianceReport({ initial }: ComplianceReportProps) {
           <div
             style={{
               display: 'flex',
+              flexWrap: 'wrap',
               alignItems: 'center',
               gap: 10,
               marginTop: 12,
@@ -43,7 +47,12 @@ export function ComplianceReport({ initial }: ComplianceReportProps) {
               color: 'var(--body-text)',
             }}
           >
-            <span style={{ fontWeight: 600 }}>{currentSevaYear}</span>
+            <span
+              className="pill"
+              style={{ background: 'var(--accentSoft)', color: 'var(--accentDeep)', fontWeight: 600 }}
+            >
+              {currentSevaYear}
+            </span>
             <span aria-hidden style={{ color: 'var(--line2)' }}>·</span>
             <span>{hoursPerYear} hrs / family / year</span>
           </div>
@@ -52,27 +61,56 @@ export function ComplianceReport({ initial }: ComplianceReportProps) {
 
       {hasYear ? (
         <>
-          {/* Stat strip — Total / Met / Short at a glance. */}
+          {/* Stat strip — Total / Met / Short at a glance. The Short column gets the
+              soft accent wash only when there are families to nudge. */}
           <div
             className="card"
             style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(3, 1fr)',
-              marginBottom: 22,
+              marginBottom: 18,
               overflow: 'hidden',
             }}
           >
-            {renderStat('Total', summary.totalFamilies, 'var(--ink)')}
-            {renderStat('Met', summary.metCount, 'var(--accentDeep)')}
-            {renderStat('Short', summary.shortCount, 'var(--muted)')}
+            {renderStat('Total', summary.totalFamilies, 'var(--ink)', false)}
+            {renderStat('Met', summary.metCount, 'var(--accentDeep)', false)}
+            {renderStat('Short', summary.shortCount, hasShort ? 'var(--accentDeep)' : 'var(--muted)', hasShort)}
           </div>
 
-          {/* Met-of-total summary line. */}
-          <p style={{ fontSize: 14, color: 'var(--muted)', marginBottom: 18, lineHeight: 1.5 }}>
-            <strong style={{ color: 'var(--ink)', fontWeight: 600 }}>
-              {summary.metCount} of {summary.totalFamilies}
-            </strong>{' '}
-            families have met the {hoursPerYear}-hour target.
+          {/* Met-of-total summary line. Keep the "{metCount} of {totalFamilies}" phrasing intact. */}
+          <p
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 9,
+              fontSize: 14,
+              color: 'var(--muted)',
+              marginBottom: 20,
+              lineHeight: 1.5,
+            }}
+          >
+            <span
+              aria-hidden
+              style={{
+                width: 26,
+                height: 26,
+                flex: '0 0 auto',
+                borderRadius: 999,
+                background: allClear ? 'var(--accentSoft)' : 'var(--surface2)',
+                color: allClear ? 'var(--accentDeep)' : 'var(--muted)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              {allClear ? <SetuIcon.check width={14} height={14} /> : <SetuIcon.people width={14} height={14} />}
+            </span>
+            <span>
+              <strong style={{ color: 'var(--ink)', fontWeight: 600 }}>
+                {summary.metCount} of {summary.totalFamilies}
+              </strong>{' '}
+              families have met the {hoursPerYear}-hour target.
+            </span>
           </p>
 
           {/* Family rows — short-first order comes from the server. */}
@@ -84,28 +122,43 @@ export function ComplianceReport({ initial }: ComplianceReportProps) {
         <div
           className="card"
           style={{
-            padding: 'clamp(28px, 7vw, 44px) 24px',
+            padding: 'clamp(32px, 8vw, 48px) 24px',
             textAlign: 'center',
             background: 'var(--surface)',
           }}
         >
+          {/* Heart-in-rosette motif — shared with the roster + seva managers. */}
           <div
             aria-hidden
             style={{
-              width: 52,
-              height: 52,
+              width: 72,
+              height: 72,
               borderRadius: 999,
               background: 'var(--accentSoft)',
-              color: 'var(--accentDeep)',
               display: 'inline-flex',
               alignItems: 'center',
               justifyContent: 'center',
-              marginBottom: 16,
+              marginBottom: 18,
             }}
           >
-            <SetuIcon.calendar />
+            <div
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: 999,
+                background: 'var(--surface)',
+                color: 'var(--accent)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <SetuIcon.calendar width={22} height={22} />
+            </div>
           </div>
-          <p style={{ fontSize: 17, color: 'var(--ink)', fontWeight: 600 }}>No seva year set yet</p>
+          <p style={{ fontSize: 18, color: 'var(--ink)', fontWeight: 600, letterSpacing: '-0.01em' }}>
+            No seva year set yet
+          </p>
           <p
             style={{
               fontSize: 14,
@@ -113,7 +166,7 @@ export function ComplianceReport({ initial }: ComplianceReportProps) {
               marginTop: 8,
               maxWidth: 340,
               marginInline: 'auto',
-              lineHeight: 1.5,
+              lineHeight: 1.55,
             }}
           >
             Set an active seva year and hours target from the seva opportunities page to start tracking
@@ -126,9 +179,12 @@ export function ComplianceReport({ initial }: ComplianceReportProps) {
 }
 
 // A single compliance card. The whole row is a link to the family detail page.
-// Rendered as a function (never a nested component) to avoid remount churn.
+// Status drives the rail + avatar so Met (quietly affirmed) and Short (kindly
+// flagged) read at a glance. Rendered as a function (never a nested component)
+// to avoid remount churn.
 function renderRow(row: ComplianceRow, hoursPerYear: number) {
   const pct = hoursPerYear > 0 ? Math.min(100, Math.round((row.hoursEarned / hoursPerYear) * 100)) : 0;
+  const Glyph = row.met ? SetuIcon.check : SetuIcon.warn;
   return (
     <Link
       key={row.fid}
@@ -136,77 +192,124 @@ function renderRow(row: ComplianceRow, hoursPerYear: number) {
       className="card focus-ring"
       style={{
         display: 'block',
-        padding: 'clamp(14px, 4vw, 18px)',
+        padding: 0,
+        overflow: 'hidden',
         textDecoration: 'none',
         color: 'inherit',
         borderColor: row.met ? 'var(--accent)' : 'var(--line)',
       }}
     >
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 12,
-          flexWrap: 'wrap',
-        }}
-      >
-        <div style={{ minWidth: 0, flex: '1 1 auto' }}>
-          <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--ink)', lineHeight: 1.25 }}>
-            {row.name}
-          </div>
-          <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 4 }}>
-            {row.hoursEarned} of {hoursPerYear} hrs
-          </div>
-        </div>
-        {row.met ? (
-          <span
-            className="pill"
-            style={{ flex: '0 0 auto', fontWeight: 600, background: 'var(--accentSoft)', color: 'var(--accentDeep)' }}
-          >
-            Met
-          </span>
-        ) : (
-          <span
-            className="pill"
-            style={{ flex: '0 0 auto', fontWeight: 600, background: 'var(--surface2)', color: 'var(--muted)' }}
-          >
-            Short
-          </span>
-        )}
-      </div>
-      {/* Thin progress bar toward the target. */}
-      <div
-        aria-hidden
-        style={{
-          marginTop: 12,
-          height: 4,
-          borderRadius: 999,
-          background: 'var(--surface2)',
-          overflow: 'hidden',
-        }}
-      >
+      {/* Affirming accent rail on families that met the target — the rewarding signal. */}
+      {row.met && <div aria-hidden style={{ height: 3, background: 'var(--accent)' }} />}
+
+      <div style={{ padding: 'clamp(15px, 4vw, 18px)' }}>
         <div
           style={{
-            width: `${pct}%`,
-            height: '100%',
-            background: row.met ? 'var(--accent)' : 'var(--accentSoft)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            flexWrap: 'wrap',
           }}
-        />
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: '1 1 auto' }}>
+            <span
+              aria-hidden
+              style={{
+                width: 36,
+                height: 36,
+                flex: '0 0 auto',
+                borderRadius: 999,
+                background: row.met ? 'var(--accentSoft)' : 'var(--surface2)',
+                color: row.met ? 'var(--accentDeep)' : 'var(--muted)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Glyph width={16} height={16} />
+            </span>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--ink)', lineHeight: 1.25 }}>
+                {row.name}
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 3 }}>
+                {row.hoursEarned} of {hoursPerYear} hrs
+              </div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '0 0 auto' }}>
+            {row.met ? (
+              <span
+                className="pill"
+                style={{ fontWeight: 600, background: 'var(--accentSoft)', color: 'var(--accentDeep)' }}
+              >
+                <SetuIcon.check width={13} height={13} /> Met
+              </span>
+            ) : (
+              <span
+                className="pill"
+                style={{ fontWeight: 600, background: 'var(--surface2)', color: 'var(--muted)' }}
+              >
+                Short
+              </span>
+            )}
+            <span aria-hidden style={{ display: 'inline-flex', color: 'var(--line2)' }}>
+              <SetuIcon.chevron width={16} height={16} />
+            </span>
+          </div>
+        </div>
+        {/* Thin progress hint toward the target, with a quiet percentage tick. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 13 }}>
+          <div
+            aria-hidden
+            style={{
+              flex: '1 1 auto',
+              height: 5,
+              borderRadius: 999,
+              background: 'var(--surface2)',
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                width: `${pct}%`,
+                height: '100%',
+                borderRadius: 999,
+                background: row.met ? 'var(--accent)' : 'var(--accentDeep)',
+                opacity: row.met ? 1 : 0.55,
+              }}
+            />
+          </div>
+          <span
+            aria-hidden
+            style={{
+              flex: '0 0 auto',
+              fontSize: 11,
+              fontWeight: 600,
+              fontVariantNumeric: 'tabular-nums',
+              color: row.met ? 'var(--accentDeep)' : 'var(--muted)',
+            }}
+          >
+            {pct}%
+          </span>
+        </div>
       </div>
     </Link>
   );
 }
 
-// A single cell in the stat strip. Hoisted-style render helper (called as a
-// function, not declared as a nested component).
-function renderStat(label: string, value: number, valueColor: string) {
+// A single cell in the stat strip. The `lead` flag washes the actionable column
+// in soft accent (mirrors the roster band). Hoisted-style render helper (called
+// as a function, not declared as a nested component).
+function renderStat(label: string, value: number, valueColor: string, lead: boolean) {
   return (
     <div
       key={label}
       style={{
         padding: 'clamp(13px, 3.5vw, 18px) clamp(10px, 3vw, 16px)',
         textAlign: 'center',
+        background: lead && value > 0 ? 'var(--accentSoft)' : 'transparent',
         borderRight: '1px solid var(--line)',
       }}
     >
