@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockCanTeach, mockDerive } = vi.hoisted(() => ({ mockCanTeach: vi.fn(), mockDerive: vi.fn() }));
+const { mockCanTeach, mockView } = vi.hoisted(() => ({ mockCanTeach: vi.fn(), mockView: vi.fn() }));
 vi.mock('@/features/setu/teacher/guard', () => ({ canTeachLevel: mockCanTeach }));
-vi.mock('@/features/setu/teacher/roster', () => ({ deriveRoster: mockDerive }));
-vi.mock('@/features/setu/calendar/calendar', () => ({ torontoToday: () => '2025-09-07' }));
+vi.mock('@/features/setu/teacher/level-attendance-view', () => ({ getLevelAttendanceView: mockView }));
+vi.mock('@/features/setu/calendar/calendar', () => ({ mostRecentSunday: () => '2025-09-07' }));
 
 function req(role: string | null, url = '/api/setu/teacher/levels/lvl/roster', mid?: string): Request {
   const headers: Record<string, string> = {};
@@ -16,7 +16,7 @@ const params = (levelId = 'lvl') => ({ params: Promise.resolve({ levelId }) });
 beforeEach(() => {
   vi.clearAllMocks();
   mockCanTeach.mockResolvedValue('ok');
-  mockDerive.mockResolvedValue({ levelId: 'lvl', members: [], markedCount: 0, total: 0, date: '2025-09-07' });
+  mockView.mockResolvedValue({ levelId: 'lvl', levelName: 'Level 1', ageLabel: 'Gr 1', location: 'Hall', pid: 'pid', date: '2025-09-07', rows: [], presentCount: 0, total: 0 });
 });
 
 describe('GET roster', () => {
@@ -36,16 +36,17 @@ describe('GET roster', () => {
     const { GET } = await import('../route');
     expect((await GET(req('teacher', undefined, 'CMT-A-01'), params())).status).toBe(404);
   });
-  it('200 with roster, defaulting date to today', async () => {
+  it('200 with view, defaulting date to the most recent Sunday', async () => {
     const { GET } = await import('../route');
     const res = await GET(req('teacher', undefined, 'CMT-A-01'), params());
     expect(res.status).toBe(200);
-    expect(mockDerive).toHaveBeenCalledWith('lvl', '2025-09-07');
+    expect((await res.json()).view).toMatchObject({ levelId: 'lvl' });
+    expect(mockView).toHaveBeenCalledWith('lvl', '2025-09-07');
   });
   it('uses the date query param when present', async () => {
     const { GET } = await import('../route');
     await GET(req('teacher', '/api/setu/teacher/levels/lvl/roster?date=2025-10-19', 'CMT-A-01'), params());
-    expect(mockDerive).toHaveBeenCalledWith('lvl', '2025-10-19');
+    expect(mockView).toHaveBeenCalledWith('lvl', '2025-10-19');
   });
   it('400 for a malformed date', async () => {
     const { GET } = await import('../route');

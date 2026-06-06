@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server';
 import { isTeacher } from '@cmt/shared-domain';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
 import { canTeachLevel } from '@/features/setu/teacher/guard';
-import { deriveRoster } from '@/features/setu/teacher/roster';
-import { torontoToday } from '@/features/setu/calendar/calendar';
+import { getLevelAttendanceView } from '@/features/setu/teacher/level-attendance-view';
+import { mostRecentSunday } from '@/features/setu/calendar/calendar';
 
 export async function GET(req: Request, { params }: { params: Promise<{ levelId: string }> }) {
   const session = readSessionFromHeaders(req);
@@ -16,12 +16,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ levelId:
   if (access === 'level-not-found') return NextResponse.json({ error: 'not-found' }, { status: 404 });
   if (access === 'forbidden') return NextResponse.json({ error: 'not-your-class' }, { status: 403 });
 
-  const date = new URL(req.url).searchParams.get('date') || torontoToday();
+  const date = new URL(req.url).searchParams.get('date') || mostRecentSunday();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     return NextResponse.json({ error: 'bad-date' }, { status: 400 });
   }
 
-  const roster = await deriveRoster(levelId, date);
-  if (!roster) return NextResponse.json({ error: 'not-found' }, { status: 404 });
-  return NextResponse.json({ roster });
+  const view = await getLevelAttendanceView(levelId, date);
+  if (!view) return NextResponse.json({ error: 'not-found' }, { status: 404 });
+  return NextResponse.json({ view });
 }

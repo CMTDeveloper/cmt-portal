@@ -3,24 +3,17 @@
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { toast } from '@cmt/ui';
-import type { SetuAttendanceStatus, RosterStatus } from '@cmt/shared-domain';
-
-export interface MarkerMember {
-  mid: string;
-  fid: string;
-  firstName: string;
-  lastName: string;
-  schoolGrade: string | null;
-  hasSafetyInfo: boolean;
-  status: RosterStatus;
-}
+import type { SetuAttendanceStatus } from '@cmt/shared-domain';
+import type { AttendanceViewRow } from '@/features/setu/teacher/level-attendance-view';
 
 interface AttendanceMarkerProps {
   levelId: string;
   levelName: string;
   ageLabel: string;
   date: string;
-  initialMembers: MarkerMember[];
+  rows: AttendanceViewRow[];
+  presentCount: number;
+  total: number;
 }
 
 const OPTIONS: { value: SetuAttendanceStatus; label: string; color: string }[] = [
@@ -29,18 +22,21 @@ const OPTIONS: { value: SetuAttendanceStatus; label: string; color: string }[] =
   { value: 'absent', label: 'Absent', color: 'var(--err)' },
 ];
 
-export function AttendanceMarker({ levelId, levelName, ageLabel, date, initialMembers }: AttendanceMarkerProps) {
+/** Shift a YYYY-MM-DD by n days (noon-UTC anchor keeps it tz-stable). */
+function addDays(ymd: string, n: number): string {
+  const d = new Date(`${ymd}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+export function AttendanceMarker({ levelId, levelName, ageLabel, date, rows, total }: AttendanceMarkerProps) {
   const [marks, setMarks] = useState<Record<string, SetuAttendanceStatus>>(() => {
     const init: Record<string, SetuAttendanceStatus> = {};
-    for (const m of initialMembers) {
-      if (m.status !== 'unaccounted') init[m.mid] = m.status;
-    }
+    for (const r of rows) init[r.mid] = r.status;
     return init;
   });
   const [pending, startTransition] = useTransition();
-
-  const total = initialMembers.length;
-  const markedCount = Object.keys(marks).length;
+  const presentCount = Object.values(marks).filter((s) => s === 'present').length;
 
   function setStatus(mid: string, status: SetuAttendanceStatus) {
     setMarks((prev) => ({ ...prev, [mid]: status }));
@@ -54,52 +50,49 @@ export function AttendanceMarker({ levelId, levelName, ageLabel, date, initialMe
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ levelId, date, marks }),
         });
-        if (!res.ok) {
-          const j = await res.json().catch(() => ({}));
-          toast.error(j.error === 'not-your-class' ? 'You are not assigned to this class' : 'Save failed');
-          return;
-        }
-        toast.success('Thank you for taking attendance today.');
-      } catch {
-        toast.error('Network error — please try again.');
-      }
+        if (!res.ok) { toast.error('Save failed'); return; }
+        toast.success('Attendance saved');
+      } catch { toast.error('Network error — please try again.'); }
     });
   }
 
   return (
-    <div style={{ paddingBottom: 88 }}>
+    <div style={{ paddingBottom: 92 }}>
       <header style={{ marginBottom: 16 }}>
         <Link href="/teacher" style={{ fontSize: 13, color: 'var(--muted)', textDecoration: 'none' }}>← My classes</Link>
-        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, marginTop: 8 }}>
-          <div>
-            <h1 style={{ fontSize: 24, fontWeight: 600, letterSpacing: '-0.02em' }}>{levelName}</h1>
-            <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 2 }}>{ageLabel} · {date}</p>
+        <h1 style={{ fontSize: 24, fontWeight: 600, letterSpacing: '-0.02em', marginTop: 8 }}>{levelName}</h1>
+        <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 2 }}>{ageLabel}</p>
+        <div className="between" style={{ marginTop: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Link href={`/teacher/levels/${levelId}/attendance?date=${addDays(date, -7)}`} aria-label="Previous Sunday" className="btn btn--g" style={{ minWidth: 40, padding: '8px 10px' }}>‹</Link>
+            <span style={{ fontSize: 14, fontWeight: 600 }}>{date}</span>
+            <Link href={`/teacher/levels/${levelId}/attendance?date=${addDays(date, 7)}`} aria-label="Next Sunday" className="btn btn--g" style={{ minWidth: 40, padding: '8px 10px' }}>›</Link>
           </div>
-          <Link href={`/teacher/levels/${levelId}/guests?date=${date}`} style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>Guests →</Link>
+          <Link href={`/teacher/levels/${levelId}/guests?date=${date}`} style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>Visitors →</Link>
         </div>
       </header>
 
-      {total === 0 ? (
+      {rows.length === 0 ? (
         <div className="card" style={{ padding: 24, textAlign: 'center', color: 'var(--muted)', fontSize: 14 }}>
           No enrolled students match this level yet.
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {initialMembers.map((m) => {
-            const current = marks[m.mid];
+          {rows.map((r) => {
+            const current = marks[r.mid];
             return (
-              <div key={m.mid} className="card" style={{ padding: '12px 14px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                    {m.hasSafetyInfo && (
-                      <Link href={`/teacher/students/${m.mid}`} aria-label="Safety info" title="Allergy / safety info" style={{ width: 9, height: 9, borderRadius: '50%', background: 'var(--err)', flexShrink: 0 }} />
-                    )}
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 15, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.firstName} {m.lastName}</div>
-                      {m.schoolGrade && <div style={{ fontSize: 12, color: 'var(--muted)' }}>{m.schoolGrade}</div>}
+              <div key={r.mid} data-testid="att-row" className="card" style={{ padding: '12px 14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, marginBottom: 10 }}>
+                  {r.hasSafetyInfo && (
+                    <Link href={`/teacher/students/${r.mid}`} aria-label="Safety info" title="Allergy / safety info" style={{ width: 9, height: 9, borderRadius: '50%', background: 'var(--err)', flexShrink: 0 }} />
+                  )}
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 15, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.firstName} {r.lastName}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                      {r.schoolGrade && <span style={{ fontSize: 12, color: 'var(--muted)' }}>{r.schoolGrade}</span>}
+                      {r.checkedInAtDoor && <span className="pill" style={{ fontSize: 11, background: 'var(--accentSoft)', color: 'var(--accentDeep)' }}>· door</span>}
                     </div>
                   </div>
-                  {!current && <span style={{ fontSize: 11, color: 'var(--muted)', whiteSpace: 'nowrap' }}>unmarked</span>}
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
                   {OPTIONS.map((o) => {
@@ -108,11 +101,11 @@ export function AttendanceMarker({ levelId, levelName, ageLabel, date, initialMe
                       <button
                         key={o.value}
                         type="button"
-                        onClick={() => setStatus(m.mid, o.value)}
+                        onClick={() => setStatus(r.mid, o.value)}
                         aria-pressed={active}
                         style={{
                           padding: '10px 0', borderRadius: 'var(--radiusSm)', fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                          fontFamily: 'var(--body)',
+                          fontFamily: 'var(--body)', minHeight: 44,
                           border: active ? `1.5px solid ${o.color}` : '1px solid var(--line2)',
                           background: active ? o.color : 'var(--bg)',
                           color: active ? '#fff' : 'var(--body-text)',
@@ -129,11 +122,8 @@ export function AttendanceMarker({ levelId, levelName, ageLabel, date, initialMe
         </div>
       )}
 
-      {/* Sticky save footer */}
       <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, background: 'var(--surface)', borderTop: '1px solid var(--line)', padding: '12px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-        <span style={{ fontSize: 13, color: 'var(--muted)' }}>
-          <strong style={{ color: 'var(--ink)' }}>{markedCount}</strong> / {total} marked
-        </span>
+        <span style={{ fontSize: 13, color: 'var(--body-text)' }}>{presentCount} / {total} present</span>
         <button onClick={save} disabled={pending || total === 0} className="btn btn--p" style={{ fontSize: 14, padding: '10px 24px', opacity: pending ? 0.6 : 1 }}>
           {pending ? 'Saving…' : 'Save attendance'}
         </button>

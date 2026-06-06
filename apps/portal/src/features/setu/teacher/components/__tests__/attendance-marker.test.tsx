@@ -1,62 +1,44 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-const toastMock = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), warning: vi.fn() }));
-vi.mock('@cmt/ui', () => ({ toast: toastMock }));
-vi.mock('next/link', () => ({
-  default: ({ children, href, ...rest }: { children?: React.ReactNode; href: string } & Record<string, unknown>) => (
-    <a href={href} {...rest}>{children}</a>
-  ),
-}));
+vi.mock('next/link', () => ({ default: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a> }));
+vi.mock('@cmt/ui', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
-import { AttendanceMarker, type MarkerMember } from '../attendance-marker';
+import { AttendanceMarker } from '../attendance-marker';
 
-const MEMBERS: MarkerMember[] = [
-  { mid: 'CMT-A-02', fid: 'CMT-A', firstName: 'Arjun', lastName: 'Apple', schoolGrade: 'Grade 2', hasSafetyInfo: true, status: 'unaccounted' },
-  { mid: 'CMT-B-02', fid: 'CMT-B', firstName: 'Bala', lastName: 'Banana', schoolGrade: 'Grade 3', hasSafetyInfo: false, status: 'present' },
+const ROWS = [
+  { mid: 'F-02', fid: 'F', firstName: 'Aarav', lastName: 'Shah', schoolGrade: 'Grade 1', hasSafetyInfo: false, status: 'present' as const, source: 'default' as const, checkedInAtDoor: false },
+  { mid: 'F-03', fid: 'F', firstName: 'Diya', lastName: 'Patel', schoolGrade: 'Grade 1', hasSafetyInfo: true, status: 'present' as const, source: 'door' as const, checkedInAtDoor: true },
 ];
 
-beforeEach(() => {
-  vi.clearAllMocks();
-  global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ saved: 2, skipped: [] }) }) as unknown as typeof fetch;
+function props(over: Record<string, unknown> = {}) {
+  return { levelId: 'L', levelName: 'Level 1', ageLabel: 'Gr 1', date: '2026-01-04', rows: ROWS, presentCount: 2, total: 2, ...over };
+}
+
+beforeEach(() => { global.fetch = vi.fn(async () => new Response(JSON.stringify({ saved: 2, skipped: [] }), { status: 200 })) as never; });
+
+it('opens with everyone present and shows the live present count', () => {
+  render(<AttendanceMarker {...props()} />);
+  expect(screen.getByText('Aarav Shah')).toBeDefined();
+  expect(screen.getByText(/2\s*\/\s*2 present/i)).toBeDefined();
 });
 
-describe('AttendanceMarker', () => {
-  it('seeds marked count from initial statuses (present pre-marked)', () => {
-    render(<AttendanceMarker levelId="lvl" levelName="Level 2" ageLabel="Gr 2 & 3" date="2025-09-07" initialMembers={MEMBERS} />);
-    expect(screen.getByText('1')).toBeTruthy(); // 1 of 2 marked (Bala present)
-    expect(screen.getByText(/\/ 2 marked/)).toBeTruthy();
-  });
+it('shows a door badge for the door-checked-in student', () => {
+  render(<AttendanceMarker {...props()} />);
+  const diya = screen.getByText('Diya Patel').closest('[data-testid="att-row"]') as HTMLElement;
+  expect(within(diya).getByText(/door/i)).toBeDefined();
+});
 
-  it('marking a student increments the count', async () => {
-    const user = userEvent.setup();
-    render(<AttendanceMarker levelId="lvl" levelName="Level 2" ageLabel="x" date="2025-09-07" initialMembers={MEMBERS} />);
-    // Arjun's row has Present/Late/Absent; click Present (first Present button)
-    const presentButtons = screen.getAllByRole('button', { name: 'Present' });
-    await user.click(presentButtons[0]!);
-    expect(screen.getByText('2')).toBeTruthy();
-  });
-
-  it('shows a safety dot link for a member with allergies', () => {
-    render(<AttendanceMarker levelId="lvl" levelName="Level 2" ageLabel="x" date="2025-09-07" initialMembers={MEMBERS} />);
-    expect(screen.getByLabelText('Safety info')).toBeTruthy();
-  });
-
-  it('Save posts levelId, date and the marks record', async () => {
-    const user = userEvent.setup();
-    render(<AttendanceMarker levelId="lvl" levelName="Level 2" ageLabel="x" date="2025-09-07" initialMembers={MEMBERS} />);
-    const absentButtons = screen.getAllByRole('button', { name: 'Absent' });
-    await user.click(absentButtons[0]!); // Arjun absent
-    await user.click(screen.getByRole('button', { name: 'Save attendance' }));
-
-    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
-    const [url, init] = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0]!;
-    expect(url).toBe('/api/setu/teacher/attendance');
-    const sent = JSON.parse((init as RequestInit).body as string);
-    expect(sent.levelId).toBe('lvl');
-    expect(sent.date).toBe('2025-09-07');
-    expect(sent.marks).toEqual({ 'CMT-A-02': 'absent', 'CMT-B-02': 'present' });
-    await waitFor(() => expect(toastMock.success).toHaveBeenCalledWith('Thank you for taking attendance today.'));
-  });
+it('flagging a student absent decrements the present count and posts the full marks map', async () => {
+  const user = userEvent.setup();
+  render(<AttendanceMarker {...props()} />);
+  const aarav = screen.getByText('Aarav Shah').closest('[data-testid="att-row"]') as HTMLElement;
+  await user.click(within(aarav).getByRole('button', { name: /absent/i }));
+  expect(screen.getByText(/1\s*\/\s*2 present/i)).toBeDefined();
+  await user.click(screen.getByRole('button', { name: /save attendance/i }));
+  expect(global.fetch).toHaveBeenCalledWith('/api/setu/teacher/attendance', expect.objectContaining({ method: 'POST' }));
+  const calls = (global.fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+  const body = JSON.parse((calls[0]![1] as { body: string }).body);
+  expect(body).toMatchObject({ levelId: 'L', date: '2026-01-04', marks: { 'F-02': 'absent', 'F-03': 'present' } });
 });
