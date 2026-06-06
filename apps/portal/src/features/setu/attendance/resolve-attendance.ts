@@ -21,7 +21,23 @@ export interface ResolvedSummary {
 // in two levels under one program), the attended status wins deterministically
 // — present > late > absent — so a stray absent can never silently overwrite an
 // attendance. (Guards the N=2 / one→many trap; door marks are unique per date.)
-const STATUS_RANK: Record<SetuAttendanceStatus, number> = { present: 2, late: 1, absent: 0 };
+export const STATUS_RANK: Record<SetuAttendanceStatus, number> = { present: 2, late: 1, absent: 0 };
+
+/** Build a ResolvedSummary from already-merged marks (any order). */
+export function summarizeResolvedMarks(marks: ReadonlyArray<ResolvedMark>): ResolvedSummary {
+  const sorted = [...marks].sort((a, b) => a.date.localeCompare(b.date));
+  const present = sorted.filter((m) => m.status === 'present').length;
+  const late = sorted.filter((m) => m.status === 'late').length;
+  const absent = sorted.filter((m) => m.status === 'absent').length;
+  const total = sorted.length;
+  const attendedPct = total > 0 ? Math.round(((present + late) / total) * 100) : 0;
+  return { present, late, absent, total, attendedPct, marks: sorted };
+}
+
+/** A zero-attendance summary (no BV enrollment / no data). */
+export const EMPTY_RESOLVED_SUMMARY: ResolvedSummary = {
+  present: 0, late: 0, absent: 0, total: 0, attendedPct: 0, marks: [],
+};
 
 /**
  * Merge a member's portal attendance marks (authoritative) with their door
@@ -52,11 +68,5 @@ export function resolveMemberAttendance(
     }
   }
 
-  const marks = [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
-  const present = marks.filter((m) => m.status === 'present').length;
-  const late = marks.filter((m) => m.status === 'late').length;
-  const absent = marks.filter((m) => m.status === 'absent').length;
-  const total = marks.length;
-  const attendedPct = total > 0 ? Math.round(((present + late) / total) * 100) : 0;
-  return { present, late, absent, total, attendedPct, marks };
+  return summarizeResolvedMarks([...byDate.values()]);
 }
