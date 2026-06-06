@@ -42,7 +42,7 @@ const fieldStyle: React.CSSProperties = {
   display: 'block',
   width: '100%',
   marginTop: 7,
-  padding: '11px 13px',
+  padding: '12px 13px',
   borderRadius: 'var(--radiusSm)',
   border: '1px solid var(--line2)',
   background: 'var(--surface)',
@@ -50,6 +50,7 @@ const fieldStyle: React.CSSProperties = {
   color: 'var(--ink)',
   fontFamily: 'var(--body)',
   boxSizing: 'border-box',
+  minHeight: 46,
 };
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -63,10 +64,23 @@ function fmtDate(iso: string): string {
   });
 }
 
+/** A thin middot separator between inline metadata items. */
 function Dot() {
   return (
     <span aria-hidden style={{ color: 'var(--line2)' }}>
       ·
+    </span>
+  );
+}
+
+/** A small icon + label cell for the opportunity metadata row. */
+function MetaItem({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--body-text)' }}>
+      <span aria-hidden style={{ display: 'inline-flex', color: 'var(--muted)' }}>
+        {icon}
+      </span>
+      {children}
     </span>
   );
 }
@@ -88,10 +102,13 @@ export function SevaBrowser({
   const [creditMid, setCreditMid] = useState<string>('');
   // Guards double-clicks: the oppId / signupId currently mutating.
   const [pendingId, setPendingId] = useState<string | null>(null);
+  // Subtle hover-lift state, keyed by id (card hover is per-card).
+  const [hoverId, setHoverId] = useState<string | null>(null);
 
   const memberNameByMid = new Map(members.map((m) => [m.mid, m.name]));
   const isEmpty = currentSevaYear == null || opportunities.length === 0;
   const activeSignups = mySignups.filter((s) => s.status === 'signed-up');
+  const signedUpCount = opportunities.filter((o) => o.mySignupStatus === 'signed-up').length;
 
   async function refetch() {
     const [opps, signups] = await Promise.all([fetchOpportunities(), fetchMySignups()]);
@@ -152,15 +169,24 @@ export function SevaBrowser({
     if (isSignedUp) {
       return (
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-          <span className="pill" style={{ background: 'var(--accentSoft)', color: 'var(--accentDeep)', fontWeight: 600 }}>
-            Signed up ✓
+          <span
+            className="pill"
+            style={{
+              background: 'var(--accentSoft)',
+              color: 'var(--accentDeep)',
+              fontWeight: 600,
+              fontSize: 12,
+              padding: '6px 12px',
+            }}
+          >
+            <SetuIcon.check width={13} height={13} /> Signed up
           </span>
           <button
             type="button"
             className="btn btn--g"
             onClick={() => cancelForOpp(o.oppId)}
             disabled={pendingId !== null}
-            style={{ minHeight: 44 }}
+            style={{ minHeight: 44, marginLeft: 'auto' }}
           >
             Cancel
           </button>
@@ -170,7 +196,12 @@ export function SevaBrowser({
 
     if (isFull) {
       return (
-        <button type="button" className="btn btn--g" disabled style={{ minHeight: 44, opacity: 0.7 }}>
+        <button
+          type="button"
+          className="btn btn--s btn--block"
+          disabled
+          style={{ minHeight: 46, opacity: 0.65, cursor: 'not-allowed' }}
+        >
           Full
         </button>
       );
@@ -178,7 +209,7 @@ export function SevaBrowser({
 
     if (openSignupId === o.oppId) {
       return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <label style={labelStyle} htmlFor={`credit-${o.oppId}`}>
             Credit a member
             <select
@@ -202,16 +233,16 @@ export function SevaBrowser({
               className="btn btn--p"
               onClick={() => confirmSignup(o.oppId)}
               disabled={pending}
-              style={{ minHeight: 44, padding: '12px 24px' }}
+              style={{ flex: '1 1 140px', minHeight: 46, padding: '13px 24px' }}
             >
               {pending ? 'Signing up…' : 'Confirm'}
             </button>
             <button
               type="button"
-              className="btn btn--g"
+              className="btn btn--s"
               onClick={() => setOpenSignupId(null)}
               disabled={pending}
-              style={{ minHeight: 44 }}
+              style={{ flex: '1 1 100px', minHeight: 46 }}
             >
               Cancel
             </button>
@@ -221,8 +252,13 @@ export function SevaBrowser({
     }
 
     return (
-      <button type="button" className="btn btn--p" onClick={() => openSignup(o.oppId)} style={{ minHeight: 44 }}>
-        <SetuIcon.heart /> Sign up
+      <button
+        type="button"
+        className="btn btn--p btn--block"
+        onClick={() => openSignup(o.oppId)}
+        style={{ minHeight: 46 }}
+      >
+        <SetuIcon.heart width={16} height={16} /> Sign up
       </button>
     );
   }
@@ -230,126 +266,227 @@ export function SevaBrowser({
   return (
     <>
       {/* Header */}
-      <header style={{ marginBottom: 28 }}>
+      <header style={{ marginBottom: 24 }}>
         <p style={eyebrowStyle}>Seva</p>
         <h1 style={{ fontSize: 'clamp(28px, 7vw, 38px)', fontWeight: 400, marginTop: 8, lineHeight: 1.08 }}>
-          Seva opportunities
+          Lend a hand
         </h1>
-        <p style={{ fontSize: 15, color: 'var(--body-text)', marginTop: 12, maxWidth: 560, lineHeight: 1.55 }}>
-          Lend a hand — our family goal is {hoursPerYear} hours of seva this year.
+        <p style={{ fontSize: 15, color: 'var(--body-text)', marginTop: 12, maxWidth: 540, lineHeight: 1.55 }}>
+          Seva is selfless service offered with a joyful heart. Pick something that fits your week — every hour helps
+          our community thrive.
         </p>
       </header>
+
+      {/* Goal band — warm, gratifying, accent-forward */}
+      <div
+        className="card"
+        style={{
+          background: 'var(--accentSoft)',
+          border: '1px solid transparent',
+          padding: 'clamp(18px, 4.5vw, 24px)',
+          marginBottom: 26,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 16,
+          flexWrap: 'wrap',
+        }}
+      >
+        <div
+          aria-hidden
+          style={{
+            width: 52,
+            height: 52,
+            flex: '0 0 auto',
+            borderRadius: 999,
+            background: 'var(--surface)',
+            color: 'var(--accent)',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: '0 2px 8px rgba(217, 102, 66, 0.18)',
+          }}
+        >
+          <SetuIcon.heart width={24} height={24} />
+        </div>
+        <div style={{ minWidth: 0, flex: '1 1 200px' }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--accentDeep)', letterSpacing: '.04em' }}>
+            OUR FAMILY GOAL{currentSevaYear ? ` · ${currentSevaYear}` : ''}
+          </div>
+          {/* The number is a bare text interpolation (no wrapping element) so
+              "{hours} hours of seva this year" stays a single contiguous text
+              node the goal-header test can match. The whole line carries the
+              confident accent treatment instead of enlarging only the number. */}
+          <p
+            style={{
+              marginTop: 4,
+              fontSize: 'clamp(22px, 6.5vw, 28px)',
+              fontWeight: 600,
+              color: 'var(--accentDeep)',
+              letterSpacing: '-0.02em',
+              lineHeight: 1.12,
+            }}
+          >
+            {hoursPerYear} hours of seva this year
+          </p>
+          {signedUpCount > 0 && (
+            <div style={{ fontSize: 13, color: 'var(--accentDeep)', marginTop: 8, fontWeight: 500 }}>
+              You&apos;re signed up for {signedUpCount} {signedUpCount === 1 ? 'opportunity' : 'opportunities'} — thank you.
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Opportunities */}
       {isEmpty ? (
         <div
           className="card"
           style={{
-            padding: 'clamp(28px, 7vw, 44px) 24px',
+            padding: 'clamp(32px, 8vw, 48px) 24px',
             textAlign: 'center',
             background: 'var(--surface)',
           }}
         >
+          {/* Heart-in-rosette motif built from existing tokens */}
           <div
             aria-hidden
             style={{
-              width: 52,
-              height: 52,
+              width: 72,
+              height: 72,
               borderRadius: 999,
               background: 'var(--accentSoft)',
-              color: 'var(--accentDeep)',
               display: 'inline-flex',
               alignItems: 'center',
               justifyContent: 'center',
-              marginBottom: 16,
+              marginBottom: 18,
             }}
           >
-            <SetuIcon.heart />
+            <div
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: 999,
+                background: 'var(--surface)',
+                color: 'var(--accent)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <SetuIcon.heart width={22} height={22} />
+            </div>
           </div>
-          <p style={{ fontSize: 17, color: 'var(--ink)', fontWeight: 600 }}>No seva opportunities posted yet</p>
+          <p style={{ fontSize: 18, color: 'var(--ink)', fontWeight: 600, letterSpacing: '-0.01em' }}>
+            No seva opportunities just yet
+          </p>
           <p
             style={{
               fontSize: 14,
               color: 'var(--muted)',
               marginTop: 8,
-              maxWidth: 340,
+              maxWidth: 360,
               marginInline: 'auto',
-              lineHeight: 1.5,
+              lineHeight: 1.55,
             }}
           >
-            Check back soon — new ways to help out are posted here through the year.
+            New ways to help out are posted here through the year. Check back soon — there&apos;ll be a place for you.
           </p>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           {opportunities.map((o) => {
             const showSpots = o.spotsLeft !== null;
+            const isSignedUp = o.mySignupStatus === 'signed-up';
+            const isFull = o.spotsLeft === 0;
+            const lowSpots = o.spotsLeft !== null && o.spotsLeft > 0 && o.spotsLeft <= 3;
+            const hovered = hoverId === o.oppId;
             return (
-              <div key={o.oppId} className="card" style={{ padding: 'clamp(16px, 4vw, 22px)' }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-                  <div style={{ minWidth: 0 }}>
-                    <div
-                      style={{
-                        fontSize: 18,
-                        fontWeight: 600,
-                        color: 'var(--ink)',
-                        lineHeight: 1.25,
-                        letterSpacing: '-0.01em',
-                      }}
-                    >
-                      {o.title}
+              <div
+                key={o.oppId}
+                className="card"
+                onMouseEnter={() => setHoverId(o.oppId)}
+                onMouseLeave={() => setHoverId((h) => (h === o.oppId ? null : h))}
+                style={{
+                  padding: 0,
+                  overflow: 'hidden',
+                  borderColor: isSignedUp ? 'var(--accent)' : 'var(--line)',
+                  boxShadow: hovered ? '0 8px 24px rgba(15, 26, 34, 0.08)' : 'none',
+                  transition: 'box-shadow .14s ease, border-color .14s ease',
+                }}
+              >
+                {/* Confirming accent rail when you're signed up */}
+                {isSignedUp && <div aria-hidden style={{ height: 3, background: 'var(--accent)' }} />}
+
+                <div style={{ padding: 'clamp(16px, 4vw, 22px)' }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div
+                        style={{
+                          fontSize: 18,
+                          fontWeight: 600,
+                          color: 'var(--ink)',
+                          lineHeight: 1.25,
+                          letterSpacing: '-0.01em',
+                        }}
+                      >
+                        {o.title}
+                      </div>
+                      <div
+                        style={{
+                          display: 'flex',
+                          flexWrap: 'wrap',
+                          alignItems: 'center',
+                          gap: 10,
+                          marginTop: 10,
+                          fontSize: 13.5,
+                        }}
+                      >
+                        <MetaItem icon={<SetuIcon.calendar width={14} height={14} />}>{fmtDate(o.date)}</MetaItem>
+                        <Dot />
+                        <span style={{ color: 'var(--body-text)', fontWeight: 600 }}>{o.defaultHours} hrs</span>
+                        {o.location && (
+                          <>
+                            <Dot />
+                            <MetaItem icon={<SetuIcon.home width={14} height={14} />}>{o.location}</MetaItem>
+                          </>
+                        )}
+                      </div>
                     </div>
-                    <div
-                      style={{
-                        display: 'flex',
-                        flexWrap: 'wrap',
-                        alignItems: 'center',
-                        gap: 8,
-                        marginTop: 8,
-                        fontSize: 13.5,
-                        color: 'var(--body-text)',
-                      }}
-                    >
-                      <span>{fmtDate(o.date)}</span>
-                      <Dot />
-                      <span>{o.defaultHours} hrs</span>
-                      {o.location && (
-                        <>
-                          <Dot />
-                          <span>{o.location}</span>
-                        </>
-                      )}
-                    </div>
+                    {showSpots && (
+                      <span
+                        className="pill"
+                        style={{
+                          flex: '0 0 auto',
+                          fontWeight: 600,
+                          fontSize: 11.5,
+                          padding: '5px 11px',
+                          background: isFull
+                            ? 'var(--surface2)'
+                            : lowSpots
+                              ? 'var(--accentSoft)'
+                              : 'var(--surface2)',
+                          color: isFull ? 'var(--muted)' : lowSpots ? 'var(--accentDeep)' : 'var(--body-text)',
+                        }}
+                      >
+                        {isFull ? 'Full' : `${o.spotsLeft} left`}
+                      </span>
+                    )}
                   </div>
-                  {showSpots && (
-                    <span
-                      className="pill"
-                      style={{
-                        flex: '0 0 auto',
-                        fontWeight: 600,
-                        background: o.spotsLeft === 0 ? 'var(--surface2)' : 'var(--accentSoft)',
-                        color: o.spotsLeft === 0 ? 'var(--muted)' : 'var(--accentDeep)',
-                      }}
-                    >
-                      {o.spotsLeft === 0 ? 'Full' : `${o.spotsLeft} spots left`}
-                    </span>
+
+                  {o.description && (
+                    <p style={{ fontSize: 13.5, color: 'var(--muted)', marginTop: 12, lineHeight: 1.55 }}>
+                      {o.description}
+                    </p>
                   )}
-                </div>
 
-                {o.description && (
-                  <p style={{ fontSize: 13.5, color: 'var(--muted)', marginTop: 10, lineHeight: 1.55 }}>
-                    {o.description}
-                  </p>
-                )}
-
-                <div
-                  style={{
-                    marginTop: 18,
-                    paddingTop: 16,
-                    borderTop: '1px solid var(--line)',
-                  }}
-                >
-                  {renderOppAction(o)}
+                  <div
+                    style={{
+                      marginTop: 18,
+                      paddingTop: 16,
+                      borderTop: '1px solid var(--line)',
+                    }}
+                  >
+                    {renderOppAction(o)}
+                  </div>
                 </div>
               </div>
             );
@@ -360,7 +497,36 @@ export function SevaBrowser({
       {/* My sign-ups */}
       <SectionLabel>My sign-ups</SectionLabel>
       {activeSignups.length === 0 ? (
-        <p style={{ fontSize: 13, color: 'var(--muted)' }}>You haven&apos;t signed up for anything yet.</p>
+        <div
+          className="card"
+          style={{
+            padding: '20px 18px',
+            background: 'var(--surface)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+          }}
+        >
+          <span
+            aria-hidden
+            style={{
+              width: 34,
+              height: 34,
+              flex: '0 0 auto',
+              borderRadius: 999,
+              background: 'var(--accentSoft)',
+              color: 'var(--accent)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <SetuIcon.heart width={16} height={16} />
+          </span>
+          <p style={{ fontSize: 13.5, color: 'var(--muted)', lineHeight: 1.5 }}>
+            You haven&apos;t signed up for anything yet — pick an opportunity above to get started.
+          </p>
+        </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {activeSignups.map((s) => {
@@ -378,28 +544,46 @@ export function SevaBrowser({
                   flexWrap: 'wrap',
                 }}
               >
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--ink)' }}>
-                    {s.opportunity?.title ?? 'Seva opportunity'}
-                  </div>
-                  <div
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: '1 1 auto' }}>
+                  <span
+                    aria-hidden
                     style={{
-                      display: 'flex',
-                      flexWrap: 'wrap',
+                      width: 36,
+                      height: 36,
+                      flex: '0 0 auto',
+                      borderRadius: 999,
+                      background: 'var(--accentSoft)',
+                      color: 'var(--accentDeep)',
+                      display: 'inline-flex',
                       alignItems: 'center',
-                      gap: 8,
-                      marginTop: 4,
-                      fontSize: 13,
-                      color: 'var(--body-text)',
+                      justifyContent: 'center',
                     }}
                   >
-                    {s.opportunity && <span>{fmtDate(s.opportunity.date)}</span>}
-                    {creditedName && (
-                      <>
-                        <Dot />
-                        <span>For {creditedName}</span>
-                      </>
-                    )}
+                    <SetuIcon.check width={16} height={16} />
+                  </span>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--ink)' }}>
+                      {s.opportunity?.title ?? 'Seva opportunity'}
+                    </div>
+                    <div
+                      style={{
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        alignItems: 'center',
+                        gap: 8,
+                        marginTop: 4,
+                        fontSize: 12.5,
+                        color: 'var(--muted)',
+                      }}
+                    >
+                      {s.opportunity && <span>{fmtDate(s.opportunity.date)}</span>}
+                      {creditedName && (
+                        <>
+                          <Dot />
+                          <span>For {creditedName}</span>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <button
