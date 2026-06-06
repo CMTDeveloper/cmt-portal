@@ -472,6 +472,24 @@ describe('SignInPage — password mode toggle', () => {
     // OTP send-code button should NOT appear
     expect(screen.queryByText(/send sign-in code/i)).toBeNull();
   });
+
+  it('a register OTP handoff (?type/&value) forces code mode even when password is the stored preference', async () => {
+    // Returning user has previously chosen password mode...
+    localStorageMock.setItem('setu-signin-mode', 'password');
+    // ...but arrives from the register "We found a family" CTA carrying an OTP-proof handoff.
+    searchParamsMock.value = 'type=phone&value=4165550000';
+    render(<SignInPage />);
+
+    // Stays in OTP/code mode: the send-code button is shown, no password form.
+    expect(screen.getAllByText(/send sign-in code/i).length).toBeGreaterThan(0);
+    expect(document.querySelectorAll('input[type="password"]').length).toBe(0);
+    expect(screen.queryByText(/forgot password\?/i)).toBeNull();
+
+    // The phone value rides through to the (tel) contact field.
+    const telInputs = document.querySelectorAll('input[type="tel"]') as NodeListOf<HTMLInputElement>;
+    expect(telInputs.length).toBeGreaterThan(0);
+    expect(telInputs[0]!.value).toBe('4165550000');
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

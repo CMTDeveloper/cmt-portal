@@ -172,17 +172,22 @@ function SignInReal() {
   const prefillEmail = searchParams?.get('email') ?? '';
   const initialContactType: ContactType = prefillType === 'phone' ? 'phone' : 'email';
   const initialContactValue = prefillValue ?? prefillEmail;
+  // A register "We found a family" CTA hands off via ?type=&value= to drive an
+  // OTP proof. When present we must NOT restore a saved password-mode preference:
+  // password mode is email-only and would drop the prefilled phone/email + intent.
+  const hasOtpHandoff = Boolean(prefillType || prefillValue);
 
   // Read localStorage preference once on mount; default to 'otp'.
   const [signInMode, setSignInMode] = useState<SignInMode>('otp');
   useEffect(() => {
+    if (hasOtpHandoff) return; // a register OTP-proof handoff forces code mode
     try {
       const stored = localStorage.getItem(MODE_STORAGE_KEY);
       if (stored === 'password') setSignInMode('password');
     } catch {
       // localStorage unavailable (private browsing, SSR) — stay 'otp'
     }
-  }, []);
+  }, [hasOtpHandoff]);
 
   function switchMode(next: SignInMode, prefill?: string) {
     setSignInMode(next);
