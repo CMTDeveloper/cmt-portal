@@ -5,6 +5,7 @@ import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { SetuIcon, toast } from '@cmt/ui';
 import { CspRoot, SectionLabel, FieldError } from '@/features/family/components/atoms';
+import { VolunteeringSkillsPicker } from '@/features/setu/members/volunteering-skills-picker';
 import { getCurrentFamilyClient } from '@/features/setu/members/get-current-family-client';
 import type { FamilyWithMembers } from '@/features/setu/members/get-current-family';
 import { LoadingOm } from '@/components/chrome/loading-om';
@@ -39,7 +40,7 @@ export default function EditMemberPage() {
   const [foodAllergies, setFoodAllergies] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
-  const [volunteeringSkills, setVolunteeringSkills] = useState('');
+  const [volunteeringSkills, setVolunteeringSkills] = useState<string[]>([]);
   const [isManager, setIsManager] = useState(false);
   const [ec1Relation, setEc1Relation] = useState('');
   const [ec1Phone, setEc1Phone] = useState('');
@@ -81,7 +82,7 @@ export default function EditMemberPage() {
         setFoodAllergies(member.foodAllergies ?? '');
         setEmail(member.email ?? '');
         setPhone(member.phone ?? '');
-        setVolunteeringSkills(member.volunteeringSkills.join(', '));
+        setVolunteeringSkills(member.volunteeringSkills);
         setIsManager(member.manager);
         const [ec1, ec2] = member.emergencyContacts ?? [null, null];
         setEc1Relation(ec1?.relation ?? '');
@@ -111,9 +112,7 @@ export default function EditMemberPage() {
       schoolGrade: schoolGrade || null,
       birthMonthYear: birthMonthYear || null,
       foodAllergies: foodAllergies || null,
-      volunteeringSkills: volunteeringSkills
-        ? volunteeringSkills.split(',').map((s) => s.trim()).filter(Boolean)
-        : [],
+      volunteeringSkills,
       email: email || null,
       phone: phone || null,
       emergencyContacts: [
@@ -272,7 +271,7 @@ export default function EditMemberPage() {
           </div>
           <div className="field" style={{ marginBottom: 14 }}>
             <label>Volunteering skills</label>
-            <input className="input" value={volunteeringSkills} onChange={(e) => setVolunteeringSkills(e.target.value)} placeholder="e.g. Teaching, AV (comma-separated)"/>
+            <VolunteeringSkillsPicker value={volunteeringSkills} onChange={setVolunteeringSkills} />
           </div>
         </>
       )}

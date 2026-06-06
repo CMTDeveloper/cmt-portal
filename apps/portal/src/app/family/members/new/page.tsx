@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { SetuIcon } from '@cmt/ui';
 import { CspRoot, SectionLabel } from '@/features/family/components/atoms';
+import { VolunteeringSkillsPicker } from '@/features/setu/members/volunteering-skills-picker';
 
 type MemberType = 'Adult' | 'Child';
 type Gender = 'Male' | 'Female' | 'PreferNotToSay';
@@ -20,7 +21,7 @@ export default function AddMemberPage() {
   const [foodAllergies, setFoodAllergies] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
-  const [volunteeringSkills, setVolunteeringSkills] = useState('');
+  const [volunteeringSkills, setVolunteeringSkills] = useState<string[]>([]);
   const [ec1Relation, setEc1Relation] = useState('');
   const [ec1Phone, setEc1Phone] = useState('');
   const [ec1Email, setEc1Email] = useState('');
@@ -51,9 +52,7 @@ export default function AddMemberPage() {
       schoolGrade: schoolGrade || null,
       birthMonthYear: birthMonthYear || null,
       foodAllergies: foodAllergies || null,
-      volunteeringSkills: volunteeringSkills
-        ? volunteeringSkills.split(',').map((s) => s.trim()).filter(Boolean)
-        : [],
+      volunteeringSkills,
       email: email || null,
       phone: phone || null,
       emergencyContacts: [ec1, null],
@@ -181,7 +180,7 @@ export default function AddMemberPage() {
           </div>
           <div className="field" style={{ marginBottom: 14 }}>
             <label>Volunteering skills</label>
-            <input className="input" value={volunteeringSkills} onChange={(e) => setVolunteeringSkills(e.target.value)} placeholder="e.g. Teaching, AV (comma-separated)"/>
+            <VolunteeringSkillsPicker value={volunteeringSkills} onChange={setVolunteeringSkills} />
           </div>
         </>
       )}

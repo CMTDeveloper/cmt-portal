@@ -59,6 +59,14 @@ vi.mock('@/features/family/components/atoms', () => ({
     message ? <span data-testid="field-error">{message}</span> : null,
 }));
 
+// ── Volunteering-skills picker ───────────────────────────────────────────────
+// The real picker fetches /api/setu/volunteering-skills on mount, which would
+// become fetchMock.mock.calls[0] and break the PATCH-body assertions below.
+// It has its own test; stub it to a no-op here.
+vi.mock('@/features/setu/members/volunteering-skills-picker', () => ({
+  VolunteeringSkillsPicker: () => <div data-testid="volunteering-skills-picker" />,
+}));
+
 // ── getCurrentFamilyClient (data source for the edit page) ───────────────────
 // The edit page calls getCurrentFamilyClient() (a fetch wrapper) rather than
 // the server-only getCurrentFamily. Mocking the client wrapper is what the
@@ -99,7 +107,7 @@ const MEMBER_02 = {
   joinedAt: new Date('2024-09-01'),
   email: 'priya@example.com',
   phone: null,
-  volunteeringSkills: [],
+  volunteeringSkills: ['Teaching'],
   foodAllergies: null,
   emergencyContacts: [
     { relation: 'Spouse', phone: '4165551234', email: 'raj@example.com' },
@@ -279,6 +287,9 @@ describe('EditMemberPage — successful PATCH submit', () => {
       const body = JSON.parse(call?.[1]?.body as string) as Record<string, unknown>;
       // self-edit: manager field must not appear
       expect(body).not.toHaveProperty('manager');
+      // string→array refactor: the member's existing skills array is sent
+      // through verbatim (no comma-split), preloaded from member.volunteeringSkills.
+      expect(body.volunteeringSkills).toEqual(['Teaching']);
     });
   });
 });
