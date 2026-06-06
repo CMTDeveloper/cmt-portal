@@ -93,6 +93,66 @@ export async function readDoorPresentSids(
   return present;
 }
 
+/** One door guest check-in child for a date (no portal id — door has none). */
+export interface DoorGuestChild {
+  name: string;
+  grade: string; // door stores string|number; normalized to string here
+  parentEmail: string;
+  parentName: string | null;
+  phone: string | null;
+}
+
+/**
+ * READ-ONLY: every checked-in guest child at the door for a single date, across
+ * all guest families. Mirrors the door app's own read (list `guest-families`,
+ * then point-read each family's `checkIns/{date}`) — deliberately INDEX-FREE so
+ * it never needs a composite index in prod 715b8. Tolerates missing day-docs and
+ * per-family read errors; returns [] if the collection list itself fails.
+ */
+export async function readDoorGuestCheckIns(date: string): Promise<DoorGuestChild[]> {
+  const db = checkInSourceFirestore();
+  let familyDocs: Array<{ id: string }>;
+  try {
+    const list = await db.collection('guest-families').get();
+    familyDocs = list.docs;
+  } catch (err) {
+    console.error('[door-guests] list failed for', date, err);
+    return [];
+  }
+
+  const out: DoorGuestChild[] = [];
+  await Promise.all(
+    familyDocs.map(async (fam) => {
+      try {
+        const snap = await db
+          .collection('guest-families').doc(fam.id)
+          .collection('checkIns').doc(date).get();
+        if (!snap.exists) return;
+        const data = (snap.data() ?? {}) as {
+          parentName?: string | null;
+          phone?: string | null;
+          email?: string | null;
+          children?: Array<{ name?: string; grade?: string | number; isCheckedIn?: boolean }>;
+        };
+        const parentEmail = (data.email ?? fam.id) || fam.id;
+        for (const c of data.children ?? []) {
+          if (c.isCheckedIn !== true) continue;
+          out.push({
+            name: String(c.name ?? '').trim(),
+            grade: c.grade == null ? '' : String(c.grade).trim(),
+            parentEmail,
+            parentName: data.parentName ?? null,
+            phone: data.phone ?? null,
+          });
+        }
+      } catch (err) {
+        console.error('[door-guests] read failed for', fam.id, date, err);
+      }
+    }),
+  );
+  return out;
+}
+
 function summarize(marks: CheckInDateMark[]): CheckInSummary {
   const ascending = [...marks].sort((a, b) => a.date.localeCompare(b.date));
   const attended = ascending.filter((m) => m.present).length;

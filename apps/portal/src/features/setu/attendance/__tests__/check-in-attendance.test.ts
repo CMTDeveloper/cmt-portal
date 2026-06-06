@@ -1,29 +1,45 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockGet, dayDocResolver } = vi.hoisted(() => ({
+const { mockGet, dayDocResolver, guestListResolver, guestDayResolver } = vi.hoisted(() => ({
   mockGet: vi.fn(),
   // Routes a `family-check-ins/{legacyFid}/checkIns/{date}.get()` read by the
   // captured legacyFid + date. Default: { exists: false }. Per-fid tests set it.
   dayDocResolver: { fn: (_legacyFid: string, _date: string) => ({ exists: false }) as unknown },
+  // guest-families list: returns docs [{ id: emailLower }]
+  guestListResolver: { fn: () => ({ docs: [] as Array<{ id: string }> }) as unknown },
+  // guest-families/{email}/checkIns/{date} day doc
+  guestDayResolver: { fn: (_email: string, _date: string) => ({ exists: false }) as unknown },
 }));
 vi.mock('../check-in-source', () => ({
   checkInSourceFirestore: () => ({
-    collection: () => ({
-      doc: (legacyFid: string) => ({
-        collection: () => ({
-          // getCheckInAttendance reads the whole `checkIns` subcollection.
-          get: mockGet,
-          // readDoorPresentSids reads a single day doc; route by fid + date.
-          doc: (date: string) => ({ get: async () => dayDocResolver.fn(legacyFid, date) }),
+    collection: (name: string) => {
+      if (name === 'guest-families') {
+        return {
+          get: async () => guestListResolver.fn(),
+          doc: (email: string) => ({
+            collection: () => ({ doc: (date: string) => ({ get: async () => guestDayResolver.fn(email, date) }) }),
+          }),
+        };
+      }
+      // family-check-ins (unchanged shape used by getCheckInAttendance + readDoorPresentSids)
+      return {
+        doc: (legacyFid: string) => ({
+          collection: () => ({
+            // getCheckInAttendance reads the whole `checkIns` subcollection.
+            get: mockGet,
+            // readDoorPresentSids reads a single day doc; route by fid + date.
+            doc: (date: string) => ({ get: async () => dayDocResolver.fn(legacyFid, date) }),
+          }),
         }),
-      }),
-    }),
+      };
+    },
   }),
 }));
 
 import {
   getCheckInAttendance,
   readDoorPresentSids,
+  readDoorGuestCheckIns,
   summarizeFamilyCheckIns,
   summarizeMemberCheckIns,
   type CheckInRecord,
@@ -36,6 +52,8 @@ function doc(date: string, students: Array<{ sid: string; isCheckedIn: boolean }
 beforeEach(() => {
   vi.clearAllMocks();
   dayDocResolver.fn = () => ({ exists: false });
+  guestListResolver.fn = () => ({ docs: [] });
+  guestDayResolver.fn = () => ({ exists: false });
 });
 
 describe('getCheckInAttendance', () => {
@@ -121,5 +139,53 @@ describe('readDoorPresentSids', () => {
     };
     const out = await readDoorPresentSids(['4421', '4421', '9999'], '2026-01-04');
     expect(out).toEqual(new Set(['S9']));
+  });
+});
+
+describe('readDoorGuestCheckIns', () => {
+  it('returns one entry per checked-in child for the date, coercing grade to string', async () => {
+    guestListResolver.fn = () => ({ docs: [{ id: 'mom@x.com' }, { id: 'dad@y.com' }] });
+    guestDayResolver.fn = (email, date) => {
+      if (date !== '2026-01-04') return { exists: false };
+      if (email === 'mom@x.com') {
+        return { exists: true, data: () => ({
+          parentName: 'Mom X', phone: '416', email: 'mom@x.com',
+          children: [
+            { name: 'Arjun X', grade: 2, isCheckedIn: true },
+            { name: 'Maya X', grade: '3', isCheckedIn: false }, // not checked in → skipped
+          ],
+        }) };
+      }
+      if (email === 'dad@y.com') {
+        return { exists: true, data: () => ({
+          parentName: null, phone: null, email: 'dad@y.com',
+          children: [{ name: 'Ravi Y', grade: 'Grade 1', isCheckedIn: true }],
+        }) };
+      }
+      return { exists: false };
+    };
+    const out = await readDoorGuestCheckIns('2026-01-04');
+    expect(out).toEqual([
+      { name: 'Arjun X', grade: '2', parentEmail: 'mom@x.com', parentName: 'Mom X', phone: '416' },
+      { name: 'Ravi Y', grade: 'Grade 1', parentEmail: 'dad@y.com', parentName: null, phone: null },
+    ]);
+  });
+
+  it('skips families with no day-doc and tolerates a per-family read error', async () => {
+    guestListResolver.fn = () => ({ docs: [{ id: 'a@x.com' }, { id: 'boom@x.com' }] });
+    guestDayResolver.fn = (email, date) => {
+      if (email === 'boom@x.com') throw new Error('read failed');
+      if (email === 'a@x.com' && date === '2026-01-04') {
+        return { exists: true, data: () => ({ email: 'a@x.com', children: [{ name: 'Sam', grade: '', isCheckedIn: true }] }) };
+      }
+      return { exists: false };
+    };
+    const out = await readDoorGuestCheckIns('2026-01-04');
+    expect(out).toEqual([{ name: 'Sam', grade: '', parentEmail: 'a@x.com', parentName: null, phone: null }]);
+  });
+
+  it('returns [] when the guest-families list read fails', async () => {
+    guestListResolver.fn = () => { throw new Error('list failed'); };
+    expect(await readDoorGuestCheckIns('2026-01-04')).toEqual([]);
   });
 });
