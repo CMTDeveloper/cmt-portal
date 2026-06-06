@@ -67,6 +67,13 @@ export default function AdminPage() {
           tone="primary"
         />
         <Tile
+          href="/admin/volunteering-skills"
+          title="Volunteering skills"
+          icon="check"
+          sub="Manage the list of volunteering skills families choose from when recording an adult member's skills."
+          tone="primary"
+        />
+        <Tile
           href="/check-in/admin/users"
           title="Admin users"
           icon="shield"
