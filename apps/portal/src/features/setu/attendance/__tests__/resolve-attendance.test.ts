@@ -29,6 +29,28 @@ describe('resolveMemberAttendance', () => {
     expect(out).toMatchObject({ present: 0, late: 1, absent: 0, total: 1, attendedPct: 100 });
   });
 
+  it('lets a portal ABSENT override a door present on the same date (proves portal-over-door direction)', () => {
+    const out = resolveMemberAttendance(
+      [{ date: '2026-01-04', status: 'absent' }],
+      [{ date: '2026-01-04', present: true }],
+    );
+    expect(out.marks).toEqual([{ date: '2026-01-04', status: 'absent', source: 'portal' }]);
+    expect(out).toMatchObject({ present: 0, absent: 1, total: 1, attendedPct: 0 });
+  });
+
+  it('among same-date portal marks (two levels, one program) the attended status wins regardless of order', () => {
+    const absentFirst = resolveMemberAttendance(
+      [{ date: '2026-01-04', status: 'absent' }, { date: '2026-01-04', status: 'present' }],
+      [],
+    );
+    const presentFirst = resolveMemberAttendance(
+      [{ date: '2026-01-04', status: 'present' }, { date: '2026-01-04', status: 'absent' }],
+      [],
+    );
+    expect(absentFirst.marks).toEqual([{ date: '2026-01-04', status: 'present', source: 'portal' }]);
+    expect(presentFirst.marks).toEqual([{ date: '2026-01-04', status: 'present', source: 'portal' }]);
+  });
+
   it('unions dates from both sources and sorts ascending; late+present both count as attended (N=2)', () => {
     const out = resolveMemberAttendance(
       [{ date: '2026-01-18', status: 'absent' }, { date: '2026-01-04', status: 'late' }],

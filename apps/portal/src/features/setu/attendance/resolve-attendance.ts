@@ -17,6 +17,12 @@ export interface ResolvedSummary {
   marks: ResolvedMark[]; // ascending by date
 }
 
+// When a member has more than one portal mark on the same date (e.g. enrolled
+// in two levels under one program), the attended status wins deterministically
+// — present > late > absent — so a stray absent can never silently overwrite an
+// attendance. (Guards the N=2 / one→many trap; door marks are unique per date.)
+const STATUS_RANK: Record<SetuAttendanceStatus, number> = { present: 2, late: 1, absent: 0 };
+
 /**
  * Merge a member's portal attendance marks (authoritative) with their door
  * check-ins into one timeline. Per date: a portal mark wins; otherwise a door
@@ -33,9 +39,17 @@ export function resolveMemberAttendance(
   for (const d of doorMarks) {
     byDate.set(d.date, { date: d.date, status: d.present ? 'present' : 'absent', source: 'door' });
   }
-  // Portal overrides.
+  // Portal overrides door. Among multiple same-date portal marks, the
+  // higher-ranked (more-attended) status wins — never insertion order.
   for (const p of portalMarks) {
-    byDate.set(p.date, { date: p.date, status: p.status, source: 'portal' });
+    const existing = byDate.get(p.date);
+    const portalWins =
+      !existing ||
+      existing.source === 'door' ||
+      STATUS_RANK[p.status] > STATUS_RANK[existing.status];
+    if (portalWins) {
+      byDate.set(p.date, { date: p.date, status: p.status, source: 'portal' });
+    }
   }
 
   const marks = [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
