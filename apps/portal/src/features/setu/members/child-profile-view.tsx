@@ -325,8 +325,11 @@ function formatAwardedMonth(iso: string): string {
   return new Date(iso).toLocaleDateString('en-CA', { month: 'short', year: 'numeric', timeZone: 'America/Toronto' });
 }
 
-// A read-only chip strip — one accent-tinted badge per award, with the awarding
-// program (when scoped) and the awarded month read as a quiet meta line.
+// A read-only chip strip — one accent-tinted medallion per award. A small "earned"
+// rosette (the heart-in-rosette motif borrowed from the empty state, here a check
+// mark to read as a genuine award) leads each badge; the title sits confident in
+// accentDeep, with the awarding program (when scoped) and the awarded month as a
+// quiet meta line. Chips wrap cleanly and never stretch past the viewport at 375px.
 function renderAchievements(achievements: ChildAchievement[]) {
   if (achievements.length === 0) return null;
   return (
@@ -338,17 +341,39 @@ function renderAchievements(achievements: ChildAchievement[]) {
             key={a.achId}
             className="card"
             style={{
-              padding: '10px 12px',
+              padding: '10px 13px 10px 11px',
               display: 'inline-flex',
-              flexDirection: 'column',
-              gap: 2,
+              alignItems: 'center',
+              gap: 10,
+              maxWidth: '100%',
               background: 'var(--accentSoft)',
               borderColor: 'var(--accent)',
             }}
           >
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--accentDeep)' }}>{a.title}</span>
-            <span style={{ fontSize: 11, color: 'var(--muted)' }}>
-              {a.programKey ? `${a.programKey} · ` : ''}{formatAwardedMonth(a.awardedAt)}
+            <span
+              aria-hidden
+              style={{
+                width: 30,
+                height: 30,
+                flex: '0 0 auto',
+                borderRadius: 999,
+                background: 'var(--surface)',
+                color: 'var(--accent)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 0 0 2px var(--accent)',
+              }}
+            >
+              <SetuIcon.check width={15} height={15} />
+            </span>
+            <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--accentDeep)', lineHeight: 1.2 }}>
+                {a.title}
+              </span>
+              <span style={{ fontSize: 11, color: 'var(--muted)', lineHeight: 1.3 }}>
+                {a.programKey ? `${a.programKey} · ` : ''}{formatAwardedMonth(a.awardedAt)}
+              </span>
             </span>
           </div>
         ))}

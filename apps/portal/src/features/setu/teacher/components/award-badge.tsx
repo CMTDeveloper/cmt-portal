@@ -18,6 +18,45 @@ interface AwardBadgeProps {
 
 const fieldLabel = { fontSize: 13, fontWeight: 600, color: 'var(--body-text)' } as const;
 
+// A standalone checkmark glyph so the "earned" medallion reads without pulling in
+// SetuIcon (kept inline to stay independent of the @cmt/ui mock in tests).
+function CheckGlyph({ size = 15 }: { size?: number }) {
+  return (
+    <svg
+      aria-hidden
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.4}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  );
+}
+
+// A small plus glyph for the "award a new badge" header rosette.
+function PlusGlyph({ size = 16 }: { size?: number }) {
+  return (
+    <svg
+      aria-hidden
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+    >
+      <line x1="12" y1="5" x2="12" y2="19" />
+      <line x1="5" y1="12" x2="19" y2="12" />
+    </svg>
+  );
+}
+
 function formatAwardedAt(iso: string): string {
   return new Date(iso).toLocaleDateString('en-CA', {
     month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/Toronto',
@@ -69,14 +108,73 @@ export function AwardBadge({ mid, achievements, programOptions }: AwardBadgeProp
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       {achievements.length === 0 ? (
-        <div style={{ fontSize: 13, color: 'var(--muted)' }}>No badges yet.</div>
+        <div
+          style={{
+            padding: '12px 14px',
+            borderRadius: 'var(--radiusSm)',
+            background: 'var(--surface2)',
+            fontSize: 13,
+            color: 'var(--muted)',
+          }}
+        >
+          No badges yet — award one below to celebrate progress.
+        </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {achievements.map((a) => (
-            <div key={a.achId} className="card" style={{ padding: '10px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>{a.title}</div>
-                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
+            <div
+              key={a.achId}
+              className="card"
+              style={{
+                padding: '10px 12px 10px 11px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 11,
+                background: 'var(--accentSoft)',
+                borderColor: 'var(--accent)',
+              }}
+            >
+              <span
+                aria-hidden
+                style={{
+                  width: 30,
+                  height: 30,
+                  flex: '0 0 auto',
+                  borderRadius: 999,
+                  background: 'var(--surface)',
+                  color: 'var(--accent)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 0 0 2px var(--accent)',
+                }}
+              >
+                <CheckGlyph />
+              </span>
+              <div style={{ minWidth: 0, flex: '1 1 auto' }}>
+                <div
+                  style={{
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color: 'var(--accentDeep)',
+                    lineHeight: 1.25,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {a.title}
+                </div>
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: 'var(--muted)',
+                    marginTop: 2,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
                   {labelFor(a.programKey) ? `${labelFor(a.programKey)} · ` : ''}{formatAwardedAt(a.awardedAt)}
                 </div>
               </div>
@@ -88,7 +186,28 @@ export function AwardBadge({ mid, achievements, programOptions }: AwardBadgeProp
         </div>
       )}
 
-      <div className="card" style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div className="card" style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span
+            aria-hidden
+            style={{
+              width: 30,
+              height: 30,
+              flex: '0 0 auto',
+              borderRadius: 999,
+              background: 'var(--accentSoft)',
+              color: 'var(--accent)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <PlusGlyph />
+          </span>
+          <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)', letterSpacing: '-0.01em' }}>
+            Award a new badge
+          </span>
+        </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <span style={fieldLabel}>Badge title</span>
           <input aria-label="Badge title" className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Om Award" maxLength={80} />
@@ -106,8 +225,9 @@ export function AwardBadge({ mid, achievements, programOptions }: AwardBadgeProp
             </select>
           </div>
         )}
-        <div>
-          <button type="button" onClick={award} disabled={pending} className="btn btn--p" style={{ minHeight: 44 }}>
+        <div style={{ marginTop: 2 }}>
+          <button type="button" onClick={award} disabled={pending} className="btn btn--p" style={{ minHeight: 44, display: 'inline-flex', alignItems: 'center', gap: 7 }}>
+            {!pending && <CheckGlyph size={15} />}
             {pending ? 'Awarding…' : 'Award badge'}
           </button>
         </div>
