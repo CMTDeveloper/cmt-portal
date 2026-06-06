@@ -8,6 +8,9 @@ export interface MemberUnifiedAttendanceArgs {
   legacySid: string | null;
   /** When set, only portal events for this offering id (oid) are counted. */
   pid?: string | null;
+  /** Door-side window (YMD) from the offering; null/omitted = unbounded. */
+  windowStart?: string | null;
+  windowEnd?: string | null;
 }
 
 /**
@@ -25,6 +28,9 @@ export async function getMemberUnifiedAttendance(
   const portalMarks = events
     .filter((e) => (args.pid ? e.pid === args.pid : true))
     .map((e) => ({ date: e.date, status: e.status }));
-  const doorMarks = summarizeMemberCheckIns(doorRecords, args.legacySid).marks;
+  const start = args.windowStart ?? '0000-01-01';
+  const end = args.windowEnd ?? '9999-12-31';
+  const scopedDoor = doorRecords.filter((r) => r.date >= start && r.date <= end);
+  const doorMarks = summarizeMemberCheckIns(scopedDoor, args.legacySid).marks;
   return resolveMemberAttendance(portalMarks, doorMarks);
 }

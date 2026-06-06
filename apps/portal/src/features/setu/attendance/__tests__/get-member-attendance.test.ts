@@ -42,3 +42,18 @@ it('returns an empty summary when there is no legacySid and no portal events', a
   const out = await getMemberUnifiedAttendance({ mid: 'CMT-F1-02', legacyFid: null, legacySid: null });
   expect(out).toMatchObject({ total: 0, marks: [] });
 });
+
+it('scopes the door side to the window when windowStart/windowEnd are given', async () => {
+  // getAttendanceForMember → [] ; getCheckInAttendance → two door dates, one outside the window.
+  mockGetEvents.mockResolvedValue([]);
+  mockGetCheckIns.mockResolvedValue([
+    { date: '2024-01-01', checkedInBy: null, students: [{ sid: 'S9', isCheckedIn: true }] }, // before window
+    { date: '2025-11-02', checkedInBy: null, students: [{ sid: 'S9', isCheckedIn: true }] }, // in window
+  ]);
+  const s = await getMemberUnifiedAttendance({
+    mid: 'CMT-F-03', legacyFid: '4421', legacySid: 'S9', pid: 'o-bv',
+    windowStart: '2025-09-01', windowEnd: '2026-06-30',
+  });
+  expect(s.marks.map((m) => m.date)).toEqual(['2025-11-02']);
+  expect(s.total).toBe(1);
+});
