@@ -136,6 +136,18 @@ describe('WelcomeFamilyDetailPage — with data', () => {
     expect(avatars.length).toBeGreaterThanOrEqual(2);
   });
 
+  it('renders a View profile link to each member profile', async () => {
+    mockGetFamilyForWelcome.mockResolvedValue({ family: SAMPLE_FAMILY, members: SAMPLE_MEMBERS });
+
+    const page = await WelcomeFamilyDetailPage({ params: Promise.resolve({ fid: 'FAM001' }) });
+    render(page as React.ReactElement);
+
+    const links = screen.getAllByRole('link', { name: /view profile/i });
+    expect(links.length).toBeGreaterThanOrEqual(2);
+    expect(links.some((a) => a.getAttribute('href') === '/welcome/family/FAM001/members/MID001')).toBe(true);
+    expect(links.some((a) => a.getAttribute('href') === '/welcome/family/FAM001/members/MID002')).toBe(true);
+  });
+
   it('shows allergy warning for child with food allergies', async () => {
     mockGetFamilyForWelcome.mockResolvedValue({ family: SAMPLE_FAMILY, members: SAMPLE_MEMBERS });
 

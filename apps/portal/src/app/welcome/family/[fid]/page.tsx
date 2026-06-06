@@ -154,7 +154,7 @@ function FamilyDetailBody({ family, members, adults, children, sevaProgress }: F
           <div style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: '.12em', textTransform: 'uppercase', fontWeight: 600, marginBottom: 8 }}>Adults · {adults.length}</div>
           <div className="col" style={{ gap: 8 }}>
             {adults.map((m) => (
-              <MemberRow key={m.mid} m={m}/>
+              <MemberRow key={m.mid} m={m} fid={family.fid}/>
             ))}
           </div>
         </div>
@@ -166,7 +166,7 @@ function FamilyDetailBody({ family, members, adults, children, sevaProgress }: F
           <div style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: '.12em', textTransform: 'uppercase', fontWeight: 600, marginBottom: 8 }}>Children · {children.length}</div>
           <div className="col" style={{ gap: 8 }}>
             {children.map((m) => (
-              <MemberRow key={m.mid} m={m}/>
+              <MemberRow key={m.mid} m={m} fid={family.fid}/>
             ))}
           </div>
         </div>
@@ -175,7 +175,7 @@ function FamilyDetailBody({ family, members, adults, children, sevaProgress }: F
   );
 }
 
-function MemberRow({ m }: { m: MemberDoc }) {
+function MemberRow({ m, fid }: { m: MemberDoc; fid: string }) {
   const name = `${m.firstName} ${m.lastName}`;
   const typeLabel = m.type === 'Child'
     ? `Child${m.schoolGrade ? ` · ${m.schoolGrade}` : ''}`
@@ -197,6 +197,9 @@ function MemberRow({ m }: { m: MemberDoc }) {
             <SetuIcon.warn/> {m.foodAllergies}
           </div>
         )}
+        <Link href={`/welcome/family/${fid}/members/${m.mid}`} style={{ display: 'inline-block', marginTop: 8, fontSize: 12, color: 'var(--accent)', textDecoration: 'none', fontWeight: 600 }}>
+          View profile
+        </Link>
       </div>
     </div>
   );
