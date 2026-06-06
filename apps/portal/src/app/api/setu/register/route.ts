@@ -7,8 +7,12 @@ import {
   createPortalSessionCookie,
   exchangeCustomTokenForIdToken,
 } from '@cmt/firebase-shared/admin/session';
-import { sha256Hex } from '@/features/check-in/shared';
-import { normalizeContact } from '@/features/check-in/shared';
+import {
+  sha256Hex,
+  normalizeContact,
+  checkAndRecordOtpRateLimit,
+  REGISTER_RATE_LIMIT_MAX,
+} from '@/features/check-in/shared';
 
 
 const additionalMemberSchema = z.object({
@@ -54,6 +58,16 @@ export async function POST(req: Request) {
       { error: 'bad-request', issues: parsed.error.issues },
       { status: 400 },
     );
+  }
+
+  // Rate-limit by IP AFTER body validation (a malformed body 400s without
+  // consuming quota) and BEFORE any write. Stricter than the read-only lookup
+  // bucket because this path creates Firestore docs + a Firebase Auth user —
+  // it bounds mass-registration / contact-squatting spam.
+  const ip = req.headers.get('x-forwarded-for') ?? 'unknown';
+  const rate = await checkAndRecordOtpRateLimit(`register:${ip}`, REGISTER_RATE_LIMIT_MAX);
+  if (!rate.allowed) {
+    return NextResponse.json({ error: 'rate-limited', resetAt: rate.resetAt }, { status: 429 });
   }
 
   // Strip undefined optional fields to satisfy exactOptionalPropertyTypes in RegisterFamilyInput

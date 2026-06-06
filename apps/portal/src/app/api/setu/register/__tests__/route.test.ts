@@ -4,6 +4,16 @@ vi.mock('@/lib/flags', () => ({ flags: { setuAuth: true } }));
 vi.mock('@/features/setu/registration/register-family', () => ({
   registerFamily: vi.fn(),
 }));
+// Preserve the real contact helpers the route also pulls from this barrel
+// (sha256Hex, normalizeContact) while overriding the rate-limit surface.
+vi.mock('@/features/check-in/shared', async (importActual) => {
+  const actual = await importActual<typeof import('@/features/check-in/shared')>();
+  return {
+    ...actual,
+    checkAndRecordOtpRateLimit: vi.fn(),
+    REGISTER_RATE_LIMIT_MAX: 10,
+  };
+});
 vi.mock('@cmt/firebase-shared/admin/auth', () => ({
   portalAuth: vi.fn(),
 }));
@@ -13,6 +23,7 @@ vi.mock('@cmt/firebase-shared/admin/session', () => ({
 }));
 
 import { POST } from '../route';
+import { checkAndRecordOtpRateLimit } from '@/features/check-in/shared';
 import { registerFamily } from '@/features/setu/registration/register-family';
 import { portalAuth } from '@cmt/firebase-shared/admin/auth';
 import {
@@ -44,6 +55,7 @@ function makeRequest(body: unknown) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  (checkAndRecordOtpRateLimit as ReturnType<typeof vi.fn>).mockResolvedValue({ allowed: true });
   (portalAuth as ReturnType<typeof vi.fn>).mockReturnValue({
     getUser: mockGetUser,
     createUser: mockCreateUser,
@@ -94,6 +106,36 @@ describe('POST /api/setu/register', () => {
       manager: { lastName: 'Patel', gender: 'Male' },
     }));
     expect(res.status).toBe(400);
+  });
+
+  it('returns 429 when the per-IP register rate limit is exceeded — and does NOT call registerFamily', async () => {
+    (checkAndRecordOtpRateLimit as ReturnType<typeof vi.fn>).mockResolvedValue({
+      allowed: false,
+      resetAt: '2026-06-05T12:00:00.000Z',
+    });
+    const res = await POST(makeRequest(validBody));
+    expect(res.status).toBe(429);
+    const body = await res.json();
+    expect(body.error).toBe('rate-limited');
+    expect(body.resetAt).toBe('2026-06-05T12:00:00.000Z');
+    expect(registerFamily).not.toHaveBeenCalled();
+  });
+
+  it('rate-limits by IP with the stricter REGISTER_RATE_LIMIT_MAX (write quota)', async () => {
+    await POST(new Request('http://localhost/api/setu/register', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-forwarded-for': '9.9.9.9' },
+      body: JSON.stringify(validBody),
+    }));
+    expect(checkAndRecordOtpRateLimit).toHaveBeenCalledWith('register:9.9.9.9', 10);
+  });
+
+  it('a malformed body 400s BEFORE consuming rate-limit quota', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { email, ...rest } = validBody;
+    const res = await POST(makeRequest(rest));
+    expect(res.status).toBe(400);
+    expect(checkAndRecordOtpRateLimit).not.toHaveBeenCalled();
   });
 
   it('returns 409 when duplicate contact key exists', async () => {
