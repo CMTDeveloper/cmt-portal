@@ -48,3 +48,27 @@ export const UpdateSevaOpportunitySchema = z
   })
   .strict();
 export type UpdateSevaOpportunityInput = z.infer<typeof UpdateSevaOpportunitySchema>;
+
+export const SevaSignupStatus = z.enum(['signed-up', 'completed', 'no-show', 'cancelled']);
+export type SevaSignupStatusType = z.infer<typeof SevaSignupStatus>;
+
+export const SevaSignupDocSchema = z.object({
+  signupId: z.string().min(1),
+  oppId: z.string().min(1),
+  fid: z.string().min(1),
+  mid: z.string().nullable(),
+  sevaYear: z.string().min(1),
+  status: SevaSignupStatus,
+  hoursAwarded: z.number().nonnegative(),
+  signedUpAt: z.date(),
+  signedUpByMid: z.string().nullable(),
+  confirmedAt: z.date().nullable(),
+  confirmedBy: z.string().nullable(),
+});
+export type SevaSignupDoc = z.infer<typeof SevaSignupDocSchema>;
+
+export const CreateSevaSignupSchema = z.object({
+  oppId: z.string().min(1),
+  mid: z.string().min(1).nullable().optional().default(null),
+});
+export type CreateSevaSignupInput = z.infer<typeof CreateSevaSignupSchema>;
