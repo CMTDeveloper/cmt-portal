@@ -9,10 +9,12 @@ export interface RosterMemberInput {
   schoolGrade: string | null;
   birthMonthYear: string | null;
   foodAllergies: string | null;
+  legacySid: string | null;
 }
 
 export interface RosterFamily {
   fid: string;
+  legacyFid: string | null;
   members: RosterMemberInput[];
 }
 
@@ -31,6 +33,8 @@ export interface RosterMember {
   schoolGrade: string | null;
   hasSafetyInfo: boolean; // allergy/emergency → safety dot on the marker
   status: RosterStatus;
+  legacySid: string | null;
+  legacyFid: string | null;
 }
 
 export interface RosterResult {
@@ -76,6 +80,8 @@ export function buildRoster(
         schoolGrade: m.schoolGrade,
         hasSafetyInfo: Boolean(m.foodAllergies && m.foodAllergies.trim().length > 0),
         status,
+        legacySid: m.legacySid,
+        legacyFid: fam.legacyFid,
       });
     }
   }
@@ -121,9 +127,14 @@ export async function deriveRoster(levelId: string, date: string, now: Date = ne
   const [families, eventsSnap] = await Promise.all([
     Promise.all(
       fids.map(async (fid): Promise<RosterFamily> => {
-        const memSnap = await db.collection('families').doc(fid).collection('members').get();
+        const [famDoc, memSnap] = await Promise.all([
+          db.collection('families').doc(fid).get(),
+          db.collection('families').doc(fid).collection('members').get(),
+        ]);
+        const legacyFid = (famDoc.data()?.legacyFid as string | undefined) ?? null;
         return {
           fid,
+          legacyFid,
           members: memSnap.docs.map((d) => {
             const m = d.data();
             return {
@@ -134,6 +145,7 @@ export async function deriveRoster(levelId: string, date: string, now: Date = ne
               schoolGrade: m.schoolGrade ?? null,
               birthMonthYear: m.birthMonthYear ?? null,
               foodAllergies: m.foodAllergies ?? null,
+              legacySid: m.legacySid ?? null,
             };
           }),
         };

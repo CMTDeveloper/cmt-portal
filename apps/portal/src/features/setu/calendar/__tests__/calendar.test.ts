@@ -25,7 +25,7 @@ vi.mock('@cmt/firebase-shared/admin/firestore', () => {
   };
 });
 
-import { getUpcoming, getPublishedCalendar, getWeeklySchedule, torontoToday } from '../calendar';
+import { getUpcoming, getPublishedCalendar, getWeeklySchedule, torontoToday, mostRecentSunday } from '../calendar';
 
 function entryDoc(date: string, kind: 'class' | 'no-class', enabled = true, extra: Record<string, unknown> = {}) {
   return {
@@ -55,6 +55,15 @@ describe('torontoToday', () => {
   it('formats a date as YYYY-MM-DD in Toronto', () => {
     // 2026-01-15 05:00 UTC = 2026-01-15 00:00 Toronto (EST)
     expect(torontoToday(new Date('2026-01-15T05:00:00Z'))).toBe('2026-01-15');
+  });
+});
+
+describe('mostRecentSunday', () => {
+  it('mostRecentSunday returns the same day when today is Sunday', () => {
+    expect(mostRecentSunday(new Date('2026-01-04T17:00:00Z'))).toBe('2026-01-04'); // a Sunday
+  });
+  it('mostRecentSunday rolls back to the previous Sunday midweek', () => {
+    expect(mostRecentSunday(new Date('2026-01-07T17:00:00Z'))).toBe('2026-01-04'); // Wed → prev Sun
   });
 });
 

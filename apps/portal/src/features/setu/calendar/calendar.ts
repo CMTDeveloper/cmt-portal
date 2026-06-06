@@ -34,6 +34,14 @@ export function torontoToday(now: Date = new Date()): string {
   }).format(now);
 }
 
+/** The most recent Sunday (today if today is Sunday) as a Toronto YYYY-MM-DD. */
+export function mostRecentSunday(now: Date = new Date()): string {
+  const today = torontoToday(now); // Toronto calendar date
+  const d = new Date(`${today}T12:00:00Z`); // noon UTC: weekday is tz-stable
+  d.setUTCDate(d.getUTCDate() - d.getUTCDay()); // getUTCDay 0 = Sunday
+  return d.toISOString().slice(0, 10);
+}
+
 /**
  * Entries for a (location, program) ordered by date (family/teacher chain;
  * includes drafts). programKey is REQUIRED: families must see only their
