@@ -153,7 +153,7 @@ export function buildFamilyDashboardModel(input: DashboardModelInput): FamilyDas
   const donationHeading = !isEnrolled
     ? 'Donation'
     : legacyPaid
-      ? 'Paid'
+      ? 'Completed'
       : isLegacyPeriod
         ? 'Payment pending'
         : donationComplete

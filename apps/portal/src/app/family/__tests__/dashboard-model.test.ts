@@ -250,11 +250,11 @@ describe('buildFamilyDashboardModel — legacy payment bridge', () => {
     expect(isLegacyBvPeriod([TABLA_ENROLLMENT])).toBe(false);
   });
 
-  it('legacyPaid + Paid heading when the roster says paid', () => {
+  it('legacyPaid + Completed heading when the roster says paid', () => {
     const m = buildFamilyDashboardModel(input({ enrollments: [legacyBv], legacyPaymentStatus: 'paid' }));
     expect(m.isLegacyPeriod).toBe(true);
     expect(m.legacyPaid).toBe(true);
-    expect(m.donation.heading).toBe('Paid');
+    expect(m.donation.heading).toBe('Completed');
     expect(m.donation.showGive).toBe(false);
     expect(m.donation.showProgress).toBe(false);
   });

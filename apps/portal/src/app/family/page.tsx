@@ -210,14 +210,14 @@ export default async function FamilyDashboardPage() {
                 <div>
                   <div style={{ fontSize: 12, color: 'var(--muted)' }}>{donationHeading}</div>
                   <div style={{ fontSize: 22, fontWeight: 600, marginTop: 2, letterSpacing: '-0.01em' }}>
-                    {legacyPaid ? 'Paid' : isEnrolled ? `$${givenForPeriod}.00` : 'Give'}
+                    {legacyPaid ? 'Completed' : isEnrolled ? `$${givenForPeriod}.00` : 'Give'}
                   </div>
                 </div>
                 {showGive && <Link href={donateUrl} className="btn btn--p">{donationComplete ? 'Give more' : 'Give'}</Link>}
               </div>
               {legacyPaid && (
                 <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
-                  Paid for {enrollPeriodLabel} — thank you. Recorded from our records.
+                  Completed for {enrollPeriodLabel} — thank you. Recorded from our records.
                 </div>
               )}
               {showProgress && (
@@ -327,12 +327,12 @@ export default async function FamilyDashboardPage() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 18 }}>
           <MetricCard
             label="Donation"
-            value={legacyPaid ? 'Paid' : isEnrolled ? `$${givenForPeriod}` : '—'}
+            value={legacyPaid ? 'Completed' : isEnrolled ? `$${givenForPeriod}` : '—'}
             sub={
               !isEnrolled
                 ? 'not enrolled'
                 : legacyPaid
-                  ? `${enrollPeriodLabel ?? ''} · paid`
+                  ? `${enrollPeriodLabel ?? ''} · completed`
                   : isLegacyPeriod
                     ? `${enrollPeriodLabel ?? ''} · payment pending`
                     : donationComplete
@@ -397,9 +397,9 @@ export default async function FamilyDashboardPage() {
               </div>
               {legacyPaid ? (
                 <div style={{ marginBottom: 18 }}>
-                  <span className="pill" style={{ background: 'var(--accentSoft)', color: 'var(--accentDeep)', fontSize: 12 }}>Paid · {enrollPeriodLabel}</span>
+                  <span className="pill" style={{ background: 'var(--accentSoft)', color: 'var(--accentDeep)', fontSize: 12 }}>Completed · {enrollPeriodLabel}</span>
                   <div style={{ fontSize: 13, color: 'var(--body-text)', lineHeight: 1.5, marginTop: 12 }}>
-                    Your {enrollPeriodLabel} Bala Vihar contribution is recorded as paid. Thank you — no further action needed for this year.
+                    Your {enrollPeriodLabel} Bala Vihar contribution is recorded as completed. Thank you — no further action needed for this year.
                   </div>
                 </div>
               ) : isEnrolled && suggestedAmount !== null ? (
