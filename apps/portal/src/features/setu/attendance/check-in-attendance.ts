@@ -1,4 +1,4 @@
-import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
+import { checkInSourceFirestore } from './check-in-source';
 
 /**
  * READ-ONLY reader of the live check-in app's `family-check-ins` collection.
@@ -34,7 +34,7 @@ export async function getCheckInAttendance(
 ): Promise<CheckInRecord[]> {
   if (!legacyFid) return [];
   try {
-    const snap = await portalFirestore()
+    const snap = await checkInSourceFirestore()
       .collection('family-check-ins')
       .doc(legacyFid)
       .collection('checkIns')

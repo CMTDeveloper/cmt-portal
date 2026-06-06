@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const { mockGet } = vi.hoisted(() => ({ mockGet: vi.fn() }));
-vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
-  portalFirestore: () => ({
+vi.mock('../check-in-source', () => ({
+  checkInSourceFirestore: () => ({
     collection: () => ({ doc: () => ({ collection: () => ({ get: mockGet }) }) }),
   }),
 }));
