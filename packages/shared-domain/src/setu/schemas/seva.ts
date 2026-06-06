@@ -72,3 +72,12 @@ export const CreateSevaSignupSchema = z.object({
   mid: z.string().min(1).nullable().optional().default(null),
 });
 export type CreateSevaSignupInput = z.infer<typeof CreateSevaSignupSchema>;
+
+// Confirmation: a roster manager marks a sign-up completed (hours accrue) or
+// no-show (0 hrs). hoursAwarded is optional — when omitted on 'completed', the
+// route falls back to the opportunity's defaultHours.
+export const ConfirmSevaSignupSchema = z.object({
+  status: z.enum(['completed', 'no-show']),
+  hoursAwarded: z.number().nonnegative().max(100).optional(),
+});
+export type ConfirmSevaSignupInput = z.infer<typeof ConfirmSevaSignupSchema>;
