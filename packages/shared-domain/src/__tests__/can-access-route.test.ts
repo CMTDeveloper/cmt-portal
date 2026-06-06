@@ -376,6 +376,11 @@ describe('canAccessRoute — /api/setu/teacher/* — teacher capability', () => 
   it('denies welcome-team', () => {
     expect(canAccessRoute(welcomeTeam, '/api/setu/teacher/levels', 'GET')).toBe(false);
   });
+  it('gates /api/setu/teacher/visitors via the teacher catch-all', () => {
+    expect(canAccessRoute(teacher, '/api/setu/teacher/visitors', 'POST')).toBe(true);
+    expect(canAccessRoute(teacher, '/api/setu/teacher/visitors', 'GET')).toBe(true);
+    expect(canAccessRoute(manager, '/api/setu/teacher/visitors', 'GET')).toBe(false);
+  });
 });
 
 describe('canAccessRoute — /api/admin/teacher-assignments — admin + welcome-team', () => {
