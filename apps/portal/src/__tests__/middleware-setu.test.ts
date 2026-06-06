@@ -122,7 +122,7 @@ describe('Legacy /check-in/* still redirects to /login', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('Authenticated family-manager on /family/*', () => {
-  it('passes through, sets x-portal-role, x-portal-uid, x-portal-fid, x-portal-mid', async () => {
+  it('forwards x-portal-* on the REQUEST headers (not leaked on the response)', async () => {
     (verifyPortalSessionCookie as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       uid: 'u-mgr',
       role: 'family-manager',
@@ -131,10 +131,17 @@ describe('Authenticated family-manager on /family/*', () => {
     });
     const res = await middleware(makeReq('http://localhost/family', { cookie: 'good' }));
     expect(res.status).toBe(200);
-    expect(res.headers.get('x-portal-role')).toBe('family-manager');
-    expect(res.headers.get('x-portal-uid')).toBe('u-mgr');
-    expect(res.headers.get('x-portal-fid')).toBe('FAM001');
-    expect(res.headers.get('x-portal-mid')).toBe('FAM001-01');
+    // Forwarded to the downstream handler via the request headers. Next encodes
+    // NextResponse.next({ request: { headers } }) as x-middleware-request-*.
+    expect(res.headers.get('x-middleware-request-x-portal-role')).toBe('family-manager');
+    expect(res.headers.get('x-middleware-request-x-portal-uid')).toBe('u-mgr');
+    expect(res.headers.get('x-middleware-request-x-portal-fid')).toBe('FAM001');
+    expect(res.headers.get('x-middleware-request-x-portal-mid')).toBe('FAM001-01');
+    // SECURITY: must NOT leak the claims onto the client-facing response headers.
+    expect(res.headers.get('x-portal-role')).toBeNull();
+    expect(res.headers.get('x-portal-uid')).toBeNull();
+    expect(res.headers.get('x-portal-fid')).toBeNull();
+    expect(res.headers.get('x-portal-mid')).toBeNull();
   });
 
   it('family-manager can access /family/members', async () => {
@@ -163,7 +170,8 @@ describe('Authenticated family-member on /family/*', () => {
     });
     const res = await middleware(makeReq('http://localhost/family/members', { cookie: 'good' }));
     expect(res.status).toBe(200);
-    expect(res.headers.get('x-portal-role')).toBe('family-member');
+    expect(res.headers.get('x-middleware-request-x-portal-role')).toBe('family-member');
+    expect(res.headers.get('x-portal-role')).toBeNull();
   });
 });
 
@@ -254,7 +262,8 @@ describe('legacy familyId header forwarded', () => {
       makeReq('http://localhost/check-in/family', { bearer: 'tok' }),
     );
     expect(res.status).toBe(200);
-    expect(res.headers.get('x-portal-family-id')).toBe('42');
+    expect(res.headers.get('x-middleware-request-x-portal-family-id')).toBe('42');
+    expect(res.headers.get('x-portal-family-id')).toBeNull();
   });
 });
 

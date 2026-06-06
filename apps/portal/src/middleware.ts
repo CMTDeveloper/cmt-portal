@@ -115,15 +115,11 @@ export async function middleware(req: NextRequest) {
     reqHeaders.set('x-portal-extra-roles', claims.extraRoles.join(','));
   }
 
+  // Forward the claims to the downstream route handler via the REQUEST headers
+  // only (the x-middleware-request-* mechanism). Do NOT write them onto the
+  // response headers — that would leak role/uid/fid/mid/extraRoles to the
+  // browser. Route handlers read these via headers().get('x-portal-*').
   const res = NextResponse.next({ request: { headers: reqHeaders } });
-  res.headers.set('x-portal-role', claims.role);
-  res.headers.set('x-portal-uid', claims.uid);
-  if (claims.familyId) res.headers.set('x-portal-family-id', claims.familyId);
-  if (claims.fid) res.headers.set('x-portal-fid', claims.fid);
-  if (claims.mid) res.headers.set('x-portal-mid', claims.mid);
-  if (Array.isArray(claims.extraRoles) && claims.extraRoles.length > 0) {
-    res.headers.set('x-portal-extra-roles', claims.extraRoles.join(','));
-  }
   return pathname.startsWith('/api/') ? applyCors(req, res) : res;
 }
 

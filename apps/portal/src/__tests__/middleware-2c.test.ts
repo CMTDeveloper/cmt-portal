@@ -31,7 +31,7 @@ beforeEach(() => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('family-manager GET /api/setu/family', () => {
-  it('passes through and sets x-portal-* headers', async () => {
+  it('forwards x-portal-* on the REQUEST headers (not leaked on the response)', async () => {
     (verifyPortalSessionCookie as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       uid: 'u-mgr',
       role: 'family-manager',
@@ -44,9 +44,13 @@ describe('family-manager GET /api/setu/family', () => {
     );
 
     expect(res.status).toBe(200);
-    expect(res.headers.get('x-portal-role')).toBe('family-manager');
-    expect(res.headers.get('x-portal-fid')).toBe('FAMA0001ABCD');
-    expect(res.headers.get('x-portal-mid')).toBe('FAMA0001ABCD-01');
+    expect(res.headers.get('x-middleware-request-x-portal-role')).toBe('family-manager');
+    expect(res.headers.get('x-middleware-request-x-portal-fid')).toBe('FAMA0001ABCD');
+    expect(res.headers.get('x-middleware-request-x-portal-mid')).toBe('FAMA0001ABCD-01');
+    // SECURITY: must NOT leak the claims onto the client-facing response headers.
+    expect(res.headers.get('x-portal-role')).toBeNull();
+    expect(res.headers.get('x-portal-fid')).toBeNull();
+    expect(res.headers.get('x-portal-mid')).toBeNull();
   });
 });
 
@@ -68,7 +72,8 @@ describe('family-member GET /api/setu/family', () => {
     );
 
     expect(res.status).toBe(200);
-    expect(res.headers.get('x-portal-role')).toBe('family-member');
+    expect(res.headers.get('x-middleware-request-x-portal-role')).toBe('family-member');
+    expect(res.headers.get('x-portal-role')).toBeNull();
   });
 });
 
