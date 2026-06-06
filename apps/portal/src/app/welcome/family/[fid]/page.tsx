@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { SetuAvatar, SetuIcon } from '@cmt/ui';
 import { CspRoot } from '@/features/family/components/atoms';
 import { getFamilyForWelcome } from '@/features/setu/search/get-family-for-welcome';
+import { getFamilySevaProgress, type FamilySevaProgress } from '@/features/setu/seva/get-family-seva-progress';
 import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
 import { isWelcomeTeam, type WithRole } from '@cmt/shared-domain';
 import type { FamilyDoc, MemberDoc } from '@cmt/shared-domain/setu';
@@ -56,6 +57,8 @@ export async function WelcomeFamilyDetailBody({
 
   if (!data) notFound();
 
+  const sevaProgress = await getFamilySevaProgress(fid);
+
   const { family, members } = data;
   const adults = members.filter((m) => m.type !== 'Child');
   const children = members.filter((m) => m.type === 'Child');
@@ -74,7 +77,7 @@ export async function WelcomeFamilyDetailBody({
               <div style={{ width: 32 }}/>
             </div>
             <div style={{ flex: 1, overflowY: 'auto', padding: '18px 18px 90px' }}>
-              <FamilyDetailBody family={family} members={members} adults={adults} children={children}/>
+              <FamilyDetailBody family={family} members={members} adults={adults} children={children} sevaProgress={sevaProgress}/>
             </div>
           </div>
         </CspRoot>
@@ -91,7 +94,7 @@ export async function WelcomeFamilyDetailBody({
           </p>
           <h1 style={{ fontSize: 38, fontWeight: 400, marginTop: 6 }}>The {family.name} Family</h1>
         </header>
-        <FamilyDetailBody family={family} members={members} adults={adults} children={children}/>
+        <FamilyDetailBody family={family} members={members} adults={adults} children={children} sevaProgress={sevaProgress}/>
       </div>
     </>
   );
@@ -102,9 +105,12 @@ type FamilyDetailBodyProps = {
   members: MemberDoc[];
   adults: MemberDoc[];
   children: MemberDoc[];
+  sevaProgress: FamilySevaProgress;
 };
 
-function FamilyDetailBody({ family, members, adults, children }: FamilyDetailBodyProps) {
+function FamilyDetailBody({ family, members, adults, children, sevaProgress }: FamilyDetailBodyProps) {
+  const sevaMet = sevaProgress.hoursEarned >= sevaProgress.hoursPerYear;
+
   return (
     <div>
       {/* Family header card */}
@@ -119,6 +125,28 @@ function FamilyDetailBody({ family, members, adults, children }: FamilyDetailBod
           <span>Since: {family.createdAt.getFullYear()}</span>
         </div>
       </div>
+
+      {/* Seva hours card — omitted entirely when no current seva year is set */}
+      {sevaProgress.currentSevaYear && (
+        <div className="card" style={{ padding: 18, marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: '.1em', textTransform: 'uppercase', marginBottom: 4 }}>Seva hours</div>
+            <div style={{ fontSize: 14, fontWeight: 600 }}>
+              {sevaProgress.hoursEarned} of {sevaProgress.hoursPerYear} hrs
+              <span style={{ color: 'var(--muted)', fontWeight: 400 }}> · {sevaProgress.currentSevaYear}</span>
+            </div>
+          </div>
+          <span
+            style={
+              sevaMet
+                ? { flex: '0 0 auto', fontSize: 10, padding: '2px 9px', borderRadius: 99, fontWeight: 600, background: 'var(--accentSoft)', color: 'var(--accentDeep)' }
+                : { flex: '0 0 auto', fontSize: 10, padding: '2px 9px', borderRadius: 99, fontWeight: 600, background: 'var(--surface)', color: 'var(--muted)', border: '1px solid var(--line)' }
+            }
+          >
+            {sevaMet ? 'Met' : 'Short'}
+          </span>
+        </div>
+      )}
 
       {/* Adults */}
       {adults.length > 0 && (

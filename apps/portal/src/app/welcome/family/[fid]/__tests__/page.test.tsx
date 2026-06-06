@@ -51,6 +51,12 @@ vi.mock('@/features/setu/search/get-family-for-welcome', () => ({
   getFamilyForWelcome: mockGetFamilyForWelcome,
 }));
 
+// ── get-family-seva-progress helper ───────────────────────────────────────────
+const mockGetFamilySevaProgress = vi.hoisted(() => vi.fn());
+vi.mock('@/features/setu/seva/get-family-seva-progress', () => ({
+  getFamilySevaProgress: mockGetFamilySevaProgress,
+}));
+
 import { WelcomeFamilyDetailBody as WelcomeFamilyDetailPage } from '../page';
 
 beforeEach(() => {
@@ -59,6 +65,8 @@ beforeEach(() => {
   mockCookieGet.mockReturnValue({ value: 'session-cookie' });
   mockVerifyPortalSessionCookie.mockReset();
   mockVerifyPortalSessionCookie.mockResolvedValue({ uid: 'wt-1', role: 'welcome-team' } as never);
+  mockGetFamilySevaProgress.mockReset();
+  mockGetFamilySevaProgress.mockResolvedValue({ currentSevaYear: null, hoursPerYear: 20, hoursEarned: 0 });
 });
 
 const SAMPLE_FAMILY = {
@@ -145,6 +153,42 @@ describe('WelcomeFamilyDetailPage — with data', () => {
 
     expect(screen.getAllByText(/FAM001/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/4421/).length).toBeGreaterThan(0);
+  });
+});
+
+describe('WelcomeFamilyDetailPage — seva hours', () => {
+  it('renders the seva hours card with earned/required and Met pill when met', async () => {
+    mockGetFamilyForWelcome.mockResolvedValue({ family: SAMPLE_FAMILY, members: SAMPLE_MEMBERS });
+    mockGetFamilySevaProgress.mockResolvedValue({ currentSevaYear: '2026-27', hoursPerYear: 20, hoursEarned: 24 });
+
+    const page = await WelcomeFamilyDetailPage({ params: Promise.resolve({ fid: 'FAM001' }) });
+    render(page as React.ReactElement);
+
+    expect(screen.getAllByText(/Seva hours/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/24 of 20 hrs/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/2026-27/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/^Met$/i).length).toBeGreaterThan(0);
+  });
+
+  it('renders the Short pill when hours fall below requirement', async () => {
+    mockGetFamilyForWelcome.mockResolvedValue({ family: SAMPLE_FAMILY, members: SAMPLE_MEMBERS });
+    mockGetFamilySevaProgress.mockResolvedValue({ currentSevaYear: '2026-27', hoursPerYear: 20, hoursEarned: 5 });
+
+    const page = await WelcomeFamilyDetailPage({ params: Promise.resolve({ fid: 'FAM001' }) });
+    render(page as React.ReactElement);
+
+    expect(screen.getAllByText(/5 of 20 hrs/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/^Short$/i).length).toBeGreaterThan(0);
+  });
+
+  it('omits the seva hours card entirely when currentSevaYear is null', async () => {
+    mockGetFamilyForWelcome.mockResolvedValue({ family: SAMPLE_FAMILY, members: SAMPLE_MEMBERS });
+    mockGetFamilySevaProgress.mockResolvedValue({ currentSevaYear: null, hoursPerYear: 20, hoursEarned: 0 });
+
+    const page = await WelcomeFamilyDetailPage({ params: Promise.resolve({ fid: 'FAM001' }) });
+    render(page as React.ReactElement);
+
+    expect(screen.queryByText(/Seva hours/i)).toBeNull();
   });
 });
 
