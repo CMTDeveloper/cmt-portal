@@ -62,6 +62,37 @@ export async function getCheckInAttendance(
   }
 }
 
+/**
+ * READ-ONLY: the set of legacy sids checked in at the door for a single date,
+ * across the given families. Overlays door self-check-ins onto a teacher
+ * roster. Reads `family-check-ins/{legacyFid}/checkIns/{date}` via the seam;
+ * tolerates missing docs + read errors (returns what it can). Never writes.
+ */
+export async function readDoorPresentSids(
+  legacyFids: ReadonlyArray<string>,
+  date: string,
+): Promise<Set<string>> {
+  const present = new Set<string>();
+  const db = checkInSourceFirestore();
+  await Promise.all(
+    [...new Set(legacyFids)].map(async (legacyFid) => {
+      try {
+        const snap = await db
+          .collection('family-check-ins').doc(legacyFid)
+          .collection('checkIns').doc(date).get();
+        if (!snap.exists) return;
+        const students = (snap.data()?.students ?? []) as Array<{ sid?: string | number; isCheckedIn?: boolean }>;
+        for (const s of students) {
+          if (s.isCheckedIn === true && s.sid != null) present.add(String(s.sid));
+        }
+      } catch (err) {
+        console.error('[door-presence] read failed for', legacyFid, date, err);
+      }
+    }),
+  );
+  return present;
+}
+
 function summarize(marks: CheckInDateMark[]): CheckInSummary {
   const ascending = [...marks].sort((a, b) => a.date.localeCompare(b.date));
   const attended = ascending.filter((m) => m.present).length;

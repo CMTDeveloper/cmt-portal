@@ -1,14 +1,29 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockGet } = vi.hoisted(() => ({ mockGet: vi.fn() }));
+const { mockGet, dayDocResolver } = vi.hoisted(() => ({
+  mockGet: vi.fn(),
+  // Routes a `family-check-ins/{legacyFid}/checkIns/{date}.get()` read by the
+  // captured legacyFid + date. Default: { exists: false }. Per-fid tests set it.
+  dayDocResolver: { fn: (_legacyFid: string, _date: string) => ({ exists: false }) as unknown },
+}));
 vi.mock('../check-in-source', () => ({
   checkInSourceFirestore: () => ({
-    collection: () => ({ doc: () => ({ collection: () => ({ get: mockGet }) }) }),
+    collection: () => ({
+      doc: (legacyFid: string) => ({
+        collection: () => ({
+          // getCheckInAttendance reads the whole `checkIns` subcollection.
+          get: mockGet,
+          // readDoorPresentSids reads a single day doc; route by fid + date.
+          doc: (date: string) => ({ get: async () => dayDocResolver.fn(legacyFid, date) }),
+        }),
+      }),
+    }),
   }),
 }));
 
 import {
   getCheckInAttendance,
+  readDoorPresentSids,
   summarizeFamilyCheckIns,
   summarizeMemberCheckIns,
   type CheckInRecord,
@@ -18,7 +33,10 @@ function doc(date: string, students: Array<{ sid: string; isCheckedIn: boolean }
   return { id: date, data: () => ({ date, checkedInBy, students }) };
 }
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  dayDocResolver.fn = () => ({ exists: false });
+});
 
 describe('getCheckInAttendance', () => {
   it('returns [] with no legacyFid (no read)', async () => {
@@ -75,5 +93,33 @@ describe('summarizeMemberCheckIns', () => {
 
   it('empty summary for a null sid', () => {
     expect(summarizeMemberCheckIns(RECORDS, null)).toEqual({ attended: 0, recorded: 0, lastDate: null, marks: [] });
+  });
+});
+
+describe('readDoorPresentSids', () => {
+  it('readDoorPresentSids collects checked-in sids for a date across families', async () => {
+    dayDocResolver.fn = (legacyFid, date) => {
+      if (date !== '2026-01-04') return { exists: false };
+      if (legacyFid === '4421') {
+        return { exists: true, data: () => ({ students: [{ sid: 'S9', isCheckedIn: true }, { sid: 'S8', isCheckedIn: false }] }) };
+      }
+      if (legacyFid === '7000') {
+        return { exists: true, data: () => ({ students: [{ sid: 'S1', isCheckedIn: true }] }) };
+      }
+      return { exists: false };
+    };
+    const out = await readDoorPresentSids(['4421', '7000'], '2026-01-04');
+    expect(out).toEqual(new Set(['S9', 'S1'])); // only checked-in sids, deduped across families
+  });
+
+  it('readDoorPresentSids ignores a missing day-doc and dedupes the input fids', async () => {
+    dayDocResolver.fn = (legacyFid, date) => {
+      if (date === '2026-01-04' && legacyFid === '4421') {
+        return { exists: true, data: () => ({ students: [{ sid: 'S9', isCheckedIn: true }] }) };
+      }
+      return { exists: false }; // 9999 missing
+    };
+    const out = await readDoorPresentSids(['4421', '4421', '9999'], '2026-01-04');
+    expect(out).toEqual(new Set(['S9']));
   });
 });
