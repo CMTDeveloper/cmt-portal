@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { SetuIcon, toast } from '@cmt/ui';
 
-const RELATION_OPTIONS = ['Spouse', 'Parent', 'Sibling', 'Adult child', 'Other'] as const;
+const RELATION_OPTIONS = ['Spouse', 'Parent', 'Adult child', 'Other'] as const;
 type Relation = (typeof RELATION_OPTIONS)[number];
 
 interface Props {
