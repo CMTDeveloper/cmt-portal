@@ -16,8 +16,12 @@ const origMaster = process.env.MASTER_FIREBASE_PROJECT_ID;
 
 beforeEach(() => { mockPortal.mockClear(); mockMaster.mockClear(); });
 afterEach(() => {
-  process.env.PORTAL_FIREBASE_PROJECT_ID = origPortal;
-  process.env.MASTER_FIREBASE_PROJECT_ID = origMaster;
+  // Restore originals; delete (don't assign `undefined`, which stringifies to
+  // "undefined") so an originally-unset var stays unset for other workers.
+  if (origPortal === undefined) delete process.env.PORTAL_FIREBASE_PROJECT_ID;
+  else process.env.PORTAL_FIREBASE_PROJECT_ID = origPortal;
+  if (origMaster === undefined) delete process.env.MASTER_FIREBASE_PROJECT_ID;
+  else process.env.MASTER_FIREBASE_PROJECT_ID = origMaster;
 });
 
 it('reads from the MASTER app when portal and master are different projects (portal on UAT)', () => {
