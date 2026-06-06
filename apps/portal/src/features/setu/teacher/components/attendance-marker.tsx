@@ -147,7 +147,7 @@ export function AttendanceMarker({ levelId, levelName, ageLabel, date, rows, tot
             </Link>
           </div>
           <Link
-            href={`/teacher/levels/${levelId}/guests?date=${date}`}
+            href={`/teacher/levels/${levelId}/visitors?date=${date}`}
             className="btn btn--g"
             style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', padding: '8px 12px', minHeight: 44 }}
           >
@@ -183,7 +183,7 @@ export function AttendanceMarker({ levelId, levelName, ageLabel, date, rows, tot
             No enrolled students match this level yet. Once families enroll, their children will appear here for you to mark.
           </p>
           <Link
-            href={`/teacher/levels/${levelId}/guests?date=${date}`}
+            href={`/teacher/levels/${levelId}/visitors?date=${date}`}
             className="btn btn--s"
             style={{ marginTop: 18, fontSize: 13 }}
           >
