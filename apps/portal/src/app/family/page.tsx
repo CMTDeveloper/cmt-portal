@@ -56,7 +56,7 @@ export default async function FamilyDashboardPage() {
   let managerName = 'Family member';
   let familyName = mockFamily.name;
   let memberCount = mockFamily.members.length;
-  let displayMembers: { name: string }[] = mockFamily.members.map((m) => ({ name: m.name }));
+  let displayMembers: { name: string; mid?: string }[] = mockFamily.members.map((m) => ({ name: m.name }));
   let currentMid: string | null = null;
   // Upcoming class dates from the managed calendar (Slice 4b), by family location.
   let upcomingEntries: CalendarEntry[] = [];
@@ -94,7 +94,7 @@ export default async function FamilyDashboardPage() {
       currentMid = data.currentMid;
       familyName = data.family.name;
       memberCount = data.members.length;
-      displayMembers = data.members.map((m) => ({ name: `${m.firstName} ${m.lastName}` }));
+      displayMembers = data.members.map((m) => ({ name: `${m.firstName} ${m.lastName}`, mid: m.mid }));
 
       const [enrollments, donations, allPrograms] = await Promise.all([
         getEnrollments(data.family.fid),
@@ -318,13 +318,20 @@ export default async function FamilyDashboardPage() {
                 <Link href="/family/members" className="focus-ring" style={{ background: 'transparent', border: 0, color: 'var(--accent)', fontSize: 12, fontWeight: 600, textDecoration: 'none' }}>Manage</Link>
               </div>
               <div className="row" style={{ gap: -6, flexWrap: 'wrap' }}>
-                {displayMembers.map((m, i) => (
-                  <div key={i} style={{ marginLeft: i > 0 ? -8 : 0 }}>
+                {displayMembers.map((m, i) => {
+                  const avatar = (
                     <div style={{ border: '2px solid var(--surface)', borderRadius: '50%' }}>
                       <SetuAvatar name={m.name} size={36}/>
                     </div>
-                  </div>
-                ))}
+                  );
+                  return (
+                    <div key={i} style={{ marginLeft: i > 0 ? -8 : 0 }}>
+                      {m.mid ? (
+                        <Link href={`/family/members/${m.mid}/profile`} className="focus-ring" title={m.name} style={{ display: 'inline-flex', borderRadius: '50%' }}>{avatar}</Link>
+                      ) : avatar}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>

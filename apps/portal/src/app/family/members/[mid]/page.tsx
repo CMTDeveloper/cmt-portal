@@ -90,13 +90,15 @@ export default async function MemberDetailPage({ params }: Props) {
                 }
               </div>
               <div style={{ flex: 1, overflowY: 'auto', padding: '20px 18px 30px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16 }}>
                   <SetuAvatar name={name} size={64}/>
                   <div>
                     <h1 style={{ fontSize: 24, fontWeight: 400, lineHeight: 1.1 }}>{name}</h1>
                     <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4, fontFamily: 'var(--mono)' }}>MID {member.mid} · {typeLabel}</div>
                   </div>
                 </div>
+
+                <Link href={`/family/members/${mid}/profile`} className="btn btn--s" style={{ marginBottom: 20, display: 'inline-flex' }}>View profile</Link>
 
                 {member.foodAllergies && (
                   <AllergyCallout severity="severe" summary={member.foodAllergies} detail="Please inform class teacher."/>
@@ -147,9 +149,12 @@ export default async function MemberDetailPage({ params }: Props) {
                   <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 6, fontFamily: 'var(--mono)' }}>MID {member.mid} · {typeLabel}</div>
                 </div>
               </div>
-              {canEdit && (
-                <Link href={`/family/members/${mid}/edit`} className="btn btn--s" style={{ alignSelf: 'flex-start' }}><SetuIcon.edit/> Edit member</Link>
-              )}
+              <div className="row" style={{ gap: 10, alignSelf: 'flex-start' }}>
+                <Link href={`/family/members/${mid}/profile`} className="btn btn--s">View profile</Link>
+                {canEdit && (
+                  <Link href={`/family/members/${mid}/edit`} className="btn btn--s"><SetuIcon.edit/> Edit member</Link>
+                )}
+              </div>
             </div>
           </header>
 

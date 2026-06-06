@@ -145,7 +145,10 @@ export default async function FamilyRosterPage() {
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{m.type}</div>
                 </div>
-                <Link href={`/family/members/${m.mid}/edit`} className="btn btn--s" style={{ padding: '6px 10px', fontSize: 12 }}><SetuIcon.edit/> Edit</Link>
+                <div className="row" style={{ gap: 8 }}>
+                  <Link href={`/family/members/${m.mid}/profile`} className="btn btn--s" style={{ padding: '6px 10px', fontSize: 12 }}>Profile</Link>
+                  <Link href={`/family/members/${m.mid}/edit`} className="btn btn--s" style={{ padding: '6px 10px', fontSize: 12 }}><SetuIcon.edit/> Edit</Link>
+                </div>
               </div>
               {m.nameMissing && m.isCurrent && (
                 <Link href={`/family/members/${m.mid}/edit`} style={{ display: 'block', padding: '10px 14px', background: 'var(--accentSoft)', border: '1px solid var(--accent)', borderRadius: 'var(--radiusSm)', textDecoration: 'none', color: 'var(--accentDeep)', marginBottom: 10, fontSize: 13, fontWeight: 600 }}>
