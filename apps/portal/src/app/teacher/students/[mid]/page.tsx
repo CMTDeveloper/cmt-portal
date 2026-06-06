@@ -4,6 +4,9 @@ import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
 import type { WithRole } from '@cmt/shared-domain';
 import { AllergyCallout, SectionLabel, DetailGroup } from '@/features/family/components/atoms';
 import { canTeacherSeeStudent, getStudentDetail } from '@/features/setu/teacher/student-detail';
+import { getMemberAchievements } from '@/features/setu/members/get-achievements';
+import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
+import { AwardBadge } from '@/features/setu/teacher/components/award-badge';
 
 export const metadata = { title: 'Student — CMT Teacher' };
 
@@ -23,6 +26,18 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
 
   const s = await getStudentDetail(mid);
   if (!s) return <p style={{ color: 'var(--muted)', fontSize: 14 }}>Student not found.</p>;
+
+  const [achievements, enrollments] = await Promise.all([
+    getMemberAchievements(s.fid, mid),
+    getEnrollments(s.fid),
+  ]);
+  const programOptions = Array.from(
+    new Map(
+      enrollments
+        .filter((e) => e.status === 'active' && e.enrolledMids.includes(mid))
+        .map((e) => [e.programKey, { key: e.programKey, label: e.programLabel }]),
+    ).values(),
+  );
 
   const name = `${s.firstName} ${s.lastName}`;
   const ec = s.emergencyContacts[0];
@@ -73,6 +88,11 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
         ) : (
           <DetailGroup rows={s.parents.map((p): [string, string] => [p.name, p.phone || p.email || '—'])} />
         )}
+      </div>
+
+      <div style={{ marginTop: 22 }}>
+        <SectionLabel>Achievements</SectionLabel>
+        <AwardBadge mid={mid} achievements={achievements} programOptions={programOptions} />
       </div>
     </div>
   );

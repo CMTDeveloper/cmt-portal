@@ -1,0 +1,117 @@
+'use client';
+
+import { useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
+import { toast } from '@cmt/ui';
+import type { ChildAchievement } from '@/features/setu/members/get-child-profile';
+
+interface ProgramOption {
+  key: string;
+  label: string;
+}
+
+interface AwardBadgeProps {
+  mid: string;
+  achievements: ChildAchievement[];
+  programOptions: ProgramOption[];
+}
+
+const fieldLabel = { fontSize: 13, fontWeight: 600, color: 'var(--body-text)' } as const;
+
+function formatAwardedAt(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-CA', {
+    month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/Toronto',
+  });
+}
+
+export function AwardBadge({ mid, achievements, programOptions }: AwardBadgeProps) {
+  const router = useRouter();
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [programKey, setProgramKey] = useState('');
+  const [pending, startTransition] = useTransition();
+
+  const labelFor = (key: string | null): string | null =>
+    key ? (programOptions.find((p) => p.key === key)?.label ?? key) : null;
+
+  function award() {
+    const t = title.trim();
+    if (!t) {
+      toast.error('Enter a badge title');
+      return;
+    }
+    startTransition(async () => {
+      try {
+        const res = await fetch('/api/setu/teacher/achievements', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mid, title: t, description: description.trim() || undefined, programKey: programKey || null }),
+        });
+        if (!res.ok) { toast.error('Could not award badge'); return; }
+        toast.success('Badge awarded');
+        setTitle(''); setDescription(''); setProgramKey('');
+        router.refresh();
+      } catch { toast.error('Network error — please try again.'); }
+    });
+  }
+
+  function revoke(achId: string) {
+    startTransition(async () => {
+      try {
+        const res = await fetch(`/api/setu/teacher/achievements/${achId}?mid=${encodeURIComponent(mid)}`, { method: 'DELETE' });
+        if (!res.ok) { toast.error('Could not revoke badge'); return; }
+        toast.success('Badge revoked');
+        router.refresh();
+      } catch { toast.error('Network error — please try again.'); }
+    });
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {achievements.length === 0 ? (
+        <div style={{ fontSize: 13, color: 'var(--muted)' }}>No badges yet.</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {achievements.map((a) => (
+            <div key={a.achId} className="card" style={{ padding: '10px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>{a.title}</div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
+                  {labelFor(a.programKey) ? `${labelFor(a.programKey)} · ` : ''}{formatAwardedAt(a.awardedAt)}
+                </div>
+              </div>
+              <button type="button" onClick={() => revoke(a.achId)} disabled={pending} className="btn btn--s" style={{ flex: '0 0 auto', fontSize: 13 }}>
+                Revoke
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="card" style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <span style={fieldLabel}>Badge title</span>
+          <input aria-label="Badge title" className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Om Award" maxLength={80} />
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <span style={fieldLabel}>Description (optional)</span>
+          <input aria-label="Badge description" className="input" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="e.g. Recited chapter 12" maxLength={500} />
+        </div>
+        {programOptions.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <span style={fieldLabel}>Program (optional)</span>
+            <select aria-label="Program" className="input" value={programKey} onChange={(e) => setProgramKey(e.target.value)}>
+              <option value="">General (no program)</option>
+              {programOptions.map((p) => (<option key={p.key} value={p.key}>{p.label}</option>))}
+            </select>
+          </div>
+        )}
+        <div>
+          <button type="button" onClick={award} disabled={pending} className="btn btn--p" style={{ minHeight: 44 }}>
+            {pending ? 'Awarding…' : 'Award badge'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
