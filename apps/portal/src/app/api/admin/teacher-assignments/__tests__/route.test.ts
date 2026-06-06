@@ -1,7 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockAssignTeacher } = vi.hoisted(() => ({ mockAssignTeacher: vi.fn() }));
+const { mockAssignTeacher, mockFindMissingLevelIds } = vi.hoisted(() => ({
+  mockAssignTeacher: vi.fn(),
+  mockFindMissingLevelIds: vi.fn(),
+}));
 vi.mock('@/features/setu/teacher/assignments', () => ({ assignTeacher: mockAssignTeacher }));
+vi.mock('@/features/setu/teacher/levels', () => ({ findMissingLevelIds: mockFindMissingLevelIds }));
 
 function makeRequest(body?: unknown, uid?: string, role = 'admin'): Request {
   const headers: Record<string, string> = { 'content-type': 'application/json', 'x-portal-role': role };
@@ -16,6 +20,7 @@ function makeRequest(body?: unknown, uid?: string, role = 'admin'): Request {
 beforeEach(() => {
   vi.clearAllMocks();
   mockAssignTeacher.mockResolvedValue({ added: ['l1'], removed: [] });
+  mockFindMissingLevelIds.mockResolvedValue([]);
 });
 
 describe('POST /api/admin/teacher-assignments', () => {
@@ -60,5 +65,22 @@ describe('POST /api/admin/teacher-assignments', () => {
     const res = await POST(makeRequest({ ref: 'CMT-FAM1-01', levelIds: [] }, 'uid-admin'));
     expect(res.status).toBe(200);
     expect((await res.json()).removed).toEqual(['l1']);
+  });
+
+  it('returns 400 unknown-levels when a level does not exist', async () => {
+    mockFindMissingLevelIds.mockResolvedValue(['ghost']);
+    const { POST } = await import('../route');
+    const res = await POST(makeRequest({ ref: 'CMT-FAM1-01', levelIds: ['ghost'] }, 'uid-admin'));
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: 'unknown-levels', missing: ['ghost'] });
+    expect(mockAssignTeacher).not.toHaveBeenCalled();
+  });
+
+  it('assigns when all levels exist', async () => {
+    const { POST } = await import('../route');
+    const res = await POST(makeRequest(body, 'uid-admin'));
+    expect(res.status).toBe(200);
+    expect(mockFindMissingLevelIds).toHaveBeenCalledWith(['l1']);
+    expect(mockAssignTeacher).toHaveBeenCalledWith({ ref: 'CMT-FAM1-01', levelIds: ['l1'], byUid: 'uid-admin' });
   });
 });

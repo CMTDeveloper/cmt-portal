@@ -42,3 +42,18 @@ export async function getMyLevels(ref: string | null): Promise<LevelDoc[]> {
     .map((d) => docToLevel(d.data()))
     .sort((a, b) => (a.location ?? '').localeCompare(b.location ?? '') || a.order - b.order);
 }
+
+/**
+ * Of the given level ids, the ones with no `levels/{id}` doc. Used to reject a
+ * teacher assignment that references a non-existent level (which would otherwise
+ * create a phantom partial level doc via the denormalized teacherRefs write).
+ * Deduplicates input; preserves first-seen order in the result.
+ */
+export async function findMissingLevelIds(levelIds: string[]): Promise<string[]> {
+  const unique = [...new Set(levelIds)];
+  if (unique.length === 0) return [];
+  const db = portalFirestore();
+  const refs = unique.map((id) => db.collection('levels').doc(id));
+  const snaps = await db.getAll(...refs);
+  return unique.filter((_, i) => !snaps[i]!.exists);
+}

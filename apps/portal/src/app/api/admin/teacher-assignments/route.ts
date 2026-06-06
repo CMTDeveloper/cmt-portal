@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { AssignTeacherSchema, isAdmin, isWelcomeTeam } from '@cmt/shared-domain';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
 import { assignTeacher } from '@/features/setu/teacher/assignments';
+import { findMissingLevelIds } from '@/features/setu/teacher/levels';
 
 // Set the levels a teacher (member mid or standalone tid) covers. Writable by
 // admin AND welcome-team (RBB-2 front-desk flexibility). The `teacher`
@@ -22,6 +23,12 @@ export async function POST(req: Request) {
   }
 
   const { ref, levelIds } = parsed.data;
+
+  const missing = await findMissingLevelIds(levelIds);
+  if (missing.length > 0) {
+    return NextResponse.json({ error: 'unknown-levels', missing }, { status: 400 });
+  }
+
   const { added, removed } = await assignTeacher({ ref, levelIds, byUid: session.uid });
   return NextResponse.json({ ref, levelIds, added, removed });
 }
