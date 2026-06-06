@@ -347,6 +347,12 @@ export function ChildProfileView({ profile, editHref }: ChildProfileViewProps) {
             }}
           >
             <span>{subLine}</span>
+            {profile.birthMonthYear && (
+              <>
+                <Dot />
+                <span>Born {profile.birthMonthYear}</span>
+              </>
+            )}
             <Dot />
             <span style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>MID {profile.mid}</span>
           </div>
