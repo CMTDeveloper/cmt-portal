@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { SetuAvatar, SetuIcon } from '@cmt/ui';
 import { AllergyCallout, SectionLabel } from '@/features/family/components/atoms';
-import type { ChildProfile, ChildProfileProgram, ChildProgramAttendance } from './get-child-profile';
+import type { ChildAchievement, ChildProfile, ChildProfileProgram, ChildProgramAttendance } from './get-child-profile';
 
 interface ChildProfileViewProps {
   profile: ChildProfile;
@@ -319,6 +319,44 @@ function renderEmptyPrograms() {
   );
 }
 
+// ─── achievements ─────────────────────────────────────────────────────────────
+
+function formatAwardedMonth(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-CA', { month: 'short', year: 'numeric', timeZone: 'America/Toronto' });
+}
+
+// A read-only chip strip — one accent-tinted badge per award, with the awarding
+// program (when scoped) and the awarded month read as a quiet meta line.
+function renderAchievements(achievements: ChildAchievement[]) {
+  if (achievements.length === 0) return null;
+  return (
+    <div style={{ marginTop: 18 }}>
+      <SectionLabel>Achievements</SectionLabel>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        {achievements.map((a) => (
+          <div
+            key={a.achId}
+            className="card"
+            style={{
+              padding: '10px 12px',
+              display: 'inline-flex',
+              flexDirection: 'column',
+              gap: 2,
+              background: 'var(--accentSoft)',
+              borderColor: 'var(--accent)',
+            }}
+          >
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--accentDeep)' }}>{a.title}</span>
+            <span style={{ fontSize: 11, color: 'var(--muted)' }}>
+              {a.programKey ? `${a.programKey} · ` : ''}{formatAwardedMonth(a.awardedAt)}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── main component ─────────────────────────────────────────────────────────────
 
 export function ChildProfileView({ profile, editHref }: ChildProfileViewProps) {
@@ -410,6 +448,8 @@ export function ChildProfileView({ profile, editHref }: ChildProfileViewProps) {
           </div>
         </details>
       )}
+
+      {renderAchievements(profile.achievements)}
 
       {editHref && (
         <div style={{ marginTop: 22 }}>

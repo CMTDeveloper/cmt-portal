@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import type { ChildProfile, ChildProfileProgram, ChildProgramAttendance } from '../get-child-profile';
+import type { ChildAchievement, ChildProfile, ChildProfileProgram, ChildProgramAttendance } from '../get-child-profile';
 
 vi.mock('@cmt/ui', () => ({
   SetuIcon: new Proxy({}, { get: () => () => <span data-testid="icon" /> }),
@@ -138,5 +138,28 @@ describe('ChildProfileView', () => {
     const details = screen.getByText(/Past programs/i);
     expect(details).toBeTruthy();
     expect(screen.getByText(/Sanskrit 101/)).toBeTruthy();
+  });
+
+  describe('achievements', () => {
+    const achievements: ChildAchievement[] = [
+      { achId: 'ac1', title: 'Om Award', description: null, programKey: 'bala-vihar', awardedByName: null, awardedAt: '2026-05-01T00:00:00.000Z' },
+      { achId: 'ac2', title: 'Gita Level 2', description: null, programKey: null, awardedByName: null, awardedAt: '2026-04-01T00:00:00.000Z' },
+    ];
+
+    it('renders an Achievements section with each award, its program tag, and a date', () => {
+      render(<ChildProfileView profile={makeProfile({ achievements })} />);
+      expect(screen.getByText('Achievements')).toBeTruthy();
+      expect(screen.getByText('Om Award')).toBeTruthy();
+      expect(screen.getByText('Gita Level 2')).toBeTruthy();
+      // program-tagged badge surfaces its program key
+      expect(screen.getByText(/bala-vihar/)).toBeTruthy();
+      // an awarded date is shown
+      expect(screen.getAllByText(/2026/).length).toBeGreaterThan(0);
+    });
+
+    it('hides the Achievements section when there are none', () => {
+      render(<ChildProfileView profile={makeProfile()} />);
+      expect(screen.queryByText('Achievements')).toBeNull();
+    });
   });
 });
