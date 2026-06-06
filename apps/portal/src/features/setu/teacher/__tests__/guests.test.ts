@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockLevelGet, mockMemberGet, mockEnrollGet, mockSet, mockEventsGet, mockEnroll } = vi.hoisted(() => ({
+const { mockLevelGet, mockMemberGet, mockEnrollGet, mockMemberDocGet, mockSet, mockEventsGet, mockEnroll } = vi.hoisted(() => ({
   mockLevelGet: vi.fn(),
   mockMemberGet: vi.fn(),
   mockEnrollGet: vi.fn(),
+  mockMemberDocGet: vi.fn(),
   mockSet: vi.fn(),
   mockEventsGet: vi.fn(),
   mockEnroll: vi.fn(),
@@ -14,7 +15,11 @@ vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
   portalFirestore: () => ({
     collection: (name: string) => {
       if (name === 'levels') return { doc: () => ({ get: mockLevelGet }) };
-      if (name === 'families') return { doc: () => ({ collection: () => ({ doc: () => ({ get: mockEnrollGet }) }) }) };
+      // families/{fid}/{members|enrollments}/{id} — members read by
+      // listGuestsDetailed, enrollments read by markGuest.
+      if (name === 'families') {
+        return { doc: () => ({ collection: (sub: string) => ({ doc: () => ({ get: sub === 'members' ? mockMemberDocGet : mockEnrollGet }) }) }) };
+      }
       // attendanceEvents
       const eventsChain = { where: () => eventsChain, get: mockEventsGet };
       return { doc: () => ({ set: mockSet }), where: () => eventsChain };
@@ -24,7 +29,7 @@ vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
 }));
 vi.mock('@/features/setu/enrollment/enroll-on-first-attendance', () => ({ enrollFamilyOnFirstAttendance: mockEnroll }));
 
-import { markGuest, listGuests } from '../guests';
+import { markGuest, listGuests, listGuestsDetailed } from '../guests';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -75,5 +80,19 @@ describe('listGuests', () => {
     const out = await listGuests('lvl', '2025-09-07');
     expect(out).toHaveLength(1);
     expect(out[0]!.mid).toBe('CMT-Z-09');
+  });
+});
+
+describe('listGuestsDetailed', () => {
+  it('returns only guest events for the level+date, enriched with member names', async () => {
+    mockEventsGet.mockResolvedValue({
+      docs: [
+        { data: () => ({ aid: 'a1', mid: 'F-02', fid: 'F', date: '2026-01-04', status: 'present', isGuest: true }) },
+        { data: () => ({ aid: 'a2', mid: 'G-02', fid: 'G', date: '2026-01-04', status: 'present', isGuest: false }) }, // not a guest → excluded
+      ],
+    });
+    mockMemberDocGet.mockResolvedValue({ exists: true, data: () => ({ firstName: 'Arjun', lastName: 'X' }) });
+    const out = await listGuestsDetailed('L', '2026-01-04');
+    expect(out).toEqual([{ mid: 'F-02', fid: 'F', firstName: 'Arjun', lastName: 'X', status: 'present' }]);
   });
 });

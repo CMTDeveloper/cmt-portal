@@ -93,3 +93,35 @@ export async function listGuests(levelId: string, date: string): Promise<GuestEv
     .filter((e) => e.isGuest === true)
     .map((e) => ({ aid: e.aid, mid: e.mid, fid: e.fid, date: e.date, status: e.status }));
 }
+
+export interface DetailedGuest {
+  mid: string;
+  fid: string;
+  firstName: string;
+  lastName: string;
+  status: SetuAttendanceStatus;
+}
+
+/** Guests marked at a level on a date, enriched with each child's name. */
+export async function listGuestsDetailed(levelId: string, date: string): Promise<DetailedGuest[]> {
+  const db = portalFirestore();
+  const snap = await db.collection('attendanceEvents').where('levelId', '==', levelId).where('date', '==', date).get();
+  const guests = snap.docs.map((d) => d.data()).filter((e) => e.isGuest === true);
+  return Promise.all(
+    guests.map(async (e) => {
+      let firstName = '';
+      let lastName = '';
+      try {
+        const m = await db.collection('families').doc(e.fid).collection('members').doc(e.mid).get();
+        if (m.exists) {
+          const md = m.data() as { firstName?: string; lastName?: string };
+          firstName = md.firstName ?? '';
+          lastName = md.lastName ?? '';
+        }
+      } catch {
+        // tolerate a missing member — show the mid-less row rather than failing the view
+      }
+      return { mid: e.mid, fid: e.fid, firstName, lastName, status: e.status as SetuAttendanceStatus };
+    }),
+  );
+}
