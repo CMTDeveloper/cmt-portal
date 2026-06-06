@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { it, expect, vi, beforeEach } from 'vitest';
 
 const { mockDerive, mockDoor } = vi.hoisted(() => ({ mockDerive: vi.fn(), mockDoor: vi.fn() }));
 vi.mock('../roster', () => ({ deriveRoster: mockDerive }));
