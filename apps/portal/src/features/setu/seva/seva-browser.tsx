@@ -129,6 +129,7 @@ export function SevaBrowser({
     if (!res.ok) {
       if (res.error === 'opportunity-full') toast.error('That opportunity just filled up');
       else if (res.error === 'not-open') toast.error('Sign-ups are closed for this one');
+      else if (res.error === 'already-resolved') toast.error('This seva is already recorded for your family');
       else toast.error('Could not sign up — please try again');
       return;
     }
