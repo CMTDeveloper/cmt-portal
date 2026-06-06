@@ -4,6 +4,7 @@ import { getEnrollments, type EnrollmentWithOffering } from '@/features/setu/enr
 import { listPrograms } from '@/features/setu/programs/get-programs';
 import { getAttendanceForMember, summarize } from '@/features/setu/teacher/get-attendance';
 import { getCheckInAttendance, summarizeMemberCheckIns } from '@/features/setu/attendance/check-in-attendance';
+import { resolveMemberAttendance } from '@/features/setu/attendance/resolve-attendance';
 import { getMemberAchievements, type ChildAchievement } from './get-achievements';
 import { fidFromMid } from './mid';
 import { isoToTorontoDateInput } from '@/lib/toronto-date';
@@ -79,10 +80,10 @@ export async function getChildProfile(mid: string): Promise<ChildProfile | null>
       return { mode, available: true, attended: s.present + s.late, total: s.total, attendedPct: s.attendedPct, marks, note: null };
     }
     if (mode === 'check-in') {
-      if (!member!.legacySid) {
-        return { mode, available: false, attended: 0, total: 0, attendedPct: 0, marks: [], note: "Attendance isn't linked for this member yet." };
-      }
       const off = e.offering;
+      const portalMarks = memberRecords
+        .filter((r) => r.pid === e.oid)
+        .map((r) => ({ date: r.date, status: r.status }));
       const scoped = off
         ? checkIns.filter((r) => {
             const start = isoToTorontoDateInput(off.startDate.toISOString());
@@ -90,9 +91,23 @@ export async function getChildProfile(mid: string): Promise<ChildProfile | null>
             return r.date >= start && r.date <= end;
           })
         : checkIns;
-      const s = summarizeMemberCheckIns(scoped, member!.legacySid);
-      const attendedPct = s.recorded > 0 ? Math.round((s.attended / s.recorded) * 100) : 0;
-      return { mode, available: true, attended: s.attended, total: s.recorded, attendedPct, marks: s.marks, note: null };
+      const doorMarks = summarizeMemberCheckIns(scoped, member!.legacySid).marks;
+      const resolved = resolveMemberAttendance(portalMarks, doorMarks);
+      // Available if the door link exists OR a teacher has marked this child for the
+      // offering — so a child without a legacySid still shows teacher-marked dates.
+      if (!member!.legacySid && portalMarks.length === 0) {
+        return { mode, available: false, attended: 0, total: 0, attendedPct: 0, marks: [], note: "Attendance isn't linked for this member yet." };
+      }
+      const marks = resolved.marks.map((m) => ({ date: m.date, present: m.status !== 'absent' }));
+      return {
+        mode,
+        available: true,
+        attended: resolved.present + resolved.late,
+        total: resolved.total,
+        attendedPct: resolved.attendedPct,
+        marks,
+        note: null,
+      };
     }
     return NO_ATTENDANCE;
   }

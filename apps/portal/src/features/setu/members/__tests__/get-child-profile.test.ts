@@ -210,11 +210,14 @@ describe('getChildProfile', () => {
 
     // Teacher attendance: 2 present + 1 absent for o-tabla, plus a stray record
     // for a different oid that the pid===oid filter must exclude. Newest-first.
+    // Plus one BV-offering (o-bv) teacher mark on a date NOT in the door set —
+    // the union must fold it into BV attendance.
     mockGetAttendanceForMember.mockResolvedValue([
       { aid: 'a4', mid: MID, fid: FID, levelId: 'l1', pid: 'o-other', date: '2025-10-15', status: 'present', isGuest: false },
       { aid: 'a3', mid: MID, fid: FID, levelId: 'l1', pid: 'o-tabla', date: '2025-10-08', status: 'absent', isGuest: false },
       { aid: 'a2', mid: MID, fid: FID, levelId: 'l1', pid: 'o-tabla', date: '2025-10-01', status: 'present', isGuest: false },
       { aid: 'a1', mid: MID, fid: FID, levelId: 'l1', pid: 'o-tabla', date: '2025-09-24', status: 'present', isGuest: false },
+      { aid: 'b1', mid: MID, fid: FID, levelId: 'l1', pid: 'o-bv', date: '2025-10-05', status: 'present', isGuest: false },
     ] as never);
 
     // Check-in: S9 present 3, absent 1 (recorded 4).
@@ -243,15 +246,15 @@ describe('getChildProfile', () => {
     const bv = result!.programs.find((p) => p.programKey === 'bala-vihar')!;
     expect(bv.attendance.mode).toBe('check-in');
     expect(bv.attendance.available).toBe(true);
-    expect(bv.attendance.attended).toBe(3);
-    expect(bv.attendance.total).toBe(4);
+    expect(bv.attendance.attended).toBe(4); // 3 door + 1 teacher (new date)
+    expect(bv.attendance.total).toBe(5);    // 4 door dates ∪ 1 teacher date
 
     const om = result!.programs.find((p) => p.programKey === 'om')!;
     expect(om.attendance.mode).toBe('none');
     expect(om.attendance.available).toBe(false);
 
-    // Blended: (2+3) / (3+4) = 5/7 = 71% — distinct from tabla-alone (67%) and bv-alone (75%).
-    expect(result!.stats.overallAttendedPct).toBe(71);
+    // Blended: tabla (2/3) + bv (4/5) = 6/8 = 75%.
+    expect(result!.stats.overallAttendedPct).toBe(75);
     expect(result!.stats.programCount).toBe(3);
     expect(result!.stats.hasAnyAttendance).toBe(true);
 
@@ -276,6 +279,25 @@ describe('getChildProfile', () => {
     expect(bv.attendance.mode).toBe('check-in');
     expect(bv.attendance.available).toBe(false);
     expect(bv.attendance.note).toBeTruthy();
+  });
+
+  it('check-in BV is available from teacher marks even when legacySid is null (union)', async () => {
+    mockGetFamilyByFid.mockResolvedValue(makeFamily({ legacySid: null }) as never);
+    mockListPrograms.mockResolvedValue([makeProgram('bala-vihar', 'check-in')] as never);
+    mockGetEnrollments.mockResolvedValue([
+      makeEnrollment({ eid: 'e-bv', oid: 'o-bv', programKey: 'bala-vihar' }),
+    ] as never);
+    mockGetAttendanceForMember.mockResolvedValue([
+      { aid: 'b1', mid: MID, fid: FID, levelId: 'l1', pid: 'o-bv', date: '2025-10-05', status: 'present', isGuest: false },
+    ] as never);
+    mockGetCheckInAttendance.mockResolvedValue([] as never);
+
+    const result = await getChildProfile(MID);
+    const bv = result!.programs[0]!;
+    expect(bv.attendance.available).toBe(true);   // teacher mark makes it available despite null sid
+    expect(bv.attendance.attended).toBe(1);
+    expect(bv.attendance.total).toBe(1);
+    expect(bv.attendance.note).toBeNull();
   });
 
   it('puts cancelled enrollments in pastPrograms, not programs', async () => {
