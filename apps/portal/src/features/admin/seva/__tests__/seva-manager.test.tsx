@@ -113,6 +113,18 @@ describe('SevaManager', () => {
     });
   });
 
+  it('renders a "View roster" link to the opportunity roster page', () => {
+    render(
+      <SevaManager
+        initialRequirement={reqWithYear}
+        initialOpportunities={[makeOpp()]}
+        canEditRequirement={false}
+      />,
+    );
+    const link = screen.getByRole('link', { name: /view roster/i });
+    expect(link).toHaveAttribute('href', '/welcome/seva/opp-1');
+  });
+
   it('closes an open opportunity via updateOpportunity', async () => {
     vi.stubGlobal('confirm', vi.fn(() => true));
     const user = userEvent.setup();

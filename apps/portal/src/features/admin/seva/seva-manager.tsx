@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import Link from 'next/link';
 import { SetuIcon, toast } from '@cmt/ui';
 import {
   createOpportunity,
@@ -649,6 +650,13 @@ export function SevaManager({
                         flexWrap: 'wrap',
                       }}
                     >
+                      <Link
+                        href={`/welcome/seva/${o.oppId}`}
+                        className="btn btn--s"
+                        style={{ flex: '1 1 auto', minWidth: 120, minHeight: 44, textDecoration: 'none' }}
+                      >
+                        <SetuIcon.people /> View roster
+                      </Link>
                       <button
                         type="button"
                         className="btn btn--s"
