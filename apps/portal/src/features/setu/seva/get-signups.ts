@@ -28,6 +28,11 @@ export async function listSignupsForOpp(oppId: string): Promise<SevaSignupDoc[]>
   return snap.docs.map((doc) => mapSignup(doc.data()));
 }
 
+export async function listCompletedSignupsForYear(sevaYear: string): Promise<SevaSignupDoc[]> {
+  const snap = await portalFirestore().collection('seva_signups').where('sevaYear', '==', sevaYear).get();
+  return snap.docs.map((doc) => mapSignup(doc.data())).filter((s) => s.status === 'completed');
+}
+
 export async function getSignup(signupId: string): Promise<SevaSignupDoc | null> {
   const snap = await portalFirestore().collection('seva_signups').doc(signupId).get();
   if (!snap.exists) return null;

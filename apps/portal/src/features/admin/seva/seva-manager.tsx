@@ -480,20 +480,25 @@ export function SevaManager({
             {opportunities.length} posted
           </h2>
         </div>
-        {!creating && (
-          <button
-            type="button"
-            className="btn btn--p"
-            onClick={() => {
-              setCreateForm(emptyForm());
-              setCreateErrors({});
-              setCreating(true);
-            }}
-            style={{ minHeight: 46 }}
-          >
-            <SetuIcon.plus /> New opportunity
-          </button>
-        )}
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <Link href="/welcome/seva/compliance" className="btn btn--s" style={{ minHeight: 46, textDecoration: 'none' }}>
+            <SetuIcon.people /> Compliance report
+          </Link>
+          {!creating && (
+            <button
+              type="button"
+              className="btn btn--p"
+              onClick={() => {
+                setCreateForm(emptyForm());
+                setCreateErrors({});
+                setCreating(true);
+              }}
+              style={{ minHeight: 46 }}
+            >
+              <SetuIcon.plus /> New opportunity
+            </button>
+          )}
+        </div>
       </div>
 
       {creating && (

@@ -11,6 +11,7 @@ vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
 
 import {
   listFamilySignups, listSignupsForOpp, getSignup, serializeSignup, signupDocId, isActiveSignup,
+  listCompletedSignupsForYear,
 } from '../get-signups';
 
 const ts = (d: Date) => ({ toDate: () => d });
@@ -38,6 +39,22 @@ describe('listSignupsForOpp', () => {
   it('queries by oppId', async () => {
     await listSignupsForOpp('o1');
     expect(mockWhere).toHaveBeenCalledWith('oppId', '==', 'o1');
+  });
+});
+describe('listCompletedSignupsForYear', () => {
+  it('queries by sevaYear and returns only completed rows (filters signed-up/cancelled)', async () => {
+    mockGet.mockResolvedValue({
+      docs: [
+        { data: () => row({ fid: 'F1', status: 'completed', hoursAwarded: 3 }) },
+        { data: () => row({ fid: 'F2', status: 'signed-up' }) },
+        { data: () => row({ fid: 'F3', status: 'cancelled' }) },
+      ],
+    });
+    const res = await listCompletedSignupsForYear('2025-26');
+    expect(mockWhere).toHaveBeenCalledWith('sevaYear', '==', '2025-26');
+    expect(res).toHaveLength(1);
+    expect(res[0]!.fid).toBe('F1');
+    expect(res[0]!.status).toBe('completed');
   });
 });
 describe('getSignup', () => {

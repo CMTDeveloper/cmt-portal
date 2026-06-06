@@ -527,6 +527,11 @@ describe('canAccessRoute — /api/welcome/seva/* — welcome-team + admin', () =
     expect(canAccessRoute(admin, '/api/welcome/seva/signups/o1__FAM/confirm', 'POST')).toBe(true);
     expect(canAccessRoute(member, '/api/welcome/seva/signups/o1__FAM/confirm', 'POST')).toBe(false);
   });
+  it('gates the compliance report to welcome-team (admin inherits, family denied)', () => {
+    expect(canAccessRoute(welcomeTeam, '/api/welcome/seva/compliance', 'GET')).toBe(true);
+    expect(canAccessRoute(admin, '/api/welcome/seva/compliance', 'GET')).toBe(true);
+    expect(canAccessRoute(member, '/api/welcome/seva/compliance', 'GET')).toBe(false);
+  });
 });
 
 describe('canAccessRoute — /api/admin/seva/requirement — admin only', () => {

@@ -113,6 +113,18 @@ describe('SevaManager', () => {
     });
   });
 
+  it('renders a "Compliance report" link to the compliance page', () => {
+    render(
+      <SevaManager
+        initialRequirement={reqWithYear}
+        initialOpportunities={[]}
+        canEditRequirement={false}
+      />,
+    );
+    const link = screen.getByRole('link', { name: /compliance report/i });
+    expect(link).toHaveAttribute('href', '/welcome/seva/compliance');
+  });
+
   it('renders a "View roster" link to the opportunity roster page', () => {
     render(
       <SevaManager
