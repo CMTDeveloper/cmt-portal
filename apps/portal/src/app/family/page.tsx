@@ -16,6 +16,8 @@ import { getLegacyPaymentStatus } from '@/features/setu/donations/legacy-payment
 import { getUpcoming, getClassDatesHeld, type CalendarEntry } from '@/features/setu/calendar/calendar';
 import { getCheckInAttendance } from '@/features/setu/attendance/check-in-attendance';
 import { listPrograms } from '@/features/setu/programs/get-programs';
+import { getFamilySevaProgress, deriveSevaCardView, type FamilySevaProgress } from '@/features/setu/seva/get-family-seva-progress';
+import { SevaProgressCard } from '@/features/family/components/seva-progress-card';
 import {
   buildFamilyDashboardModel,
   isLegacyBvPeriod,
@@ -76,6 +78,9 @@ export default async function FamilyDashboardPage() {
     classSundaysHeld: 0,
     legacyPaymentStatus: null,
   });
+  // Seva-hours progress (Slice D). Default renders nothing (no seva year set);
+  // the real value is read below once the family is loaded.
+  let sevaProgress: FamilySevaProgress = { currentSevaYear: null, hoursPerYear: 20, hoursEarned: 0 };
 
   if (flags.setuAuth) {
     const data = await getCurrentFamily();
@@ -123,6 +128,8 @@ export default async function FamilyDashboardPage() {
         classSundaysHeld: classSundays.length,
         legacyPaymentStatus,
       });
+
+      sevaProgress = await getFamilySevaProgress(data.family.fid);
     }
   }
 
@@ -164,6 +171,8 @@ export default async function FamilyDashboardPage() {
     timeZone: 'America/Toronto',
   });
   void familyName;
+
+  const sevaView = deriveSevaCardView(sevaProgress);
 
   return (
     <>
@@ -244,6 +253,17 @@ export default async function FamilyDashboardPage() {
                 <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>A charitable gift to Chinmaya Mission Toronto — any amount welcome.</div>
               )}
             </div>
+
+            {sevaView.show && (
+              <div style={{ marginBottom: 12 }}>
+                <SevaProgressCard
+                  view={sevaView}
+                  hoursEarned={sevaProgress.hoursEarned}
+                  hoursPerYear={sevaProgress.hoursPerYear}
+                  currentSevaYear={sevaProgress.currentSevaYear}
+                />
+              </div>
+            )}
 
             {/* Generic cards for non-BV active enrollments (Phase F) */}
             {otherProgramCards.map((card) => (
@@ -447,6 +467,17 @@ export default async function FamilyDashboardPage() {
             </div>
           </Suspense>
         </div>
+
+        {sevaView.show && (
+          <div style={{ marginTop: 18 }}>
+            <SevaProgressCard
+              view={sevaView}
+              hoursEarned={sevaProgress.hoursEarned}
+              hoursPerYear={sevaProgress.hoursPerYear}
+              currentSevaYear={sevaProgress.currentSevaYear}
+            />
+          </div>
+        )}
 
         {/* Generic cards for non-BV active enrollments (Phase F) */}
         {otherProgramCards.length > 0 && (
