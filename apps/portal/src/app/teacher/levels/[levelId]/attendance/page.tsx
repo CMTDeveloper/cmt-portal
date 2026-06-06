@@ -40,7 +40,6 @@ export default async function TakeAttendancePage({
       ageLabel={view.ageLabel}
       date={view.date}
       rows={view.rows}
-      presentCount={view.presentCount}
       total={view.total}
     />
   );

@@ -12,7 +12,8 @@ interface AttendanceMarkerProps {
   ageLabel: string;
   date: string;
   rows: AttendanceViewRow[];
-  presentCount: number;
+  // presentCount is intentionally NOT a prop — the live count is derived from
+  // `marks` so it updates as the teacher flags exceptions.
   total: number;
 }
 
