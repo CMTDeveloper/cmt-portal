@@ -2,9 +2,11 @@ import { it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-const { mockRefresh } = vi.hoisted(() => ({ mockRefresh: vi.fn() }));
+const { mockRefresh, mockToastSuccess, mockToastError } = vi.hoisted(() => ({
+  mockRefresh: vi.fn(), mockToastSuccess: vi.fn(), mockToastError: vi.fn(),
+}));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: mockRefresh }) }));
-vi.mock('@cmt/ui', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock('@cmt/ui', () => ({ toast: { success: mockToastSuccess, error: mockToastError } }));
 
 import { AwardBadge } from '../award-badge';
 
@@ -15,6 +17,8 @@ const PROGRAMS = [{ key: 'bala-vihar', label: 'Bala Vihar' }];
 
 beforeEach(() => {
   mockRefresh.mockReset();
+  mockToastSuccess.mockReset();
+  mockToastError.mockReset();
   global.fetch = vi.fn(async () => new Response(JSON.stringify({ achId: 'new' }), { status: 201 })) as never;
 });
 
@@ -49,4 +53,24 @@ it('revokes: DELETEs with the mid query param and refreshes', async () => {
   await user.click(screen.getByRole('button', { name: /revoke/i }));
   expect(global.fetch).toHaveBeenCalledWith('/api/setu/teacher/achievements/a1?mid=CMT-F1-02', expect.objectContaining({ method: 'DELETE' }));
   expect(mockRefresh).toHaveBeenCalled();
+});
+
+it('includes the selected programKey in the award POST body', async () => {
+  const user = userEvent.setup();
+  render(<AwardBadge mid="CMT-F1-02" achievements={[]} programOptions={PROGRAMS} />);
+  await user.type(screen.getByLabelText(/badge title/i), 'Gita L2');
+  await user.selectOptions(screen.getByLabelText(/program/i), 'bala-vihar');
+  await user.click(screen.getByRole('button', { name: /award/i }));
+  const call = (global.fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls[0]!;
+  expect(JSON.parse((call[1] as { body: string }).body)).toMatchObject({ mid: 'CMT-F1-02', title: 'Gita L2', programKey: 'bala-vihar' });
+});
+
+it('shows an error and does not refresh when the award POST fails', async () => {
+  global.fetch = vi.fn(async () => new Response(JSON.stringify({ error: 'x' }), { status: 500 })) as never;
+  const user = userEvent.setup();
+  render(<AwardBadge mid="CMT-F1-02" achievements={[]} programOptions={PROGRAMS} />);
+  await user.type(screen.getByLabelText(/badge title/i), 'Gita L2');
+  await user.click(screen.getByRole('button', { name: /award/i }));
+  expect(mockToastError).toHaveBeenCalled();
+  expect(mockRefresh).not.toHaveBeenCalled();
 });
