@@ -522,6 +522,11 @@ describe('canAccessRoute — /api/welcome/seva/* — welcome-team + admin', () =
     expect(canAccessRoute(member, '/api/welcome/seva/opportunities', 'POST')).toBe(false);
     expect(canAccessRoute(teacher, '/api/welcome/seva/opportunities', 'GET')).toBe(false);
   });
+  it('gates the seva roster + confirm paths to welcome-team (admin inherits)', () => {
+    expect(canAccessRoute(welcomeTeam, '/api/welcome/seva/opportunities/o1/signups', 'GET')).toBe(true);
+    expect(canAccessRoute(admin, '/api/welcome/seva/signups/o1__FAM/confirm', 'POST')).toBe(true);
+    expect(canAccessRoute(member, '/api/welcome/seva/signups/o1__FAM/confirm', 'POST')).toBe(false);
+  });
 });
 
 describe('canAccessRoute — /api/admin/seva/requirement — admin only', () => {
