@@ -8,6 +8,8 @@ import { mockFamily } from '@/features/family/data/mock';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 import { ContactsNudge } from '@/features/family/components/contacts-nudge';
 import { shouldShowContactsNudge } from './_helpers/should-show-contacts-nudge';
+import { VolunteeringSkillsNudge } from '@/features/family/components/volunteering-skills-nudge';
+import { shouldShowVolunteeringSkillsNudge } from './_helpers/should-show-volunteering-nudge';
 import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
 import { getDonations } from '@/features/setu/donations/get-donations';
 import { getLegacyPaymentStatus } from '@/features/setu/donations/legacy-payment';
@@ -58,6 +60,8 @@ export default async function FamilyDashboardPage() {
   let upcomingEntries: CalendarEntry[] = [];
   // One-time "add your other contacts" nudge — shown until the current member dismisses it (B3).
   let showContactsNudge = false;
+  // One-time "set your volunteering skills" nudge — adults with no skills yet.
+  let showVolunteeringNudge = false;
 
   // All BV-bespoke derivation (which enrollment drives the card, donation status,
   // attendance scoping) lives in buildFamilyDashboardModel so it can be unit-
@@ -80,6 +84,7 @@ export default async function FamilyDashboardPage() {
       if (currentMember) {
         managerName = `${currentMember.firstName} ${currentMember.lastName}`;
         showContactsNudge = shouldShowContactsNudge(currentMember);
+        showVolunteeringNudge = shouldShowVolunteeringSkillsNudge(currentMember);
       }
       currentMid = data.currentMid;
       familyName = data.family.name;
@@ -183,6 +188,9 @@ export default async function FamilyDashboardPage() {
                 <div style={{ fontSize: 13, fontWeight: 600 }}>Complete your profile →</div>
                 <div style={{ fontSize: 12, marginTop: 2 }}>We don&apos;t have your name on file yet. Add it so sevaks know who to greet on Sunday.</div>
               </Link>
+            )}
+            {!needsProfile && !showContactsNudge && showVolunteeringNudge && currentMid && (
+              <VolunteeringSkillsNudge mid={currentMid} />
             )}
 
             <div className="card" style={{ padding: 16, marginBottom: 12 }}>
@@ -322,6 +330,9 @@ export default async function FamilyDashboardPage() {
             <div style={{ fontSize: 14, fontWeight: 600 }}>Complete your profile →</div>
             <div style={{ fontSize: 13, marginTop: 2 }}>We don&apos;t have your name on file yet. Add it so sevaks know who to greet on Sunday.</div>
           </Link>
+        )}
+        {!needsProfile && !showContactsNudge && showVolunteeringNudge && currentMid && (
+          <VolunteeringSkillsNudge mid={currentMid} />
         )}
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 18 }}>
