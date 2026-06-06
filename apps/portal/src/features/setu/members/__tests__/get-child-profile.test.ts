@@ -30,6 +30,9 @@ vi.mock('@/lib/toronto-date', () => ({
   isoToTorontoDateInput: (iso: string) => iso.slice(0, 10),
 }));
 
+const { mockGetAchievements } = vi.hoisted(() => ({ mockGetAchievements: vi.fn(async () => []) }));
+vi.mock('../get-achievements', () => ({ getMemberAchievements: mockGetAchievements }));
+
 import { getFamilyByFid } from '../get-family-by-fid';
 import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
 import { listPrograms } from '@/features/setu/programs/get-programs';
@@ -172,6 +175,7 @@ function makeEnrollment(opts: {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockGetAchievements.mockResolvedValue([]);
 });
 
 describe('getChildProfile', () => {
@@ -251,6 +255,9 @@ describe('getChildProfile', () => {
     expect(result!.stats.programCount).toBe(3);
     expect(result!.stats.hasAnyAttendance).toBe(true);
 
+    // Achievements default to [] when none are returned.
+    expect(result!.achievements).toEqual([]);
+
     // Result must be plain-JSON (no Date instances).
     expect(JSON.parse(JSON.stringify(result))).toEqual(result);
   });
@@ -285,5 +292,21 @@ describe('getChildProfile', () => {
     expect(result!.pastPrograms).toHaveLength(1);
     expect(result!.pastPrograms[0]!.programKey).toBe('tabla');
     expect(result!.stats.programCount).toBe(0);
+  });
+
+  it('folds achievements into the profile', async () => {
+    mockGetFamilyByFid.mockResolvedValue(makeFamily() as never);
+    mockListPrograms.mockResolvedValue([] as never);
+    mockGetEnrollments.mockResolvedValue([] as never);
+    mockGetAttendanceForMember.mockResolvedValue([] as never);
+    mockGetCheckInAttendance.mockResolvedValue([] as never);
+    mockGetAchievements.mockResolvedValue([
+      { achId: 'a1', title: 'Om Award', description: null, programKey: null, awardedByName: null, awardedAt: '2026-05-01T00:00:00.000Z' },
+      { achId: 'a2', title: 'Gita L2', description: null, programKey: null, awardedByName: null, awardedAt: '2026-04-01T00:00:00.000Z' },
+    ] as never);
+
+    const result = await getChildProfile(MID);
+    expect(result!.achievements).toHaveLength(2);
+    expect(result!.achievements[0]!.title).toBe('Om Award');
   });
 });

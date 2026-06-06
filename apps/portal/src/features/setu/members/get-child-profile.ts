@@ -4,7 +4,11 @@ import { getEnrollments, type EnrollmentWithOffering } from '@/features/setu/enr
 import { listPrograms } from '@/features/setu/programs/get-programs';
 import { getAttendanceForMember, summarize } from '@/features/setu/teacher/get-attendance';
 import { getCheckInAttendance, summarizeMemberCheckIns } from '@/features/setu/attendance/check-in-attendance';
+import { getMemberAchievements, type ChildAchievement } from './get-achievements';
+import { fidFromMid } from './mid';
 import { isoToTorontoDateInput } from '@/lib/toronto-date';
+
+export type { ChildAchievement } from './get-achievements';
 
 export interface ChildProgramAttendance {
   mode: 'teacher' | 'check-in' | 'none';
@@ -37,18 +41,13 @@ export interface ChildProfile {
   foodAllergies: string | null;
   programs: ChildProfileProgram[];
   pastPrograms: ChildProfileProgram[];
+  achievements: ChildAchievement[];
   stats: { programCount: number; overallAttendedPct: number; hasAnyAttendance: boolean };
 }
 
 const NO_ATTENDANCE: ChildProgramAttendance = {
   mode: 'none', available: false, attended: 0, total: 0, attendedPct: 0, marks: [], note: null,
 };
-
-/** Derive the fid from a mid (`${fid}-NN`). */
-function fidFromMid(mid: string): string {
-  const i = mid.lastIndexOf('-');
-  return i > 0 ? mid.slice(0, i) : mid;
-}
 
 export async function getChildProfile(mid: string): Promise<ChildProfile | null> {
   const fid = fidFromMid(mid);
@@ -57,11 +56,12 @@ export async function getChildProfile(mid: string): Promise<ChildProfile | null>
   const member = fam.members.find((m) => m.mid === mid);
   if (!member) return null;
 
-  const [enrollments, programs, memberRecords, checkIns] = await Promise.all([
+  const [enrollments, programs, memberRecords, checkIns, achievements] = await Promise.all([
     getEnrollments(fid),
     listPrograms(),
     getAttendanceForMember(mid),
     getCheckInAttendance(fam.family.legacyFid),
+    getMemberAchievements(fid, mid),
   ]);
   const programByKey = new Map<string, ProgramDoc>(programs.map((p) => [p.programKey, p]));
   const mine = enrollments.filter((e) => e.enrolledMids.includes(mid));
@@ -113,6 +113,7 @@ export async function getChildProfile(mid: string): Promise<ChildProfile | null>
     schoolGrade: member.schoolGrade ?? null, birthMonthYear: member.birthMonthYear ?? null,
     foodAllergies: member.foodAllergies ?? null,
     programs: activePrograms, pastPrograms,
+    achievements,
     stats: { programCount: activePrograms.length, overallAttendedPct, hasAnyAttendance: sumTotal > 0 },
   };
 }

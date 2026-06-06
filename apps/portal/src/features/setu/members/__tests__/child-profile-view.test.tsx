@@ -40,6 +40,7 @@ function makeProfile(over: Partial<ChildProfile> = {}): ChildProfile {
       makeProgram({ eid: 'e3', label: 'Gita Chanting', programKey: 'gita', attendance: noneAtt }),
     ],
     pastPrograms: [],
+    achievements: [],
     stats: { programCount: 3, overallAttendedPct: 90, hasAnyAttendance: true },
     ...over,
   };
