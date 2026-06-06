@@ -10,6 +10,8 @@ import { VolunteeringSkillsPicker } from '@/features/setu/members/volunteering-s
 type MemberType = 'Adult' | 'Child';
 type Gender = 'Male' | 'Female' | 'PreferNotToSay';
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const;
+
 export default function AddMemberPage() {
   const router = useRouter();
   const [mode, setMode] = useState<MemberType>('Child');
@@ -17,7 +19,8 @@ export default function AddMemberPage() {
   const [lastName, setLastName] = useState('');
   const [gender, setGender] = useState<Gender>('Male');
   const [schoolGrade, setSchoolGrade] = useState('');
-  const [birthMonthYear, setBirthMonthYear] = useState('');
+  const [birthMonth, setBirthMonth] = useState('');
+  const [birthYear, setBirthYear] = useState('');
   const [foodAllergies, setFoodAllergies] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -27,6 +30,12 @@ export default function AddMemberPage() {
   const [ec1Email, setEc1Email] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Birth month/year is captured via two dropdowns and composed into the
+  // existing "MMM YYYY" string (e.g. "Mar 2017") so stored data stays compatible.
+  const currentYear = new Date().getFullYear();
+  const birthYears = Array.from({ length: 26 }, (_, i) => String(currentYear - i));
+  const birthMonthYear = birthMonth && birthYear ? `${birthMonth} ${birthYear}` : '';
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -155,7 +164,16 @@ export default function AddMemberPage() {
             </div>
             <div className="field" style={{ flex: 1 }}>
               <label>Birth month/year</label>
-              <input className="input" value={birthMonthYear} onChange={(e) => setBirthMonthYear(e.target.value)} placeholder="e.g. Mar 2017"/>
+              <div className="row" style={{ gap: 8 }}>
+                <select className="input" aria-label="Birth month" value={birthMonth} onChange={(e) => setBirthMonth(e.target.value)} style={{ flex: 1 }}>
+                  <option value="">Month</option>
+                  {MONTHS.map((m) => <option key={m} value={m}>{m}</option>)}
+                </select>
+                <select className="input" aria-label="Birth year" value={birthYear} onChange={(e) => setBirthYear(e.target.value)} style={{ flex: 1 }}>
+                  <option value="">Year</option>
+                  {birthYears.map((y) => <option key={y} value={y}>{y}</option>)}
+                </select>
+              </div>
             </div>
           </div>
 
