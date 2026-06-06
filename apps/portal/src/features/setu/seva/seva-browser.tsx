@@ -91,13 +91,16 @@ function MetaItem({ icon, children }: { icon: React.ReactNode; children: React.R
 export function SevaBrowser({
   currentSevaYear,
   hoursPerYear,
-  hoursEarned,
+  hoursEarned: initialHoursEarned,
   initialOpportunities,
   initialMySignups,
   members,
 }: SevaBrowserProps) {
   const [opportunities, setOpportunities] = useState<SevaOppView[]>(initialOpportunities);
   const [mySignups, setMySignups] = useState<SevaMySignup[]>(initialMySignups);
+  // Earned hours is lifted into state so the goal band reflects a post-mutation
+  // refetch (the opportunities GET re-emits hoursEarned). Seeded from the SSR prop.
+  const [hoursEarned, setHoursEarned] = useState<number>(initialHoursEarned);
 
   // Which opportunity has its inline sign-up control open, and the member it credits.
   const [openSignupId, setOpenSignupId] = useState<string | null>(null);
@@ -117,6 +120,7 @@ export function SevaBrowser({
     const [opps, signups] = await Promise.all([fetchOpportunities(), fetchMySignups()]);
     setOpportunities(opps.opportunities);
     setMySignups(signups);
+    setHoursEarned(opps.hoursEarned ?? 0);
   }
 
   function openSignup(oppId: string) {
