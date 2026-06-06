@@ -498,6 +498,19 @@ describe('canAccessRoute — /api/setu/contacts/* (self-service, any family role
   });
 });
 
+describe('canAccessRoute — /api/setu/seva/* — any setu family', () => {
+  it('allows family-manager and family-member', () => {
+    expect(canAccessRoute(manager, '/api/setu/seva/opportunities', 'GET')).toBe(true);
+    expect(canAccessRoute(member, '/api/setu/seva/my', 'GET')).toBe(true);
+    expect(canAccessRoute(member, '/api/setu/seva/signups', 'POST')).toBe(true);
+    expect(canAccessRoute(member, '/api/setu/seva/signups/o1__FAM001/cancel', 'POST')).toBe(true);
+  });
+  it('denies welcome-team and legacy family role', () => {
+    expect(canAccessRoute(welcomeTeam, '/api/setu/seva/opportunities', 'GET')).toBe(false);
+    expect(canAccessRoute(family, '/api/setu/seva/my', 'GET')).toBe(false);
+  });
+});
+
 describe('canAccessRoute — /api/welcome/seva/* — welcome-team + admin', () => {
   it('allows welcome-team and admin', () => {
     expect(canAccessRoute(welcomeTeam, '/api/welcome/seva/opportunities', 'POST')).toBe(true);

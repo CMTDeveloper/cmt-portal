@@ -122,6 +122,12 @@ export function canAccessRoute(
     return isSetuFamily(claims);
   }
 
+  // Setu API — seva: browse opportunities + sign up + cancel. Any signed-in
+  // setu family (handlers bind fid from the session and verify ownership).
+  if (pathname === '/api/setu/seva' || pathname.startsWith('/api/setu/seva/')) {
+    return isSetuFamily(claims);
+  }
+
   // Setu API — enrollments: GET is any setu family; POST/DELETE is manager-only
   if (pathname === '/api/setu/enrollments' || pathname.startsWith('/api/setu/enrollments/')) {
     if (!isSetuFamily(claims)) return false;
