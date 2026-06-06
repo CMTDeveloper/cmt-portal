@@ -15,7 +15,7 @@ Inspired by the old Setu app's member-card information architecture and Vaibhav'
 - **Attendance:** a **per-program breakdown** (each program shows its own attendance), not a single blended summary.
 - **Achievements:** **teacher/admin-awarded badges** (manual), roster-checked. Not auto-derived in v1.
 - **Sequencing:** **Slice 1** = the profile (enrollments + attendance), shipped first since the data already exists. **Slice 2** = achievements.
-- **Audience:** **family-facing** (any member/manager of the *signed-in* family, scoped to their own family). Teachers keep their existing `/teacher/students/[mid]` view (separate; not unified in v1). Welcome/admin are out of scope for v1 (they have `/welcome/family/[fid]`).
+- **Audience:** **family-facing + welcome/admin** (both read-only). Families see their *own* children (own-family enforced); **welcome-team/admin can view any family's child** (it fits their front-desk family-support role; admin inherits welcome-team). Built as ONE auth-agnostic reader + ONE shared component, mounted in a family route and a welcome route, each enforcing its own access. Teachers keep their existing `/teacher/students/[mid]` view (a different concern — roster + attendance *marking* — not unified in v1).
 - **Past enrollments:** included as a secondary/collapsed "Past programs" area (cheap, and matches "see all this information"). Active programs lead.
 
 ## Relationship to the planned Attendance-module migration
@@ -24,7 +24,7 @@ A **separate future initiative** will migrate the old app's Attendance module an
 
 ## Architecture (one paragraph)
 
-The profile is assembled server-side by a single composing reader `getChildProfile(mid)` from data that already exists: member identity (via `getFamilyByFid` / `getCurrentFamily`), the child's program enrollments (`getEnrollments(fid)` filtered by `enrolledMids.includes(mid)`), and per-program attendance (branching on each program's `capabilities.attendanceMode`). A mobile-ready `GET /api/setu/members/[mid]/profile` returns the same assembled JSON so a future mobile app and the web page share one contract. Slice 2 adds a small `achievements` subcollection and a teacher/admin awarding flow; the profile renders the badges read-only.
+The profile is assembled server-side by a single **auth-agnostic** composing reader `getChildProfile(mid)` from data that already exists: it first resolves the member's family from the `mid` (via a `collectionGroup('members')` lookup, like the existing `getStudentDetail`), then assembles member identity (via `getFamilyByFid`), the child's program enrollments (`getEnrollments(fid)` filtered by `enrolledMids.includes(mid)`), and per-program attendance (branching on each program's `capabilities.attendanceMode`). The reader does NOT check authorization — **the routes do**: the family page enforces own-family, the welcome page enforces `isWelcomeTeam`, and the API gate is *(own-family setu member) OR welcome/admin*. One shared `<ChildProfile>` presentational component renders it in both the family and welcome contexts. A mobile-ready `GET /api/setu/members/[mid]/profile` returns the same assembled JSON so a future mobile app and the web page share one contract. Slice 2 adds a small `achievements` subcollection and a teacher/admin awarding flow; the profile renders the badges read-only.
 
 ## Data model
 
@@ -62,9 +62,11 @@ Reuse the heatmap + `summarize()` rendering already proven in the teacher `stude
 ## Surfaces
 
 **Slice 1:**
-- **Page** `/family/members/[mid]/profile` (server component; real mobile `block md:hidden` + desktop `hidden md:block`; themed; designer pass). Layout: identity header (avatar, name, `Child · Grade · MID`, allergy warning, quick stats: # programs · overall attendance %) → **Programs** (one card per active enrollment: program label · term · location · status pill, with that program's attendance % + recent-marks heatmap *inside the card*) → **Past programs** (collapsed; cancelled/ended) → **[Slice 2] Achievements** → "Edit details" link to `[mid]/edit`.
-- **Entry points** ("View profile"): the member detail page `/family/members/[mid]`, each member in the `/family/members` list, and the dashboard **My family** card.
-- **Mobile API** `GET /api/setu/members/[mid]/profile` — returns the assembled profile JSON (ISO dates), own-family enforced.
+- **Shared `<ChildProfile>` component** (presentational, takes the serialized profile). Layout: identity header (avatar, name, `Child · Grade · MID`, allergy warning, quick stats: # programs · overall attendance %) → **Programs** (one card per active enrollment: program label · term · location · status pill, with that program's attendance % + recent-marks heatmap *inside the card*) → **Past programs** (collapsed; cancelled/ended) → **[Slice 2] Achievements** → (family context only) "Edit details" link to `[mid]/edit`. Real mobile (`block md:hidden`) + desktop (`hidden md:block`); designer pass.
+- **Family page** `/family/members/[mid]/profile` (server component, own-family enforced) mounting `<ChildProfile>`.
+- **Welcome page** `/welcome/family/[fid]/members/[mid]` (server component, defensive `isWelcomeTeam` re-check, any family) mounting the same `<ChildProfile>` read-only (no "Edit details").
+- **Entry points** ("View profile"): the family member detail page `/family/members/[mid]`, each member in the `/family/members` list, the dashboard **My family** card, and **each member row on `/welcome/family/[fid]`**.
+- **Mobile API** `GET /api/setu/members/[mid]/profile` — returns the assembled profile JSON (ISO dates); gate = *(own-family setu member) OR welcome/admin*.
 
 **Slice 2 (achievements):**
 - The profile gains a read-only **Achievements** chip strip (badge title + optional program + awarded date).
@@ -72,7 +74,7 @@ Reuse the heatmap + `summarize()` rendering already proven in the teacher `stude
 
 ## API surface
 
-- **`GET /api/setu/members/[mid]/profile`** — `isSetuFamily`; the handler verifies the requested `mid` belongs to the caller's family (load the family, confirm membership — NOT a bare string-prefix check). Returns:
+- **`GET /api/setu/members/[mid]/profile`** — gate = **(`isSetuFamily` AND the `mid` belongs to the caller's own family) OR `isWelcomeTeam`** (welcome/admin may read any family's child). For the family case the handler confirms membership by loading the family — NOT a bare string-prefix check. Returns:
   ```
   { member: {...identity}, programs: [{ programKey, label, term, location, status,
       attendance: { mode, summary?: {present,late,absent,total,attendedPct}, marks?: [{date,status}], note?: string } }],
@@ -81,12 +83,13 @@ Reuse the heatmap + `summarize()` rendering already proven in the teacher `stude
 - **(Slice 2) `POST /api/setu/teacher/achievements`** `{ mid, title, description?, programKey? }` — `isTeacher` (admin inherits); enforces `canTeacherSeeStudent(session, mid)` (roster check) or admin; stamps `awardedByUid` + `awardedAt` (server timestamp).
 - **(Slice 2) `DELETE /api/setu/teacher/achievements/[achId]`** — same gate (the awarder or any admin).
 
-**canAccessRoute:** `/api/setu/members/*` GET is already `isSetuFamily` (the profile subpath is covered; the handler enforces own-family). `/api/setu/teacher/*` is already `isTeacher`. **No new catch-all rules needed** — add confirming assertion tests for the new subpaths. The page `/family/members/[mid]/profile` is under `/family/*` → `isSetuFamily`.
+**canAccessRoute:** the existing `/api/setu/members/*` rule is `isSetuFamily`-only — which would block welcome-team at the middleware. So add ONE explicit rule **before** the members rule: a path ending in `/profile` under `/api/setu/members/` is allowed for **`isSetuFamily(claims) || isWelcomeTeam(claims)`** (GET; the handler then enforces own-family for the family case). `/api/setu/teacher/*` is already `isTeacher` (Slice 2 achievements). Pages: `/family/members/[mid]/profile` is under `/family/*` → `isSetuFamily`; `/welcome/family/[fid]/members/[mid]` is under `/welcome/*` → `isWelcomeTeam`. Ship the canAccessRoute change with assertion tests (welcome-team + family-member allowed on the profile API; welcome-team still denied on other `/api/setu/members/*` GETs).
 
 ## Access & security
 
-- Profile page + API are **own-family only**: resolve the caller's family from the session and confirm `mid` is a member of it; otherwise 404 (don't leak existence). `mid` format (`${fid}-NN`) is a hint, not the authorization — verify against the loaded family.
-- Slice 2 awarding/revoking requires the teacher to have the student on a level they teach (`canTeacherSeeStudent`) or be an admin. Mobile-ready (`readSessionFromHeaders`, never `cookies()`/`getCurrentFamily()` in the handler).
+- **Family context** (the `/family/...` page + the family branch of the API) is **own-family only**: resolve the caller's family from the session and confirm `mid` is a member of it; otherwise 404 (don't leak existence). `mid` format (`${fid}-NN`) is a hint, not the authorization — verify against the loaded family.
+- **Welcome/admin context** (the `/welcome/family/[fid]/members/[mid]` page + the welcome branch of the API) may read **any** family's child, gated by `isWelcomeTeam` (admin inherits). The page re-checks `isWelcomeTeam` defensively (mirror `/welcome/family/[fid]`); the welcome page should also confirm the `mid` resolves to the `[fid]` in its own route path.
+- Slice 2 awarding/revoking requires the teacher to have the student on a level they teach (`canTeacherSeeStudent`) or be an admin. All handlers mobile-ready (`readSessionFromHeaders`, never `cookies()`/`getCurrentFamily()` in the handler).
 
 ## Edge cases & rules
 
@@ -106,12 +109,12 @@ Reuse the heatmap + `summarize()` rendering already proven in the teacher `stude
 
 ## Slice decomposition
 
-- **Slice 1 — Profile (enrollments + per-program attendance).** `getChildProfile(mid)` composing reader (identity + enrollments-by-mid + mode-driven per-program attendance, reusing the attendance readers + heatmap); `/family/members/[mid]/profile` page (themed, mobile + desktop, designer pass); `GET /api/setu/members/[mid]/profile` (mobile, own-family); "View profile" entry points from the member page, the members list, and the dashboard My-family card. *Deliverable:* a family can open any child and see all their programs + attendance in one place.
-- **Slice 2 — Achievements.** `AchievementDoc` schema + the `achievements` subcollection; `GET` (family read, own-family) folded into the profile; teacher/admin `POST`/`DELETE` (roster-checked) + an awarding UI on `/teacher/students/[mid]`; the profile's read-only badge section. *Deliverable:* teachers award badges and they appear on the child's profile.
+- **Slice 1 — Profile (enrollments + per-program attendance).** The auth-agnostic `getChildProfile(mid)` composing reader (resolve family by mid + identity + enrollments-by-mid + mode-driven per-program attendance, reusing the attendance readers + heatmap); the shared `<ChildProfile>` component (themed, mobile + desktop, designer pass); the **family page** `/family/members/[mid]/profile` (own-family) AND the **welcome page** `/welcome/family/[fid]/members/[mid]` (isWelcomeTeam) mounting it; `GET /api/setu/members/[mid]/profile` (mobile; own-family OR welcome/admin) + the canAccessRoute `/profile` rule; "View profile" entry points from the member page, the members list, the dashboard My-family card, and the welcome family-detail member rows. *Deliverable:* a family can open any of their children — and welcome/admin can open any family's child — and see all their programs + attendance in one place.
+- **Slice 2 — Achievements.** `AchievementDoc` schema + the `achievements` subcollection; the read is folded into `getChildProfile`, so badges appear wherever the profile does (family own-family AND welcome/admin); teacher/admin `POST`/`DELETE` (roster-checked) + an awarding UI on `/teacher/students/[mid]`; the profile's read-only badge section. *Deliverable:* teachers award badges and they appear on the child's profile.
 
 ## Out of scope (v1 — YAGNI)
 
 - The full **Attendance-module migration/redesign** (separate planned initiative — the profile consumes current readers and re-points later).
-- Welcome/admin viewing the child profile (they use `/welcome/family/[fid]`); could be added later.
+- Unifying the **teacher** `/teacher/students/[mid]` view onto the shared `<ChildProfile>` component (it stays as-is in v1; converging it is a later option).
 - Messaging, class notes, grades/scores, report cards; the old prototype's academic model (grade-progression chains, subjects, levels-as-assignments).
 - Auto-derived achievements/milestones (could layer on later); adult-specific profile polish.
