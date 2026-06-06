@@ -336,7 +336,9 @@ function renderAchievements(achievements: ChildAchievement[]) {
     <div style={{ marginTop: 18 }}>
       <SectionLabel>Achievements</SectionLabel>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-        {achievements.map((a) => (
+        {achievements.map((a) => {
+          const prog = a.programLabel ?? a.programKey;
+          return (
           <div
             key={a.achId}
             className="card"
@@ -372,11 +374,12 @@ function renderAchievements(achievements: ChildAchievement[]) {
                 {a.title}
               </span>
               <span style={{ fontSize: 11, color: 'var(--muted)', lineHeight: 1.3 }}>
-                {a.programKey ? `${a.programKey} · ` : ''}{formatAwardedMonth(a.awardedAt)}
+                {prog ? `${prog} · ` : ''}{formatAwardedMonth(a.awardedAt)}
               </span>
             </span>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

@@ -6,6 +6,9 @@ export interface ChildAchievement {
   title: string;
   description: string | null;
   programKey: string | null;
+  /** Human label for programKey, resolved by getChildProfile (the program-catalog
+   *  owner). The bare subcollection reader leaves it unset — it only has the key. */
+  programLabel?: string | null;
   awardedByName: string | null;
   awardedAt: string; // ISO
 }

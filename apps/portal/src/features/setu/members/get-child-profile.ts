@@ -64,6 +64,10 @@ export async function getChildProfile(mid: string): Promise<ChildProfile | null>
     getMemberAchievements(fid, mid),
   ]);
   const programByKey = new Map<string, ProgramDoc>(programs.map((p) => [p.programKey, p]));
+  const achievementsWithLabels = achievements.map((a) => ({
+    ...a,
+    programLabel: a.programKey ? (programByKey.get(a.programKey)?.label ?? null) : null,
+  }));
   const mine = enrollments.filter((e) => e.enrolledMids.includes(mid));
 
   function buildAttendance(e: EnrollmentWithOffering): ChildProgramAttendance {
@@ -113,7 +117,7 @@ export async function getChildProfile(mid: string): Promise<ChildProfile | null>
     schoolGrade: member.schoolGrade ?? null, birthMonthYear: member.birthMonthYear ?? null,
     foodAllergies: member.foodAllergies ?? null,
     programs: activePrograms, pastPrograms,
-    achievements,
+    achievements: achievementsWithLabels,
     stats: { programCount: activePrograms.length, overallAttendedPct, hasAnyAttendance: sumTotal > 0 },
   };
 }

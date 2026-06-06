@@ -309,4 +309,28 @@ describe('getChildProfile', () => {
     expect(result!.achievements).toHaveLength(2);
     expect(result!.achievements[0]!.title).toBe('Om Award');
   });
+
+  it('resolves programLabel from the program catalog (and null for unscoped awards)', async () => {
+    mockGetFamilyByFid.mockResolvedValue(makeFamily() as never);
+    // makeProgram() sets label === programKey; override one to a distinct human label
+    // so the resolution is observable (not a key === label coincidence).
+    mockListPrograms.mockResolvedValue([
+      { ...makeProgram('bala-vihar', 'check-in'), label: 'Bala Vihar' },
+    ] as never);
+    mockGetEnrollments.mockResolvedValue([] as never);
+    mockGetAttendanceForMember.mockResolvedValue([] as never);
+    mockGetCheckInAttendance.mockResolvedValue([] as never);
+    mockGetAchievements.mockResolvedValue([
+      { achId: 'a1', title: 'Om Award', description: null, programKey: 'bala-vihar', awardedByName: null, awardedAt: '2026-05-01T00:00:00.000Z' },
+      { achId: 'a2', title: 'Gita L2', description: null, programKey: null, awardedByName: null, awardedAt: '2026-04-01T00:00:00.000Z' },
+    ] as never);
+
+    const result = await getChildProfile(MID);
+    // scoped award resolves to the catalog label, not the raw key
+    expect(result!.achievements[0]!.programKey).toBe('bala-vihar');
+    expect(result!.achievements[0]!.programLabel).toBe('Bala Vihar');
+    // unscoped award yields a null label
+    expect(result!.achievements[1]!.programKey).toBeNull();
+    expect(result!.achievements[1]!.programLabel).toBe(null);
+  });
 });
