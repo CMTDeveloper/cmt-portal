@@ -24,21 +24,33 @@ const labelStyle: React.CSSProperties = {
   fontWeight: 600,
   color: 'var(--muted)',
   textTransform: 'uppercase',
-  letterSpacing: '.08em',
+  letterSpacing: '.07em',
 };
 const fieldStyle: React.CSSProperties = {
   display: 'block',
   width: '100%',
-  marginTop: 6,
-  padding: '9px 11px',
+  marginTop: 7,
+  padding: '11px 13px',
   borderRadius: 'var(--radiusSm)',
   border: '1px solid var(--line2)',
-  background: 'var(--bg)',
-  fontSize: 14,
+  background: 'var(--surface)',
+  fontSize: 15,
   color: 'var(--ink)',
   fontFamily: 'var(--body)',
   boxSizing: 'border-box',
 };
+const eyebrowStyle: React.CSSProperties = {
+  fontSize: 11,
+  letterSpacing: '.16em',
+  textTransform: 'uppercase',
+  color: 'var(--muted)',
+  fontWeight: 600,
+};
+const sectionLabelStyle: React.CSSProperties = {
+  ...labelStyle,
+  letterSpacing: '.09em',
+};
+
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
 function fmtDate(iso: string): string {
@@ -57,11 +69,16 @@ function isoToDateInput(iso: string): string {
 }
 
 function capacityLabel(capacity: number | null): string {
-  return capacity == null ? 'unlimited' : `${capacity} spot${capacity === 1 ? '' : 's'}`;
+  return capacity == null ? 'Unlimited spots' : `${capacity} spot${capacity === 1 ? '' : 's'}`;
 }
 
 function FieldError({ msg }: { msg: string }) {
-  return <span style={{ fontSize: 11, color: 'var(--err)', marginTop: 4, display: 'block' }}>{msg}</span>;
+  return <span style={{ fontSize: 12, color: 'var(--err)', marginTop: 5, display: 'block' }}>{msg}</span>;
+}
+
+/** A thin middot separator between inline metadata items. */
+function Dot() {
+  return <span aria-hidden style={{ color: 'var(--line2)' }}>·</span>;
 }
 
 // Editable opportunity form values (string-backed for the inputs).
@@ -233,27 +250,125 @@ export function SevaManager({
     toast.success('Opportunity closed');
   }
 
+  // ── shared opportunity-form fields (rendered as a function, never a nested
+  //    component — declaring a component inside another remounts it on every
+  //    keystroke and steals input focus). ──
+  function renderOppFields(
+    form: OppFormState,
+    setForm: React.Dispatch<React.SetStateAction<OppFormState>>,
+    errors: Record<string, string>,
+    idPrefix: string,
+  ) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <label style={labelStyle} htmlFor={`${idPrefix}-title`}>
+          Title
+          <input
+            id={`${idPrefix}-title`}
+            aria-label={idPrefix === 'create' ? 'Title' : 'Edit title'}
+            value={form.title}
+            onChange={(ev) => setForm((f) => ({ ...f, title: ev.target.value }))}
+            placeholder="Diwali hall setup"
+            style={fieldStyle}
+          />
+          {errors.title && <FieldError msg={errors.title} />}
+        </label>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 14 }}>
+          <label style={labelStyle} htmlFor={`${idPrefix}-date`}>
+            Date
+            <input
+              id={`${idPrefix}-date`}
+              aria-label={idPrefix === 'create' ? 'Date' : 'Edit date'}
+              type="date"
+              value={form.date}
+              onChange={(ev) => setForm((f) => ({ ...f, date: ev.target.value }))}
+              style={fieldStyle}
+            />
+            {errors.date && <FieldError msg={errors.date} />}
+          </label>
+          <label style={labelStyle} htmlFor={`${idPrefix}-hours`}>
+            Default hours
+            <input
+              id={`${idPrefix}-hours`}
+              aria-label={idPrefix === 'create' ? 'Default hours' : 'Edit default hours'}
+              type="number"
+              min={0.5}
+              step={0.5}
+              value={form.defaultHours}
+              onChange={(ev) => setForm((f) => ({ ...f, defaultHours: ev.target.value }))}
+              style={fieldStyle}
+            />
+            {errors.defaultHours && <FieldError msg={errors.defaultHours} />}
+          </label>
+          <label style={labelStyle} htmlFor={`${idPrefix}-capacity`}>
+            Capacity
+            <input
+              id={`${idPrefix}-capacity`}
+              aria-label={idPrefix === 'create' ? 'Capacity' : 'Edit capacity'}
+              type="number"
+              min={1}
+              step={1}
+              value={form.capacity}
+              onChange={(ev) => setForm((f) => ({ ...f, capacity: ev.target.value }))}
+              placeholder="Unlimited"
+              style={fieldStyle}
+            />
+            <span style={{ fontSize: 11, color: 'var(--muted)', marginTop: 5, display: 'block', textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>
+              Leave blank for unlimited
+            </span>
+          </label>
+        </div>
+
+        <label style={labelStyle} htmlFor={`${idPrefix}-location`}>
+          Location
+          <input
+            id={`${idPrefix}-location`}
+            aria-label={idPrefix === 'create' ? 'Location' : 'Edit location'}
+            value={form.location}
+            onChange={(ev) => setForm((f) => ({ ...f, location: ev.target.value }))}
+            placeholder="Brampton"
+            style={fieldStyle}
+          />
+        </label>
+
+        <label style={labelStyle} htmlFor={`${idPrefix}-description`}>
+          Description
+          <textarea
+            id={`${idPrefix}-description`}
+            aria-label={idPrefix === 'create' ? 'Description' : 'Edit description'}
+            value={form.description}
+            onChange={(ev) => setForm((f) => ({ ...f, description: ev.target.value }))}
+            placeholder="What will families be helping with?"
+            rows={3}
+            style={{ ...fieldStyle, resize: 'vertical', lineHeight: 1.5 }}
+          />
+        </label>
+      </div>
+    );
+  }
+
+  const formActionBtn: React.CSSProperties = { padding: '12px 24px', minHeight: 46 };
+
   return (
     <>
       {/* Header */}
-      <header style={{ marginBottom: 24 }}>
-        <p style={{ fontSize: 11, letterSpacing: '.16em', textTransform: 'uppercase', color: 'var(--muted)' }}>
-          Seva
-        </p>
-        <h1 style={{ fontSize: 'clamp(28px, 7vw, 38px)', fontWeight: 400, marginTop: 6, lineHeight: 1.1 }}>
+      <header style={{ marginBottom: 28 }}>
+        <p style={eyebrowStyle}>Seva</p>
+        <h1 style={{ fontSize: 'clamp(28px, 7vw, 38px)', fontWeight: 400, marginTop: 8, lineHeight: 1.08 }}>
           Seva opportunities
         </h1>
-        <p style={{ fontSize: 14, color: 'var(--body-text)', marginTop: 10, maxWidth: 640, lineHeight: 1.55 }}>
+        <p style={{ fontSize: 15, color: 'var(--body-text)', marginTop: 12, maxWidth: 560, lineHeight: 1.55 }}>
           Post seva opportunities for families to sign up for, and set the yearly seva-hours target.
         </p>
       </header>
 
       {/* Requirement panel */}
-      <div className="card" style={{ padding: 'clamp(16px, 4vw, 22px)', marginBottom: 20 }}>
+      <div className="card" style={{ padding: 'clamp(18px, 4vw, 24px)', marginBottom: 28 }}>
         {editingReq ? (
           <div>
-            <div style={{ ...labelStyle, marginBottom: 12 }}>Seva requirement</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 12 }}>
+            <div style={{ ...sectionLabelStyle, marginBottom: 16 }}>Seva requirement</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 14 }}>
               <label style={labelStyle} htmlFor="seva-year">
                 Seva year
                 <input
@@ -279,70 +394,87 @@ export function SevaManager({
                 />
               </label>
             </div>
-            <div style={{ display: 'flex', gap: 10, marginTop: 16, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 10, marginTop: 20, flexWrap: 'wrap' }}>
               <button
                 type="button"
                 className="btn btn--p"
                 onClick={submitReq}
                 disabled={savingReq}
-                style={{ padding: '10px 22px' }}
+                style={formActionBtn}
               >
                 {savingReq ? 'Saving…' : 'Save requirement'}
               </button>
-              <button type="button" className="btn btn--g" onClick={() => setEditingReq(false)}>
+              <button type="button" className="btn btn--g" onClick={() => setEditingReq(false)} style={{ minHeight: 46 }}>
                 Cancel
               </button>
             </div>
           </div>
         ) : (
-          <div className="between" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
-            <div>
-              <div style={{ ...labelStyle, marginBottom: 8 }}>Seva requirement</div>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 18, flexWrap: 'wrap' }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ ...sectionLabelStyle, marginBottom: 10 }}>Seva requirement</div>
               {hasYear ? (
-                <>
-                  <div style={{ fontSize: 22, fontWeight: 500, color: 'var(--ink)' }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 30, fontWeight: 500, color: 'var(--ink)', letterSpacing: '-0.01em', lineHeight: 1 }}>
                     {requirement.currentSevaYear}
-                  </div>
-                  <div style={{ fontSize: 14, color: 'var(--body-text)', marginTop: 4 }}>
+                  </span>
+                  <span
+                    className="pill"
+                    style={{ background: 'var(--accentSoft)', color: 'var(--accentDeep)', fontWeight: 600 }}
+                  >
                     {requirement.hoursPerYear} hrs / family / year
-                  </div>
-                </>
+                  </span>
+                </div>
               ) : (
                 <div
                   style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
                     background: 'var(--accentSoft)',
                     color: 'var(--accentDeep)',
                     borderRadius: 'var(--radiusSm)',
-                    padding: '12px 14px',
+                    padding: '14px 16px',
                     fontSize: 14,
                     fontWeight: 600,
-                    maxWidth: 420,
+                    maxWidth: 440,
+                    lineHeight: 1.45,
                   }}
                 >
-                  Set a seva year to start posting opportunities.
+                  <SetuIcon.calendar style={{ flex: '0 0 auto' }} />
+                  <span>Set a seva year to start posting opportunities.</span>
                 </div>
               )}
               {!canEditRequirement && (
-                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 8 }}>Admin-managed</div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 12 }}>Admin-managed</div>
               )}
             </div>
             {canEditRequirement && (
-              <button type="button" className="btn btn--s" onClick={openReqEdit} style={{ flex: '0 0 auto' }}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                  <SetuIcon.edit /> Edit requirement
-                </span>
+              <button type="button" className="btn btn--s" onClick={openReqEdit} style={{ flex: '0 0 auto', minHeight: 42 }}>
+                <SetuIcon.edit /> Edit requirement
               </button>
             )}
           </div>
         )}
       </div>
 
-      {/* New opportunity button + inline create panel */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
-        <div style={{ fontSize: 13, color: 'var(--muted)' }}>
-          {opportunities.length} {opportunities.length === 1 ? 'opportunity' : 'opportunities'}
+      {/* Opportunities section header + New-opportunity action */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'flex-end',
+          justifyContent: 'space-between',
+          gap: 14,
+          marginBottom: 18,
+          flexWrap: 'wrap',
+        }}
+      >
+        <div>
+          <p style={eyebrowStyle}>Opportunities</p>
+          <h2 style={{ fontSize: 20, fontWeight: 500, marginTop: 6, lineHeight: 1.1 }}>
+            {opportunities.length} {opportunities.length === 1 ? 'posted' : 'posted'}
+          </h2>
         </div>
-        <div style={{ flex: 1 }} />
         {!creating && (
           <button
             type="button"
@@ -352,113 +484,28 @@ export function SevaManager({
               setCreateErrors({});
               setCreating(true);
             }}
-            style={{ padding: '10px 20px' }}
+            style={{ minHeight: 46 }}
           >
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-              <SetuIcon.plus /> New opportunity
-            </span>
+            <SetuIcon.plus /> New opportunity
           </button>
         )}
       </div>
 
       {creating && (
-        <div className="card" style={{ padding: 'clamp(16px, 4vw, 22px)', marginBottom: 20 }}>
-          <div style={{ ...labelStyle, marginBottom: 12 }}>New opportunity</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <label style={labelStyle} htmlFor="create-title">
-              Title
-              <input
-                id="create-title"
-                aria-label="Title"
-                value={createForm.title}
-                onChange={(ev) => setCreateForm((f) => ({ ...f, title: ev.target.value }))}
-                placeholder="Diwali hall setup"
-                style={fieldStyle}
-              />
-              {createErrors.title && <FieldError msg={createErrors.title} />}
-            </label>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
-              <label style={labelStyle} htmlFor="create-date">
-                Date
-                <input
-                  id="create-date"
-                  aria-label="Date"
-                  type="date"
-                  value={createForm.date}
-                  onChange={(ev) => setCreateForm((f) => ({ ...f, date: ev.target.value }))}
-                  style={fieldStyle}
-                />
-                {createErrors.date && <FieldError msg={createErrors.date} />}
-              </label>
-              <label style={labelStyle} htmlFor="create-hours">
-                Default hours
-                <input
-                  id="create-hours"
-                  aria-label="Default hours"
-                  type="number"
-                  min={0.5}
-                  step={0.5}
-                  value={createForm.defaultHours}
-                  onChange={(ev) => setCreateForm((f) => ({ ...f, defaultHours: ev.target.value }))}
-                  style={fieldStyle}
-                />
-                {createErrors.defaultHours && <FieldError msg={createErrors.defaultHours} />}
-              </label>
-              <label style={labelStyle} htmlFor="create-capacity">
-                Capacity (blank = unlimited)
-                <input
-                  id="create-capacity"
-                  aria-label="Capacity"
-                  type="number"
-                  min={1}
-                  step={1}
-                  value={createForm.capacity}
-                  onChange={(ev) => setCreateForm((f) => ({ ...f, capacity: ev.target.value }))}
-                  placeholder="∞"
-                  style={fieldStyle}
-                />
-              </label>
-            </div>
-
-            <label style={labelStyle} htmlFor="create-location">
-              Location
-              <input
-                id="create-location"
-                aria-label="Location"
-                value={createForm.location}
-                onChange={(ev) => setCreateForm((f) => ({ ...f, location: ev.target.value }))}
-                placeholder="Brampton"
-                style={fieldStyle}
-              />
-            </label>
-
-            <label style={labelStyle} htmlFor="create-description">
-              Description
-              <textarea
-                id="create-description"
-                aria-label="Description"
-                className="input"
-                value={createForm.description}
-                onChange={(ev) => setCreateForm((f) => ({ ...f, description: ev.target.value }))}
-                placeholder="What will families be helping with?"
-                rows={3}
-                style={{ ...fieldStyle, resize: 'vertical' }}
-              />
-            </label>
-          </div>
-
-          <div style={{ display: 'flex', gap: 10, marginTop: 18, flexWrap: 'wrap' }}>
+        <div className="card" style={{ padding: 'clamp(18px, 4vw, 24px)', marginBottom: 22 }}>
+          <div style={{ ...sectionLabelStyle, marginBottom: 16 }}>New opportunity</div>
+          {renderOppFields(createForm, setCreateForm, createErrors, 'create')}
+          <div style={{ display: 'flex', gap: 10, marginTop: 22, flexWrap: 'wrap' }}>
             <button
               type="button"
               className="btn btn--p"
               onClick={submitCreate}
               disabled={savingCreate}
-              style={{ padding: '10px 22px' }}
+              style={formActionBtn}
             >
               {savingCreate ? 'Posting…' : 'Create opportunity'}
             </button>
-            <button type="button" className="btn btn--g" onClick={() => setCreating(false)}>
+            <button type="button" className="btn btn--g" onClick={() => setCreating(false)} style={{ minHeight: 46 }}>
               Cancel
             </button>
           </div>
@@ -467,121 +514,110 @@ export function SevaManager({
 
       {/* List */}
       {opportunities.length === 0 ? (
-        <div className="card" style={{ padding: 32, textAlign: 'center' }}>
-          <p style={{ fontSize: 15, color: 'var(--ink)', fontWeight: 500 }}>No opportunities yet</p>
-          <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 6 }}>Post the first one.</p>
+        <div
+          className="card"
+          style={{
+            padding: 'clamp(28px, 7vw, 44px) 24px',
+            textAlign: 'center',
+            background: 'var(--surface)',
+          }}
+        >
+          <div
+            aria-hidden
+            style={{
+              width: 52,
+              height: 52,
+              borderRadius: 999,
+              background: 'var(--accentSoft)',
+              color: 'var(--accentDeep)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: 16,
+            }}
+          >
+            <SetuIcon.heart />
+          </div>
+          <p style={{ fontSize: 17, color: 'var(--ink)', fontWeight: 600 }}>No opportunities yet</p>
+          <p style={{ fontSize: 14, color: 'var(--muted)', marginTop: 8, maxWidth: 320, marginInline: 'auto', lineHeight: 1.5 }}>
+            Post the first seva opportunity so families can sign up and start logging hours.
+          </p>
+          {!creating && (
+            <button
+              type="button"
+              className="btn btn--p"
+              onClick={() => {
+                setCreateForm(emptyForm());
+                setCreateErrors({});
+                setCreating(true);
+              }}
+              style={{ marginTop: 20, minHeight: 46 }}
+            >
+              <SetuIcon.plus /> Post an opportunity
+            </button>
+          )}
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           {opportunities.map((o) => {
             const isEditing = editingId === o.oppId;
-            const statusBg = o.status === 'open' ? 'var(--accentSoft)' : 'var(--surface2)';
-            const statusColor = o.status === 'open' ? 'var(--accentDeep)' : 'var(--muted)';
+            const isOpen = o.status === 'open';
             return (
-              <div key={o.oppId} className="card" style={{ padding: 'clamp(14px, 4vw, 20px)' }}>
+              <div
+                key={o.oppId}
+                className="card"
+                style={{
+                  padding: 'clamp(16px, 4vw, 22px)',
+                  opacity: !isEditing && !isOpen ? 0.78 : 1,
+                  transition: 'box-shadow .12s, opacity .12s',
+                }}
+              >
                 {isEditing ? (
                   <div>
-                    <div style={{ ...labelStyle, marginBottom: 12 }}>Edit opportunity</div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                      <label style={labelStyle}>
-                        Title
-                        <input
-                          aria-label="Edit title"
-                          value={editForm.title}
-                          onChange={(ev) => setEditForm((f) => ({ ...f, title: ev.target.value }))}
-                          style={fieldStyle}
-                        />
-                        {editErrors.title && <FieldError msg={editErrors.title} />}
-                      </label>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
-                        <label style={labelStyle}>
-                          Date
-                          <input
-                            aria-label="Edit date"
-                            type="date"
-                            value={editForm.date}
-                            onChange={(ev) => setEditForm((f) => ({ ...f, date: ev.target.value }))}
-                            style={fieldStyle}
-                          />
-                          {editErrors.date && <FieldError msg={editErrors.date} />}
-                        </label>
-                        <label style={labelStyle}>
-                          Default hours
-                          <input
-                            aria-label="Edit default hours"
-                            type="number"
-                            min={0.5}
-                            step={0.5}
-                            value={editForm.defaultHours}
-                            onChange={(ev) => setEditForm((f) => ({ ...f, defaultHours: ev.target.value }))}
-                            style={fieldStyle}
-                          />
-                          {editErrors.defaultHours && <FieldError msg={editErrors.defaultHours} />}
-                        </label>
-                        <label style={labelStyle}>
-                          Capacity (blank = unlimited)
-                          <input
-                            aria-label="Edit capacity"
-                            type="number"
-                            min={1}
-                            step={1}
-                            value={editForm.capacity}
-                            onChange={(ev) => setEditForm((f) => ({ ...f, capacity: ev.target.value }))}
-                            placeholder="∞"
-                            style={fieldStyle}
-                          />
-                        </label>
-                      </div>
-                      <label style={labelStyle}>
-                        Location
-                        <input
-                          aria-label="Edit location"
-                          value={editForm.location}
-                          onChange={(ev) => setEditForm((f) => ({ ...f, location: ev.target.value }))}
-                          style={fieldStyle}
-                        />
-                      </label>
-                      <label style={labelStyle}>
-                        Description
-                        <textarea
-                          aria-label="Edit description"
-                          className="input"
-                          value={editForm.description}
-                          onChange={(ev) => setEditForm((f) => ({ ...f, description: ev.target.value }))}
-                          rows={3}
-                          style={{ ...fieldStyle, resize: 'vertical' }}
-                        />
-                      </label>
-                    </div>
-                    <div style={{ display: 'flex', gap: 10, marginTop: 18, flexWrap: 'wrap' }}>
+                    <div style={{ ...sectionLabelStyle, marginBottom: 16 }}>Edit opportunity</div>
+                    {renderOppFields(editForm, setEditForm, editErrors, 'edit')}
+                    <div style={{ display: 'flex', gap: 10, marginTop: 22, flexWrap: 'wrap' }}>
                       <button
                         type="button"
                         className="btn btn--p"
                         onClick={() => submitEdit(o.oppId)}
                         disabled={savingEdit}
-                        style={{ padding: '10px 22px' }}
+                        style={formActionBtn}
                       >
                         {savingEdit ? 'Saving…' : 'Save changes'}
                       </button>
-                      <button type="button" className="btn btn--g" onClick={() => setEditingId(null)}>
+                      <button type="button" className="btn btn--g" onClick={() => setEditingId(null)} style={{ minHeight: 46 }}>
                         Cancel
                       </button>
                     </div>
                   </div>
                 ) : (
                   <>
-                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
                       <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: 17, fontWeight: 600, color: 'var(--ink)' }}>{o.title}</div>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 12px', marginTop: 6, fontSize: 13, color: 'var(--body-text)' }}>
+                        <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--ink)', lineHeight: 1.25, letterSpacing: '-0.01em' }}>
+                          {o.title}
+                        </div>
+                        <div
+                          style={{
+                            display: 'flex',
+                            flexWrap: 'wrap',
+                            alignItems: 'center',
+                            gap: 8,
+                            marginTop: 8,
+                            fontSize: 13.5,
+                            color: 'var(--body-text)',
+                          }}
+                        >
                           <span>{fmtDate(o.date)}</span>
-                          {o.location && <span>{o.location}</span>}
-                          <span>
-                            {o.defaultHours} hrs · {capacityLabel(o.capacity)}
-                          </span>
+                          {o.location && (<><Dot /><span>{o.location}</span></>)}
+                          <Dot />
+                          <span>{o.defaultHours} hrs</span>
+                          <Dot />
+                          <span>{capacityLabel(o.capacity)}</span>
                         </div>
                         {o.description && (
-                          <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 8, lineHeight: 1.5 }}>
+                          <p style={{ fontSize: 13.5, color: 'var(--muted)', marginTop: 10, lineHeight: 1.55 }}>
                             {o.description}
                           </p>
                         )}
@@ -590,23 +626,40 @@ export function SevaManager({
                         className="pill"
                         style={{
                           flex: '0 0 auto',
-                          padding: '3px 12px',
-                          borderRadius: 99,
-                          fontSize: 11,
+                          textTransform: 'capitalize',
                           fontWeight: 600,
-                          background: statusBg,
-                          color: statusColor,
+                          background: isOpen ? 'var(--accentSoft)' : 'var(--surface2)',
+                          color: isOpen ? 'var(--accentDeep)' : 'var(--muted)',
                         }}
                       >
                         {o.status}
                       </span>
                     </div>
-                    <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
-                      <button type="button" className="btn btn--s" onClick={() => openEdit(o)}>
-                        Edit
+                    <div
+                      style={{
+                        display: 'flex',
+                        gap: 10,
+                        marginTop: 18,
+                        paddingTop: 16,
+                        borderTop: '1px solid var(--line)',
+                        flexWrap: 'wrap',
+                      }}
+                    >
+                      <button
+                        type="button"
+                        className="btn btn--s"
+                        onClick={() => openEdit(o)}
+                        style={{ flex: '1 1 auto', minWidth: 120, minHeight: 44 }}
+                      >
+                        <SetuIcon.edit /> Edit
                       </button>
-                      {o.status === 'open' && (
-                        <button type="button" className="btn btn--g" onClick={() => closeOpp(o.oppId)}>
+                      {isOpen && (
+                        <button
+                          type="button"
+                          className="btn btn--g"
+                          onClick={() => closeOpp(o.oppId)}
+                          style={{ flex: '1 1 auto', minWidth: 120, minHeight: 44 }}
+                        >
                           Close
                         </button>
                       )}
