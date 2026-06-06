@@ -25,6 +25,9 @@ export const MemberDocSchema = z.object({
   // One-time post-sign-in "add your other contacts" nudge. Null/absent =
   // not yet dismissed (show it); a Date = dismissed (never show again).
   contactsNudgeDismissedAt: z.date().nullable().optional(),
+  // One-time post-sign-in "set your volunteering skills" nudge (adults only,
+  // shown until they add a skill or dismiss). Same null/absent/Date semantics.
+  volunteeringSkillsNudgeDismissedAt: z.date().nullable().optional(),
   schoolGrade: z.string().nullable(),
   birthMonthYear: z.string().nullable(),
   // Legacy roster student id (sid), captured at migration / backfilled, so the

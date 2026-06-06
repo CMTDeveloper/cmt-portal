@@ -63,6 +63,7 @@ describe('getFamilyByFid — multi-contact defaults', () => {
     expect(member.altEmails).toEqual([]);
     expect(member.altPhones).toEqual([]);
     expect(member.contactsNudgeDismissedAt).toBeNull();
+    expect(member.volunteeringSkillsNudgeDismissedAt).toBeNull();
   });
 
   it('passes through stored altEmails/altPhones and a dismissed timestamp', async () => {
@@ -83,6 +84,7 @@ describe('getFamilyByFid — multi-contact defaults', () => {
             altEmails: ['priya.work@example.com'],
             altPhones: ['+14165550200'],
             contactsNudgeDismissedAt: { toDate: () => dismissed },
+            volunteeringSkillsNudgeDismissedAt: { toDate: () => dismissed },
           }),
         },
       ],
@@ -93,5 +95,6 @@ describe('getFamilyByFid — multi-contact defaults', () => {
     expect(member.altEmails).toEqual(['priya.work@example.com']);
     expect(member.altPhones).toEqual(['+14165550200']);
     expect(member.contactsNudgeDismissedAt).toEqual(dismissed);
+    expect(member.volunteeringSkillsNudgeDismissedAt).toEqual(dismissed);
   });
 });

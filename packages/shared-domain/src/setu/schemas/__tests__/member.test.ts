@@ -28,6 +28,7 @@ describe('MemberDocSchema — multi-contact fields', () => {
     expect(parsed.altEmails).toEqual([]);
     expect(parsed.altPhones).toEqual([]);
     expect(parsed.contactsNudgeDismissedAt ?? null).toBeNull();
+    expect(parsed.volunteeringSkillsNudgeDismissedAt ?? null).toBeNull();
   });
 
   it('preserves provided altEmails/altPhones and a dismissed timestamp', () => {
@@ -36,9 +37,11 @@ describe('MemberDocSchema — multi-contact fields', () => {
       altEmails: ['priya.work@example.com'],
       altPhones: ['+14165550200'],
       contactsNudgeDismissedAt: new Date('2026-06-05T00:00:00Z'),
+      volunteeringSkillsNudgeDismissedAt: new Date('2026-06-05T00:00:00Z'),
     });
     expect(parsed.altEmails).toEqual(['priya.work@example.com']);
     expect(parsed.altPhones).toEqual(['+14165550200']);
     expect(parsed.contactsNudgeDismissedAt).toBeInstanceOf(Date);
+    expect(parsed.volunteeringSkillsNudgeDismissedAt).toBeInstanceOf(Date);
   });
 });
