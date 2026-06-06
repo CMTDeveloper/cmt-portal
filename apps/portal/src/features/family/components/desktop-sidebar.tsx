@@ -24,6 +24,7 @@ const FAMILY_NAV_ITEMS: [SidebarTab, string, keyof typeof SetuIcon, string][] = 
   ['home',     'Home',           'home',    '/family'],
   ['family',   'My family',      'people',  '/family/members'],
   ['programs', 'Programs',       'grid',    '/family/programs'],
+  ['seva',     'Seva',           'heart',   '/family/seva'],
   ['calendar', 'Calendar',       'calendar','/family/calendar'],
   // Giving + Receipts intentionally omitted: general donations are handled via a
   // separate CMT process/site, not Stripe-in-portal (CMT decision 2026-06-04).
@@ -48,6 +49,7 @@ function deriveActiveFromPathname(pathname: string): SidebarTab {
   if (pathname.startsWith('/family/donate') && !pathname.startsWith('/family/donations')) return 'giving';
   if (pathname.startsWith('/family/donations')) return 'receipts';
   if (pathname.startsWith('/family/settings/security')) return 'security';
+  if (pathname.startsWith('/family/seva')) return 'seva';
   if (pathname.startsWith('/family')) return 'home';
   if (pathname.startsWith('/welcome/levels')) return 'levels';
   if (pathname.startsWith('/welcome/seva')) return 'seva';

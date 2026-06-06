@@ -21,6 +21,7 @@ const TABS: { id: Tab; label: string; icon: keyof typeof SetuIcon; href: string 
 // (CMT decision 2026-06-04). The Bala Vihar dakshina flow stays reachable from
 // the dashboard / enroll.
 const MORE_ITEMS: { label: string; icon: keyof typeof SetuIcon; href: string }[] = [
+  { label: 'Seva', icon: 'heart', href: '/family/seva' },
   { label: 'Calendar', icon: 'calendar', href: '/family/calendar' },
   { label: 'Sign-in security', icon: 'shield', href: '/family/settings/security' },
 ];
@@ -44,7 +45,7 @@ function activeTab(pathname: string): Tab {
   // All program enrollment (incl. Bala Vihar) lives under Programs now.
   if (pathname.startsWith('/family/enroll') || pathname.startsWith('/family/programs')) return 'programs';
   if (pathname.startsWith('/family/donate') && !pathname.startsWith('/family/donations')) return 'giving';
-  if (pathname.startsWith('/family/donations') || pathname.startsWith('/family/calendar') || pathname.startsWith('/family/settings')) {
+  if (pathname.startsWith('/family/donations') || pathname.startsWith('/family/calendar') || pathname.startsWith('/family/seva') || pathname.startsWith('/family/settings')) {
     return 'more';
   }
   return 'home';
