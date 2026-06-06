@@ -10,3 +10,4 @@ export * from './schemas/level';
 export * from './schemas/teacher';
 export * from './schemas/class-calendar';
 export * from './schemas/attendance';
+export * from './schemas/seva';
