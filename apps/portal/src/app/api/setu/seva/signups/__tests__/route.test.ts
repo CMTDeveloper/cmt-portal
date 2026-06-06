@@ -59,6 +59,19 @@ describe('POST /api/setu/seva/signups', () => {
     expect(res.status).toBe(200);
     expect(mockSet).not.toHaveBeenCalled();
   });
+  it('409 already-resolved when completed (does not overwrite/reset hours)', async () => {
+    vi.mocked(getSignup).mockResolvedValue({ signupId: 'o1__CMT-AB12CD34', status: 'completed' } as never);
+    const res = await POST(req({ oppId: 'o1' }));
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toBe('already-resolved');
+    expect(mockSet).not.toHaveBeenCalled();
+  });
+  it('201 reactivates a cancelled signup', async () => {
+    vi.mocked(getSignup).mockResolvedValue({ signupId: 'o1__CMT-AB12CD34', status: 'cancelled' } as never);
+    const res = await POST(req({ oppId: 'o1' }));
+    expect(res.status).toBe(201);
+    expect(mockSet).toHaveBeenCalled();
+  });
   it('409 opportunity-full at capacity', async () => {
     vi.mocked(getOpportunity).mockResolvedValue({ ...openOpp, capacity: 1 } as never);
     vi.mocked(listSignupsForOpp).mockResolvedValue([{ signupId: 'o1__OTHER', status: 'signed-up' }] as never);

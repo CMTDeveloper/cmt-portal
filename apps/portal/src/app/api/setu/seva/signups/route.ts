@@ -25,6 +25,12 @@ export async function POST(req: Request) {
   if (existing && existing.status === 'signed-up') {
     return NextResponse.json({ signupId: id, status: 'signed-up' });
   }
+  // A completed / no-show signup must NOT be silently overwritten — that would
+  // reset awarded hours once Slice C confirmation exists. Only a cancelled
+  // signup is reactivated below; any other resolved state is rejected.
+  if (existing && existing.status !== 'cancelled') {
+    return NextResponse.json({ error: 'already-resolved' }, { status: 409 });
+  }
 
   if (opp.capacity != null) {
     const signups = await listSignupsForOpp(oppId);
