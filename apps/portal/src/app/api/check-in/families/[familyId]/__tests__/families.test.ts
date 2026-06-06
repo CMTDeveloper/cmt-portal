@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { testApiHandler } from 'next-test-api-route-handler';
 
+const flagsMock = vi.hoisted(() => ({ checkInKiosk: true }));
+vi.mock('@/lib/flags', () => ({ flags: flagsMock }));
+
 vi.mock('@/features/check-in/shared', () => ({
   findFamilyById: vi.fn(),
 }));
@@ -10,9 +13,23 @@ import * as appHandler from '../route';
 
 beforeEach(() => {
   vi.clearAllMocks();
+  flagsMock.checkInKiosk = true;
 });
 
 describe('GET /api/check-in/families/:familyId', () => {
+  it('returns 404 when kiosk flag is off', async () => {
+    flagsMock.checkInKiosk = false;
+    await testApiHandler({
+      appHandler,
+      params: { familyId: '42' },
+      test: async ({ fetch }) => {
+        const res = await fetch({ method: 'GET' });
+        expect(res.status).toBe(404);
+      },
+    });
+    expect(findFamilyById).not.toHaveBeenCalled();
+  });
+
   it('returns 200 with family on hit', async () => {
     (findFamilyById as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       fid: '42',

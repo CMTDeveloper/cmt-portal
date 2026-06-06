@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+import { flags } from '@/lib/flags';
 import { recordGuestCheckIn } from '@/features/check-in/shared';
 
 
@@ -14,6 +15,9 @@ const bodySchema = z.object({
 });
 
 export async function POST(req: Request) {
+  if (!flags.checkInKiosk) {
+    return NextResponse.json({ error: 'not-found' }, { status: 404 });
+  }
   const raw = await req.json().catch(() => null);
   const parsed = bodySchema.safeParse(raw);
   if (!parsed.success) {

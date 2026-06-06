@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
+import { flags } from '@/lib/flags';
 import { findFamilyById } from '@/features/check-in/shared';
 import { resolveSender } from '@/lib/aws/resolve-sender';
 
@@ -13,6 +14,9 @@ export async function POST(
   req: Request,
   { params }: { params: Promise<{ familyId: string }> },
 ) {
+  if (!flags.checkInKiosk) {
+    return NextResponse.json({ error: 'not-found' }, { status: 404 });
+  }
   const { familyId } = await params;
   const raw = await req.json().catch(() => null);
   const parsed = bodySchema.safeParse(raw);

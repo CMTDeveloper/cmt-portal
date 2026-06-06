@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { testApiHandler } from 'next-test-api-route-handler';
 
+const flagsMock = vi.hoisted(() => ({ checkInKiosk: true }));
+vi.mock('@/lib/flags', () => ({ flags: flagsMock }));
+
 const fakeCollection = { add: vi.fn() };
 vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
   portalFirestore: vi.fn(() => ({ collection: vi.fn(() => fakeCollection) })),
@@ -20,10 +23,29 @@ import * as appHandler from '../check-in/route';
 
 beforeEach(() => {
   vi.clearAllMocks();
+  flagsMock.checkInKiosk = true;
   fakeCollection.add.mockResolvedValue({ id: 'ci-new' });
 });
 
 describe('POST /api/check-in/families/:familyId/check-in', () => {
+  it('returns 404 when kiosk flag is off', async () => {
+    flagsMock.checkInKiosk = false;
+    await testApiHandler({
+      appHandler,
+      params: { familyId: '42' },
+      test: async ({ fetch }) => {
+        const res = await fetch({
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ students: { '1': true } }),
+        });
+        expect(res.status).toBe(404);
+      },
+    });
+    expect(findFamilyById).not.toHaveBeenCalled();
+    expect(fakeCollection.add).not.toHaveBeenCalled();
+  });
+
   it('returns 400 on invalid body', async () => {
     await testApiHandler({
       appHandler,
