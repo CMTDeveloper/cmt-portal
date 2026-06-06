@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { SetuLogo, SetuAvatar, SetuIcon } from '@cmt/ui';
 import { signOut } from './sign-out-button';
 
-type SidebarTab = 'home' | 'family' | 'bv' | 'programs' | 'calendar' | 'giving' | 'receipts' | 'security' | 'levels';
+type SidebarTab = 'home' | 'family' | 'bv' | 'programs' | 'calendar' | 'giving' | 'receipts' | 'security' | 'levels' | 'seva';
 
 interface DesktopSidebarProps {
   active?: SidebarTab;
@@ -34,6 +34,7 @@ const FAMILY_NAV_ITEMS: [SidebarTab, string, keyof typeof SetuIcon, string][] = 
 const WELCOME_NAV_ITEMS: [SidebarTab, string, keyof typeof SetuIcon, string, boolean?][] = [
   ['home', 'Search',            'search',  '/welcome'],
   ['levels', 'Levels & rosters','people',  '/welcome/levels'],
+  ['seva',   'Seva',            'heart',   '/welcome/seva'],
   ['family', 'Pending',         'people',  '/welcome', true],
   ['bv',     'Donation periods','calendar','/welcome', true],
 ];
@@ -49,6 +50,7 @@ function deriveActiveFromPathname(pathname: string): SidebarTab {
   if (pathname.startsWith('/family/settings/security')) return 'security';
   if (pathname.startsWith('/family')) return 'home';
   if (pathname.startsWith('/welcome/levels')) return 'levels';
+  if (pathname.startsWith('/welcome/seva')) return 'seva';
   if (pathname.startsWith('/welcome')) return 'home';
   return 'home';
 }

@@ -87,6 +87,7 @@ function AdminSidebar({ displayEmail, hasFamily }: { displayEmail: string; hasFa
     { label: 'Levels & teachers',  href: '/admin/levels' },
     { label: 'Class calendar',     href: '/admin/calendar' },
     { label: 'Volunteering skills',href: '/admin/volunteering-skills' },
+    { label: 'Seva',               href: '/welcome/seva' },
     { label: 'Admin users',        href: '/check-in/admin/users',   legacy: true },
     { label: 'Guests',             href: '/check-in/admin/guests',  legacy: true },
     { label: 'Unpaid',             href: '/check-in/admin/unpaid',  legacy: true },

@@ -19,6 +19,7 @@ const MORE_THEMED: { label: string; icon: keyof typeof SetuIcon; href: string }[
   { label: 'Family search', icon: 'search', href: '/welcome' },
   { label: 'Welcome-team grants', icon: 'people', href: '/admin/welcome-team' },
   { label: 'Volunteering skills', icon: 'check', href: '/admin/volunteering-skills' },
+  { label: 'Seva', icon: 'heart', href: '/welcome/seva' },
 ];
 
 const MORE_LEGACY: { label: string; href: string }[] = [

@@ -9,7 +9,7 @@ import { signOut } from './sign-out-button';
 // page, including the drill-down detail pages (family detail, single-level
 // roster) which also keep their own back arrow.
 function isSearchActive(pathname: string): boolean {
-  return !pathname.startsWith('/welcome/levels');
+  return !pathname.startsWith('/welcome/levels') && !pathname.startsWith('/welcome/seva');
 }
 
 export function WelcomeMobileNav({ isAdmin = false, hasFamily = false }: { isAdmin?: boolean; hasFamily?: boolean }) {
@@ -35,8 +35,11 @@ export function WelcomeMobileNav({ isAdmin = false, hasFamily = false }: { isAdm
       <Link href="/welcome" style={itemStyle(searchActive)}>
         <SetuIcon.search /> Search
       </Link>
-      <Link href="/welcome/levels" style={itemStyle(!searchActive)}>
+      <Link href="/welcome/levels" style={itemStyle(pathname.startsWith('/welcome/levels'))}>
         <SetuIcon.people /> Levels
+      </Link>
+      <Link href="/welcome/seva" style={itemStyle(pathname.startsWith('/welcome/seva'))}>
+        <SetuIcon.heart /> Seva
       </Link>
       {isAdmin ? (
         <Link href="/admin" style={itemStyle(false)}>
