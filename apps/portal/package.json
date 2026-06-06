@@ -23,6 +23,7 @@
     "wipe:uat-leaks": "tsx --env-file=.env.local scripts/wipe-uat-leaks.ts",
     "wipe:test-leaks": "tsx --env-file=.env.local scripts/wipe-test-leaks.ts",
     "check:migrations": "tsx --env-file=.env.local scripts/check-uat-migrations.ts",
+    "check:door-access": "tsx --env-file=.env.local scripts/check-door-firestore-access.ts",
     "seed:donation-periods": "tsx --env-file=.env.local scripts/seed-donation-periods.ts",
     "seed:bala-vihar-levels": "tsx --env-file=.env.local scripts/seed-bala-vihar-levels.ts",
     "seed:bala-vihar-calendar": "tsx --env-file=.env.local scripts/seed-bala-vihar-calendar.ts",
