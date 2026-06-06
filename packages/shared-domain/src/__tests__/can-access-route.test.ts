@@ -551,3 +551,12 @@ describe('canAccessRoute — /api/admin/seva/requirement — admin only', () => 
     expect(canAccessRoute(welcomeTeam, '/api/admin/seva/requirement', 'PUT')).toBe(false);
   });
 });
+
+describe('canAccessRoute — /api/setu/teacher/achievements — teacher capability', () => {
+  it('allows teacher POST and admin DELETE (inherits teacher); denies family-manager + welcome-team', () => {
+    expect(canAccessRoute(teacher, '/api/setu/teacher/achievements', 'POST')).toBe(true);
+    expect(canAccessRoute(admin, '/api/setu/teacher/achievements/a1', 'DELETE')).toBe(true);
+    expect(canAccessRoute(manager, '/api/setu/teacher/achievements', 'POST')).toBe(false);
+    expect(canAccessRoute(welcomeTeam, '/api/setu/teacher/achievements', 'POST')).toBe(false);
+  });
+});
