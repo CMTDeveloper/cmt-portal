@@ -1,11 +1,7 @@
 import { paymentSourceOf } from '@cmt/shared-domain';
-import type { DonationDoc, ProgramDoc, OfferingDoc } from '@cmt/shared-domain';
+import type { DonationDoc, ProgramDoc } from '@cmt/shared-domain';
 import type { EnrollmentWithOffering } from '@/features/setu/enrollment/get-enrollments';
-import {
-  summarizeFamilyCheckIns,
-  type CheckInRecord,
-  type CheckInSummary,
-} from '@/features/setu/attendance/check-in-attendance';
+import type { ResolvedSummary } from '@/features/setu/attendance/resolve-attendance';
 import { selectBalaViharEnrollment } from './select-bv-enrollment';
 import { deriveProgramCards, type ProgramCard } from './derive-program-cards';
 
@@ -42,8 +38,9 @@ export interface DashboardModelInput {
   donations: DonationDoc[];
   /** Program docs keyed by programKey (for capability-aware cards). */
   programsById: Map<string, ProgramDoc>;
-  /** Raw check-in records from the standalone check-in app (read-only). */
-  rawCheckIns: CheckInRecord[];
+  /** Family-level BV attendance union (teacher marks ∪ door check-ins), already
+   *  window-scoped to the BV offering by the caller. */
+  bvAttendance: ResolvedSummary;
   /** Class Sundays held so far this year (calendar) — the honest denominator. */
   classSundaysHeld: number;
   /**
@@ -66,9 +63,9 @@ export interface FamilyDashboardModel {
   legacyPaid: boolean;
   /** One card per active NON-BV enrollment (BV has its own bespoke section). */
   otherProgramCards: ProgramCard[];
-  /** Family-level check-in summary, scoped to the BV offering's window. */
+  /** Family-level BV attendance (teacher marks ∪ door check-ins), window-scoped. */
   attendance: {
-    summary: CheckInSummary;
+    summary: { attended: number; marks: { date: string; present: boolean }[] };
     hasAttendance: boolean;
     total: number;
     pct: number;
@@ -97,13 +94,12 @@ export interface FamilyDashboardModel {
  * separately via `deriveProgramCards`.
  */
 export function buildFamilyDashboardModel(input: DashboardModelInput): FamilyDashboardModel {
-  const { enrollments, donations, programsById, rawCheckIns, classSundaysHeld, legacyPaymentStatus } =
+  const { enrollments, donations, programsById, bvAttendance, classSundaysHeld, legacyPaymentStatus } =
     input;
 
   const bv = selectBalaViharEnrollment(enrollments);
   const isEnrolled = bv !== null;
   const kidsEnrolled = bv?.enrolledMids.length ?? 0;
-  const offering: OfferingDoc | null = bv?.offering ?? null;
 
   const enrollPeriodLabel = bv?.termLabel ?? null;
   const suggestedAmount = bv?.effectiveSuggestedAmount ?? null;
@@ -117,20 +113,14 @@ export function buildFamilyDashboardModel(input: DashboardModelInput): FamilyDas
   const isLegacyPeriod = isLegacyBvPeriod(enrollments);
   const legacyPaid = isLegacyPeriod && legacyPaymentStatus === 'paid';
 
-  // Attendance scoped to the BV offering window (a prior year's records must not
-  // show under this year's enrollment). With no active BV offering, no scoping.
-  const scoped = offering
-    ? rawCheckIns.filter((r) => {
-        const start = torontoYmd(offering.startDate);
-        const end = offering.endDate ? torontoYmd(offering.endDate) : '9999-12-31';
-        return r.date >= start && r.date <= end;
-      })
-    : rawCheckIns;
-  const summary = summarizeFamilyCheckIns(scoped);
-  const hasAttendance = summary.recorded > 0;
-  const attendanceTotal = classSundaysHeld > 0 ? classSundaysHeld : summary.recorded;
-  const attendancePct =
-    attendanceTotal > 0 ? Math.round((summary.attended / attendanceTotal) * 100) : 0;
+  // The family-level BV union is computed + window-scoped by the caller; the
+  // model just formats it. attendedPct uses classSundaysHeld as the honest
+  // denominator when known (else the union's own total).
+  const attended = bvAttendance.present + bvAttendance.late;
+  const hasAttendance = bvAttendance.total > 0;
+  const attendanceTotal = classSundaysHeld > 0 ? classSundaysHeld : bvAttendance.total;
+  const attendancePct = attendanceTotal > 0 ? Math.round((attended / attendanceTotal) * 100) : 0;
+  const attendanceMarks = bvAttendance.marks.map((m) => ({ date: m.date, present: m.status !== 'absent' }));
 
   const otherProgramCards = deriveProgramCards(enrollments, programsById).filter(
     (c) => c.programKey !== 'bala-vihar',
@@ -173,7 +163,12 @@ export function buildFamilyDashboardModel(input: DashboardModelInput): FamilyDas
     isLegacyPeriod,
     legacyPaid,
     otherProgramCards,
-    attendance: { summary, hasAttendance, total: attendanceTotal, pct: attendancePct },
+    attendance: {
+      summary: { attended, marks: attendanceMarks },
+      hasAttendance,
+      total: attendanceTotal,
+      pct: attendancePct,
+    },
     donation: {
       complete: donationComplete,
       pct: donationPct,

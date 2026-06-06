@@ -5,7 +5,7 @@ import {
   type DashboardModelInput,
 } from '../_helpers/dashboard-model';
 import type { EnrollmentWithOffering } from '@/features/setu/enrollment/get-enrollments';
-import type { CheckInRecord } from '@/features/setu/attendance/check-in-attendance';
+import type { ResolvedSummary } from '@/features/setu/attendance/resolve-attendance';
 import type { DonationDoc, ProgramDoc, OfferingDoc } from '@cmt/shared-domain';
 
 // ─── Fixtures ───────────────────────────────────────────────────────────────
@@ -128,12 +128,18 @@ const PROGRAMS = new Map<string, ProgramDoc>([
   ['tabla', tablaProgram()],
 ]);
 
-function checkIn(date: string): CheckInRecord {
-  return { date, checkedInBy: 'sevak', students: [{ sid: '900', isCheckedIn: true }] };
+function resolved(marks: { date: string; status: 'present' | 'late' | 'absent'; source?: 'portal' | 'door' }[]): ResolvedSummary {
+  const sorted = [...marks].sort((a, b) => a.date.localeCompare(b.date)).map((m) => ({ ...m, source: m.source ?? 'door' }));
+  const present = sorted.filter((m) => m.status === 'present').length;
+  const late = sorted.filter((m) => m.status === 'late').length;
+  const absent = sorted.filter((m) => m.status === 'absent').length;
+  const total = sorted.length;
+  return { present, late, absent, total, attendedPct: total ? Math.round(((present + late) / total) * 100) : 0, marks: sorted };
 }
 
-// Two check-ins inside the BV 2025-26 window, ZERO inside the Tabla 2026-27 window.
-const CHECK_INS: CheckInRecord[] = [checkIn('2025-10-05'), checkIn('2026-01-11')];
+// The family-level BV union the page now computes (teacher marks ∪ door check-ins,
+// already window-scoped by the reader) — two attended Sundays.
+const BV_ATTENDANCE = resolved([{ date: '2025-10-05', status: 'present' }, { date: '2026-01-11', status: 'present' }]);
 
 function makeDonation(overrides: Partial<DonationDoc> = {}): DonationDoc {
   return {
@@ -159,7 +165,7 @@ function input(overrides: Partial<DashboardModelInput> = {}): DashboardModelInpu
     enrollments: [TABLA_ENROLLMENT, BV_ENROLLMENT], // Tabla first (enrolledAt DESC)
     donations: [],
     programsById: PROGRAMS,
-    rawCheckIns: CHECK_INS,
+    bvAttendance: BV_ATTENDANCE,
     classSundaysHeld: 30,
     legacyPaymentStatus: null,
     ...overrides,
@@ -176,10 +182,10 @@ describe('buildFamilyDashboardModel — BV section pins to Bala Vihar', () => {
     expect(m.suggestedAmount).toBe(200); // BV's amount, NOT Tabla's 300
   });
 
-  it('REGRESSION: attendance is scoped to the BV window, so BV check-ins still show', () => {
+  it('formats the passed BV attendance union (window-scoping lives in the reader)', () => {
     const m = buildFamilyDashboardModel(input());
-    // Both check-ins are inside BV 2025-26 but outside Tabla 2026-27. If the
-    // section wrongly scoped to Tabla, attended would be 0 (the original bug).
+    // The page now passes a pre-scoped family-level union; the model just formats
+    // it. Two attended Sundays over classSundaysHeld=30.
     expect(m.attendance.hasAttendance).toBe(true);
     expect(m.attendance.summary.attended).toBe(2);
     expect(m.attendance.total).toBe(30); // classSundaysHeld
@@ -226,14 +232,15 @@ describe('buildFamilyDashboardModel — no BV enrollment', () => {
     // no in-portal Give button.
     expect(m.donation.showGive).toBe(false);
     expect(m.enrolledPill.text).toBe('Not enrolled');
-    // No active BV offering → attendance is unscoped (shows all records).
+    // The model formats whatever union it's given (the page decides whether a
+    // non-BV-enrolled family even computes one).
     expect(m.attendance.summary.attended).toBe(2);
     // Tabla still gets its own card.
     expect(m.otherProgramCards.map((c) => c.programKey)).toEqual(['tabla']);
   });
 
   it('handles an empty family (no enrollments, no check-ins)', () => {
-    const m = buildFamilyDashboardModel(input({ enrollments: [], rawCheckIns: [], donations: [] }));
+    const m = buildFamilyDashboardModel(input({ enrollments: [], bvAttendance: resolved([]), donations: [] }));
     expect(m.isEnrolled).toBe(false);
     expect(m.attendance.hasAttendance).toBe(false);
     expect(m.donation.tone).toBeNull();

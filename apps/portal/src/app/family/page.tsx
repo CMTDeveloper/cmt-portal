@@ -14,13 +14,16 @@ import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
 import { getDonations } from '@/features/setu/donations/get-donations';
 import { getLegacyPaymentStatus } from '@/features/setu/donations/legacy-payment';
 import { getUpcoming, getClassDatesHeld, type CalendarEntry } from '@/features/setu/calendar/calendar';
-import { getCheckInAttendance } from '@/features/setu/attendance/check-in-attendance';
+import { getFamilyBalaViharAttendance } from '@/features/setu/attendance/get-family-attendance';
+import { EMPTY_RESOLVED_SUMMARY } from '@/features/setu/attendance/resolve-attendance';
 import { listPrograms } from '@/features/setu/programs/get-programs';
 import { getFamilySevaProgress, deriveSevaCardView, type FamilySevaProgress } from '@/features/setu/seva/get-family-seva-progress';
 import { SevaProgressCard } from '@/features/family/components/seva-progress-card';
+import { selectBalaViharEnrollment } from './_helpers/select-bv-enrollment';
 import {
   buildFamilyDashboardModel,
   isLegacyBvPeriod,
+  torontoYmd,
   type FamilyDashboardModel,
 } from './_helpers/dashboard-model';
 import type { ProgramDoc } from '@cmt/shared-domain';
@@ -74,7 +77,7 @@ export default async function FamilyDashboardPage() {
     enrollments: [],
     donations: [],
     programsById: new Map(),
-    rawCheckIns: [],
+    bvAttendance: EMPTY_RESOLVED_SUMMARY,
     classSundaysHeld: 0,
     legacyPaymentStatus: null,
   });
@@ -113,18 +116,40 @@ export default async function FamilyDashboardPage() {
       // The dashboard's calendar + attendance are the Bala Vihar program's, so
       // scope the readers to 'bala-vihar' (a second usesCalendar program must not
       // leak dates in or inflate the attendance denominator).
-      const [{ upcoming }, rawCheckIns, classSundays] = await Promise.all([
+      const [{ upcoming }, classSundays] = await Promise.all([
         getUpcoming(data.family.location, 'bala-vihar', undefined, 3),
-        getCheckInAttendance(data.family.legacyFid),
         getClassDatesHeld(data.family.location, 'bala-vihar'),
       ]);
       upcomingEntries = upcoming;
+
+      // Family-level BV attendance = union of teacher marks ∪ door check-ins,
+      // resolved per child then folded by date (best status across children) so
+      // one child's teacher-absent can't erase a sibling's door-present. Pinned
+      // to the active Bala Vihar enrollment — a newer non-BV enrollment must not
+      // scope this attendance away.
+      const bvEnrollment = selectBalaViharEnrollment(enrollments);
+      let bvAttendance = EMPTY_RESOLVED_SUMMARY;
+      if (bvEnrollment) {
+        const off = bvEnrollment.offering;
+        const children = bvEnrollment.enrolledMids
+          .map((cmid) => data.members.find((mm) => mm.mid === cmid))
+          .filter((mm): mm is NonNullable<typeof mm> => Boolean(mm))
+          .map((mm) => ({ mid: mm.mid, legacySid: mm.legacySid ?? null }));
+        bvAttendance = await getFamilyBalaViharAttendance({
+          fid: data.family.fid,
+          legacyFid: data.family.legacyFid,
+          oid: bvEnrollment.oid,
+          windowStart: off ? torontoYmd(off.startDate) : null,
+          windowEnd: off?.endDate ? torontoYmd(off.endDate) : null,
+          children,
+        });
+      }
 
       model = buildFamilyDashboardModel({
         enrollments,
         donations,
         programsById,
-        rawCheckIns,
+        bvAttendance,
         classSundaysHeld: classSundays.length,
         legacyPaymentStatus,
       });
