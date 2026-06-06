@@ -112,6 +112,16 @@ export function canAccessRoute(
     return isSetuFamily(claims) || isWelcomeTeam(claims);
   }
 
+  // Setu API — volunteering-skill options: read-only list for the member
+  // add/edit forms. Any signed-in setu family (incl. a family-member editing
+  // their own profile). Writes go through /api/admin/volunteering-skills (admin).
+  if (
+    pathname === '/api/setu/volunteering-skills' ||
+    pathname.startsWith('/api/setu/volunteering-skills/')
+  ) {
+    return isSetuFamily(claims);
+  }
+
   // Setu API — enrollments: GET is any setu family; POST/DELETE is manager-only
   if (pathname === '/api/setu/enrollments' || pathname.startsWith('/api/setu/enrollments/')) {
     if (!isSetuFamily(claims)) return false;

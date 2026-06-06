@@ -434,6 +434,31 @@ describe('canAccessRoute — /api/setu/programs — family + welcome-team', () =
   });
 });
 
+describe('canAccessRoute — /api/setu/volunteering-skills — any setu family (read-only)', () => {
+  it('allows family-manager GET', () => {
+    expect(canAccessRoute(manager, '/api/setu/volunteering-skills', 'GET')).toBe(true);
+  });
+  it('allows family-member GET (self-edit needs the option list)', () => {
+    expect(canAccessRoute(member, '/api/setu/volunteering-skills', 'GET')).toBe(true);
+  });
+  it('denies welcome-team (managed via /api/admin/volunteering-skills)', () => {
+    expect(canAccessRoute(welcomeTeam, '/api/setu/volunteering-skills', 'GET')).toBe(false);
+  });
+  it('denies legacy family role (no fid)', () => {
+    expect(canAccessRoute(family, '/api/setu/volunteering-skills', 'GET')).toBe(false);
+  });
+});
+
+describe('canAccessRoute — /api/admin/volunteering-skills — admin-only', () => {
+  it('allows admin to PUT', () => {
+    expect(canAccessRoute(admin, '/api/admin/volunteering-skills', 'PUT')).toBe(true);
+  });
+  it('denies welcome-team and family-manager', () => {
+    expect(canAccessRoute(welcomeTeam, '/api/admin/volunteering-skills', 'PUT')).toBe(false);
+    expect(canAccessRoute(manager, '/api/admin/volunteering-skills', 'PUT')).toBe(false);
+  });
+});
+
 describe('canAccessRoute — /api/setu/donations', () => {
   it('allows family-manager to POST /api/setu/donations/checkout', () => {
     expect(canAccessRoute(manager, '/api/setu/donations/checkout', 'POST')).toBe(true);
