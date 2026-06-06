@@ -497,3 +497,23 @@ describe('canAccessRoute — /api/setu/contacts/* (self-service, any family role
     expect(canAccessRoute(welcomeTeam, '/api/setu/contacts/send-code', 'POST')).toBe(false);
   });
 });
+
+describe('canAccessRoute — /api/welcome/seva/* — welcome-team + admin', () => {
+  it('allows welcome-team and admin', () => {
+    expect(canAccessRoute(welcomeTeam, '/api/welcome/seva/opportunities', 'POST')).toBe(true);
+    expect(canAccessRoute(admin, '/api/welcome/seva/opportunities', 'GET')).toBe(true);
+    expect(canAccessRoute(admin, '/api/welcome/seva/opportunities/abc', 'PATCH')).toBe(true);
+  });
+  it('denies family and teacher', () => {
+    expect(canAccessRoute(manager, '/api/welcome/seva/opportunities', 'GET')).toBe(false);
+    expect(canAccessRoute(member, '/api/welcome/seva/opportunities', 'POST')).toBe(false);
+    expect(canAccessRoute(teacher, '/api/welcome/seva/opportunities', 'GET')).toBe(false);
+  });
+});
+
+describe('canAccessRoute — /api/admin/seva/requirement — admin only', () => {
+  it('allows admin, denies welcome-team', () => {
+    expect(canAccessRoute(admin, '/api/admin/seva/requirement', 'PUT')).toBe(true);
+    expect(canAccessRoute(welcomeTeam, '/api/admin/seva/requirement', 'PUT')).toBe(false);
+  });
+});

@@ -149,6 +149,11 @@ export function canAccessRoute(
     return isWelcomeTeam(claims);
   }
 
+  // Seva management — opportunities + (later) signup rosters + confirmations: admin + welcome-team.
+  if (pathname === '/api/welcome/seva' || pathname.startsWith('/api/welcome/seva/')) {
+    return isWelcomeTeam(claims);
+  }
+
   // Setu API — published class calendar is readable by ANY signed-in user
   // (families incl. family-member, teachers). Returns only enabled entries;
   // writes go through /api/admin/calendar (admin + welcome-team).
