@@ -37,6 +37,10 @@ describe('PUBLIC_ROUTES', () => {
     expect(PUBLIC_ROUTES).toContain('/api/auth/family/verify-code');
     expect(PUBLIC_ROUTES).toContain('/api/auth/signout');
   });
+  it('includes cron routes (their handlers self-verify CRON_SECRET)', () => {
+    expect(PUBLIC_ROUTES).toContain('/api/cron/reset-cache');
+    expect(PUBLIC_ROUTES).toContain('/api/cron/send-weekly-payment-reminders');
+  });
 });
 
 describe('matchRoute', () => {
@@ -74,5 +78,9 @@ describe('isPublicRoute', () => {
   });
   it('returns true for :param route matches', () => {
     expect(isPublicRoute('/api/check-in/families/42')).toBe(true);
+  });
+  it('returns true for cron routes (self-verify CRON_SECRET in their handlers)', () => {
+    expect(isPublicRoute('/api/cron/reset-cache')).toBe(true);
+    expect(isPublicRoute('/api/cron/send-weekly-payment-reminders')).toBe(true);
   });
 });

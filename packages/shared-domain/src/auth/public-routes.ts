@@ -48,10 +48,22 @@ export const PUBLIC_ROUTES = [
   '/api/check-in/lookup',
   '/api/check-in/guests',
 
-  // NOTE: /api/webhooks/stripe and /api/cron/archive-pledges are intentionally
-  // absent until their Stripe-signature-verifying and CRON_SECRET-verifying
-  // handlers ship in slice 3c/3d. Adding them now without handlers would expose
-  // unauthenticated endpoints with no enforcement.
+  // Vercel Cron endpoints. Listed here BECAUSE their handlers self-verify
+  // CRON_SECRET via a timing-safe Bearer check (verifyCronAuth) — Vercel Cron
+  // sends `Authorization: Bearer ${CRON_SECRET}`, which the Firebase
+  // session/ID-token verifier can't decode. Without this allowlist the
+  // middleware 401s the cron request before its own CRON_SECRET enforcement
+  // runs, so the daily cache-reset + weekly reminders never fire. These are
+  // public at the middleware layer but self-authenticating in the handler
+  // (same pattern as webhooks/register).
+  '/api/cron/reset-cache',
+  '/api/cron/send-weekly-payment-reminders',
+
+  // NOTE: /api/webhooks/stripe and /api/cron/archive-pledges remain
+  // intentionally absent until their Stripe-signature-verifying and
+  // CRON_SECRET-verifying handlers ship in slice 3c/3d. Adding a route here
+  // without a self-authenticating handler would expose an unauthenticated
+  // endpoint with no enforcement.
 ] as const;
 
 export function matchRoute(pattern: string, pathname: string): boolean {
