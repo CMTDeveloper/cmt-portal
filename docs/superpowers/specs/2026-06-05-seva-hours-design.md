@@ -128,6 +128,14 @@ Deterministic id `${oppId}__${fid}` ⇒ one signup per family per opportunity
 - **Member credit:** optional `mid`; if that member is later removed, the signup keeps the historical `mid` and the UI degrades gracefully.
 - **Unenrolled families:** still get a seva card (0 of 20) and can sign up — per the "every family" scope.
 
+## Cross-cutting: mobile-app readiness + mobile view (ALL slices)
+
+A native mobile app will consume these APIs later, so every slice builds them mobile-consumable:
+- **Header-session auth, not cookies.** Handlers derive identity via `readSessionFromHeaders(req)` (the `x-portal-*` headers the middleware injects from EITHER the `__session` cookie OR an `Authorization: Bearer <ID token>`), never `getCurrentFamily()`/`cookies()` directly — so a Bearer-only mobile client works. (Especially the Slice B family signup route.)
+- **Cross-origin clean** (middleware `applyCors` covers it), **JSON-only with ISO-string dates** and a consistent `{ data }` / `{ error }` envelope, numbers as numbers.
+- **One shared contract:** request/response shapes live in `@cmt/shared-domain` Zod schemas, imported by both web and mobile.
+- **Real mobile UI:** every screen ships a true mobile layout (`block md:hidden`) + desktop (`hidden md:block`), verified at ~375px.
+
 ## Out of scope (v1 — YAGNI)
 
 - Enforcement teeth (blocking enrollment/actions) — track & remind only.
