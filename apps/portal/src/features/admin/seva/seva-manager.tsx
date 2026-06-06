@@ -132,6 +132,7 @@ export function SevaManager({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<OppFormState>(emptyForm);
   const [editErrors, setEditErrors] = useState<Record<string, string>>({});
+  const [closingId, setClosingId] = useState<string | null>(null);
   const [savingEdit, startEditTransition] = useTransition();
 
   const hasYear = requirement.currentSevaYear != null && requirement.currentSevaYear !== '';
@@ -240,8 +241,11 @@ export function SevaManager({
 
   // ── close ──
   async function closeOpp(oppId: string) {
+    if (closingId) return;
     if (!confirm('Close this opportunity? Families will no longer be able to sign up for it.')) return;
+    setClosingId(oppId);
     const res = await updateOpportunity(oppId, { status: 'closed' });
+    setClosingId(null);
     if (!res.ok) {
       toast.error(res.error ?? 'Close failed');
       return;
@@ -472,7 +476,7 @@ export function SevaManager({
         <div>
           <p style={eyebrowStyle}>Opportunities</p>
           <h2 style={{ fontSize: 20, fontWeight: 500, marginTop: 6, lineHeight: 1.1 }}>
-            {opportunities.length} {opportunities.length === 1 ? 'posted' : 'posted'}
+            {opportunities.length} posted
           </h2>
         </div>
         {!creating && (
@@ -658,9 +662,10 @@ export function SevaManager({
                           type="button"
                           className="btn btn--g"
                           onClick={() => closeOpp(o.oppId)}
+                          disabled={closingId === o.oppId}
                           style={{ flex: '1 1 auto', minWidth: 120, minHeight: 44 }}
                         >
-                          Close
+                          {closingId === o.oppId ? 'Closing…' : 'Close'}
                         </button>
                       )}
                     </div>
