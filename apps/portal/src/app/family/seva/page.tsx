@@ -17,6 +17,7 @@ export default async function FamilySevaPage() {
     <SevaBrowser
       currentSevaYear={view.currentSevaYear}
       hoursPerYear={view.hoursPerYear}
+      hoursEarned={view.hoursEarned}
       initialOpportunities={view.opportunities}
       initialMySignups={view.mySignups}
       members={members}

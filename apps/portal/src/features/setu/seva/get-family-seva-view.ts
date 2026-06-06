@@ -5,18 +5,21 @@ import { listFamilySignups, listSignupsForOpp, serializeSignup, isActiveSignup }
 export async function getFamilySevaView(fid: string) {
   const { hoursPerYear, currentSevaYear } = await getSevaRequirement();
   if (!currentSevaYear) {
-    return { currentSevaYear: null, hoursPerYear, opportunities: [], mySignups: [] };
+    return { currentSevaYear: null, hoursPerYear, hoursEarned: 0, opportunities: [], mySignups: [] };
   }
 
-  const [opps, mySignupsAll] = await Promise.all([
+  // openOpps drives the browse list; allOpps (incl. closed) backs the
+  // my-signups join so a resolved sign-up on a since-closed opp still shows
+  // its summary.
+  const [openOpps, allOpps, mySignupsAll] = await Promise.all([
     listOpportunities({ sevaYear: currentSevaYear, status: 'open' }),
+    listOpportunities({ sevaYear: currentSevaYear }),
     listFamilySignups(fid),
   ]);
 
-  // Active count per capacity-limited opportunity (for spots-left).
   const activeByOpp = new Map<string, number>();
   await Promise.all(
-    opps
+    openOpps
       .filter((o) => o.capacity != null)
       .map(async (o) => {
         const signups = await listSignupsForOpp(o.oppId);
@@ -27,16 +30,13 @@ export async function getFamilySevaView(fid: string) {
   const myThisYear = mySignupsAll.filter((s) => s.sevaYear === currentSevaYear);
   const myByOpp = new Map(myThisYear.map((s) => [s.oppId, s]));
 
-  const opportunities = opps.map((o) => {
+  const opportunities = openOpps.map((o) => {
     const mine = myByOpp.get(o.oppId);
     const spotsLeft = o.capacity != null ? Math.max(0, o.capacity - (activeByOpp.get(o.oppId) ?? 0)) : null;
     return { ...serializeOpportunity(o), mySignupStatus: mine ? mine.status : null, spotsLeft };
   });
 
-  // A signup for an opportunity that has since been CLOSED won't be in the
-  // open-only `opps` list, so its `opportunity` summary is null (the UI renders
-  // a minimal row). Acceptable for Slice B; C/D can fetch closed opps.
-  const oppById = new Map(opps.map((o) => [o.oppId, o]));
+  const oppById = new Map(allOpps.map((o) => [o.oppId, o]));
   const mySignups = myThisYear
     .filter((s) => s.status !== 'cancelled')
     .map((s) => {
@@ -44,5 +44,9 @@ export async function getFamilySevaView(fid: string) {
       return { ...serializeSignup(s), opportunity: opp ? serializeOpportunity(opp) : null };
     });
 
-  return { currentSevaYear, hoursPerYear, opportunities, mySignups };
+  const hoursEarned = myThisYear
+    .filter((s) => s.status === 'completed')
+    .reduce((sum, s) => sum + (s.hoursAwarded ?? 0), 0);
+
+  return { currentSevaYear, hoursPerYear, hoursEarned, opportunities, mySignups };
 }

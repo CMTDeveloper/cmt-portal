@@ -15,6 +15,7 @@ import {
 interface SevaBrowserProps {
   currentSevaYear: string | null;
   hoursPerYear: number;
+  hoursEarned: number;
   initialOpportunities: SevaOppView[];
   initialMySignups: SevaMySignup[];
   members: { mid: string; name: string }[];
@@ -90,6 +91,7 @@ function MetaItem({ icon, children }: { icon: React.ReactNode; children: React.R
 export function SevaBrowser({
   currentSevaYear,
   hoursPerYear,
+  hoursEarned,
   initialOpportunities,
   initialMySignups,
   members,
@@ -107,7 +109,8 @@ export function SevaBrowser({
 
   const memberNameByMid = new Map(members.map((m) => [m.mid, m.name]));
   const isEmpty = currentSevaYear == null || opportunities.length === 0;
-  const activeSignups = mySignups.filter((s) => s.status === 'signed-up');
+  const pendingSignups = mySignups.filter((s) => s.status === 'signed-up');
+  const completedSignups = mySignups.filter((s) => s.status === 'completed');
   const signedUpCount = opportunities.filter((o) => o.mySignupStatus === 'signed-up').length;
 
   async function refetch() {
@@ -166,6 +169,24 @@ export function SevaBrowser({
     const isSignedUp = o.mySignupStatus === 'signed-up';
     const isFull = o.spotsLeft === 0;
     const pending = pendingId === o.oppId;
+
+    if (o.mySignupStatus === 'completed' || o.mySignupStatus === 'no-show') {
+      const done = o.mySignupStatus === 'completed';
+      return (
+        <span
+          className="pill"
+          style={{
+            background: done ? 'var(--accentSoft)' : 'var(--surface2)',
+            color: done ? 'var(--accentDeep)' : 'var(--muted)',
+            fontWeight: 600,
+            fontSize: 12,
+            padding: '6px 12px',
+          }}
+        >
+          {done ? <SetuIcon.check width={13} height={13} /> : null} {done ? 'Completed' : 'Marked absent'}
+        </span>
+      );
+    }
 
     if (isSignedUp) {
       return (
@@ -313,10 +334,12 @@ export function SevaBrowser({
           <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--accentDeep)', letterSpacing: '.04em' }}>
             OUR FAMILY GOAL{currentSevaYear ? ` · ${currentSevaYear}` : ''}
           </div>
-          {/* The number is a bare text interpolation (no wrapping element) so
-              "{hours} hours of seva this year" stays a single contiguous text
-              node the goal-header test can match. The whole line carries the
-              confident accent treatment instead of enlarging only the number. */}
+          {/* "{earned} of {target}" is a bare text interpolation (no wrapping
+              element) so the full "{earned} of {target} hours of seva this year"
+              line stays a single contiguous text node the goal-header test can
+              match. The whole line carries the confident accent treatment
+              instead of enlarging only the number. A real progress bar lands in
+              Slice D — this is earned progress as plain text for now. */}
           <p
             style={{
               marginTop: 4,
@@ -327,7 +350,7 @@ export function SevaBrowser({
               lineHeight: 1.12,
             }}
           >
-            {hoursPerYear} hours of seva this year
+            {hoursEarned} of {hoursPerYear} hours of seva this year
           </p>
           {signedUpCount > 0 && (
             <div style={{ fontSize: 13, color: 'var(--accentDeep)', marginTop: 8, fontWeight: 500 }}>
@@ -495,9 +518,11 @@ export function SevaBrowser({
         </div>
       )}
 
-      {/* My sign-ups */}
+      {/* My sign-ups — pending (cancellable) first, then completed (hours
+          credited, not cancellable). The empty state shows only when both
+          lists are empty; no-show rows are intentionally omitted here. */}
       <SectionLabel>My sign-ups</SectionLabel>
-      {activeSignups.length === 0 ? (
+      {pendingSignups.length === 0 && completedSignups.length === 0 ? (
         <div
           className="card"
           style={{
@@ -530,8 +555,9 @@ export function SevaBrowser({
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {activeSignups.map((s) => {
+          {[...pendingSignups, ...completedSignups].map((s) => {
             const creditedName = s.mid ? (memberNameByMid.get(s.mid) ?? null) : null;
+            const isDone = s.status === 'completed';
             return (
               <div
                 key={s.signupId}
@@ -587,15 +613,31 @@ export function SevaBrowser({
                     </div>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  className="btn btn--g"
-                  onClick={() => doCancel(s.signupId)}
-                  disabled={pendingId !== null}
-                  style={{ minHeight: 44, flex: '0 0 auto' }}
-                >
-                  Cancel
-                </button>
+                {isDone ? (
+                  <span
+                    className="pill"
+                    style={{
+                      flex: '0 0 auto',
+                      background: 'var(--accentSoft)',
+                      color: 'var(--accentDeep)',
+                      fontWeight: 600,
+                      fontSize: 12.5,
+                      padding: '6px 12px',
+                    }}
+                  >
+                    {s.hoursAwarded} hrs
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn btn--g"
+                    onClick={() => doCancel(s.signupId)}
+                    disabled={pendingId !== null}
+                    style={{ minHeight: 44, flex: '0 0 auto' }}
+                  >
+                    Cancel
+                  </button>
+                )}
               </div>
             );
           })}

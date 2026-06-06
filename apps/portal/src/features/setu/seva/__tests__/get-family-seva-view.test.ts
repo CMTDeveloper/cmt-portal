@@ -35,6 +35,7 @@ describe('getFamilySevaView', () => {
     expect(v.currentSevaYear).toBeNull();
     expect(v.opportunities).toEqual([]);
     expect(v.mySignups).toEqual([]);
+    expect(v.hoursEarned).toBe(0);
   });
   it('sets mySignupStatus null + spotsLeft null for an uncapped opp with no signup', async () => {
     const v = await getFamilySevaView('F');
@@ -62,5 +63,27 @@ describe('getFamilySevaView', () => {
     ] as never);
     const v = await getFamilySevaView('F');
     expect(v.opportunities[0]!.spotsLeft).toBe(1);
+  });
+  it('sums hoursAwarded over completed signups into hoursEarned (no-show counts 0)', async () => {
+    vi.mocked(listFamilySignups).mockResolvedValue([
+      sg({ signupId: 's1', oppId: 'o1', status: 'completed', hoursAwarded: 4 }),
+      sg({ signupId: 's2', oppId: 'o2', status: 'no-show', hoursAwarded: 0 }),
+    ] as never);
+    const v = await getFamilySevaView('F');
+    expect(v.hoursEarned).toBe(4);
+  });
+  it('joins a since-closed opportunity into mySignups (all-statuses query backs the join)', async () => {
+    const open = opp({ oppId: 'o1', status: 'open' });
+    const closed = opp({ oppId: 'o2', status: 'closed' });
+    vi.mocked(listOpportunities).mockImplementation(async (f) =>
+      (f?.status === 'open' ? [open] : [open, closed]) as never,
+    );
+    vi.mocked(listFamilySignups).mockResolvedValue([
+      sg({ signupId: 's2', oppId: 'o2', status: 'completed', hoursAwarded: 4 }),
+    ] as never);
+    const v = await getFamilySevaView('F');
+    expect(v.mySignups).toHaveLength(1);
+    expect(v.mySignups[0]!.opportunity).not.toBeNull();
+    expect(v.mySignups[0]!.opportunity!.oppId).toBe('o2');
   });
 });

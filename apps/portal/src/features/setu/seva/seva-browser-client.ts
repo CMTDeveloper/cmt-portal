@@ -32,22 +32,25 @@ export async function fetchOpportunities(): Promise<{
   opportunities: SevaOppView[];
   currentSevaYear: string | null;
   hoursPerYear: number;
+  hoursEarned: number;
 }> {
   const res = await fetch('/api/setu/seva/opportunities', {
     method: 'GET',
     headers: { 'content-type': 'application/json' },
     credentials: 'same-origin',
   });
-  if (!res.ok) return { opportunities: [], currentSevaYear: null, hoursPerYear: 20 };
+  if (!res.ok) return { opportunities: [], currentSevaYear: null, hoursPerYear: 20, hoursEarned: 0 };
   const data = (await res.json().catch(() => ({}))) as {
     opportunities?: SevaOppView[];
     currentSevaYear?: string | null;
     hoursPerYear?: number;
+    hoursEarned?: number;
   };
   return {
     opportunities: data.opportunities ?? [],
     currentSevaYear: data.currentSevaYear ?? null,
     hoursPerYear: data.hoursPerYear ?? 20,
+    hoursEarned: data.hoursEarned ?? 0,
   };
 }
 
