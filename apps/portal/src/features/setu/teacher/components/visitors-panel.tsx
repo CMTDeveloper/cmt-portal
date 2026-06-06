@@ -361,11 +361,11 @@ export function VisitorsPanel({ levelId, levelName, date }: VisitorsPanelProps) 
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {view.doorVisitors.map((g) => {
+            {view.doorVisitors.map((g, i) => {
               const settled = g.alreadyConfirmed;
               return (
                 <div
-                  key={`${g.parentEmail}:${g.name}`}
+                  key={`${g.parentEmail}:${g.name}:${i}`}
                   className="card"
                   style={{
                     padding: '14px 16px',
