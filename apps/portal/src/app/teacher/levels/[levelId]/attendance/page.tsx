@@ -3,7 +3,7 @@ import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
 import type { WithRole } from '@cmt/shared-domain';
 import { canTeachLevel } from '@/features/setu/teacher/guard';
 import { getLevelAttendanceView } from '@/features/setu/teacher/level-attendance-view';
-import { mostRecentSunday } from '@/features/setu/calendar/calendar';
+import { mostRecentSunday, torontoToday } from '@/features/setu/calendar/calendar';
 import { AttendanceMarker } from '@/features/setu/teacher/components/attendance-marker';
 
 export const metadata = { title: 'Take attendance — CMT Teacher' };
@@ -39,6 +39,7 @@ export default async function TakeAttendancePage({
       levelName={view.levelName}
       ageLabel={view.ageLabel}
       date={view.date}
+      today={torontoToday()}
       rows={view.rows}
       total={view.total}
     />

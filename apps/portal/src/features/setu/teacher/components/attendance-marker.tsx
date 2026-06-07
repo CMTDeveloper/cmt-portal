@@ -11,6 +11,8 @@ interface AttendanceMarkerProps {
   levelName: string;
   ageLabel: string;
   date: string;
+  /** Toronto "today" (YYYY-MM-DD) — drives the future-date guard. */
+  today: string;
   rows: AttendanceViewRow[];
   // presentCount is intentionally NOT a prop — the live count is derived from
   // `marks` so it updates as the teacher flags exceptions.
@@ -75,7 +77,7 @@ const navArrow: React.CSSProperties = {
   textDecoration: 'none',
 };
 
-export function AttendanceMarker({ levelId, levelName, ageLabel, date, rows, total }: AttendanceMarkerProps) {
+export function AttendanceMarker({ levelId, levelName, ageLabel, date, today, rows, total }: AttendanceMarkerProps) {
   const [marks, setMarks] = useState<Record<string, SetuAttendanceStatus>>(() => {
     const init: Record<string, SetuAttendanceStatus> = {};
     for (const r of rows) init[r.mid] = r.status;
@@ -85,6 +87,10 @@ export function AttendanceMarker({ levelId, levelName, ageLabel, date, rows, tot
   const presentCount = Object.values(marks).filter((s) => s === 'present').length;
   const flaggedCount = total - presentCount;
   const progress = total > 0 ? Math.round((presentCount / total) * 100) : 0;
+
+  const isFuture = date > today; // this class hasn't happened yet
+  const canGoNext = addDays(date, 7) <= today; // next Sunday must be past/today
+  const hasSaved = rows.some((r) => r.source === 'portal'); // a teacher already recorded this date
 
   function setStatus(mid: string, status: SetuAttendanceStatus) {
     setMarks((prev) => ({ ...prev, [mid]: status }));
@@ -137,14 +143,24 @@ export function AttendanceMarker({ levelId, levelName, ageLabel, date, rows, tot
               <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--ink)' }}>{prettyDate(date)}</span>
               <span style={{ fontSize: 11, color: 'var(--muted)', fontFamily: 'var(--mono)', letterSpacing: '0.01em' }}>{date}</span>
             </div>
-            <Link
-              href={`/teacher/levels/${levelId}/attendance?date=${addDays(date, 7)}`}
-              aria-label="Next Sunday"
-              className="btn btn--s"
-              style={navArrow}
-            >
-              ›
-            </Link>
+            {canGoNext ? (
+              <Link
+                href={`/teacher/levels/${levelId}/attendance?date=${addDays(date, 7)}`}
+                aria-label="Next Sunday"
+                className="btn btn--s"
+                style={navArrow}
+              >
+                ›
+              </Link>
+            ) : (
+              <span
+                aria-label="Next Sunday"
+                aria-disabled="true"
+                style={{ ...navArrow, opacity: 0.4, pointerEvents: 'none' }}
+              >
+                ›
+              </span>
+            )}
           </div>
           <Link
             href={`/teacher/levels/${levelId}/visitors?date=${date}`}
@@ -156,7 +172,34 @@ export function AttendanceMarker({ levelId, levelName, ageLabel, date, rows, tot
         </div>
       </header>
 
-      {rows.length === 0 ? (
+      {isFuture ? (
+        <div
+          className="card"
+          style={{ padding: '40px 28px', textAlign: 'center', boxShadow: 'var(--setu-elev-1, 0 1px 0 rgba(15,26,34,0.04))' }}
+        >
+          <div
+            aria-hidden
+            style={{
+              width: 52,
+              height: 52,
+              margin: '0 auto 16px',
+              borderRadius: '50%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 24,
+              background: 'var(--info-soft)',
+              color: 'var(--info-deep)',
+            }}
+          >
+            ⏳
+          </div>
+          <p style={{ fontSize: 16, fontWeight: 600, color: 'var(--ink)' }}>This class is upcoming</p>
+          <p style={{ fontSize: 14, color: 'var(--muted)', marginTop: 6, maxWidth: 320, marginInline: 'auto', lineHeight: 1.5 }}>
+            Attendance for {prettyDate(date)} can be taken on class day.
+          </p>
+        </div>
+      ) : rows.length === 0 ? (
         <div
           className="card"
           style={{ padding: '40px 28px', textAlign: 'center', boxShadow: 'var(--setu-elev-1, 0 1px 0 rgba(15,26,34,0.04))' }}
@@ -192,6 +235,20 @@ export function AttendanceMarker({ levelId, levelName, ageLabel, date, rows, tot
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {!hasSaved && (
+            <div
+              style={{
+                padding: '10px 14px',
+                borderRadius: 'var(--radiusSm)',
+                background: 'var(--info-soft)',
+                color: 'var(--info-deep)',
+                fontSize: 13,
+                lineHeight: 1.45,
+              }}
+            >
+              Attendance not taken yet — everyone defaults to Present. Tap a status to flag exceptions, then Save.
+            </div>
+          )}
           {rows.map((r) => {
             const current = marks[r.mid] ?? 'present';
             const opt = OPTION_BY_VALUE[current];
@@ -297,6 +354,7 @@ export function AttendanceMarker({ levelId, levelName, ageLabel, date, rows, tot
         </div>
       )}
 
+      {!isFuture && (
       <div
         style={{
           position: 'fixed',
@@ -342,6 +400,7 @@ export function AttendanceMarker({ levelId, levelName, ageLabel, date, rows, tot
           </button>
         </div>
       </div>
+      )}
     </div>
   );
 }
