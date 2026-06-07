@@ -77,6 +77,59 @@ const navArrow: React.CSSProperties = {
   textDecoration: 'none',
 };
 
+interface StatCardProps {
+  label: string;
+  value: number;
+  /** Card fill — a soft status wash or a neutral surface. */
+  bg: string;
+  /** The big number's color. */
+  valueColor: string;
+  /** Optional sub-label beneath the metric name (e.g. "at the door"). */
+  hint?: string;
+}
+
+/** One compact at-a-glance metric: small label on top, big number below. Hoisted
+ *  to module scope so it never remounts on the parent's re-renders. */
+function StatCard({ label, value, bg, valueColor, hint }: StatCardProps) {
+  return (
+    <div
+      style={{
+        background: bg,
+        border: '1px solid var(--line)',
+        borderRadius: 'var(--radiusSm)',
+        padding: '10px 12px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 2,
+        minWidth: 0,
+        boxShadow: 'var(--setu-elev-1, 0 1px 0 rgba(15,26,34,0.04))',
+      }}
+    >
+      <span
+        style={{
+          fontSize: 11,
+          fontWeight: 600,
+          color: 'var(--muted)',
+          textTransform: 'uppercase',
+          letterSpacing: '0.04em',
+          lineHeight: 1.2,
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+        }}
+      >
+        {label}
+      </span>
+      <span style={{ fontSize: 24, fontWeight: 700, color: valueColor, lineHeight: 1.1, letterSpacing: '-0.02em' }}>
+        {value}
+      </span>
+      {hint && (
+        <span style={{ fontSize: 10.5, color: 'var(--muted)', lineHeight: 1.2 }}>{hint}</span>
+      )}
+    </div>
+  );
+}
+
 export function AttendanceMarker({ levelId, levelName, ageLabel, date, today, rows, total }: AttendanceMarkerProps) {
   const [marks, setMarks] = useState<Record<string, SetuAttendanceStatus>>(() => {
     const init: Record<string, SetuAttendanceStatus> = {};
@@ -84,13 +137,24 @@ export function AttendanceMarker({ levelId, levelName, ageLabel, date, today, ro
     return init;
   });
   const [pending, startTransition] = useTransition();
-  const presentCount = Object.values(marks).filter((s) => s === 'present').length;
+
+  // Live counts — derived from `marks` so they update the instant a teacher flags
+  // an exception (present/late/absent), and from `rows` for the static context.
+  const markValues = Object.values(marks);
+  const presentCount = markValues.filter((s) => s === 'present').length;
+  const lateCount = markValues.filter((s) => s === 'late').length;
+  const absentCount = markValues.filter((s) => s === 'absent').length;
   const flaggedCount = total - presentCount;
   const progress = total > 0 ? Math.round((presentCount / total) * 100) : 0;
 
   const isFuture = date > today; // this class hasn't happened yet
   const canGoNext = addDays(date, 7) <= today; // next Sunday must be past/today
-  const hasSaved = rows.some((r) => r.source === 'portal'); // a teacher already recorded this date
+
+  // Door-aware banner state. The real attendance for a past date often lives in
+  // the self-check-in app, surfaced here as door check-ins — so the absence of a
+  // PORTAL mark does NOT mean "nobody came". Distinguish the three cases.
+  const hasPortalMarks = rows.some((r) => r.source === 'portal'); // teacher already recorded this date
+  const doorCount = rows.filter((r) => r.checkedInAtDoor).length; // self-checked-in at the ashram door
 
   function setStatus(mid: string, status: SetuAttendanceStatus) {
     setMarks((prev) => ({ ...prev, [mid]: status }));
@@ -235,20 +299,59 @@ export function AttendanceMarker({ levelId, levelName, ageLabel, date, today, ro
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {!hasSaved && (
-            <div
-              style={{
-                padding: '10px 14px',
-                borderRadius: 'var(--radiusSm)',
-                background: 'var(--info-soft)',
-                color: 'var(--info-deep)',
-                fontSize: 13,
-                lineHeight: 1.45,
-              }}
-            >
-              Attendance not taken yet — everyone defaults to Present. Tap a status to flag exceptions, then Save.
-            </div>
-          )}
+          {/* At-a-glance stat strip — a row on desktop, wraps to 2-up on narrow
+              phones. Enrolled + Checked-in are static per load; Present/Late/Absent
+              are live off `marks`. Complements (does not replace) the live save
+              footer pinned to the bottom. */}
+          <div
+            role="group"
+            aria-label="Attendance summary"
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(96px, 1fr))',
+              gap: 8,
+              marginBottom: 2,
+            }}
+          >
+            <StatCard label="Enrolled" value={total} bg="var(--surface2)" valueColor="var(--ink)" />
+            <StatCard label="Checked in" hint="at the door" value={doorCount} bg="var(--info-soft)" valueColor="var(--info-deep)" />
+            <StatCard label="Present" value={presentCount} bg="var(--setu-ok-soft)" valueColor="var(--ok)" />
+            <StatCard label="Late" value={lateCount} bg="var(--setu-warn-soft)" valueColor="var(--warn, #a06410)" />
+            <StatCard label="Absent" value={absentCount} bg="var(--setu-err-soft)" valueColor="var(--err)" />
+          </div>
+
+          {/* Door-aware banner. No banner once a teacher has recorded the date in
+              the portal (re-saving just updates). If self-check-ins exist, frame it
+              as "confirm the door list", not "not taken yet". Otherwise the empty
+              default-Present prompt. */}
+          {!hasPortalMarks &&
+            (doorCount > 0 ? (
+              <div
+                style={{
+                  padding: '10px 14px',
+                  borderRadius: 'var(--radiusSm)',
+                  background: 'var(--info-soft)',
+                  color: 'var(--info-deep)',
+                  fontSize: 13,
+                  lineHeight: 1.45,
+                }}
+              >
+                {doorCount} checked in at the door. Everyone defaults to Present — confirm or flag exceptions, then Save.
+              </div>
+            ) : (
+              <div
+                style={{
+                  padding: '10px 14px',
+                  borderRadius: 'var(--radiusSm)',
+                  background: 'var(--info-soft)',
+                  color: 'var(--info-deep)',
+                  fontSize: 13,
+                  lineHeight: 1.45,
+                }}
+              >
+                Attendance not taken yet — everyone defaults to Present. Tap a status to flag exceptions, then Save.
+              </div>
+            ))}
           {rows.map((r) => {
             const current = marks[r.mid] ?? 'present';
             const opt = OPTION_BY_VALUE[current];

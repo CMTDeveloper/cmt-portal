@@ -61,17 +61,57 @@ it('disables the next arrow when the next Sunday is in the future', () => {
   expect(next.tagName).not.toBe('A'); // not a link
 });
 
-it('shows the "not taken yet" banner when no row was saved in the portal', () => {
-  // All fixture rows are source default/door → not yet taken.
+it('shows the door-aware info banner (not "not taken yet") when there are door check-ins but no portal marks', () => {
+  // Default fixture: F-03 is checkedInAtDoor:true, no row is source:'portal'.
   render(<AttendanceMarker {...props()} />);
+  // The door case must NOT read as "not taken yet" — real attendance came in via
+  // the self-check-in door. It shows a confirm-the-door-list info banner instead.
+  expect(screen.queryByText(/not taken yet/i)).toBeNull();
+  expect(screen.getByText(/checked in at the door/i)).toBeDefined();
+});
+
+it('shows the "not taken yet" banner only when there are no portal marks and no door check-ins', () => {
+  const noDoorRows = [
+    { ...ROWS[0]! },
+    { ...ROWS[1]!, source: 'default' as const, checkedInAtDoor: false },
+  ];
+  render(<AttendanceMarker {...props({ rows: noDoorRows })} />);
   expect(screen.getByText(/not taken yet/i)).toBeDefined();
 });
 
-it('hides the "not taken yet" banner once a row has a portal source', () => {
+it('hides every "not taken" / door banner once a row has a portal source', () => {
   const savedRows = [
     { ...ROWS[0]!, source: 'portal' as const, status: 'absent' as const },
     ROWS[1]!,
   ];
   render(<AttendanceMarker {...props({ rows: savedRows })} />);
   expect(screen.queryByText(/not taken yet/i)).toBeNull();
+  expect(screen.queryByText(/checked in at the door/i)).toBeNull();
+});
+
+it('renders the stat strip with the door check-in count reflecting checkedInAtDoor rows', () => {
+  // One of the two fixture rows (F-03) is checkedInAtDoor:true → Checked in = 1.
+  render(<AttendanceMarker {...props()} />);
+  const strip = screen.getByRole('group', { name: /attendance summary/i });
+  const checkedIn = within(strip).getByText('Checked in').closest('div') as HTMLElement;
+  expect(within(checkedIn).getByText('1')).toBeDefined();
+  // Enrolled mirrors `total`.
+  const enrolled = within(strip).getByText('Enrolled').closest('div') as HTMLElement;
+  expect(within(enrolled).getByText('2')).toBeDefined();
+});
+
+it('stat strip Present/Absent counts update live as the teacher flags exceptions', async () => {
+  const user = userEvent.setup();
+  render(<AttendanceMarker {...props()} />);
+  const strip = screen.getByRole('group', { name: /attendance summary/i });
+  const present = within(strip).getByText('Present').closest('div') as HTMLElement;
+  const absent = within(strip).getByText('Absent').closest('div') as HTMLElement;
+  // Opens all present.
+  expect(within(present).getByText('2')).toBeDefined();
+  expect(within(absent).getByText('0')).toBeDefined();
+  // Flag Aarav absent → Present 2→1, Absent 0→1.
+  const aarav = screen.getByText('Aarav Shah').closest('[data-testid="att-row"]') as HTMLElement;
+  await user.click(within(aarav).getByRole('button', { name: /absent/i }));
+  expect(within(present).getByText('1')).toBeDefined();
+  expect(within(absent).getByText('1')).toBeDefined();
 });
