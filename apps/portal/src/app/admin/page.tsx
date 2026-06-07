@@ -60,6 +60,13 @@ export default function AdminPage() {
           tone="primary"
         />
         <Tile
+          href="/admin/school-year"
+          title="School year rollover"
+          icon="check"
+          sub="Promote Bala Vihar families to the next school year — advance grades, re-assign levels, keep each child's history."
+          tone="primary"
+        />
+        <Tile
           href="/admin/calendar"
           title="Class calendar"
           icon="calendar"
