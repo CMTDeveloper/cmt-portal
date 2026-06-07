@@ -306,6 +306,22 @@ describe('POST /api/setu/enrollments', () => {
     expect(body.donateUrl).toContain(EID);
   });
 
+  it('writes pid:oid onto the enrollment doc so it appears on teacher rosters', async () => {
+    // Teacher rosters are derived via collectionGroup('enrollments').where('pid','==',level.pid).
+    // A portal-initiated enrollment must carry pid === oid or it is invisible to teachers.
+    const { set } = setupEnrollTransaction();
+
+    const res = await enrollmentsPOST(
+      makeRequest('POST', '/api/setu/enrollments', { oid: OID }, managerHeaders()),
+    );
+    expect(res.status).toBe(201);
+
+    const enrollmentWrite = set.mock.calls[0]?.[1] as { pid: string; oid: string };
+    expect(enrollmentWrite.pid).toBe(OID);
+    expect(enrollmentWrite.oid).toBe(OID);
+    expect(enrollmentWrite.pid).toBe(enrollmentWrite.oid);
+  });
+
   it('enrolls every member that passes program eligibility — adults for an "any" program, not just children', async () => {
     mockGetProgram.mockResolvedValue({ programKey: 'tabla', status: 'active', eligibility: { memberType: 'any' } });
     const { set } = setupEnrollTransaction({

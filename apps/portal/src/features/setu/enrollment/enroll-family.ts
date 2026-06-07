@@ -130,6 +130,7 @@ export async function enrollFamily(params: EnrollFamilyParams): Promise<EnrollFa
       eid,
       fid,
       oid,
+      pid: oid,
       programKey: offering.programKey,
       programLabel: offering.programLabel,
       termLabel: offering.termLabel,
