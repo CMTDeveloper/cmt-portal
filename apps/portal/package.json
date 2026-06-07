@@ -29,6 +29,8 @@
     "seed:bala-vihar-calendar": "tsx --env-file=.env.local scripts/seed-bala-vihar-calendar.ts",
     "backfill:legacy-sid": "tsx --env-file=.env.local scripts/backfill-legacy-sid.ts",
     "backfill:bv-enrollments": "tsx --env-file=.env.local scripts/backfill-bv-enrollments.ts",
+    "school-year:start": "tsx --env-file=.env.local scripts/start-new-year.ts",
+    "school-year:promote": "tsx --env-file=.env.local scripts/promote-families.ts",
     "refresh:check-ins": "tsx --env-file=.env.local scripts/refresh-check-ins.ts"
   },
   "dependencies": {
