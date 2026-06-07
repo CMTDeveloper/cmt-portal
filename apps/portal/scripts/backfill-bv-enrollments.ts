@@ -2,22 +2,29 @@
  * Legacy Bala Vihar enrollment backfill (UAT, idempotent).
  *
  * Reads every legacy family from the prod RTDB roster (MASTER_FIREBASE
- * credentials, READ-ONLY) and, for each family with ≥1 non-parent child,
- * writes an ACTIVE Bala Vihar enrollment under that center's 2025-26 offering
- * into the Setu Firestore (PORTAL_FIREBASE credentials — UAT by default).
+ * credentials, READ-ONLY) and, for each family with ≥1 CURRENTLY-REGISTERED
+ * child, writes an ACTIVE Bala Vihar enrollment under that center's 2025-26
+ * offering into the Setu Firestore (PORTAL_FIREBASE credentials — UAT by
+ * default). The legacy roster accumulates since 2012; only kids with a non-null
+ * legacy `level` are currently registered (graduated/inactive kids carry a NULL
+ * level and are excluded from enrolledMids).
  *
  * Per family:
  *   1. lazyMigrateLegacyFamily(legacyFid) — idempotent; ensures the Setu
  *      family + members + contactKeys exist; returns the Setu fid.
  *   2. Re-parse the legacy family → its non-parent children with the corrected
- *      schoolGrade (JK/SK fix from legacy-parser) + legacySid.
- *   3. For each child member whose stored schoolGrade differs from the freshly
- *      parsed value, upsert schoolGrade (fixes already-migrated stale grades).
- *   4. enrolledMids = the family's Setu child mids.
- *   5. Upsert families/{fid}/enrollments/{fid}-{oid} with the full schema-valid
+ *      schoolGrade (JK/SK fix from legacy-parser) + legacySid + legacyLevel.
+ *   3. currentChildren = children with a non-null legacy `level`.
+ *      - If none: the family has no current BV kids → if a prior run left an
+ *        enrollment doc, set status:'cancelled' (merge); never create one.
+ *   4. For each CURRENT child member whose stored schoolGrade differs from the
+ *      freshly parsed value, upsert schoolGrade (fixes stale grades).
+ *   5. enrolledMids = the CURRENT children's Setu child mids (via legacySid).
+ *   6. Upsert families/{fid}/enrollments/{fid}-{oid} with the full schema-valid
  *      doc INCLUDING `pid: oid` — the field deriveRoster queries on
  *      (collectionGroup('enrollments').where('pid','==',level.pid)). Without it
  *      the teacher roster stays EMPTY despite "successful" enrollments.
+ *      set(...,{merge:true}) replaces enrolledMids with the current-only array.
  *
  * Does NOT call enrollFamily/getProgram (they use Next 'use cache' and throw
  * outside a render context). Writes the enrollment doc directly, mirroring
@@ -119,7 +126,13 @@ async function loadOffering(db: Db, oid: string): Promise<OfferingInfo | null> {
 }
 
 interface FamilyOutcome {
-  status: 'enrolled' | 'skipped-no-children' | 'error' | 'dry-run';
+  status:
+    | 'enrolled'
+    | 'deactivated'
+    | 'skipped-no-current-children'
+    | 'skipped-no-children'
+    | 'error'
+    | 'dry-run';
   center?: LegacyLocation;
   oid?: string;
   childCount?: number;
@@ -144,18 +157,48 @@ async function processFamily(
     return { status: 'error', error: 'legacy family vanished mid-run' };
   }
   const center = legacy.location;
-  const childCount = legacy.children.length;
 
-  if (childCount === 0) {
+  if (legacy.children.length === 0) {
     return { status: 'skipped-no-children', center };
   }
 
-  // 3. Map legacySid → freshly parsed schoolGrade; upsert stale member grades.
+  // 3. Identify CURRENT kids: those with a non-null legacy `level`. The legacy
+  //    roster accumulates since 2012; graduated/inactive kids carry a NULL level
+  //    and must NOT be enrolled. Map legacySid → fresh schoolGrade for current
+  //    kids only (the grade re-assert stays scoped to current kids).
+  const currentChildren = legacy.children.filter((c) => c.legacyLevel != null);
+  const currentLegacySids = new Set(
+    currentChildren.map((c) => c.legacySid).filter((s): s is string => s != null),
+  );
   const gradeByLegacySid = new Map<string, string | null>();
-  for (const child of legacy.children) {
+  for (const child of currentChildren) {
     if (child.legacySid != null) gradeByLegacySid.set(child.legacySid, child.schoolGrade);
   }
 
+  // 4. Pick the offering for this center.
+  const oid = oidForCenter(center);
+  const offering = offerings.get(oid);
+  if (!offering) {
+    return { status: 'error', center, oid, error: `offering ${oid} not loaded` };
+  }
+  const eid = `${fid}-${oid}`;
+
+  // 5. No current BV kids → don't enroll. If a prior run created an enrollment,
+  //    deactivate it (status:'cancelled', merge); otherwise nothing to do.
+  if (currentChildren.length === 0) {
+    const enrollRef = db.collection('families').doc(fid).collection('enrollments').doc(eid);
+    const existing = await enrollRef.get();
+    if (existing.exists) {
+      if (!dryRun) {
+        await enrollRef.set({ status: 'cancelled' }, { merge: true });
+      }
+      return { status: 'deactivated', center, oid };
+    }
+    return { status: 'skipped-no-current-children', center, oid };
+  }
+
+  // 6. Walk Setu members → enrolledMids = the CURRENT children's mids (via the
+  //    legacySid map). Re-assert schoolGrade for current kids where stale.
   const membersSnap = await db.collection('families').doc(fid).collection('members').get();
   const enrolledMids: string[] = [];
   let gradeFixes = 0;
@@ -167,10 +210,11 @@ async function processFamily(
       legacySid?: string | null;
     };
     if (!m.mid || m.type !== 'Child') continue;
+    if (m.legacySid == null || !currentLegacySids.has(m.legacySid)) continue; // skip graduated/inactive
     enrolledMids.push(m.mid);
 
     // Re-assert grade where the freshly parsed value differs from what's stored.
-    if (m.legacySid != null && gradeByLegacySid.has(m.legacySid)) {
+    if (gradeByLegacySid.has(m.legacySid)) {
       const freshGrade = gradeByLegacySid.get(m.legacySid) ?? null;
       const storedGrade = m.schoolGrade ?? null;
       if (freshGrade !== storedGrade) {
@@ -182,26 +226,19 @@ async function processFamily(
     }
   }
 
-  // 4. Pick the offering for this center.
-  const oid = oidForCenter(center);
-  const offering = offerings.get(oid);
-  if (!offering) {
-    return { status: 'error', center, oid, error: `offering ${oid} not loaded` };
-  }
-
-  // 5. Resolve the manager mid (every migrated family has a manager).
+  // 7. Resolve the manager mid (every migrated family has a manager).
   const familySnap = await db.collection('families').doc(fid).get();
   const familyData = familySnap.data() as { managers?: string[] } | undefined;
   const managerMid = familyData?.managers?.[0] ?? `${fid}-01`;
 
   const suggestedAmountSnapshot = resolveSuggestedAmount(offering, offering.startDate);
-  const eid = `${fid}-${oid}`;
 
   if (dryRun) {
     return { status: 'dry-run', center, oid, childCount: enrolledMids.length, gradeFixes };
   }
 
-  // 6. Upsert the enrollment doc — CRUCIALLY carrying `pid: oid`.
+  // 8. Upsert the enrollment doc — CRUCIALLY carrying `pid: oid`. set(...,{merge})
+  //    replaces enrolledMids with the current-only array.
   await db
     .collection('families')
     .doc(fid)
@@ -289,6 +326,8 @@ async function main(): Promise<void> {
     processed: 0,
     enrolled: 0,
     wouldEnroll: 0,
+    deactivated: 0,
+    skippedNoCurrentChildren: 0,
     skippedNoChildren: 0,
     errors: 0,
     gradeFixes: 0,
@@ -309,6 +348,12 @@ async function main(): Promise<void> {
       if (outcome.status === 'skipped-no-children') {
         counts.skippedNoChildren++;
         console.log(`${pos} ${legacyFid.padEnd(8)} ↺ skipped (no children)`);
+      } else if (outcome.status === 'skipped-no-current-children') {
+        counts.skippedNoCurrentChildren++;
+        console.log(`${pos} ${legacyFid.padEnd(8)} ↺ skipped (no current kids)`);
+      } else if (outcome.status === 'deactivated') {
+        counts.deactivated++;
+        console.log(`${pos} ${legacyFid.padEnd(8)} ⊘ deactivated (no current kids; cancelled stale enrollment)`);
       } else if (outcome.status === 'error') {
         counts.errors++;
         console.error(`${pos} ${legacyFid.padEnd(8)} ✗ ERROR: ${outcome.error}`);
@@ -337,6 +382,8 @@ async function main(): Promise<void> {
   } else {
     console.log(`  Enrolled:            ${counts.enrolled}`);
   }
+  console.log(`  Deactivated (stale): ${counts.deactivated}${args.dryRun ? ' (dry-run — not written)' : ''}`);
+  console.log(`  Skipped (no current):${counts.skippedNoCurrentChildren}`);
   console.log(`  Skipped (no kids):   ${counts.skippedNoChildren}`);
   console.log(`  Grade fixes applied: ${counts.gradeFixes}${args.dryRun ? ' (dry-run — not written)' : ''}`);
   console.log(`  Errors:              ${counts.errors}`);

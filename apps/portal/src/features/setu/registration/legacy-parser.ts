@@ -70,6 +70,10 @@ export interface LegacyChild {
   // Legacy roster student id — maps this child to the check-in app's
   // family-check-ins records (which key students by sid).
   legacySid: string | null;
+  // Raw legacy `level` (cleaned: "NULL"/empty/missing → null). The legacy
+  // roster accumulates since 2012; a non-null level is the current-registration
+  // signal (graduated/inactive kids have a NULL level).
+  legacyLevel: string | null;
 }
 
 export interface LegacyFamilyForMigration {
@@ -202,6 +206,7 @@ export function parseLegacyRowsForMigration(
     gender: mapGender(r.gender),
     schoolGrade: mapSchoolGrade(r),
     legacySid: r.sid != null ? String(r.sid) : null,
+    legacyLevel: clean(r.level),
   }));
 
   return {

@@ -150,6 +150,25 @@ describe('parseLegacyRowsForMigration', () => {
     expect(result?.children[1]?.schoolGrade).toBeNull();
   });
 
+  it('exposes the raw legacy level, cleaning "NULL"/empty to null', () => {
+    const result = parseLegacyRowsForMigration(
+      [
+        row({ grade: 99, fname: 'Asha', lname: 'Shah', sid: 1 }),
+        // current kid — non-null legacy level
+        row({ grade: 1, fname: 'Current', lname: 'Shah', level: 'Level 1 (Gr 1)', sid: 2 }),
+        // graduated/inactive kid — level "NULL" sentinel → null
+        row({ grade: 3, fname: 'Graduated', lname: 'Shah', level: 'NULL', sid: 3 }),
+        // missing level entirely → null
+        row({ grade: 5, fname: 'NoLevel', lname: 'Shah', level: '', sid: 4 }),
+      ],
+      '42',
+    );
+    const byName = Object.fromEntries((result?.children ?? []).map((c) => [c.firstName, c.legacyLevel]));
+    expect(byName.Current).toBe('Level 1 (Gr 1)');
+    expect(byName.Graduated).toBeNull();
+    expect(byName.NoLevel).toBeNull();
+  });
+
   it('children inherit lastName from primary when their own lname is empty', () => {
     const result = parseLegacyRowsForMigration(
       [
