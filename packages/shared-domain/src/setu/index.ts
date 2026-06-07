@@ -13,3 +13,4 @@ export * from './schemas/class-calendar';
 export * from './schemas/attendance';
 export * from './schemas/seva';
 export * from './schemas/achievement';
+export * from './grade-ladder';
