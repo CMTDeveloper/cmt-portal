@@ -11,7 +11,7 @@ export interface AttendanceViewRow {
   lastName: string;
   schoolGrade: string | null;
   hasSafetyInfo: boolean;
-  status: SetuAttendanceStatus; // present | late | absent — defaults to present
+  status: SetuAttendanceStatus | null; // present | late | absent — null = unmarked
   source: AttendanceRowSource;
   checkedInAtDoor: boolean;
 }
@@ -30,9 +30,9 @@ export interface AttendanceView {
 
 /**
  * The teacher attendance screen's read model: the enrollment-gated roster with
- * each kid resolved to a DEFAULT-PRESENT status, a prior portal mark winning,
- * and a read-only door self-check-in overlay (the `·door` badge). null if the
- * level is missing.
+ * each kid resolved to a seeded status — a prior portal mark wins, else a door
+ * self-check-in seeds Present, else the kid is unmarked (null). The `·door`
+ * badge surfaces the self-check-in overlay. null if the level is missing.
  */
 export async function getLevelAttendanceView(levelId: string, date: string): Promise<AttendanceView | null> {
   const roster = await deriveRoster(levelId, date);
@@ -43,11 +43,17 @@ export async function getLevelAttendanceView(levelId: string, date: string): Pro
 
   const rows: AttendanceViewRow[] = roster.members.map((m) => {
     const checkedInAtDoor = !!m.legacySid && doorSids.has(m.legacySid);
-    let status: SetuAttendanceStatus = 'present';
-    let source: AttendanceRowSource = checkedInAtDoor ? 'door' : 'default';
+    let status: SetuAttendanceStatus | null;
+    let source: AttendanceRowSource;
     if (m.status !== 'unaccounted') {
-      status = m.status;
+      status = m.status; // prior teacher mark wins
       source = 'portal';
+    } else if (checkedInAtDoor) {
+      status = 'present'; // door check-in → present
+      source = 'door';
+    } else {
+      status = null; // unmarked
+      source = 'default';
     }
     return {
       mid: m.mid,

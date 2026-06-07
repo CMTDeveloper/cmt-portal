@@ -8,7 +8,7 @@ import { getLevelAttendanceView } from '../level-attendance-view';
 
 beforeEach(() => { mockDerive.mockReset(); mockDoor.mockReset(); });
 
-it('resolves default-present with door overlay + portal precedence', async () => {
+it('seeds unmarked by default; door check-in → present; portal mark wins', async () => {
   mockDerive.mockResolvedValue({
     levelId: 'L', levelName: 'Level 1', ageLabel: 'Gr 1', location: 'Brampton', pid: 'o-bv', date: '2026-01-04',
     markedCount: 1, total: 3,
@@ -23,10 +23,14 @@ it('resolves default-present with door overlay + portal precedence', async () =>
   const view = await getLevelAttendanceView('L', '2026-01-04');
   expect(view).not.toBeNull();
   const byMid = Object.fromEntries(view!.rows.map((r) => [r.mid, r]));
+  // prior portal mark wins
   expect(byMid['F-02']).toMatchObject({ status: 'absent', source: 'portal', checkedInAtDoor: false });
+  // door check-in → present
   expect(byMid['F-03']).toMatchObject({ status: 'present', source: 'door', checkedInAtDoor: true });
-  expect(byMid['G-02']).toMatchObject({ status: 'present', source: 'default', checkedInAtDoor: false });
-  expect(view!.presentCount).toBe(2);
+  // no portal mark + no door → unmarked (null)
+  expect(byMid['G-02']).toMatchObject({ status: null, source: 'default', checkedInAtDoor: false });
+  // presentCount counts only present rows (door + portal) — NOT the total
+  expect(view!.presentCount).toBe(1);
   expect(view!.total).toBe(3);
   expect(mockDoor).toHaveBeenCalledWith(['4421', '7000'], '2026-01-04'); // unique non-null legacyFids
 });
@@ -37,7 +41,7 @@ it('returns null when the level is missing', async () => {
   expect(mockDoor).not.toHaveBeenCalled();
 });
 
-it('skips the door read when no roster member has a legacyFid', async () => {
+it('seeds a new kid with no legacyFid as unmarked (null) and skips the door read', async () => {
   mockDerive.mockResolvedValue({
     levelId: 'L', levelName: 'Level 1', ageLabel: 'Gr 1', location: 'Brampton', pid: 'o-bv', date: '2026-01-04',
     markedCount: 0, total: 1,
@@ -46,7 +50,7 @@ it('skips the door read when no roster member has a legacyFid', async () => {
     ],
   });
   const view = await getLevelAttendanceView('L', '2026-01-04');
-  expect(view!.rows[0]).toMatchObject({ status: 'present', source: 'default', checkedInAtDoor: false });
-  expect(view!.presentCount).toBe(1);
+  expect(view!.rows[0]).toMatchObject({ status: null, source: 'default', checkedInAtDoor: false });
+  expect(view!.presentCount).toBe(0);
   expect(mockDoor).not.toHaveBeenCalled();
 });
