@@ -15,7 +15,7 @@ interface AttendanceMarkerProps {
   today: string;
   rows: AttendanceViewRow[];
   // presentCount is intentionally NOT a prop — the live count is derived from
-  // `marks` so it updates as the teacher flags exceptions.
+  // `marks` so it updates as the teacher marks students.
   total: number;
 }
 
@@ -131,21 +131,23 @@ function StatCard({ label, value, bg, valueColor, hint }: StatCardProps) {
 }
 
 export function AttendanceMarker({ levelId, levelName, ageLabel, date, today, rows, total }: AttendanceMarkerProps) {
-  const [marks, setMarks] = useState<Record<string, SetuAttendanceStatus>>(() => {
-    const init: Record<string, SetuAttendanceStatus> = {};
-    for (const r of rows) init[r.mid] = r.status;
+  const [marks, setMarks] = useState<Record<string, SetuAttendanceStatus | null>>(() => {
+    const init: Record<string, SetuAttendanceStatus | null> = {};
+    for (const r of rows) init[r.mid] = r.status; // null preserved → unmarked
     return init;
   });
   const [pending, startTransition] = useTransition();
 
-  // Live counts — derived from `marks` so they update the instant a teacher flags
-  // an exception (present/late/absent), and from `rows` for the static context.
+  // Live counts — derived from `marks` so they update the instant a teacher marks
+  // a student, and from `rows` for the static context. Door-seeded rows already
+  // count as Present; unmarked (null) rows count toward neither — only reality.
   const markValues = Object.values(marks);
   const presentCount = markValues.filter((s) => s === 'present').length;
   const lateCount = markValues.filter((s) => s === 'late').length;
   const absentCount = markValues.filter((s) => s === 'absent').length;
-  const flaggedCount = total - presentCount;
-  const progress = total > 0 ? Math.round((presentCount / total) * 100) : 0;
+  const markedCount = presentCount + lateCount + absentCount;
+  const unmarkedCount = total - markedCount;
+  const progress = total > 0 ? Math.round((markedCount / total) * 100) : 0; // marking completeness
 
   const isFuture = date > today; // this class hasn't happened yet
   const canGoNext = addDays(date, 7) <= today; // next Sunday must be past/today
@@ -157,8 +159,16 @@ export function AttendanceMarker({ levelId, levelName, ageLabel, date, today, ro
   const doorCount = rows.filter((r) => r.checkedInAtDoor).length; // self-checked-in at the ashram door
 
   function setStatus(mid: string, status: SetuAttendanceStatus) {
-    setMarks((prev) => ({ ...prev, [mid]: status }));
+    // Toggle: tapping the already-active status unselects it (back to unmarked).
+    setMarks((prev) => ({ ...prev, [mid]: (prev[mid] ?? null) === status ? null : status }));
   }
+
+  // Only marked students (present/late/absent) get an event — unmarked → no
+  // event (they stay "unaccounted" for the date). Disable Save when nothing's
+  // marked since there's nothing to record.
+  const marked: Record<string, SetuAttendanceStatus> = {};
+  for (const [mid, s] of Object.entries(marks)) if (s) marked[mid] = s;
+  const hasMarks = Object.keys(marked).length > 0;
 
   function save() {
     startTransition(async () => {
@@ -166,7 +176,7 @@ export function AttendanceMarker({ levelId, levelName, ageLabel, date, today, ro
         const res = await fetch('/api/setu/teacher/attendance', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ levelId, date, marks }),
+          body: JSON.stringify({ levelId, date, marks: marked }),
         });
         if (!res.ok) { toast.error('Save failed'); return; }
         toast.success('Attendance saved');
@@ -301,8 +311,9 @@ export function AttendanceMarker({ levelId, levelName, ageLabel, date, today, ro
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {/* At-a-glance stat strip — a row on desktop, wraps to 2-up on narrow
               phones. Enrolled + Checked-in are static per load; Present/Late/Absent
-              are live off `marks`. Complements (does not replace) the live save
-              footer pinned to the bottom. */}
+              and Unmarked are live off `marks` and reflect reality (door check-ins
+              + teacher marks), not the roster size. Complements (does not replace)
+              the live save footer pinned to the bottom. */}
           <div
             role="group"
             aria-label="Attendance summary"
@@ -318,12 +329,13 @@ export function AttendanceMarker({ levelId, levelName, ageLabel, date, today, ro
             <StatCard label="Present" value={presentCount} bg="var(--setu-ok-soft)" valueColor="var(--ok)" />
             <StatCard label="Late" value={lateCount} bg="var(--setu-warn-soft)" valueColor="var(--warn, #a06410)" />
             <StatCard label="Absent" value={absentCount} bg="var(--setu-err-soft)" valueColor="var(--err)" />
+            <StatCard label="Unmarked" value={unmarkedCount} bg="var(--surface2)" valueColor="var(--muted)" />
           </div>
 
           {/* Door-aware banner. No banner once a teacher has recorded the date in
-              the portal (re-saving just updates). If self-check-ins exist, frame it
-              as "confirm the door list", not "not taken yet". Otherwise the empty
-              default-Present prompt. */}
+              the portal (re-saving just updates). If self-check-ins exist, they're
+              seeded Present — prompt to mark the rest. Otherwise nobody has checked
+              in yet, so prompt to mark students as they arrive. */}
           {!hasPortalMarks &&
             (doorCount > 0 ? (
               <div
@@ -336,7 +348,7 @@ export function AttendanceMarker({ levelId, levelName, ageLabel, date, today, ro
                   lineHeight: 1.45,
                 }}
               >
-                {doorCount} checked in at the door. Everyone defaults to Present — confirm or flag exceptions, then Save.
+                {doorCount} checked in at the door — marked Present. Mark the rest, then Save.
               </div>
             ) : (
               <div
@@ -349,13 +361,13 @@ export function AttendanceMarker({ levelId, levelName, ageLabel, date, today, ro
                   lineHeight: 1.45,
                 }}
               >
-                Attendance not taken yet — everyone defaults to Present. Tap a status to flag exceptions, then Save.
+                No check-ins yet — tap a status as students arrive, then Save.
               </div>
             ))}
           {rows.map((r) => {
-            const current = marks[r.mid] ?? 'present';
-            const opt = OPTION_BY_VALUE[current];
-            const flagged = current !== 'present';
+            const current = marks[r.mid] ?? null;
+            const opt = current ? OPTION_BY_VALUE[current] : null;
+            const flagged = current !== null && current !== 'present';
             return (
               <div
                 key={r.mid}
@@ -365,8 +377,8 @@ export function AttendanceMarker({ levelId, levelName, ageLabel, date, today, ro
                   padding: '14px 16px',
                   position: 'relative',
                   overflow: 'hidden',
-                  borderColor: flagged ? opt.color : 'var(--line)',
-                  background: flagged
+                  borderColor: flagged && opt ? opt.color : 'var(--line)',
+                  background: flagged && opt
                     ? `linear-gradient(0deg, ${opt.rowWash}, ${opt.rowWash}), var(--surface)`
                     : 'var(--surface)',
                   transition: 'border-color .15s ease, background .15s ease',
@@ -380,7 +392,7 @@ export function AttendanceMarker({ levelId, levelName, ageLabel, date, today, ro
                     top: 0,
                     bottom: 0,
                     width: 4,
-                    background: opt.rail,
+                    background: flagged && opt ? opt.rail : 'transparent',
                     transition: 'background .15s ease',
                   }}
                 />
@@ -488,14 +500,14 @@ export function AttendanceMarker({ levelId, levelName, ageLabel, date, today, ro
           style={{ gap: 12, padding: '12px 18px', maxWidth: 760, margin: '0 auto' }}
         >
           <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, lineHeight: 1.25 }}>
-            <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--ink)' }}>{presentCount} / {total} present</span>
-            <span style={{ fontSize: 12, color: flaggedCount > 0 ? 'var(--warn, #a06410)' : 'var(--muted)' }}>
-              {flaggedCount > 0 ? `${flaggedCount} flagged` : 'all present'}
+            <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--ink)' }}>{presentCount} present</span>
+            <span style={{ fontSize: 12, color: 'var(--muted)' }}>
+              {unmarkedCount > 0 ? `${unmarkedCount} not marked` : 'all marked'}
             </span>
           </div>
           <button
             onClick={save}
-            disabled={pending || total === 0}
+            disabled={pending || !hasMarks}
             className="btn btn--p"
             style={{ fontSize: 15, padding: '12px 26px', minHeight: 48, opacity: pending ? 0.65 : 1, whiteSpace: 'nowrap' }}
           >
