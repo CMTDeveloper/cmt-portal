@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { Spinner } from './start-step';
 
 interface ConfirmDialogProps {
   promoted: number;
@@ -59,19 +60,53 @@ export function ConfirmDialog({ promoted, fromYear, toYear, busy, onConfirm, onC
           background: 'var(--surface)',
           border: '1px solid var(--line)',
           borderRadius: 'var(--radius, 16px)',
-          padding: 22,
+          padding: 24,
           boxShadow: '0 24px 60px rgba(15,26,34,0.28)',
         }}
       >
-        <h2
-          id="rollover-confirm-title"
-          style={{ fontSize: 19, fontWeight: 600, color: 'var(--ink)', letterSpacing: '-0.01em', lineHeight: 1.25 }}
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 13 }}>
+          <span
+            aria-hidden
+            style={{
+              flexShrink: 0,
+              width: 40,
+              height: 40,
+              borderRadius: '50%',
+              display: 'grid',
+              placeItems: 'center',
+              background: 'var(--accentSoft)',
+              color: 'var(--accentDeep)',
+            }}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+              <path d="M12 3 1.5 21h21L12 3Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+              <path d="M12 10v4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              <circle cx="12" cy="17.4" r="1.1" fill="currentColor" />
+            </svg>
+          </span>
+          <h2
+            id="rollover-confirm-title"
+            style={{ fontSize: 19, fontWeight: 600, color: 'var(--ink)', letterSpacing: '-0.01em', lineHeight: 1.3, marginTop: 4 }}
+          >
+            Promote {promoted} students to {toYear}?
+          </h2>
+        </div>
+        <p style={{ fontSize: 14, color: 'var(--body-text)', marginTop: 14, lineHeight: 1.55 }}>
+          This advances grades and closes the {fromYear} enrollments. Every child&rsquo;s history is preserved.
+        </p>
+        <p
+          style={{
+            marginTop: 12,
+            padding: '10px 12px',
+            borderRadius: 'var(--radiusSm)',
+            background: 'var(--accentSoft)',
+            color: 'var(--accentDeep)',
+            fontSize: 13,
+            fontWeight: 600,
+            lineHeight: 1.45,
+          }}
         >
-          Promote {promoted} students to {toYear}?
-        </h2>
-        <p style={{ fontSize: 14, color: 'var(--body-text)', marginTop: 10, lineHeight: 1.55 }}>
-          This advances grades and closes the {fromYear} enrollments. History is preserved. This can&rsquo;t be
-          undone with one click.
+          This can&rsquo;t be undone with one click.
         </p>
         <div
           style={{
@@ -87,10 +122,16 @@ export function ConfirmDialog({ promoted, fromYear, toYear, busy, onConfirm, onC
             type="button"
             onClick={onConfirm}
             disabled={busy}
-            className="btn btn--p"
-            style={{ flex: '1 1 160px', minHeight: 46, fontSize: 15, fontWeight: 600, opacity: busy ? 0.65 : 1 }}
+            className="btn btn--p rollover-cta"
+            style={{ flex: '1 1 160px', minHeight: 46, fontSize: 15, fontWeight: 600, opacity: busy ? 0.7 : 1 }}
           >
-            {busy ? 'Promoting…' : 'Promote'}
+            {busy ? (
+              <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                <Spinner /> Promoting…
+              </span>
+            ) : (
+              'Promote'
+            )}
           </button>
           <button
             type="button"

@@ -42,12 +42,17 @@ export function StartStep({ toYear, sourceLevelCount, sourceOfferingCount, done,
   return (
     <section
       className="card"
-      style={{ padding: 20, borderColor: done ? 'var(--ok)' : 'var(--line)' }}
+      style={{
+        padding: 20,
+        borderColor: done ? 'var(--ok)' : 'var(--line)',
+        boxShadow: 'var(--setu-elev-1, 0 1px 0 rgba(15,26,34,0.04))',
+        transition: 'border-color .2s ease',
+      }}
     >
       <div className="between" style={{ gap: 12, alignItems: 'flex-start' }}>
         <div style={{ minWidth: 0 }}>
-          <p style={{ fontSize: 11, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--muted)' }}>Step 1</p>
-          <h2 style={{ fontSize: 18, fontWeight: 600, color: 'var(--ink)', marginTop: 4 }}>Start {toYear}</h2>
+          <p style={{ fontSize: 11, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600 }}>Step 1</p>
+          <h2 style={{ fontSize: 18, fontWeight: 600, color: 'var(--ink)', marginTop: 4, letterSpacing: '-0.01em' }}>Start {toYear}</h2>
         </div>
         <StatusDot done={done} />
       </div>
@@ -71,7 +76,23 @@ export function StartStep({ toYear, sourceLevelCount, sourceOfferingCount, done,
             color: 'var(--ok)',
           }}
         >
-          <span aria-hidden style={{ fontSize: 16, fontWeight: 700 }}>✓</span>
+          <span
+            aria-hidden
+            style={{
+              flexShrink: 0,
+              width: 22,
+              height: 22,
+              borderRadius: '50%',
+              display: 'grid',
+              placeItems: 'center',
+              background: 'var(--ok)',
+              color: '#fff',
+              fontSize: 13,
+              fontWeight: 700,
+            }}
+          >
+            ✓
+          </span>
           <span style={{ fontSize: 13.5, fontWeight: 600, flex: 1, minWidth: 0 }}>
             {toYear} is ready. Levels and offerings are in place.
           </span>
@@ -79,10 +100,11 @@ export function StartStep({ toYear, sourceLevelCount, sourceOfferingCount, done,
             type="button"
             onClick={run}
             disabled={busy}
+            className="rollover-textbtn"
             style={{
               background: 'transparent',
               border: 0,
-              padding: 0,
+              padding: '2px 0',
               fontSize: 13,
               fontWeight: 600,
               color: 'var(--accentDeep)',
@@ -97,39 +119,76 @@ export function StartStep({ toYear, sourceLevelCount, sourceOfferingCount, done,
         </div>
       ) : (
         <>
-          <ul
+          <div
             style={{
-              listStyle: 'none',
               margin: '16px 0 0',
-              padding: 0,
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: '6px 18px',
-              fontSize: 13,
-              color: 'var(--body-text)',
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: 10,
             }}
           >
-            <li>
-              <strong style={{ color: 'var(--ink)' }}>{sourceLevelCount}</strong> levels to create
-            </li>
-            <li>
-              <strong style={{ color: 'var(--ink)' }}>{sourceOfferingCount}</strong> offerings to create
-            </li>
-          </ul>
+            <PlanStat value={sourceLevelCount} label="levels to create" />
+            <PlanStat value={sourceOfferingCount} label="offerings to create" />
+          </div>
           <div style={{ marginTop: 18 }}>
             <button
               type="button"
               onClick={run}
               disabled={busy}
-              className="btn btn--p"
-              style={{ minHeight: 46, fontSize: 14.5, fontWeight: 600, width: '100%', maxWidth: 280, opacity: busy ? 0.65 : 1 }}
+              className="btn btn--p rollover-cta"
+              style={{ minHeight: 46, fontSize: 14.5, fontWeight: 600, width: '100%', maxWidth: 280, opacity: busy ? 0.7 : 1 }}
             >
-              {busy ? 'Starting…' : `Start ${toYear}`}
+              {busy ? (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  <Spinner /> Starting…
+                </span>
+              ) : (
+                `Start ${toYear}`
+              )}
             </button>
           </div>
         </>
       )}
     </section>
+  );
+}
+
+/** A small "what this will create" chip — number-forward so the scope of Step 1
+ *  is legible at a glance before running it. */
+function PlanStat({ value, label }: { value: number; label: string }) {
+  return (
+    <div
+      style={{
+        background: 'var(--surface2)',
+        border: '1px solid var(--line)',
+        borderRadius: 'var(--radiusSm)',
+        padding: '11px 13px',
+        minWidth: 0,
+      }}
+    >
+      <span style={{ fontSize: 22, fontWeight: 700, color: 'var(--ink)', lineHeight: 1, letterSpacing: '-0.02em', display: 'block' }}>
+        {value}
+      </span>
+      <span style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.3, marginTop: 4, display: 'block' }}>{label}</span>
+    </div>
+  );
+}
+
+/** Tiny spinning ring for in-flight CTA affordance. Token-driven, no deps. */
+export function Spinner() {
+  return (
+    <span
+      aria-hidden
+      style={{
+        width: 14,
+        height: 14,
+        borderRadius: '50%',
+        border: '2px solid rgba(255,255,255,0.4)',
+        borderTopColor: '#fff',
+        display: 'inline-block',
+        animation: 'rollover-spin .6s linear infinite',
+      }}
+    />
   );
 }
 
