@@ -10,6 +10,9 @@ import { getMemberUnifiedAttendance } from '@/features/setu/attendance/get-membe
 import type { ResolvedSummary } from '@/features/setu/attendance/resolve-attendance';
 import { selectBalaViharEnrollment } from '../../_helpers/select-bv-enrollment';
 import { isoToTorontoDateInput } from '@/lib/toronto-date';
+import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
+import { getChildBalaViharJourney } from '@/features/setu/rollover/get-child-journey';
+import { JourneyStrip } from '@/features/setu/rollover/components/journey-strip';
 interface Props {
   params: Promise<{ mid: string }>;
 }
@@ -71,6 +74,16 @@ export default async function MemberDetailPage({ params }: Props) {
       windowEnd: off?.endDate ? isoToTorontoDateInput(off.endDate.toISOString()) : null,
     });
 
+    // Year-by-year Bala Vihar grade + level history (children only).
+    const journeyRows =
+      member.type === 'Child'
+        ? await getChildBalaViharJourney(portalFirestore(), {
+            fid: data.family.fid,
+            mid,
+            member: { schoolGrade: member.schoolGrade ?? null, birthMonthYear: member.birthMonthYear ?? null },
+          })
+        : [];
+
     return (
       <>
         {/* Mobile */}
@@ -124,6 +137,8 @@ export default async function MemberDetailPage({ params }: Props) {
                 )}
 
                 {member.type === 'Child' && <AttendanceSummaryBlock summary={attendanceSummary} hasSid={Boolean(member.legacySid)}/>}
+
+                {member.type === 'Child' && <JourneyStrip rows={journeyRows}/>}
 
                 {canEdit && (
                   <Link href={`/family/members/${mid}/edit`} className="btn btn--s" style={{ marginTop: 22, display: 'inline-flex' }}>Manage member</Link>
@@ -183,6 +198,8 @@ export default async function MemberDetailPage({ params }: Props) {
             )}
 
             {member.type === 'Child' && <AttendanceSummaryBlock summary={attendanceSummary} hasSid={Boolean(member.legacySid)}/>}
+
+            {member.type === 'Child' && <JourneyStrip rows={journeyRows}/>}
 
             {canEdit && (
               <Link href={`/family/members/${mid}/edit`} className="btn btn--s" style={{ marginTop: 28, display: 'inline-flex' }}>Manage member</Link>

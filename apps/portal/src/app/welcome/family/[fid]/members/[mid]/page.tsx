@@ -6,9 +6,11 @@ import { cookies } from 'next/headers';
 import { SetuIcon } from '@cmt/ui';
 import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
 import { isWelcomeTeam, type WithRole } from '@cmt/shared-domain';
+import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { CspRoot } from '@/features/family/components/atoms';
 import { getChildProfile } from '@/features/setu/members/get-child-profile';
 import { ChildProfileView } from '@/features/setu/members/child-profile-view';
+import { getChildBalaViharJourney } from '@/features/setu/rollover/get-child-journey';
 
 export const metadata = { title: 'Profile — CMT Portal' };
 
@@ -47,9 +49,19 @@ export async function WelcomeMemberProfileBody({
   // mid must belong to the route's fid — guards against URL tampering.
   if (!profile || profile.fid !== fid) notFound();
 
+  // Year-by-year Bala Vihar grade + level history (children only).
+  const journey =
+    profile.type === 'Child'
+      ? await getChildBalaViharJourney(portalFirestore(), {
+          fid: profile.fid,
+          mid: profile.mid,
+          member: { schoolGrade: profile.schoolGrade, birthMonthYear: profile.birthMonthYear },
+        })
+      : [];
+
   // Welcome reads the profile READ-ONLY — no editHref (exactOptionalPropertyTypes
   // means we omit the prop entirely rather than pass undefined).
-  const view = <ChildProfileView profile={profile} />;
+  const view = <ChildProfileView profile={profile} journey={journey} />;
 
   return (
     <>

@@ -42,6 +42,13 @@ vi.mock('@cmt/firebase-shared/admin/session', () => ({
 const mockGetChildProfile = vi.hoisted(() => vi.fn());
 vi.mock('@/features/setu/members/get-child-profile', () => ({ getChildProfile: mockGetChildProfile }));
 
+// ── Bala Vihar journey reader (server-only Firestore) ─────────────────────────
+vi.mock('@cmt/firebase-shared/admin/firestore', () => ({ portalFirestore: vi.fn(() => ({})) }));
+const mockGetChildBalaViharJourney = vi.hoisted(() => vi.fn(async () => []));
+vi.mock('@/features/setu/rollover/get-child-journey', () => ({
+  getChildBalaViharJourney: mockGetChildBalaViharJourney,
+}));
+
 import { WelcomeMemberProfileBody } from '../page';
 
 const PROFILE = {

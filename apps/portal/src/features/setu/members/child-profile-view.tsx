@@ -1,11 +1,15 @@
 import Link from 'next/link';
 import { SetuAvatar, SetuIcon } from '@cmt/ui';
 import { AllergyCallout, SectionLabel } from '@/features/family/components/atoms';
+import { JourneyStrip } from '@/features/setu/rollover/components/journey-strip';
+import type { JourneyRow } from '@/features/setu/rollover/get-child-journey';
 import type { ChildAchievement, ChildProfile, ChildProfileProgram, ChildProgramAttendance } from './get-child-profile';
 
 interface ChildProfileViewProps {
   profile: ChildProfile;
   editHref?: string;
+  /** Year-by-year Bala Vihar grade/level history (children only). */
+  journey?: JourneyRow[];
 }
 
 // ─── shared bits ────────────────────────────────────────────────────────────────
@@ -387,7 +391,7 @@ function renderAchievements(achievements: ChildAchievement[]) {
 
 // ─── main component ─────────────────────────────────────────────────────────────
 
-export function ChildProfileView({ profile, editHref }: ChildProfileViewProps) {
+export function ChildProfileView({ profile, editHref, journey }: ChildProfileViewProps) {
   const { stats } = profile;
   const name = `${profile.firstName} ${profile.lastName}`;
   const subLine =
@@ -478,6 +482,8 @@ export function ChildProfileView({ profile, editHref }: ChildProfileViewProps) {
       )}
 
       {renderAchievements(profile.achievements)}
+
+      {profile.type === 'Child' && journey && <JourneyStrip rows={journey} />}
 
       {editHref && (
         <div style={{ marginTop: 22 }}>

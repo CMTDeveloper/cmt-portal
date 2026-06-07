@@ -3,9 +3,11 @@ import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
 import { SetuIcon } from '@cmt/ui';
 import { CspRoot } from '@/features/family/components/atoms';
+import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 import { getChildProfile } from '@/features/setu/members/get-child-profile';
 import { ChildProfileView } from '@/features/setu/members/child-profile-view';
+import { getChildBalaViharJourney } from '@/features/setu/rollover/get-child-journey';
 
 export const metadata = { title: 'Profile — CMT Portal' };
 
@@ -18,7 +20,16 @@ export default async function FamilyMemberProfilePage({ params }: { params: Prom
   const profile = await getChildProfile(mid);
   if (!profile) notFound();
   const canEdit = data.isManager || mid === data.currentMid;
-  const view = <ChildProfileView profile={profile} {...(canEdit ? { editHref: `/family/members/${mid}/edit` } : {})} />;
+  // Year-by-year Bala Vihar grade + level history (children only).
+  const journey =
+    profile.type === 'Child'
+      ? await getChildBalaViharJourney(portalFirestore(), {
+          fid: profile.fid,
+          mid: profile.mid,
+          member: { schoolGrade: profile.schoolGrade, birthMonthYear: profile.birthMonthYear },
+        })
+      : [];
+  const view = <ChildProfileView profile={profile} journey={journey} {...(canEdit ? { editHref: `/family/members/${mid}/edit` } : {})} />;
   return (
     <>
       {/* Mobile */}
