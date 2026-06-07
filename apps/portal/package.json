@@ -28,6 +28,7 @@
     "seed:bala-vihar-levels": "tsx --env-file=.env.local scripts/seed-bala-vihar-levels.ts",
     "seed:bala-vihar-calendar": "tsx --env-file=.env.local scripts/seed-bala-vihar-calendar.ts",
     "backfill:legacy-sid": "tsx --env-file=.env.local scripts/backfill-legacy-sid.ts",
+    "backfill:bv-enrollments": "tsx --env-file=.env.local scripts/backfill-bv-enrollments.ts",
     "refresh:check-ins": "tsx --env-file=.env.local scripts/refresh-check-ins.ts"
   },
   "dependencies": {

@@ -1,0 +1,354 @@
+/**
+ * Legacy Bala Vihar enrollment backfill (UAT, idempotent).
+ *
+ * Reads every legacy family from the prod RTDB roster (MASTER_FIREBASE
+ * credentials, READ-ONLY) and, for each family with ≥1 non-parent child,
+ * writes an ACTIVE Bala Vihar enrollment under that center's 2025-26 offering
+ * into the Setu Firestore (PORTAL_FIREBASE credentials — UAT by default).
+ *
+ * Per family:
+ *   1. lazyMigrateLegacyFamily(legacyFid) — idempotent; ensures the Setu
+ *      family + members + contactKeys exist; returns the Setu fid.
+ *   2. Re-parse the legacy family → its non-parent children with the corrected
+ *      schoolGrade (JK/SK fix from legacy-parser) + legacySid.
+ *   3. For each child member whose stored schoolGrade differs from the freshly
+ *      parsed value, upsert schoolGrade (fixes already-migrated stale grades).
+ *   4. enrolledMids = the family's Setu child mids.
+ *   5. Upsert families/{fid}/enrollments/{fid}-{oid} with the full schema-valid
+ *      doc INCLUDING `pid: oid` — the field deriveRoster queries on
+ *      (collectionGroup('enrollments').where('pid','==',level.pid)). Without it
+ *      the teacher roster stays EMPTY despite "successful" enrollments.
+ *
+ * Does NOT call enrollFamily/getProgram (they use Next 'use cache' and throw
+ * outside a render context). Writes the enrollment doc directly, mirroring
+ * seed-e2e-family.ts ensureEnrollment() — but that helper OMITS `pid`; this
+ * script ADDS it.
+ *
+ * Center → offering: Scarborough → bv-scarborough-2025-26; everything else
+ * (Brampton / NULL / ALL / missing) → bv-brampton-2025-26 (matches the
+ * legacy-parser mapLocation default).
+ *
+ * Standing constraints:
+ *   - UAT writes ONLY. Refuses unless PORTAL_FIREBASE_PROJECT_ID is
+ *     chinmaya-setu-uat (pass --allow-prod to bypass — never used here).
+ *   - The RTDB read of prod 715b8 is read-only by design. NEVER writes 715b8.
+ *   - Idempotent: deterministic eid = `${fid}-${oid}`, set(..., { merge:true }).
+ *
+ * Usage:
+ *   pnpm --filter @cmt/portal exec tsx --env-file=.env.local \
+ *     scripts/backfill-bv-enrollments.ts [--dry-run] [--limit N] [--fid X] [--allow-prod]
+ *
+ *   # dry-run a sample (writes nothing)
+ *   pnpm --filter @cmt/portal exec tsx --env-file=.env.local \
+ *     scripts/backfill-bv-enrollments.ts --dry-run --limit 20
+ *
+ *   # full UAT run
+ *   pnpm --filter @cmt/portal backfill:bv-enrollments
+ */
+
+import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
+import { resolveSuggestedAmount, type OfferingDoc } from '@cmt/shared-domain';
+import { listAllFamilies } from '@/features/check-in/shared/rtdb/family-lookup';
+import { lazyMigrateLegacyFamily } from '@/features/setu/registration/lazy-migrate';
+import {
+  fetchLegacyFamilyForMigration,
+  type LegacyLocation,
+} from '@/features/setu/registration/legacy-parser';
+
+const BV_BRAMPTON_OID = 'bv-brampton-2025-26';
+const BV_SCARBOROUGH_OID = 'bv-scarborough-2025-26';
+
+type Db = ReturnType<typeof portalFirestore>;
+
+interface Args {
+  dryRun: boolean;
+  limit: number | null;
+  fid: string | null;
+  allowProd: boolean;
+}
+
+function parseArgs(argv: string[]): Args {
+  const args: Args = { dryRun: false, limit: null, fid: null, allowProd: false };
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === '--dry-run') args.dryRun = true;
+    else if (a === '--allow-prod') args.allowProd = true;
+    else if (a === '--limit') args.limit = Number(argv[++i]);
+    else if (a === '--fid') args.fid = argv[++i] ?? null;
+  }
+  return args;
+}
+
+/** Scarborough → Scarborough offering; everything else → Brampton offering. */
+function oidForCenter(center: LegacyLocation): string {
+  return center === 'Scarborough' ? BV_SCARBOROUGH_OID : BV_BRAMPTON_OID;
+}
+
+function toDate(v: unknown): Date {
+  if (v !== null && typeof v === 'object' && typeof (v as { toDate?: unknown }).toDate === 'function') {
+    return (v as { toDate: () => Date }).toDate();
+  }
+  if (v instanceof Date) return v;
+  return new Date(v as string);
+}
+
+/** A loaded offering doc reduced to just the fields the backfill needs. */
+interface OfferingInfo {
+  oid: string;
+  programKey: string;
+  programLabel: string;
+  termLabel: string;
+  location: OfferingDoc['location'];
+  startDate: Date;
+  pricingTiers: OfferingDoc['pricingTiers'];
+}
+
+async function loadOffering(db: Db, oid: string): Promise<OfferingInfo | null> {
+  const snap = await db.collection('offerings').doc(oid).get();
+  if (!snap.exists) return null;
+  const od = snap.data() as Record<string, unknown>;
+  return {
+    oid,
+    programKey: od['programKey'] as string,
+    programLabel: od['programLabel'] as string,
+    termLabel: od['termLabel'] as string,
+    location: (od['location'] ?? null) as OfferingDoc['location'],
+    startDate: toDate(od['startDate']),
+    pricingTiers: (od['pricingTiers'] as OfferingDoc['pricingTiers']) ?? [],
+  };
+}
+
+interface FamilyOutcome {
+  status: 'enrolled' | 'skipped-no-children' | 'error' | 'dry-run';
+  center?: LegacyLocation;
+  oid?: string;
+  childCount?: number;
+  gradeFixes?: number;
+  error?: string;
+}
+
+async function processFamily(
+  db: Db,
+  legacyFid: string,
+  offerings: Map<string, OfferingInfo>,
+  dryRun: boolean,
+): Promise<FamilyOutcome> {
+  // 1. Ensure the Setu family + members exist (idempotent), get the Setu fid.
+  const migrate = await lazyMigrateLegacyFamily(legacyFid);
+  const fid = migrate.fid;
+
+  // 2. Re-parse the legacy family → its non-parent children (schoolGrade now
+  //    JK/SK-correct) + center.
+  const legacy = await fetchLegacyFamilyForMigration(legacyFid);
+  if (!legacy) {
+    return { status: 'error', error: 'legacy family vanished mid-run' };
+  }
+  const center = legacy.location;
+  const childCount = legacy.children.length;
+
+  if (childCount === 0) {
+    return { status: 'skipped-no-children', center };
+  }
+
+  // 3. Map legacySid → freshly parsed schoolGrade; upsert stale member grades.
+  const gradeByLegacySid = new Map<string, string | null>();
+  for (const child of legacy.children) {
+    if (child.legacySid != null) gradeByLegacySid.set(child.legacySid, child.schoolGrade);
+  }
+
+  const membersSnap = await db.collection('families').doc(fid).collection('members').get();
+  const enrolledMids: string[] = [];
+  let gradeFixes = 0;
+  for (const doc of membersSnap.docs) {
+    const m = doc.data() as {
+      mid?: string;
+      type?: 'Adult' | 'Child';
+      schoolGrade?: string | null;
+      legacySid?: string | null;
+    };
+    if (!m.mid || m.type !== 'Child') continue;
+    enrolledMids.push(m.mid);
+
+    // Re-assert grade where the freshly parsed value differs from what's stored.
+    if (m.legacySid != null && gradeByLegacySid.has(m.legacySid)) {
+      const freshGrade = gradeByLegacySid.get(m.legacySid) ?? null;
+      const storedGrade = m.schoolGrade ?? null;
+      if (freshGrade !== storedGrade) {
+        gradeFixes++;
+        if (!dryRun) {
+          await doc.ref.set({ schoolGrade: freshGrade }, { merge: true });
+        }
+      }
+    }
+  }
+
+  // 4. Pick the offering for this center.
+  const oid = oidForCenter(center);
+  const offering = offerings.get(oid);
+  if (!offering) {
+    return { status: 'error', center, oid, error: `offering ${oid} not loaded` };
+  }
+
+  // 5. Resolve the manager mid (every migrated family has a manager).
+  const familySnap = await db.collection('families').doc(fid).get();
+  const familyData = familySnap.data() as { managers?: string[] } | undefined;
+  const managerMid = familyData?.managers?.[0] ?? `${fid}-01`;
+
+  const suggestedAmountSnapshot = resolveSuggestedAmount(offering, offering.startDate);
+  const eid = `${fid}-${oid}`;
+
+  if (dryRun) {
+    return { status: 'dry-run', center, oid, childCount: enrolledMids.length, gradeFixes };
+  }
+
+  // 6. Upsert the enrollment doc — CRUCIALLY carrying `pid: oid`.
+  await db
+    .collection('families')
+    .doc(fid)
+    .collection('enrollments')
+    .doc(eid)
+    .set(
+      {
+        eid,
+        fid,
+        oid,
+        pid: oid, // ★ REQUIRED — deriveRoster queries where('pid','==',level.pid)
+        programKey: offering.programKey,
+        programLabel: offering.programLabel,
+        termLabel: offering.termLabel,
+        location: offering.location,
+        enrolledMids,
+        enrolledAt: FieldValue.serverTimestamp(),
+        enrolledVia: 'welcome-team',
+        enrolledByMid: managerMid,
+        suggestedAmountSnapshot,
+        suggestedAmountOverride: null,
+        status: 'active',
+        cancelledAt: null,
+        cancelledReason: null,
+      },
+      { merge: true },
+    );
+
+  return { status: 'enrolled', center, oid, childCount: enrolledMids.length, gradeFixes };
+}
+
+async function main(): Promise<void> {
+  const args = parseArgs(process.argv.slice(2));
+
+  const portalProject = process.env['PORTAL_FIREBASE_PROJECT_ID'];
+  const masterProject = process.env['MASTER_FIREBASE_PROJECT_ID'];
+  if (!portalProject || !masterProject) {
+    console.error('REFUSED: PORTAL_FIREBASE_PROJECT_ID and MASTER_FIREBASE_PROJECT_ID must be set in .env.local');
+    process.exit(1);
+  }
+  if (portalProject !== 'chinmaya-setu-uat' && !args.allowProd) {
+    console.error(
+      `REFUSED: PORTAL_FIREBASE_PROJECT_ID is "${portalProject}", expected "chinmaya-setu-uat". Pass --allow-prod to bypass.`,
+    );
+    process.exit(1);
+  }
+
+  console.log('\nLegacy Bala Vihar enrollment backfill');
+  console.log(`  Read from:  ${masterProject} (RTDB roster, read-only)`);
+  console.log(`  Write to:   ${portalProject} (Firestore${args.dryRun ? ', DRY-RUN — no writes' : ''})`);
+  if (args.limit !== null) console.log(`  Limit:      first ${args.limit} families`);
+  if (args.fid !== null) console.log(`  Filter:     legacyFid=${args.fid} only`);
+  console.log('');
+
+  const db = portalFirestore();
+
+  // Load both BV offerings once.
+  const offerings = new Map<string, OfferingInfo>();
+  for (const oid of [BV_BRAMPTON_OID, BV_SCARBOROUGH_OID]) {
+    const off = await loadOffering(db, oid);
+    if (!off) {
+      console.error(`REFUSED: offering ${oid} not found in ${portalProject}. Seed offerings first.`);
+      process.exit(1);
+    }
+    offerings.set(oid, off);
+    console.log(`  loaded offering ${oid} (programKey=${off.programKey}, location=${off.location ?? 'null'})`);
+  }
+  console.log('');
+
+  console.log('Reading legacy roster…');
+  let families = await listAllFamilies();
+  console.log(`  → ${families.length} legacy families found`);
+
+  if (args.fid !== null) {
+    families = families.filter((f) => String(f.fid) === args.fid);
+    console.log(`  → ${families.length} matched --fid=${args.fid}`);
+  }
+  if (args.limit !== null) {
+    families = families.slice(0, args.limit);
+    console.log(`  → ${families.length} after --limit=${args.limit}`);
+  }
+  console.log('');
+
+  const counts = {
+    processed: 0,
+    enrolled: 0,
+    wouldEnroll: 0,
+    skippedNoChildren: 0,
+    errors: 0,
+    gradeFixes: 0,
+  };
+  const perCenter = new Map<string, number>(); // oid → enrolled count
+
+  for (let i = 0; i < families.length; i++) {
+    const fam = families[i];
+    if (!fam) continue;
+    const legacyFid = String(fam.fid);
+    const pos = `[${String(i + 1).padStart(4)}/${families.length}]`;
+    counts.processed++;
+
+    try {
+      const outcome = await processFamily(db, legacyFid, offerings, args.dryRun);
+      counts.gradeFixes += outcome.gradeFixes ?? 0;
+
+      if (outcome.status === 'skipped-no-children') {
+        counts.skippedNoChildren++;
+        console.log(`${pos} ${legacyFid.padEnd(8)} ↺ skipped (no children)`);
+      } else if (outcome.status === 'error') {
+        counts.errors++;
+        console.error(`${pos} ${legacyFid.padEnd(8)} ✗ ERROR: ${outcome.error}`);
+      } else {
+        // enrolled or dry-run
+        if (outcome.oid) perCenter.set(outcome.oid, (perCenter.get(outcome.oid) ?? 0) + 1);
+        if (outcome.status === 'enrolled') counts.enrolled++;
+        else counts.wouldEnroll++;
+        const verb = outcome.status === 'dry-run' ? 'would enroll' : '✓ enrolled';
+        const fixNote = (outcome.gradeFixes ?? 0) > 0 ? `, ${outcome.gradeFixes} grade-fix` : '';
+        console.log(
+          `${pos} ${legacyFid.padEnd(8)} ${verb}  center=${outcome.center} → ${outcome.oid}  (${outcome.childCount} children${fixNote})`,
+        );
+      }
+    } catch (err) {
+      counts.errors++;
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`${pos} ${legacyFid.padEnd(8)} ✗ ERROR: ${msg}`);
+    }
+  }
+
+  console.log('\nSummary:');
+  console.log(`  Processed:           ${counts.processed}`);
+  if (args.dryRun) {
+    console.log(`  Would enroll:        ${counts.wouldEnroll}`);
+  } else {
+    console.log(`  Enrolled:            ${counts.enrolled}`);
+  }
+  console.log(`  Skipped (no kids):   ${counts.skippedNoChildren}`);
+  console.log(`  Grade fixes applied: ${counts.gradeFixes}${args.dryRun ? ' (dry-run — not written)' : ''}`);
+  console.log(`  Errors:              ${counts.errors}`);
+  console.log('  Per offering:');
+  for (const [oid, n] of perCenter) {
+    console.log(`    ${oid}: ${n}`);
+  }
+
+  process.exit(counts.errors > 0 ? 1 : 0);
+}
+
+main().catch((e) => {
+  console.error('Fatal:', e);
+  process.exit(1);
+});
