@@ -400,6 +400,12 @@ describe('canAccessRoute — /api/admin/teacher-assignments — admin + welcome-
     expect(canAccessRoute(welcomeTeam, '/api/admin/levels', 'GET')).toBe(false);
     expect(canAccessRoute(admin, '/api/admin/levels', 'GET')).toBe(true);
   });
+  it('keeps /api/admin/school-year/* admin-only (family denied, admin allowed)', () => {
+    expect(canAccessRoute(family, '/api/admin/school-year/promote', 'POST')).toBe(false);
+    expect(canAccessRoute(manager, '/api/admin/school-year/promote', 'POST')).toBe(false);
+    expect(canAccessRoute(admin, '/api/admin/school-year/promote', 'POST')).toBe(true);
+    expect(canAccessRoute(admin, '/api/admin/school-year/start', 'POST')).toBe(true);
+  });
 });
 
 describe('canAccessRoute — /api/admin/calendar — admin + welcome-team', () => {
