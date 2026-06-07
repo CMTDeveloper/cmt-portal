@@ -51,6 +51,7 @@ const REPORT: RolloverReport = {
     { fid: 'FAM-77', mid: 'MID-99', childName: 'Riya S.', location: 'Brampton', outcomeKind: 'needs-grade', fromGrade: null, fromLevelName: null, toGrade: null, toLevelName: null },
   ],
   rows: [],
+  affectedFids: [],
 };
 
 beforeEach(() => {

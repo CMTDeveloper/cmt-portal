@@ -36,6 +36,7 @@ const rolloverReport: RolloverReport = {
   graduates: [],
   attention: [],
   rows: [],
+  affectedFids: [],
 };
 
 describe('startNewYearClient', () => {

@@ -147,6 +147,8 @@ interface Acc {
   graduates: PromotionRow[];
   attention: PromotionRow[];
   rows: PromotionRow[];
+  // fids actually written on a commit run (uncapped); stays empty on dry-run.
+  affectedFids: string[];
 }
 
 function newAcc(): Acc {
@@ -162,6 +164,7 @@ function newAcc(): Acc {
     graduates: [],
     attention: [],
     rows: [],
+    affectedFids: [],
   };
 }
 
@@ -274,6 +277,10 @@ export async function promoteFamilies(db: Db, args: PromoteArgs): Promise<Rollov
       const familyPlan = planFamilyPromotion({
         fid: fam.fid,
         location,
+        // NOTE: enrolledMids comes from the pre-txn discovery snapshot, not re-read
+        // inside the txn. This batch is admin-triggered and effectively single-writer
+        // (once-a-year), so a concurrent enrolledMids edit between discovery and
+        // commit is not a concern.
         enrolledMids: fam.enrolledMids,
         members,
         srcLevels: ctx.srcLevels,
@@ -330,6 +337,10 @@ export async function promoteFamilies(db: Db, args: PromoteArgs): Promise<Rollov
     } else {
       acc.familiesProcessed++;
       aggregate(acc, plan, false);
+      // Record the fid only when the txn actually wrote (family progressed); an
+      // all-needs-attention family is examined but unmutated, so it must NOT be
+      // revalidated. Uncapped — unlike `rows`.
+      if (familyProgressed(plan)) acc.affectedFids.push(fam.fid);
     }
   }
 
@@ -353,5 +364,6 @@ export async function promoteFamilies(db: Db, args: PromoteArgs): Promise<Rollov
     graduates: acc.graduates,
     attention: acc.attention,
     rows: acc.rows,
+    affectedFids: acc.affectedFids,
   };
 }

@@ -22,6 +22,10 @@ export const RolloverReportSchema = z.object({
   graduates: z.array(PromotionRowSchema),
   attention: z.array(PromotionRowSchema),
   rows: z.array(PromotionRowSchema),
+  // The fids actually mutated on a commit run (uncapped — unlike `rows`, which is
+  // capped at COMMIT_ROW_CAP). Empty on dry-run. Used to revalidate every affected
+  // family's cache, not just the first capped page of child rows.
+  affectedFids: z.array(z.string()).default([]),
 });
 export type RolloverReport = z.infer<typeof RolloverReportSchema>;
 

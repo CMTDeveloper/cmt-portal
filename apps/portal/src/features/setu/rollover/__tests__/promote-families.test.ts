@@ -291,6 +291,9 @@ describe('promoteFamilies', () => {
     expect(report.dryRun).toBe(false);
     expect(report.byTransition).toContainEqual({ label: 'Level 2 → Level 2', count: 1 });
     expect(report.byTransition).toContainEqual({ label: 'Level 2 → Level 3', count: 1 });
+
+    // ── affectedFids: F1 was mutated on this commit run (used for revalidation) ──
+    expect(report.affectedFids).toContain('F1');
   });
 
   it('is idempotent: a plain second run does not re-discover or double-advance', async () => {
@@ -385,6 +388,8 @@ describe('promoteFamilies', () => {
     expect(f9Row!.outcomeKind).toBe('needs-grade');
     // familiesProcessed counts F9 (examined, even though no writes happened).
     expect(report.familiesProcessed).toBeGreaterThanOrEqual(1);
+    // F9 was unmutated (zero progress) → it must NOT be revalidated.
+    expect(report.affectedFids).not.toContain('F9');
   });
 
   it('dry-run reports counts but writes nothing', async () => {
@@ -405,5 +410,7 @@ describe('promoteFamilies', () => {
     expect(src['status']).toBe('active');
     expect(fake.readSub('F2', 'enrollments', 'F2-bv-brampton-2026-27')).toBeUndefined();
     expect(fake.readSub('F2', 'members', 'F2-02')!['schoolGrade']).toBe('2');
+    // Dry-run writes nothing → affectedFids stays empty (no revalidation downstream).
+    expect(report.affectedFids).toEqual([]);
   });
 });

@@ -128,7 +128,11 @@ export async function startNewYear(db: Db, args: StartArgs): Promise<StartYearRe
       const lvl = levelDoc.data();
       const sourceLevelId = String(lvl['levelId']);
       // Preserve the exact `{location}-{levelSlug}-` prefix; only the pid suffix swaps.
-      const newLevelId = sourceLevelId.replace(sourceOid, targetOid);
+      // Suffix-anchor the swap so a levelSlug that happens to contain the oid string
+      // can't be mangled by replacing the first occurrence.
+      const newLevelId = sourceLevelId.endsWith(sourceOid)
+        ? sourceLevelId.slice(0, -sourceOid.length) + targetOid
+        : sourceLevelId.replace(sourceOid, targetOid);
 
       const targetLevelRef = db.collection('levels').doc(newLevelId);
       const targetLevelSnap = await targetLevelRef.get();

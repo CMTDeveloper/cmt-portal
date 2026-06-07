@@ -12,8 +12,9 @@ import { promoteFamilies } from '@/features/setu/rollover/promote-families';
  * middleware `/api/admin/` gate). Returns the RolloverReport JSON.
  *
  * On a commit run, per-family enrollment + member docs change, so we invalidate
- * the `family-${fid}` read tag for every affected family in the report. A dry-run
- * performs no writes and therefore does NOT revalidate.
+ * the `family-${fid}` read tag for every mutated family. We use the engine's
+ * `affectedFids` (uncapped) — NOT `rows`, which is capped at COMMIT_ROW_CAP and
+ * would miss families past the cap. A dry-run performs no writes → no revalidation.
  */
 export async function POST(req: Request) {
   const session = readSessionFromHeaders(req);
@@ -34,8 +35,7 @@ export async function POST(req: Request) {
   });
 
   if (!parsed.data.dryRun) {
-    const affectedFids = new Set(result.rows.map((row) => row.fid));
-    for (const fid of affectedFids) {
+    for (const fid of result.affectedFids) {
       revalidateTag(`family-${fid}`, 'max');
     }
   }

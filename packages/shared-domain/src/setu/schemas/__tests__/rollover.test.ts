@@ -46,6 +46,8 @@ describe('rollover response schemas', () => {
       graduates: [], attention: [], rows: [],
     });
     expect(r.promoted).toBe(3);
+    // affectedFids is omitted from the fixture → .default([]) fills it in.
+    expect(r.affectedFids).toEqual([]);
   });
   it('parses a StartYearResult', () => {
     const s = StartYearResultSchema.parse({

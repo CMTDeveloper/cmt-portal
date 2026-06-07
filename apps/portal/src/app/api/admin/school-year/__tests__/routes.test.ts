@@ -42,6 +42,7 @@ const REPORT: RolloverReport = {
   byTransition: [{ label: 'Grade 1 → Grade 2', count: 2 }],
   graduates: [],
   attention: [],
+  affectedFids: [],
   rows: [
     {
       fid: 'CMT-0001', mid: 'CMT-0001-02', childName: 'A Child',
@@ -154,16 +155,19 @@ describe('POST /api/admin/school-year/promote', () => {
     expect(revalidateTag).not.toHaveBeenCalled();
   });
 
-  it('revalidates family-${fid} for every affected family on a commit run', async () => {
-    mockPromoteFamilies.mockResolvedValueOnce({ ...REPORT, dryRun: false });
+  it('revalidates family-${fid} from affectedFids (not capped rows) on a commit run', async () => {
+    // affectedFids is the uncapped source of truth — revalidation must derive from
+    // it, not from `rows` (which the engine caps at COMMIT_ROW_CAP).
+    mockPromoteFamilies.mockResolvedValueOnce({ ...REPORT, dryRun: false, affectedFids: ['F1'] });
     const { revalidateTag } = await import('next/cache');
     const { POST } = await import('../promote/route');
     const res = await POST(makeRequest('/api/admin/school-year/promote', { dryRun: false }, 'admin'));
     expect(res.status).toBe(200);
     const args = mockPromoteFamilies.mock.calls[0]![1] as { dryRun: boolean };
     expect(args.dryRun).toBe(false);
-    expect(revalidateTag).toHaveBeenCalledWith('family-CMT-0001', 'max');
-    expect(revalidateTag).toHaveBeenCalledWith('family-CMT-0002', 'max');
+    expect(revalidateTag).toHaveBeenCalledWith('family-F1', 'max');
+    // CMT-0001/CMT-0002 appear in rows but NOT in affectedFids → not revalidated.
+    expect(revalidateTag).not.toHaveBeenCalledWith('family-CMT-0001', 'max');
   });
 
   it('returns 400 when dryRun is missing from the body', async () => {
