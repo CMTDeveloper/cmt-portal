@@ -15,6 +15,8 @@ export interface RosterMemberInput {
 export interface RosterFamily {
   fid: string;
   legacyFid: string | null;
+  /** Mids covered by this family's active enrollment for the offering. */
+  enrolledMids: string[];
   members: RosterMemberInput[];
 }
 
@@ -69,6 +71,7 @@ export function buildRoster(
   const members: RosterMember[] = [];
   for (const fam of families) {
     for (const m of fam.members) {
+      if (!fam.enrolledMids.includes(m.mid)) continue; // only members in the active enrollment
       if (!memberMatchesLevel(m, level, now)) continue;
       const status: RosterStatus = statusByMid.get(m.mid) ?? 'unaccounted';
       members.push({
@@ -115,14 +118,18 @@ export async function deriveRoster(levelId: string, date: string, now: Date = ne
     .where('pid', '==', level.pid)
     .where('status', '==', 'active')
     .get();
-  const fids = [
-    ...new Set(
-      enrollSnap.docs
-        .map((d) => d.data() as { fid?: string; location?: string })
-        .filter((e) => e.location === level.location && typeof e.fid === 'string')
-        .map((e) => e.fid as string),
-    ),
-  ];
+
+  // fid → enrolledMids for this offering. A family normally has one active
+  // enrollment per pid; if somehow more than one, union their enrolledMids.
+  const enrolledMidsByFid = new Map<string, string[]>();
+  for (const d of enrollSnap.docs) {
+    const e = d.data() as { fid?: string; location?: string; enrolledMids?: string[] };
+    if (e.location !== level.location || typeof e.fid !== 'string') continue;
+    const existing = enrolledMidsByFid.get(e.fid) ?? [];
+    const merged = new Set([...existing, ...(e.enrolledMids ?? [])]);
+    enrolledMidsByFid.set(e.fid, [...merged]);
+  }
+  const fids = [...enrolledMidsByFid.keys()];
 
   const [families, eventsSnap] = await Promise.all([
     Promise.all(
@@ -135,6 +142,7 @@ export async function deriveRoster(levelId: string, date: string, now: Date = ne
         return {
           fid,
           legacyFid,
+          enrolledMids: enrolledMidsByFid.get(fid) ?? [],
           members: memSnap.docs.map((d) => {
             const m = d.data();
             return {
