@@ -145,6 +145,14 @@
       ]
     },
     {
+      "collectionGroup": "enrollments",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "oid", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "attendanceEvents",
       "queryScope": "COLLECTION",
       "fields": [
