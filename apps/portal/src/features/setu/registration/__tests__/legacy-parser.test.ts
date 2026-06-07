@@ -105,19 +105,49 @@ describe('parseLegacyRowsForMigration', () => {
     expect(result?.adults[1]?.isPrimary).toBe(false);
   });
 
-  it('uses grade as schoolGrade for valid school grades and falls back to level', () => {
+  it('maps numeric grades 1-12 to the bare number', () => {
     const result = parseLegacyRowsForMigration(
       [
         row({ grade: 99, fname: 'Asha', lname: 'Shah', sid: 1 }),
-        row({ grade: 5, fname: 'Kid1', lname: 'Shah', sid: 2 }),
-        row({ grade: 99, fname: 'Asha', lname: 'Shah', sid: 3 }), // dup-shape adult ignored
-        row({ grade: 0, fname: 'Kid2', lname: 'Shah', level: 'Pre-K', sid: 4 }),
+        row({ grade: 3, fname: 'Kid1', lname: 'Shah', level: 'Level 2', sid: 2 }),
+        row({ grade: 12, fname: 'Kid2', lname: 'Shah', level: 'Level 9', sid: 3 }),
       ],
       '42',
     );
     expect(result?.children).toHaveLength(2);
-    expect(result?.children[0]?.schoolGrade).toBe('5');
-    expect(result?.children[1]?.schoolGrade).toBe('Pre-K');
+    expect(result?.children[0]?.schoolGrade).toBe('3');
+    expect(result?.children[1]?.schoolGrade).toBe('12');
+  });
+
+  it('maps grade -1 → "JK" and grade 0 → "SK" (Pre-Level band accepts both)', () => {
+    const result = parseLegacyRowsForMigration(
+      [
+        row({ grade: 99, fname: 'Asha', lname: 'Shah', sid: 1 }),
+        // JK/SK kids carry a "Pre L1 (Gr JK-SK)" level blob we must NOT store.
+        row({ grade: -1, fname: 'KidJK', lname: 'Shah', level: 'Pre L1 (Gr JK-SK)', sid: 2 }),
+        row({ grade: 0, fname: 'KidSK', lname: 'Shah', level: 'Pre L1 (Gr JK-SK)', sid: 3 }),
+      ],
+      '42',
+    );
+    expect(result?.children).toHaveLength(2);
+    expect(result?.children[0]?.schoolGrade).toBe('JK');
+    expect(result?.children[1]?.schoolGrade).toBe('SK');
+  });
+
+  it('leaves shishu (grade -2) and unknown (grade 14, level NULL) as null', () => {
+    const result = parseLegacyRowsForMigration(
+      [
+        row({ grade: 99, fname: 'Asha', lname: 'Shah', sid: 1 }),
+        // Shishu is age-based (no school grade) and carries a "Shishu E/W (Pre-K)" blob.
+        row({ grade: -2, fname: 'KidShishu', lname: 'Shah', level: 'Shishu E/W (Pre-K)', sid: 2 }),
+        // grade 14 alumni/edge with no level band.
+        row({ grade: 14, fname: 'KidEdge', lname: 'Shah', level: 'NULL', sid: 3 }),
+      ],
+      '42',
+    );
+    expect(result?.children).toHaveLength(2);
+    expect(result?.children[0]?.schoolGrade).toBeNull();
+    expect(result?.children[1]?.schoolGrade).toBeNull();
   });
 
   it('children inherit lastName from primary when their own lname is empty', () => {

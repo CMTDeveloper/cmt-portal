@@ -107,12 +107,23 @@ function mapLocation(value: unknown): LegacyLocation {
   return 'Brampton';
 }
 
+// Legacy `grade` is numeric: 1-12 are real grades; 0 and -1 are the JK/SK
+// pre-level kids (level text "Pre L1 (Gr JK-SK)"); -2 is shishu (Pre-K,
+// age-based — no grade); 99 is a parent; 13+/14 are alumni/edge (no band).
+// Map to a `schoolGrade` that `normalizeGrade` + the level gradeBands can match.
 function mapSchoolGrade(row: LegacyRosterRow): string | null {
-  const gradeNum = Number(row.grade);
-  if (Number.isFinite(gradeNum) && gradeNum >= 1 && gradeNum <= 13) {
-    return String(gradeNum);
+  const g = Number(row.grade);
+  if (Number.isFinite(g)) {
+    if (g >= 1 && g <= 12) return String(g);
+    if (g === -1) return 'JK'; // Pre-Level band is ['JK','SK'] — both match
+    if (g === 0) return 'SK';
+    // -2 (shishu, age-based), 13+/14 (no band): no usable school grade
+    return null;
   }
-  return clean(row.level);
+  // Non-numeric grade (rare) — fall back to the free-text level if it looks
+  // like a real grade; otherwise null (don't store the raw "Pre L1 (...)" blob).
+  const lvl = clean(row.level);
+  return lvl && /^(jk|sk|\d{1,2})$/i.test(lvl) ? lvl : null;
 }
 
 function isFidMatch(stored: unknown, target: string): boolean {
