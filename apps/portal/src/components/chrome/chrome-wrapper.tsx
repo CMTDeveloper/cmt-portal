@@ -13,6 +13,7 @@ const SUPPRESS_PATTERNS: RegExp[] = [
   /^\/invite($|\/)/,
   /^\/welcome($|\/)/,
   /^\/admin($|\/)/,
+  /^\/teacher($|\/)/,
 ];
 
 export function ChromeWrapper({ children }: { children: ReactNode }) {
