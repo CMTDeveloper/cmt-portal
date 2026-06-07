@@ -18,6 +18,11 @@ interface DesktopSidebarProps {
   // true for both primary admins and family members with admin in extraRoles
   // (via roleAssignments/{mid}). Welcome-team-only sidebar ignores this flag.
   isAdmin?: boolean;
+  // When true, a "Teacher" link appears in the Staff section. Gated on
+  // flags.setuTeacher && isTeacher(claims) by the layout. Unlike the Admin
+  // link this shows in both the family AND welcome-team sidebars (a teacher
+  // may be browsing either surface), so it's gated on showTeacher alone.
+  showTeacher?: boolean;
 }
 
 const FAMILY_NAV_ITEMS: [SidebarTab, string, keyof typeof SetuIcon, string][] = [
@@ -60,7 +65,7 @@ function deriveActiveFromPathname(pathname: string): SidebarTab {
 // DesktopSidebar is pure — it does not call hooks. This lets it render inside
 // Suspense fallbacks (which Next.js 16 cacheComponents prerenders statically).
 // For pathname-driven self-highlighting, use DesktopSidebarLive instead.
-export function DesktopSidebar({ active, role = 'family', displayName, subtitle, showSignOut, isAdmin }: DesktopSidebarProps) {
+export function DesktopSidebar({ active, role = 'family', displayName, subtitle, showSignOut, isAdmin, showTeacher = false }: DesktopSidebarProps) {
   const navItems = role === 'welcome-team' ? WELCOME_NAV_ITEMS : FAMILY_NAV_ITEMS;
   const trimmed = (displayName ?? '').trim();
   const name = trimmed || (role === 'welcome-team' ? 'Welcome team' : 'Family member');
@@ -68,6 +73,9 @@ export function DesktopSidebar({ active, role = 'family', displayName, subtitle,
   // has its own routes). Admins still navigate via /admin URLs — this is
   // just a convenience link so they don't have to type the path.
   const showAdminLink = role === 'family' && isAdmin === true;
+  // The Staff section renders if EITHER a staff cross-link is available. Teacher
+  // is gated on showTeacher alone (shows in both family + welcome sidebars).
+  const showStaffSection = showAdminLink || showTeacher;
 
   return (
     <aside style={{ width: 248, background: 'var(--surface)', borderRight: '1px solid var(--line)', padding: '22px 18px', display: 'flex', flexDirection: 'column' }}>
@@ -97,23 +105,39 @@ export function DesktopSidebar({ active, role = 'family', displayName, subtitle,
             </Link>
           );
         })}
-        {showAdminLink && (
+        {showStaffSection && (
           <>
             <div style={{ marginTop: 14, marginBottom: 6, padding: '0 12px', fontSize: 10, fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--muted)' }}>
               Staff
             </div>
-            <Link
-              href="/admin"
-              style={{
-                display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px',
-                borderRadius: 'var(--radiusSm)',
-                background: 'transparent',
-                color: 'var(--body-text)',
-                fontWeight: 500, textDecoration: 'none',
-              }}
-            >
-              <SetuIcon.shield/> Admin
-            </Link>
+            {showAdminLink && (
+              <Link
+                href="/admin"
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px',
+                  borderRadius: 'var(--radiusSm)',
+                  background: 'transparent',
+                  color: 'var(--body-text)',
+                  fontWeight: 500, textDecoration: 'none',
+                }}
+              >
+                <SetuIcon.shield/> Admin
+              </Link>
+            )}
+            {showTeacher && (
+              <Link
+                href="/teacher"
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px',
+                  borderRadius: 'var(--radiusSm)',
+                  background: 'transparent',
+                  color: 'var(--body-text)',
+                  fontWeight: 500, textDecoration: 'none',
+                }}
+              >
+                <SetuIcon.people/> Teacher
+              </Link>
+            )}
           </>
         )}
       </nav>

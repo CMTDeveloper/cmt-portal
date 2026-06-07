@@ -62,6 +62,41 @@ describe('Programs entry in family navigation', () => {
   });
 });
 
+// Teacher cross-link: gated on showTeacher (layout computes
+// flags.setuTeacher && isTeacher(claims)). Shows in both the family and
+// welcome-team desktop sidebars, plus the family mobile "More" sheet.
+describe('Teacher cross-link gated on showTeacher', () => {
+  it('desktop family sidebar shows Teacher → /teacher when showTeacher', () => {
+    render(<DesktopSidebar role="family" showTeacher />);
+    const link = screen.getByRole('link', { name: /teacher/i });
+    expect(link.getAttribute('href')).toBe('/teacher');
+  });
+
+  it('desktop family sidebar hides Teacher when showTeacher is false', () => {
+    render(<DesktopSidebar role="family" />);
+    expect(screen.queryByRole('link', { name: /teacher/i })).toBeNull();
+  });
+
+  it('desktop welcome sidebar shows Teacher when showTeacher (not gated on role)', () => {
+    render(<DesktopSidebar role="welcome-team" showTeacher />);
+    const link = screen.getByRole('link', { name: /teacher/i });
+    expect(link.getAttribute('href')).toBe('/teacher');
+  });
+
+  it('mobile "More" sheet shows Teacher → /teacher when showTeacher', () => {
+    render(<MobileBottomNav showTeacher />);
+    fireEvent.click(screen.getByRole('button', { name: /more/i }));
+    const link = screen.getByRole('link', { name: /teacher/i });
+    expect(link.getAttribute('href')).toBe('/teacher');
+  });
+
+  it('mobile "More" sheet hides Teacher when showTeacher is false', () => {
+    render(<MobileBottomNav />);
+    fireEvent.click(screen.getByRole('button', { name: /more/i }));
+    expect(screen.queryByRole('link', { name: /teacher/i })).toBeNull();
+  });
+});
+
 // CMT decision 2026-06-04: general donations are handled via a separate process,
 // not Stripe-in-portal, so the Giving + Receipts nav surfaces are hidden. The
 // Bala Vihar dakshina flow stays reachable from the dashboard / enroll (not nav).

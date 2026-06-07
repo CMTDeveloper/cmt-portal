@@ -20,7 +20,8 @@ export default async function TeacherDashboardPage() {
         <SetuLogo size={18} />
       </div>
       <header style={{ marginBottom: 24 }}>
-        <p style={{ fontSize: 11, letterSpacing: '.16em', textTransform: 'uppercase', color: 'var(--muted)' }}>
+        <Link href="/family" style={{ fontSize: 13, color: 'var(--muted)', textDecoration: 'none', fontWeight: 500 }}>← My family</Link>
+        <p style={{ fontSize: 11, letterSpacing: '.16em', textTransform: 'uppercase', color: 'var(--muted)', marginTop: 10 }}>
           Teacher · Bala Vihar
         </p>
         <h1 style={{ fontSize: 30, fontWeight: 600, marginTop: 6, letterSpacing: '-0.02em' }}>My classes</h1>

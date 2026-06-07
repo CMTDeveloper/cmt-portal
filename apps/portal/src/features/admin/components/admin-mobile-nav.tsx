@@ -37,7 +37,7 @@ function activeTab(pathname: string): Tab {
   return 'more';
 }
 
-export function AdminMobileNav({ hasFamily = false }: { hasFamily?: boolean }) {
+export function AdminMobileNav({ hasFamily = false, showTeacher = false }: { hasFamily?: boolean; showTeacher?: boolean }) {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
   const active = activeTab(pathname);
@@ -85,6 +85,11 @@ export function AdminMobileNav({ hasFamily = false }: { hasFamily?: boolean }) {
                 </Link>
               ))}
               <div style={{ height: 1, background: 'var(--line)', margin: '6px 0' }} />
+              {showTeacher && (
+                <Link href="/teacher" onClick={() => setMoreOpen(false)} style={sheetLink}>
+                  <SetuIcon.people /> Teacher
+                </Link>
+              )}
               {hasFamily && (
                 <Link href="/family" onClick={() => setMoreOpen(false)} style={sheetLink}>
                   <SetuIcon.back /> Back to my family

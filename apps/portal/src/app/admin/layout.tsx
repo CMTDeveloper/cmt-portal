@@ -2,8 +2,9 @@ import { Suspense } from 'react';
 import { cookies } from 'next/headers';
 import Link from 'next/link';
 import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
-import { isAdmin, type WithRole } from '@cmt/shared-domain';
+import { isAdmin, isTeacher, type WithRole } from '@cmt/shared-domain';
 import { SetuLogo, SetuIcon } from '@cmt/ui';
+import { flags } from '@/lib/flags';
 import { CspRoot } from '@/features/family/components/atoms';
 import { LoadingOm } from '@/components/chrome/loading-om';
 import { SignOutButton } from '@/features/family/components/sign-out-button';
@@ -17,6 +18,7 @@ interface AdminIdentity {
   allowed: boolean;
   displayEmail: string;
   hasFamily: boolean;
+  showTeacher: boolean;
 }
 
 async function resolveAdminIdentity(): Promise<AdminIdentity> {
@@ -25,6 +27,7 @@ async function resolveAdminIdentity(): Promise<AdminIdentity> {
   let allowed = false;
   let displayEmail = 'Admin';
   let hasFamily = false;
+  let showTeacher = false;
   if (sessionCookie) {
     const raw = await verifyPortalSessionCookie(sessionCookie).catch(() => null);
     // isAdmin() checks role OR extraRoles — a family-manager with
@@ -37,9 +40,12 @@ async function resolveAdminIdentity(): Promise<AdminIdentity> {
       // admins don't. We use this to show a "Back to family" link so dual-role
       // users can hop back to /family quickly.
       hasFamily = typeof (raw as { fid?: unknown }).fid === 'string';
+      // Teacher cross-link: an admin who also teaches can hop to /teacher.
+      // Gated on the feature flag + isTeacher(claims), mirroring isAdmin().
+      showTeacher = flags.setuTeacher && isTeacher(raw as unknown as WithRole);
     }
   }
-  return { allowed, displayEmail, hasFamily };
+  return { allowed, displayEmail, hasFamily, showTeacher };
 }
 
 function AccessDenied() {
@@ -51,12 +57,12 @@ function AccessDenied() {
 }
 
 async function AdminChromeAndChildren({ children }: { children: React.ReactNode }) {
-  const { allowed, displayEmail, hasFamily } = await resolveAdminIdentity();
+  const { allowed, displayEmail, hasFamily, showTeacher } = await resolveAdminIdentity();
   if (!allowed) return <AccessDenied />;
 
   return (
     <CspRoot style={{ display: 'flex', width: '100%', minHeight: '100dvh' }}>
-      <AdminSidebar displayEmail={displayEmail} hasFamily={hasFamily}/>
+      <AdminSidebar displayEmail={displayEmail} hasFamily={hasFamily} showTeacher={showTeacher}/>
       <main style={{ flex: 1, padding: '32px 40px', overflow: 'auto' }}>{children}</main>
     </CspRoot>
   );
@@ -67,18 +73,18 @@ async function AdminChromeAndChildren({ children }: { children: React.ReactNode 
 // fixed bottom nav. Sign out + Back-to-family live in the nav's "More" sheet,
 // mirroring the family mobile chrome.
 async function AdminMobileChrome({ children }: { children: React.ReactNode }) {
-  const { allowed, hasFamily } = await resolveAdminIdentity();
+  const { allowed, hasFamily, showTeacher } = await resolveAdminIdentity();
   if (!allowed) return <AccessDenied />;
 
   return (
     <CspRoot style={{ minHeight: '100dvh' }}>
       <div style={{ padding: '18px 18px 90px' }}>{children}</div>
-      <AdminMobileNav hasFamily={hasFamily} />
+      <AdminMobileNav hasFamily={hasFamily} showTeacher={showTeacher} />
     </CspRoot>
   );
 }
 
-function AdminSidebar({ displayEmail, hasFamily }: { displayEmail: string; hasFamily: boolean }) {
+function AdminSidebar({ displayEmail, hasFamily, showTeacher = false }: { displayEmail: string; hasFamily: boolean; showTeacher?: boolean }) {
   const items: Array<{ label: string; href: string; legacy?: boolean }> = [
     { label: 'Dashboard',          href: '/admin' },
     { label: 'Family search',      href: '/welcome' },
@@ -97,19 +103,34 @@ function AdminSidebar({ displayEmail, hasFamily }: { displayEmail: string; hasFa
     <aside style={{ width: 248, background: 'var(--surface)', borderRight: '1px solid var(--line)', padding: '22px 18px', display: 'flex', flexDirection: 'column' }}>
       <div style={{ marginBottom: 28 }}><SetuLogo size={20}/></div>
       <nav style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 14 }}>
-        {hasFamily && (
+        {(hasFamily || showTeacher) && (
           <>
-            <Link
-              href="/family"
-              style={{
-                display: 'flex', alignItems: 'center', gap: 10,
-                padding: '10px 12px', borderRadius: 'var(--radiusSm)',
-                color: 'var(--body-text)', fontWeight: 500, textDecoration: 'none',
-              }}
-            >
-              <SetuIcon.back/>
-              <span>Back to my family</span>
-            </Link>
+            {hasFamily && (
+              <Link
+                href="/family"
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '10px 12px', borderRadius: 'var(--radiusSm)',
+                  color: 'var(--body-text)', fontWeight: 500, textDecoration: 'none',
+                }}
+              >
+                <SetuIcon.back/>
+                <span>Back to my family</span>
+              </Link>
+            )}
+            {showTeacher && (
+              <Link
+                href="/teacher"
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '10px 12px', borderRadius: 'var(--radiusSm)',
+                  color: 'var(--body-text)', fontWeight: 500, textDecoration: 'none',
+                }}
+              >
+                <SetuIcon.people/>
+                <span>Teacher</span>
+              </Link>
+            )}
             <div style={{ height: 1, background: 'var(--line)', margin: '8px 12px' }}/>
           </>
         )}

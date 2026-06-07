@@ -6,7 +6,8 @@ import { DesktopSidebar, DesktopSidebarLive } from '@/features/family/components
 import { MobileBottomNav } from '@/features/family/components/mobile-bottom-nav';
 import { LoadingOm } from '@/components/chrome/loading-om';
 import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
-import { isAdmin, type WithRole } from '@cmt/shared-domain';
+import { isAdmin, isTeacher, type WithRole } from '@cmt/shared-domain';
+import { flags } from '@/lib/flags';
 
 // The layout itself stays synchronous so cacheComponents:true can stream the
 // static shell. The two awaited data fetches (sidebar identity, page body) are
@@ -14,7 +15,7 @@ import { isAdmin, type WithRole } from '@cmt/shared-domain';
 // renders immediately.
 
 async function SidebarWithIdentity() {
-  const [data, admin] = await Promise.all([getCurrentFamily(), readIsAdminFromCookie()]);
+  const [data, staff] = await Promise.all([getCurrentFamily(), readStaffFlagsFromCookie()]);
   let displayName: string | undefined;
   let subtitle: string | undefined;
   if (data) {
@@ -22,30 +23,35 @@ async function SidebarWithIdentity() {
     if (currentMember) displayName = `${currentMember.firstName} ${currentMember.lastName}`;
     subtitle = `${data.family.name}${data.family.legacyFid ? ` · FID ${data.family.fid} · Legacy ${data.family.legacyFid}` : ` · FID ${data.family.fid}`}`;
   }
-  return <DesktopSidebarLive displayName={displayName} subtitle={subtitle} showSignOut isAdmin={admin}/>;
+  return <DesktopSidebarLive displayName={displayName} subtitle={subtitle} showSignOut isAdmin={staff.isAdmin} showTeacher={staff.showTeacher}/>;
 }
 
-// Mobile bottom nav needs isAdmin to decide whether the "More" sheet shows the
-// Admin shortcut. Computed the same way as the desktop sidebar.
+// Mobile bottom nav needs isAdmin/showTeacher to decide whether the "More" sheet
+// shows the Admin / Teacher shortcuts. Computed the same way as the desktop sidebar.
 async function MobileNavWithIdentity() {
-  const admin = await readIsAdminFromCookie();
-  return <MobileBottomNav isAdmin={admin} />;
+  const staff = await readStaffFlagsFromCookie();
+  return <MobileBottomNav isAdmin={staff.isAdmin} showTeacher={staff.showTeacher} />;
 }
 
-// Reads the session cookie and runs isAdmin() so the sidebar can decide whether
-// to show the Admin shortcut. Returns false on any error (missing cookie,
-// expired session, etc.) — silent failure is fine here because middleware
-// already gates access to /admin itself.
-async function readIsAdminFromCookie(): Promise<boolean> {
+// Reads the session cookie once and runs isAdmin()/isTeacher() so the chrome can
+// decide whether to show the Admin / Teacher shortcuts. Returns false on any
+// error (missing cookie, expired session, etc.) — silent failure is fine here
+// because middleware already gates access to /admin and /teacher themselves.
+// Teacher is additionally gated on the flags.setuTeacher feature flag.
+async function readStaffFlagsFromCookie(): Promise<{ isAdmin: boolean; showTeacher: boolean }> {
   try {
     const cookieStore = await cookies();
     const sessionCookie = cookieStore.get('__session')?.value;
-    if (!sessionCookie) return false;
+    if (!sessionCookie) return { isAdmin: false, showTeacher: false };
     const claims = await verifyPortalSessionCookie(sessionCookie).catch(() => null);
-    if (!claims) return false;
-    return isAdmin(claims as unknown as WithRole);
+    if (!claims) return { isAdmin: false, showTeacher: false };
+    const withRole = claims as unknown as WithRole;
+    return {
+      isAdmin: isAdmin(withRole),
+      showTeacher: flags.setuTeacher && isTeacher(withRole),
+    };
   } catch {
-    return false;
+    return { isAdmin: false, showTeacher: false };
   }
 }
 

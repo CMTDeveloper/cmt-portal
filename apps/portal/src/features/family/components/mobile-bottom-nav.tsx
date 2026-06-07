@@ -51,7 +51,7 @@ function activeTab(pathname: string): Tab {
   return 'home';
 }
 
-export function MobileBottomNav({ isAdmin = false }: { isAdmin?: boolean }) {
+export function MobileBottomNav({ isAdmin = false, showTeacher = false }: { isAdmin?: boolean; showTeacher?: boolean }) {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
   if (shouldHide(pathname)) return null;
@@ -110,6 +110,19 @@ export function MobileBottomNav({ isAdmin = false }: { isAdmin?: boolean }) {
                   }}
                 >
                   <SetuIcon.shield /> Admin
+                </Link>
+              )}
+              {showTeacher && (
+                <Link
+                  href="/teacher"
+                  onClick={() => setMoreOpen(false)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 14, padding: '14px 14px',
+                    borderRadius: 'var(--radiusSm)', textDecoration: 'none',
+                    color: 'var(--body-text)', background: 'transparent', fontSize: 15, fontWeight: 600,
+                  }}
+                >
+                  <SetuIcon.people /> Teacher
                 </Link>
               )}
               <div style={{ height: 1, background: 'var(--line)', margin: '6px 0' }} />

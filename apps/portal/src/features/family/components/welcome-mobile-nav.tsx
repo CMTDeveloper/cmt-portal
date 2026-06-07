@@ -12,7 +12,7 @@ function isSearchActive(pathname: string): boolean {
   return !pathname.startsWith('/welcome/levels') && !pathname.startsWith('/welcome/seva');
 }
 
-export function WelcomeMobileNav({ isAdmin = false, hasFamily = false }: { isAdmin?: boolean; hasFamily?: boolean }) {
+export function WelcomeMobileNav({ isAdmin = false, hasFamily = false, showTeacher = false }: { isAdmin?: boolean; hasFamily?: boolean; showTeacher?: boolean }) {
   const pathname = usePathname();
   const searchActive = isSearchActive(pathname);
 
@@ -41,6 +41,11 @@ export function WelcomeMobileNav({ isAdmin = false, hasFamily = false }: { isAdm
       <Link href="/welcome/seva" style={itemStyle(pathname.startsWith('/welcome/seva'))}>
         <SetuIcon.heart /> Seva
       </Link>
+      {showTeacher && (
+        <Link href="/teacher" style={itemStyle(false)}>
+          <SetuIcon.people /> Teacher
+        </Link>
+      )}
       {isAdmin ? (
         <Link href="/admin" style={itemStyle(false)}>
           <SetuIcon.shield /> Admin

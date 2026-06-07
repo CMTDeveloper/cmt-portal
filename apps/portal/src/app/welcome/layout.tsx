@@ -1,7 +1,8 @@
 import { Suspense } from 'react';
 import { cookies } from 'next/headers';
 import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
-import { isWelcomeTeam, isAdmin, type WithRole } from '@cmt/shared-domain';
+import { isWelcomeTeam, isAdmin, isTeacher, type WithRole } from '@cmt/shared-domain';
+import { flags } from '@/lib/flags';
 import { CspRoot } from '@/features/family/components/atoms';
 import { DesktopSidebarLive } from '@/features/family/components/desktop-sidebar';
 import { WelcomeMobileNav } from '@/features/family/components/welcome-mobile-nav';
@@ -19,17 +20,19 @@ async function WelcomeChromeAndChildren({ children }: { children: React.ReactNod
   // welcome-team capability — so admins and family-managers-with-welcome-team
   // both pass here without needing strict role equality.
   let allowed = false;
+  let showTeacher = false;
   if (sessionCookie) {
     const raw = await verifyPortalSessionCookie(sessionCookie);
     if (raw && isWelcomeTeam(raw as unknown as WithRole)) {
       allowed = true;
+      showTeacher = flags.setuTeacher && isTeacher(raw as unknown as WithRole);
     }
   }
 
   return (
     <CspRoot style={{ display: 'flex', width: '100%', minHeight: '100dvh' }}>
       {allowed ? (
-        <DesktopSidebarLive role="welcome-team" displayName="Welcome team" subtitle="Welcome team" showSignOut/>
+        <DesktopSidebarLive role="welcome-team" displayName="Welcome team" subtitle="Welcome team" showSignOut showTeacher={showTeacher}/>
       ) : (
         <div style={{ width: 248, background: 'var(--surface)', borderRight: '1px solid var(--line)' }}/>
       )}
@@ -56,7 +59,8 @@ async function WelcomeMobileNavWithIdentity() {
   if (!raw || !isWelcomeTeam(raw as unknown as WithRole)) return null;
   const admin = isAdmin(raw as unknown as WithRole);
   const hasFamily = typeof (raw as { fid?: unknown }).fid === 'string';
-  return <WelcomeMobileNav isAdmin={admin} hasFamily={hasFamily} />;
+  const showTeacher = flags.setuTeacher && isTeacher(raw as unknown as WithRole);
+  return <WelcomeMobileNav isAdmin={admin} hasFamily={hasFamily} showTeacher={showTeacher} />;
 }
 
 export default function WelcomeLayout({ children }: { children: React.ReactNode }) {
