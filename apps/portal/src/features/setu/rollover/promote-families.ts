@@ -165,6 +165,16 @@ function newAcc(): Acc {
   };
 }
 
+/**
+ * A family "progressed" if any child advanced, graduated, or stayed in shishu.
+ * An all-needs-attention family (every child is needs-grade / shishu-aged-out)
+ * must NOT have its source enrollment cancelled — those children need a human
+ * to fix their data before the next run can pick them up.
+ */
+function familyProgressed(plan: FamilyPromotionPlan): boolean {
+  return plan.promotedMids.length > 0 || plan.rows.some((r) => r.outcomeKind === 'graduate');
+}
+
 /** Fold one family's plan into the accumulator. */
 function aggregate(acc: Acc, plan: FamilyPromotionPlan, dryRun: boolean): void {
   acc.promoted += plan.promotedMids.length;
@@ -271,41 +281,46 @@ export async function promoteFamilies(db: Db, args: PromoteArgs): Promise<Rollov
         now,
       });
 
-      // WRITES.
-      for (const upd of familyPlan.gradeUpdates) {
-        txn.set(membersCol.doc(upd.mid), { schoolGrade: upd.schoolGrade }, { merge: true });
-      }
-      txn.set(
-        srcRef,
-        {
-          status: 'cancelled',
-          cancelledAt: FieldValue.serverTimestamp(),
-          cancelledReason: `promoted-${toYear}`,
-          levelSnapshots: familyPlan.sourceSnapshots,
-        },
-        { merge: true },
-      );
-      if (familyPlan.promotedMids.length > 0) {
-        txn.set(tgtRef, {
-          eid: tgtEid,
-          fid: fam.fid,
-          oid: ctx.targetOid,
-          pid: ctx.targetOid,
-          programKey,
-          programLabel,
-          termLabel: toYear,
-          location,
-          enrolledAt: FieldValue.serverTimestamp(),
-          enrolledVia: 'promotion',
-          enrolledByMid: args.actorMid ?? null,
-          enrolledMids: familyPlan.promotedMids,
-          suggestedAmountSnapshot: resolveSuggestedAmount({ pricingTiers: ctx.pricingTiers }, now),
-          suggestedAmountOverride: null,
-          status: 'active',
-          cancelledAt: null,
-          cancelledReason: null,
-          levelSnapshots: familyPlan.targetSnapshots,
-        });
+      // WRITES — only when the family made progress (at least one child
+      // advanced, graduated, or stayed in shishu). A family whose every child
+      // is needs-grade / shishu-aged-out keeps its source enrollment ACTIVE so
+      // a re-run can pick it up once the data is corrected.
+      if (familyProgressed(familyPlan)) {
+        for (const upd of familyPlan.gradeUpdates) {
+          txn.set(membersCol.doc(upd.mid), { schoolGrade: upd.schoolGrade }, { merge: true });
+        }
+        txn.set(
+          srcRef,
+          {
+            status: 'cancelled',
+            cancelledAt: FieldValue.serverTimestamp(),
+            cancelledReason: `promoted-${toYear}`,
+            levelSnapshots: familyPlan.sourceSnapshots,
+          },
+          { merge: true },
+        );
+        if (familyPlan.promotedMids.length > 0) {
+          txn.set(tgtRef, {
+            eid: tgtEid,
+            fid: fam.fid,
+            oid: ctx.targetOid,
+            pid: ctx.targetOid,
+            programKey,
+            programLabel,
+            termLabel: toYear,
+            location,
+            enrolledAt: FieldValue.serverTimestamp(),
+            enrolledVia: 'promotion',
+            enrolledByMid: args.actorMid ?? null,
+            enrolledMids: familyPlan.promotedMids,
+            suggestedAmountSnapshot: resolveSuggestedAmount({ pricingTiers: ctx.pricingTiers }, now),
+            suggestedAmountOverride: null,
+            status: 'active',
+            cancelledAt: null,
+            cancelledReason: null,
+            levelSnapshots: familyPlan.targetSnapshots,
+          });
+        }
       }
       return familyPlan;
     });

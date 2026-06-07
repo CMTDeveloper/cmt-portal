@@ -346,6 +346,47 @@ describe('promoteFamilies', () => {
     expect(fake.readSub('F1', 'enrollments', 'F1-bv-brampton-2025-26')!['status']).toBe('active');
   });
 
+  it('does not cancel source enrollment for an all-needs-attention family (zero-progress guard)', async () => {
+    const fake = makeFakeDb();
+    seedLevels(fake);
+    seedTargetOffering(fake);
+    // F9-02: no grade, no birthMonthYear → needs-grade (zero progress)
+    fake.seedSub('F9', 'members', 'F9-02', {
+      mid: 'F9-02',
+      firstName: 'X',
+      lastName: 'R',
+      type: 'Child',
+      schoolGrade: null,
+      birthMonthYear: null,
+    });
+    fake.seedSub('F9', 'enrollments', 'F9-bv-brampton-2025-26', {
+      eid: 'F9-bv-brampton-2025-26',
+      fid: 'F9',
+      oid: 'bv-brampton-2025-26',
+      pid: 'bv-brampton-2025-26',
+      status: 'active',
+      enrolledMids: ['F9-02'],
+      location: 'Brampton',
+      programKey: 'bala-vihar',
+      programLabel: 'Bala Vihar',
+      termLabel: '2025-26',
+    });
+
+    const report = await promoteFamilies(fake.db, ARGS);
+
+    // Source must remain active — F9 can be re-processed once grade data is fixed.
+    expect(fake.readSub('F9', 'enrollments', 'F9-bv-brampton-2025-26')!['status']).toBe('active');
+    // No target enrollment created.
+    expect(fake.readSub('F9', 'enrollments', 'F9-bv-brampton-2026-27')).toBeUndefined();
+    // The attention row is surfaced in the report.
+    expect(report.needsAttention).toBeGreaterThanOrEqual(1);
+    const f9Row = report.attention.find((r) => r.mid === 'F9-02');
+    expect(f9Row).toBeDefined();
+    expect(f9Row!.outcomeKind).toBe('needs-grade');
+    // familiesProcessed counts F9 (examined, even though no writes happened).
+    expect(report.familiesProcessed).toBeGreaterThanOrEqual(1);
+  });
+
   it('dry-run reports counts but writes nothing', async () => {
     const fake = makeFakeDb();
     seedLevels(fake);
