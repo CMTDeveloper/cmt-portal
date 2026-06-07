@@ -1,0 +1,35 @@
+import { memberMatchesLevel, type LevelDoc, type LevelSnapshot } from '@cmt/shared-domain';
+
+export const DEFAULT_FROM_YEAR = '2025-26';
+export const DEFAULT_TO_YEAR = '2026-27';
+export const BV_SOURCE_OIDS = ['bv-brampton-2025-26', 'bv-scarborough-2025-26'] as const;
+
+/** Swap the term-slug suffix of an oid: bv-brampton-2025-26 → bv-brampton-2026-27. */
+export function targetOidOf(sourceOid: string, fromYear: string, toYear: string): string {
+  const fromSlug = fromYear.trim().toLowerCase();
+  const toSlug = toYear.trim().toLowerCase();
+  if (sourceOid.endsWith(`-${fromSlug}`)) return sourceOid.slice(0, -fromSlug.length) + toSlug;
+  return `${sourceOid}-${toSlug}`; // defensive fallback
+}
+
+type LevelLite = Pick<LevelDoc, 'levelId' | 'levelName' | 'levelKind' | 'gradeBand'>;
+
+/** Match a member to a level among `levels` and return the snapshot (level may be null). */
+export function buildLevelSnapshot(
+  member: { schoolGrade: string | null; birthMonthYear: string | null },
+  levels: LevelLite[],
+  now: Date,
+): LevelSnapshot {
+  const match = levels.find((lv) =>
+    memberMatchesLevel(
+      { type: 'Child', schoolGrade: member.schoolGrade, birthMonthYear: member.birthMonthYear },
+      lv,
+      now,
+    ),
+  );
+  return {
+    schoolGrade: member.schoolGrade,
+    levelId: match?.levelId ?? null,
+    levelName: match?.levelName ?? null,
+  };
+}
