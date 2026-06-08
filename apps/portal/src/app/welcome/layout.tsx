@@ -21,18 +21,31 @@ async function WelcomeChromeAndChildren({ children }: { children: React.ReactNod
   // both pass here without needing strict role equality.
   let allowed = false;
   let showTeacher = false;
+  let admin = false;
+  let email: string | undefined;
   if (sessionCookie) {
     const raw = await verifyPortalSessionCookie(sessionCookie);
     if (raw && isWelcomeTeam(raw as unknown as WithRole)) {
       allowed = true;
       showTeacher = flags.setuTeacher && isTeacher(raw as unknown as WithRole);
+      // Admins inherit welcome-team and reach /welcome via the admin nav. Surface
+      // their real identity + an "Admin" link back so they aren't stranded.
+      admin = isAdmin(raw as unknown as WithRole);
+      email = (raw as { email?: string }).email;
     }
   }
 
   return (
     <CspRoot style={{ display: 'flex', width: '100%', minHeight: '100dvh' }}>
       {allowed ? (
-        <DesktopSidebarLive role="welcome-team" displayName="Welcome team" subtitle="Welcome team" showSignOut showTeacher={showTeacher}/>
+        <DesktopSidebarLive
+          role="welcome-team"
+          isAdmin={admin}
+          displayName={admin ? 'Admin' : 'Welcome team'}
+          subtitle={admin ? email : 'Welcome team'}
+          showSignOut
+          showTeacher={showTeacher}
+        />
       ) : (
         <div style={{ width: 248, background: 'var(--surface)', borderRight: '1px solid var(--line)' }}/>
       )}

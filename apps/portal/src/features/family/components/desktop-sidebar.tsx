@@ -69,10 +69,11 @@ export function DesktopSidebar({ active, role = 'family', displayName, subtitle,
   const navItems = role === 'welcome-team' ? WELCOME_NAV_ITEMS : FAMILY_NAV_ITEMS;
   const trimmed = (displayName ?? '').trim();
   const name = trimmed || (role === 'welcome-team' ? 'Welcome team' : 'Family member');
-  // Only show the admin shortcut on the family sidebar (welcome-team already
-  // has its own routes). Admins still navigate via /admin URLs — this is
-  // just a convenience link so they don't have to type the path.
-  const showAdminLink = role === 'family' && isAdmin === true;
+  // Show the "Admin" shortcut whenever the signed-in user is an admin — in BOTH
+  // the family and welcome-team sidebars. /welcome pages (search, seva) are
+  // shared admin surfaces an admin reaches from the admin nav; without this link
+  // they'd be stranded in welcome chrome with no route back to /admin.
+  const showAdminLink = isAdmin === true;
   // The Staff section renders if EITHER a staff cross-link is available. Teacher
   // is gated on showTeacher alone (shows in both family + welcome sidebars).
   const showStaffSection = showAdminLink || showTeacher;
