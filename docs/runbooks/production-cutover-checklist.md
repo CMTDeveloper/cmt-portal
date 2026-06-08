@@ -280,4 +280,12 @@ pnpm --filter @cmt/portal exec tsx --env-file=.env.local scripts/grant-admin.ts 
 
 ---
 
-*Maintenance: when you add a new ops script, collection, index, env var, or feature flag, update §3, §5, §9, and §10 here in the same PR.*
+## 14. Change log (UAT) — keep this current
+
+> **Rule:** any important UAT DB change (new collection/field, new index + deploy, new ops/migration/seed/backfill script or run, schema change, new env var/flag, corrective write) gets a dated entry here **and** an update to the relevant section above, in the same change. Prod replays this log additively (never `--force`, never touch the door-app collections).
+
+- **2026-06-07** — Added collectionGroup index `enrollments(oid ASC, status ASC)` to `firestore.indexes.json`; **deployed to UAT** (`firebase deploy --only firestore:indexes --project chinmaya-setu-uat`, no `--force`). New scripts `school-year:start` / `school-year:promote` (§7, §10). Ran `school-year:start` (created 18 BV 2026-27 levels, idempotent) then `school-year:promote` **committed** the 2025-26→2026-27 rollover in UAT: 512 families, 769 promoted, 23 graduated; 24 Shishu (Pre-K) intentionally left out (handled at registration). Idempotent re-run verified (0 to promote). Enrollment schema gained `levelSnapshots` + `pid` + `'promotion'` enrolledVia; `enrollFamily` now writes `pid:oid`. **Prod TODO:** deploy the new index to 715b8 (no `--force`), then run the same Step 1 + promote sequence during cutover.
+
+---
+
+*Maintenance: when you add a new ops script, collection, index, env var, or feature flag, update §3, §5, §9, §10, and add a §14 Change-log entry in the same PR.*
