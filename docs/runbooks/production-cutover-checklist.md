@@ -18,15 +18,15 @@
 
 ---
 
-## 1. ⚠️ DECISION TO CONFIRM FIRST — what *is* the prod Setu Firestore?
+## 1. Prod target — CONFIRMED: `chinmaya-setu-715b8` (shared)
 
-Everything below depends on this. **Confirm before any prod write.**
+**Decided 2026-06-07 (CMT Developer):** the production Setu Firestore **is `chinmaya-setu-715b8`** — the same project as MASTER and the standalone door app. The portal's Setu collections (families, offerings, levels, enrollments, …) are written **into 715b8 alongside** the door app's collections. They use distinct names (§3), so writes are **additive** — but the index + collection rules in §0 are non-negotiable.
 
-- **Documented assumption (per `CLAUDE.md` B2 note):** the production Setu Firestore **is `chinmaya-setu-715b8`** — the same project as MASTER and the standalone app. The portal's Setu collections (families, offerings, levels, enrollments, …) get written **into 715b8 alongside** the door app's collections. They have distinct names, so it's additive — but the index + collection rules in §0 are non-negotiable.
-- **Implication if 715b8 (shared):** `PORTAL_FIREBASE_PROJECT_ID` flips from `chinmaya-setu-uat` → `chinmaya-setu-715b8`, becoming the **same** project as `MASTER_FIREBASE_PROJECT_ID`. Index deploys go to 715b8 **without `--force`**.
-- **Alternative (dedicated prod project):** if instead a *separate* prod Setu project is created (e.g. `chinmaya-setu-prod`), then `PORTAL_FIREBASE` points there (portal-only, `--force` safe like UAT) while `MASTER_FIREBASE` stays `715b8` (door + roster, read-only). This is cleaner but is **not** what CLAUDE.md currently says.
+- `PORTAL_FIREBASE_PROJECT_ID` flips from `chinmaya-setu-uat` → `chinmaya-setu-715b8`, becoming the **same** project as `MASTER_FIREBASE_PROJECT_ID`. (Both credential sets target 715b8 — Firestore for PORTAL, Firestore+RTDB for MASTER.)
+- Index deploys go to 715b8 **without `--force`** (§5).
+- A dedicated separate prod project was considered and **rejected** in favour of the shared model.
 
-> **Action:** CMT Developer confirms which target. The rest of this doc is written for the **715b8-shared** path (the documented default); where the dedicated-project path differs, it's noted inline. Until this is confirmed and the "never write 715b8" directive is consciously lifted, **prod writes remain forbidden** (firm directive, 2026-05-31).
+> ⚠️ **Safety gate:** the standing "never write `715b8`" directive (2026-05-31) is **consciously lifted only for the deliberate cutover window** described in this runbook. Outside a planned cutover/migration, day-to-day dev + all automated ops still target `chinmaya-setu-uat`. Treat every `--allow-prod` run as a reviewed, intentional act.
 
 ---
 
@@ -36,7 +36,7 @@ Everything below depends on this. **Confirm before any prod write.**
 |---|---|---|---|
 | **PORTAL_FIREBASE** (current) | `chinmaya-setu-uat` | All portal Setu Firestore collections + Firebase Auth (OTP users). Portal-only. | Read/write. `--force` index deploys safe. |
 | **MASTER_FIREBASE** | `chinmaya-setu-715b8` (PROD) | Legacy RTDB `/roster`; door-app Firestore `family-check-ins`, `guest-families`; **its own composite indexes**. Shared with standalone app. | **Read-only** via MASTER service account. |
-| **PORTAL_FIREBASE** (after cutover, 715b8-shared path) | `chinmaya-setu-715b8` | Portal Setu collections written **additively** into the shared prod project. | Read/write portal collections only; never `--force` indexes; never touch door collections. |
+| **PORTAL_FIREBASE** (after cutover) | `chinmaya-setu-715b8` | Portal Setu collections written **additively** into the shared prod project. | Read/write portal collections only; never `--force` indexes; never touch door collections. |
 
 **Credentials** (service-account, set per environment):
 - `PORTAL_FIREBASE_PROJECT_ID` / `PORTAL_FIREBASE_CLIENT_EMAIL` / `PORTAL_FIREBASE_PRIVATE_KEY`
