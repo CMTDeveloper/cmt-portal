@@ -5,6 +5,7 @@ import { isWelcomeTeam, isAdmin, isTeacher, type WithRole } from '@cmt/shared-do
 import { flags } from '@/lib/flags';
 import { CspRoot } from '@/features/family/components/atoms';
 import { DesktopSidebarLive } from '@/features/family/components/desktop-sidebar';
+import { AdminSidebarLive } from '@/features/admin/components/admin-sidebar';
 import { WelcomeMobileNav } from '@/features/family/components/welcome-mobile-nav';
 import { LoadingOm } from '@/components/chrome/loading-om';
 
@@ -22,15 +23,17 @@ async function WelcomeChromeAndChildren({ children }: { children: React.ReactNod
   let allowed = false;
   let showTeacher = false;
   let admin = false;
+  let hasFamily = false;
   let email: string | undefined;
   if (sessionCookie) {
     const raw = await verifyPortalSessionCookie(sessionCookie);
     if (raw && isWelcomeTeam(raw as unknown as WithRole)) {
       allowed = true;
       showTeacher = flags.setuTeacher && isTeacher(raw as unknown as WithRole);
-      // Admins inherit welcome-team and reach /welcome via the admin nav. Surface
-      // their real identity + an "Admin" link back so they aren't stranded.
+      // Admins inherit welcome-team and reach /welcome (search, seva) via the
+      // admin nav — keep them in the ADMIN sidebar so the menu doesn't swap out.
       admin = isAdmin(raw as unknown as WithRole);
+      hasFamily = typeof (raw as { fid?: unknown }).fid === 'string';
       email = (raw as { email?: string }).email;
     }
   }
@@ -38,14 +41,11 @@ async function WelcomeChromeAndChildren({ children }: { children: React.ReactNod
   return (
     <CspRoot style={{ display: 'flex', width: '100%', minHeight: '100dvh' }}>
       {allowed ? (
-        <DesktopSidebarLive
-          role="welcome-team"
-          isAdmin={admin}
-          displayName={admin ? 'Admin' : 'Welcome team'}
-          subtitle={admin ? email : 'Welcome team'}
-          showSignOut
-          showTeacher={showTeacher}
-        />
+        admin ? (
+          <AdminSidebarLive displayEmail={email ?? 'Admin'} hasFamily={hasFamily} showTeacher={showTeacher} />
+        ) : (
+          <DesktopSidebarLive role="welcome-team" displayName="Welcome team" subtitle="Welcome team" showSignOut showTeacher={showTeacher} />
+        )
       ) : (
         <div style={{ width: 248, background: 'var(--surface)', borderRight: '1px solid var(--line)' }}/>
       )}
