@@ -65,37 +65,35 @@ export function StaffManager({ initialStaff }: StaffManagerProps) {
     <>
       {/* ── Desktop ──────────────────────────────────────────────── */}
       <div className="hidden md:block">
-        <div className="grid grid-cols-1 md:grid-cols-[1fr_1.5fr] gap-7 items-start">
-          <div className="col" style={{ gap: 22 }}>
-            <section className="card" style={{ padding: 22 }}>
-              <h2 style={sectionHeading}>Add staff role</h2>
-              <AddStaffForm onGranted={refresh} />
-            </section>
-            <section className="card" style={{ padding: 22 }}>
-              <h2 style={sectionHeading}>Roles reference</h2>
-              <RolesReferencePanel />
-            </section>
+        {/* Filter + list: primary focus, full-width */}
+        <FilterBar
+          roleFilter={roleFilter}
+          onRoleFilter={setRoleFilter}
+          query={query}
+          onQuery={setQuery}
+          count={filtered.length}
+        />
+        {filtered.length === 0 ? (
+          <EmptyState />
+        ) : (
+          <div className="col" style={{ gap: 10, marginTop: 14 }}>
+            {filtered.map((s) => (
+              <StaffCard key={s.key} row={s} onChanged={refresh} mobile={false} />
+            ))}
           </div>
+        )}
 
-          <section>
-            <FilterBar
-              roleFilter={roleFilter}
-              onRoleFilter={setRoleFilter}
-              query={query}
-              onQuery={setQuery}
-              count={filtered.length}
-            />
-            {filtered.length === 0 ? (
-              <EmptyState />
-            ) : (
-              <div className="col" style={{ gap: 10, marginTop: 14 }}>
-                {filtered.map((s) => (
-                  <StaffCard key={s.key} row={s} onChanged={refresh} mobile={false} />
-                ))}
-              </div>
-            )}
-          </section>
-        </div>
+        {/* Add form: collapsed by default so the search input isn't doubled */}
+        <DesktopDisclosure heading="Add staff role +" style={{ marginTop: 28 }}>
+          <div style={{ maxWidth: 480 }}>
+            <AddStaffForm onGranted={refresh} />
+          </div>
+        </DesktopDisclosure>
+
+        {/* Roles reference: collapsed by default, below the list */}
+        <DesktopDisclosure heading="Roles reference ↓" style={{ marginTop: 12 }}>
+          <RolesReferencePanel />
+        </DesktopDisclosure>
       </div>
 
       {/* ── Mobile ───────────────────────────────────────────────── */}
@@ -457,6 +455,54 @@ function AddStaffForm({ onGranted }: { onGranted: () => void }) {
         it applies at their next sign-in.
       </p>
     </form>
+  );
+}
+
+// ─── Desktop collapsible section ──────────────────────────────────────────
+
+function DesktopDisclosure({
+  heading,
+  children,
+  style,
+}: {
+  heading: string;
+  children: React.ReactNode;
+  style?: React.CSSProperties;
+}) {
+  const [open, setOpen] = useState(false);
+  const panelId = useId();
+  return (
+    <div style={style}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-controls={panelId}
+        style={{
+          background: 'transparent',
+          border: 'none',
+          padding: 0,
+          fontSize: 13,
+          fontWeight: 600,
+          color: 'var(--accent)',
+          cursor: 'pointer',
+          fontFamily: 'var(--body)',
+          letterSpacing: '.01em',
+        }}
+      >
+        {heading}
+      </button>
+      <div id={panelId} hidden={!open}>
+        {open && (
+          <div
+            className="card"
+            style={{ padding: 22, marginTop: 12 }}
+          >
+            {children}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
