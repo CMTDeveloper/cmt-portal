@@ -16,7 +16,7 @@ interface AdminSidebarProps {
 const NAV_GROUPS: Array<{ heading: string; items: Array<{ label: string; href: string; legacy?: boolean }> }> = [
   { heading: 'People & access', items: [
     { label: 'Family search', href: '/welcome' },
-    { label: 'Welcome-team grants', href: '/admin/welcome-team' },
+    { label: 'Users & roles', href: '/admin/users' },
   ]},
   { heading: 'Bala Vihar', items: [
     { label: 'Programs', href: '/admin/programs' },
@@ -46,7 +46,7 @@ const NAV_GROUPS: Array<{ heading: string; items: Array<{ label: string; href: s
 export function deriveAdminActive(pathname: string): string {
   if (pathname.startsWith('/welcome/seva')) return '/welcome/seva';
   if (pathname.startsWith('/welcome')) return '/welcome'; // search + family detail
-  if (pathname.startsWith('/admin/welcome-team')) return '/admin/welcome-team';
+  if (pathname.startsWith('/admin/users')) return '/admin/users';
   if (pathname.startsWith('/admin/programs')) return '/admin/programs';
   if (pathname.startsWith('/admin/levels')) return '/admin/levels';
   if (pathname.startsWith('/admin/calendar')) return '/admin/calendar';

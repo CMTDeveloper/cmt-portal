@@ -17,7 +17,7 @@ const GROUPS: Array<{
     heading: 'People & access',
     tiles: [
       { href: '/welcome', title: 'Family search', icon: 'search', tone: 'primary', sub: 'Look up any family by name, FID, legacy FID, email, or phone. Read-only family detail.' },
-      { href: '/admin/welcome-team', title: 'Welcome-team grants', icon: 'people', tone: 'primary', sub: 'Grant + revoke welcome-team access for CMT volunteers helping families on Sunday.' },
+      { href: '/admin/users', title: 'Users & roles', icon: 'people', tone: 'primary', sub: 'Grant + revoke admin & welcome-team roles for CMT staff. View teacher assignments.' },
     ],
   },
   {
@@ -111,7 +111,7 @@ export default function AdminPage() {
           <p style={{ fontSize: 13, color: 'var(--body-text)', lineHeight: 1.55 }}>
             Admins now sign in via the same OTP flow as families and welcome-team
             (no password). Roles are granted via <code>scripts/grant-admin.ts</code> or
-            another admin's <em>Admin users</em> page.
+            the <em>Users &amp; roles</em> screen.
           </p>
         </div>
       </div>

@@ -16,7 +16,7 @@ describe('deriveAdminActive', () => {
     expect(deriveAdminActive('/admin/programs')).toBe('/admin/programs');
     expect(deriveAdminActive('/admin/levels')).toBe('/admin/levels');
     expect(deriveAdminActive('/admin/calendar')).toBe('/admin/calendar');
-    expect(deriveAdminActive('/admin/welcome-team')).toBe('/admin/welcome-team');
+    expect(deriveAdminActive('/admin/users')).toBe('/admin/users');
     expect(deriveAdminActive('/admin')).toBe('/admin');
   });
   it('maps /admin/school-year → its nav item (now in the nav)', () => {

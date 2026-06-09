@@ -21,7 +21,7 @@ const TABS: { id: Tab; label: string; icon: keyof typeof SetuIcon; href: string 
 // "Legacy tools" group here so the mobile IA matches (parity finding).
 const MORE_THEMED: { label: string; icon: keyof typeof SetuIcon; href: string }[] = [
   { label: 'Family search', icon: 'search', href: '/welcome' },
-  { label: 'Welcome-team grants', icon: 'people', href: '/admin/welcome-team' },
+  { label: 'Users & roles', icon: 'people', href: '/admin/users' },
   { label: 'School year rollover', icon: 'check', href: '/admin/school-year' },
   { label: 'Volunteering skills', icon: 'check', href: '/admin/volunteering-skills' },
   { label: 'Seva', icon: 'heart', href: '/welcome/seva' },
