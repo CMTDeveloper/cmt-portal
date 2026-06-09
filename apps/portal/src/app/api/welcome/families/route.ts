@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
-import { isWelcomeTeam, RosterQuerySchema, type RosterQuery } from '@cmt/shared-domain';
+import { isWelcomeTeam, RosterQuerySchema } from '@cmt/shared-domain';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
 import { flags } from '@/lib/flags';
 import { listRosterFamilies } from '@/features/setu/roster/list-families';
-import { expandPeople } from '@/features/setu/roster/expand-people';
+import { buildRosterCsvRows } from '@/features/setu/roster/build-csv-rows';
 import { rosterToCsv } from '@/features/setu/roster/roster-csv';
 
 export async function GET(req: Request) {
@@ -23,26 +23,13 @@ export async function GET(req: Request) {
   const params = parsed.data;
 
   if (params.format === 'csv') {
-    // CSV exports the full matched set (no pagination), capped in expandPeople.
-    // Build the base query WITHOUT `cursor` (exactOptionalPropertyTypes forbids
-    // assigning `cursor: undefined` to the optional field — omit the key, only
-    // carrying forward the filters the query supports).
-    const filters: RosterQuery = {
+    // CSV exports the full matched set (no pagination) in one bulk pass.
+    // Conditional spread for the optional filters (exactOptionalPropertyTypes
+    // forbids assigning `undefined` to the optional fields).
+    const csv = rosterToCsv(await buildRosterCsvRows({
       ...(params.location ? { location: params.location } : {}),
       ...(params.program ? { program: params.program } : {}),
-      limit: 100,
-      format: 'json',
-    };
-    const all = await listRosterFamilies(filters);
-    let families = all.families;
-    let cursor = all.nextCursor;
-    while (cursor) {
-      const next = await listRosterFamilies({ ...filters, cursor });
-      families = families.concat(next.families);
-      cursor = next.nextCursor;
-      if (families.length >= 2000) break; // expandPeople enforces + logs the hard cap
-    }
-    const csv = rosterToCsv(await expandPeople(families));
+    }));
     return new NextResponse(csv, {
       status: 200,
       headers: {

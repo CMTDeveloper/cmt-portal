@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { listRosterFamilies, expandPeople } = vi.hoisted(() => ({
+const { listRosterFamilies, buildRosterCsvRows } = vi.hoisted(() => ({
   listRosterFamilies: vi.fn(),
-  expandPeople: vi.fn(),
+  buildRosterCsvRows: vi.fn(),
 }));
 vi.mock('@/features/setu/roster/list-families', () => ({ listRosterFamilies }));
-vi.mock('@/features/setu/roster/expand-people', () => ({ expandPeople }));
+vi.mock('@/features/setu/roster/build-csv-rows', () => ({ buildRosterCsvRows }));
 vi.mock('@/lib/flags', () => ({ flags: { setuAuth: true } }));
 
 import { GET } from '../route';
@@ -17,7 +17,7 @@ const WELCOME = { 'x-portal-role': 'welcome-team', 'x-portal-extra-roles': '' };
 
 beforeEach(() => {
   listRosterFamilies.mockReset();
-  expandPeople.mockReset();
+  buildRosterCsvRows.mockReset();
 });
 
 describe('GET /api/welcome/families', () => {
@@ -41,22 +41,7 @@ describe('GET /api/welcome/families', () => {
   });
 
   it('format=csv streams text/csv with a one-row-per-person body', async () => {
-    listRosterFamilies.mockResolvedValue({
-      families: [
-        {
-          fid: 'CMT-X',
-          name: 'Patel',
-          legacyFid: '1',
-          location: 'Brampton',
-          memberCount: 1,
-          payment: 'paid',
-          programs: [],
-        },
-      ],
-      nextCursor: null,
-      total: 1,
-    });
-    expandPeople.mockResolvedValue([
+    buildRosterCsvRows.mockResolvedValue([
       {
         familyName: 'Patel',
         fid: 'CMT-X',
