@@ -7,6 +7,63 @@ export const metadata = { title: 'Admin — CMT Portal' };
 // own the data dashboards; this page is a themed entry point + jumping board
 // to the welcome-team grant page (the only fully themed admin tool today).
 
+// Group data drives the render. tone 'legacy' keeps the muted treatment + badge.
+const GROUPS: Array<{
+  heading: string;
+  blurb?: string;
+  tiles: Array<{ href: string; title: string; icon: keyof typeof SetuIcon; sub: string; tone: 'primary' | 'legacy' }>;
+}> = [
+  {
+    heading: 'People & access',
+    tiles: [
+      { href: '/welcome', title: 'Family search', icon: 'search', tone: 'primary', sub: 'Look up any family by name, FID, legacy FID, email, or phone. Read-only family detail.' },
+      { href: '/admin/welcome-team', title: 'Welcome-team grants', icon: 'people', tone: 'primary', sub: 'Grant + revoke welcome-team access for CMT volunteers helping families on Sunday.' },
+    ],
+  },
+  {
+    heading: 'Bala Vihar',
+    tiles: [
+      { href: '/admin/programs', title: 'Programs', icon: 'people', tone: 'primary', sub: 'Manage programs (Bala Vihar, Tabla, etc.), their offerings per term, eligibility, and capabilities.' },
+      { href: '/admin/levels', title: 'Level management', icon: 'check', tone: 'primary', sub: 'Configure Bala Vihar levels per location + period, set grade-bands, and assign the teachers who cover each one.' },
+      { href: '/admin/calendar', title: 'Class calendar', icon: 'calendar', tone: 'primary', sub: 'Publish the school-year Sunday schedule + weekly times. Families see it on their dashboard.' },
+      { href: '/admin/school-year', title: 'School year rollover', icon: 'check', tone: 'primary', sub: 'Promote Bala Vihar families to the next school year — advance grades, re-assign levels, keep history.' },
+      { href: '/admin/volunteering-skills', title: 'Volunteering skills', icon: 'check', tone: 'primary', sub: 'Manage the list of volunteering skills families choose from for adult members.' },
+      { href: '/welcome/seva', title: 'Seva', icon: 'heart', tone: 'primary', sub: 'Manage seva opportunities and review volunteer signups.' },
+    ],
+  },
+  {
+    heading: 'Reports',
+    tiles: [
+      { href: '/check-in/admin/reports', title: 'Reports', icon: 'info', tone: 'legacy', sub: 'Legacy: attendance + engagement CSV exports. A unified Reports hub is coming.' },
+    ],
+  },
+  {
+    heading: 'Legacy · door app',
+    blurb: 'Standalone check-in kiosk tools. Retiring after the door cutover.',
+    tiles: [
+      { href: '/check-in/admin', title: 'Check-in dashboard', icon: 'home', tone: 'legacy', sub: 'Live check-in counts and operational stats.' },
+      { href: '/check-in/admin/guests', title: 'Guests', icon: 'people', tone: 'legacy', sub: 'Recent guest check-ins from the Sunday kiosk.' },
+      { href: '/check-in/admin/unpaid', title: 'Unpaid families', icon: 'warn', tone: 'legacy', sub: 'Families whose dakshina is outstanding.' },
+      { href: '/check-in/admin/users', title: 'Admin users', icon: 'shield', tone: 'legacy', sub: 'Add or remove other admins.' },
+      { href: '/admin/donation-periods', title: 'Donation periods', icon: 'receipt', tone: 'legacy', sub: 'Redirects to Programs → Offerings. Kept for bookmarks.' },
+    ],
+  },
+];
+
+function Section({ heading, blurb, children }: { heading: string; blurb?: string; children: React.ReactNode }) {
+  return (
+    <section style={{ marginTop: 28 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 12 }}>
+        <h2 style={{ fontSize: 13, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--muted)' }}>{heading}</h2>
+        {blurb && <span style={{ fontSize: 12, color: 'var(--muted)' }}>{blurb}</span>}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
+        {children}
+      </div>
+    </section>
+  );
+}
+
 export default function AdminPage() {
   return (
     <>
@@ -18,104 +75,29 @@ export default function AdminPage() {
           Hari OM, admin.
         </h1>
         <p style={{ fontSize: 14, color: 'var(--body-text)', marginTop: 10, maxWidth: 620, lineHeight: 1.55 }}>
-          Manage CMT staff access and operational tools. The themed surface starts here;
-          older check-in admin tools are still available in the sidebar (marked <em>Legacy</em>) until they're ported.
+          Manage CMT staff access and operational tools, grouped by area. The themed surface starts here;
+          older check-in admin tools are still available (marked <em>Legacy</em>) until they're ported.
         </p>
       </header>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
-        <Tile
-          href="/welcome"
-          title="Family search"
-          icon="search"
-          sub="Look up any family by name, FID, legacy FID, email, or phone. Read-only family detail. Admins inherit welcome-team capability automatically."
-          tone="primary"
-        />
-        <Tile
-          href="/admin/welcome-team"
-          title="Welcome-team grants"
-          icon="people"
-          sub="Grant + revoke welcome-team access for CMT volunteers helping families on Sunday."
-          tone="primary"
-        />
-        <Tile
-          href="/admin/programs"
-          title="Programs"
-          icon="people"
-          sub="Manage programs (Bala Vihar, Tabla, etc.), their offerings per term, eligibility rules, and capabilities. Offerings replace the old donation-periods page."
-          tone="primary"
-        />
-        <Tile
-          href="/admin/donation-periods"
-          title="Donation periods"
-          icon="receipt"
-          sub="Legacy: redirects to Programs → Offerings. Kept for bookmarks."
-          tone="legacy"
-        />
-        <Tile
-          href="/admin/levels"
-          title="Level management"
-          icon="check"
-          sub="Configure Bala Vihar levels (classes) per location + period, set grade-bands, and assign the teachers who cover each one."
-          tone="primary"
-        />
-        <Tile
-          href="/admin/school-year"
-          title="School year rollover"
-          icon="check"
-          sub="Promote Bala Vihar families to the next school year — advance grades, re-assign levels, keep each child's history."
-          tone="primary"
-        />
-        <Tile
-          href="/admin/calendar"
-          title="Class calendar"
-          icon="calendar"
-          sub="Publish the school-year Sunday schedule (class / no-class days, special events) + weekly times. Replaces the per-year PDF; families see it on their dashboard."
-          tone="primary"
-        />
-        <Tile
-          href="/admin/volunteering-skills"
-          title="Volunteering skills"
-          icon="check"
-          sub="Manage the list of volunteering skills families choose from when recording an adult member's skills."
-          tone="primary"
-        />
-        <Tile
-          href="/check-in/admin/users"
-          title="Admin users"
-          icon="shield"
-          sub="Legacy: add or remove other admins. (Themed version coming.)"
-          tone="legacy"
-        />
-        <Tile
-          href="/check-in/admin/unpaid"
-          title="Unpaid families"
-          icon="warn"
-          sub="Legacy: list of families whose dakshina is outstanding."
-          tone="legacy"
-        />
-        <Tile
-          href="/check-in/admin/guests"
-          title="Guests"
-          icon="people"
-          sub="Legacy: recent guest check-ins from the Sunday kiosk."
-          tone="legacy"
-        />
-        <Tile
-          href="/check-in/admin/reports"
-          title="Reports"
-          icon="info"
-          sub="Legacy: attendance and engagement reports."
-          tone="legacy"
-        />
-        <Tile
-          href="/check-in/admin"
-          title="Check-in dashboard"
-          icon="home"
-          sub="Legacy: live check-in counts and operational stats."
-          tone="legacy"
-        />
-      </div>
+      {GROUPS.map((group) => (
+        <Section
+          key={group.heading}
+          heading={group.heading}
+          {...(group.blurb !== undefined ? { blurb: group.blurb } : {})}
+        >
+          {group.tiles.map((tile) => (
+            <Tile
+              key={tile.href}
+              href={tile.href}
+              title={tile.title}
+              icon={tile.icon}
+              sub={tile.sub}
+              tone={tile.tone}
+            />
+          ))}
+        </Section>
+      ))}
 
       <div style={{ marginTop: 28, padding: 22, background: 'var(--accentSoft)', border: '1px solid var(--accent)', borderRadius: 'var(--radius)', display: 'flex', alignItems: 'center', gap: 16 }}>
         <Rosette size={56} color="var(--accentDeep)" stroke={1}/>
