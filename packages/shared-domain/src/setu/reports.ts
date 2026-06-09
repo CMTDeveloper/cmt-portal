@@ -1,18 +1,21 @@
 // packages/shared-domain/src/setu/reports.ts
 import { z } from 'zod';
-import { LOCATIONS, programKeySchema } from './schemas/offering';
+import { programKeySchema } from './schemas/offering';
 
 export const REPORT_KINDS = ['enrollment', 'attendance', 'donations'] as const;
 export type ReportKind = (typeof REPORT_KINDS)[number];
 
 const YMD = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD');
 
+// v1 report filters: `program` (all kinds) and `from`/`to` (attendance only —
+// the route fills defaults; donations is all-time by donation-period, and the
+// donations/enrollment data carry no clean location field, so `location` is
+// intentionally NOT a report filter in v1 — see the Phase 4 plan deviations).
 export const ReportQuerySchema = z.object({
   format: z.enum(['json', 'csv']).default('json'),
   from: YMD.optional(),
   to: YMD.optional(),
   program: programKeySchema.optional(),
-  location: z.enum(LOCATIONS).optional(),
 });
 export type ReportQuery = z.infer<typeof ReportQuerySchema>;
 

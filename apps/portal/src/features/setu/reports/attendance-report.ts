@@ -4,6 +4,18 @@ import type { AttendanceReport, ReportQuery } from '@cmt/shared-domain';
 
 type Tally = { present: number; absent: number; late: number };
 const zero = (): Tally => ({ present: 0, absent: 0, late: 0 });
+
+// Attendance is sourced from levels (which carry programKey but no display
+// label), so derive a readable label from the slug: "bala-vihar" → "Bala Vihar".
+// This keeps the attendance card consistent with the enrollment/donations
+// reports, which use stored labels of the same form.
+function titleCaseProgram(programKey: string): string {
+  return programKey
+    .split('-')
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}
 function rate(t: Tally): { total: number; rate: number } {
   const total = t.present + t.absent + t.late;
   return { total, rate: total === 0 ? 0 : (t.present + t.late) / total };
@@ -40,7 +52,7 @@ export async function buildAttendanceReport(params: ReportQuery & { from: string
     if (programKey) {
       if (!byProgram.has(programKey)) byProgram.set(programKey, zero());
       byProgram.get(programKey)![status]++;
-      programLabel.set(programKey, programKey); // labels resolved from program list if needed; key is enough here
+      programLabel.set(programKey, titleCaseProgram(programKey));
     }
   }
 

@@ -4,7 +4,7 @@ import type { EnrollmentReport, ReportQuery } from '@cmt/shared-domain';
 
 type RawEnr = {
   fid?: unknown; programKey?: unknown; programLabel?: unknown; status?: unknown;
-  location?: unknown; enrolledMids?: unknown; levelSnapshots?: unknown;
+  enrolledMids?: unknown; levelSnapshots?: unknown;
 };
 
 export async function buildEnrollmentReport(params: ReportQuery): Promise<EnrollmentReport> {
@@ -33,7 +33,6 @@ export async function buildEnrollmentReport(params: ReportQuery): Promise<Enroll
     const programKey = String(e.programKey ?? '');
     if (!programKey) continue;
     if (params.program && programKey !== params.program) continue;
-    if (params.location && typeof e.location === 'string' && e.location !== params.location) continue;
     const fid = String(e.fid ?? '');
     const mids = Array.isArray(e.enrolledMids) ? e.enrolledMids.map(String) : [];
     totalActiveEnrollments++;

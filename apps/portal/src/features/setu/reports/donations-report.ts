@@ -4,6 +4,10 @@ import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import type { DonationsReport, ReportQuery } from '@cmt/shared-domain';
 import { paymentFromAmounts } from '@/features/setu/roster/payment';
 
+// The donations summary is ALL-TIME, bucketed by donation period (`pid`). It
+// intentionally does NOT honor `params.from`/`params.to` — donations carry a
+// `createdAt` timestamp (not the YMD the schema validates), and "by period" is
+// the product-meaningful grouping. Only `params.program` narrows the result.
 export async function buildDonationsReport(params: ReportQuery): Promise<DonationsReport> {
   const db = portalFirestore();
   const [donSnap, enrSnap] = await Promise.all([
