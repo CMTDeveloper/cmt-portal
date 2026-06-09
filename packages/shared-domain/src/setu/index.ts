@@ -14,4 +14,5 @@ export * from './schemas/attendance';
 export * from './schemas/seva';
 export * from './schemas/achievement';
 export * from './schemas/staff';
+export * from './roster';
 export * from './grade-ladder';
