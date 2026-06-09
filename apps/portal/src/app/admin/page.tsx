@@ -50,12 +50,14 @@ const GROUPS: Array<{
   },
 ];
 
-function Section({ heading, blurb, children }: { heading: string; blurb?: string; children: React.ReactNode }) {
+function Section({ heading, blurb, first = false, children }: { heading: string; blurb?: string; first?: boolean; children: React.ReactNode }) {
   return (
-    <section style={{ marginTop: 28 }}>
+    <section style={{ marginTop: first ? 12 : 30 }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 12 }}>
-        <h2 style={{ fontSize: 13, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--muted)' }}>{heading}</h2>
-        {blurb && <span style={{ fontSize: 12, color: 'var(--muted)' }}>{blurb}</span>}
+        {/* --ink (not --muted) so the section header isn't out-weighted by the
+            orange tile titles below it. Blurb stays a lighter --body-text note. */}
+        <h2 style={{ fontSize: 13, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--ink)' }}>{heading}</h2>
+        {blurb && <span style={{ fontSize: 12, color: 'var(--body-text)' }}>{blurb}</span>}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
         {children}
@@ -80,10 +82,11 @@ export default function AdminPage() {
         </p>
       </header>
 
-      {GROUPS.map((group) => (
+      {GROUPS.map((group, i) => (
         <Section
           key={group.heading}
           heading={group.heading}
+          first={i === 0}
           {...(group.blurb !== undefined ? { blurb: group.blurb } : {})}
         >
           {group.tiles.map((tile) => (

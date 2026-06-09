@@ -17,16 +17,18 @@ const TABS: { id: Tab; label: string; icon: keyof typeof SetuIcon; href: string 
 
 // Mirrors the grouped IA: People & access + Bala Vihar extras not already in
 // the bottom tabs, then the legacy door-app tools.
+// Reports is its OWN top-level section on desktop/sidebar — keep it out of the
+// "Legacy tools" group here so the mobile IA matches (parity finding).
 const MORE_THEMED: { label: string; icon: keyof typeof SetuIcon; href: string }[] = [
   { label: 'Family search', icon: 'search', href: '/welcome' },
   { label: 'Welcome-team grants', icon: 'people', href: '/admin/welcome-team' },
   { label: 'School year rollover', icon: 'check', href: '/admin/school-year' },
   { label: 'Volunteering skills', icon: 'check', href: '/admin/volunteering-skills' },
   { label: 'Seva', icon: 'heart', href: '/welcome/seva' },
+  { label: 'Reports', icon: 'info', href: '/check-in/admin/reports' },
 ];
 
 const MORE_LEGACY: { label: string; href: string }[] = [
-  { label: 'Reports', href: '/check-in/admin/reports' },
   { label: 'Admin users', href: '/check-in/admin/users' },
   { label: 'Guests', href: '/check-in/admin/guests' },
   { label: 'Unpaid families', href: '/check-in/admin/unpaid' },
@@ -46,10 +48,13 @@ export function AdminMobileNav({ hasFamily = false, showTeacher = false }: { has
   const [moreOpen, setMoreOpen] = useState(false);
   const active = activeTab(pathname);
 
+  // minHeight/minWidth keep every tab ≥44px (a11y tap target); inactive uses
+  // --body-text not --muted (the latter ≈2.9:1 on white, below AA at 11px).
   const itemStyle = (on: boolean): React.CSSProperties => ({
     background: 'transparent', border: 0, cursor: 'pointer', textDecoration: 'none',
-    color: on ? 'var(--accent)' : 'var(--muted)',
-    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
+    color: on ? 'var(--accent)' : 'var(--body-text)',
+    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3,
+    minHeight: 44, minWidth: 56, padding: '4px 6px',
     fontSize: 11, fontWeight: 600, fontFamily: 'var(--body)',
   });
 
@@ -78,14 +83,14 @@ export function AdminMobileNav({ hasFamily = false, showTeacher = false }: { has
                 const on = pathname.startsWith(m.href);
                 return (
                   <Link key={m.href} href={m.href} onClick={() => setMoreOpen(false)} style={{ ...sheetLink, color: on ? 'var(--accentDeep)' : 'var(--body-text)', background: on ? 'var(--accentSoft)' : 'transparent' }}>
-                    <Icon /> {m.label}
+                    <Icon /> <span>{m.label}</span>
                   </Link>
                 );
               })}
               <div style={{ padding: '12px 14px 4px', fontSize: 10, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--muted)' }}>Legacy tools</div>
               {MORE_LEGACY.map((m) => (
                 <Link key={m.href} href={m.href} onClick={() => setMoreOpen(false)} style={{ ...sheetLink, color: 'var(--body-text)' }}>
-                  <SetuIcon.shield /> {m.label}
+                  <SetuIcon.shield /> <span>{m.label}</span>
                 </Link>
               ))}
               <div style={{ height: 1, background: 'var(--line)', margin: '6px 0' }} />
@@ -115,7 +120,7 @@ export function AdminMobileNav({ hasFamily = false, showTeacher = false }: { has
         style={{
           position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 50,
           background: 'var(--surface)', borderTop: '1px solid var(--line)',
-          display: 'flex', justifyContent: 'space-around', padding: '10px 8px 16px',
+          display: 'flex', justifyContent: 'space-around', padding: '10px 8px max(16px, env(safe-area-inset-bottom))',
         }}
       >
         {TABS.map((t) => {

@@ -119,9 +119,17 @@ export function AdminSidebar({ active = '', displayEmail, hasFamily, showTeacher
             </Link>
           );
         })()}
-        {NAV_GROUPS.map((group) => (
-          <div key={group.heading} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <div style={{ padding: '14px 12px 4px', fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--muted)' }}>
+        {NAV_GROUPS.map((group, i) => (
+          <div
+            key={group.heading}
+            style={{
+              display: 'flex', flexDirection: 'column', gap: 2,
+              // Structural break between groups so the section header reads as a
+              // divider, not just another (muted) row.
+              ...(i > 0 ? { marginTop: 8, paddingTop: 4, borderTop: '1px solid var(--line)' } : {}),
+            }}
+          >
+            <div style={{ padding: '12px 12px 4px', fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--muted)' }}>
               {group.heading}
             </div>
             {group.items.map(({ label, href, legacy }) => {
