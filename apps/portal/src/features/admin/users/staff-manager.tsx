@@ -679,14 +679,6 @@ function MobileSheet({
 
 // ─── Shared styles ─────────────────────────────────────────────────────────
 
-const sectionHeading: React.CSSProperties = {
-  fontSize: 13,
-  fontWeight: 600,
-  marginBottom: 14,
-  textTransform: 'uppercase',
-  letterSpacing: '.12em',
-};
-
 const grantBtn: React.CSSProperties = {
   background: 'var(--accent)',
   border: '1px solid var(--accent)',
