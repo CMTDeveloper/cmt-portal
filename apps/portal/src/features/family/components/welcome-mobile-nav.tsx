@@ -9,12 +9,13 @@ import { signOut } from './sign-out-button';
 // page, including the drill-down detail pages (family detail, single-level
 // roster) which also keep their own back arrow.
 function isRosterActive(pathname: string): boolean {
-  return !pathname.startsWith('/welcome/levels') && !pathname.startsWith('/welcome/seva');
+  return !pathname.startsWith('/welcome/levels') && !pathname.startsWith('/welcome/seva') && !pathname.startsWith('/welcome/reports');
 }
 
 export function WelcomeMobileNav({ isAdmin = false, hasFamily = false, showTeacher = false }: { isAdmin?: boolean; hasFamily?: boolean; showTeacher?: boolean }) {
   const pathname = usePathname();
   const rosterActive = isRosterActive(pathname);
+  const reportsActive = pathname.startsWith('/welcome/reports');
 
   const itemStyle = (on: boolean): React.CSSProperties => ({
     background: 'transparent', border: 0, cursor: 'pointer', textDecoration: 'none',
@@ -40,6 +41,9 @@ export function WelcomeMobileNav({ isAdmin = false, hasFamily = false, showTeach
       </Link>
       <Link href="/welcome/seva" style={itemStyle(pathname.startsWith('/welcome/seva'))}>
         <SetuIcon.heart /> Seva
+      </Link>
+      <Link href="/welcome/reports" style={itemStyle(reportsActive)}>
+        <SetuIcon.info /> Reports
       </Link>
       {showTeacher && (
         <Link href="/teacher" style={itemStyle(false)}>

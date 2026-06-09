@@ -25,7 +25,7 @@ const MORE_THEMED: { label: string; icon: keyof typeof SetuIcon; href: string }[
   { label: 'School year rollover', icon: 'check', href: '/admin/school-year' },
   { label: 'Volunteering skills', icon: 'check', href: '/admin/volunteering-skills' },
   { label: 'Seva', icon: 'heart', href: '/welcome/seva' },
-  { label: 'Reports', icon: 'info', href: '/check-in/admin/reports' },
+  { label: 'Reports', icon: 'info', href: '/welcome/reports' },
 ];
 
 const MORE_LEGACY: { label: string; href: string }[] = [

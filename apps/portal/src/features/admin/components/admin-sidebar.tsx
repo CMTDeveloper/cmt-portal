@@ -27,7 +27,7 @@ const NAV_GROUPS: Array<{ heading: string; items: Array<{ label: string; href: s
     { label: 'Seva', href: '/welcome/seva' },
   ]},
   { heading: 'Reports', items: [
-    { label: 'Reports', href: '/check-in/admin/reports', legacy: true },
+    { label: 'Reports', href: '/welcome/reports' },
   ]},
   { heading: 'Legacy · door app', items: [
     { label: 'Admin users', href: '/check-in/admin/users', legacy: true },
@@ -45,6 +45,7 @@ const NAV_GROUPS: Array<{ heading: string; items: Array<{ label: string; href: s
  */
 export function deriveAdminActive(pathname: string): string {
   if (pathname.startsWith('/welcome/seva')) return '/welcome/seva';
+  if (pathname.startsWith('/welcome/reports')) return '/welcome/reports';
   if (pathname.startsWith('/welcome')) return '/welcome'; // search + family detail
   if (pathname.startsWith('/admin/users')) return '/admin/users';
   if (pathname.startsWith('/admin/programs')) return '/admin/programs';
@@ -56,7 +57,6 @@ export function deriveAdminActive(pathname: string): string {
   if (pathname.startsWith('/check-in/admin/users')) return '/check-in/admin/users';
   if (pathname.startsWith('/check-in/admin/guests')) return '/check-in/admin/guests';
   if (pathname.startsWith('/check-in/admin/unpaid')) return '/check-in/admin/unpaid';
-  if (pathname.startsWith('/check-in/admin/reports')) return '/check-in/admin/reports';
   if (pathname === '/check-in/admin') return '/check-in/admin';
   if (pathname === '/admin') return '/admin';
   return ''; // anything else → no highlight

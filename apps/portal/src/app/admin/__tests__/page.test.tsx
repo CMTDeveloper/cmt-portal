@@ -13,7 +13,7 @@ describe('AdminPage dashboard', () => {
 
   it('keeps every tile reachable via a link with an href', () => {
     render(<AdminPage />);
-    for (const href of ['/welcome', '/admin/users', '/admin/programs', '/admin/levels', '/admin/calendar', '/admin/school-year', '/admin/volunteering-skills', '/check-in/admin/reports']) {
+    for (const href of ['/welcome', '/admin/users', '/admin/programs', '/admin/levels', '/admin/calendar', '/admin/school-year', '/admin/volunteering-skills', '/welcome/reports']) {
       const links = screen.getAllByRole('link');
       expect(links.some((l) => l.getAttribute('href') === href)).toBe(true);
     }

@@ -22,6 +22,10 @@ describe('deriveAdminActive', () => {
   it('maps /admin/school-year → its nav item (now in the nav)', () => {
     expect(deriveAdminActive('/admin/school-year')).toBe('/admin/school-year');
   });
+  it('maps /welcome/reports → the Reports nav item (not the /welcome catch-all)', () => {
+    expect(deriveAdminActive('/welcome/reports')).toBe('/welcome/reports');
+    expect(deriveAdminActive('/welcome/reports/attendance')).toBe('/welcome/reports');
+  });
 });
 
 describe('AdminSidebar', () => {

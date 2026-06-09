@@ -34,7 +34,7 @@ const GROUPS: Array<{
   {
     heading: 'Reports',
     tiles: [
-      { href: '/check-in/admin/reports', title: 'Reports', icon: 'info', tone: 'legacy', sub: 'Legacy: attendance + engagement CSV exports. A unified Reports hub is coming.' },
+      { href: '/welcome/reports', title: 'Reports', icon: 'info', tone: 'primary', sub: 'Enrollment, attendance, donations + legacy check-in exports.' },
     ],
   },
   {
