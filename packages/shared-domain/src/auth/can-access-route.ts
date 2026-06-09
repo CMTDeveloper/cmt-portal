@@ -172,6 +172,15 @@ export function canAccessRoute(
     return isWelcomeTeam(claims);
   }
 
+  // Welcome-team API — reports hub. Donations report is ADMIN-ONLY (D5); it must
+  // be checked before the general reports rule.
+  if (pathname === '/api/welcome/reports/donations') {
+    return isAdmin(claims);
+  }
+  if (pathname === '/api/welcome/reports' || pathname.startsWith('/api/welcome/reports/')) {
+    return isWelcomeTeam(claims);
+  }
+
   // Setu API — published class calendar is readable by ANY signed-in user
   // (families incl. family-member, teachers). Returns only enabled entries;
   // writes go through /api/admin/calendar (admin + welcome-team).
