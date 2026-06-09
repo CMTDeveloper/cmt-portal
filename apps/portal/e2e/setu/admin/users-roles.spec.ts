@@ -31,7 +31,8 @@ test.describe('admin Users & Roles', () => {
       // Expand the collapsed add-staff disclosure, then grant welcome-team.
       await vis(page.getByRole('button', { name: /add staff role/i })).click();
       await vis(page.getByPlaceholder('person@example.com or +1…')).fill(TARGET);
-      await vis(page.getByRole('combobox')).selectOption('welcome-team');
+      // Role is now a segmented radio control (not a native select).
+      await vis(page.getByRole('radio', { name: 'Welcome team' })).click();
       await vis(page.getByRole('button', { name: /grant role/i })).click();
 
       // It appears in the list. Filter the list to the target to isolate its row.

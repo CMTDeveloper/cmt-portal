@@ -126,3 +126,8 @@
   outline-offset: 2px;
   border-radius: 4px;
 }
+
+/* Horizontal scroll containers (filter-chip rows) without the grey scrollbar
+   track that otherwise shows as a stray line under the chips on first paint. */
+.no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.no-scrollbar::-webkit-scrollbar { width: 0; height: 0; display: none; }

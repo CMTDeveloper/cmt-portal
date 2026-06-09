@@ -135,7 +135,7 @@ function FilterBar({
 }) {
   return (
     <div className="between" style={{ gap: 12, flexWrap: 'wrap' }}>
-      <div style={{ display: 'flex', gap: 6, overflowX: 'auto', maxWidth: '100%' }}>
+      <div className="no-scrollbar" style={{ display: 'flex', gap: 6, overflowX: 'auto', maxWidth: '100%' }}>
         {FILTER_CHIPS.map((c) => {
           const active = roleFilter === c.key;
           return (
@@ -435,17 +435,48 @@ function AddStaffForm({ onGranted }: { onGranted: () => void }) {
         />
       </div>
       <div className="field" style={{ marginBottom: 14 }}>
-        <label htmlFor={roleId}>Role</label>
-        <select
-          id={roleId}
-          className="input"
-          value={role}
-          onChange={(e) => setRole(e.target.value as GrantableRole)}
-          disabled={pending}
+        {/* Segmented control instead of a native <select>: there are only two
+            grantable roles, and a native select's popup mis-anchors inside the
+            position:fixed mobile sheet. This renders identically on desktop and
+            mobile with no detached popup. */}
+        <label id={roleId}>Role</label>
+        <div
+          role="radiogroup"
+          aria-labelledby={roleId}
+          style={{ display: 'flex', gap: 8, marginTop: 6 }}
         >
-          <option value="welcome-team">Welcome team</option>
-          <option value="admin">Admin</option>
-        </select>
+          {([
+            ['welcome-team', 'Welcome team'],
+            ['admin', 'Admin'],
+          ] as const).map(([value, label]) => {
+            const active = role === value;
+            return (
+              <button
+                key={value}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                onClick={() => setRole(value)}
+                disabled={pending}
+                className="focus-ring"
+                style={{
+                  flex: 1,
+                  minHeight: 44,
+                  borderRadius: 'var(--radius)',
+                  border: `1px solid ${active ? 'var(--accent)' : 'var(--line)'}`,
+                  background: active ? 'var(--accentSoft)' : 'var(--surface)',
+                  color: active ? 'var(--accentDeep)' : 'var(--body-text)',
+                  fontWeight: 600,
+                  fontSize: 14,
+                  fontFamily: 'var(--body)',
+                  cursor: pending ? 'default' : 'pointer',
+                }}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
       </div>
       <button type="submit" className="btn btn--p btn--block" disabled={pending}>
         {pending ? 'Granting…' : 'Grant role →'}
@@ -555,7 +586,7 @@ function MobileStaff({
         style={{ minHeight: 44 }}
       />
 
-      <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2 }}>
+      <div className="no-scrollbar" style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2 }}>
         {FILTER_CHIPS.map((c) => {
           const active = roleFilter === c.key;
           return (
