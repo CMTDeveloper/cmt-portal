@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useTransition, type FormEvent } from 'react';
+import { useId, useMemo, useState, useTransition, type FormEvent } from 'react';
 import Link from 'next/link';
 import { toast } from '@cmt/ui';
 import type { StaffRow, GrantableRole } from '@cmt/shared-domain';
@@ -22,6 +22,10 @@ function toastError(code: string, fallback: string) {
 }
 
 const GRANT_NOTE = 'Applies at their next sign-in.';
+
+// In-flight key: "grant:admin" | "revoke:welcome-team" etc. Tracks which
+// specific action on this row is pending so sibling buttons stay enabled.
+type InFlightKey = `grant:${GrantableRole}` | `revoke:${GrantableRole}`;
 
 interface StaffManagerProps {
   initialStaff: StaffRow[];
@@ -203,45 +207,55 @@ function StaffCard({
   onChanged: () => void;
   mobile: boolean;
 }) {
+  // FIX #2: per-action in-flight key so only the acting button is disabled.
+  const [inFlight, setInFlight] = useState<InFlightKey | null>(null);
+  // FIX #5: stable id for the disclosure panel (aria-controls).
+  const panelId = useId();
   const [expanded, setExpanded] = useState(false);
-  const [pending, startTransition] = useTransition();
 
-  function handleRevoke(role: GrantableRole) {
+  async function handleRevoke(role: GrantableRole) {
     if (!row.contact) {
       toast.error('No contact on record — cannot revoke.');
       return;
     }
     if (!confirm(`Revoke ${ROLE_REFERENCE[role].label} from ${row.name}?`)) return;
-    startTransition(async () => {
-      try {
-        await revokeRoleClient({ contact: row.contact, role });
-        toast.success(`Revoked ${ROLE_REFERENCE[role].label} from ${row.name}.`);
-        onChanged();
-      } catch (err) {
-        toastError(err instanceof Error ? err.message : 'unknown', 'Revoke failed');
-      }
-    });
+    const key: InFlightKey = `revoke:${role}`;
+    setInFlight(key);
+    try {
+      await revokeRoleClient({ contact: row.contact, role });
+      toast.success(`Revoked ${ROLE_REFERENCE[role].label} from ${row.name}.`);
+      onChanged();
+    } catch (err) {
+      toastError(err instanceof Error ? err.message : 'unknown', 'Revoke failed');
+    } finally {
+      setInFlight(null);
+    }
   }
 
-  function handleGrant(role: GrantableRole) {
+  async function handleGrant(role: GrantableRole) {
     if (!row.contact) {
       toast.error('No contact on record — cannot grant.');
       return;
     }
-    startTransition(async () => {
-      try {
-        await grantRoleClient({ contact: row.contact, role });
-        toast.success(`Granted ${ROLE_REFERENCE[role].label} to ${row.name}. ${GRANT_NOTE}`);
-        onChanged();
-      } catch (err) {
-        toastError(err instanceof Error ? err.message : 'unknown', 'Grant failed');
-      }
-    });
+    const key: InFlightKey = `grant:${role}`;
+    setInFlight(key);
+    try {
+      await grantRoleClient({ contact: row.contact, role });
+      toast.success(`Granted ${ROLE_REFERENCE[role].label} to ${row.name}. ${GRANT_NOTE}`);
+      onChanged();
+    } catch (err) {
+      toastError(err instanceof Error ? err.message : 'unknown', 'Grant failed');
+    } finally {
+      setInFlight(null);
+    }
   }
 
   const grantable: GrantableRole[] = ['admin', 'welcome-team'];
   // Roles present on this person, for the access expander.
   const accessRoles = [...row.roles, ...(row.isTeacher ? (['teacher'] as const) : [])];
+
+  // FIX #3: mobile tap targets ≥ 44px; secondary actions demoted to text/ghost.
+  const btnMinHeight = mobile ? 44 : 36;
 
   return (
     <div
@@ -255,10 +269,11 @@ function StaffCard({
       <div className="between" style={{ gap: 12, alignItems: 'flex-start' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 14, fontWeight: 600 }}>{row.name || '(no name)'}</div>
+          {/* FIX #6: use body-text (not muted) for the contact caption — improves contrast. */}
           <div
             style={{
               fontSize: 12,
-              color: 'var(--muted)',
+              color: 'var(--body-text)',
               fontFamily: 'var(--mono)',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
@@ -279,74 +294,100 @@ function StaffCard({
         </div>
       </div>
 
+      {/* FIX #2 + #3: primary grant/revoke pair first; secondary actions
+          ("Manage as teacher", disclosure) are ghost/text-style with lower visual
+          weight. Each button tracks its own inFlight key so siblings stay enabled. */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
-        {grantable.map((role) =>
-          row.roles.includes(role) ? (
-            <button
-              key={role}
-              type="button"
-              onClick={() => handleRevoke(role)}
-              disabled={pending}
-              style={revokeBtn}
-            >
-              Revoke {ROLE_REFERENCE[role].label.toLowerCase()}
-            </button>
-          ) : (
-            <button
-              key={role}
-              type="button"
-              onClick={() => handleGrant(role)}
-              disabled={pending}
-              style={grantBtn}
-            >
-              Grant {ROLE_REFERENCE[role].label.toLowerCase()}
-            </button>
-          ),
-        )}
+        {grantable.map((role) => {
+          const hasRole = row.roles.includes(role);
+          if (hasRole) {
+            const key: InFlightKey = `revoke:${role}`;
+            const busy = inFlight === key;
+            return (
+              <button
+                key={role}
+                type="button"
+                onClick={() => handleRevoke(role)}
+                disabled={busy}
+                style={{ ...revokeBtn, minHeight: btnMinHeight }}
+              >
+                {busy ? 'Revoking…' : `Revoke ${ROLE_REFERENCE[role].label.toLowerCase()}`}
+              </button>
+            );
+          } else {
+            const key: InFlightKey = `grant:${role}`;
+            const busy = inFlight === key;
+            return (
+              <button
+                key={role}
+                type="button"
+                onClick={() => handleGrant(role)}
+                disabled={busy}
+                style={{ ...grantBtn, minHeight: btnMinHeight }}
+              >
+                {busy ? 'Granting…' : `Grant ${ROLE_REFERENCE[role].label.toLowerCase()}`}
+              </button>
+            );
+          }
+        })}
+      </div>
+
+      {/* FIX #3: secondary actions on their own row, visually lighter */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
         {row.isTeacher && (
-          <Link href="/admin/levels" style={linkBtn}>
+          <Link href="/admin/levels" style={{ ...textLinkBtn, minHeight: btnMinHeight }}>
             Manage as teacher →
           </Link>
         )}
-        <button type="button" onClick={() => setExpanded((v) => !v)} style={ghostBtn}>
-          {expanded ? 'Hide access' : 'What can they access?'}
+        {/* FIX #5: aria-expanded + aria-controls on the disclosure toggle */}
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          aria-expanded={expanded}
+          aria-controls={panelId}
+          style={{ ...textLinkBtn, minHeight: btnMinHeight }}
+        >
+          {expanded ? 'Hide access ↑' : 'What can they access? ↓'}
         </button>
       </div>
 
-      {expanded && (
-        <div
-          style={{
-            marginTop: 12,
-            paddingTop: 12,
-            borderTop: '1px solid var(--line)',
-          }}
-        >
-          {accessRoles.length === 0 ? (
-            <p style={{ fontSize: 12, color: 'var(--muted)' }}>
-              No special access — derived family-role access only.
-            </p>
-          ) : (
-            accessRoles.map((r) => (
-              <div key={r} style={{ marginBottom: 10 }}>
-                <div style={{ fontSize: 12, fontWeight: 700 }}>{ROLE_REFERENCE[r].label}</div>
-                <ul
-                  style={{
-                    margin: '4px 0 0',
-                    paddingLeft: 18,
-                    fontSize: 12,
-                    color: 'var(--body-text)',
-                    lineHeight: 1.5,
-                  }}
-                >
-                  {ROLE_REFERENCE[r].grants.map((g, i) => (
-                    <li key={i}>{g}</li>
-                  ))}
-                </ul>
-              </div>
-            ))
-          )}
-        </div>
-      )}
+      {/* FIX #5: matching id on the disclosure panel */}
+      <div id={panelId} hidden={!expanded}>
+        {expanded && (
+          <div
+            style={{
+              marginTop: 12,
+              paddingTop: 12,
+              borderTop: '1px solid var(--line)',
+            }}
+          >
+            {accessRoles.length === 0 ? (
+              <p style={{ fontSize: 12, color: 'var(--muted)' }}>
+                No special access — derived family-role access only.
+              </p>
+            ) : (
+              accessRoles.map((r) => (
+                <div key={r} style={{ marginBottom: 10 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700 }}>{ROLE_REFERENCE[r].label}</div>
+                  <ul
+                    style={{
+                      margin: '4px 0 0',
+                      paddingLeft: 18,
+                      fontSize: 12,
+                      color: 'var(--body-text)',
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    {ROLE_REFERENCE[r].grants.map((g, i) => (
+                      <li key={i}>{g}</li>
+                    ))}
+                  </ul>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -357,6 +398,9 @@ function AddStaffForm({ onGranted }: { onGranted: () => void }) {
   const [contact, setContact] = useState('');
   const [role, setRole] = useState<GrantableRole>('welcome-team');
   const [pending, startTransition] = useTransition();
+  // FIX #5: stable ids for label→input association.
+  const contactId = useId();
+  const roleId = useId();
 
   function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -380,8 +424,10 @@ function AddStaffForm({ onGranted }: { onGranted: () => void }) {
   return (
     <form onSubmit={onSubmit}>
       <div className="field" style={{ marginBottom: 12 }}>
-        <label>Email or phone</label>
+        {/* FIX #5: htmlFor tied to input id */}
+        <label htmlFor={contactId}>Email or phone</label>
         <input
+          id={contactId}
           className="input"
           value={contact}
           onChange={(e) => setContact(e.target.value)}
@@ -391,8 +437,9 @@ function AddStaffForm({ onGranted }: { onGranted: () => void }) {
         />
       </div>
       <div className="field" style={{ marginBottom: 14 }}>
-        <label>Role</label>
+        <label htmlFor={roleId}>Role</label>
         <select
+          id={roleId}
           className="input"
           value={role}
           onChange={(e) => setRole(e.target.value as GrantableRole)}
@@ -550,7 +597,9 @@ function MobileSheet({
           width: '100%',
           maxHeight: '85dvh',
           overflowY: 'auto',
-          background: 'var(--bg, #fff)',
+          // FIX #1: was var(--bg, #fff) which resolves to page-grey inside .csp.
+          // var(--surface) is the correct card/sheet white in the Setu palette.
+          background: 'var(--surface)',
           borderTopLeftRadius: 18,
           borderTopRightRadius: 18,
           padding: '18px 18px 28px',
@@ -597,7 +646,7 @@ const grantBtn: React.CSSProperties = {
   border: '1px solid var(--accent)',
   color: '#fff',
   padding: '8px 14px',
-  minHeight: 36,
+  minHeight: 36, // overridden per-card via btnMinHeight
   borderRadius: 'var(--radiusSm)',
   fontSize: 12,
   fontWeight: 600,
@@ -610,7 +659,7 @@ const revokeBtn: React.CSSProperties = {
   border: '1px solid var(--err)',
   color: 'var(--err)',
   padding: '8px 14px',
-  minHeight: 36,
+  minHeight: 36, // overridden per-card via btnMinHeight
   borderRadius: 'var(--radiusSm)',
   fontSize: 12,
   fontWeight: 600,
@@ -618,21 +667,19 @@ const revokeBtn: React.CSSProperties = {
   fontFamily: 'var(--body)',
 };
 
-const ghostBtn: React.CSSProperties = {
+// FIX #3: secondary actions use a text-link style — no border, muted colour,
+// lower visual weight than the primary grant/revoke pair.
+const textLinkBtn: React.CSSProperties = {
   background: 'transparent',
-  border: '1px solid var(--line)',
-  color: 'var(--body-text)',
-  padding: '8px 14px',
+  border: 'none',
+  color: 'var(--muted)',
+  padding: '6px 4px',
   minHeight: 36,
   borderRadius: 'var(--radiusSm)',
   fontSize: 12,
-  fontWeight: 600,
+  fontWeight: 500,
   cursor: 'pointer',
   fontFamily: 'var(--body)',
-};
-
-const linkBtn: React.CSSProperties = {
-  ...ghostBtn,
   textDecoration: 'none',
   display: 'inline-flex',
   alignItems: 'center',
