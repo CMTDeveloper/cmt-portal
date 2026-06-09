@@ -17,3 +17,4 @@ export * from './schemas/staff';
 export * from './roster';
 export * from './reports';
 export * from './grade-ladder';
+export * from './set-grade';
