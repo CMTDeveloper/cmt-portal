@@ -8,13 +8,13 @@ import { signOut } from './sign-out-button';
 // Bottom nav for the welcome-team section (/welcome). Shown on every welcome
 // page, including the drill-down detail pages (family detail, single-level
 // roster) which also keep their own back arrow.
-function isSearchActive(pathname: string): boolean {
+function isRosterActive(pathname: string): boolean {
   return !pathname.startsWith('/welcome/levels') && !pathname.startsWith('/welcome/seva');
 }
 
 export function WelcomeMobileNav({ isAdmin = false, hasFamily = false, showTeacher = false }: { isAdmin?: boolean; hasFamily?: boolean; showTeacher?: boolean }) {
   const pathname = usePathname();
-  const searchActive = isSearchActive(pathname);
+  const rosterActive = isRosterActive(pathname);
 
   const itemStyle = (on: boolean): React.CSSProperties => ({
     background: 'transparent', border: 0, cursor: 'pointer', textDecoration: 'none',
@@ -32,8 +32,8 @@ export function WelcomeMobileNav({ isAdmin = false, hasFamily = false, showTeach
         display: 'flex', justifyContent: 'space-around', padding: '10px 8px 16px',
       }}
     >
-      <Link href="/welcome" style={itemStyle(searchActive)}>
-        <SetuIcon.search /> Search
+      <Link href="/welcome/roster" style={itemStyle(rosterActive)}>
+        <SetuIcon.search /> Roster
       </Link>
       <Link href="/welcome/levels" style={itemStyle(pathname.startsWith('/welcome/levels'))}>
         <SetuIcon.people /> Levels

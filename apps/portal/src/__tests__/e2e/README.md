@@ -12,7 +12,6 @@ Five flagship tests exercise the full server-side path through route handlers â†
 | `members-crud.e2e.test.ts` | `POST /api/setu/members`, `PATCH /api/setu/members/[mid]`, `DELETE /api/setu/members/[mid]` |
 | `invite-flow.e2e.test.ts` | `POST /api/setu/invite/send`, `POST /api/setu/invite/accept` |
 | `lazy-migrate.e2e.test.ts` | `lazyMigrateLegacyFamily()` server function (Firestore write path; RTDB is mocked) |
-| `welcome-search.e2e.test.ts` | `GET /api/setu/family/search` |
 
 After each test file runs, `cleanupTestData()` removes all Firestore documents tagged `_test: true` and all contactKey docs tagged `_test: true`. Cleanup is idempotent â€” running it twice does not error.
 
