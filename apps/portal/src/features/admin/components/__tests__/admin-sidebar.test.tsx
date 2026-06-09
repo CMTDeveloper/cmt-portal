@@ -19,8 +19,8 @@ describe('deriveAdminActive', () => {
     expect(deriveAdminActive('/admin/welcome-team')).toBe('/admin/welcome-team');
     expect(deriveAdminActive('/admin')).toBe('/admin');
   });
-  it('does not highlight Dashboard for /admin/school-year (no nav item)', () => {
-    expect(deriveAdminActive('/admin/school-year')).toBe('');
+  it('maps /admin/school-year → its nav item (now in the nav)', () => {
+    expect(deriveAdminActive('/admin/school-year')).toBe('/admin/school-year');
   });
 });
 
@@ -47,5 +47,15 @@ describe('AdminSidebar', () => {
     const link = screen.getByRole('link', { name: 'Level management' });
     expect(link.getAttribute('href')).toBe('/admin/levels');
     expect(screen.queryByRole('link', { name: 'Levels & teachers' })).toBeNull();
+  });
+  it('renders the four nav section headers', () => {
+    render(<AdminSidebar displayEmail="a@b.com" hasFamily={false} />);
+    // Group headers are non-link <div>s; scope the matcher to them so the
+    // "Reports" group header isn't confused with the "Reports" nav link.
+    const isHeader = (content: string, el: Element | null, re: RegExp) =>
+      el?.tagName === 'DIV' && el.closest('a') === null && re.test(content);
+    for (const h of [/people & access/i, /bala vihar/i, /^reports$/i, /legacy/i]) {
+      expect(screen.getByText((content, el) => isHeader(content, el, h))).toBeTruthy();
+    }
   });
 });
