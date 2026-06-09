@@ -429,6 +429,10 @@ describe('canAccessRoute — /api/admin/teacher-assignments — admin + welcome-
     expect(canAccessRoute(admin, '/api/admin/school-year/promote', 'POST')).toBe(true);
     expect(canAccessRoute(admin, '/api/admin/school-year/start', 'POST')).toBe(true);
   });
+  it('set-grade is admin only', () => {
+    expect(canAccessRoute(admin, '/api/admin/school-year/set-grade', 'POST')).toBe(true);
+    expect(canAccessRoute(welcomeTeam, '/api/admin/school-year/set-grade', 'POST')).toBe(false);
+  });
 });
 
 describe('canAccessRoute — /api/admin/calendar — admin + welcome-team', () => {
