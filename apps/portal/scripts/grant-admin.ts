@@ -10,6 +10,11 @@
  * Non-family CMT staff (no Bala Vihar family) → legacy auth-claim path
  *   keyed on the contact's canonical-form uid.
  *
+ * The grant/revoke routing lives in the shared
+ * features/setu/auth/manage-roles module (grantRole/revokeRole) so the CLI and
+ * the /api/admin/users routes stay in lockstep. This script keeps the CLI
+ * surface (output + the UAT/--allow-prod guard) and the `list` command.
+ *
  * Usage:
  *   pnpm --filter @cmt/portal exec tsx scripts/grant-admin.ts grant   <email-or-phone>
  *   pnpm --filter @cmt/portal exec tsx scripts/grant-admin.ts revoke  <email-or-phone>
@@ -20,32 +25,11 @@
  */
 
 import { portalAuth } from '@cmt/firebase-shared/admin/auth';
-import { sha256Hex } from '@/features/check-in/shared';
-import {
-  addCapability,
-  removeCapability,
-  hasCapability,
-  type ClaimsShape,
-} from '@/lib/auth/role-claims';
-import { findSetuFamilyByContact } from '@/features/setu/auth/find-family-by-contact';
-import {
-  addMemberRole,
-  removeMemberRole,
-  listMembersWithRole,
-} from '@/features/setu/auth/member-roles';
-import { normalizeContactForKey } from '@cmt/shared-domain/setu';
+import { hasCapability, type ClaimsShape } from '@/lib/auth/role-claims';
+import { listMembersWithRole } from '@/features/setu/auth/member-roles';
+import { grantRole, revokeRole } from '@/features/setu/auth/manage-roles';
 
 type Cmd = 'grant' | 'revoke' | 'list';
-
-function detectType(input: string): 'email' | 'phone' {
-  return input.includes('@') ? 'email' : 'phone';
-}
-
-function uidOf(type: 'email' | 'phone', value: string): string {
-  // Same canonicalization as verify-code/route.ts so legacy auth-claim
-  // grants land on the uid that OTP sign-in will create / look up.
-  return sha256Hex(normalizeContactForKey(type, value));
-}
 
 async function main() {
   const [cmd, ...rest] = process.argv.slice(2);
@@ -93,74 +77,30 @@ async function main() {
     process.exit(1);
   }
 
-  const type = detectType(input);
-  const result = await findSetuFamilyByContact(type, input);
-
   if (cmd === ('grant' as Cmd)) {
-    if (result.source === 'setu' && result.fid && result.mid) {
-      await addMemberRole({
-        mid: result.mid,
-        fid: result.fid,
-        role: 'admin',
-        grantedVia: input,
-      });
-      console.log(`✓ Granted admin via roleAssignments/${result.mid}`);
-      console.log(`  fid=${result.fid}  grantedVia=${input}`);
+    const res = await grantRole({ contact: input, role: 'admin' });
+    if (res.path === 'roleAssignments') {
+      console.log(`✓ Granted admin via roleAssignments/${res.mid}`);
+      console.log(`  fid=${res.fid}  grantedVia=${input}`);
       console.log(
         `\nNext time they OTP-sign-in (email OR phone), the session will include admin in extraRoles regardless of contact.`,
       );
-      process.exit(0);
+    } else {
+      console.log(`✓ Granted admin via auth-claim (no Bala Vihar family found for ${input})`);
+      console.log(`  uid=${res.uid}`);
     }
-
-    // Non-family CMT staff path — legacy auth-claim grant on the canonical
-    // uid for the input contact. They sign in directly to /admin (no family).
-    const uid = uidOf(type, input);
-    let existingClaims: ClaimsShape | null = null;
-    try {
-      const u = await auth.getUser(uid);
-      existingClaims = (u.customClaims as ClaimsShape | undefined) ?? null;
-    } catch (err) {
-      if ((err as { code?: string }).code === 'auth/user-not-found') {
-        const createArg = type === 'email' ? { uid, email: input, disabled: false } : { uid, disabled: false };
-        await auth.createUser(createArg);
-        console.log(`Created Firebase auth user uid=${uid} (${type}=${input})`);
-      } else {
-        throw err;
-      }
-    }
-    const newClaims = addCapability(existingClaims, 'admin', type === 'email' ? input : undefined);
-    await auth.setCustomUserClaims(uid, newClaims);
-    console.log(`✓ Granted admin via auth-claim (no Bala Vihar family found for ${input})`);
-    console.log(`  uid=${uid}`);
-    console.log(`  Claims: role=${newClaims.role}${newClaims.extraRoles ? ` extraRoles=[${newClaims.extraRoles.join(',')}]` : ''}`);
     process.exit(0);
   }
 
   if (cmd === ('revoke' as Cmd)) {
-    if (result.source === 'setu' && result.mid) {
-      await removeMemberRole(result.mid, 'admin');
-      console.log(`✓ Revoked admin from roleAssignments/${result.mid}`);
+    const res = await revokeRole({ contact: input, role: 'admin' });
+    if (res.path === 'roleAssignments') {
+      console.log(`✓ Revoked admin from roleAssignments`);
       console.log(`\nNote: any existing session cookie still carries the old claim until expiry.`);
-      process.exit(0);
-    }
-
-    const uid = uidOf(type, input);
-    try {
-      const existing = await auth.getUser(uid);
-      const existingClaims = (existing.customClaims as ClaimsShape | undefined) ?? null;
-      if (!hasCapability(existingClaims, 'admin')) {
-        console.log(`No admin role found for ${input} (neither member nor legacy auth-claim).`);
-        process.exit(0);
-      }
-      const newClaims = removeCapability(existingClaims, 'admin');
-      await auth.setCustomUserClaims(uid, newClaims);
-      console.log(`✓ Revoked admin from legacy auth-claim (uid=${uid})`);
-    } catch (err) {
-      if ((err as { code?: string }).code === 'auth/user-not-found') {
-        console.log(`No admin role found for ${input}.`);
-        process.exit(0);
-      }
-      throw err;
+    } else if (res.revoked) {
+      console.log(`✓ Revoked admin from legacy auth-claim`);
+    } else {
+      console.log(`No admin role found for ${input} (neither member nor legacy auth-claim).`);
     }
     process.exit(0);
   }
