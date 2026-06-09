@@ -96,6 +96,7 @@ export function MemberGradeEditor({ fid, mid, childName, currentGrade }: MemberG
           {currentGrade && currentGrade.trim() !== '' ? currentGrade : 'not set'}
         </strong>
         . Setting a school grade lets {childName} promote correctly on the next school-year rollover.
+        A Shishu-age child is promoted by age, not grade — only set a grade once they&rsquo;re in JK or older.
       </p>
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <select
