@@ -273,6 +273,21 @@ describe('listRosterFamilies', () => {
     expect(res.families.some((f) => f.fid === 'CMT-OTHER')).toBe(false);
   });
 
+  it('program path: a stale/unknown cursor returns a terminal empty page (no rewind to page 1)', async () => {
+    const families = [
+      fam({
+        fid: 'CMT-P',
+        name: 'Prog',
+        enrollments: [{ programKey: 'bala-vihar', programLabel: 'Bala Vihar', status: 'active' }],
+      }),
+    ];
+    mockFirestore.mockReturnValue(makeDb(families) as never);
+
+    const res = await listRosterFamilies({ program: 'bala-vihar', cursor: 'CMT-GONE', limit: 50, format: 'json' });
+    expect(res.families).toEqual([]);
+    expect(res.nextCursor).toBeNull();
+  });
+
   it('reports memberCount from the members subcollection', async () => {
     const families = [
       fam({ fid: 'CMT-FOUR', name: 'Four Members', members: 4 }),

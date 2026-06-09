@@ -11,7 +11,16 @@ const MISSING_SAMPLE_CAP = 200;
  */
 export async function getMigrationStatus(opts: { checkedAt: string }): Promise<MigrationStatusResponse> {
   const [legacy, setuLegacyFids] = await Promise.all([listAllFamilies(), listSetuLegacyFids()]);
-  const legacyFids = [...new Set(legacy.map((f) => String(f.fid)).filter(Boolean))];
+  // Guard against a malformed RTDB family lacking `fid`: String(undefined) is the
+  // truthy string 'undefined', which would otherwise count as a spurious missing fid.
+  const legacyFids = [
+    ...new Set(
+      legacy
+        .filter((f) => typeof f.fid === 'string' || typeof f.fid === 'number')
+        .map((f) => String(f.fid))
+        .filter(Boolean),
+    ),
+  ];
   const missingFids = legacyFids.filter((fid) => !setuLegacyFids.has(fid));
   return {
     legacyTotal: legacyFids.length,

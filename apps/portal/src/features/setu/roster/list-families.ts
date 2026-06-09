@@ -74,7 +74,15 @@ export async function listRosterFamilies(params: RosterQuery): Promise<RosterLis
       const c = nameOf(a.fid, a.data).localeCompare(nameOf(b.fid, b.data));
       return c !== 0 ? c : a.fid.localeCompare(b.fid);
     });
-    const startIdx = params.cursor ? docs.findIndex((x) => x.fid === params.cursor) + 1 : 0;
+    let startIdx = 0;
+    if (params.cursor) {
+      const idx = docs.findIndex((x) => x.fid === params.cursor);
+      // Stale/invalid cursor (family left the program/location set, or a
+      // hand-edited cursor): return a terminal empty page rather than silently
+      // rewinding to page 1 (which could make a paging consumer loop).
+      if (idx < 0) return { families: [], nextCursor: null, total: null };
+      startIdx = idx + 1;
+    }
     const slice = docs.slice(startIdx, startIdx + limit);
     const families = await Promise.all(slice.map((x) => toRow(x.fid, x.data)));
     const lastFid = slice.at(-1)?.fid ?? null;

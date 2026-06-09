@@ -18,12 +18,17 @@ export type RosterFamilyRow = z.infer<typeof RosterFamilyRowSchema>;
 export const RosterListResponseSchema = z.object({
   families: z.array(RosterFamilyRowSchema),
   nextCursor: z.string().nullable(), // last fid of this page, or null when no more
-  total: z.number().int().nonnegative().nullable(), // total family count (first page only), else null
+  // Count of families matching the CURRENTLY-APPLIED filters (program+location,
+  // or location, or none). Present on the first page only (null on later pages).
+  total: z.number().int().nonnegative().nullable(),
 });
 export type RosterListResponse = z.infer<typeof RosterListResponseSchema>;
 
 export const RosterQuerySchema = z.object({
-  q: z.string().trim().optional(),
+  // NOTE: free-text search is NOT a server param here — the roster screen calls
+  // the existing welcome-team search endpoint (`searchFamilies`) client-side when
+  // the search box is non-empty, and shows browse (this query) when it's empty.
+  // Keeping `q` out of this schema avoids a silently-ignored param.
   location: z.enum(LOCATIONS).optional(),
   program: programKeySchema.optional(),
   cursor: z.string().optional(), // last fid from the prior page
