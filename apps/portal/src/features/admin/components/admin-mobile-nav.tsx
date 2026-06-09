@@ -15,18 +15,22 @@ const TABS: { id: Tab; label: string; icon: keyof typeof SetuIcon; href: string 
   { id: 'calendar', label: 'Calendar', icon: 'calendar', href: '/admin/calendar' },
 ];
 
+// Mirrors the grouped IA: People & access + Bala Vihar extras not already in
+// the bottom tabs, then the legacy door-app tools.
 const MORE_THEMED: { label: string; icon: keyof typeof SetuIcon; href: string }[] = [
   { label: 'Family search', icon: 'search', href: '/welcome' },
   { label: 'Welcome-team grants', icon: 'people', href: '/admin/welcome-team' },
+  { label: 'School year rollover', icon: 'check', href: '/admin/school-year' },
   { label: 'Volunteering skills', icon: 'check', href: '/admin/volunteering-skills' },
   { label: 'Seva', icon: 'heart', href: '/welcome/seva' },
 ];
 
 const MORE_LEGACY: { label: string; href: string }[] = [
+  { label: 'Reports', href: '/check-in/admin/reports' },
   { label: 'Admin users', href: '/check-in/admin/users' },
   { label: 'Guests', href: '/check-in/admin/guests' },
   { label: 'Unpaid families', href: '/check-in/admin/unpaid' },
-  { label: 'Reports', href: '/check-in/admin/reports' },
+  { label: 'Check-in dashboard', href: '/check-in/admin' },
 ];
 
 function activeTab(pathname: string): Tab {
