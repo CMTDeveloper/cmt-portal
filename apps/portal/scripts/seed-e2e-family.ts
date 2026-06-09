@@ -169,8 +169,16 @@ async function main(): Promise<void> {
   // set legacyFid so the dashboard reads attendance from family-check-ins/{legacyFid}.
   await db.collection('families').doc(fid).set({ legacyFid: LEGACY_FID, _test: true }, { merge: true });
   const membersSnap = await db.collection('families').doc(fid).collection('members').get();
+  let childMid: string | null = null;
   for (const m of membersSnap.docs) {
-    await m.ref.set({ _test: true }, { merge: true });
+    const md = m.data() as { mid?: string; type?: string };
+    if (md.type === 'Child' && md.mid) childMid = md.mid;
+    // The child needs legacySid = CHILD_SID so the door check-ins
+    // (family-check-ins/{legacyFid}, students[].sid = CHILD_SID) link to this
+    // member — getFamilyBalaViharAttendance matches door marks by legacySid, so
+    // without it the dashboard attendance resolves to 0 (empty state).
+    const extra = md.type === 'Child' ? { legacySid: CHILD_SID } : {};
+    await m.ref.set({ _test: true, ...extra }, { merge: true });
   }
   await db.collection('contactKeys').doc(hashContactKey('email', EMAIL)).set({ _test: true }, { merge: true });
   await db.collection('contactKeys').doc(hashContactKey('phone', PHONE)).set({ _test: true }, { merge: true });
@@ -202,6 +210,25 @@ async function main(): Promise<void> {
   await ensureEnrollment(db, fid, BV_OID, managerMid);
   await ensureEnrollment(db, fid, NODON_OID, managerMid);
 
+  // 3b) Single-BV invariant. The dashboard's bespoke BV section
+  // (selectBalaViharEnrollment) resolves to ONE active bala-vihar enrollment and
+  // scopes attendance to its offering window. If the school-year rollover has
+  // since created a 2026-27 BV enrollment for this fixture, two active BV
+  // enrollments coexist and attendance can resolve to the not-yet-started
+  // 2026-27 window → empty state → flaky dashboard E2E. Cancel any active BV
+  // enrollment other than BV_OID so the started (2025-26) window always wins.
+  const enrSnap = await db.collection('families').doc(fid).collection('enrollments').get();
+  for (const d of enrSnap.docs) {
+    const e = d.data() as { oid?: string; programKey?: string; status?: string };
+    if (e.programKey === 'bala-vihar' && e.oid !== BV_OID && e.status === 'active') {
+      await d.ref.set(
+        { status: 'cancelled', cancelledAt: FieldValue.serverTimestamp(), cancelledReason: 'e2e-seed: single-BV fixture' },
+        { merge: true },
+      );
+      console.log(`  cancelled conflicting active BV enrollment ${e.oid} (keeps ${BV_OID} as the sole active BV)`);
+    }
+  }
+
   // 4) family-check-ins inside the BV window (family-level attendance source).
   for (const date of CHECKIN_DATES) {
     await db
@@ -215,6 +242,42 @@ async function main(): Promise<void> {
       );
   }
   console.log(`wrote ${CHECKIN_DATES.length} check-ins under family-check-ins/${LEGACY_FID}`);
+
+  // 4b) Portal-native attendanceEvents (UAT) for the child. The dashboard's
+  //     attendance is door-check-ins ∪ portal teacher-marks. Door records live in
+  //     the check-in SOURCE db (checkInSourceFirestore → MASTER/715b8 when
+  //     PORTAL≠MASTER), which we must NOT write to — so on the deployed UAT app
+  //     the UAT door check-ins above are invisible and attendance would resolve
+  //     to 0. These portal attendanceEvents are read by getAttendanceForFamily
+  //     from PORTAL (UAT) regardless of the door source, so the BV attendance
+  //     renders deterministically. pid = BV_OID matches the dashboard filter
+  //     (e.mid === child.mid && e.pid === enrollment.oid).
+  if (childMid) {
+    for (const date of CHECKIN_DATES) {
+      const aid = `${BV_OID}-e2e-${childMid}-${date}`;
+      await db.collection('attendanceEvents').doc(aid).set(
+        {
+          aid,
+          levelId: `${BV_OID}-e2e`,
+          mid: childMid,
+          fid,
+          pid: BV_OID,
+          date,
+          status: 'present',
+          isGuest: false,
+          markedByUid: 'seed',
+          markedByMid: null,
+          markedAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+          _test: true,
+        },
+        { merge: true },
+      );
+    }
+    console.log(`wrote ${CHECKIN_DATES.length} portal attendanceEvents for child ${childMid} (pid=${BV_OID})`);
+  } else {
+    console.log('  WARN: no child member found — skipped attendanceEvents seeding');
+  }
 
   console.log(`\n=== done. fid=${fid} uid=${uid} ===\n`);
 }
