@@ -15,4 +15,5 @@ export * from './schemas/seva';
 export * from './schemas/achievement';
 export * from './schemas/staff';
 export * from './roster';
+export * from './reports';
 export * from './grade-ladder';
