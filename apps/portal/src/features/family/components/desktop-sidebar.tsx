@@ -38,7 +38,7 @@ const FAMILY_NAV_ITEMS: [SidebarTab, string, keyof typeof SetuIcon, string][] = 
 ];
 
 const WELCOME_NAV_ITEMS: [SidebarTab, string, keyof typeof SetuIcon, string, boolean?][] = [
-  ['home', 'Search',            'search',  '/welcome'],
+  ['home', 'Roster',            'search',  '/welcome/roster'],
   ['levels', 'Levels & rosters','people',  '/welcome/levels'],
   ['seva',   'Seva',            'heart',   '/welcome/seva'],
   ['family', 'Pending',         'people',  '/welcome', true],
