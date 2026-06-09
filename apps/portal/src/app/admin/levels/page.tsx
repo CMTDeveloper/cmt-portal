@@ -7,7 +7,7 @@ import { AssignTeacherForm } from '@/features/admin/levels/assign-teacher-form';
 import { listPrograms } from '@/features/setu/programs/get-programs';
 import type { ProgramRow } from '@/features/admin/programs/programs-table';
 
-export const metadata = { title: 'Levels & teachers — CMT Portal admin' };
+export const metadata = { title: 'Level management — CMT Portal admin' };
 
 type TS = ReturnType<typeof Timestamp.now>;
 
@@ -68,11 +68,12 @@ export default async function LevelsPage() {
           <SetuIcon.back /> Back to admin
         </Link>
         <p style={{ fontSize: 11, letterSpacing: '.16em', textTransform: 'uppercase', color: 'var(--muted)' }}>Admin · Bala Vihar</p>
-        <h1 style={{ fontSize: 'clamp(28px, 7vw, 38px)', fontWeight: 400, marginTop: 6, lineHeight: 1.1 }}>Levels &amp; teachers</h1>
+        <h1 style={{ fontSize: 'clamp(28px, 7vw, 38px)', fontWeight: 400, marginTop: 6, lineHeight: 1.1 }}>Level management</h1>
         <p style={{ fontSize: 14, color: 'var(--body-text)', marginTop: 10, maxWidth: 660, lineHeight: 1.55 }}>
           A level is a Bala Vihar class for a location + period. Level names and grade-bands differ by
-          location, so a grade maps to a different level at a different centre. Assign teachers below — the
-          teacher capability takes effect on their next sign-in.
+          location, so the same grade maps to a different level at a different centre. Configure levels
+          below, and assign the teachers who cover each one — the teacher capability takes effect on
+          their next sign-in.
         </p>
       </header>
 

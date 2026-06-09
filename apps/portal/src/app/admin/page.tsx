@@ -54,9 +54,9 @@ export default function AdminPage() {
         />
         <Tile
           href="/admin/levels"
-          title="Levels & teachers"
+          title="Level management"
           icon="check"
-          sub="Configure Bala Vihar levels (classes) per location + period, set grade-bands, and assign teachers. Assignment grants the teacher capability on next sign-in."
+          sub="Configure Bala Vihar levels (classes) per location + period, set grade-bands, and assign the teachers who cover each one."
           tone="primary"
         />
         <Tile

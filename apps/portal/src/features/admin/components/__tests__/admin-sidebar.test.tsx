@@ -42,4 +42,10 @@ describe('AdminSidebar', () => {
     rerender(<AdminSidebar displayEmail="a@b.com" hasFamily={false} />);
     expect(screen.queryByRole('link', { name: /back to my family/i })).toBeNull();
   });
+  it('renders the renamed "Level management" nav item at /admin/levels', () => {
+    render(<AdminSidebar displayEmail="a@b.com" hasFamily={false} />);
+    const link = screen.getByRole('link', { name: 'Level management' });
+    expect(link.getAttribute('href')).toBe('/admin/levels');
+    expect(screen.queryByRole('link', { name: 'Levels & teachers' })).toBeNull();
+  });
 });

@@ -18,7 +18,7 @@ const ADMIN_NAV: Array<{ label: string; href: string; legacy?: boolean }> = [
   { label: 'Family search', href: '/welcome' },
   { label: 'Welcome-team grants', href: '/admin/welcome-team' },
   { label: 'Programs', href: '/admin/programs' },
-  { label: 'Levels & teachers', href: '/admin/levels' },
+  { label: 'Level management', href: '/admin/levels' },
   { label: 'Class calendar', href: '/admin/calendar' },
   { label: 'Volunteering skills', href: '/admin/volunteering-skills' },
   { label: 'Seva', href: '/welcome/seva' },
