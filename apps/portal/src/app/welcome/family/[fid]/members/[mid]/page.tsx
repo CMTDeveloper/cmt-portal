@@ -5,12 +5,13 @@ import Link from 'next/link';
 import { cookies } from 'next/headers';
 import { SetuIcon } from '@cmt/ui';
 import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
-import { isWelcomeTeam, type WithRole } from '@cmt/shared-domain';
+import { isWelcomeTeam, isAdmin, type WithRole } from '@cmt/shared-domain';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { CspRoot } from '@/features/family/components/atoms';
 import { getChildProfile } from '@/features/setu/members/get-child-profile';
 import { ChildProfileView } from '@/features/setu/members/child-profile-view';
 import { getChildBalaViharJourney } from '@/features/setu/rollover/get-child-journey';
+import { MemberGradeEditor } from '@/features/setu/rollover/member-grade-editor';
 
 export const metadata = { title: 'Profile — CMT Portal' };
 
@@ -36,6 +37,9 @@ export async function WelcomeMemberProfileBody({
   await connection();
   const cookieStore = await cookies();
   const raw = await verifyPortalSessionCookie(cookieStore.get('__session')?.value ?? '').catch(() => null);
+  // Admins inherit welcome-team (so they reach this page) but ALSO get the
+  // inline grade editor — welcome-team-only volunteers keep the page read-only.
+  const admin = !!raw && isAdmin(raw as unknown as WithRole);
   if (!raw || !isWelcomeTeam(raw as unknown as WithRole)) {
     return (
       <div style={{ padding: 32, fontFamily: 'var(--body)' }}>
@@ -60,8 +64,22 @@ export async function WelcomeMemberProfileBody({
       : [];
 
   // Welcome reads the profile READ-ONLY — no editHref (exactOptionalPropertyTypes
-  // means we omit the prop entirely rather than pass undefined).
-  const view = <ChildProfileView profile={profile} journey={journey} />;
+  // means we omit the prop entirely rather than pass undefined). Admins get one
+  // exception: an inline grade editor below the read-only view (children only —
+  // grade is a child concept), so the rollover "Review →" link is actionable.
+  const view = (
+    <>
+      <ChildProfileView profile={profile} journey={journey} />
+      {admin && profile.type === 'Child' && (
+        <MemberGradeEditor
+          fid={profile.fid}
+          mid={profile.mid}
+          childName={profile.firstName}
+          currentGrade={profile.schoolGrade}
+        />
+      )}
+    </>
+  );
 
   return (
     <>

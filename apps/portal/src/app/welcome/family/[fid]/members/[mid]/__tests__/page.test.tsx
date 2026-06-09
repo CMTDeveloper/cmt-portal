@@ -30,6 +30,14 @@ vi.mock('@/features/setu/members/child-profile-view', () => ({
   ),
 }));
 
+// Stub the admin grade editor — this test asserts the page mounts it only for
+// admins; the editor's own behaviour is covered by member-grade-editor.test.
+vi.mock('@/features/setu/rollover/member-grade-editor', () => ({
+  MemberGradeEditor: ({ childName }: { childName: string }) => (
+    <div data-testid="member-grade-editor">{childName}</div>
+  ),
+}));
+
 // ── Firebase admin (server-only) ─────────────────────────────────────────────
 const mockVerifyPortalSessionCookie = vi.hoisted(() =>
   vi.fn(async () => ({ uid: 'wt-1', role: 'welcome-team' })),
@@ -80,6 +88,23 @@ describe('WelcomeMemberProfileBody — happy path', () => {
     render(page as React.ReactElement);
     expect(screen.getAllByTestId('child-profile-view').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Priya').length).toBeGreaterThan(0);
+  });
+});
+
+describe('WelcomeMemberProfileBody — admin grade editor gate', () => {
+  it('renders the admin grade editor when the session is an admin', async () => {
+    mockVerifyPortalSessionCookie.mockResolvedValueOnce({ uid: 'a-1', role: 'admin' } as never);
+    const page = await WelcomeMemberProfileBody({ params: Promise.resolve({ fid: 'FAM001', mid: 'FAM001-02' }) });
+    render(page as React.ReactElement);
+    expect(screen.getAllByTestId('member-grade-editor').length).toBeGreaterThan(0);
+  });
+
+  it('does NOT render the admin grade editor for a non-admin welcome-team session', async () => {
+    // default beforeEach session is welcome-team (non-admin) — page stays read-only.
+    const page = await WelcomeMemberProfileBody({ params: Promise.resolve({ fid: 'FAM001', mid: 'FAM001-02' }) });
+    render(page as React.ReactElement);
+    expect(screen.queryByTestId('member-grade-editor')).toBeNull();
+    expect(screen.getAllByTestId('child-profile-view').length).toBeGreaterThan(0);
   });
 });
 
