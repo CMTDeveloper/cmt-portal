@@ -65,7 +65,19 @@ function makeDb(families: FamilySeed[]) {
     return { __kind: 'familyDoc' as const, fid };
   }
 
-  type QueryState = { location?: string; startAfterFid?: string };
+  type QueryState = { location?: string; startAfterFid?: string; orderedFields?: string[] };
+
+  // Mirror the real Admin SDK: ordering by the same field twice throws. Without
+  // this guard the fake would silently accept `orderBy('name').where(...).orderBy('name')`,
+  // which 500s in production.
+  function orderByOrThrow(state: QueryState, field: string): QueryState {
+    if (state.orderedFields?.includes(field)) {
+      throw new Error(
+        `Invalid query. You cannot specify the same field '${field}' multiple times in the order by clause.`,
+      );
+    }
+    return { ...state, orderedFields: [...(state.orderedFields ?? []), field] };
+  }
 
   function makeQuery(state: QueryState) {
     const builder = {
@@ -73,7 +85,7 @@ function makeDb(families: FamilySeed[]) {
         if (field === 'location') return makeQuery({ ...state, location: String(value) });
         return makeQuery(state);
       }),
-      orderBy: vi.fn(() => makeQuery(state)),
+      orderBy: vi.fn((field: string) => makeQuery(orderByOrThrow(state, field))),
       startAfter: vi.fn((snap: DocSnap) => makeQuery({ ...state, startAfterFid: snap.id })),
       limit: vi.fn((_n: number) => ({
         get: vi.fn(async (): Promise<QuerySnap> => resolve(state, _n)),
@@ -152,7 +164,7 @@ function makeDb(families: FamilySeed[]) {
         where: vi.fn((field: string, _op: string, value: unknown) =>
           field === 'location' ? makeQuery({ location: String(value) }) : makeQuery({}),
         ),
-        orderBy: vi.fn(() => makeQuery({})),
+        orderBy: vi.fn((field: string) => makeQuery(orderByOrThrow({}, field))),
         count: vi.fn(() => ({
           get: vi.fn(async () => ({ data: () => ({ count: families.length }) })),
         })),

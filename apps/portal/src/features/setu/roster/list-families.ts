@@ -83,9 +83,15 @@ export async function listRosterFamilies(params: RosterQuery): Promise<RosterLis
   }
 
   // --- No program filter: Firestore-ordered cursor path ---
-  let query = familiesCol.orderBy('name');
-  if (params.location) query = query.where('location', '==', params.location).orderBy('name');
-  // (Firestore allows where + orderBy on the same composite index — see Task 8.)
+  // Apply the equality filter first, THEN a single orderBy('name'). Calling
+  // orderBy('name') twice (e.g. once before and once after where) makes the
+  // real Admin SDK throw "you cannot specify the same field multiple times in
+  // the order by clause" — so the where + single orderBy must be composed in
+  // this order. The (location, name) composite index backs the filtered case
+  // (see Task 8).
+  let query = params.location
+    ? familiesCol.where('location', '==', params.location).orderBy('name')
+    : familiesCol.orderBy('name');
   if (params.cursor) {
     const curDoc = await familiesCol.doc(params.cursor).get();
     if (curDoc.exists) query = query.startAfter(curDoc);
