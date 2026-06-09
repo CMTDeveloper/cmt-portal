@@ -77,6 +77,29 @@ describe('canAccessRoute — API surface mirrors pages', () => {
   });
 });
 
+describe('canAccessRoute — /api/admin/users — admin-only (catch-all)', () => {
+  // No dedicated rule — these are covered by the generic /api/admin/* catch-all
+  // (isAdmin). This test pins that the catch-all gates the new Users & Roles
+  // API for every method and denies welcome-team + family roles.
+  it('allows admin on GET/POST /api/admin/users', () => {
+    expect(canAccessRoute(admin, '/api/admin/users', 'GET')).toBe(true);
+    expect(canAccessRoute(admin, '/api/admin/users', 'POST')).toBe(true);
+  });
+  it('allows admin on DELETE /api/admin/users/roles', () => {
+    expect(canAccessRoute(admin, '/api/admin/users/roles', 'DELETE')).toBe(true);
+  });
+  it('denies welcome-team on /api/admin/users + /roles', () => {
+    expect(canAccessRoute(welcomeTeam, '/api/admin/users', 'GET')).toBe(false);
+    expect(canAccessRoute(welcomeTeam, '/api/admin/users', 'POST')).toBe(false);
+    expect(canAccessRoute(welcomeTeam, '/api/admin/users/roles', 'DELETE')).toBe(false);
+  });
+  it('denies family roles on /api/admin/users + /roles', () => {
+    expect(canAccessRoute(manager, '/api/admin/users', 'GET')).toBe(false);
+    expect(canAccessRoute(member, '/api/admin/users', 'POST')).toBe(false);
+    expect(canAccessRoute(family, '/api/admin/users/roles', 'DELETE')).toBe(false);
+  });
+});
+
 describe('canAccessRoute — /api/setu/family-lookup is public', () => {
   it('allows unauthenticated (no session) via isPublicRoute', () => {
     // Middleware calls isPublicRoute before canAccessRoute; canAccessRoute is

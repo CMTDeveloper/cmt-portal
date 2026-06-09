@@ -115,6 +115,25 @@ export async function revokeRole(args: {
   }
 }
 
+/**
+ * Resolve a contact to the identity keys used for grant/revoke routing so a
+ * caller (e.g. the DELETE route's self-lockout guard) can compare the target
+ * against their own session without re-deriving the dual-path logic.
+ *
+ * `mid` is set when the contact maps to a Setu family member; `uid` is always
+ * the canonical legacy auth-claim uid for the contact (matches what a future
+ * OTP sign-in would land on). A self-lockout exists when either the resolved
+ * `mid` equals the caller's `mid` or the resolved `uid` equals the caller's `uid`.
+ */
+export async function resolveContactIdentity(
+  contact: string,
+): Promise<{ mid: string | null; uid: string }> {
+  const type = detectType(contact);
+  const result = await findSetuFamilyByContact(type, contact);
+  const mid = result.source === 'setu' && result.mid ? result.mid : null;
+  return { mid, uid: uidOf(type, contact) };
+}
+
 // --- listStaff(): merged, deduped-by-person staff reader -------------------
 
 interface MutableStaffRow {
