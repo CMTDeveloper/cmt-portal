@@ -73,6 +73,11 @@ export function RolloverPage({ state }: RolloverPageProps) {
         .rollover-disclosure:hover { background: var(--surface2) !important; }
         .rollover-review { transition: background .15s ease, border-color .15s ease; }
         .rollover-review:hover { background: var(--accentSoft) !important; border-color: var(--accent) !important; }
+        .rollover-grade-select { transition: border-color .12s ease, box-shadow .12s ease; }
+        .rollover-grade-select:focus-visible { outline: none; border-color: var(--accent) !important; box-shadow: 0 0 0 3px var(--accentSoft); }
+        .rollover-grade-save { transition: background .15s ease, transform .12s ease, box-shadow .15s ease; }
+        .rollover-grade-save:not(:disabled):hover { background: var(--accentDeep) !important; box-shadow: 0 3px 10px rgba(217,102,66,0.28); }
+        .rollover-grade-save:not(:disabled):active { transform: translateY(1px); }
         @media (prefers-reduced-motion: reduce) {
           .rollover-spin, [style*="rollover-spin"] { animation-duration: 0.01ms !important; }
         }

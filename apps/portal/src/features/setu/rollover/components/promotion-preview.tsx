@@ -2,13 +2,19 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import type { RolloverReport, PromotionRow } from '@cmt/shared-domain';
+import { toast } from '@cmt/ui';
+import { GRADE_LADDER, type RolloverReport, type PromotionRow } from '@cmt/shared-domain';
+import { setGradeClient } from '../set-grade-client';
 import { Spinner } from './start-step';
 
 interface PromotionPreviewProps {
   report: RolloverReport;
   committing: boolean;
   onPromote: () => void;
+  /** Re-runs the dry-run preview after a row is resolved (set grade succeeds),
+   *  so the just-fixed child drops out of "Need attention". Wired to the same
+   *  handler as the "Refresh preview" affordance. */
+  onResolved: () => void;
 }
 
 /** Big scannable metric. A top accent rail + semantic fill makes each count's
@@ -210,7 +216,126 @@ function attentionReason(row: PromotionRow): string {
   }
 }
 
-export function PromotionPreview({ report, committing, onPromote }: PromotionPreviewProps) {
+/** Inline grade picker for a single need-attention row. A mist-surface select
+ *  (placeholder + GRADE_LADDER rungs) paired with an accent "Save" pill, both
+ *  ≥44px tall so they stay comfortable tap targets on mobile and wrap onto
+ *  their own line under the child's name on a narrow row. Saving writes the
+ *  grade through the admin endpoint, toasts, then calls onResolved() so the
+ *  fixed child leaves the list on the refreshed preview.
+ *
+ *  Module-scope (not nested in PromotionPreview) so its <select> never remounts
+ *  and lose focus/selection on a parent re-render. */
+function SetGradeControl({
+  fid,
+  mid,
+  childName,
+  onResolved,
+  disabled,
+}: {
+  fid: string;
+  mid: string;
+  childName: string;
+  onResolved: () => void;
+  disabled: boolean;
+}) {
+  const [grade, setGrade] = useState('');
+  const [saving, setSaving] = useState(false);
+  const busy = saving || disabled;
+
+  async function save() {
+    if (!grade || saving) return;
+    setSaving(true);
+    try {
+      // grade is one of GRADE_LADDER (the only options rendered), which is the
+      // SetMemberGradeBody.schoolGrade enum the endpoint validates against.
+      await setGradeClient({ fid, mid, schoolGrade: grade as (typeof GRADE_LADDER)[number] });
+      toast.success(`Grade set for ${childName}`);
+      onResolved();
+    } catch {
+      toast.error('Could not set grade. Please try again.');
+      setSaving(false);
+    }
+  }
+
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+      <select
+        aria-label={`Set grade for ${childName}`}
+        value={grade}
+        disabled={busy}
+        onChange={(e) => setGrade(e.target.value)}
+        className="rollover-grade-select"
+        style={{
+          minHeight: 44,
+          padding: '0 28px 0 11px',
+          fontSize: 13,
+          fontWeight: 600,
+          fontFamily: 'var(--body)',
+          color: grade ? 'var(--ink)' : 'var(--muted)',
+          background: 'var(--surface)',
+          border: '1px solid var(--line2)',
+          borderRadius: 999,
+          cursor: busy ? 'default' : 'pointer',
+          opacity: busy ? 0.6 : 1,
+          // Native chevron via a token-coloured SVG so the pill reads as part of
+          // the Cool-Mist set, not a default OS control.
+          appearance: 'none',
+          WebkitAppearance: 'none',
+          MozAppearance: 'none',
+          backgroundImage:
+            "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23a06410' stroke-width='1.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")",
+          backgroundRepeat: 'no-repeat',
+          backgroundPosition: 'right 11px center',
+        }}
+      >
+        <option value="" disabled>
+          Set grade…
+        </option>
+        {GRADE_LADDER.map((g) => (
+          <option key={g} value={g}>
+            {/^\d/.test(g) ? `Grade ${g}` : g}
+          </option>
+        ))}
+      </select>
+      <button
+        type="button"
+        onClick={save}
+        disabled={busy || !grade}
+        aria-label={`Save grade for ${childName}`}
+        className="rollover-grade-save"
+        style={{
+          minHeight: 44,
+          minWidth: 44,
+          padding: '0 14px',
+          fontSize: 12.5,
+          fontWeight: 700,
+          fontFamily: 'var(--body)',
+          color: '#fff',
+          background: 'var(--accent)',
+          border: '1px solid var(--accentDeep)',
+          borderRadius: 999,
+          cursor: busy || !grade ? 'default' : 'pointer',
+          opacity: busy || !grade ? 0.55 : 1,
+          whiteSpace: 'nowrap',
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 6,
+        }}
+      >
+        {saving ? (
+          <>
+            <Spinner /> Saving…
+          </>
+        ) : (
+          'Save'
+        )}
+      </button>
+    </span>
+  );
+}
+
+export function PromotionPreview({ report, committing, onPromote, onResolved }: PromotionPreviewProps) {
   const { promoted, graduated, needsAttention, shishuStayed, byTransition, graduates, attention, fromYear, toYear } = report;
   const maxCount = byTransition.reduce((m, t) => Math.max(m, t.count), 0);
 
@@ -314,24 +439,40 @@ export function PromotionPreview({ report, committing, onPromote }: PromotionPre
                   <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.childName}</span>
                   <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--warn, #a06410)' }}>{attentionReason(row)}</span>
                 </span>
-                <Link
-                  href={`/welcome/family/${row.fid}/members/${row.mid}`}
-                  className="rollover-review"
-                  style={{
-                    flexShrink: 0,
-                    fontSize: 12.5,
-                    fontWeight: 600,
-                    color: 'var(--accentDeep)',
-                    textDecoration: 'none',
-                    whiteSpace: 'nowrap',
-                    padding: '5px 11px',
-                    borderRadius: 999,
-                    background: 'var(--surface)',
-                    border: '1px solid var(--line2)',
-                  }}
-                >
-                  Review →
-                </Link>
+                {/* Actions: fix in place (inline grade picker) or open the full
+                    profile. The group wraps to its own line under the name on a
+                    narrow row (the parent <li> is flexWrap:'wrap'); both controls
+                    are ≥44px tap targets. */}
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', flexShrink: 0 }}>
+                  <SetGradeControl
+                    fid={row.fid}
+                    mid={row.mid}
+                    childName={row.childName}
+                    onResolved={onResolved}
+                    disabled={committing}
+                  />
+                  <Link
+                    href={`/welcome/family/${row.fid}/members/${row.mid}`}
+                    className="rollover-review"
+                    style={{
+                      flexShrink: 0,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      minHeight: 44,
+                      fontSize: 12.5,
+                      fontWeight: 600,
+                      color: 'var(--accentDeep)',
+                      textDecoration: 'none',
+                      whiteSpace: 'nowrap',
+                      padding: '0 13px',
+                      borderRadius: 999,
+                      background: 'var(--surface)',
+                      border: '1px solid var(--line2)',
+                    }}
+                  >
+                    Review →
+                  </Link>
+                </span>
               </li>
             ))}
           </ul>

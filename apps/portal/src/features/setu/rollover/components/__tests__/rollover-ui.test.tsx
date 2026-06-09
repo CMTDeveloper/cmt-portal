@@ -15,9 +15,14 @@ vi.mock('@/features/setu/rollover/rollover-client', () => ({
   previewPromotionClient: vi.fn(),
   commitPromotionClient: vi.fn(),
 }));
+vi.mock('../../set-grade-client', () => ({
+  setGradeClient: vi.fn(),
+}));
 
 import { RolloverPage, type RolloverPageState } from '../rollover-page';
+import { PromotionPreview } from '../promotion-preview';
 import { previewPromotionClient, commitPromotionClient } from '@/features/setu/rollover/rollover-client';
+import { setGradeClient } from '../../set-grade-client';
 
 function state(over: Partial<RolloverPageState> = {}): RolloverPageState {
   return {
@@ -57,6 +62,7 @@ const REPORT: RolloverReport = {
 beforeEach(() => {
   vi.mocked(previewPromotionClient).mockReset();
   vi.mocked(commitPromotionClient).mockReset();
+  vi.mocked(setGradeClient).mockReset();
 });
 
 it('renders Step 1 and a LOCKED Step 2 when the next year is not ready', () => {
@@ -117,4 +123,30 @@ it('renders Step 1 in its confirmed state and unlocks Step 2 when next year is a
   // Step 2 is unlocked: the "Preview run" action is available, no lock copy.
   expect(screen.getByRole('button', { name: /preview run/i })).toBeDefined();
   expect(screen.queryByText(/Complete Step 1 first/i)).toBeNull();
+});
+
+it('inline Set grade on a need-attention row calls setGradeClient and refreshes the preview', async () => {
+  vi.mocked(setGradeClient).mockResolvedValue(undefined);
+  const onResolved = vi.fn();
+  const user = userEvent.setup();
+  render(<PromotionPreview report={REPORT} committing={false} onPromote={vi.fn()} onResolved={onResolved} />);
+
+  // The need-attention row keeps its "Review →" link AND gains an inline picker.
+  expect(screen.getByRole('link', { name: /review/i })).toBeDefined();
+
+  // Pick a grade for Riya S. (the seeded needs-grade child: fid FAM-77, mid MID-99).
+  const select = screen.getByRole('combobox', { name: /set grade for riya s\./i });
+  await user.selectOptions(select, '4');
+
+  // Save fires the client with the row's identity + chosen grade, then refreshes.
+  await user.click(screen.getByRole('button', { name: /save grade for riya s\./i }));
+
+  expect(setGradeClient).toHaveBeenCalledWith({ fid: 'FAM-77', mid: 'MID-99', schoolGrade: '4' });
+  expect(onResolved).toHaveBeenCalledTimes(1);
+});
+
+it('Save is disabled until a grade is chosen on a need-attention row', () => {
+  render(<PromotionPreview report={REPORT} committing={false} onPromote={vi.fn()} onResolved={vi.fn()} />);
+  const save = screen.getByRole('button', { name: /save grade for riya s\./i });
+  expect((save as HTMLButtonElement).disabled).toBe(true);
 });

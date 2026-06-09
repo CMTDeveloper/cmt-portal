@@ -106,7 +106,7 @@ export function PromoteStep({ fromYear, toYear, unlocked, report, committing, on
         </p>
       ) : report ? (
         <div style={{ marginTop: 18 }}>
-          <PromotionPreview report={report} committing={committing} onPromote={onPromote} />
+          <PromotionPreview report={report} committing={committing} onPromote={onPromote} onResolved={preview} />
           <div style={{ marginTop: 14, textAlign: 'center' }}>
             <button
               type="button"
