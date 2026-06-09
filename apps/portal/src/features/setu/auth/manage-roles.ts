@@ -1,8 +1,9 @@
 import 'server-only';
 import { portalAuth } from '@cmt/firebase-shared/admin/auth';
+import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { sha256Hex } from '@/features/check-in/shared';
 import { normalizeContactForKey } from '@cmt/shared-domain/setu';
-import type { GrantableRole } from '@cmt/shared-domain';
+import type { GrantableRole, StaffRow } from '@cmt/shared-domain';
 import {
   addCapability,
   removeCapability,
@@ -11,7 +12,7 @@ import {
   type Capability,
 } from '@/lib/auth/role-claims';
 import { findSetuFamilyByContact } from './find-family-by-contact';
-import { addMemberRole, removeMemberRole } from './member-roles';
+import { addMemberRole, removeMemberRole, listMembersWithRole } from './member-roles';
 
 /**
  * Dual-path role management, extracted from scripts/grant-admin.ts and
@@ -112,4 +113,268 @@ export async function revokeRole(args: {
     }
     throw err;
   }
+}
+
+// --- listStaff(): merged, deduped-by-person staff reader -------------------
+
+interface MutableStaffRow {
+  key: string;
+  mid: string | null;
+  fid: string | null;
+  uid: string | null;
+  name: string;
+  contact: string;
+  roles: Set<GrantableRole>;
+  isTeacher: boolean;
+  teacherLevels: string[];
+  source: 'family' | 'staff';
+}
+
+function memberNameContact(data: Record<string, unknown> | undefined): {
+  name: string;
+  contact: string;
+} {
+  const first = typeof data?.firstName === 'string' ? data.firstName : '';
+  const last = typeof data?.lastName === 'string' ? data.lastName : '';
+  const name = `${first} ${last}`.trim();
+  const email = typeof data?.email === 'string' ? data.email : '';
+  const phone = typeof data?.phone === 'string' ? data.phone : '';
+  return { name, contact: email || phone };
+}
+
+/**
+ * Every staff person — family-member admins/welcome-team (roleAssignments),
+ * non-family auth-claim admins/welcome-team, and teachers (parent-mid or
+ * standalone tid) — merged and deduped to one row per distinct person.
+ *
+ * Dedupe key: mid when known, else tid, else uid. The same person reached via
+ * multiple sources (e.g. a roleAssignment AND a legacy auth-claim on the same
+ * contact) lands on a single row.
+ */
+export async function listStaff(): Promise<StaffRow[]> {
+  const db = portalFirestore();
+  const auth = portalAuth();
+
+  // rows keyed by dedupe key; midIndex maps a known mid → that key for merges.
+  const rows = new Map<string, MutableStaffRow>();
+  const keyByMid = new Map<string, string>();
+
+  function ensureMidRow(mid: string, fid: string | null): MutableStaffRow {
+    const existingKey = keyByMid.get(mid);
+    if (existingKey) {
+      const existing = rows.get(existingKey);
+      if (existing) {
+        if (!existing.fid && fid) existing.fid = fid;
+        return existing;
+      }
+    }
+    const row: MutableStaffRow = {
+      key: mid,
+      mid,
+      fid,
+      uid: null,
+      name: '',
+      contact: '',
+      roles: new Set(),
+      isTeacher: false,
+      teacherLevels: [],
+      source: 'family',
+    };
+    rows.set(mid, row);
+    keyByMid.set(mid, mid);
+    return row;
+  }
+
+  // 1. roleAssignments — admins + welcome-team, accumulated per mid.
+  const [admins, welcomeTeam] = await Promise.all([
+    listMembersWithRole('admin'),
+    listMembersWithRole('welcome-team'),
+  ]);
+
+  const roleByMid = new Map<string, { fid: string; roles: Set<GrantableRole> }>();
+  for (const a of admins) {
+    const entry = roleByMid.get(a.mid) ?? { fid: a.fid, roles: new Set<GrantableRole>() };
+    entry.roles.add('admin');
+    if (!entry.fid && a.fid) entry.fid = a.fid;
+    roleByMid.set(a.mid, entry);
+  }
+  for (const w of welcomeTeam) {
+    const entry = roleByMid.get(w.mid) ?? { fid: w.fid, roles: new Set<GrantableRole>() };
+    entry.roles.add('welcome-team');
+    if (!entry.fid && w.fid) entry.fid = w.fid;
+    roleByMid.set(w.mid, entry);
+  }
+
+  // Resolve member name/contact for each role-assigned mid.
+  await Promise.all(
+    [...roleByMid.entries()].map(async ([mid, { fid, roles }]) => {
+      const row = ensureMidRow(mid, fid);
+      for (const r of roles) row.roles.add(r);
+      const memberSnap = await db
+        .collection('families')
+        .doc(fid)
+        .collection('members')
+        .doc(mid)
+        .get();
+      const data = memberSnap.exists
+        ? (memberSnap.data() as Record<string, unknown>)
+        : undefined;
+      const { name, contact } = memberNameContact(data);
+      if (name) row.name = name;
+      if (contact) row.contact = contact;
+    }),
+  );
+
+  // 2. teacherAssignments — parent-mid rows merge; standalone tids get their own row.
+  const taSnap = await db.collection('teacherAssignments').get();
+  const assignments = taSnap.docs
+    .map((d) => {
+      const data = d.data() as { ref?: string; levelIds?: string[] } | undefined;
+      const ref = typeof data?.ref === 'string' && data.ref ? data.ref : d.id;
+      const levelIds = Array.isArray(data?.levelIds)
+        ? data.levelIds.filter((l): l is string => typeof l === 'string' && l.length > 0)
+        : [];
+      return { ref, levelIds };
+    })
+    .filter((a) => a.levelIds.length > 0);
+
+  // Resolve all referenced levelIds → levelName in one batch.
+  const allLevelIds = [...new Set(assignments.flatMap((a) => a.levelIds))];
+  const levelNameById = new Map<string, string>();
+  if (allLevelIds.length > 0) {
+    const levelRefs = allLevelIds.map((id) => db.collection('levels').doc(id));
+    const levelSnaps = await db.getAll(...levelRefs);
+    for (let i = 0; i < allLevelIds.length; i++) {
+      const id = allLevelIds[i];
+      const snap = levelSnaps[i];
+      if (!id || !snap || !snap.exists) continue;
+      const data = snap.data() as { levelName?: unknown } | undefined;
+      levelNameById.set(id, typeof data?.levelName === 'string' ? data.levelName : id);
+    }
+  }
+
+  for (const a of assignments) {
+    const levelNames = a.levelIds.map((id) => levelNameById.get(id) ?? id);
+
+    // Is this ref a member mid (parent-teacher) or a standalone tid?
+    const memberSnap = await db
+      .collectionGroup('members')
+      .where('mid', '==', a.ref)
+      .limit(1)
+      .get();
+    const memberDoc = memberSnap.docs[0];
+
+    if (memberDoc) {
+      const fid = memberDoc.ref.parent.parent?.id ?? null;
+      const row = ensureMidRow(a.ref, fid);
+      row.isTeacher = true;
+      row.teacherLevels = [...new Set([...row.teacherLevels, ...levelNames])];
+      if (!row.name || !row.contact) {
+        const { name, contact } = memberNameContact(
+          memberDoc.data() as Record<string, unknown>,
+        );
+        if (!row.name && name) row.name = name;
+        if (!row.contact && contact) row.contact = contact;
+      }
+      continue;
+    }
+
+    // Standalone teacher — teachers/{tid}.
+    const teacherSnap = await db.collection('teachers').doc(a.ref).get();
+    const existing = rows.get(a.ref);
+    const data = teacherSnap.exists
+      ? (teacherSnap.data() as Record<string, unknown>)
+      : undefined;
+    const { name, contact } = memberNameContact(data);
+    if (existing) {
+      existing.isTeacher = true;
+      existing.teacherLevels = [...new Set([...existing.teacherLevels, ...levelNames])];
+      if (!existing.name && name) existing.name = name;
+      if (!existing.contact && contact) existing.contact = contact;
+    } else {
+      rows.set(a.ref, {
+        key: a.ref,
+        mid: null,
+        fid: null,
+        uid: null,
+        name: name || a.ref,
+        contact,
+        roles: new Set(),
+        isTeacher: true,
+        teacherLevels: levelNames,
+        source: 'staff',
+      });
+    }
+  }
+
+  // 3. Auth claims — admins/welcome-team on the legacy non-family path.
+  let token: string | undefined;
+  do {
+    const page = await auth.listUsers(1000, token);
+    for (const u of page.users) {
+      const claims = (u.customClaims as ClaimsShape | undefined) ?? null;
+      const claimRoles: GrantableRole[] = [];
+      if (hasCapability(claims, 'admin')) claimRoles.push('admin');
+      if (hasCapability(claims, 'welcome-team')) claimRoles.push('welcome-team');
+      if (claimRoles.length === 0) continue;
+
+      const claimsEmail = typeof claims?.email === 'string' ? claims.email : null;
+      const claimsPhone = typeof claims?.phone === 'string' ? claims.phone : null;
+      const contact = u.email ?? claimsEmail ?? claimsPhone ?? '';
+
+      // Does this contact resolve to an existing family mid? If so, merge.
+      let mergedIntoMid: string | null = null;
+      if (contact) {
+        const type = contact.includes('@') ? 'email' : 'phone';
+        const fam = await findSetuFamilyByContact(type, contact);
+        if (fam.source === 'setu' && fam.mid) mergedIntoMid = fam.mid;
+      }
+
+      if (mergedIntoMid) {
+        const row = ensureMidRow(mergedIntoMid, null);
+        for (const r of claimRoles) row.roles.add(r);
+        if (!row.contact && contact) row.contact = contact;
+        continue;
+      }
+
+      // Standalone non-family staff — keyed by uid.
+      const existing = rows.get(u.uid);
+      if (existing) {
+        for (const r of claimRoles) existing.roles.add(r);
+        if (!existing.uid) existing.uid = u.uid;
+        if (!existing.contact && contact) existing.contact = contact;
+        continue;
+      }
+      rows.set(u.uid, {
+        key: u.uid,
+        mid: null,
+        fid: null,
+        uid: u.uid,
+        name: contact || u.uid,
+        contact,
+        roles: new Set(claimRoles),
+        isTeacher: false,
+        teacherLevels: [],
+        source: 'staff',
+      });
+    }
+    token = page.pageToken;
+  } while (token);
+
+  const ROLE_ORDER: GrantableRole[] = ['admin', 'welcome-team'];
+  const out: StaffRow[] = [...rows.values()].map((r) => ({
+    key: r.key,
+    mid: r.mid,
+    fid: r.fid,
+    uid: r.uid,
+    name: r.name || r.contact || r.key,
+    contact: r.contact,
+    roles: ROLE_ORDER.filter((role) => r.roles.has(role)),
+    isTeacher: r.isTeacher,
+    teacherLevels: r.teacherLevels,
+    source: r.source,
+  }));
+
+  out.sort((a, b) => a.name.localeCompare(b.name));
+  return out;
 }
