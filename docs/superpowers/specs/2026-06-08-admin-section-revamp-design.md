@@ -174,68 +174,97 @@ renders the renamed labels with correct hrefs; redirect routes resolve.
 **Replaces** "Welcome-team grants" and legacy "Admin users" with one screen at
 `/admin/users` (admin-only).
 
+## ⚠️ Real role model (corrected 2026-06-08 after reading `build-session-claims.ts`)
+
+Roles are **NOT** Firebase-Auth-claims-only. The authoritative resolution
+(`apps/portal/src/features/setu/auth/build-session-claims.ts`) merges **three
+grant sources** into a session, **person-centric (keyed by `mid`)** so a grant
+holds across a person's separate email/phone auth UIDs:
+
+1. **`roleAssignments/{mid}`** — `{ mid, fid, roles: ('admin'|'welcome-team')[], grantedAt, grantedVia }`.
+   The canonical path for **family-member** staff. Helpers:
+   `getMemberRoles` / `addMemberRole` / `removeMemberRole` / `listMembersWithRole`
+   (`features/setu/auth/member-roles.ts`).
+2. **Firebase Auth custom claims** on `sha256(canonicalContact)` — the legacy
+   path for **non-family** CMT staff (no Bala Vihar family). Helpers:
+   `addCapability` / `removeCapability` / `hasCapability` (`lib/auth/role-claims.ts`).
+3. **`teacherAssignments/{ref}`** (ref = `mid` or standalone `tid`) — the teacher
+   capability + its `levelIds`; computed at session-build, not pushed to claims.
+
+`build-session-claims` rules: family role wins the **primary** slot;
+admin/welcome-team/teacher go to `extraRoles`; **admin inherits welcome-team +
+teacher**. The proven dual-path grant/revoke/list logic already exists in
+`scripts/grant-admin.ts` — Phase 2 **extracts it into a shared server module**
+(`features/setu/auth/manage-roles.ts`) that BOTH the CLI and the new API call
+(DRY; single source of truth for the contact→mid-or-uid routing).
+
 ## Data model
 
-A `UserRow` assembled server-side by merging two sources:
+A `StaffRow` assembled server-side by **merging all three grant sources and
+deduping by person** (mid when known, else contact-uid):
 
-1. **Firebase Auth** — `portalAuth().listUsers(1000, pageToken)` over all pages.
-   For each user: `uid`, `email` (auth email or `claims.email`), `role`
-   (primary), `extraRoles[]`.
-2. **Teacher assignments** — read `teacherAssignments` once; build a
-   `Map<ref, levelIds[]>`. A user is "teacher" if their `mid` (from claims) or a
-   matching standalone `tid` appears, even before they re-sign-in (so claims
-   that don't yet carry `teacher` still display correctly). Annotate with the
-   level names they cover (join to `levels`).
+1. **`roleAssignments`** — read all docs (or `where('roles','array-contains', …)`
+   twice); for each `mid` resolve name/contact from `families/{fid}/members/{mid}`.
+2. **Firebase Auth claims** — `listUsers()` paginated; keep users whose claims
+   carry admin/welcome-team **and** have no `mid`-backed family (non-family staff).
+   Family members granted via the legacy path historically may appear in BOTH —
+   dedupe by resolving their `mid`.
+3. **`teacherAssignments`** — read all docs; mark `isTeacher`, join `levels` for
+   level names. `tid`-only teachers (no family) resolve via `teachers/{tid}`.
 
 ```ts
-interface UserRow {
-  uid: string;
-  email: string;
-  primaryRole: Role | null;
-  extraRoles: Role[];
-  isTeacher: boolean;          // from teacherAssignments OR claims
+interface StaffRow {
+  key: string;                 // mid when known, else uid — the dedupe key
+  mid: string | null;
+  fid: string | null;
+  uid: string | null;          // contact-derived auth uid (non-family staff)
+  name: string;                // resolved member/teacher name, or email
+  contact: string;             // email/phone for display
+  roles: Array<'admin' | 'welcome-team'>;   // effective grants (deduped)
+  isTeacher: boolean;
   teacherLevels: string[];     // level names, for display
-  fid: string | null;          // dual-role family users
+  source: 'family' | 'staff';  // which grant path backs this person
 }
 ```
 
-`listUsers` returns *everyone who ever authenticated* (families included). The
-screen **defaults to staff filter** (admin / welcome-team / teacher) with a
-toggle to show all, so it isn't drowned by family accounts.
+The list is **staff-only by construction** (it reads grant collections, not all
+auth users), so it isn't drowned by family accounts. A search box filters
+by name/contact; role chips filter by Admin / Welcome-team / Teacher.
 
 ## Screen (`/admin/users`)
 
-- **Header + search box** (filter by email/name).
-- **Role filter chips**: All staff · Admin · Welcome-team · Teacher · (show
-  family accounts toggle).
-- **User table/list**: name/email, role badges (primary + extras + teacher with
-  its levels). Each row expands (or opens a side panel) to **"What can this user
-  access?"** — a plain-English summary derived from their roles.
-- **Add user**: enter email → choose role to grant (admin / welcome-team). Same
-  derivation as today: `uid = sha256(normalizeContact('email', email))`, create
-  the Auth user if missing, `addCapability`. (Teacher is granted via Level
-  management, with a deep link from here.)
-- **Per-user actions**: grant/revoke admin, grant/revoke welcome-team (via
-  `addCapability`/`removeCapability`); "Manage as teacher" → deep-links to
-  `/admin/levels`. Guard: cannot revoke your own admin (avoid self-lockout);
-  warn on revoking the last admin.
-- **Roles reference panel** (static, curated): one card per role in `ROLES`
-  with what it grants, authored from `canAccessRoute`. This is the honest
-  "which roles exist & what they do" answer.
+- **Header + search box** (filter by name/contact).
+- **Role filter chips**: All staff · Admin · Welcome-team · Teacher.
+- **Staff list**: name/contact, role badges (admin / welcome-team / teacher with
+  its levels), and which path backs them. Each row expands to **"What can this
+  person access?"** — a plain-English summary derived from their effective roles.
+- **Add staff**: enter email/phone → server resolves whether they're a Setu
+  family member (`findSetuFamilyByContact`) and routes the grant to the correct
+  path (`roleAssignments/{mid}` for family, auth-claims for non-family) — exactly
+  as `grant-admin.ts` does today, now via the shared module. Choose admin or
+  welcome-team.
+- **Per-row actions**: grant/revoke admin, grant/revoke welcome-team (dual-path);
+  "Manage as teacher" → deep-links to Level management (teacher stays granted by
+  level assignment — single source of truth). Guards: **cannot revoke your own
+  admin** (self-lockout); **warn on revoking the last admin**.
+- **Roles reference panel** (static, curated): one card per role in `ROLES` with
+  what it grants, authored from `canAccessRoute`.
 
 ## API
 
-- `GET /api/admin/users` → `{ users: UserRow[] }` (paginates Auth internally,
-  merges teacher assignments). Admin-only (covered by `/api/admin/*` catch-all).
-- `POST /api/admin/users` `{ email, role: 'admin' | 'welcome-team' }` → grant
-  (generalizes today's `POST /api/admin/welcome-team`). 201 with new claims.
-- `DELETE /api/admin/users/[uid]/roles/[role]` → revoke that capability
-  (`removeCapability`), with last-admin / self-revoke guards.
+- `GET /api/admin/users` → `{ staff: StaffRow[] }` (merges all three sources,
+  deduped). Admin-only (covered by `/api/admin/*` catch-all).
+- `POST /api/admin/users` `{ contact, role: 'admin' | 'welcome-team' }` → grant
+  via the shared module (auto-routes family→`roleAssignments`, non-family→claims).
+  201 with the resulting `StaffRow`.
+- `DELETE /api/admin/users/roles` `{ key, role }` (or `…/[key]/roles/[role]`) →
+  revoke that capability through the correct path, with last-admin / self-revoke
+  guards.
 
-The existing `/api/admin/welcome-team` routes are kept as thin
-back-compat shims (or removed once the UI no longer calls them — the CLI
-`grant-admin.ts` / grant scripts continue to work since they call the same
-helpers).
+All three reuse the shared `manage-roles.ts` module. The existing
+`POST/DELETE /api/admin/welcome-team` routes become thin shims over it (or are
+removed once the UI/CLI no longer call them). `grant-admin.ts` is refactored to
+call the shared module so CLI and UI never diverge.
 
 ## Mobile
 
