@@ -154,6 +154,11 @@ export function canAccessRoute(
   // ship. Authorizing paths without handlers silently passes requests that
   // should get 404/501.
 
+  // Welcome-team API — roster browse/filter/CSV + migration reconciliation.
+  if (pathname === '/api/welcome/families' || pathname.startsWith('/api/welcome/families/')) {
+    return isWelcomeTeam(claims);
+  }
+
   // Welcome-team API — enrollments only (donations routes ship in slice 3c)
   if (
     pathname.startsWith('/api/welcome/enrollments/') ||

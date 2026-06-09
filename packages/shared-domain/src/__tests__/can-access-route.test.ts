@@ -594,3 +594,16 @@ describe('canAccessRoute — /api/setu/teacher/achievements — teacher capabili
     expect(canAccessRoute(welcomeTeam, '/api/setu/teacher/achievements', 'POST')).toBe(false);
   });
 });
+
+describe('canAccessRoute — roster API (/api/welcome/families)', () => {
+  it('admits welcome-team and admin', () => {
+    expect(canAccessRoute(welcomeTeam, '/api/welcome/families', 'GET')).toBe(true);
+    expect(canAccessRoute(admin, '/api/welcome/families', 'GET')).toBe(true);
+    expect(canAccessRoute(welcomeTeam, '/api/welcome/families/migration-status', 'GET')).toBe(true);
+  });
+
+  it('denies family roles', () => {
+    expect(canAccessRoute(manager, '/api/welcome/families', 'GET')).toBe(false);
+    expect(canAccessRoute(member, '/api/welcome/families', 'GET')).toBe(false);
+  });
+});
