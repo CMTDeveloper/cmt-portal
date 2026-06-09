@@ -1,0 +1,34 @@
+// apps/portal/src/features/setu/reports/report-csv.ts
+import type { EnrollmentReport, AttendanceReport, DonationsReport } from '@cmt/shared-domain';
+
+function escapeField(v: unknown): string {
+  const s = v === undefined || v === null ? '' : String(v);
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+function table(headers: string[], rows: Array<Array<unknown>>): string {
+  const head = headers.join(',');
+  if (rows.length === 0) return head;
+  return `${head}\n${rows.map((r) => r.map(escapeField).join(',')).join('\n')}`;
+}
+
+export function enrollmentReportToCsv(r: EnrollmentReport): string {
+  return table(['scope', 'key', 'label', 'families', 'members'], [
+    ...r.byProgram.map((p) => ['program', p.programKey, p.programLabel, p.families, p.members]),
+    ...r.byLevel.map((l) => ['level', l.levelId, l.levelName, '', l.members]),
+  ]);
+}
+
+export function attendanceReportToCsv(r: AttendanceReport): string {
+  return table(['scope', 'key', 'label', 'present', 'absent', 'late', 'total', 'rate'], [
+    ...r.byLevel.map((l) => ['level', l.levelId, l.levelName, l.present, l.absent, l.late, l.total, l.rate.toFixed(3)]),
+    ...r.byProgram.map((p) => ['program', p.programKey, p.programLabel, p.present, p.absent, p.late, p.total, p.rate.toFixed(3)]),
+  ]);
+}
+
+export function donationsReportToCsv(r: DonationsReport): string {
+  return table(['scope', 'key', 'label', 'completedCAD', 'completedCount'], [
+    ...r.byPeriod.map((p) => ['period', p.pid, p.label, p.completedCAD, p.completedCount]),
+    ...r.byProgram.map((p) => ['program', p.programKey, p.programLabel, p.completedCAD, p.completedCount]),
+  ]);
+}
