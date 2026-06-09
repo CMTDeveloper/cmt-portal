@@ -3,6 +3,14 @@
 Browser-level regression net for the Setu family/admin flows. On-demand only
 (NOT in the pre-push gate). Auth bypasses OTP via the password-sign-in route.
 
+> **Every feature gets an E2E spec.** The standing rule (CMT Developer, 2026-06-08):
+> each shipped feature has a Playwright spec that logs in and exercises the whole
+> flow against the **deployed UAT app**. The single seeded test user is
+> **family-manager + admin** (the seed grants admin via `roleAssignments`), so the
+> same login drives family, admin, welcome, and teacher surfaces. Admin specs live
+> under `e2e/setu/admin/` and reuse the `setu` project's storageState. Mutation
+> specs (e.g. grant/revoke a role) must clean up after themselves (UAT is real).
+
 > **⚠️ Re-seed before running.** The seeded family is tagged `_test:true`, and the
 > vitest integration suite's cleanup sweep deletes `_test:true` docs in UAT — so if
 > that suite ran since you last seeded, the Playwright family is gone and `setup`

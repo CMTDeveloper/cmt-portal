@@ -26,6 +26,7 @@ import {
 import { registerFamily } from '@/features/setu/registration/register-family';
 import { hashContactKey } from '@/features/setu/registration/hash-contact-key';
 import { findSetuFamilyByContact } from '@/features/setu/auth/find-family-by-contact';
+import { addMemberRole } from '@/features/setu/auth/member-roles';
 
 const EMAIL = process.env['E2E_FAMILY_EMAIL'];
 const PASSWORD = process.env['E2E_FAMILY_PASSWORD'];
@@ -189,6 +190,12 @@ async function main(): Promise<void> {
     }
   }
   console.log(`auth user ${uid} password set`);
+
+  // 2b) Grant admin to the manager so the SAME single E2E user can drive admin
+  //     surfaces too (family-manager primary role + admin in extraRoles, resolved
+  //     from roleAssignments/{mid} by build-session-claims). Idempotent.
+  await addMemberRole({ mid: managerMid, fid, role: 'admin', grantedVia: EMAIL });
+  console.log(`granted admin via roleAssignments/${managerMid}`);
 
   // 3) Enrollments — BV + no-donation, written directly (NOT via enrollFamily).
   console.log('ensuring enrollments:');
