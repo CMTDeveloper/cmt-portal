@@ -133,7 +133,7 @@ function SundayCard({ sunday }: { sunday: PrasadSunday }) {
               <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>No manager contact on file</div>
             ) : (
               family.contacts.map((contact, i) => (
-                <div key={i} style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2, fontFamily: 'var(--mono)' }}>
+                <div key={contact.email ?? contact.phone ?? String(i)} style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2, fontFamily: 'var(--mono)' }}>
                   {formatContact(contact)}
                 </div>
               ))

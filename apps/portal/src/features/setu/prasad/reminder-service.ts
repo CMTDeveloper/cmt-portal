@@ -17,7 +17,7 @@ function formatDate(ymd: string): string {
   }).format(new Date(Date.UTC(y!, m! - 1, d!)));
 }
 
-export interface ReminderRunResult { checked: number; sent: number; skipped: number }
+export interface ReminderRunResult { checked: number; sent: number; skipped: number; failed: number }
 
 /** Send 7-day / 2-day prasad reminders to family managers. Idempotent via remindedAt stamps. */
 export async function sendDuePrasadReminders(now: Date = new Date()): Promise<ReminderRunResult> {
@@ -30,7 +30,7 @@ export async function sendDuePrasadReminders(now: Date = new Date()): Promise<Re
   const snap = await db.collection('prasadAssignments')
     .where('status', '==', 'assigned').where('date', 'in', targets).get();
 
-  let sent = 0, skipped = 0;
+  let sent = 0, skipped = 0, failed = 0;
   for (const doc of snap.docs) {
     const a = doc.data() as {
       fid: string; date: string; familyName: string;
@@ -40,22 +40,32 @@ export async function sendDuePrasadReminders(now: Date = new Date()): Promise<Re
     if (!kind) continue;
     if (a.remindedAt?.[kind] != null) { skipped++; continue; }
 
-    const managersSnap = await db.collection('families').doc(a.fid)
-      .collection('members').where('manager', '==', true).get();
-    const when = formatDate(a.date);
-    const lead = kind === 'weekBefore' ? 'is one week away' : 'is this Sunday';
-    for (const m of managersSnap.docs) {
-      const mem = m.data() as { email?: string | null; phone?: string | null; firstName?: string };
-      const msg = `Namaste ${mem.firstName ?? ''}! Your family's Bala Vihar prasad day ${lead} — ${when}. Please bring prasad for the assembly. — Chinmaya Mission Toronto`;
-      if (mem.email) await sender.sendEmail({ to: mem.email, subject: `Prasad reminder — ${when}`, text: msg });
-      if (mem.phone) await sender.sendSMS({ phone: mem.phone, message: msg });
+    try {
+      const managersSnap = await db.collection('families').doc(a.fid)
+        .collection('members').where('manager', '==', true).get();
+      const when = formatDate(a.date);
+      const lead = kind === 'weekBefore' ? 'is one week away' : 'is this Sunday';
+      for (const m of managersSnap.docs) {
+        const mem = m.data() as { email?: string | null; phone?: string | null; firstName?: string };
+        const msg = `Namaste ${mem.firstName ?? ''}! Your family's Bala Vihar prasad day ${lead} — ${when}. Please bring prasad for the assembly. — Chinmaya Mission Toronto`;
+        if (mem.email) await sender.sendEmail({ to: mem.email, subject: `Prasad reminder — ${when}`, text: msg });
+        if (mem.phone) await sender.sendSMS({ phone: mem.phone, message: msg });
+      }
+      // Relies on Admin SDK deep merge: set({ remindedAt: { [kind]: ts } }, { merge: true })
+      // merges the nested map field-by-field, so stamping twoDayBefore does NOT erase a
+      // previously-stamped weekBefore (and vice versa). Do not switch to update() with a
+      // dotted path — set+merge is the intended, verified behavior here.
+      // Stamp-after-send ordering: if a send throws, we do NOT stamp, so the next run
+      // retries. Managers who already received a message for this family may get a
+      // duplicate on retry — accepted v1 trade-off (skip-risk is worse than dup-risk
+      // for a seva reminder). A caught failure increments `failed` and the loop
+      // continues so the rest of the batch is not aborted.
+      await doc.ref.set({ remindedAt: { [kind]: FieldValue.serverTimestamp() } }, { merge: true });
+      sent++;
+    } catch (err) {
+      console.error(`[prasad-reminder] family ${a.fid} failed:`, err);
+      failed++;
     }
-    // Relies on Admin SDK deep merge: set({ remindedAt: { [kind]: ts } }, { merge: true })
-    // merges the nested map field-by-field, so stamping twoDayBefore does NOT erase a
-    // previously-stamped weekBefore (and vice versa). Do not switch to update() with a
-    // dotted path — set+merge is the intended, verified behavior here.
-    await doc.ref.set({ remindedAt: { [kind]: FieldValue.serverTimestamp() } }, { merge: true });
-    sent++;
   }
-  return { checked: snap.size, sent, skipped };
+  return { checked: snap.size, sent, skipped, failed };
 }

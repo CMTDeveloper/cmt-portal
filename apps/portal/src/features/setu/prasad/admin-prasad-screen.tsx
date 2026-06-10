@@ -275,9 +275,8 @@ function CapInput({
 }) {
   const [value, setValue] = useState(String(defaultCap));
 
-  // Keep the field in sync when a new preview arrives with a different default
-  // (e.g. switching locations) — but only when the user isn't mid-edit by
-  // virtue of the controlled value already matching.
+  // Reset the field whenever a new preview arrives with a different cap
+  // (e.g. switching locations or after a committed cap change).
   useEffect(() => {
     setValue(String(defaultCap));
   }, [defaultCap]);

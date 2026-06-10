@@ -198,7 +198,7 @@ describe('sendDuePrasadReminders', () => {
     expect(captured.sets[0]!.data).toEqual({ remindedAt: { weekBefore: '__ts__' } });
     expect(captured.sets[0]!.opts).toEqual({ merge: true });
 
-    expect(result).toEqual({ checked: 1, sent: 1, skipped: 0 });
+    expect(result).toEqual({ checked: 1, sent: 1, skipped: 0, failed: 0 });
   });
 
   it('stamps remindedAt.twoDayBefore for a today+2 assignment with this-Sunday copy', async () => {
@@ -222,7 +222,7 @@ describe('sendDuePrasadReminders', () => {
     expect(captured.sets).toHaveLength(1);
     expect(captured.sets[0]!.data).toEqual({ remindedAt: { twoDayBefore: '__ts__' } });
     expect((emailSpy.mock.calls[0]![0] as { text: string }).text).toContain('this Sunday');
-    expect(result).toEqual({ checked: 1, sent: 1, skipped: 0 });
+    expect(result).toEqual({ checked: 1, sent: 1, skipped: 0, failed: 0 });
   });
 
   it('skips an assignment already stamped for the due kind — no sends', async () => {
@@ -253,7 +253,7 @@ describe('sendDuePrasadReminders', () => {
     expect(emailSpy).not.toHaveBeenCalled();
     expect(smsSpy).not.toHaveBeenCalled();
     expect(captured.sets).toHaveLength(0);
-    expect(result).toEqual({ checked: 1, sent: 0, skipped: 1 });
+    expect(result).toEqual({ checked: 1, sent: 0, skipped: 1, failed: 0 });
   });
 
   it('does not SMS a manager who has only an email', async () => {
@@ -276,10 +276,10 @@ describe('sendDuePrasadReminders', () => {
 
     expect(emailSpy).toHaveBeenCalledTimes(1);
     expect(smsSpy).not.toHaveBeenCalled();
-    expect(result).toEqual({ checked: 1, sent: 1, skipped: 0 });
+    expect(result).toEqual({ checked: 1, sent: 1, skipped: 0, failed: 0 });
   });
 
-  it('reports {checked, sent, skipped} across a mixed batch', async () => {
+  it('reports {checked, sent, skipped, failed} across a mixed batch', async () => {
     const captured = { query: { where: [] as CapturedQuery['where'] }, sets: [] as CapturedSet[] };
     mockFirestore.mockReturnValue(
       makeDb(
@@ -308,7 +308,42 @@ describe('sendDuePrasadReminders', () => {
 
     const result = await sendDuePrasadReminders(NOW);
 
-    expect(result).toEqual({ checked: 3, sent: 2, skipped: 1 });
+    expect(result).toEqual({ checked: 3, sent: 2, skipped: 1, failed: 0 });
     expect(captured.sets).toHaveLength(2);
+  });
+
+  it('isolates per-family failures: second family still sends+stamps when first throws', async () => {
+    const captured = { query: { where: [] as CapturedQuery['where'] }, sets: [] as CapturedSet[] };
+    // F1's sendEmail rejects; F2 should proceed normally.
+    const errorSpy = vi.fn<(args: SendEmailArgs) => Promise<void>>()
+      .mockRejectedValueOnce(new Error('SES timeout'))
+      .mockResolvedValue(undefined);
+    const silentSms = vi.fn<(args: SendSMSArgs) => Promise<void>>().mockResolvedValue(undefined);
+    mockResolveSender.mockReturnValue({ sendEmail: errorSpy, sendSMS: silentSms });
+
+    mockFirestore.mockReturnValue(
+      makeDb(
+        {
+          assignments: [
+            { paid: 'p-f1', fid: 'F1', date: DAY7, familyName: 'Sharma', status: 'assigned' },
+            { paid: 'p-f2', fid: 'F2', date: DAY7, familyName: 'Patel', status: 'assigned' },
+          ],
+          membersByFid: {
+            F1: [{ mid: 'm1', manager: true, email: 'fail@example.com' }],
+            F2: [{ mid: 'm2', manager: true, email: 'ok@example.com' }],
+          },
+        },
+        captured,
+      ) as never,
+    );
+
+    const result = await sendDuePrasadReminders(NOW);
+
+    // F2 still got its email despite F1 throwing.
+    expect(errorSpy).toHaveBeenCalledTimes(2); // called for both families
+    // F1 not stamped (send failed before stamp); F2 stamped.
+    expect(captured.sets).toHaveLength(1);
+    expect(captured.sets[0]!.paid).toBe('p-f2');
+    expect(result).toMatchObject({ sent: 1, failed: 1 });
   });
 });

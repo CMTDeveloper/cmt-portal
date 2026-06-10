@@ -23,7 +23,7 @@ export async function POST(req: Request) {
   // env (not NEXT_PUBLIC) so it can be flipped without a client-bundle redeploy.
   if (process.env.PRASAD_REMINDER_CRON_ENABLED !== 'true') {
     return NextResponse.json(
-      { success: true, disabled: true, checked: 0, sent: 0, skipped: 0 },
+      { success: true, disabled: true, checked: 0, sent: 0, skipped: 0, failed: 0 },
       { status: 200 },
     );
   }
