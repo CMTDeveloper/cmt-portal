@@ -56,14 +56,32 @@ for future role-based specs.
 
 ## Caveats
 
+- **The shared password is effectively an ADMIN credential.** The
+  `setu-test-admin` account reaches every `/admin/*` surface (including role
+  grant/revoke) on deployed UAT, which holds real migrated family PII. Share
+  the password only with people who should have that access, and rotate it
+  (edit `.env.local`, re-run the seed) when testing rounds end.
 - **The integration suite wipes these families.** `pnpm --filter @cmt/portal
   test:integration` runs `cleanupTestData()`, a global `_test:true` sweep that
   deletes the seeded families (same caveat as the `seed:e2e-family` fixture).
   Re-run `seed:test-accounts` afterwards. Auth users, `teacherAssignments`,
   and auth-claim grants survive the sweep; the re-seed re-points them at the
   recreated member ids (a wiped family gets a NEW fid on re-seed).
-- After a wipe + re-seed, stale mids can linger in `levels.teacherRefs`
-  (harmless — they match no member; the seed re-adds the current mids).
+- After a wipe + re-seed, the OLD mids linger in `levels.teacherRefs` and as
+  orphan `teacherAssignments/{oldMid}` docs — they match no member, so they're
+  functionally harmless, but they accumulate per wipe+reseed cycle. Prune an
+  orphan with `assignTeacher(oldMid, [])` via the `/admin/levels` UI (untick
+  everything for that ref) if the clutter bothers anyone.
+- **Rate limiter:** password sign-in shares the OTP limiter — **5 attempts per
+  email per 15 minutes**. A tester fumbling the password plus a couple of
+  local E2E re-runs in the same window can trip a 429 for that persona; wait
+  out the window.
+- **School-year rollover:** the seed pins the `bv-*-2025-26` offerings and
+  level names, and `e2e/setu/test-accounts.spec.ts` pins the matching levelId
+  constants. Bump both at rollover (same ritual as `CURRENT_PRASAD_PIDS`).
+  Note the seed's single-BV invariant cancels any OTHER active BV enrollment —
+  including one a rollover created for the new year — until the pins are
+  bumped.
 - These accounts live ONLY in UAT. Nothing here is part of the prod cutover;
   if prod ever needs demo accounts, decide that separately (the seed script
   hard-refuses prod).

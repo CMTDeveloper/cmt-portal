@@ -74,7 +74,7 @@ describe('POST /api/welcome/seva/signups/[signupId]/confirm', () => {
     expect(mockSet).toHaveBeenCalledWith(expect.objectContaining({ status: 'no-show', hoursAwarded: 0 }), { merge: true });
     expect(getOpportunity).not.toHaveBeenCalled();
   });
-  it('200 re-confirms an already-completed signup (staff fixes hours 5 -> 3)', async () => {
+  it('200 re-confirms an already-completed signup (sevak fixes hours 5 -> 3)', async () => {
     // Spec: only a cancelled signup is blocked; a prior completed/no-show may be
     // re-confirmed to correct the awarded hours or flip the outcome.
     vi.mocked(getSignup).mockResolvedValue({ signupId: 'o1__F1', oppId: 'o1', status: 'completed', hoursAwarded: 5 } as never);

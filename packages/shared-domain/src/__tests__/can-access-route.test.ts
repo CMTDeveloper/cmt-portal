@@ -416,7 +416,7 @@ describe('canAccessRoute — /api/admin/teacher-assignments — admin + welcome-
   it('denies family-manager', () => {
     expect(canAccessRoute(manager, '/api/admin/teacher-assignments', 'POST')).toBe(false);
   });
-  it('denies a teacher (assignment is a staff action)', () => {
+  it('denies a teacher (assignment is a sevak action)', () => {
     expect(canAccessRoute(teacher, '/api/admin/teacher-assignments', 'POST')).toBe(false);
   });
   it('keeps other /api/admin/* admin-only (welcome-team denied on /api/admin/levels)', () => {

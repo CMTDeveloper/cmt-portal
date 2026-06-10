@@ -78,7 +78,7 @@ export default function AdminPage() {
           Hari OM, admin.
         </h1>
         <p style={{ fontSize: 14, color: 'var(--body-text)', marginTop: 10, maxWidth: 620, lineHeight: 1.55 }}>
-          Manage CMT sevaks access and operational tools, grouped by area. The themed surface starts here;
+          Manage CMT sevak access and operational tools, grouped by area. The themed surface starts here;
           older check-in admin tools are still available (marked <em>Legacy</em>) until they're ported.
         </p>
       </header>

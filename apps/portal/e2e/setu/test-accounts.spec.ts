@@ -23,7 +23,11 @@ async function signIn(
 
 async function teacherLevelIds(ctx: APIRequestContext): Promise<string[]> {
   const res = await ctx.get('/api/setu/teacher/levels');
-  expect(res.status(), await res.text()).toBe(200);
+  expect(
+    res.status(),
+    `teacher levels API returned ${res.status()} — a 404 means NEXT_PUBLIC_FEATURE_SETU_TEACHER ` +
+      `is not 'true' on the target deploy (middleware gate), not a seed problem: ${await res.text()}`,
+  ).toBe(200);
   const body = (await res.json()) as { levels: Array<{ levelId: string }> };
   return body.levels.map((l) => l.levelId);
 }

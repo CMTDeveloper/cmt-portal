@@ -285,49 +285,84 @@ async function ensureContactKey(
  * email (second adult), creating any that are missing (e.g. after a partial
  * wipe). Returns the fid + the manager mid.
  */
+async function createFamily(p: FamilyPersona): Promise<{ fid: string; managerMid: string }> {
+  const additionalMembers: AdditionalMember[] = [
+    ...(p.secondAdult
+      ? [{ ...p.secondAdult, type: 'Adult' as const, gender: 'PreferNotToSay' as const }]
+      : []),
+    ...p.children.map((c) => ({
+      firstName: c.firstName,
+      lastName: c.lastName,
+      type: 'Child' as const,
+      gender: c.gender,
+      schoolGrade: c.schoolGrade,
+      birthMonthYear: c.birthMonthYear,
+    })),
+  ];
+  const res = await registerFamily({
+    email: p.email,
+    phone: p.phone,
+    familyName: p.familyName,
+    location: p.location,
+    manager: { ...p.manager, gender: 'PreferNotToSay' },
+    additionalMembers,
+  });
+  console.log(`  [${p.key}] created family ${res.fid}`);
+  return { fid: res.fid, managerMid: res.mid };
+}
+
 async function ensureFamily(db: Db, p: FamilyPersona): Promise<{ fid: string; managerMid: string }> {
   let fid: string;
   let managerMid: string;
 
   const existing = await findSetuFamilyByContact('email', p.email);
   if (existing.source === 'setu' && existing.fid && existing.mid) {
-    fid = existing.fid;
-    managerMid = existing.mid;
-    console.log(`  [${p.key}] reusing family ${fid}`);
+    // Adopt the fid only if the family doc actually exists. contactKeys can
+    // outlive the family (an interrupted cleanupTestData sweep deletes
+    // families before contactKeys) — blindly reusing a DANGLING key would
+    // merge members into a ghost family doc.
+    const famSnap = await db.collection('families').doc(existing.fid).get();
+    if (famSnap.exists) {
+      fid = existing.fid;
+      managerMid = existing.mid;
+      console.log(`  [${p.key}] reusing family ${fid}`);
+    } else {
+      console.log(
+        `  [${p.key}] contactKey points at deleted family ${existing.fid} — clearing dangling keys, registering fresh`,
+      );
+      const dangling = [
+        hashContactKey('email', p.email),
+        hashContactKey('phone', p.phone),
+        ...(p.secondAdult ? [hashContactKey('email', p.secondAdult.email)] : []),
+      ];
+      for (const h of dangling) await db.collection('contactKeys').doc(h).delete();
+      ({ fid, managerMid } = await createFamily(p));
+    }
   } else {
-    const additionalMembers: AdditionalMember[] = [
-      ...(p.secondAdult
-        ? [{ ...p.secondAdult, type: 'Adult' as const, gender: 'PreferNotToSay' as const }]
-        : []),
-      ...p.children.map((c) => ({
-        firstName: c.firstName,
-        lastName: c.lastName,
-        type: 'Child' as const,
-        gender: c.gender,
-        schoolGrade: c.schoolGrade,
-        birthMonthYear: c.birthMonthYear,
-      })),
-    ];
-    const res = await registerFamily({
-      email: p.email,
-      phone: p.phone,
-      familyName: p.familyName,
-      location: p.location,
-      manager: { ...p.manager, gender: 'PreferNotToSay' },
-      additionalMembers,
-    });
-    fid = res.fid;
-    managerMid = res.mid;
-    console.log(`  [${p.key}] created family ${fid}`);
+    ({ fid, managerMid } = await createFamily(p));
   }
 
-  // Tag the family _test:true (cleanup-sweep convention).
-  await db.collection('families').doc(fid).set({ _test: true }, { merge: true });
+  // Re-assert identity fields + _test (cleanup-sweep convention). A tester may
+  // have renamed the family; the welcome roster and the persona E2E rely on
+  // the canonical name/location/searchKeys.
+  await db.collection('families').doc(fid).set(
+    { name: p.familyName, location: p.location, searchKeys: [p.familyName.toLowerCase(), fid], _test: true },
+    { merge: true },
+  );
 
   // Reconcile members: tag _test, re-assert grades + birthMonth, create missing.
   const members = await readMembers(db, fid);
   const nameOf = (first: string, last: string) => `${first} ${last}`.toLowerCase();
-  let nextSeq = members.length + 1;
+  // Next free member sequence — derived from the MAX existing numeric suffix,
+  // NOT the member count: hard-deletes (DELETE /api/setu/members) leave gaps,
+  // and length+1 would collide with — and silently overwrite — a surviving
+  // member at that mid.
+  let nextSeq =
+    1 +
+    members.reduce((mx, m) => {
+      const n = Number(m.mid.slice(fid.length + 1));
+      return Number.isInteger(n) && n > mx ? n : mx;
+    }, 1);
 
   for (const c of p.children) {
     const found = members.find(
@@ -360,7 +395,10 @@ async function ensureFamily(db: Db, p: FamilyPersona): Promise<{ fid: string; ma
         emergencyContacts: [null, null],
         _test: true,
       });
-      console.log(`  [${p.key}] created missing child member ${mid} (${c.firstName} ${c.lastName})`);
+      console.log(
+        `  [${p.key}] WARN: child "${c.firstName} ${c.lastName}" not found by name — created ${mid}. ` +
+          `If a tester RENAMED this child, the renamed member is now a duplicate (remove one via the member screen).`,
+      );
     }
   }
 
@@ -559,6 +597,13 @@ async function main(): Promise<void> {
     console.error('Set TEST_ACCOUNTS_PASSWORD in apps/portal/.env.local (min 8 chars, letter+digit).');
     process.exit(1);
   }
+  // Enforce the same policy as POST /api/setu/auth/set-password — the Admin
+  // SDK floor is only 6 chars with no composition rule, and these accounts
+  // include a standalone admin with a fixed, committed email.
+  if (PASSWORD.length < 8 || PASSWORD.length > 128 || !/[a-zA-Z]/.test(PASSWORD) || !/\d/.test(PASSWORD)) {
+    console.error('TEST_ACCOUNTS_PASSWORD must be 8-128 chars with at least one letter and one digit.');
+    process.exit(1);
+  }
 
   const db = portalFirestore();
   const levels = await loadEnabledLevels(db);
@@ -582,6 +627,19 @@ async function main(): Promise<void> {
       if (p.teacherLevels) {
         const levelIds = pickLevels(levels, p.teacherLevels, p.key);
         const { added, removed } = await assignTeacher({ ref: managerMid, levelIds, byUid: SEED_BY });
+        // assignTeacher diffs against the ASSIGNMENT doc, so it cannot repair
+        // level docs whose denormalized teacherRefs were reset out-of-band
+        // (e.g. a seed:bala-vihar-levels re-run writes teacherRefs: []).
+        // Re-assert the ref on every target level — arrayUnion is idempotent.
+        const batch = db.batch();
+        for (const levelId of levelIds) {
+          batch.set(
+            db.collection('levels').doc(levelId),
+            { teacherRefs: FieldValue.arrayUnion(managerMid) },
+            { merge: true },
+          );
+        }
+        await batch.commit();
         console.log(`  [${p.key}] teacher on ${levelIds.length} level(s) (+${added.length}/−${removed.length})`);
         roles += ' + teacher';
       }
