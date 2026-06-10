@@ -53,3 +53,6 @@ apps/portal/.playwright/
 
 # Playwright auth storageState (contains a session cookie)
 apps/portal/e2e/.auth/
+
+# Local RTDB snapshot (real family PII — never commit; capture via snapshot:rtdb)
+apps/portal/.rtdb-snapshot/

@@ -1,27 +1,41 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { SetuIcon } from '@cmt/ui';
 import type { MigrationStatusResponse } from '@cmt/shared-domain/setu';
 import { fetchMigrationStatusClient } from './roster-client';
 
 /**
- * Compact migration-completeness strip. Fires its own (~864-family 715b8) read
- * on mount so the browse list is never blocked by it. Fails QUIET — a failed
- * reconciliation renders a muted line and never throws into the page.
+ * Compact migration-completeness strip. The reconciliation downloads the whole
+ * legacy 715b8 roster (RTDB bills per GB downloaded), so it runs ON DEMAND via
+ * the "Check migration status" button — never on page load. Fails QUIET — a
+ * failed check renders a muted line with a retry and never throws into the page.
  */
 export function MigrationStrip() {
   const [status, setStatus] = useState<MigrationStatusResponse | null>(null);
-  const [state, setState] = useState<'loading' | 'ok' | 'error'>('loading');
+  const [state, setState] = useState<'idle' | 'loading' | 'ok' | 'error'>('idle');
   const [expanded, setExpanded] = useState(false);
 
-  useEffect(() => {
-    let alive = true;
+  function check() {
+    setState('loading');
     fetchMigrationStatusClient()
-      .then((s) => { if (alive) { setStatus(s); setState('ok'); } })
-      .catch(() => { if (alive) setState('error'); });
-    return () => { alive = false; };
-  }, []);
+      .then((s) => { setStatus(s); setState('ok'); })
+      .catch(() => setState('error'));
+  }
+
+  if (state === 'idle') {
+    return (
+      <div style={stripBase}>
+        <span style={{ fontSize: 12, color: 'var(--ink)', fontWeight: 600 }}>Migration status</span>
+        <span style={{ fontSize: 12, color: 'var(--muted)' }}>
+          Compares the legacy roster against portal families — run when needed.
+        </span>
+        <button type="button" onClick={check} className="focus-ring" style={checkButton}>
+          Check migration status
+        </button>
+      </div>
+    );
+  }
 
   if (state === 'loading') {
     return (
@@ -35,6 +49,9 @@ export function MigrationStrip() {
     return (
       <div style={stripBase}>
         <span style={{ color: 'var(--muted)', fontSize: 12 }}>Couldn’t check migration status right now.</span>
+        <button type="button" onClick={check} className="focus-ring" style={checkButton}>
+          Try again
+        </button>
       </div>
     );
   }
@@ -112,4 +129,12 @@ const stripBase = {
   background: 'var(--surface)',
   border: '1px solid var(--line)',
   borderRadius: 'var(--radius)',
+  flexWrap: 'wrap',
+} as const;
+
+const checkButton = {
+  marginLeft: 'auto', minHeight: 44, padding: '0 12px',
+  background: 'transparent', border: '1px solid var(--line2)', borderRadius: 999,
+  cursor: 'pointer', fontSize: 12, fontWeight: 600, color: 'var(--accentDeep)',
+  whiteSpace: 'nowrap',
 } as const;
