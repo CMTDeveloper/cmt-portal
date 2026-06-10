@@ -58,6 +58,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entryI
   if (data.noClassReason !== undefined) update.noClassReason = data.noClassReason;
   if (data.specialEvents !== undefined) update.specialEvents = data.specialEvents;
   if (data.enabled !== undefined) update.enabled = data.enabled;
+  if (data.prasadNeeded !== undefined) update.prasadNeeded = data.prasadNeeded;
 
   await ref.update(update);
   return NextResponse.json({ entryId });

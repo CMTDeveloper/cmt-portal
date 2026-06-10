@@ -35,6 +35,7 @@ export const ClassCalendarEntryDocSchema = z.object({
   noClassReason: z.string().nullable(),
   specialEvents: z.string().nullable(),
   enabled: z.boolean(),
+  prasadNeeded: z.boolean().default(true),
   createdAt: z.date(),
   createdBy: z.string().min(1),
   updatedAt: z.date(),
@@ -64,6 +65,7 @@ export const CreateCalendarEntrySchema = z
     noClassReason: z.string().nullable().default(null),
     specialEvents: z.string().nullable().default(null),
     enabled: z.boolean().default(true),
+    prasadNeeded: z.boolean().default(true),
   })
   .refine(kindConsistent, {
     message: 'class entries need a classType (and no noClassReason); no-class entries must omit classType',
@@ -79,6 +81,7 @@ export const UpdateCalendarEntrySchema = z
     noClassReason: z.string().nullable().optional(),
     specialEvents: z.string().nullable().optional(),
     enabled: z.boolean().optional(),
+    prasadNeeded: z.boolean().optional(),
   })
   .refine(
     (d) => {

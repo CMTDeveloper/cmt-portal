@@ -68,6 +68,11 @@ describe('UpdateCalendarEntrySchema', () => {
   it('rejects switching to class without a classType in the same patch', () => {
     expect(UpdateCalendarEntrySchema.safeParse({ kind: 'class', classType: null }).success).toBe(false);
   });
+  it('accepts toggling prasadNeeded off', () => {
+    const r = UpdateCalendarEntrySchema.safeParse({ prasadNeeded: false });
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.prasadNeeded).toBe(false);
+  });
 });
 
 describe('ClassCalendarEntryDocSchema', () => {
@@ -88,6 +93,16 @@ describe('ClassCalendarEntryDocSchema', () => {
   };
   it('accepts a valid entry doc', () => {
     expect(ClassCalendarEntryDocSchema.safeParse(valid).success).toBe(true);
+  });
+  it('defaults prasadNeeded to true when the field is missing', () => {
+    const r = ClassCalendarEntryDocSchema.safeParse(valid);
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.prasadNeeded).toBe(true);
+  });
+  it('keeps prasadNeeded:false when present', () => {
+    const r = ClassCalendarEntryDocSchema.safeParse({ ...valid, prasadNeeded: false });
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.prasadNeeded).toBe(false);
   });
   it('rejects a missing entryId', () => {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars

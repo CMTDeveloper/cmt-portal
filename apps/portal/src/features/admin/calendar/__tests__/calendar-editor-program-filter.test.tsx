@@ -161,4 +161,20 @@ describe('CalendarEditor — program filter', () => {
     await waitFor(() => expect(screen.getAllByText('OM Session').length).toBeGreaterThan(0));
     expect(screen.queryByText('BV Diwali')).toBeNull();
   });
+
+  it('renders a Prasad toggle on class rows (defaulting missing prasadNeeded to on)', async () => {
+    global.fetch = vi.fn().mockImplementation((url: string) =>
+      Promise.resolve({
+        ok: true,
+        json: async () =>
+          String(url).includes('/weekly')
+            ? { rows: [] }
+            : { entries: [entryFixture('bala-vihar', 'BV Diwali')] }, // class row, no prasadNeeded field
+      }),
+    ) as unknown as typeof fetch;
+
+    render(<CalendarEditor locations={['Brampton']} programs={PROGRAMS} />);
+    // Missing field → treated as on → label reads "Prasad" (one per mobile+desktop branch).
+    await waitFor(() => expect(screen.getAllByText('Prasad').length).toBeGreaterThan(0));
+  });
 });

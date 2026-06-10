@@ -20,6 +20,7 @@ interface EntryRow {
   noClassReason: string | null;
   specialEvents: string | null;
   enabled: boolean;
+  prasadNeeded: boolean;
 }
 
 interface ScheduleRow {
@@ -58,7 +59,11 @@ export function CalendarEditor({ locations, programs }: CalendarEditorProps) {
         fetch(`/api/admin/calendar?location=${encodeURIComponent(loc)}`),
         fetch(`/api/admin/calendar/weekly?location=${encodeURIComponent(loc)}`),
       ]);
-      if (cRes.ok) setEntries(((await cRes.json()).entries as EntryRow[]) ?? []);
+      if (cRes.ok) {
+        const raw = (((await cRes.json()).entries as Array<EntryRow & { prasadNeeded?: boolean }>) ?? []);
+        // Legacy entries predate the flag; treat a missing value as true.
+        setEntries(raw.map((e) => ({ ...e, prasadNeeded: e.prasadNeeded !== false })));
+      }
       if (wRes.ok) setWeekly(((await wRes.json()).rows as ScheduleRow[]) ?? []);
     } catch {
       toast.error('Failed to load calendar');
@@ -86,6 +91,7 @@ export function CalendarEditor({ locations, programs }: CalendarEditorProps) {
       noClassReason: kind === 'no-class' ? noClassReason.trim() || null : null,
       specialEvents: specialEvents.trim() || null,
       enabled: true,
+      prasadNeeded: true,
     };
     startTransition(async () => {
       const res = await fetch('/api/admin/calendar', {
@@ -114,6 +120,16 @@ export function CalendarEditor({ locations, programs }: CalendarEditorProps) {
     });
     if (!res.ok) { toast.error('Toggle failed'); return; }
     setEntries((prev) => prev.map((e) => (e.entryId === row.entryId ? { ...e, enabled: !e.enabled } : e)));
+  }
+
+  async function togglePrasadNeeded(row: EntryRow) {
+    const res = await fetch(`/api/admin/calendar/${row.entryId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prasadNeeded: !row.prasadNeeded }),
+    });
+    if (!res.ok) { toast.error('Toggle failed'); return; }
+    setEntries((prev) => prev.map((e) => (e.entryId === row.entryId ? { ...e, prasadNeeded: !e.prasadNeeded } : e)));
   }
 
   async function remove(row: EntryRow) {
@@ -229,6 +245,11 @@ export function CalendarEditor({ locations, programs }: CalendarEditorProps) {
                     <button onClick={() => toggleEnabled(e)} style={{ ...pill, background: e.enabled ? 'var(--accentSoft)' : 'var(--surface2)', color: e.enabled ? 'var(--accentDeep)' : 'var(--muted)', cursor: 'pointer', border: 0 }}>
                       {e.enabled ? 'Published' : 'Draft'}
                     </button>
+                    {e.kind === 'class' && (
+                      <button onClick={() => togglePrasadNeeded(e)} style={{ ...pill, background: e.prasadNeeded ? 'var(--accentSoft)' : 'var(--surface2)', color: e.prasadNeeded ? 'var(--accentDeep)' : 'var(--muted)', cursor: 'pointer', border: 0 }}>
+                        {e.prasadNeeded ? 'Prasad' : 'No prasad'}
+                      </button>
+                    )}
                     <button onClick={() => remove(e)} style={removeBtn} aria-label="Delete entry">×</button>
                   </div>
                 </div>
@@ -263,9 +284,16 @@ export function CalendarEditor({ locations, programs }: CalendarEditorProps) {
                     <td style={td}>{e.kind === 'class' ? e.classType : e.noClassReason ?? '—'}</td>
                     <td style={{ ...td, color: 'var(--body-text)' }}>{e.specialEvents ?? '—'}</td>
                     <td style={td}>
-                      <button onClick={() => toggleEnabled(e)} style={{ ...pill, background: e.enabled ? 'var(--accentSoft)' : 'var(--surface2)', color: e.enabled ? 'var(--accentDeep)' : 'var(--muted)', cursor: 'pointer', border: 0 }}>
-                        {e.enabled ? 'Published' : 'Draft'}
-                      </button>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <button onClick={() => toggleEnabled(e)} style={{ ...pill, background: e.enabled ? 'var(--accentSoft)' : 'var(--surface2)', color: e.enabled ? 'var(--accentDeep)' : 'var(--muted)', cursor: 'pointer', border: 0 }}>
+                          {e.enabled ? 'Published' : 'Draft'}
+                        </button>
+                        {e.kind === 'class' && (
+                          <button onClick={() => togglePrasadNeeded(e)} style={{ ...pill, background: e.prasadNeeded ? 'var(--accentSoft)' : 'var(--surface2)', color: e.prasadNeeded ? 'var(--accentDeep)' : 'var(--muted)', cursor: 'pointer', border: 0 }}>
+                            {e.prasadNeeded ? 'Prasad' : 'No prasad'}
+                          </button>
+                        )}
+                      </div>
                     </td>
                     <td style={td}><button onClick={() => remove(e)} style={removeBtn} aria-label="Delete entry">×</button></td>
                   </tr>

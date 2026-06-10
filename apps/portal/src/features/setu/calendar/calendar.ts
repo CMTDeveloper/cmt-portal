@@ -19,6 +19,7 @@ function docToEntry(data: FirebaseFirestore.DocumentData): CalendarEntry {
     noClassReason: data.noClassReason ?? null,
     specialEvents: data.specialEvents ?? null,
     enabled: data.enabled,
+    prasadNeeded: data.prasadNeeded !== false,
     createdBy: data.createdBy,
     updatedBy: data.updatedBy,
   };
