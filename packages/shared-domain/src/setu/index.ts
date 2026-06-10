@@ -18,3 +18,4 @@ export * from './roster';
 export * from './reports';
 export * from './grade-ladder';
 export * from './set-grade';
+export * from './prasad';
