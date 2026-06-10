@@ -23,6 +23,7 @@ const MORE_THEMED: { label: string; icon: keyof typeof SetuIcon; href: string }[
   { label: 'Family search', icon: 'search', href: '/welcome' },
   { label: 'Users & roles', icon: 'people', href: '/admin/users' },
   { label: 'School year rollover', icon: 'check', href: '/admin/school-year' },
+  { label: 'Prasad rotation', icon: 'heart', href: '/admin/prasad' },
   { label: 'Volunteering skills', icon: 'check', href: '/admin/volunteering-skills' },
   { label: 'Seva', icon: 'heart', href: '/welcome/seva' },
   { label: 'Reports', icon: 'info', href: '/welcome/reports' },

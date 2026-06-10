@@ -27,6 +27,7 @@ const GROUPS: Array<{
       { href: '/admin/levels', title: 'Level management', icon: 'check', tone: 'primary', sub: 'Configure Bala Vihar levels per location + period, set grade-bands, and assign the teachers who cover each one.' },
       { href: '/admin/calendar', title: 'Class calendar', icon: 'calendar', tone: 'primary', sub: 'Publish the school-year Sunday schedule + weekly times. Families see it on their dashboard.' },
       { href: '/admin/school-year', title: 'School year rollover', icon: 'check', tone: 'primary', sub: 'Promote Bala Vihar families to the next school year — advance grades, re-assign levels, keep history.' },
+      { href: '/admin/prasad', title: 'Prasad rotation', icon: 'heart', tone: 'primary', sub: 'Assign and manage prasad Sundays — one per family per year, clustered near a child’s birthday month.' },
       { href: '/admin/volunteering-skills', title: 'Volunteering skills', icon: 'check', tone: 'primary', sub: 'Manage the list of volunteering skills families choose from for adult members.' },
       { href: '/welcome/seva', title: 'Seva', icon: 'heart', tone: 'primary', sub: 'Manage seva opportunities and review volunteer signups.' },
     ],

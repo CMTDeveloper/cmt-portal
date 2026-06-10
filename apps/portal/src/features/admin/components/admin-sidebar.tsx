@@ -23,6 +23,7 @@ const NAV_GROUPS: Array<{ heading: string; items: Array<{ label: string; href: s
     { label: 'Level management', href: '/admin/levels' },
     { label: 'Class calendar', href: '/admin/calendar' },
     { label: 'School year rollover', href: '/admin/school-year' },
+    { label: 'Prasad rotation', href: '/admin/prasad' },
     { label: 'Volunteering skills', href: '/admin/volunteering-skills' },
     { label: 'Seva', href: '/welcome/seva' },
   ]},
@@ -53,6 +54,7 @@ export function deriveAdminActive(pathname: string): string {
   if (pathname.startsWith('/admin/calendar')) return '/admin/calendar';
   if (pathname.startsWith('/admin/volunteering-skills')) return '/admin/volunteering-skills';
   if (pathname.startsWith('/admin/school-year')) return '/admin/school-year';
+  if (pathname.startsWith('/admin/prasad')) return '/admin/prasad';
   if (pathname.startsWith('/admin/donation-periods')) return '/admin/donation-periods';
   if (pathname.startsWith('/check-in/admin/users')) return '/check-in/admin/users';
   if (pathname.startsWith('/check-in/admin/guests')) return '/check-in/admin/guests';
