@@ -19,6 +19,8 @@ import { EMPTY_RESOLVED_SUMMARY } from '@/features/setu/attendance/resolve-atten
 import { listPrograms } from '@/features/setu/programs/get-programs';
 import { getFamilySevaProgress, deriveSevaCardView, type FamilySevaProgress } from '@/features/setu/seva/get-family-seva-progress';
 import { SevaProgressCard } from '@/features/family/components/seva-progress-card';
+import { getFamilyAssignment, type FamilyPrasadView } from '@/features/setu/prasad/family-assignment';
+import { FamilyPrasadCard } from '@/features/setu/prasad/family-prasad-card';
 import { selectBalaViharEnrollment } from './_helpers/select-bv-enrollment';
 import {
   buildFamilyDashboardModel,
@@ -84,6 +86,9 @@ export default async function FamilyDashboardPage() {
   // Seva-hours progress (Slice D). Default renders nothing (no seva year set);
   // the real value is read below once the family is loaded.
   let sevaProgress: FamilySevaProgress = { currentSevaYear: null, hoursPerYear: 20, hoursEarned: 0 };
+  // Prasad seva assignment (Task 11). null = no rotation published for this
+  // family yet (or no setu session) — the card renders nothing in that case.
+  let prasad: FamilyPrasadView | null = null;
 
   if (flags.setuAuth) {
     const data = await getCurrentFamily();
@@ -155,6 +160,7 @@ export default async function FamilyDashboardPage() {
       });
 
       sevaProgress = await getFamilySevaProgress(data.family.fid);
+      prasad = await getFamilyAssignment(data.family.fid);
     }
   }
 
@@ -287,6 +293,12 @@ export default async function FamilyDashboardPage() {
                   hoursPerYear={sevaProgress.hoursPerYear}
                   currentSevaYear={sevaProgress.currentSevaYear}
                 />
+              </div>
+            )}
+
+            {prasad && (
+              <div style={{ marginBottom: 12 }}>
+                <FamilyPrasadCard assignment={prasad} />
               </div>
             )}
 
@@ -508,6 +520,12 @@ export default async function FamilyDashboardPage() {
               hoursPerYear={sevaProgress.hoursPerYear}
               currentSevaYear={sevaProgress.currentSevaYear}
             />
+          </div>
+        )}
+
+        {prasad && (
+          <div style={{ marginTop: 18, maxWidth: 420 }}>
+            <FamilyPrasadCard assignment={prasad} />
           </div>
         )}
 

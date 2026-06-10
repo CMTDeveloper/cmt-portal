@@ -131,3 +131,40 @@
    track that otherwise shows as a stray line under the chips on first paint. */
 .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
 .no-scrollbar::-webkit-scrollbar { width: 0; height: 0; display: none; }
+
+/* ─── Prasad move sheet ────────────────────────────────────────────────────
+   One fixed overlay that reads as a bottom sheet on phones and a centred dialog
+   from md+. The overlay aligns its panel; the panel sizes itself. Mobile-first:
+   default styles are the bottom sheet, the media query promotes it to a card.   */
+.csp .prasad-move-overlay {
+  align-items: flex-end;
+  justify-content: center;
+}
+.csp .prasad-move-panel {
+  width: 100%;
+  border-radius: var(--radius) var(--radius) 0 0;
+  animation: prasad-sheet-up .22s ease;
+}
+@keyframes prasad-sheet-up {
+  from { transform: translateY(18px); opacity: .85; }
+  to { transform: translateY(0); opacity: 1; }
+}
+@media (min-width: 768px) {
+  .csp .prasad-move-overlay {
+    align-items: center;
+    padding: 20px;
+  }
+  .csp .prasad-move-panel {
+    width: 100%;
+    max-width: 440px;
+    border-radius: var(--radius);
+    animation: prasad-dialog-in .18s ease;
+  }
+  @keyframes prasad-dialog-in {
+    from { transform: scale(.97); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .csp .prasad-move-panel { animation: none; }
+}
