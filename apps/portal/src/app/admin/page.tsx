@@ -17,7 +17,7 @@ const GROUPS: Array<{
     heading: 'People & access',
     tiles: [
       { href: '/welcome', title: 'Family search', icon: 'search', tone: 'primary', sub: 'Look up any family by name, FID, legacy FID, email, or phone. Read-only family detail.' },
-      { href: '/admin/users', title: 'Users & roles', icon: 'people', tone: 'primary', sub: 'Grant + revoke admin & welcome-team roles for CMT staff. View teacher assignments.' },
+      { href: '/admin/users', title: 'Users & roles', icon: 'people', tone: 'primary', sub: 'Grant + revoke admin & welcome-team roles for CMT sevaks. View teacher assignments.' },
     ],
   },
   {
@@ -78,7 +78,7 @@ export default function AdminPage() {
           Hari OM, admin.
         </h1>
         <p style={{ fontSize: 14, color: 'var(--body-text)', marginTop: 10, maxWidth: 620, lineHeight: 1.55 }}>
-          Manage CMT staff access and operational tools, grouped by area. The themed surface starts here;
+          Manage CMT sevaks access and operational tools, grouped by area. The themed surface starts here;
           older check-in admin tools are still available (marked <em>Legacy</em>) until they're ported.
         </p>
       </header>

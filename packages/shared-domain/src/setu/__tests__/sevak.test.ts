@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { StaffRowSchema, GrantRoleBodySchema, RevokeRoleBodySchema } from '../schemas/staff';
+import { SevakRowSchema, GrantRoleBodySchema, RevokeRoleBodySchema } from '../schemas/sevak';
 
-describe('staff schemas', () => {
-  it('accepts a valid StaffRow', () => {
+describe('sevak schemas', () => {
+  it('accepts a valid SevakRow', () => {
     const row = {
       key: 'CMT-X-01',
       mid: 'CMT-X-01',
@@ -15,7 +15,7 @@ describe('staff schemas', () => {
       teacherLevels: ['Level 2 (West)'],
       source: 'family',
     };
-    expect(StaffRowSchema.parse(row)).toEqual(row);
+    expect(SevakRowSchema.parse(row)).toEqual(row);
   });
 
   it('rejects an unknown role in the grant body', () => {

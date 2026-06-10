@@ -3,7 +3,7 @@ import { portalAuth } from '@cmt/firebase-shared/admin/auth';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { sha256Hex } from '@/features/check-in/shared';
 import { normalizeContactForKey } from '@cmt/shared-domain/setu';
-import type { GrantableRole, StaffRow } from '@cmt/shared-domain';
+import type { GrantableRole, SevakRow } from '@cmt/shared-domain';
 import {
   addCapability,
   removeCapability,
@@ -22,7 +22,7 @@ import { addMemberRole, removeMemberRole, listMembersWithRole } from './member-r
  *
  * Family members → roleAssignments/{mid} (mid-keyed, applies across the
  *   person's email + phone auth uids).
- * Non-family CMT staff → legacy auth-claim path keyed on the canonical-form
+ * Non-family CMT sevaks → legacy auth-claim path keyed on the canonical-form
  *   uid for the contact.
  */
 
@@ -134,9 +134,9 @@ export async function resolveContactIdentity(
   return { mid, uid: uidOf(type, contact) };
 }
 
-// --- listStaff(): merged, deduped-by-person staff reader -------------------
+// --- listSevaks(): merged, deduped-by-person sevak reader -------------------
 
-interface MutableStaffRow {
+interface MutableSevakRow {
   key: string;
   mid: string | null;
   fid: string | null;
@@ -162,7 +162,7 @@ function memberNameContact(data: Record<string, unknown> | undefined): {
 }
 
 /**
- * Every staff person — family-member admins/welcome-team (roleAssignments),
+ * Every sevak — family-member admins/welcome-team (roleAssignments),
  * non-family auth-claim admins/welcome-team, and teachers (parent-mid or
  * standalone tid) — merged and deduped to one row per distinct person.
  *
@@ -170,15 +170,15 @@ function memberNameContact(data: Record<string, unknown> | undefined): {
  * multiple sources (e.g. a roleAssignment AND a legacy auth-claim on the same
  * contact) lands on a single row.
  */
-export async function listStaff(): Promise<StaffRow[]> {
+export async function listSevaks(): Promise<SevakRow[]> {
   const db = portalFirestore();
   const auth = portalAuth();
 
   // rows keyed by dedupe key; midIndex maps a known mid → that key for merges.
-  const rows = new Map<string, MutableStaffRow>();
+  const rows = new Map<string, MutableSevakRow>();
   const keyByMid = new Map<string, string>();
 
-  function ensureMidRow(mid: string, fid: string | null): MutableStaffRow {
+  function ensureMidRow(mid: string, fid: string | null): MutableSevakRow {
     const existingKey = keyByMid.get(mid);
     if (existingKey) {
       const existing = rows.get(existingKey);
@@ -187,7 +187,7 @@ export async function listStaff(): Promise<StaffRow[]> {
         return existing;
       }
     }
-    const row: MutableStaffRow = {
+    const row: MutableSevakRow = {
       key: mid,
       mid,
       fid,
@@ -356,7 +356,7 @@ export async function listStaff(): Promise<StaffRow[]> {
         continue;
       }
 
-      // Standalone non-family staff — keyed by uid.
+      // Standalone non-family sevak — keyed by uid.
       const existing = rows.get(u.uid);
       if (existing) {
         for (const r of claimRoles) existing.roles.add(r);
@@ -381,7 +381,7 @@ export async function listStaff(): Promise<StaffRow[]> {
   } while (token);
 
   const ROLE_ORDER: GrantableRole[] = ['admin', 'welcome-team'];
-  const out: StaffRow[] = [...rows.values()].map((r) => ({
+  const out: SevakRow[] = [...rows.values()].map((r) => ({
     key: r.key,
     mid: r.mid,
     fid: r.fid,

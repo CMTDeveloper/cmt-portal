@@ -7,7 +7,7 @@
  * regardless of which contact the user OTPs with.
  *
  * Family members → roleAssignments/{mid} (canonical, mid-keyed)
- * Non-family CMT staff (no Bala Vihar family) → legacy auth-claim path
+ * Non-family CMT sevaks (no Bala Vihar family) → legacy auth-claim path
  *   keyed on the contact's canonical-form uid.
  *
  * The grant/revoke routing lives in the shared

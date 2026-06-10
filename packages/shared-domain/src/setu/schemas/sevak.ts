@@ -7,8 +7,8 @@ export const GRANTABLE_ROLES = ['admin', 'welcome-team'] as const;
 export const GrantableRoleSchema = z.enum(GRANTABLE_ROLES);
 export type GrantableRole = z.infer<typeof GrantableRoleSchema>;
 
-// One deduped staff person in the merged listStaff() view.
-export const StaffRowSchema = z.object({
+// One deduped sevak in the merged listSevaks() view.
+export const SevakRowSchema = z.object({
   key: z.string().min(1), // mid when known, else tid, else uid — dedupe key
   mid: z.string().nullable(),
   fid: z.string().nullable(),
@@ -20,7 +20,7 @@ export const StaffRowSchema = z.object({
   teacherLevels: z.array(z.string()),
   source: z.enum(['family', 'staff']),
 });
-export type StaffRow = z.infer<typeof StaffRowSchema>;
+export type SevakRow = z.infer<typeof SevakRowSchema>;
 
 export const GrantRoleBodySchema = z.object({
   contact: z.string().min(1), // email or phone
@@ -34,5 +34,5 @@ export const RevokeRoleBodySchema = z.object({
 });
 export type RevokeRoleBody = z.infer<typeof RevokeRoleBodySchema>;
 
-export const StaffListResponseSchema = z.object({ staff: z.array(StaffRowSchema) });
-export type StaffListResponse = z.infer<typeof StaffListResponseSchema>;
+export const SevakListResponseSchema = z.object({ sevaks: z.array(SevakRowSchema) });
+export type SevakListResponse = z.infer<typeof SevakListResponseSchema>;

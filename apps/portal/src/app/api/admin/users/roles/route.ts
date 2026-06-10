@@ -3,7 +3,7 @@ import { RevokeRoleBodySchema, isAdmin } from '@cmt/shared-domain';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
 import {
   revokeRole,
-  listStaff,
+  listSevaks,
   resolveContactIdentity,
 } from '@/features/setu/auth/manage-roles';
 
@@ -44,8 +44,8 @@ export async function DELETE(req: Request) {
     }
 
     // Last-admin: never remove the only remaining admin.
-    const staff = await listStaff();
-    const admins = staff.filter((s) => s.roles.includes('admin'));
+    const sevaks = await listSevaks();
+    const admins = sevaks.filter((s) => s.roles.includes('admin'));
     if (admins.length <= 1) {
       return NextResponse.json({ error: 'last-admin' }, { status: 409 });
     }

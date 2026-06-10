@@ -16,7 +16,7 @@ import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestor
  *     grantedVia: "dineshdm7@gmail.com"    // input contact at grant time
  *   }
  *
- * Non-family CMT staff (admins without a Bala Vihar family) still use the
+ * Non-family CMT sevaks (admins without a Bala Vihar family) still use the
  * legacy auth-claim path — that's handled separately in verify-code.
  */
 

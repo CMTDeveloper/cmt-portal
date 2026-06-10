@@ -3,9 +3,9 @@
 import { useId, useMemo, useState, useTransition, type FormEvent } from 'react';
 import Link from 'next/link';
 import { toast } from '@cmt/ui';
-import type { StaffRow, GrantableRole } from '@cmt/shared-domain';
+import type { SevakRow, GrantableRole } from '@cmt/shared-domain';
 import { ROLE_REFERENCE } from '@/lib/auth/roles-reference';
-import { grantRoleClient, revokeRoleClient, listStaffClient } from './users-client';
+import { grantRoleClient, revokeRoleClient, listSevaksClient } from './users-client';
 import { RoleChip, TeacherBadge } from './role-badges';
 import { RolesReferencePanel } from './roles-reference-panel';
 
@@ -27,12 +27,12 @@ const GRANT_NOTE = 'Applies at their next sign-in.';
 // specific action on this row is pending so sibling buttons stay enabled.
 type InFlightKey = `grant:${GrantableRole}` | `revoke:${GrantableRole}`;
 
-interface StaffManagerProps {
-  initialStaff: StaffRow[];
+interface SevakManagerProps {
+  initialSevaks: SevakRow[];
 }
 
-export function StaffManager({ initialStaff }: StaffManagerProps) {
-  const [staff, setStaff] = useState<StaffRow[]>(initialStaff);
+export function SevakManager({ initialSevaks }: SevakManagerProps) {
+  const [sevaks, setSevaks] = useState<SevakRow[]>(initialSevaks);
   const [roleFilter, setRoleFilter] = useState<GrantableRole | 'teacher' | null>(null);
   const [query, setQuery] = useState('');
   const [, startRefresh] = useTransition();
@@ -40,8 +40,8 @@ export function StaffManager({ initialStaff }: StaffManagerProps) {
   function refresh() {
     startRefresh(async () => {
       try {
-        const next = await listStaffClient();
-        setStaff(next);
+        const next = await listSevaksClient();
+        setSevaks(next);
       } catch {
         // A failed refresh is non-fatal — the optimistic state already updated.
       }
@@ -50,7 +50,7 @@ export function StaffManager({ initialStaff }: StaffManagerProps) {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return staff.filter((s) => {
+    return sevaks.filter((s) => {
       if (roleFilter === 'teacher' && !s.isTeacher) return false;
       if (roleFilter && roleFilter !== 'teacher' && !s.roles.includes(roleFilter)) return false;
       if (q) {
@@ -59,7 +59,7 @@ export function StaffManager({ initialStaff }: StaffManagerProps) {
       }
       return true;
     });
-  }, [staff, roleFilter, query]);
+  }, [sevaks, roleFilter, query]);
 
   return (
     <>
@@ -78,15 +78,15 @@ export function StaffManager({ initialStaff }: StaffManagerProps) {
         ) : (
           <div className="col" style={{ gap: 10, marginTop: 14 }}>
             {filtered.map((s) => (
-              <StaffCard key={s.key} row={s} onChanged={refresh} mobile={false} />
+              <SevakCard key={s.key} row={s} onChanged={refresh} mobile={false} />
             ))}
           </div>
         )}
 
         {/* Add form: collapsed by default so the search input isn't doubled */}
-        <DesktopDisclosure heading="Add staff role +" style={{ marginTop: 28 }}>
+        <DesktopDisclosure heading="Add sevak role +" style={{ marginTop: 28 }}>
           <div style={{ maxWidth: 480 }}>
-            <AddStaffForm onGranted={refresh} />
+            <AddSevakForm onGranted={refresh} />
           </div>
         </DesktopDisclosure>
 
@@ -98,7 +98,7 @@ export function StaffManager({ initialStaff }: StaffManagerProps) {
 
       {/* ── Mobile ───────────────────────────────────────────────── */}
       <div className="block md:hidden">
-        <MobileStaff
+        <MobileSevaks
           rows={filtered}
           roleFilter={roleFilter}
           onRoleFilter={setRoleFilter}
@@ -168,7 +168,7 @@ function FilterBar({
         onChange={(e) => onQuery(e.target.value)}
         placeholder="Search name or contact…"
         style={{ flex: '1 1 200px', minWidth: 160 }}
-        aria-label="Search staff"
+        aria-label="Search sevaks"
       />
       <span style={{ fontSize: 12, color: 'var(--muted)', whiteSpace: 'nowrap' }}>{count} shown</span>
     </div>
@@ -189,19 +189,19 @@ function EmptyState() {
         fontSize: 13,
       }}
     >
-      No staff match. Adjust the filter or grant a role with the form.
+      No sevaks match. Adjust the filter or grant a role with the form.
     </div>
   );
 }
 
-// ─── One staff row ─────────────────────────────────────────────────────────
+// ─── One sevak row ─────────────────────────────────────────────────────────
 
-function StaffCard({
+function SevakCard({
   row,
   onChanged,
   mobile,
 }: {
-  row: StaffRow;
+  row: SevakRow;
   onChanged: () => void;
   mobile: boolean;
 }) {
@@ -390,9 +390,9 @@ function StaffCard({
   );
 }
 
-// ─── Add-staff form ────────────────────────────────────────────────────────
+// ─── Add-sevak form ────────────────────────────────────────────────────────
 
-function AddStaffForm({ onGranted }: { onGranted: () => void }) {
+function AddSevakForm({ onGranted }: { onGranted: () => void }) {
   const [contact, setContact] = useState('');
   const [role, setRole] = useState<GrantableRole>('welcome-team');
   const [pending, startTransition] = useTransition();
@@ -482,7 +482,7 @@ function AddStaffForm({ onGranted }: { onGranted: () => void }) {
         {pending ? 'Granting…' : 'Grant role →'}
       </button>
       <p style={{ marginTop: 12, fontSize: 12, color: 'var(--muted)', lineHeight: 1.55 }}>
-        Family members are granted via their member record; CMT staff via an auth claim. Either way
+        Family members are granted via their member record; CMT sevaks via an auth claim. Either way
         it applies at their next sign-in.
       </p>
     </form>
@@ -539,7 +539,7 @@ function DesktopDisclosure({
 
 // ─── Mobile layout ─────────────────────────────────────────────────────────
 
-function MobileStaff({
+function MobileSevaks({
   rows,
   roleFilter,
   onRoleFilter,
@@ -547,7 +547,7 @@ function MobileStaff({
   onQuery,
   onChanged,
 }: {
-  rows: StaffRow[];
+  rows: SevakRow[];
   roleFilter: GrantableRole | 'teacher' | null;
   onRoleFilter: (r: GrantableRole | 'teacher' | null) => void;
   query: string;
@@ -565,7 +565,7 @@ function MobileStaff({
           style={{ flex: 1, minHeight: 44 }}
           onClick={() => setSheet('add')}
         >
-          + Add staff role
+          + Add sevak role
         </button>
         <button
           type="button"
@@ -582,7 +582,7 @@ function MobileStaff({
         value={query}
         onChange={(e) => onQuery(e.target.value)}
         placeholder="Search name or contact…"
-        aria-label="Search staff"
+        aria-label="Search sevaks"
         style={{ minHeight: 44 }}
       />
 
@@ -620,18 +620,18 @@ function MobileStaff({
       ) : (
         <div className="col" style={{ gap: 10 }}>
           {rows.map((s) => (
-            <StaffCard key={s.key} row={s} onChanged={onChanged} mobile />
+            <SevakCard key={s.key} row={s} onChanged={onChanged} mobile />
           ))}
         </div>
       )}
 
       {sheet !== null && (
         <MobileSheet
-          title={sheet === 'add' ? 'Add staff role' : 'Roles reference'}
+          title={sheet === 'add' ? 'Add sevak role' : 'Roles reference'}
           onClose={() => setSheet(null)}
         >
           {sheet === 'add' ? (
-            <AddStaffForm
+            <AddSevakForm
               onGranted={() => {
                 onChanged();
                 setSheet(null);

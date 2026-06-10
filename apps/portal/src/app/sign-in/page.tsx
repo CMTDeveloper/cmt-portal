@@ -165,7 +165,7 @@ function SignInReal() {
   const fromParam = searchParams?.get('from') ?? '';
   const welcomeFlow = fromParam.startsWith('/welcome');
   const adminFlow = fromParam === '/admin' || fromParam.startsWith('/admin/');
-  const staffFlow = welcomeFlow || adminFlow;
+  const sevakFlow = welcomeFlow || adminFlow;
 
   const prefillType = searchParams?.get('type');
   const prefillValue = searchParams?.get('value');
@@ -358,7 +358,7 @@ function SignInReal() {
   const isVerifying = pageState === 'verifying';
 
   // ── Mode toggle (rendered above the contact field) ───────────────────────────
-  const modeToggle = !staffFlow ? (
+  const modeToggle = !sevakFlow ? (
     <div style={{ marginBottom: 18 }}>
       {signInMode === 'otp' ? (
         <button
@@ -522,7 +522,7 @@ function SignInReal() {
                   >
                     {contactType === 'email' ? 'Use phone number instead' : 'Use email instead'}
                   </button>
-                  {!staffFlow && (
+                  {!sevakFlow && (
                     <>
                       <div style={{ marginTop: 24, padding: 14, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radiusSm)', fontSize: 12, color: 'var(--body-text)', lineHeight: 1.5 }}>
                         <strong>New to Setu?</strong> Use the same form — if we don't find an account we'll walk you through registering your family.
@@ -558,7 +558,7 @@ function SignInReal() {
                   <button className="btn btn--g btn--block" onClick={() => { setPageState('form'); setOtp(''); }} disabled={isVerifying}>
                     Use a different address
                   </button>
-                  {!staffFlow && (
+                  {!sevakFlow && (
                     <div style={{ marginTop: 18, padding: 14, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radiusSm)' }}>
                       <p style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Didn&apos;t get a code?</p>
                       <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5, marginBottom: 10 }}>
@@ -637,7 +637,7 @@ function SignInReal() {
                   >
                     {contactType === 'email' ? 'Use phone number instead' : 'Use email instead'}
                   </button>
-                  {!staffFlow && (
+                  {!sevakFlow && (
                     <>
                       <div style={{ marginTop: 28, padding: 16, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radiusSm)', fontSize: 13, color: 'var(--body-text)', lineHeight: 1.5 }}>
                         <strong>New to Setu?</strong> Use the same form — if we don't find an account we'll walk you through registering your family.
@@ -673,7 +673,7 @@ function SignInReal() {
                   <button className="btn btn--g btn--block" onClick={() => { setPageState('form'); setOtp(''); }} disabled={isVerifying}>
                     Use a different address
                   </button>
-                  {!staffFlow && (
+                  {!sevakFlow && (
                     <div style={{ marginTop: 20, padding: 16, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radiusSm)' }}>
                       <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Didn&apos;t get a code?</p>
                       <p style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.55, marginBottom: 12 }}>

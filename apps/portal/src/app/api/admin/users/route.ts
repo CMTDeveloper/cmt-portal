@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { GrantRoleBodySchema, isAdmin } from '@cmt/shared-domain';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
-import { grantRole, listStaff } from '@/features/setu/auth/manage-roles';
+import { grantRole, listSevaks } from '@/features/setu/auth/manage-roles';
 
 // Admin-only Users & Roles surface. The /api/admin/* catch-all in
 // canAccessRoute already gates this at the middleware layer; the handler
@@ -16,8 +16,8 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
 
-  const staff = await listStaff();
-  return NextResponse.json({ staff });
+  const sevaks = await listSevaks();
+  return NextResponse.json({ sevaks });
 }
 
 export async function POST(req: Request) {

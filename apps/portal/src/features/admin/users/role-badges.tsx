@@ -2,7 +2,7 @@
 
 import type { GrantableRole } from '@cmt/shared-domain';
 
-// Small presentational chips for a staff person's effective roles. Pure —
+// Small presentational chips for a sevak's effective roles. Pure —
 // no client state — but kept in the 'use client' tree so it can sit inside
 // the interactive list without a server/client boundary hop.
 

@@ -1,8 +1,8 @@
 import { connection } from 'next/server';
 import Link from 'next/link';
 import { SetuIcon } from '@cmt/ui';
-import { listStaff } from '@/features/setu/auth/manage-roles';
-import { StaffManager } from '@/features/admin/users/staff-manager';
+import { listSevaks } from '@/features/setu/auth/manage-roles';
+import { SevakManager } from '@/features/admin/users/sevak-manager';
 
 export const metadata = { title: 'Users & roles — CMT Portal admin' };
 
@@ -11,7 +11,7 @@ export default async function AdminUsersPage() {
   // cacheComponents prerender. Same pattern as other admin pages.
   await connection();
 
-  const staff = await listStaff();
+  const sevaks = await listSevaks();
 
   return (
     <>
@@ -44,13 +44,13 @@ export default async function AdminUsersPage() {
           Users &amp; roles
         </h1>
         <p style={{ fontSize: 14, color: 'var(--body-text)', marginTop: 10, maxWidth: 680, lineHeight: 1.55 }}>
-          Every staff person and their effective roles. Grant or revoke admin &amp; welcome-team;
+          Every sevak and their effective roles. Grant or revoke admin &amp; welcome-team;
           teacher status is read-only here (managed at <code>/admin/levels</code>). Granted roles
           apply at the person&apos;s next sign-in.
         </p>
       </header>
 
-      <StaffManager initialStaff={staff} />
+      <SevakManager initialSevaks={sevaks} />
     </>
   );
 }

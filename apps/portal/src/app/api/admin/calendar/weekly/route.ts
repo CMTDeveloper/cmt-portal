@@ -4,7 +4,7 @@ import { SetWeeklyScheduleSchema, isAdmin, isWelcomeTeam, LOCATIONS, type Locati
 import { readSessionFromHeaders } from '@/lib/auth/headers';
 import { getWeeklySchedule } from '@/features/setu/calendar/calendar';
 
-function staff(req: Request) {
+function sevak(req: Request) {
   const session = readSessionFromHeaders(req);
   if (!session || !session.uid) return { error: NextResponse.json({ error: 'no-session' }, { status: 401 }) };
   if (!isAdmin(session) && !isWelcomeTeam(session)) {
@@ -14,7 +14,7 @@ function staff(req: Request) {
 }
 
 export async function GET(req: Request) {
-  const gate = staff(req);
+  const gate = sevak(req);
   if (gate.error) return gate.error;
   const location = new URL(req.url).searchParams.get('location');
   if (!location || !(LOCATIONS as readonly string[]).includes(location)) {
@@ -25,7 +25,7 @@ export async function GET(req: Request) {
 }
 
 export async function PUT(req: Request) {
-  const gate = staff(req);
+  const gate = sevak(req);
   if (gate.error) return gate.error;
   const { session } = gate;
 

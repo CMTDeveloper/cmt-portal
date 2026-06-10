@@ -1,14 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { StaffRow } from '@cmt/shared-domain';
+import type { SevakRow } from '@cmt/shared-domain';
 
-const { mockRevokeRole, mockListStaff, mockResolveContactIdentity } = vi.hoisted(() => ({
+const { mockRevokeRole, mockListSevaks, mockResolveContactIdentity } = vi.hoisted(() => ({
   mockRevokeRole: vi.fn(),
-  mockListStaff: vi.fn(),
+  mockListSevaks: vi.fn(),
   mockResolveContactIdentity: vi.fn(),
 }));
 vi.mock('@/features/setu/auth/manage-roles', () => ({
   revokeRole: mockRevokeRole,
-  listStaff: mockListStaff,
+  listSevaks: mockListSevaks,
   resolveContactIdentity: mockResolveContactIdentity,
   grantRole: vi.fn(),
 }));
@@ -25,7 +25,7 @@ function makeRequest(body?: unknown, role = 'admin', uid = 'uid-caller', mid?: s
   });
 }
 
-function staffRow(over: Partial<StaffRow>): StaffRow {
+function sevakRow(over: Partial<SevakRow>): SevakRow {
   return {
     key: 'k',
     mid: null,
@@ -42,15 +42,15 @@ function staffRow(over: Partial<StaffRow>): StaffRow {
 }
 
 // Two distinct admins so the last-admin guard does NOT trip by default.
-const TWO_ADMINS: StaffRow[] = [
-  staffRow({ key: 'a1', uid: 'uid-a1', contact: 'a1@example.com', roles: ['admin'] }),
-  staffRow({ key: 'a2', uid: 'uid-a2', contact: 'a2@example.com', roles: ['admin'] }),
+const TWO_ADMINS: SevakRow[] = [
+  sevakRow({ key: 'a1', uid: 'uid-a1', contact: 'a1@example.com', roles: ['admin'] }),
+  sevakRow({ key: 'a2', uid: 'uid-a2', contact: 'a2@example.com', roles: ['admin'] }),
 ];
 
 beforeEach(() => {
   vi.clearAllMocks();
   mockRevokeRole.mockResolvedValue({ path: 'auth-claim', revoked: true });
-  mockListStaff.mockResolvedValue(TWO_ADMINS);
+  mockListSevaks.mockResolvedValue(TWO_ADMINS);
   // By default the target is someone OTHER than the caller.
   mockResolveContactIdentity.mockResolvedValue({ mid: null, uid: 'uid-other' });
 });
@@ -83,7 +83,7 @@ describe('DELETE /api/admin/users/roles — welcome-team revoke (no guards)', ()
     const res = await DELETE(makeRequest({ contact: 'a@b.com', role: 'welcome-team' }));
     expect(res.status).toBe(200);
     expect(mockResolveContactIdentity).not.toHaveBeenCalled();
-    expect(mockListStaff).not.toHaveBeenCalled();
+    expect(mockListSevaks).not.toHaveBeenCalled();
     expect(mockRevokeRole).toHaveBeenCalledWith({ contact: 'a@b.com', role: 'welcome-team' });
   });
 });
@@ -117,8 +117,8 @@ describe('DELETE /api/admin/users/roles — admin guards', () => {
   });
 
   it('409 last-admin when only one admin remains', async () => {
-    mockListStaff.mockResolvedValue([
-      staffRow({ key: 'only', uid: 'uid-only', contact: 'only@example.com', roles: ['admin'] }),
+    mockListSevaks.mockResolvedValue([
+      sevakRow({ key: 'only', uid: 'uid-only', contact: 'only@example.com', roles: ['admin'] }),
     ]);
     const { DELETE } = await import('../route');
     const res = await DELETE(makeRequest({ contact: 'only@example.com', role: 'admin' }));

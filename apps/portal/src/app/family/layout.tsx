@@ -15,7 +15,7 @@ import { flags } from '@/lib/flags';
 // renders immediately.
 
 async function SidebarWithIdentity() {
-  const [data, staff] = await Promise.all([getCurrentFamily(), readStaffFlagsFromCookie()]);
+  const [data, sevak] = await Promise.all([getCurrentFamily(), readSevakFlagsFromCookie()]);
   let displayName: string | undefined;
   let subtitle: string | undefined;
   if (data) {
@@ -23,14 +23,14 @@ async function SidebarWithIdentity() {
     if (currentMember) displayName = `${currentMember.firstName} ${currentMember.lastName}`;
     subtitle = `${data.family.name}${data.family.legacyFid ? ` · FID ${data.family.fid} · Legacy ${data.family.legacyFid}` : ` · FID ${data.family.fid}`}`;
   }
-  return <DesktopSidebarLive displayName={displayName} subtitle={subtitle} showSignOut isAdmin={staff.isAdmin} showTeacher={staff.showTeacher}/>;
+  return <DesktopSidebarLive displayName={displayName} subtitle={subtitle} showSignOut isAdmin={sevak.isAdmin} showTeacher={sevak.showTeacher}/>;
 }
 
 // Mobile bottom nav needs isAdmin/showTeacher to decide whether the "More" sheet
 // shows the Admin / Teacher shortcuts. Computed the same way as the desktop sidebar.
 async function MobileNavWithIdentity() {
-  const staff = await readStaffFlagsFromCookie();
-  return <MobileBottomNav isAdmin={staff.isAdmin} showTeacher={staff.showTeacher} />;
+  const sevak = await readSevakFlagsFromCookie();
+  return <MobileBottomNav isAdmin={sevak.isAdmin} showTeacher={sevak.showTeacher} />;
 }
 
 // Reads the session cookie once and runs isAdmin()/isTeacher() so the chrome can
@@ -38,7 +38,7 @@ async function MobileNavWithIdentity() {
 // error (missing cookie, expired session, etc.) — silent failure is fine here
 // because middleware already gates access to /admin and /teacher themselves.
 // Teacher is additionally gated on the flags.setuTeacher feature flag.
-async function readStaffFlagsFromCookie(): Promise<{ isAdmin: boolean; showTeacher: boolean }> {
+async function readSevakFlagsFromCookie(): Promise<{ isAdmin: boolean; showTeacher: boolean }> {
   try {
     const cookieStore = await cookies();
     const sessionCookie = cookieStore.get('__session')?.value;

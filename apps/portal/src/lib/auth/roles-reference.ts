@@ -24,7 +24,7 @@ export const ROLE_REFERENCE: Record<Role, RoleReference> = {
     summary: 'Full access to every admin tool. Inherits welcome-team and teacher capabilities.',
     grants: [
       'All /admin/* pages and /api/admin/* APIs (users & roles, levels, programs, calendar, school-year, seva, donation periods, volunteering skills)',
-      'Grant and revoke admin & welcome-team roles for any staff person',
+      'Grant and revoke admin & welcome-team roles for any sevak',
       'Assign teachers to class levels',
       'Everything a welcome-team volunteer can do (family search, roster)',
       'Everything a teacher can do (attendance for any level)',

@@ -34,7 +34,7 @@ async function resolveAdminIdentity(): Promise<AdminIdentity> {
       allowed = true;
       const email = (raw as { email?: string }).email;
       if (email) displayEmail = email;
-      // A family-manager-also-admin has fid in their claims; pure CMT staff
+      // A family-manager-also-admin has fid in their claims; pure CMT sevaks
       // admins don't. We use this to show a "Back to family" link so dual-role
       // users can hop back to /family quickly.
       hasFamily = typeof (raw as { fid?: unknown }).fid === 'string';

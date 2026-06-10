@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 /**
- * N=2 dedup fixture for listStaff(). Exercises two of every source plus the
+ * N=2 dedup fixture for listSevaks(). Exercises two of every source plus the
  * critical merge case — a legacy auth-claim whose contact resolves to an
  * EXISTING family mid must NOT create a duplicate row.
  *
@@ -51,7 +51,7 @@ vi.mock('../member-roles', () => ({
   listMembersWithRole: mockListMembersWithRole,
 }));
 
-import { listStaff } from '../manage-roles';
+import { listSevaks } from '../manage-roles';
 
 // --- member docs keyed by `${fid}/${mid}` ---
 const MEMBERS: Record<string, FirebaseFirestore.DocumentData> = {
@@ -182,16 +182,16 @@ beforeEach(() => {
   });
 });
 
-describe('listStaff — merged + deduped', () => {
+describe('listSevaks — merged + deduped', () => {
   it('produces one row per distinct person (no dup for the legacy-claim-on-existing-mid)', async () => {
-    const staff = await listStaff();
+    const sevaks = await listSevaks();
 
     // Asha, Bala, Chitra, Devi = 4 distinct people.
-    expect(staff).toHaveLength(4);
+    expect(sevaks).toHaveLength(4);
 
-    const byKey = new Map(staff.map((s) => [s.key, s]));
+    const byKey = new Map(sevaks.map((s) => [s.key, s]));
     // no duplicate keys
-    expect(byKey.size).toBe(staff.length);
+    expect(byKey.size).toBe(sevaks.length);
 
     const asha = byKey.get('CMT-FAM1-01');
     expect(asha).toBeDefined();
@@ -223,8 +223,8 @@ describe('listStaff — merged + deduped', () => {
   });
 
   it('sorts rows by name', async () => {
-    const staff = await listStaff();
-    const names = staff.map((s) => s.name);
+    const sevaks = await listSevaks();
+    const names = sevaks.map((s) => s.name);
     expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b)));
   });
 });

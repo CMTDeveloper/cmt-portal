@@ -12,13 +12,13 @@ const TARGET = 'e2e-grant-target@cmt-portal.test';
 test.describe('admin Users & Roles', () => {
   test.skip(!hasFamilyCreds, 'E2E_FAMILY_EMAIL / E2E_FAMILY_PASSWORD required');
 
-  test('renders the staff list with the seeded admin user', async ({ page }) => {
+  test('renders the sevak list with the seeded admin user', async ({ page }) => {
     await page.goto('/admin/users');
     await expect(page.getByRole('heading', { name: /users & roles/i }).first()).toBeVisible();
-    // The seeded E2E user (family-manager + admin) shows up as staff by name.
+    // The seeded E2E user (family-manager + admin) shows up as a sevak by name.
     await expect(vis(page.getByText('E2E Tester')).first()).toBeVisible();
-    // The collapsed add-staff + roles-reference disclosures are present.
-    await expect(vis(page.getByRole('button', { name: /add staff role/i }))).toBeVisible();
+    // The collapsed add-sevak + roles-reference disclosures are present.
+    await expect(vis(page.getByRole('button', { name: /add sevak role/i }))).toBeVisible();
     await expect(vis(page.getByRole('button', { name: /roles reference/i }))).toBeVisible();
   });
 
@@ -28,8 +28,8 @@ test.describe('admin Users & Roles', () => {
     await page.goto('/admin/users');
 
     try {
-      // Expand the collapsed add-staff disclosure, then grant welcome-team.
-      await vis(page.getByRole('button', { name: /add staff role/i })).click();
+      // Expand the collapsed add-sevak disclosure, then grant welcome-team.
+      await vis(page.getByRole('button', { name: /add sevak role/i })).click();
       await vis(page.getByPlaceholder('person@example.com or +1…')).fill(TARGET);
       // Role is now a segmented radio control (not a native select).
       await vis(page.getByRole('radio', { name: 'Welcome team' })).click();

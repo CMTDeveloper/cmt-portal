@@ -1,13 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { StaffRow } from '@cmt/shared-domain';
+import type { SevakRow } from '@cmt/shared-domain';
 
-const { mockGrantRole, mockListStaff } = vi.hoisted(() => ({
+const { mockGrantRole, mockListSevaks } = vi.hoisted(() => ({
   mockGrantRole: vi.fn(),
-  mockListStaff: vi.fn(),
+  mockListSevaks: vi.fn(),
 }));
 vi.mock('@/features/setu/auth/manage-roles', () => ({
   grantRole: mockGrantRole,
-  listStaff: mockListStaff,
+  listSevaks: mockListSevaks,
   // resolveContactIdentity/revokeRole are unused by GET/POST but mocked so the
   // module import resolves without pulling server-only deps.
   resolveContactIdentity: vi.fn(),
@@ -25,7 +25,7 @@ function makeRequest(method: string, body?: unknown, role = 'admin', uid = 'uid-
   });
 }
 
-const STAFF: StaffRow[] = [
+const SEVAKS: SevakRow[] = [
   {
     key: 'CMT-FAM1-01',
     mid: 'CMT-FAM1-01',
@@ -42,7 +42,7 @@ const STAFF: StaffRow[] = [
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockListStaff.mockResolvedValue(STAFF);
+  mockListSevaks.mockResolvedValue(SEVAKS);
   mockGrantRole.mockResolvedValue({
     path: 'roleAssignments',
     mid: 'CMT-FAM1-01',
@@ -52,19 +52,19 @@ beforeEach(() => {
 });
 
 describe('GET /api/admin/users', () => {
-  it('returns { staff } for an admin session', async () => {
+  it('returns { sevaks } for an admin session', async () => {
     const { GET } = await import('../route');
     const res = await GET(makeRequest('GET', undefined, 'admin'));
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ staff: STAFF });
-    expect(mockListStaff).toHaveBeenCalledTimes(1);
+    expect(await res.json()).toEqual({ sevaks: SEVAKS });
+    expect(mockListSevaks).toHaveBeenCalledTimes(1);
   });
 
   it('denies welcome-team (403)', async () => {
     const { GET } = await import('../route');
     const res = await GET(makeRequest('GET', undefined, 'welcome-team'));
     expect(res.status).toBe(403);
-    expect(mockListStaff).not.toHaveBeenCalled();
+    expect(mockListSevaks).not.toHaveBeenCalled();
   });
 
   it('denies a family-manager (403)', async () => {

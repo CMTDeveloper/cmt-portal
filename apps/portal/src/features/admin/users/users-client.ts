@@ -1,4 +1,4 @@
-import type { StaffRow, GrantRoleBody, RevokeRoleBody } from '@cmt/shared-domain';
+import type { SevakRow, GrantRoleBody, RevokeRoleBody } from '@cmt/shared-domain';
 
 // Client/server boundary wrappers for the Users & Roles screen. The page's
 // 'use client' components import THESE — never the server manage-roles module
@@ -12,13 +12,13 @@ async function errorCodeFrom(res: Response): Promise<string> {
   return body.error ?? `http-${res.status}`;
 }
 
-export async function listStaffClient(): Promise<StaffRow[]> {
+export async function listSevaksClient(): Promise<SevakRow[]> {
   const res = await fetch('/api/admin/users', { credentials: 'same-origin' });
   if (!res.ok) {
     throw new Error(await errorCodeFrom(res));
   }
-  const data = (await res.json()) as { staff: StaffRow[] };
-  return data.staff;
+  const data = (await res.json()) as { sevaks: SevakRow[] };
+  return data.sevaks;
 }
 
 export async function grantRoleClient(body: GrantRoleBody): Promise<void> {

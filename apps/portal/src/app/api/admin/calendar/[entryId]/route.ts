@@ -8,7 +8,7 @@ import {
 } from '@cmt/shared-domain';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
 
-function staff(req: Request) {
+function sevak(req: Request) {
   const session = readSessionFromHeaders(req);
   if (!session || !session.uid) return { error: NextResponse.json({ error: 'no-session' }, { status: 401 }) };
   if (!isAdmin(session) && !isWelcomeTeam(session)) {
@@ -18,7 +18,7 @@ function staff(req: Request) {
 }
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ entryId: string }> }) {
-  const gate = staff(req);
+  const gate = sevak(req);
   if (gate.error) return gate.error;
   const { session } = gate;
 
@@ -65,7 +65,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entryI
 }
 
 export async function DELETE(req: Request, { params }: { params: Promise<{ entryId: string }> }) {
-  const gate = staff(req);
+  const gate = sevak(req);
   if (gate.error) return gate.error;
 
   const { entryId } = await params;

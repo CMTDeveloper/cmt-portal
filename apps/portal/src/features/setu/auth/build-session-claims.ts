@@ -106,7 +106,7 @@ export async function buildSessionClaimsForContact(
     return extras;
   }
 
-  // Brand-new user with no invite and no staff role — no session, redirect to register.
+  // Brand-new user with no invite and no sevak role — no session, redirect to register.
   if (result.source === null && !hasPendingInvite && !isWelcomeTeamUser && !isAdminUser) {
     return { redirectTo: '/register?contact=verified' };
   }
