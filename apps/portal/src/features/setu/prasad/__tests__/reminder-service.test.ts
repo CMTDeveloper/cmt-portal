@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { SendEmailArgs } from '@/lib/aws/ses';
+import type { SendSMSArgs } from '@/lib/aws/sns';
 
 vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
   portalFirestore: vi.fn(),
@@ -135,13 +137,13 @@ function addDays(ymd: string, days: number): string {
 const DAY7 = addDays(TODAY, 7); // weekBefore target
 const DAY2 = addDays(TODAY, 2); // twoDayBefore target
 
-let emailSpy: ReturnType<typeof vi.fn>;
-let smsSpy: ReturnType<typeof vi.fn>;
+let emailSpy: ReturnType<typeof vi.fn<(args: SendEmailArgs) => Promise<void>>>;
+let smsSpy: ReturnType<typeof vi.fn<(args: SendSMSArgs) => Promise<void>>>;
 
 beforeEach(() => {
   vi.clearAllMocks();
-  emailSpy = vi.fn(async () => undefined);
-  smsSpy = vi.fn(async () => undefined);
+  emailSpy = vi.fn<(args: SendEmailArgs) => Promise<void>>().mockResolvedValue(undefined);
+  smsSpy = vi.fn<(args: SendSMSArgs) => Promise<void>>().mockResolvedValue(undefined);
   mockResolveSender.mockReturnValue({ sendEmail: emailSpy, sendSMS: smsSpy });
 });
 
