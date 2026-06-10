@@ -43,11 +43,12 @@ async function main(): Promise<void> {
   const membersSnap = await db.collectionGroup('members').get();
   let updated = 0, skipped = 0, noMatch = 0, processed = 0;
   for (const doc of membersSnap.docs) {
-    const m = doc.data() as { type?: string; legacySid?: string | null; birthMonth?: number | null; mid?: string };
+    const m = doc.data() as { type?: string; legacySid?: string | null; birthMonth?: number | null };
     const fid = doc.ref.parent.parent?.id ?? '';
     if (args.fid && fid !== args.fid) continue;
     if (m.type !== 'Child' || m.legacySid == null) continue;
     if (args.limit !== null && processed >= args.limit) break;
+    // --limit N counts ELIGIBLE members (Child + legacySid), not documents scanned.
     processed++;
     const month = monthBySid.get(String(m.legacySid));
     if (month == null) { noMatch++; continue; }

@@ -117,6 +117,17 @@ describe('proposePrasadAssignments', () => {
     expect(proposePrasadAssignments(input)).toEqual(proposePrasadAssignments(input));
   });
 
+  it('handles an empty calendar: everyone unplaced, nothing crashes', () => {
+    const out = run({
+      sundays: [],
+      families: [fam('A', [child('a', 1, 3)]), fam('B', [child('b', 1, null)], { date: '2026-03-01' })],
+    });
+    expect(out.rows).toEqual([]);
+    expect(out.perSunday).toEqual([]);
+    expect(out.unplaced.map((u) => u.fid)).toEqual(['A']);
+    expect(out.stats).toMatchObject({ keptExisting: 1, unplaced: 1 });
+  });
+
   it('reports per-Sunday counts including existing assignments', () => {
     const out = run({
       families: [fam('A', [child('a', 1, 3)], { date: '2026-03-08' }), fam('B', [child('b', 1, 3)])],

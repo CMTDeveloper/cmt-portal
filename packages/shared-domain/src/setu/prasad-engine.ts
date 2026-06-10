@@ -53,7 +53,7 @@ function dayNumber(ymd: string): number {
 const monthOf = (ymd: string): number => Number(ymd.slice(5, 7));
 
 /** Youngest = lowest gradeRung (null rungs sort last); tie → lower mid. */
-function pickTarget(children: PrasadEngineChild[]): { youngest: PrasadEngineChild | null; birthMonth: number | null; carrier: PrasadEngineChild | null } {
+function pickTarget(children: PrasadEngineChild[]): { youngest: PrasadEngineChild | null; birthMonth: number | null } {
   const sorted = [...children].sort((a, b) => {
     const ra = a.gradeRung ?? Number.MAX_SAFE_INTEGER;
     const rb = b.gradeRung ?? Number.MAX_SAFE_INTEGER;
@@ -61,7 +61,7 @@ function pickTarget(children: PrasadEngineChild[]): { youngest: PrasadEngineChil
   });
   const youngest = sorted[0] ?? null;
   const carrier = sorted.find((c) => c.birthMonth != null) ?? null;
-  return { youngest, birthMonth: carrier?.birthMonth ?? null, carrier };
+  return { youngest, birthMonth: carrier?.birthMonth ?? null };
 }
 
 export function proposePrasadAssignments(input: PrasadEngineInput): PrasadProposal {
@@ -133,6 +133,7 @@ export function proposePrasadAssignments(input: PrasadEngineInput): PrasadPropos
 
   // Pass 1 — birthday-month families.
   for (const { f, t } of withMonth) {
+    if (allDates.length === 0) { place(f, t, undefined, 'spill'); continue; }
     const inMonth = ordered(allDates.filter((d) => monthOf(d) === t.birthMonth && seats.get(d)! > 0));
     if (inMonth.length > 0) {
       place(f, t, inMonth[0], 'birthday-month');
