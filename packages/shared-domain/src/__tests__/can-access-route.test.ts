@@ -612,6 +612,19 @@ describe('canAccessRoute — roster API (/api/welcome/families)', () => {
   });
 });
 
+describe('canAccessRoute — prasad API (/api/welcome/prasad)', () => {
+  it('admits welcome-team and admin (admin inherits welcome-team)', () => {
+    expect(canAccessRoute(welcomeTeam, '/api/welcome/prasad/upcoming', 'GET')).toBe(true);
+    expect(canAccessRoute(admin, '/api/welcome/prasad/upcoming', 'GET')).toBe(true);
+    expect(canAccessRoute(welcomeTeam, '/api/welcome/prasad', 'GET')).toBe(true);
+  });
+
+  it('denies family roles', () => {
+    expect(canAccessRoute(manager, '/api/welcome/prasad/upcoming', 'GET')).toBe(false);
+    expect(canAccessRoute(member, '/api/welcome/prasad/upcoming', 'GET')).toBe(false);
+  });
+});
+
 describe('canAccessRoute — reports API (/api/welcome/reports)', () => {
   it('enrollment + attendance: welcome-team and admin allowed', () => {
     expect(canAccessRoute(welcomeTeam, '/api/welcome/reports/enrollment', 'GET')).toBe(true);

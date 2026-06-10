@@ -159,6 +159,11 @@ export function canAccessRoute(
     return isWelcomeTeam(claims);
   }
 
+  // Welcome-team API — prasad day-of lists (read-only).
+  if (pathname === '/api/welcome/prasad' || pathname.startsWith('/api/welcome/prasad/')) {
+    return isWelcomeTeam(claims);
+  }
+
   // Welcome-team API — enrollments only (donations routes ship in slice 3c)
   if (
     pathname.startsWith('/api/welcome/enrollments/') ||
