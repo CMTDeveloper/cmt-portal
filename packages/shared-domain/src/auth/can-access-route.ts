@@ -196,6 +196,14 @@ export function canAccessRoute(
     return isSetuFamily(claims);
   }
 
+  // Setu API — prasad: any family role may view their assignment/options;
+  // the move POST is manager-only. Must precede the manager-only catch-all.
+  if (pathname === '/api/setu/prasad' || pathname.startsWith('/api/setu/prasad/')) {
+    if (!isSetuFamily(claims)) return false;
+    if (method === 'POST') return isSetuManager(claims);
+    return true;
+  }
+
   // Setu API — remaining paths (invite/send, register, etc.): manager + welcome-team + admin
   // family-member is NOT included here; manager-level is the safe default for unknown setu paths
   if (pathname.startsWith('/api/setu/')) {

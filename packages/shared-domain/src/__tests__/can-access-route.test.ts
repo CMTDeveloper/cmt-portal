@@ -627,3 +627,25 @@ describe('canAccessRoute — reports API (/api/welcome/reports)', () => {
     expect(canAccessRoute(member, '/api/welcome/reports/enrollment', 'GET')).toBe(false);
   });
 });
+
+describe('canAccessRoute — /api/setu/prasad — view=any family, move=manager', () => {
+  it('allows family-member GET /api/setu/prasad (view assignment)', () => {
+    expect(canAccessRoute(member, '/api/setu/prasad', 'GET')).toBe(true);
+  });
+  it('allows family-member GET /api/setu/prasad/options', () => {
+    expect(canAccessRoute(member, '/api/setu/prasad/options', 'GET')).toBe(true);
+  });
+  it('allows family-manager GET /api/setu/prasad + options', () => {
+    expect(canAccessRoute(manager, '/api/setu/prasad', 'GET')).toBe(true);
+    expect(canAccessRoute(manager, '/api/setu/prasad/options', 'GET')).toBe(true);
+  });
+  it('denies family-member POST /api/setu/prasad/move (manager-only)', () => {
+    expect(canAccessRoute(member, '/api/setu/prasad/move', 'POST')).toBe(false);
+  });
+  it('allows family-manager POST /api/setu/prasad/move', () => {
+    expect(canAccessRoute(manager, '/api/setu/prasad/move', 'POST')).toBe(true);
+  });
+  it('denies teacher-only role GET /api/setu/prasad', () => {
+    expect(canAccessRoute(teacher, '/api/setu/prasad', 'GET')).toBe(false);
+  });
+});
