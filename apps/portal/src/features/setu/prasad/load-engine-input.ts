@@ -57,6 +57,9 @@ export async function loadEngineInput(pid: string, location: string, cap?: numbe
 
   // 4) Family + member docs (bulk per family — same shape as deriveRoster).
   const fids = [...enrolledMidsByFid.keys()];
+  // Unbounded fan-out is bounded by the per-location family count (~357 today —
+  // ~714 parallel reads, well within Admin SDK limits). Revisit (chunk/getAll)
+  // only if a single location approaches the full ~800-family roster.
   const families: PrasadEngineFamily[] = await Promise.all(fids.map(async (fid): Promise<PrasadEngineFamily> => {
     const [famDoc, memSnap] = await Promise.all([
       db.collection('families').doc(fid).get(),

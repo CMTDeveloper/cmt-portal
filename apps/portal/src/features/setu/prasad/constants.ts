@@ -7,6 +7,9 @@ export const CURRENT_PRASAD_PIDS = [
 
 export const MOVE_LOCK_DAYS = 7;
 
+/** Cap fallback when prasadConfig/{pid} is missing (assignments seeded without a publish). */
+export const FALLBACK_CAP = 10;
+
 /** Toronto-local YYYY-MM-DD for "today" — all date math is calendar-day based. */
 export function torontoToday(now: Date = new Date()): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Toronto' }).format(now);

@@ -1,5 +1,5 @@
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
-import { CURRENT_PRASAD_PIDS, MOVE_LOCK_DAYS, daysUntil, torontoToday } from './constants';
+import { CURRENT_PRASAD_PIDS, FALLBACK_CAP, MOVE_LOCK_DAYS, daysUntil, torontoToday } from './constants';
 
 export interface FamilyPrasadView {
   paid: string; pid: string; date: string;
@@ -10,6 +10,9 @@ export interface FamilyPrasadView {
 /** The family's current-period assignment, or null. Looks across both location pids. */
 export async function getFamilyAssignment(fid: string): Promise<FamilyPrasadView | null> {
   const db = portalFirestore();
+  // One-assignment-per-family invariant: a family enrolls at ONE location, so at
+  // most one pid yields an assigned doc. If both ever exist (two-campus anomaly),
+  // first-pid-wins and the second stays hidden — enforced by enrollment data, not here.
   for (const { pid } of CURRENT_PRASAD_PIDS) {
     const snap = await db.collection('prasadAssignments').doc(`${pid}-${fid}`).get();
     if (!snap.exists) continue;
@@ -40,7 +43,7 @@ export async function getMoveOptions(fid: string): Promise<{ paid: string; optio
     db.collection('prasadConfig').doc(current.pid).get(),
     db.collection('prasadAssignments').where('pid', '==', current.pid).get(),
   ]);
-  const cap = (cfgSnap.data()?.capPerSunday as number | undefined) ?? 10;
+  const cap = (cfgSnap.data()?.capPerSunday as number | undefined) ?? FALLBACK_CAP;
   const countByDate = new Map<string, number>();
   for (const d of assignedSnap.docs) {
     const a = d.data() as { date: string; status: string };
@@ -68,7 +71,7 @@ export async function moveAssignment(fid: string, targetDate: string, actorMid: 
 
   const db = portalFirestore();
   const cfgSnap = await db.collection('prasadConfig').doc(current.pid).get();
-  const cap = (cfgSnap.data()?.capPerSunday as number | undefined) ?? 10;
+  const cap = (cfgSnap.data()?.capPerSunday as number | undefined) ?? FALLBACK_CAP;
 
   return db.runTransaction(async (tx) => {
     const targetQ = db.collection('prasadAssignments')

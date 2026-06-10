@@ -18,6 +18,10 @@ export async function publishAssignments(pid: string, location: string, cap: num
   const proposal = await previewAssignments(pid, location, cap);
   const db = portalFirestore();
   const batchLimit = 400;
+  // TOCTOU note: `existing` families were read at preview time. A family-move that
+  // commits between that read and this batch would be re-emitted here with
+  // source:'auto' (merge resets the move fields) — a seconds-wide window on a
+  // once-a-year op; self-healing on the family's next move. Accepted v1 risk.
   for (let i = 0; i < proposal.rows.length; i += batchLimit) {
     const batch = db.batch();
     for (const row of proposal.rows.slice(i, i + batchLimit)) {
