@@ -279,6 +279,47 @@ async function main(): Promise<void> {
     console.log('  WARN: no child member found — skipped attendanceEvents seeding');
   }
 
+  // 5) Prasad fixture: a published config + one assignment for the seed family
+  //    so the family card / options / move E2E paths are deterministic without
+  //    running a full admin publish (which would write ~350 family docs).
+  //    Date = the last 2025-26 Brampton class Sunday; the move spec reverts via
+  //    a second move, and a re-seed restores this date regardless.
+  await db.collection('prasadConfig').doc(BV_OID).set(
+    {
+      pid: BV_OID,
+      capPerSunday: 10,
+      publishedAt: FieldValue.serverTimestamp(),
+      publishedBy: 'seed-script',
+      _test: true,
+    },
+    { merge: true },
+  );
+  const prasadPaid = `${BV_OID}-${fid}`;
+  await db.collection('prasadAssignments').doc(prasadPaid).set(
+    {
+      paid: prasadPaid,
+      pid: BV_OID,
+      fid,
+      familyName: 'E2E Test Family',
+      location: 'Brampton',
+      date: '2026-06-14',
+      youngestMid: childMid ?? null,
+      youngestName: 'E2E Child',
+      birthMonth: 6,
+      reason: 'birthday-month',
+      source: 'auto',
+      status: 'assigned',
+      assignedAt: FieldValue.serverTimestamp(),
+      movedFrom: null,
+      movedAt: null,
+      movedBy: null,
+      remindedAt: { weekBefore: null, twoDayBefore: null },
+      _test: true,
+    },
+    { merge: true },
+  );
+  console.log(`wrote prasadConfig/${BV_OID} + prasadAssignments/${prasadPaid} (date=2026-06-14)`);
+
   console.log(`\n=== done. fid=${fid} uid=${uid} ===\n`);
 }
 
