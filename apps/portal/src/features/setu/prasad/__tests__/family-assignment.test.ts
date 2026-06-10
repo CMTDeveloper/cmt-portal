@@ -7,6 +7,7 @@ vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
 
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { getFamilyAssignment, getMoveOptions, moveAssignment } from '../family-assignment';
+import { FALLBACK_CAP } from '../constants';
 
 const mockFirestore = vi.mocked(portalFirestore);
 
@@ -310,6 +311,39 @@ describe('getMoveOptions', () => {
     mockFirestore.mockReturnValue(makeDb(seeds, []) as never);
 
     expect(await getMoveOptions('F-NONE')).toBeNull();
+  });
+
+  it('uses FALLBACK_CAP when prasadConfig doc is missing', async () => {
+    // Same shape as the happy-path fixtures but config is empty (doc.exists === false).
+    // With FALLBACK_CAP (10) as the cap, a date carrying 9 assigned families has
+    // seatsLeft 1; a date with 0 assigned has seatsLeft FALLBACK_CAP.
+    const seeds: Seeds = {
+      config: [], // no prasadConfig doc → FALLBACK_CAP kicks in
+      assignments: [
+        // current assignment
+        { paid: `${PID}-F-1`, fid: 'F-1', pid: PID, date: ymdPlus(60), status: 'assigned' },
+        // open date with 9 assigned → seatsLeft = FALLBACK_CAP - 9 = 1
+        ...Array.from({ length: 9 }, (_, i) => ({
+          paid: `${PID}-F-fill-${i}`, fid: `F-fill-${i}`, pid: PID,
+          date: ymdPlus(20), status: 'assigned',
+        })),
+      ],
+      calendar: [
+        { entryId: 'cur', location: 'Brampton', programKey: 'bala-vihar', date: ymdPlus(60), kind: 'class', enabled: true, prasadNeeded: true },
+        // open date with 9 taken → 1 seat left
+        { entryId: 'open', location: 'Brampton', programKey: 'bala-vihar', date: ymdPlus(20), kind: 'class', enabled: true, prasadNeeded: true },
+        // open date with 0 taken → FALLBACK_CAP seats left
+        { entryId: 'open2', location: 'Brampton', programKey: 'bala-vihar', date: ymdPlus(30), kind: 'class', enabled: true, prasadNeeded: true },
+      ],
+    };
+    mockFirestore.mockReturnValue(makeDb(seeds, []) as never);
+
+    const result = await getMoveOptions('F-1');
+    expect(result).not.toBeNull();
+    expect(result!.options).toEqual([
+      { date: ymdPlus(20), seatsLeft: 1 },
+      { date: ymdPlus(30), seatsLeft: FALLBACK_CAP },
+    ]);
   });
 });
 
