@@ -30,6 +30,9 @@ export const MemberDocSchema = z.object({
   volunteeringSkillsNudgeDismissedAt: z.date().nullable().optional(),
   schoolGrade: z.string().nullable(),
   birthMonthYear: z.string().nullable(),
+  // Birth month only (1-12), no year — the legacy roster's `dob_m`. Used by the
+  // prasad assigner. Derived from birthMonthYear when that exists.
+  birthMonth: z.number().int().min(1).max(12).nullable().optional(),
   // Legacy roster student id (sid), captured at migration / backfilled, so the
   // portal can map this member to their records in the check-in app's
   // family-check-ins collection (which keys students by sid). Null for members

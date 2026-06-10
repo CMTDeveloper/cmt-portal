@@ -74,6 +74,10 @@ export interface LegacyChild {
   // roster accumulates since 2012; a non-null level is the current-registration
   // signal (graduated/inactive kids have a NULL level).
   legacyLevel: string | null;
+  // Birth month only (1-12), from the legacy roster's `dob_m`. Null when the
+  // value is missing, the "NULL" sentinel, or out of range. Used by the prasad
+  // assigner (keyed to the youngest child's birth month).
+  birthMonth: number | null;
 }
 
 export interface LegacyFamilyForMigration {
@@ -200,14 +204,19 @@ export function parseLegacyRowsForMigration(
     if (!adults[0]!.phone) adults[0]!.phone = primaryPhone;
   }
 
-  const children: LegacyChild[] = childRows.map((r) => ({
-    firstName: clean(r.fname) ?? '',
-    lastName: clean(r.lname) ?? primaryLastName,
-    gender: mapGender(r.gender),
-    schoolGrade: mapSchoolGrade(r),
-    legacySid: r.sid != null ? String(r.sid) : null,
-    legacyLevel: clean(r.level),
-  }));
+  const children: LegacyChild[] = childRows.map((r) => {
+    const dobM = Number(r.dob_m);
+    const birthMonth = Number.isFinite(dobM) && dobM >= 1 && dobM <= 12 ? dobM : null;
+    return {
+      firstName: clean(r.fname) ?? '',
+      lastName: clean(r.lname) ?? primaryLastName,
+      gender: mapGender(r.gender),
+      schoolGrade: mapSchoolGrade(r),
+      legacySid: r.sid != null ? String(r.sid) : null,
+      legacyLevel: clean(r.level),
+      birthMonth,
+    };
+  });
 
   return {
     legacyFid,

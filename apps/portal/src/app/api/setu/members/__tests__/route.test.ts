@@ -194,6 +194,24 @@ describe('POST /api/setu/members', () => {
     expect(body.issues[0]).toHaveProperty('message');
   });
 
+  it('writes birthMonth onto the member doc when provided', async () => {
+    const res = await POST(makeRequest({ ...validBody, birthMonth: 5 }, managerHeaders()));
+    expect(res.status).toBe(201);
+    const memberWrite = mockSet.mock.calls.find(
+      ([, data]) => data && typeof data === 'object' && 'firstName' in data,
+    );
+    expect(memberWrite?.[1]).toMatchObject({ birthMonth: 5 });
+  });
+
+  it('writes birthMonth: null onto the member doc when omitted', async () => {
+    const res = await POST(makeRequest(validBody, managerHeaders()));
+    expect(res.status).toBe(201);
+    const memberWrite = mockSet.mock.calls.find(
+      ([, data]) => data && typeof data === 'object' && 'firstName' in data,
+    );
+    expect(memberWrite?.[1]).toMatchObject({ birthMonth: null });
+  });
+
   it('rejects emergency contact with empty relation (relation is the one required EC field)', async () => {
     const body = {
       ...validBody,

@@ -21,6 +21,7 @@ const patchSchema = z
     phone: z.string().min(7).nullable().optional(),
     schoolGrade: z.string().nullable().optional(),
     birthMonthYear: z.string().nullable().optional(),
+    birthMonth: z.number().int().min(1).max(12).nullable().optional(),
     foodAllergies: z.string().nullable().optional(),
     volunteeringSkills: z.array(z.string()).optional(),
     emergencyContacts: z

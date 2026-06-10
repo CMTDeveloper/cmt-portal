@@ -180,6 +180,39 @@ describe('parseLegacyRowsForMigration', () => {
     expect(result?.children[0]?.lastName).toBe('Shah');
   });
 
+  it('maps a valid dob_m (1-12) to the child birthMonth', () => {
+    const result = parseLegacyRowsForMigration(
+      [
+        row({ grade: 99, fname: 'Asha', lname: 'Shah', sid: 1 }),
+        row({ grade: 3, fname: 'Kid', lname: 'Shah', dob_m: 9, sid: 2 }),
+      ],
+      '42',
+    );
+    expect(result?.children[0]?.birthMonth).toBe(9);
+  });
+
+  it('treats the "NULL" sentinel dob_m as a null birthMonth', () => {
+    const result = parseLegacyRowsForMigration(
+      [
+        row({ grade: 99, fname: 'Asha', lname: 'Shah', sid: 1 }),
+        row({ grade: 3, fname: 'Kid', lname: 'Shah', dob_m: 'NULL', sid: 2 }),
+      ],
+      '42',
+    );
+    expect(result?.children[0]?.birthMonth).toBeNull();
+  });
+
+  it('treats an out-of-range dob_m (0) as a null birthMonth', () => {
+    const result = parseLegacyRowsForMigration(
+      [
+        row({ grade: 99, fname: 'Asha', lname: 'Shah', sid: 1 }),
+        row({ grade: 3, fname: 'Kid', lname: 'Shah', dob_m: 0, sid: 2 }),
+      ],
+      '42',
+    );
+    expect(result?.children[0]?.birthMonth).toBeNull();
+  });
+
   it('builds a family name from the primary lastName', () => {
     const result = parseLegacyRowsForMigration(
       [row({ grade: 99, fname: 'Asha', lname: 'Shah', sid: 1 })],

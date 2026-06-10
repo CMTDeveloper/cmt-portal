@@ -73,6 +73,9 @@ const legacyShahFamily = {
       lastName: 'Shah',
       gender: 'Male' as const,
       schoolGrade: '3',
+      legacySid: '2',
+      legacyLevel: 'Level 1 (Gr 1)',
+      birthMonth: 9,
     },
   ],
 };
@@ -129,6 +132,7 @@ describe('lazyMigrateLegacyFamily — happy path', () => {
       lastName: 'Shah',
       gender: 'Male',
       schoolGrade: '3',
+      birthMonth: 9,
     });
 
     const spouseDoc = txnSetCalls.find(
