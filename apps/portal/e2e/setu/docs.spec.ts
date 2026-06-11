@@ -42,9 +42,14 @@ test.describe('/docs — staff documentation hub', () => {
     expect(href).toMatch(/^\/docs\/[a-z-]+/);
   });
 
-  test('unknown slug 404s', async ({ page }) => {
+  // cacheComponents/PPR: the layout shell streams with HTTP 200 before the
+  // page's notFound() runs, so unknown slugs can't produce a literal 404
+  // status — assert on the streamed not-found digest marker instead.
+  test('unknown slug renders not-found (no article)', async ({ page }) => {
     const res = await page.request.get('/docs/not-a-guide');
-    expect(res.status()).toBe(404);
+    const html = await res.text();
+    expect(html).toContain('NEXT_HTTP_ERROR_FALLBACK;404');
+    expect(html).not.toContain('doc-article');
   });
 
   test('teacher persona sees only teacher-tagged guides; admin-only guides 404', async ({ baseURL }) => {
@@ -56,10 +61,14 @@ test.describe('/docs — staff documentation hub', () => {
     expect(html).toContain('doc-card-teacher');
     expect(html).not.toContain('doc-card-admin');
     expect(html).not.toContain('doc-card-rollover');
+    // out-of-audience guide streams the not-found UI (status stays 200 — PPR)
     const denied = await ctx.get('/docs/admin');
-    expect(denied.status()).toBe(404);
+    const deniedHtml = await denied.text();
+    expect(deniedHtml).toContain('NEXT_HTTP_ERROR_FALLBACK;404');
+    expect(deniedHtml).not.toContain('doc-article');
     const allowed = await ctx.get('/docs/teacher');
     expect(allowed.status()).toBe(200);
+    expect(await allowed.text()).toContain('doc-article');
     await ctx.dispose();
   });
 
