@@ -146,3 +146,21 @@
 .docs-prose tr:nth-child(even) td {
   background: color-mix(in srgb, var(--surface2) 45%, transparent);
 }
+
+/* Phone-width adjustments: the top-bar pill is decoration — drop it so the
+ * brand and the back link sit comfortably on one line; ease heading sizes. */
+@media (max-width: 560px) {
+  .docs-topbar-pill {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .docs-prose h1 {
+    font-size: 22px;
+  }
+
+  .docs-prose h2 {
+    font-size: 18px;
+  }
+}

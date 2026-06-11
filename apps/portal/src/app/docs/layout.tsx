@@ -35,13 +35,16 @@ async function DocsGate({ children }: { children: React.ReactNode }) {
           <span style={{ fontWeight: 650, fontSize: 15, color: 'var(--ink)' }}>Guides</span>
         </Link>
         <span
-          className="pill"
-          style={{ fontSize: 11, color: 'var(--muted)', border: '1px solid var(--line)', borderRadius: 999, padding: '2px 8px' }}
+          className="docs-topbar-pill"
+          style={{ fontSize: 11, color: 'var(--muted)', border: '1px solid var(--line)', borderRadius: 999, padding: '2px 8px', whiteSpace: 'nowrap' }}
         >
           team documentation
         </span>
         <div style={{ flex: 1 }} />
-        <Link href="/" style={{ fontSize: 13, color: 'var(--accentDeep)', textDecoration: 'none', fontWeight: 550 }}>
+        <Link
+          href="/"
+          style={{ fontSize: 13, color: 'var(--accentDeep)', textDecoration: 'none', fontWeight: 550, whiteSpace: 'nowrap' }}
+        >
           Back to portal →
         </Link>
       </header>
