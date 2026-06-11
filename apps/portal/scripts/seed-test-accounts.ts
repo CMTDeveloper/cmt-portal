@@ -623,6 +623,32 @@ async function main(): Promise<void> {
         await ensureEnrollmentWithPid(db, fid, p.enrollOid, managerMid, p.key);
       }
 
+      // Proposed-prasad fixture (propose→confirm E2E): always restored to
+      // 'proposed' on re-seed so the confirm spec is repeatable. Future-dated
+      // (today+60) so it never reads as past.
+      if (p.key === 'parent-scarborough') {
+        const prasadPid = 'bv-scarborough-2025-26';
+        const date = new Date(Date.now() + 60 * 86_400_000).toISOString().slice(0, 10);
+        const paid = `${prasadPid}-${fid}`;
+        await db.collection('prasadAssignments').doc(paid).set({
+          paid, pid: prasadPid, fid,
+          familyName: p.familyName, location: p.location,
+          date,
+          youngestMid: null, youngestName: 'Test Child Three', birthMonth: 11,
+          reason: 'birthday-month', source: 'auto', status: 'proposed',
+          assignedAt: FieldValue.serverTimestamp(),
+          movedFrom: null, movedAt: null, movedBy: null,
+          remindedAt: { weekBefore: null, twoDayBefore: null },
+          confirmedAt: null, confirmedBy: null, proposalNotifiedAt: null,
+          _test: true,
+        }); // plain set, NOT merge — re-seed must RESET a confirmed doc back to proposed
+        await db.collection('prasadConfig').doc(prasadPid).set(
+          { pid: prasadPid, capPerSunday: 10, publishedAt: FieldValue.serverTimestamp(), publishedBy: 'seed-test-accounts', _test: true },
+          { merge: true },
+        );
+        console.log(`  [${p.key}] proposed prasad fixture ${paid} (date=${date})`);
+      }
+
       let roles = 'family-manager';
       if (p.teacherLevels) {
         const levelIds = pickLevels(levels, p.teacherLevels, p.key);
