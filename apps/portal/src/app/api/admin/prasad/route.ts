@@ -48,6 +48,8 @@ export async function GET(req: Request) {
         familyName,
         assignedAt: toIso(d.assignedAt),
         movedAt: toIso(d.movedAt),
+        confirmedAt: toIso(d.confirmedAt),
+        proposalNotifiedAt: toIso(d.proposalNotifiedAt),
         remindedAt: {
           weekBefore: toIso(remindedAt.weekBefore),
           twoDayBefore: toIso(remindedAt.twoDayBefore),

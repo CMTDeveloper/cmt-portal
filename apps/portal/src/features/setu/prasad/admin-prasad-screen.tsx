@@ -709,6 +709,7 @@ function AssignmentsManager({ pid, sundays }: { pid: string; sundays: string[] }
 
   const confirmedCount = active.filter((a) => a.status === 'assigned').length;
   const proposedCount = active.filter((a) => a.status === 'proposed').length;
+  const confirmedPct = Math.round((confirmedCount / Math.max(1, confirmedCount + proposedCount)) * 100);
 
   /** Bulk-confirm every proposed row on its current Sunday. */
   async function assignAll() {
@@ -733,7 +734,7 @@ function AssignmentsManager({ pid, sundays }: { pid: string; sundays: string[] }
           data-testid="prasad-status-counts"
           style={{ fontSize: 13, fontWeight: 600, color: 'var(--body-text)', fontVariantNumeric: 'tabular-nums' }}
         >
-          {confirmedCount} confirmed · {proposedCount} proposed
+          {confirmedCount} confirmed · {proposedCount} proposed ({confirmedPct}% confirmed)
         </span>
         {proposedCount > 0 && (
           <button

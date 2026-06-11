@@ -67,6 +67,7 @@ export type MoveResult = 'moved' | 'not-found' | 'locked' | 'target-full' | 'inv
 export async function moveAssignment(fid: string, targetDate: string, actorMid: string): Promise<MoveResult> {
   const current = await getFamilyAssignment(fid);
   if (!current) return 'not-found';
+  if (current.status === 'proposed') return 'invalid-target'; // proposed rows confirm via confirmAssignment, never move
   if (!current.movable) return 'locked';
   const opts = await getMoveOptions(fid);
   if (!opts || !opts.options.some((o) => o.date === targetDate)) return 'invalid-target';

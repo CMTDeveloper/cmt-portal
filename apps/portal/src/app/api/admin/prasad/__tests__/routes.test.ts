@@ -267,6 +267,8 @@ describe('GET /api/admin/prasad', () => {
           date: '2026-03-15', status: 'assigned',
           assignedAt: new FakeTimestamp('2026-01-02T00:00:00.000Z'),
           movedAt: new FakeTimestamp('2026-02-01T00:00:00.000Z'),
+          confirmedAt: new FakeTimestamp('2026-02-15T00:00:00.000Z'),
+          proposalNotifiedAt: new FakeTimestamp('2026-01-10T00:00:00.000Z'),
           remindedAt: { weekBefore: null, twoDayBefore: null },
         }),
       },
@@ -296,10 +298,14 @@ describe('GET /api/admin/prasad', () => {
     const adams = body.assignments[1]!;
     expect(adams.assignedAt).toBe('2026-01-02T00:00:00.000Z');
     expect(adams.movedAt).toBe('2026-02-01T00:00:00.000Z');
+    expect(adams.confirmedAt).toBe('2026-02-15T00:00:00.000Z');
+    expect(adams.proposalNotifiedAt).toBe('2026-01-10T00:00:00.000Z');
     const zephyr = body.assignments[2]!;
     expect((zephyr.remindedAt as Record<string, unknown>).weekBefore).toBe('2026-03-08T00:00:00.000Z');
     expect((zephyr.remindedAt as Record<string, unknown>).twoDayBefore).toBeNull();
     expect(zephyr.movedAt).toBeNull();
+    expect(zephyr.confirmedAt).toBeNull();
+    expect(zephyr.proposalNotifiedAt).toBeNull();
   });
 });
 

@@ -207,7 +207,7 @@ describe('AdminPrasadScreen', () => {
     try {
       render(<AdminPrasadScreen />);
       const counts = (await screen.findAllByTestId('prasad-status-counts'))[0]!;
-      expect(counts).toHaveTextContent('1 confirmed · 2 proposed');
+      expect(counts).toHaveTextContent('1 confirmed · 2 proposed (33% confirmed)');
       const bulkBtn = (await screen.findAllByTestId('prasad-assign-remaining'))[0]!;
       expect(bulkBtn).toHaveTextContent('Assign all unconfirmed (2)');
       await userEvent.click(bulkBtn);
@@ -228,7 +228,7 @@ describe('AdminPrasadScreen', () => {
     ]);
     render(<AdminPrasadScreen />);
     const counts = (await screen.findAllByTestId('prasad-status-counts'))[0]!;
-    expect(counts).toHaveTextContent('1 confirmed · 0 proposed');
+    expect(counts).toHaveTextContent('1 confirmed · 0 proposed (100% confirmed)');
     expect(screen.queryByTestId('prasad-assign-remaining')).toBeNull();
   });
 });

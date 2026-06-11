@@ -8,9 +8,10 @@ import { CspRoot } from '@/features/family/components/atoms';
 export const metadata = { title: 'Prasad seva — CMT Portal' };
 
 const HOW_IT_WORKS = [
-  'Each family is assigned one Sunday per year to bring prasad for the assembly.',
+  'Each family brings prasad for the assembly one Sunday per year. We suggest a date — your youngest child’s birthday month when possible.',
+  'Confirm the suggested Sunday, or pick any other open Sunday that works better for your family.',
   'We send reminders by email and text a week before and again two days before your Sunday.',
-  'Need a different date? Move it yourself any time up to a week before — no need to call.',
+  'Plans change? Move a confirmed date yourself any time up to a week before — no need to call.',
 ];
 
 export default async function FamilyPrasadPage() {

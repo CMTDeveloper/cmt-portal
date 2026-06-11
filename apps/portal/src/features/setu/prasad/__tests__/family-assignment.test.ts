@@ -422,6 +422,19 @@ describe('moveAssignment', () => {
     expect(ops).toHaveLength(0);
   });
 
+  it('returns "invalid-target" for a PROPOSED row without touching the txn (confirm, never move)', async () => {
+    const ops: UpdateOp[] = [];
+    const seeds = happySeeds();
+    seeds.assignments[0]!.status = 'proposed';
+    const db = makeDb(seeds, ops);
+    mockFirestore.mockReturnValue(db as never);
+
+    // ymdPlus(20) IS an open option — the guard must reject on status alone.
+    expect(await moveAssignment('F-1', ymdPlus(20), 'actor-mid')).toBe('invalid-target');
+    expect(db.runTransaction).not.toHaveBeenCalled();
+    expect(ops).toHaveLength(0);
+  });
+
   it('returns "target-full" with NO update when the txn sees the cap reached', async () => {
     const ops: UpdateOp[] = [];
     // capInTxn:2 makes tx.get see exactly cap (2) assigned docs on the target.
