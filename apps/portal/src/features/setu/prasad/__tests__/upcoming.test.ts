@@ -179,7 +179,34 @@ describe('getUpcomingPrasad', () => {
     expect(scarborough.sundays[0]!.families[0]!.contacts[0]!.name).toBe('Anil Kumar');
   });
 
-  it('filters out non-assigned rows (cancelled/moved) before grouping', async () => {
+  it('keeps proposed rows sorted after assigned within a Sunday; cancelled still excluded', async () => {
+    const captured = freshCaptured();
+    mockFirestore.mockReturnValue(
+      makeDb(
+        {
+          assignments: [
+            // Proposed seeded FIRST so the confirmed-first sort must reorder it.
+            { pid: 'bv-brampton-2025-26', fid: 'F2', familyName: 'Patel', date: '2026-03-08', status: 'proposed' },
+            { pid: 'bv-brampton-2025-26', fid: 'F1', familyName: 'Sharma', date: '2026-03-08', status: 'assigned' },
+            { pid: 'bv-brampton-2025-26', fid: 'F3', familyName: 'Iyer', date: '2026-03-08', status: 'cancelled' },
+          ],
+          membersByFid: {
+            F1: [{ mid: 'F1-01', manager: true, firstName: 'Asha', lastName: 'Sharma', email: 'asha@x.com', phone: null }],
+            F2: [{ mid: 'F2-01', manager: true, firstName: 'Ravi', lastName: 'Patel', email: 'ravi@x.com', phone: null }],
+          },
+        },
+        captured,
+      ) as never,
+    );
+
+    const result = await getUpcomingPrasad();
+    const families = result.locations[0]!.sundays[0]!.families;
+    expect(families.map((f) => f.status)).toEqual(['assigned', 'proposed']);
+    // Cancelled F3 never makes it into the Sunday.
+    expect(families.map((f) => f.fid)).toEqual(['F1', 'F2']);
+  });
+
+  it('filters out cancelled/moved rows before grouping', async () => {
     const captured = freshCaptured();
     mockFirestore.mockReturnValue(
       makeDb(

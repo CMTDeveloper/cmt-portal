@@ -11,6 +11,7 @@ export interface PrasadContact {
 export interface PrasadFamily {
   fid: string;
   familyName: string;
+  status: 'proposed' | 'assigned';
   contacts: PrasadContact[];
 }
 
@@ -31,14 +32,15 @@ export interface UpcomingPrasadResponse {
 const SUNDAYS_PER_LOCATION = 4;
 // Pull a generous window per period (status isn't in the (pid,date) index, so
 // cancelled/moved rows still count toward the limit — 60 comfortably covers the
-// first 4 future Sundays of assigned families per location).
+// first 4 future Sundays of assigned/proposed families per location).
 const QUERY_LIMIT = 60;
 
 /**
  * "Who's bringing prasad this/next Sunday + how to reach them" for the welcome
  * team. For each CURRENT_PRASAD_PIDS period: read upcoming assignments (backed
- * by the (pid,date) index), keep status==assigned, group by date, take the
- * first 4 dates, then join each family's manager contacts (bulk per-fid fetch).
+ * by the (pid,date) index), keep assigned + proposed (confirmed first;
+ * cancelled/moved-out rows excluded), group by date, take the first 4 dates,
+ * then join each family's manager contacts (bulk per-fid fetch).
  */
 export async function getUpcomingPrasad(): Promise<UpcomingPrasadResponse> {
   const db = portalFirestore();
@@ -49,7 +51,7 @@ export async function getUpcomingPrasad(): Promise<UpcomingPrasadResponse> {
   // fetched exactly once per family (bounded fan-out via Promise.all).
   const fids = new Set<string>();
   // Intermediate: per-location grouped dates (fids only) before the contact join.
-  const grouped: Array<{ location: string; sundays: Array<{ date: string; rows: Array<{ fid: string; familyName: string }> }> }> = [];
+  const grouped: Array<{ location: string; sundays: Array<{ date: string; rows: Array<{ fid: string; familyName: string; status: 'proposed' | 'assigned' }> }> }> = [];
 
   for (const { pid, location } of CURRENT_PRASAD_PIDS) {
     const snap = await db.collection('prasadAssignments')
@@ -60,21 +62,25 @@ export async function getUpcomingPrasad(): Promise<UpcomingPrasadResponse> {
       .get();
 
     // status isn't part of the index ordering — filter in memory.
-    const assigned = snap.docs
+    const kept = snap.docs
       .map((d) => d.data() as { fid?: string; familyName?: string; date?: string; status?: string })
-      .filter((a) => a.status === 'assigned' && typeof a.fid === 'string' && typeof a.date === 'string');
+      .filter((a) => (a.status === 'assigned' || a.status === 'proposed') && typeof a.fid === 'string' && typeof a.date === 'string');
 
     // Group by date, preserving the (date asc) order; take the first 4 dates.
-    const byDate = new Map<string, Array<{ fid: string; familyName: string }>>();
-    for (const a of assigned) {
+    const byDate = new Map<string, Array<{ fid: string; familyName: string; status: 'proposed' | 'assigned' }>>();
+    for (const a of kept) {
       const list = byDate.get(a.date!) ?? [];
-      list.push({ fid: a.fid!, familyName: a.familyName ?? a.fid! });
+      list.push({ fid: a.fid!, familyName: a.familyName ?? a.fid!, status: a.status as 'proposed' | 'assigned' });
       byDate.set(a.date!, list);
     }
     const sundays = [...byDate.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
       .slice(0, SUNDAYS_PER_LOCATION)
-      .map(([date, rows]) => ({ date, rows }));
+      .map(([date, rows]) => {
+        // Confirmed first within each Sunday (stable, so the per-date order holds otherwise).
+        rows.sort((x, y) => (x.status === y.status ? 0 : x.status === 'assigned' ? -1 : 1));
+        return { date, rows };
+      });
 
     for (const s of sundays) for (const r of s.rows) fids.add(r.fid);
     grouped.push({ location, sundays });
@@ -101,6 +107,7 @@ export async function getUpcomingPrasad(): Promise<UpcomingPrasadResponse> {
         families: s.rows.map((r) => ({
           fid: r.fid,
           familyName: r.familyName,
+          status: r.status,
           contacts: contactsByFid.get(r.fid) ?? [],
         })),
       })),

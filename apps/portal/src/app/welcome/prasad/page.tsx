@@ -117,18 +117,27 @@ function LocationSection({ location }: { location: PrasadLocation }) {
 }
 
 function SundayCard({ sunday }: { sunday: PrasadSunday }) {
+  const confirmed = sunday.families.filter((f) => f.status === 'assigned').length;
+  const proposed = sunday.families.length - confirmed;
   return (
     <div className="card" style={{ padding: 18 }}>
       <div className="between" style={{ marginBottom: 12 }}>
         <div style={{ fontSize: 16, fontWeight: 600 }}>{formatSunday(sunday.date)}</div>
         <span style={{ flex: '0 0 auto', fontSize: 11, padding: '2px 9px', borderRadius: 99, fontWeight: 600, background: 'var(--accentSoft)', color: 'var(--accentDeep)' }}>
-          {sunday.families.length} {sunday.families.length === 1 ? 'family' : 'families'}
+          {confirmed} confirmed · {proposed} proposed
         </span>
       </div>
       <div className="col" style={{ gap: 10 }}>
         {sunday.families.map((family) => (
           <div key={family.fid}>
-            <div style={{ fontSize: 14, fontWeight: 600 }}>{family.familyName}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ fontSize: 14, fontWeight: 600 }}>{family.familyName}</div>
+              {family.status === 'proposed' ? (
+                <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: 99, background: 'var(--setu-warn-soft)', color: 'var(--warn, #a06410)', textTransform: 'uppercase' }}>
+                  not confirmed
+                </span>
+              ) : null}
+            </div>
             {family.contacts.length === 0 ? (
               <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>No manager contact on file</div>
             ) : (
