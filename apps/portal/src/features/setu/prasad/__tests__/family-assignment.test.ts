@@ -82,7 +82,7 @@ function assignmentDoc(seeds: Seeds, paid: string): Json | undefined {
   };
 }
 
-function makeDb(seeds: Seeds, updateOps: UpdateOp[], opts: { capInTxn?: number } = {}) {
+function makeDb(seeds: Seeds, updateOps: UpdateOp[], opts: { capInTxn?: number; txnDateOverride?: string } = {}) {
   // Captures the where filters on a prasadAssignments query so the same query
   // object resolves correctly whether read via .get() or tx.get().
   function assignmentsQuery() {
@@ -170,9 +170,14 @@ function makeDb(seeds: Seeds, updateOps: UpdateOp[], opts: { capInTxn?: number }
           arg: { __resolve?: () => QuerySnap; __collection?: string; __id?: string },
         ): Promise<QuerySnap | DocSnap> => {
           // Doc-ref branch: resolve the same way assignmentDocRef(...).get() does.
+          // txnDateOverride simulates a concurrent admin move: the doc read INSIDE
+          // the txn carries a different date than the outside read.
           if (arg.__collection === 'prasadAssignments' && typeof arg.__id === 'string') {
             const data = assignmentDoc(seeds, arg.__id);
-            return { exists: data !== undefined, id: arg.__id, data: () => data };
+            const txnData = data !== undefined && opts.txnDateOverride !== undefined
+              ? { ...data, date: opts.txnDateOverride }
+              : data;
+            return { exists: txnData !== undefined, id: arg.__id, data: () => txnData };
           }
           if (typeof arg.__resolve !== 'function') throw new Error('tx.get on a non-query');
           const snap = arg.__resolve();
@@ -553,5 +558,23 @@ describe('confirmAssignment', () => {
   it('not-found without any doc', async () => {
     mockFirestore.mockReturnValue(makeDb({ calendar: [], config: [], assignments: [] }, []) as never);
     expect(await confirmAssignment('F9', undefined, 'M1')).toBe('not-found');
+  });
+
+  it('rejects in-place confirm when the doc date changed underneath (admin moved it)', async () => {
+    const updateOps: UpdateOp[] = [];
+    // The in-txn read returns a DIFFERENT date than the outside read — the admin
+    // reassign route changed `date` without changing `status` in between.
+    mockFirestore.mockReturnValue(
+      makeDb(proposedSeeds(), updateOps, { txnDateOverride: ymdPlus(37) }) as never,
+    );
+    expect(await confirmAssignment('F1', undefined, 'M1')).toBe('invalid-target');
+    expect(updateOps).toHaveLength(0);
+  });
+
+  it('rejects in-place confirm of a past proposed date', async () => {
+    const seeds = proposedSeeds();
+    seeds.assignments[0]!.date = ymdPlus(-3);
+    mockFirestore.mockReturnValue(makeDb(seeds, []) as never);
+    expect(await confirmAssignment('F1', undefined, 'M1')).toBe('invalid-target');
   });
 });

@@ -19,3 +19,11 @@ export function daysUntil(ymd: string, todayYmd: string): number {
   const n = (s: string) => { const [y, m, d] = s.split('-').map(Number); return Date.UTC(y!, m! - 1, d!) / 86_400_000; };
   return n(ymd) - n(todayYmd);
 }
+
+/** "2026-03-22" → "Sun, Mar 22" (UTC-pinned — never local-TZ-shifts the calendar day). */
+export function formatPrasadDate(ymd: string): string {
+  const [y, m, d] = ymd.split('-').map(Number);
+  return new Intl.DateTimeFormat('en-CA', {
+    weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC',
+  }).format(new Date(Date.UTC(y!, m! - 1, d!)));
+}

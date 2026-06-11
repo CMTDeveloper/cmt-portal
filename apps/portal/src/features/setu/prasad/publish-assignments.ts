@@ -19,10 +19,11 @@ export async function publishAssignments(pid: string, location: string, cap: num
   const proposal = await previewAssignments(pid, location, cap);
   const db = portalFirestore();
   const batchLimit = 400;
-  // TOCTOU note: `existing` families were read at preview time. A family-move that
-  // commits between that read and this batch would be re-emitted here with
-  // source:'auto' (merge resets the move fields) — a seconds-wide window on a
-  // once-a-year op; self-healing on the family's next move. Accepted v1 risk.
+  // Rows are NEW-families-only (any fid holding an assigned OR proposed doc at
+  // preview-read is excluded by loadEngineInput), so a re-publish never rewrites
+  // an existing row. Residual race: a doc created for the same fid between the
+  // preview read and this batch (e.g. a double-clicked concurrent publish)
+  // merge-writes identical content — harmless and idempotent.
   for (let i = 0; i < proposal.rows.length; i += batchLimit) {
     const batch = db.batch();
     for (const row of proposal.rows.slice(i, i + batchLimit)) {

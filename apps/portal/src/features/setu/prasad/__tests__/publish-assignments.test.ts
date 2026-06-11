@@ -370,4 +370,27 @@ describe('publishAssignments', () => {
     expect(res.rows).toHaveLength(1);
     expect(res.rows[0]!.fid).toBe('F-NOMONTH');
   });
+
+  it('re-publish keeps an existing PROPOSED family: no write targets its doc', async () => {
+    // Guards a real bug class: a re-emitted proposed row would merge-reset
+    // proposalNotifiedAt to null → the family gets re-spammed on the next
+    // notify pass.
+    const ops: BatchOp[] = [];
+    const withProposed = seeds();
+    withProposed.assignments = [
+      { paid: `${PID}-F-BDAY`, fid: 'F-BDAY', pid: PID, date: FUTURE_A, status: 'proposed' },
+    ];
+    mockFirestore.mockReturnValue(makeDb(withProposed, ops) as never);
+
+    const res = await publishAssignments(PID, LOC, 1, 'actor-mid');
+    expect(res.stats.keptExisting).toBe(1);
+    // Only the no-month family gets a NEW row; the proposed one is excluded.
+    expect(res.rows).toHaveLength(1);
+    expect(res.rows[0]!.fid).toBe('F-NOMONTH');
+    // NO prasadAssignments write targets the proposed doc's id.
+    const assignWrites = ops.filter((o) => o.ref.__collection === 'prasadAssignments');
+    expect(assignWrites.map((o) => o.ref.__id)).not.toContain(`${PID}-F-BDAY`);
+    expect(assignWrites).toHaveLength(1);
+    expect(assignWrites[0]!.ref.__id).toBe(`${PID}-F-NOMONTH`);
+  });
 });

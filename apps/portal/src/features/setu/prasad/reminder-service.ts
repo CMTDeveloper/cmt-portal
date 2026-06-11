@@ -1,6 +1,6 @@
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
 import { resolveSender } from '@/lib/aws/resolve-sender';
-import { torontoToday, daysUntil } from './constants';
+import { torontoToday, daysUntil, formatPrasadDate } from './constants';
 
 type Kind = 'weekBefore' | 'twoDayBefore';
 const KIND_BY_DAYS: Record<number, Kind> = { 7: 'weekBefore', 2: 'twoDayBefore' };
@@ -8,13 +8,6 @@ const KIND_BY_DAYS: Record<number, Kind> = { 7: 'weekBefore', 2: 'twoDayBefore' 
 function addDays(ymd: string, days: number): string {
   const [y, m, d] = ymd.split('-').map(Number);
   return new Date(Date.UTC(y!, m! - 1, d! + days)).toISOString().slice(0, 10);
-}
-
-function formatDate(ymd: string): string {
-  const [y, m, d] = ymd.split('-').map(Number);
-  return new Intl.DateTimeFormat('en-CA', {
-    weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC',
-  }).format(new Date(Date.UTC(y!, m! - 1, d!)));
 }
 
 export interface ReminderRunResult { checked: number; sent: number; skipped: number; failed: number }
@@ -53,7 +46,7 @@ export async function sendDuePrasadReminders(now: Date = new Date()): Promise<Re
     try {
       const managersSnap = await db.collection('families').doc(a.fid)
         .collection('members').where('manager', '==', true).get();
-      const when = formatDate(a.date);
+      const when = formatPrasadDate(a.date);
       const lead = kind === 'weekBefore' ? 'is one week away' : 'is this Sunday';
       for (const m of managersSnap.docs) {
         const mem = m.data() as { email?: string | null; phone?: string | null; firstName?: string };

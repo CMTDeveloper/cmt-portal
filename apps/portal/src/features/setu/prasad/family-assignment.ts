@@ -111,6 +111,10 @@ export async function confirmAssignment(
   const current = await getFamilyAssignment(fid);
   if (!current) return 'not-found';
   if (current.status !== 'proposed') return 'already-confirmed';
+  // Day-of confirm is allowed (>= 0); a date already in the past is not.
+  if ((targetDate === undefined || targetDate === current.date) && daysUntil(current.date, torontoToday()) < 0) {
+    return 'invalid-target';
+  }
 
   const db = portalFirestore();
   const ref = db.collection('prasadAssignments').doc(current.paid);
@@ -120,6 +124,9 @@ export async function confirmAssignment(
       const snap = await tx.get(ref);
       if (!snap.exists) return 'not-found' as const;
       if ((snap.data() as { status?: string }).status !== 'proposed') return 'already-confirmed' as const;
+      // The admin reassign route can change `date` without changing `status`
+      // between the outside read and this txn — re-verify before flipping.
+      if ((snap.data() as { date?: string }).date !== current.date) return 'invalid-target' as const;
       tx.update(ref, {
         status: 'assigned',
         confirmedAt: FieldValue.serverTimestamp(),

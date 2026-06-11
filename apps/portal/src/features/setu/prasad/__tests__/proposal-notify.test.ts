@@ -236,6 +236,30 @@ describe('notifyUnnotifiedProposals', () => {
     expect(result).toEqual({ checked: 2, sent: 1, skipped: 0, failed: 1 });
   });
 
+  it('a family with no reachable manager is NOT stamped and counts as failed', async () => {
+    const captured = { query: { where: [] as CapturedQuery['where'] }, sets: [] as CapturedSet[] };
+    mockFirestore.mockReturnValue(
+      makeDb(
+        {
+          assignments: [
+            { paid: 'p-orphan', fid: 'F1', pid: PID, date: '2026-11-08', status: 'proposed' },
+          ],
+          // managers query returns [] — zero messages can be dispatched.
+          membersByFid: { F1: [] },
+        },
+        captured,
+      ) as never,
+    );
+
+    const result = await notifyUnnotifiedProposals(PID);
+
+    expect(result.failed).toBe(1);
+    expect(result.sent).toBe(0);
+    expect(emailSpy).not.toHaveBeenCalled();
+    expect(smsSpy).not.toHaveBeenCalled();
+    expect(captured.sets).toHaveLength(0); // no stamp written
+  });
+
   it('returns disabled with zero sends when PRASAD_REMINDER_CRON_ENABLED is not "true"', async () => {
     process.env.PRASAD_REMINDER_CRON_ENABLED = 'false';
     const captured = { query: { where: [] as CapturedQuery['where'] }, sets: [] as CapturedSet[] };
