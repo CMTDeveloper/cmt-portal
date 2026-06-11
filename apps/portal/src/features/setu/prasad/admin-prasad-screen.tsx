@@ -10,6 +10,7 @@ import {
   publishPrasad,
   fetchPrasadAssignments,
   adminReassignPrasad,
+  assignRemainingPrasad,
   type AdminPrasadAssignment,
 } from './prasad-client';
 
@@ -55,6 +56,14 @@ const REASON_META: Record<ReasonKey, { label: string; bg: string; fg: string }> 
 const SOURCE_BADGE: Record<string, string> = {
   'family-move': 'moved by family',
   admin: 'moved by admin',
+};
+
+// Proposed (warn-tone) vs confirmed/assigned (info-tone) status chips for the
+// manage list. Unknown statuses render nothing (cancelled rows are filtered out
+// before they reach a row anyway).
+const STATUS_CHIP: Record<string, { label: string; bg: string; fg: string }> = {
+  proposed: { label: 'Proposed', bg: 'var(--setu-warn-soft)', fg: 'var(--warn, #a06410)' },
+  assigned: { label: 'Confirmed', bg: 'var(--info-soft)', fg: 'var(--info-deep)' },
 };
 
 // ---------------------------------------------------------------------------
@@ -180,6 +189,16 @@ function StatBlock({
         <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--body-text)', lineHeight: 1.25 }}>{label}</span>
       </span>
     </div>
+  );
+}
+
+function StatusChip({ status }: { status: string }) {
+  const meta = STATUS_CHIP[status];
+  if (!meta) return null;
+  return (
+    <span style={{ fontSize: 10.5, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: meta.bg, color: meta.fg, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+      {meta.label}
+    </span>
   );
 }
 
@@ -404,7 +423,8 @@ function AssignmentRow({
   const [target, setTarget] = useState('');
   const [saving, setSaving] = useState(false);
   const [cancelling, setCancelling] = useState(false);
-  const busy = saving || cancelling;
+  const [assigning, setAssigning] = useState(false);
+  const busy = saving || cancelling || assigning;
 
   // Reassign options = the OTHER Sundays present in the preview (never the
   // family's current date).
@@ -420,6 +440,21 @@ function AssignmentRow({
     } catch {
       toast.error('Could not reassign. Please try again.');
       setSaving(false);
+    }
+  }
+
+  /** Confirm a proposed row in place — flips proposed → assigned on its current
+   *  Sunday (the API rejects non-proposed rows with a 409). */
+  async function assignNow() {
+    if (busy) return;
+    setAssigning(true);
+    try {
+      await adminReassignPrasad({ paid: assignment.paid, assign: true });
+      toast.success(`${assignment.familyName} assigned to ${prettySunday(assignment.date)}`);
+      onMutated();
+    } catch {
+      toast.error('Could not assign. Please try again.');
+      setAssigning(false);
     }
   }
 
@@ -454,8 +489,11 @@ function AssignmentRow({
       }}
     >
       <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-        <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {assignment.familyName}
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+          <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {assignment.familyName}
+          </span>
+          <StatusChip status={assignment.status} />
         </span>
         {badge && (
           <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
@@ -465,6 +503,32 @@ function AssignmentRow({
         )}
       </span>
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', flexShrink: 0 }}>
+        {assignment.status === 'proposed' && (
+          <button
+            type="button"
+            data-testid="prasad-assign"
+            onClick={assignNow}
+            disabled={busy}
+            aria-label={`Assign ${assignment.familyName}`}
+            className="prasad-assign"
+            style={{
+              minHeight: 44,
+              padding: '0 14px',
+              fontSize: 12.5,
+              fontWeight: 700,
+              fontFamily: 'var(--body)',
+              color: 'var(--info-deep)',
+              background: 'var(--info-soft)',
+              border: '1px solid var(--info-deep)',
+              borderRadius: 999,
+              cursor: busy ? 'default' : 'pointer',
+              opacity: busy ? 0.55 : 1,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {assigning ? 'Assigning…' : 'Assign'}
+          </button>
+        )}
         <select
           aria-label={`Reassign ${assignment.familyName} to another Sunday`}
           value={target}
@@ -598,6 +662,7 @@ function AssignmentsManager({ pid, sundays }: { pid: string; sundays: string[] }
   const [assignments, setAssignments] = useState<AdminPrasadAssignment[] | null>(null);
   const [error, setError] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [bulkAssigning, setBulkAssigning] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -633,8 +698,47 @@ function AssignmentsManager({ pid, sundays }: { pid: string; sundays: string[] }
   }
   const dates = [...byDate.keys()].sort((x, y) => x.localeCompare(y));
 
+  const confirmedCount = active.filter((a) => a.status === 'assigned').length;
+  const proposedCount = active.filter((a) => a.status === 'proposed').length;
+
+  /** Bulk-confirm every proposed row on its current Sunday. */
+  async function assignAll() {
+    if (bulkAssigning) return;
+    if (!window.confirm(`Assign all ${proposedCount} unconfirmed families to their proposed Sundays?`)) return;
+    setBulkAssigning(true);
+    try {
+      const n = await assignRemainingPrasad(pid);
+      toast.success(`${n} famil${n === 1 ? 'y' : 'ies'} assigned`);
+      load();
+    } catch {
+      toast.error('Bulk assign failed. Please try again.');
+    } finally {
+      setBulkAssigning(false);
+    }
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+        <span
+          data-testid="prasad-status-counts"
+          style={{ fontSize: 13, fontWeight: 600, color: 'var(--body-text)', fontVariantNumeric: 'tabular-nums' }}
+        >
+          {confirmedCount} confirmed · {proposedCount} proposed
+        </span>
+        {proposedCount > 0 && (
+          <button
+            type="button"
+            data-testid="prasad-assign-remaining"
+            onClick={assignAll}
+            disabled={bulkAssigning}
+            className="btn btn--s"
+            style={{ minHeight: 44, fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', opacity: bulkAssigning ? 0.6 : 1 }}
+          >
+            {bulkAssigning ? 'Assigning…' : `Assign all unconfirmed (${proposedCount})`}
+          </button>
+        )}
+      </div>
       {dates.map((d, i) => {
         const list = byDate.get(d)!;
         return (
@@ -728,6 +832,7 @@ export function AdminPrasadScreen() {
         .prasad-save:not(:disabled):hover { background: var(--accentDeep) !important; box-shadow: 0 3px 10px rgba(217,102,66,0.28); }
         .prasad-save:not(:disabled):active { transform: translateY(1px); }
         .prasad-cancel:not(:disabled):hover { border-color: var(--err, #a23a2e) !important; background: var(--setu-warn-soft) !important; }
+        .prasad-assign:not(:disabled):hover { background: var(--info-deep) !important; color: #fff !important; }
         .prasad-textbtn:hover { text-decoration: underline; }
         @media (prefers-reduced-motion: reduce) {
           [style*="prasad-spin"] { animation-duration: 0.01ms !important; }
@@ -780,7 +885,7 @@ export function AdminPrasadScreen() {
       {preview !== null && preview.eligibleSundayCount > 0 && (
         <section style={{ marginTop: 32 }}>
           <h2 style={{ fontSize: 15, fontWeight: 600, color: 'var(--ink)', letterSpacing: '-0.01em', marginBottom: 4 }}>
-            Published assignments
+            Published proposals &amp; assignments
           </h2>
           <p style={{ fontSize: 13, color: 'var(--body-text)', marginBottom: 14, lineHeight: 1.5 }}>
             Move a family to another Sunday, or remove one that has left. Changes are saved immediately.
@@ -985,7 +1090,7 @@ function PreviewBody({
             <Spinner /> Publishing…
           </span>
         ) : (
-          'Publish schedule'
+          'Publish proposals'
         )}
       </button>
     </div>
