@@ -19,19 +19,29 @@ function formatDate(ymd: string): string {
 
 export interface ReminderRunResult { checked: number; sent: number; skipped: number; failed: number }
 
-/** Send 7-day / 2-day prasad reminders to family managers. Idempotent via remindedAt stamps. */
+/** Send 7-day / 2-day prasad reminders (assigned) and confirm-nudges (proposed)
+ *  to family managers. Idempotent via remindedAt stamps. */
 export async function sendDuePrasadReminders(now: Date = new Date()): Promise<ReminderRunResult> {
   const db = portalFirestore();
   const today = torontoToday(now);
   const sender = resolveSender();
+  const base = process.env.NEXT_PUBLIC_PORTAL_BASE_URL ?? 'https://cmt-setu.vercel.app';
 
-  // status==assigned + date in the two target days → backed by the (status,date) index.
+  // One query per status — `in` can't combine with another `in`, and each
+  // (status==, date in […]) pair is served by the existing (status,date)
+  // composite. Proposed families get a confirm-nudge instead of a reminder.
   const targets = Object.keys(KIND_BY_DAYS).map((d) => addDays(today, Number(d)));
-  const snap = await db.collection('prasadAssignments')
-    .where('status', '==', 'assigned').where('date', 'in', targets).get();
+  const [assignedSnap, proposedSnap] = await Promise.all([
+    db.collection('prasadAssignments').where('status', '==', 'assigned').where('date', 'in', targets).get(),
+    db.collection('prasadAssignments').where('status', '==', 'proposed').where('date', 'in', targets).get(),
+  ]);
+  const docs = [
+    ...assignedSnap.docs.map((d) => ({ doc: d, proposed: false })),
+    ...proposedSnap.docs.map((d) => ({ doc: d, proposed: true })),
+  ];
 
   let sent = 0, skipped = 0, failed = 0;
-  for (const doc of snap.docs) {
+  for (const { doc, proposed } of docs) {
     const a = doc.data() as {
       fid: string; date: string; familyName: string;
       remindedAt?: { weekBefore?: unknown; twoDayBefore?: unknown };
@@ -47,8 +57,11 @@ export async function sendDuePrasadReminders(now: Date = new Date()): Promise<Re
       const lead = kind === 'weekBefore' ? 'is one week away' : 'is this Sunday';
       for (const m of managersSnap.docs) {
         const mem = m.data() as { email?: string | null; phone?: string | null; firstName?: string };
-        const msg = `Namaste ${mem.firstName ?? ''}! Your family's Bala Vihar prasad day ${lead} — ${when}. Please bring prasad for the assembly. — Chinmaya Mission Toronto`;
-        if (mem.email) await sender.sendEmail({ to: mem.email, subject: `Prasad reminder — ${when}`, text: msg });
+        const msg = proposed
+          ? `Namaste ${mem.firstName ?? ''}! Your family's suggested Bala Vihar prasad Sunday (${when}) ${lead} and is not confirmed yet. Please confirm or pick another date: ${base}/family/prasad — Chinmaya Mission Toronto`
+          : `Namaste ${mem.firstName ?? ''}! Your family's Bala Vihar prasad day ${lead} — ${when}. Please bring prasad for the assembly. — Chinmaya Mission Toronto`;
+        const subject = proposed ? `Prasad Sunday — please confirm (${when})` : `Prasad reminder — ${when}`;
+        if (mem.email) await sender.sendEmail({ to: mem.email, subject, text: msg });
         if (mem.phone) await sender.sendSMS({ phone: mem.phone, message: msg });
       }
       // Relies on Admin SDK deep merge: set({ remindedAt: { [kind]: ts } }, { merge: true })
@@ -67,5 +80,5 @@ export async function sendDuePrasadReminders(now: Date = new Date()): Promise<Re
       failed++;
     }
   }
-  return { checked: snap.size, sent, skipped, failed };
+  return { checked: assignedSnap.size + proposedSnap.size, sent, skipped, failed };
 }

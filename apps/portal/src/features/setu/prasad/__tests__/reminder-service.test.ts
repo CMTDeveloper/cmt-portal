@@ -58,16 +58,22 @@ interface CapturedSet {
 
 function makeDb(seeds: Seeds, captured: { query: CapturedQuery; sets: CapturedSet[] }) {
   function assignmentsQuery() {
+    // Per-query-instance filters: the service now issues one query per status
+    // (assigned + proposed), so each instance must resolve its OWN where()
+    // chain. `captured.query.where` still accumulates across instances for
+    // query-shape assertions.
+    const local: CapturedQuery['where'] = [];
     const q = {
       where: vi.fn((field: string, op: string, value: unknown) => {
+        local.push({ field, op, value });
         captured.query.where.push({ field, op, value });
         return q;
       }),
       get: vi.fn(async () => {
-        // Apply the captured filters to the seeded assignments so the mock
+        // Apply this instance's filters to the seeded assignments so the mock
         // mirrors the real (status,date) query.
-        const statusF = captured.query.where.find((w) => w.field === 'status');
-        const dateF = captured.query.where.find((w) => w.field === 'date');
+        const statusF = local.find((w) => w.field === 'status');
+        const dateF = local.find((w) => w.field === 'date');
         const inDates = Array.isArray(dateF?.value) ? (dateF!.value as string[]) : null;
         const rows = seeds.assignments
           .filter((a) => (statusF ? a.status === statusF.value : true))
@@ -148,7 +154,7 @@ beforeEach(() => {
 });
 
 describe('sendDuePrasadReminders', () => {
-  it('queries status==assigned and date in [today+7, today+2]', async () => {
+  it('queries (status,date) once per status — assigned AND proposed — with date in [today+7, today+2]', async () => {
     const captured = { query: { where: [] as CapturedQuery['where'] }, sets: [] as CapturedSet[] };
     mockFirestore.mockReturnValue(
       makeDb({ assignments: [], membersByFid: {} }, captured) as never,
@@ -156,11 +162,20 @@ describe('sendDuePrasadReminders', () => {
 
     await sendDuePrasadReminders(NOW);
 
-    const statusF = captured.query.where.find((w) => w.field === 'status');
-    expect(statusF).toEqual({ field: 'status', op: '==', value: 'assigned' });
-    const dateF = captured.query.where.find((w) => w.field === 'date');
-    expect(dateF?.op).toBe('in');
-    expect((dateF?.value as string[]).slice().sort()).toEqual([DAY7, DAY2].sort());
+    const statusFs = captured.query.where.filter((w) => w.field === 'status');
+    expect(statusFs.map((w) => ({ op: w.op, value: w.value }))).toEqual(
+      expect.arrayContaining([
+        { op: '==', value: 'assigned' },
+        { op: '==', value: 'proposed' },
+      ]),
+    );
+    expect(statusFs).toHaveLength(2);
+    const dateFs = captured.query.where.filter((w) => w.field === 'date');
+    expect(dateFs).toHaveLength(2);
+    for (const dateF of dateFs) {
+      expect(dateF.op).toBe('in');
+      expect((dateF.value as string[]).slice().sort()).toEqual([DAY7, DAY2].sort());
+    }
   });
 
   it('sends email AND SMS for a weekBefore assignment and stamps remindedAt.weekBefore', async () => {
@@ -310,6 +325,67 @@ describe('sendDuePrasadReminders', () => {
 
     expect(result).toEqual({ checked: 3, sent: 2, skipped: 1, failed: 0 });
     expect(captured.sets).toHaveLength(2);
+  });
+
+  it('nudges a PROPOSED weekBefore doc with confirm copy instead of a plain reminder', async () => {
+    const captured = { query: { where: [] as CapturedQuery['where'] }, sets: [] as CapturedSet[] };
+    mockFirestore.mockReturnValue(
+      makeDb(
+        {
+          assignments: [
+            { paid: 'p-prop', fid: 'F1', date: DAY7, familyName: 'Sharma', status: 'proposed' },
+          ],
+          membersByFid: {
+            F1: [{ mid: 'm1', manager: true, email: 'mgr@example.com', firstName: 'Asha' }],
+          },
+        },
+        captured,
+      ) as never,
+    );
+
+    const result = await sendDuePrasadReminders(NOW);
+
+    expect(emailSpy).toHaveBeenCalledTimes(1);
+    const call = emailSpy.mock.calls[0]![0] as { subject: string; text: string };
+    expect(call.text).toContain('not confirmed');
+    expect(call.text).toContain('/family/prasad');
+    expect(call.subject).toContain('please confirm');
+    // The proposed doc still gets the idempotency stamp.
+    expect(captured.sets).toHaveLength(1);
+    expect(captured.sets[0]!.data).toEqual({ remindedAt: { weekBefore: '__ts__' } });
+    expect(result).toEqual({ checked: 1, sent: 1, skipped: 0, failed: 0 });
+  });
+
+  it('sends a plain reminder AND a confirm nudge when assigned + proposed are both due today+2', async () => {
+    const captured = { query: { where: [] as CapturedQuery['where'] }, sets: [] as CapturedSet[] };
+    mockFirestore.mockReturnValue(
+      makeDb(
+        {
+          assignments: [
+            { paid: 'p-assigned', fid: 'F1', date: DAY2, familyName: 'Sharma', status: 'assigned' },
+            { paid: 'p-proposed', fid: 'F2', date: DAY2, familyName: 'Patel', status: 'proposed' },
+          ],
+          membersByFid: {
+            F1: [{ mid: 'm1', manager: true, email: 'a@example.com' }],
+            F2: [{ mid: 'm2', manager: true, email: 'b@example.com' }],
+          },
+        },
+        captured,
+      ) as never,
+    );
+
+    const result = await sendDuePrasadReminders(NOW);
+
+    expect(result).toEqual({ checked: 2, sent: 2, skipped: 0, failed: 0 });
+    expect(emailSpy).toHaveBeenCalledTimes(2);
+    const texts = emailSpy.mock.calls.map((c) => (c[0] as { text: string }).text);
+    expect(texts.some((t) => t.includes('Please bring prasad'))).toBe(true);
+    expect(texts.some((t) => t.includes('not confirmed'))).toBe(true);
+    expect(captured.sets).toHaveLength(2);
+    expect(captured.sets.map((s) => s.data)).toEqual([
+      { remindedAt: { twoDayBefore: '__ts__' } },
+      { remindedAt: { twoDayBefore: '__ts__' } },
+    ]);
   });
 
   it('isolates per-family failures: second family still sends+stamps when first throws', async () => {
