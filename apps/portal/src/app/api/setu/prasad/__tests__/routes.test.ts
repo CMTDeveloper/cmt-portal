@@ -1,17 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('@/lib/flags', () => ({ flags: { setuAuth: true } }));
+const flagsMock = vi.hoisted(() => ({ setuAuth: true }));
+vi.mock('@/lib/flags', () => ({ flags: flagsMock }));
 
 // ── prasad family-assignment feature mocks ────────────────────────────────────
-const { getFamilyAssignment, getMoveOptions, moveAssignment } = vi.hoisted(() => ({
+const { getFamilyAssignment, getMoveOptions, moveAssignment, confirmAssignment } = vi.hoisted(() => ({
   getFamilyAssignment: vi.fn(),
   getMoveOptions: vi.fn(),
   moveAssignment: vi.fn(),
+  confirmAssignment: vi.fn(),
 }));
 vi.mock('@/features/setu/prasad/family-assignment', () => ({
   getFamilyAssignment,
   getMoveOptions,
   moveAssignment,
+  confirmAssignment,
 }));
 
 function req(path: string, init: { method: string; body?: unknown; headers?: Record<string, string> }): Request {
@@ -33,9 +36,11 @@ const OPTIONS = { paid: 'bv-brampton-2025-26-CMT-0001', options: [{ date: '2026-
 
 beforeEach(() => {
   vi.clearAllMocks();
+  flagsMock.setuAuth = true;
   getFamilyAssignment.mockResolvedValue(ASSIGNMENT);
   getMoveOptions.mockResolvedValue(OPTIONS);
   moveAssignment.mockResolvedValue('moved');
+  confirmAssignment.mockResolvedValue('confirmed');
 });
 
 // ── GET /api/setu/prasad ────────────────────────────────────────────────────────
@@ -129,6 +134,67 @@ describe('POST /api/setu/prasad/move', () => {
       moveAssignment.mockResolvedValue(result);
       const { POST } = await import('../move/route');
       const res = await POST(req('/api/setu/prasad/move', { method: 'POST', body: { date: '2026-03-22' }, headers: MANAGER }));
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({ error: result });
+    },
+  );
+});
+
+// ── POST /api/setu/prasad/confirm ─────────────────────────────────────────────
+describe('POST /api/setu/prasad/confirm', () => {
+  it('404 when the setuAuth flag is off', async () => {
+    flagsMock.setuAuth = false;
+    const { POST } = await import('../confirm/route');
+    const res = await POST(req('/api/setu/prasad/confirm', { method: 'POST', body: {}, headers: MANAGER }));
+    expect(res.status).toBe(404);
+    expect(confirmAssignment).not.toHaveBeenCalled();
+  });
+
+  it('401 with no session header', async () => {
+    const { POST } = await import('../confirm/route');
+    const res = await POST(req('/api/setu/prasad/confirm', { method: 'POST', body: {} }));
+    expect(res.status).toBe(401);
+    expect(confirmAssignment).not.toHaveBeenCalled();
+  });
+
+  it('400 on a malformed date', async () => {
+    const { POST } = await import('../confirm/route');
+    const res = await POST(req('/api/setu/prasad/confirm', { method: 'POST', body: { date: 'nope' }, headers: MANAGER }));
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: 'bad-request' });
+    expect(confirmAssignment).not.toHaveBeenCalled();
+  });
+
+  it('200 { ok: true } confirming in place (no date → undefined target, actor=mid)', async () => {
+    const { POST } = await import('../confirm/route');
+    const res = await POST(req('/api/setu/prasad/confirm', { method: 'POST', body: {}, headers: MANAGER }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(confirmAssignment).toHaveBeenCalledWith('CMT-0001', undefined, 'CMT-0001-01');
+  });
+
+  it('200 { ok: true } confirming at another open Sunday (passes the date through)', async () => {
+    const { POST } = await import('../confirm/route');
+    const res = await POST(req('/api/setu/prasad/confirm', { method: 'POST', body: { date: '2026-03-22' }, headers: MANAGER }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(confirmAssignment).toHaveBeenCalledWith('CMT-0001', '2026-03-22', 'CMT-0001-01');
+  });
+
+  it('404 { error: not-found } when there is no assignment', async () => {
+    confirmAssignment.mockResolvedValue('not-found');
+    const { POST } = await import('../confirm/route');
+    const res = await POST(req('/api/setu/prasad/confirm', { method: 'POST', body: {}, headers: MANAGER }));
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: 'not-found' });
+  });
+
+  it.each(['already-confirmed', 'invalid-target', 'target-full'] as const)(
+    '409 { error: %s } on a conflict result',
+    async (result) => {
+      confirmAssignment.mockResolvedValue(result);
+      const { POST } = await import('../confirm/route');
+      const res = await POST(req('/api/setu/prasad/confirm', { method: 'POST', body: { date: '2026-03-22' }, headers: MANAGER }));
       expect(res.status).toBe(409);
       expect(await res.json()).toEqual({ error: result });
     },

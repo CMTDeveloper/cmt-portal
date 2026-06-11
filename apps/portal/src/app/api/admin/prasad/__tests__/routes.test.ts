@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('@/lib/flags', () => ({ flags: { setuAuth: true } }));
+const flagsMock = vi.hoisted(() => ({ setuAuth: true }));
+vi.mock('@/lib/flags', () => ({ flags: flagsMock }));
 
 // ── prasad engine mocks ───────────────────────────────────────────────────────
 const { previewAssignments, publishAssignments } = vi.hoisted(() => ({
@@ -8,6 +9,9 @@ const { previewAssignments, publishAssignments } = vi.hoisted(() => ({
   publishAssignments: vi.fn(),
 }));
 vi.mock('@/features/setu/prasad/publish-assignments', () => ({ previewAssignments, publishAssignments }));
+
+const { notifyUnnotifiedProposals } = vi.hoisted(() => ({ notifyUnnotifiedProposals: vi.fn() }));
+vi.mock('@/features/setu/prasad/proposal-notify', () => ({ notifyUnnotifiedProposals }));
 
 // ── fake Firestore ────────────────────────────────────────────────────────────
 // Supports collection().where().where().get() (list) and collection().doc().get()/.update() (patch).
@@ -20,11 +24,13 @@ class FakeTimestamp {
 }
 const { dbState } = vi.hoisted(() => ({
   dbState: {
-    listDocs: [] as Array<{ data: () => Record<string, unknown> }>,
+    listDocs: [] as Array<{ data: () => Record<string, unknown>; ref?: { id: string } }>,
     docStore: new Map<string, Record<string, unknown> | undefined>(),
     lastWhere: [] as Array<[string, string, unknown]>,
     lastUpdate: undefined as Record<string, unknown> | undefined,
     updatedDocId: undefined as string | undefined,
+    batchUpdates: [] as Array<{ id: string; patch: Record<string, unknown> }>,
+    batchCommits: 0,
   },
 }));
 
@@ -36,7 +42,7 @@ function makeCollection() {
         return makeQuery();
       },
       async get() {
-        return { docs: dbState.listDocs };
+        return { docs: dbState.listDocs, size: dbState.listDocs.length };
       },
     };
   }
@@ -60,8 +66,19 @@ function makeCollection() {
   };
 }
 
+function makeBatch() {
+  return {
+    update(ref: { id: string }, patch: Record<string, unknown>) {
+      dbState.batchUpdates.push({ id: ref.id, patch });
+    },
+    async commit() {
+      dbState.batchCommits++;
+    },
+  };
+}
+
 vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
-  portalFirestore: () => ({ collection: () => makeCollection() }),
+  portalFirestore: () => ({ collection: () => makeCollection(), batch: makeBatch }),
   FieldValue: { serverTimestamp: () => SERVER_TS },
 }));
 
@@ -83,15 +100,21 @@ function req(path: string, init: { method: string; body?: unknown; headers?: Rec
 const ADMIN = { 'x-portal-role': 'admin', 'x-portal-extra-roles': '', 'x-portal-mid': 'CMT-9999-01' };
 const FAMILY = { 'x-portal-role': 'family', 'x-portal-extra-roles': '' };
 
+const NOTIFY_RESULT = { checked: 0, sent: 0, skipped: 0, failed: 0 };
+
 beforeEach(() => {
   vi.clearAllMocks();
+  flagsMock.setuAuth = true;
   previewAssignments.mockResolvedValue(PREVIEW_RESULT);
   publishAssignments.mockResolvedValue(PREVIEW_RESULT);
+  notifyUnnotifiedProposals.mockResolvedValue(NOTIFY_RESULT);
   dbState.listDocs = [];
   dbState.docStore = new Map();
   dbState.lastWhere = [];
   dbState.lastUpdate = undefined;
   dbState.updatedDocId = undefined;
+  dbState.batchUpdates = [];
+  dbState.batchCommits = 0;
 });
 
 // ── POST /api/admin/prasad/preview ─────────────────────────────────────────────
@@ -142,6 +165,7 @@ describe('POST /api/admin/prasad/publish', () => {
     const res = await POST(req('/api/admin/prasad/publish', { method: 'POST', body: { pid: PID, cap: 3 }, headers: FAMILY }));
     expect(res.status).toBe(403);
     expect(publishAssignments).not.toHaveBeenCalled();
+    expect(notifyUnnotifiedProposals).not.toHaveBeenCalled();
   });
 
   it('400 when cap is missing (required)', async () => {
@@ -149,14 +173,17 @@ describe('POST /api/admin/prasad/publish', () => {
     const res = await POST(req('/api/admin/prasad/publish', { method: 'POST', body: { pid: PID }, headers: ADMIN }));
     expect(res.status).toBe(400);
     expect(publishAssignments).not.toHaveBeenCalled();
+    expect(notifyUnnotifiedProposals).not.toHaveBeenCalled();
   });
 
-  it('200 calls publishAssignments with (pid, location, cap, actor=mid)', async () => {
+  it('200 calls publishAssignments with (pid, location, cap, actor=mid) and carries the notify report', async () => {
+    notifyUnnotifiedProposals.mockResolvedValue({ checked: 5, sent: 4, skipped: 1, failed: 0 });
     const { POST } = await import('../publish/route');
     const res = await POST(req('/api/admin/prasad/publish', { method: 'POST', body: { pid: PID, cap: 4 }, headers: ADMIN }));
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual(PREVIEW_RESULT);
+    expect(await res.json()).toEqual({ ...PREVIEW_RESULT, notify: { checked: 5, sent: 4, skipped: 1, failed: 0 } });
     expect(publishAssignments).toHaveBeenCalledWith(PID, 'Brampton', 4, 'CMT-9999-01');
+    expect(notifyUnnotifiedProposals).toHaveBeenCalledWith(PID);
   });
 });
 
@@ -271,5 +298,124 @@ describe('PATCH /api/admin/prasad/assignment', () => {
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ error: 'bad-request' });
     expect(dbState.lastUpdate).toBeUndefined();
+  });
+
+  it('200 assign:true flips a proposed row to assigned (confirmedBy:admin)', async () => {
+    dbState.docStore.set('p-4', { paid: 'p-4', date: '2026-03-15', status: 'proposed' });
+    const { PATCH } = await import('../assignment/route');
+    const res = await PATCH(
+      req('/api/admin/prasad/assignment', { method: 'PATCH', body: { paid: 'p-4', assign: true }, headers: ADMIN }),
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(dbState.updatedDocId).toBe('p-4');
+    expect(dbState.lastUpdate).toEqual({ status: 'assigned', confirmedAt: SERVER_TS, confirmedBy: 'admin' });
+  });
+
+  it('409 not-proposed when assign:true targets an already-assigned row', async () => {
+    dbState.docStore.set('p-5', { paid: 'p-5', date: '2026-03-15', status: 'assigned' });
+    const { PATCH } = await import('../assignment/route');
+    const res = await PATCH(
+      req('/api/admin/prasad/assignment', { method: 'PATCH', body: { paid: 'p-5', assign: true }, headers: ADMIN }),
+    );
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: 'not-proposed' });
+    expect(dbState.lastUpdate).toBeUndefined();
+  });
+
+  it('200 assign:true with a date also writes the move fields', async () => {
+    dbState.docStore.set('p-6', { paid: 'p-6', date: '2026-03-15', status: 'proposed' });
+    const { PATCH } = await import('../assignment/route');
+    const res = await PATCH(
+      req('/api/admin/prasad/assignment', {
+        method: 'PATCH', body: { paid: 'p-6', assign: true, date: '2026-03-22' }, headers: ADMIN,
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(dbState.updatedDocId).toBe('p-6');
+    expect(dbState.lastUpdate).toMatchObject({
+      status: 'assigned',
+      confirmedBy: 'admin',
+      date: '2026-03-22',
+      movedFrom: '2026-03-15',
+      movedBy: 'CMT-9999-01',
+      source: 'admin',
+    });
+    expect(dbState.lastUpdate!.confirmedAt).toBe(SERVER_TS);
+    expect(dbState.lastUpdate!.movedAt).toBe(SERVER_TS);
+  });
+});
+
+// ── POST /api/admin/prasad/assign-remaining ────────────────────────────────────
+describe('POST /api/admin/prasad/assign-remaining', () => {
+  function proposedDoc(id: string) {
+    return { data: () => ({ paid: id, pid: PID, status: 'proposed' }), ref: { id } };
+  }
+
+  it('404 when the setuAuth flag is off', async () => {
+    flagsMock.setuAuth = false;
+    const { POST } = await import('../assign-remaining/route');
+    const res = await POST(req('/api/admin/prasad/assign-remaining', { method: 'POST', body: { pid: PID }, headers: ADMIN }));
+    expect(res.status).toBe(404);
+    expect(dbState.batchUpdates).toEqual([]);
+  });
+
+  it('401 with no session header', async () => {
+    const { POST } = await import('../assign-remaining/route');
+    const res = await POST(req('/api/admin/prasad/assign-remaining', { method: 'POST', body: { pid: PID } }));
+    expect(res.status).toBe(401);
+    expect(dbState.batchUpdates).toEqual([]);
+  });
+
+  it('403 for a non-admin (family) role', async () => {
+    const { POST } = await import('../assign-remaining/route');
+    const res = await POST(req('/api/admin/prasad/assign-remaining', { method: 'POST', body: { pid: PID }, headers: FAMILY }));
+    expect(res.status).toBe(403);
+    expect(dbState.batchUpdates).toEqual([]);
+  });
+
+  it('400 on a malformed body', async () => {
+    const { POST } = await import('../assign-remaining/route');
+    const res = await POST(req('/api/admin/prasad/assign-remaining', { method: 'POST', body: { pid: 42 }, headers: ADMIN }));
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: 'bad-request' });
+    expect(dbState.batchUpdates).toEqual([]);
+  });
+
+  it('400 on an unknown pid', async () => {
+    const { POST } = await import('../assign-remaining/route');
+    const res = await POST(req('/api/admin/prasad/assign-remaining', { method: 'POST', body: { pid: 'nope' }, headers: ADMIN }));
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'unknown-pid' });
+    expect(dbState.batchUpdates).toEqual([]);
+  });
+
+  it('200 flips every still-proposed row to assigned and returns the count', async () => {
+    dbState.listDocs = [proposedDoc('a'), proposedDoc('b'), proposedDoc('c')];
+    const { POST } = await import('../assign-remaining/route');
+    const res = await POST(req('/api/admin/prasad/assign-remaining', { method: 'POST', body: { pid: PID }, headers: ADMIN }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, assigned: 3 });
+
+    // Query scoped to the pid's still-proposed rows.
+    expect(dbState.lastWhere).toContainEqual(['pid', '==', PID]);
+    expect(dbState.lastWhere).toContainEqual(['status', '==', 'proposed']);
+
+    // Every doc batched with the same assigned/confirmed payload, one commit.
+    expect(dbState.batchUpdates.map((u) => u.id)).toEqual(['a', 'b', 'c']);
+    for (const u of dbState.batchUpdates) {
+      expect(u.patch).toEqual({ status: 'assigned', confirmedAt: SERVER_TS, confirmedBy: 'admin' });
+    }
+    expect(dbState.batchCommits).toBe(1);
+  });
+
+  it('200 { assigned: 0 } when nothing is still proposed (no batch commit)', async () => {
+    dbState.listDocs = [];
+    const { POST } = await import('../assign-remaining/route');
+    const res = await POST(req('/api/admin/prasad/assign-remaining', { method: 'POST', body: { pid: PID }, headers: ADMIN }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, assigned: 0 });
+    expect(dbState.batchCommits).toBe(0);
   });
 });

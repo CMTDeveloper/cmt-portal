@@ -29,6 +29,23 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ ok: true }, { status: 200 });
   }
 
+  if (parsed.data.assign === true) {
+    const data = snap.data() as { status?: string; date?: string } | undefined;
+    if (data?.status !== 'proposed') {
+      return NextResponse.json({ error: 'not-proposed' }, { status: 409 });
+    }
+    const actor = session.mid ?? session.uid ?? 'admin';
+    await ref.update({
+      status: 'assigned',
+      confirmedAt: FieldValue.serverTimestamp(),
+      confirmedBy: 'admin',
+      ...(parsed.data.date !== undefined
+        ? { date: parsed.data.date, movedFrom: data?.date ?? null, movedAt: FieldValue.serverTimestamp(), movedBy: actor, source: 'admin' }
+        : {}),
+    });
+    return NextResponse.json({ ok: true }, { status: 200 });
+  }
+
   if (parsed.data.date !== undefined) {
     const actor = session.mid ?? session.uid ?? 'admin';
     const previousDate = (snap.data() as { date?: string } | undefined)?.date ?? null;

@@ -4,6 +4,7 @@ import { readSessionFromHeaders } from '@/lib/auth/headers';
 import { flags } from '@/lib/flags';
 import { CURRENT_PRASAD_PIDS } from '@/features/setu/prasad/constants';
 import { publishAssignments } from '@/features/setu/prasad/publish-assignments';
+import { notifyUnnotifiedProposals } from '@/features/setu/prasad/proposal-notify';
 
 /** POST /api/admin/prasad/publish — write the prasad assignments + config for one period. Admin-only. */
 export async function POST(req: Request) {
@@ -19,5 +20,8 @@ export async function POST(req: Request) {
   if (!period) return NextResponse.json({ error: 'unknown-pid' }, { status: 400 });
   const actor = session.mid ?? session.uid ?? 'admin';
   const result = await publishAssignments(period.pid, period.location, parsed.data.cap, actor);
-  return NextResponse.json(result, { status: 200 });
+  // Fire the one-time proposal notifications for anything still un-notified
+  // (self-healing — includes rows from a previous publish whose notify crashed).
+  const notify = await notifyUnnotifiedProposals(period.pid);
+  return NextResponse.json({ ...result, notify }, { status: 200 });
 }
