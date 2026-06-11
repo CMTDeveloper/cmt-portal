@@ -6,7 +6,7 @@ vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
 }));
 
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
-import { getFamilyAssignment, getMoveOptions, moveAssignment } from '../family-assignment';
+import { getFamilyAssignment, getMoveOptions, moveAssignment, confirmAssignment } from '../family-assignment';
 import { FALLBACK_CAP } from '../constants';
 
 const mockFirestore = vi.mocked(portalFirestore);
@@ -166,9 +166,16 @@ function makeDb(seeds: Seeds, updateOps: UpdateOp[], opts: { capInTxn?: number }
     }),
     runTransaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => {
       const tx = {
-        get: vi.fn(async (query: { __resolve?: () => QuerySnap }): Promise<QuerySnap> => {
-          if (typeof query.__resolve !== 'function') throw new Error('tx.get on a non-query');
-          const snap = query.__resolve();
+        get: vi.fn(async (
+          arg: { __resolve?: () => QuerySnap; __collection?: string; __id?: string },
+        ): Promise<QuerySnap | DocSnap> => {
+          // Doc-ref branch: resolve the same way assignmentDocRef(...).get() does.
+          if (arg.__collection === 'prasadAssignments' && typeof arg.__id === 'string') {
+            const data = assignmentDoc(seeds, arg.__id);
+            return { exists: data !== undefined, id: arg.__id, data: () => data };
+          }
+          if (typeof arg.__resolve !== 'function') throw new Error('tx.get on a non-query');
+          const snap = arg.__resolve();
           if (opts.capInTxn !== undefined) {
             // Simulate the target Sunday filling up between read and txn: fabricate
             // `capInTxn` assigned docs on the target date.
@@ -489,5 +496,62 @@ describe('proposed-status handling', () => {
     mockFirestore.mockReturnValue(makeDb(seeds, updateOps, { capInTxn: 1 }) as never);
     expect(await moveAssignment('F1', target, 'M1')).toBe('invalid-target');
     expect(updateOps).toHaveLength(0);
+  });
+});
+
+describe('confirmAssignment', () => {
+  function proposedSeeds(extra: AssignmentSeed[] = []): Seeds {
+    return {
+      calendar: [
+        { entryId: 'c1', location: 'Brampton', programKey: 'bala-vihar', date: ymdPlus(30), kind: 'class' },
+        { entryId: 'c2', location: 'Brampton', programKey: 'bala-vihar', date: ymdPlus(37), kind: 'class' },
+      ],
+      config: [{ pid: PID, capPerSunday: 2 }],
+      assignments: [
+        { paid: `${PID}-F1`, fid: 'F1', pid: PID, date: ymdPlus(30), status: 'proposed' },
+        ...extra,
+      ],
+    };
+  }
+
+  it('confirms in place (no date): status flip, confirmedBy family', async () => {
+    const updateOps: UpdateOp[] = [];
+    mockFirestore.mockReturnValue(makeDb(proposedSeeds(), updateOps) as never);
+    expect(await confirmAssignment('F1', undefined, 'M1')).toBe('confirmed');
+    expect(updateOps).toHaveLength(1);
+    expect(updateOps[0]!.data).toMatchObject({ status: 'assigned', confirmedBy: 'family' });
+    expect(updateOps[0]!.data.date).toBeUndefined();
+  });
+
+  it('confirms at another open Sunday: date moves + flip in one update', async () => {
+    const updateOps: UpdateOp[] = [];
+    mockFirestore.mockReturnValue(makeDb(proposedSeeds(), updateOps) as never);
+    expect(await confirmAssignment('F1', ymdPlus(37), 'M1')).toBe('confirmed');
+    expect(updateOps[0]!.data).toMatchObject({
+      status: 'assigned', confirmedBy: 'family', date: ymdPlus(37), source: 'family-move',
+    });
+  });
+
+  it('rejects a full target Sunday', async () => {
+    const updateOps: UpdateOp[] = [];
+    const seeds = proposedSeeds([
+      { paid: `${PID}-F2`, fid: 'F2', pid: PID, date: ymdPlus(37), status: 'assigned' },
+      { paid: `${PID}-F3`, fid: 'F3', pid: PID, date: ymdPlus(37), status: 'proposed' },
+    ]);
+    mockFirestore.mockReturnValue(makeDb(seeds, updateOps) as never);
+    expect(await confirmAssignment('F1', ymdPlus(37), 'M1')).toBe('invalid-target');
+    expect(updateOps).toHaveLength(0);
+  });
+
+  it('already-confirmed when the doc is assigned', async () => {
+    const seeds: Seeds = { ...proposedSeeds() };
+    seeds.assignments[0]!.status = 'assigned';
+    mockFirestore.mockReturnValue(makeDb(seeds, []) as never);
+    expect(await confirmAssignment('F1', undefined, 'M1')).toBe('already-confirmed');
+  });
+
+  it('not-found without any doc', async () => {
+    mockFirestore.mockReturnValue(makeDb({ calendar: [], config: [], assignments: [] }, []) as never);
+    expect(await confirmAssignment('F9', undefined, 'M1')).toBe('not-found');
   });
 });

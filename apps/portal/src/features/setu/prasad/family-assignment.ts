@@ -94,3 +94,68 @@ export async function moveAssignment(fid: string, targetDate: string, actorMid: 
     return 'moved' as const;
   });
 }
+
+export type ConfirmResult = 'confirmed' | 'not-found' | 'already-confirmed' | 'invalid-target' | 'target-full';
+
+/**
+ * Family confirm: no targetDate → flip the proposed doc to assigned in place
+ * (the seat is already counted — no cap check). With targetDate → validate it
+ * against the live options list, then re-count the target inside the txn
+ * (mirrors moveAssignment) and move+flip in one update. confirmedBy:'family'.
+ */
+export async function confirmAssignment(
+  fid: string,
+  targetDate: string | undefined,
+  actorMid: string,
+): Promise<ConfirmResult> {
+  const current = await getFamilyAssignment(fid);
+  if (!current) return 'not-found';
+  if (current.status !== 'proposed') return 'already-confirmed';
+
+  const db = portalFirestore();
+  const ref = db.collection('prasadAssignments').doc(current.paid);
+
+  if (targetDate === undefined || targetDate === current.date) {
+    return db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) return 'not-found' as const;
+      if ((snap.data() as { status?: string }).status !== 'proposed') return 'already-confirmed' as const;
+      tx.update(ref, {
+        status: 'assigned',
+        confirmedAt: FieldValue.serverTimestamp(),
+        confirmedBy: 'family',
+      });
+      return 'confirmed' as const;
+    });
+  }
+
+  const opts = await getMoveOptions(fid);
+  if (!opts || !opts.options.some((o) => o.date === targetDate)) return 'invalid-target';
+  const cfgSnap = await db.collection('prasadConfig').doc(current.pid).get();
+  const cap = (cfgSnap.data()?.capPerSunday as number | undefined) ?? FALLBACK_CAP;
+
+  return db.runTransaction(async (tx) => {
+    const targetSnap = await tx.get(
+      db.collection('prasadAssignments').where('pid', '==', current.pid).where('date', '==', targetDate),
+    );
+    const liveCount = targetSnap.docs.filter((d) => {
+      const s = (d.data() as { status: string }).status;
+      return s === 'assigned' || s === 'proposed';
+    }).length;
+    if (liveCount >= cap) return 'target-full' as const;
+    const meSnap = await tx.get(ref);
+    if (!meSnap.exists) return 'not-found' as const;
+    if ((meSnap.data() as { status?: string }).status !== 'proposed') return 'already-confirmed' as const;
+    tx.update(ref, {
+      date: targetDate,
+      status: 'assigned',
+      confirmedAt: FieldValue.serverTimestamp(),
+      confirmedBy: 'family',
+      movedFrom: current.date,
+      movedAt: FieldValue.serverTimestamp(),
+      movedBy: actorMid,
+      source: 'family-move',
+    });
+    return 'confirmed' as const;
+  });
+}
