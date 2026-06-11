@@ -325,7 +325,7 @@ describe('publishAssignments', () => {
       birthMonth: 11,
       reason: 'birthday-month',
       source: 'auto',
-      status: 'assigned',
+      status: 'proposed',
       movedFrom: null,
       movedAt: null,
       movedBy: null,
@@ -336,6 +336,24 @@ describe('publishAssignments', () => {
     expect(configWrites).toHaveLength(1);
     expect(configWrites[0]!.ref.__id).toBe(PID);
     expect(configWrites[0]!.data).toMatchObject({ pid: PID, capPerSunday: 1, publishedBy: 'actor-mid' });
+  });
+
+  it('writes NEW rows as proposals with null confirm/notify lifecycle fields', async () => {
+    const ops: BatchOp[] = [];
+    mockFirestore.mockReturnValue(makeDb(seeds(), ops) as never);
+
+    await publishAssignments(PID, LOC, 1, 'actor-mid');
+
+    const assignWrites = ops.filter((o) => o.ref.__collection === 'prasadAssignments');
+    expect(assignWrites).toHaveLength(2);
+    for (const write of assignWrites) {
+      expect(write.data).toMatchObject({
+        status: 'proposed',
+        confirmedAt: null,
+        confirmedBy: null,
+        proposalNotifiedAt: null,
+      });
+    }
   });
 
   it('keeps an existing assigned family and emits no new row for it', async () => {

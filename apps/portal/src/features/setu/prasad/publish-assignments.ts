@@ -12,8 +12,9 @@ export async function previewAssignments(pid: string, location: string, cap?: nu
   return { ...proposePrasadAssignments(input), defaultCap, eligibleSundayCount };
 }
 
-/** Publish = preview + write each NEW row + the config doc. Idempotent: doc id
- *  is `${pid}-${fid}`; existing assignments are never touched (engine keeps them). */
+/** Publish = preview + write each NEW row as a PROPOSAL + the config doc. Idempotent:
+ *  doc id is `${pid}-${fid}`; existing assignments are never touched (engine keeps
+ *  them — rows are NEW-families-only, so this can never downgrade a confirmed doc). */
 export async function publishAssignments(pid: string, location: string, cap: number, actorMid: string): Promise<PrasadPreviewResult> {
   const proposal = await previewAssignments(pid, location, cap);
   const db = portalFirestore();
@@ -32,10 +33,11 @@ export async function publishAssignments(pid: string, location: string, cap: num
         date: row.date,
         youngestMid: row.youngestMid, youngestName: row.youngestName,
         birthMonth: row.birthMonth, reason: row.reason,
-        source: 'auto', status: 'assigned',
+        source: 'auto', status: 'proposed',
         assignedAt: FieldValue.serverTimestamp(),
         movedFrom: null, movedAt: null, movedBy: null,
         remindedAt: { weekBefore: null, twoDayBefore: null },
+        confirmedAt: null, confirmedBy: null, proposalNotifiedAt: null,
       }, { merge: true });
     }
     await batch.commit();
