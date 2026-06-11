@@ -420,3 +420,74 @@ describe('moveAssignment', () => {
     expect(ops).toHaveLength(0);
   });
 });
+
+describe('proposed-status handling', () => {
+  it('getFamilyAssignment returns a proposed doc (status surfaced)', async () => {
+    const seeds: Seeds = {
+      calendar: [],
+      config: [{ pid: 'bv-brampton-2025-26', capPerSunday: 10 }],
+      assignments: [{
+        paid: 'bv-brampton-2025-26-F1', fid: 'F1', pid: 'bv-brampton-2025-26',
+        date: ymdPlus(30), status: 'proposed', reason: 'birthday-month', youngestName: 'Anu', birthMonth: 6,
+      }],
+    };
+    mockFirestore.mockReturnValue(makeDb(seeds, []) as never);
+    const view = await getFamilyAssignment('F1');
+    expect(view?.status).toBe('proposed');
+  });
+
+  it('getMoveOptions counts proposed rows against the cap', async () => {
+    const target = ymdPlus(30);
+    const seeds: Seeds = {
+      calendar: [
+        { entryId: 'c1', location: 'Brampton', programKey: 'bala-vihar', date: target, kind: 'class' },
+        { entryId: 'c2', location: 'Brampton', programKey: 'bala-vihar', date: ymdPlus(37), kind: 'class' },
+      ],
+      config: [{ pid: 'bv-brampton-2025-26', capPerSunday: 1 }],
+      assignments: [
+        { paid: 'bv-brampton-2025-26-F1', fid: 'F1', pid: 'bv-brampton-2025-26', date: ymdPlus(37), status: 'assigned' },
+        { paid: 'bv-brampton-2025-26-F2', fid: 'F2', pid: 'bv-brampton-2025-26', date: target, status: 'proposed' },
+      ],
+    };
+    mockFirestore.mockReturnValue(makeDb(seeds, []) as never);
+    const opts = await getMoveOptions('F1');
+    expect(opts!.options.find((o) => o.date === target)).toBeUndefined(); // full
+  });
+
+  it('a PROPOSED family sees near-term Sundays (no 7-day lock) but never past ones', async () => {
+    const near = ymdPlus(3);
+    const seeds: Seeds = {
+      calendar: [
+        { entryId: 'c1', location: 'Brampton', programKey: 'bala-vihar', date: near, kind: 'class' },
+        { entryId: 'c2', location: 'Brampton', programKey: 'bala-vihar', date: ymdPlus(-7), kind: 'class' },
+      ],
+      config: [{ pid: 'bv-brampton-2025-26', capPerSunday: 10 }],
+      assignments: [{
+        paid: 'bv-brampton-2025-26-F1', fid: 'F1', pid: 'bv-brampton-2025-26',
+        date: ymdPlus(30), status: 'proposed',
+      }],
+    };
+    mockFirestore.mockReturnValue(makeDb(seeds, []) as never);
+    const opts = await getMoveOptions('F1');
+    expect(opts!.options.map((o) => o.date)).toEqual([near]);
+  });
+
+  it('moveAssignment counts proposed rows in the txn cap check', async () => {
+    const target = ymdPlus(30);
+    const updateOps: UpdateOp[] = [];
+    const seeds: Seeds = {
+      calendar: [
+        { entryId: 'c1', location: 'Brampton', programKey: 'bala-vihar', date: target, kind: 'class' },
+        { entryId: 'c2', location: 'Brampton', programKey: 'bala-vihar', date: ymdPlus(44), kind: 'class' },
+      ],
+      config: [{ pid: 'bv-brampton-2025-26', capPerSunday: 1 }],
+      assignments: [
+        { paid: 'bv-brampton-2025-26-F1', fid: 'F1', pid: 'bv-brampton-2025-26', date: ymdPlus(44), status: 'assigned' },
+        { paid: 'bv-brampton-2025-26-F2', fid: 'F2', pid: 'bv-brampton-2025-26', date: target, status: 'proposed' },
+      ],
+    };
+    mockFirestore.mockReturnValue(makeDb(seeds, updateOps, { capInTxn: 1 }) as never);
+    expect(await moveAssignment('F1', target, 'M1')).toBe('invalid-target');
+    expect(updateOps).toHaveLength(0);
+  });
+});

@@ -17,7 +17,7 @@ export async function getFamilyAssignment(fid: string): Promise<FamilyPrasadView
     const snap = await db.collection('prasadAssignments').doc(`${pid}-${fid}`).get();
     if (!snap.exists) continue;
     const a = snap.data() as { pid: string; date: string; youngestName: string | null; birthMonth: number | null; reason: string; status: string };
-    if (a.status !== 'assigned') continue;
+    if (a.status !== 'assigned' && a.status !== 'proposed') continue;
     return {
       paid: snap.id, pid: a.pid, date: a.date,
       youngestName: a.youngestName, birthMonth: a.birthMonth,
@@ -47,12 +47,14 @@ export async function getMoveOptions(fid: string): Promise<{ paid: string; optio
   const countByDate = new Map<string, number>();
   for (const d of assignedSnap.docs) {
     const a = d.data() as { date: string; status: string };
-    if (a.status === 'assigned') countByDate.set(a.date, (countByDate.get(a.date) ?? 0) + 1);
+    if (a.status === 'assigned' || a.status === 'proposed') countByDate.set(a.date, (countByDate.get(a.date) ?? 0) + 1);
   }
   const options = calSnap.docs
     .map((d) => d.data() as { date: string; kind: string; enabled?: boolean; prasadNeeded?: boolean })
     .filter((e) => e.kind === 'class' && e.enabled !== false && e.prasadNeeded !== false)
-    .filter((e) => daysUntil(e.date, todayYmd) > MOVE_LOCK_DAYS && e.date !== current.date)
+    // Confirmed families keep the 7-day move lock; a proposed family may pick
+    // ANY future Sunday (confirming late beats not confirming at all).
+    .filter((e) => daysUntil(e.date, todayYmd) > (current.status === 'proposed' ? 0 : MOVE_LOCK_DAYS) && e.date !== current.date)
     .map((e) => ({ date: e.date, seatsLeft: cap - (countByDate.get(e.date) ?? 0) }))
     .filter((o) => o.seatsLeft > 0)
     .sort((a, b) => a.date.localeCompare(b.date));
@@ -77,7 +79,10 @@ export async function moveAssignment(fid: string, targetDate: string, actorMid: 
     const targetQ = db.collection('prasadAssignments')
       .where('pid', '==', current.pid).where('date', '==', targetDate);
     const targetSnap = await tx.get(targetQ);
-    const activeCount = targetSnap.docs.filter((d) => (d.data() as { status: string }).status === 'assigned').length;
+    const activeCount = targetSnap.docs.filter((d) => {
+      const s = (d.data() as { status: string }).status;
+      return s === 'assigned' || s === 'proposed';
+    }).length;
     if (activeCount >= cap) return 'target-full' as const;
     tx.update(db.collection('prasadAssignments').doc(current.paid), {
       date: targetDate,

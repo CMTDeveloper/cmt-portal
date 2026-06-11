@@ -52,7 +52,8 @@ export async function loadEngineInput(pid: string, location: string, cap?: numbe
   const existingByFid = new Map<string, { date: string }>();
   for (const d of assignSnap.docs) {
     const a = d.data() as { fid: string; date: string; status: string };
-    if (a.status === 'assigned') existingByFid.set(a.fid, { date: a.date });
+    // Proposed families keep their seat and are never re-proposed.
+    if (a.status === 'assigned' || a.status === 'proposed') existingByFid.set(a.fid, { date: a.date });
   }
 
   // 4) Family + member docs (bulk per family — same shape as deriveRoster).
