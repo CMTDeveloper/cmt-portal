@@ -7,6 +7,11 @@ import { TEST_ACCOUNT_EMAILS, TEST_ACCOUNTS_PASSWORD, hasTestAccounts } from '..
 //  - the in-place confirm test tolerates an already-confirmed rerun (the only
 //    state drift possible between seeds).
 test.describe('prasad propose→confirm', () => {
+  // Serial: with fullyParallel, each WORKER re-runs beforeAll — five parallel
+  // workers = five password sign-ins of the same email inside a minute, which
+  // blows the shared 5-per-15-min OTP rate limit and 429s the rest of the
+  // suite's Scarborough sign-ins (observed on the first deployed run).
+  test.describe.configure({ mode: 'serial' });
   test.skip(!hasTestAccounts, 'TEST_ACCOUNTS_PASSWORD required (run seed:test-accounts first)');
 
   let ctx: APIRequestContext;
