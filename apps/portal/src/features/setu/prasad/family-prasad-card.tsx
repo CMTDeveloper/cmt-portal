@@ -392,7 +392,9 @@ function MovePrasadSheet({ mode, currentDate, onClose, onMoved }: MovePrasadShee
             <div style={{ padding: '24px 0', color: 'var(--muted)', fontSize: 13 }}>Loading available Sundays…</div>
           ) : options.length === 0 ? (
             <div style={{ padding: '24px 0', color: 'var(--muted)', fontSize: 13, lineHeight: 1.5 }}>
-              No other Sundays have room right now. Please check back later or contact the welcome team.
+              {mode === 'choose'
+                ? 'No other Sundays have room right now — you can still confirm your suggested date, or check back later.'
+                : 'No other Sundays have room right now. Please check back later or contact the welcome team.'}
             </div>
           ) : (
             <div role="radiogroup" aria-label="Available Sundays" className="col" style={{ gap: 8, paddingBottom: 8 }}>

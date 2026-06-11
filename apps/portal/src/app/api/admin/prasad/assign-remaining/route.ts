@@ -25,17 +25,30 @@ export async function POST(req: Request) {
   const snap = await db.collection('prasadAssignments')
     .where('pid', '==', parsed.data.pid).where('status', '==', 'proposed').get();
 
-  const limit = 400;
-  for (let i = 0; i < snap.docs.length; i += limit) {
-    const batch = db.batch();
-    for (const doc of snap.docs.slice(i, i + limit)) {
-      batch.update(doc.ref, {
-        status: 'assigned',
-        confirmedAt: FieldValue.serverTimestamp(),
-        confirmedBy: 'admin',
-      });
+  // Per-doc preconditioned updates, NOT a blind batch: a row cancelled or
+  // family-confirmed between the query and the write must not be flipped back
+  // to admin-assigned. A precondition conflict means someone else changed the
+  // row — skipping is the correct semantics; the admin can re-click.
+  let assigned = 0;
+  let skipped = 0;
+  const CHUNK = 25;
+  for (let i = 0; i < snap.docs.length; i += CHUNK) {
+    const results = await Promise.allSettled(
+      snap.docs.slice(i, i + CHUNK).map((doc) =>
+        doc.ref.update(
+          {
+            status: 'assigned',
+            confirmedAt: FieldValue.serverTimestamp(),
+            confirmedBy: 'admin',
+          },
+          { lastUpdateTime: doc.updateTime }, // precondition: row unchanged since the query
+        ),
+      ),
+    );
+    for (const r of results) {
+      if (r.status === 'fulfilled') assigned++;
+      else skipped++;
     }
-    await batch.commit();
   }
-  return NextResponse.json({ ok: true, assigned: snap.size }, { status: 200 });
+  return NextResponse.json({ ok: true, assigned, skipped }, { status: 200 });
 }

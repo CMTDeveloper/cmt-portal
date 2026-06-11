@@ -30,19 +30,29 @@ export async function PATCH(req: Request) {
   }
 
   if (parsed.data.assign === true) {
-    const data = snap.data() as { status?: string; date?: string } | undefined;
-    if (data?.status !== 'proposed') {
-      return NextResponse.json({ error: 'not-proposed' }, { status: 409 });
-    }
+    // Transactional read-check-update (pattern: family-assignment.ts confirm
+    // txn) — the family confirm/move routes mutate the same doc, so a plain
+    // read-then-update could flip a row that just changed under us. The txn
+    // re-checks existence + status; the pre-txn 404 above still covers the
+    // other branches.
     const actor = session.mid ?? session.uid ?? 'admin';
-    await ref.update({
-      status: 'assigned',
-      confirmedAt: FieldValue.serverTimestamp(),
-      confirmedBy: 'admin',
-      ...(parsed.data.date !== undefined
-        ? { date: parsed.data.date, movedFrom: data?.date ?? null, movedAt: FieldValue.serverTimestamp(), movedBy: actor, source: 'admin' }
-        : {}),
+    const outcome = await portalFirestore().runTransaction(async (tx) => {
+      const txSnap = await tx.get(ref);
+      if (!txSnap.exists) return 'not-found' as const;
+      const data = txSnap.data() as { status?: string; date?: string };
+      if (data.status !== 'proposed') return 'not-proposed' as const;
+      tx.update(ref, {
+        status: 'assigned',
+        confirmedAt: FieldValue.serverTimestamp(),
+        confirmedBy: 'admin',
+        ...(parsed.data.date !== undefined
+          ? { date: parsed.data.date, movedFrom: data.date ?? null, movedAt: FieldValue.serverTimestamp(), movedBy: actor, source: 'admin' }
+          : {}),
+      });
+      return 'ok' as const;
     });
+    if (outcome === 'not-found') return NextResponse.json({ error: 'not-found' }, { status: 404 });
+    if (outcome === 'not-proposed') return NextResponse.json({ error: 'not-proposed' }, { status: 409 });
     return NextResponse.json({ ok: true }, { status: 200 });
   }
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { toast, SetuIcon } from '@cmt/ui';
 import { CURRENT_PRASAD_PIDS } from './constants';
@@ -454,6 +454,11 @@ function AssignmentRow({
       onMutated();
     } catch {
       toast.error('Could not assign. Please try again.');
+    } finally {
+      // Reset in finally: after a SUCCESSFUL in-place assign the row instance
+      // survives the refetch (same key, same date group) — a catch-only reset
+      // would leave `assigning` stuck true and permanently disable the row's
+      // other controls. Safe: the Assign button disappears once status flips.
       setAssigning(false);
     }
   }
@@ -664,13 +669,17 @@ function AssignmentsManager({ pid, sundays }: { pid: string; sundays: string[] }
   const [loading, setLoading] = useState(true);
   const [bulkAssigning, setBulkAssigning] = useState(false);
 
+  // Sequence token guards out-of-order resolutions: rapid mutate→load() pairs
+  // can resolve out of order, and a stale response must not clobber the newest.
+  const loadSeq = useRef(0);
   const load = useCallback(() => {
+    const seq = ++loadSeq.current;
     setLoading(true);
     setError(false);
     fetchPrasadAssignments(pid)
-      .then((rows) => setAssignments(rows.filter((a) => a.status !== 'cancelled')))
-      .catch(() => setError(true))
-      .finally(() => setLoading(false));
+      .then((rows) => { if (seq === loadSeq.current) setAssignments(rows.filter((a) => a.status !== 'cancelled')); })
+      .catch(() => { if (seq === loadSeq.current) setError(true); })
+      .finally(() => { if (seq === loadSeq.current) setLoading(false); });
   }, [pid]);
 
   useEffect(() => {
@@ -807,6 +816,16 @@ export function AdminPrasadScreen() {
       const result = await publishPrasad(pid, preview.cap);
       setPreview(result);
       toast.success(`${location} prasad schedule published`);
+      // Surface the notify run report — at most ONE follow-up toast so the
+      // admin learns when confirm requests didn't actually go out.
+      const notify = result.notify;
+      if (notify?.disabled) {
+        toast.info('Heads-up: notifications are disabled (PRASAD_REMINDER_CRON_ENABLED) — no confirm requests were sent.');
+      } else if (notify?.error) {
+        toast.error('Schedule saved, but sending confirm requests failed — publish again to retry the sends.');
+      } else if (notify && notify.failed > 0) {
+        toast.error(`${notify.failed} confirm request(s) failed to send — publish again to retry those families.`);
+      }
       // re-fetch the preview so the post-publish state (mostly keptExisting)
       // reflects what was written.
       runPreview(cap);

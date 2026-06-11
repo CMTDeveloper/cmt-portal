@@ -36,14 +36,22 @@ export async function fetchPrasadPreview(pid: string, cap?: number): Promise<Pra
   return (await res.json()) as PrasadPreviewResult;
 }
 
-export async function publishPrasad(pid: string, cap: number): Promise<PrasadPreviewResult> {
+/** Publish response = the preview result + the proposal-notify run report
+ *  (disabled = PRASAD_REMINDER_CRON_ENABLED off; error = the whole fan-out
+ *  threw after the publish landed). The screen surfaces it as a follow-up toast. */
+export async function publishPrasad(
+  pid: string,
+  cap: number,
+): Promise<PrasadPreviewResult & { notify?: { disabled?: boolean; error?: boolean; sent: number; failed: number; checked: number; skipped: number } }> {
   const res = await fetch('/api/admin/prasad/publish', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ pid, cap }),
   });
   if (!res.ok) throw new Error(`publish failed: ${res.status}`);
-  return (await res.json()) as PrasadPreviewResult;
+  return (await res.json()) as PrasadPreviewResult & {
+    notify?: { disabled?: boolean; error?: boolean; sent: number; failed: number; checked: number; skipped: number };
+  };
 }
 
 export interface AdminPrasadAssignment {
@@ -86,6 +94,9 @@ export async function confirmPrasad(date?: string): Promise<void> {
   }
 }
 
+/** Returns the number of rows actually flipped. The route also reports
+ *  `skipped` (rows that changed between its query and write — family confirmed
+ *  or admin cancelled); the admin can simply re-click for those. */
 export async function assignRemainingPrasad(pid: string): Promise<number> {
   const res = await fetch('/api/admin/prasad/assign-remaining', {
     method: 'POST',

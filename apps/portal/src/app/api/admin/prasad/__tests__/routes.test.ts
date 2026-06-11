@@ -14,7 +14,9 @@ const { notifyUnnotifiedProposals } = vi.hoisted(() => ({ notifyUnnotifiedPropos
 vi.mock('@/features/setu/prasad/proposal-notify', () => ({ notifyUnnotifiedProposals }));
 
 // ── fake Firestore ────────────────────────────────────────────────────────────
-// Supports collection().where().where().get() (list) and collection().doc().get()/.update() (patch).
+// Supports collection().where().where().get() (list), collection().doc().get()/
+// .update() (patch), runTransaction with tx.get(docRef)/tx.update(docRef, patch),
+// and per-doc preconditioned ref.update(patch, { lastUpdateTime }) on list docs.
 const SERVER_TS = { __serverTimestamp: true };
 class FakeTimestamp {
   constructor(private iso: string) {}
@@ -24,13 +26,23 @@ class FakeTimestamp {
 }
 const { dbState } = vi.hoisted(() => ({
   dbState: {
-    listDocs: [] as Array<{ data: () => Record<string, unknown>; ref?: { id: string } }>,
+    listDocs: [] as Array<{
+      data: () => Record<string, unknown>;
+      updateTime?: string;
+      ref?: { id: string; update?: (patch: Record<string, unknown>, precondition?: unknown) => Promise<void> };
+    }>,
     docStore: new Map<string, Record<string, unknown> | undefined>(),
     lastWhere: [] as Array<[string, string, unknown]>,
     lastUpdate: undefined as Record<string, unknown> | undefined,
     updatedDocId: undefined as string | undefined,
     batchUpdates: [] as Array<{ id: string; patch: Record<string, unknown> }>,
     batchCommits: 0,
+    // ref.update(patch, precondition) calls recorded by list-doc refs (assign-remaining).
+    refUpdates: [] as Array<{ id: string; patch: Record<string, unknown>; precondition: unknown }>,
+    // List-doc ids whose preconditioned ref.update should reject (concurrent change).
+    failUpdateIds: new Set<string>(),
+    // Doc ids that "vanish" between an outer get and a tx.get (assign TOCTOU).
+    txVanishIds: new Set<string>(),
   },
 }));
 
@@ -50,6 +62,7 @@ function makeCollection() {
     where: (field: string, op: string, value: unknown) => makeQuery().where(field, op, value),
     doc(id: string) {
       return {
+        id,
         async get() {
           const data = dbState.docStore.get(id);
           return {
@@ -77,8 +90,29 @@ function makeBatch() {
   };
 }
 
+function makeTx() {
+  return {
+    async get(ref: { id: string }) {
+      const gone = dbState.txVanishIds.has(ref.id);
+      const data = gone ? undefined : dbState.docStore.get(ref.id);
+      return {
+        exists: !gone && dbState.docStore.has(ref.id) && data !== undefined,
+        data: () => data,
+      };
+    },
+    update(ref: { id: string }, patch: Record<string, unknown>) {
+      dbState.updatedDocId = ref.id;
+      dbState.lastUpdate = patch;
+    },
+  };
+}
+
 vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
-  portalFirestore: () => ({ collection: () => makeCollection(), batch: makeBatch }),
+  portalFirestore: () => ({
+    collection: () => makeCollection(),
+    batch: makeBatch,
+    runTransaction: async <T>(fn: (tx: ReturnType<typeof makeTx>) => Promise<T>): Promise<T> => fn(makeTx()),
+  }),
   FieldValue: { serverTimestamp: () => SERVER_TS },
 }));
 
@@ -115,6 +149,9 @@ beforeEach(() => {
   dbState.updatedDocId = undefined;
   dbState.batchUpdates = [];
   dbState.batchCommits = 0;
+  dbState.refUpdates = [];
+  dbState.failUpdateIds = new Set();
+  dbState.txVanishIds = new Set();
 });
 
 // ── POST /api/admin/prasad/preview ─────────────────────────────────────────────
@@ -184,6 +221,24 @@ describe('POST /api/admin/prasad/publish', () => {
     expect(await res.json()).toEqual({ ...PREVIEW_RESULT, notify: { checked: 5, sent: 4, skipped: 1, failed: 0 } });
     expect(publishAssignments).toHaveBeenCalledWith(PID, 'Brampton', 4, 'CMT-9999-01');
     expect(notifyUnnotifiedProposals).toHaveBeenCalledWith(PID);
+  });
+
+  it('200 with notify.error when the notify fan-out throws after a landed publish', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      notifyUnnotifiedProposals.mockRejectedValue(new Error('SES exploded'));
+      const { POST } = await import('../publish/route');
+      const res = await POST(req('/api/admin/prasad/publish', { method: 'POST', body: { pid: PID, cap: 4 }, headers: ADMIN }));
+      // The publish itself landed — a notify failure must NOT surface as a 500.
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({
+        ...PREVIEW_RESULT,
+        notify: { error: true, checked: 0, sent: 0, skipped: 0, failed: 0 },
+      });
+      expect(publishAssignments).toHaveBeenCalledWith(PID, 'Brampton', 4, 'CMT-9999-01');
+    } finally {
+      errSpy.mockRestore();
+    }
   });
 });
 
@@ -323,6 +378,18 @@ describe('PATCH /api/admin/prasad/assignment', () => {
     expect(dbState.lastUpdate).toBeUndefined();
   });
 
+  it('404 when assign:true and the row vanishes between the outer read and the txn read', async () => {
+    dbState.docStore.set('p-7', { paid: 'p-7', date: '2026-03-15', status: 'proposed' });
+    dbState.txVanishIds.add('p-7'); // deleted by someone else mid-flight
+    const { PATCH } = await import('../assignment/route');
+    const res = await PATCH(
+      req('/api/admin/prasad/assignment', { method: 'PATCH', body: { paid: 'p-7', assign: true }, headers: ADMIN }),
+    );
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: 'not-found' });
+    expect(dbState.lastUpdate).toBeUndefined();
+  });
+
   it('200 assign:true with a date also writes the move fields', async () => {
     dbState.docStore.set('p-6', { paid: 'p-6', date: '2026-03-15', status: 'proposed' });
     const { PATCH } = await import('../assignment/route');
@@ -349,8 +416,21 @@ describe('PATCH /api/admin/prasad/assignment', () => {
 
 // ── POST /api/admin/prasad/assign-remaining ────────────────────────────────────
 describe('POST /api/admin/prasad/assign-remaining', () => {
+  /** A queried still-proposed doc whose ref supports preconditioned update().
+   *  A precondition mismatch (the row changed since the query) is simulated via
+   *  dbState.failUpdateIds. */
   function proposedDoc(id: string) {
-    return { data: () => ({ paid: id, pid: PID, status: 'proposed' }), ref: { id } };
+    return {
+      data: () => ({ paid: id, pid: PID, status: 'proposed' }),
+      updateTime: `ut-${id}`,
+      ref: {
+        id,
+        update: async (patch: Record<string, unknown>, precondition?: unknown) => {
+          if (dbState.failUpdateIds.has(id)) throw new Error('FAILED_PRECONDITION: row changed');
+          dbState.refUpdates.push({ id, patch, precondition });
+        },
+      },
+    };
   }
 
   it('404 when the setuAuth flag is off', async () => {
@@ -358,21 +438,21 @@ describe('POST /api/admin/prasad/assign-remaining', () => {
     const { POST } = await import('../assign-remaining/route');
     const res = await POST(req('/api/admin/prasad/assign-remaining', { method: 'POST', body: { pid: PID }, headers: ADMIN }));
     expect(res.status).toBe(404);
-    expect(dbState.batchUpdates).toEqual([]);
+    expect(dbState.refUpdates).toEqual([]);
   });
 
   it('401 with no session header', async () => {
     const { POST } = await import('../assign-remaining/route');
     const res = await POST(req('/api/admin/prasad/assign-remaining', { method: 'POST', body: { pid: PID } }));
     expect(res.status).toBe(401);
-    expect(dbState.batchUpdates).toEqual([]);
+    expect(dbState.refUpdates).toEqual([]);
   });
 
   it('403 for a non-admin (family) role', async () => {
     const { POST } = await import('../assign-remaining/route');
     const res = await POST(req('/api/admin/prasad/assign-remaining', { method: 'POST', body: { pid: PID }, headers: FAMILY }));
     expect(res.status).toBe(403);
-    expect(dbState.batchUpdates).toEqual([]);
+    expect(dbState.refUpdates).toEqual([]);
   });
 
   it('400 on a malformed body', async () => {
@@ -380,7 +460,7 @@ describe('POST /api/admin/prasad/assign-remaining', () => {
     const res = await POST(req('/api/admin/prasad/assign-remaining', { method: 'POST', body: { pid: 42 }, headers: ADMIN }));
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ error: 'bad-request' });
-    expect(dbState.batchUpdates).toEqual([]);
+    expect(dbState.refUpdates).toEqual([]);
   });
 
   it('400 on an unknown pid', async () => {
@@ -388,34 +468,45 @@ describe('POST /api/admin/prasad/assign-remaining', () => {
     const res = await POST(req('/api/admin/prasad/assign-remaining', { method: 'POST', body: { pid: 'nope' }, headers: ADMIN }));
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ error: 'unknown-pid' });
-    expect(dbState.batchUpdates).toEqual([]);
+    expect(dbState.refUpdates).toEqual([]);
   });
 
-  it('200 flips every still-proposed row to assigned and returns the count', async () => {
+  it('200 flips every still-proposed row via a preconditioned per-doc update and returns the counts', async () => {
     dbState.listDocs = [proposedDoc('a'), proposedDoc('b'), proposedDoc('c')];
     const { POST } = await import('../assign-remaining/route');
     const res = await POST(req('/api/admin/prasad/assign-remaining', { method: 'POST', body: { pid: PID }, headers: ADMIN }));
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true, assigned: 3 });
+    expect(await res.json()).toEqual({ ok: true, assigned: 3, skipped: 0 });
 
     // Query scoped to the pid's still-proposed rows.
     expect(dbState.lastWhere).toContainEqual(['pid', '==', PID]);
     expect(dbState.lastWhere).toContainEqual(['status', '==', 'proposed']);
 
-    // Every doc batched with the same assigned/confirmed payload, one commit.
-    expect(dbState.batchUpdates.map((u) => u.id)).toEqual(['a', 'b', 'c']);
-    for (const u of dbState.batchUpdates) {
+    // Every doc updated with the assigned/confirmed payload, preconditioned on
+    // the row being unchanged since the query (lastUpdateTime).
+    expect(dbState.refUpdates.map((u) => u.id)).toEqual(['a', 'b', 'c']);
+    for (const u of dbState.refUpdates) {
       expect(u.patch).toEqual({ status: 'assigned', confirmedAt: SERVER_TS, confirmedBy: 'admin' });
+      expect(u.precondition).toEqual({ lastUpdateTime: `ut-${u.id}` });
     }
-    expect(dbState.batchCommits).toBe(1);
   });
 
-  it('200 { assigned: 0 } when nothing is still proposed (no batch commit)', async () => {
+  it('200 counts a rejected precondition as skipped and still assigns the rest', async () => {
+    dbState.listDocs = [proposedDoc('a'), proposedDoc('b'), proposedDoc('c')];
+    dbState.failUpdateIds.add('b'); // b was confirmed/cancelled between query and update
+    const { POST } = await import('../assign-remaining/route');
+    const res = await POST(req('/api/admin/prasad/assign-remaining', { method: 'POST', body: { pid: PID }, headers: ADMIN }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, assigned: 2, skipped: 1 });
+    expect(dbState.refUpdates.map((u) => u.id)).toEqual(['a', 'c']);
+  });
+
+  it('200 { assigned: 0, skipped: 0 } when nothing is still proposed', async () => {
     dbState.listDocs = [];
     const { POST } = await import('../assign-remaining/route');
     const res = await POST(req('/api/admin/prasad/assign-remaining', { method: 'POST', body: { pid: PID }, headers: ADMIN }));
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true, assigned: 0 });
-    expect(dbState.batchCommits).toBe(0);
+    expect(await res.json()).toEqual({ ok: true, assigned: 0, skipped: 0 });
+    expect(dbState.refUpdates).toEqual([]);
   });
 });

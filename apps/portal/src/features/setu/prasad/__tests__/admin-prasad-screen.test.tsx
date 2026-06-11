@@ -5,7 +5,7 @@ import type { PrasadPreviewResult } from '../publish-assignments';
 import type { AdminPrasadAssignment } from '../prasad-client';
 
 // vi.hoisted so the (hoisted) vi.mock factories can reference these mocks.
-const { fetchPrasadPreview, publishPrasad, fetchPrasadAssignments, adminReassignPrasad, assignRemainingPrasad, toastSuccess, toastError } = vi.hoisted(() => ({
+const { fetchPrasadPreview, publishPrasad, fetchPrasadAssignments, adminReassignPrasad, assignRemainingPrasad, toastSuccess, toastError, toastInfo } = vi.hoisted(() => ({
   fetchPrasadPreview: vi.fn(),
   publishPrasad: vi.fn(),
   fetchPrasadAssignments: vi.fn(),
@@ -13,12 +13,13 @@ const { fetchPrasadPreview, publishPrasad, fetchPrasadAssignments, adminReassign
   assignRemainingPrasad: vi.fn(),
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
+  toastInfo: vi.fn(),
 }));
 vi.mock('../prasad-client', () => ({ fetchPrasadPreview, publishPrasad, fetchPrasadAssignments, adminReassignPrasad, assignRemainingPrasad }));
 
 vi.mock('@cmt/ui', async () => {
   const actual = await vi.importActual<typeof import('@cmt/ui')>('@cmt/ui');
-  return { ...actual, toast: { success: toastSuccess, error: toastError } };
+  return { ...actual, toast: { success: toastSuccess, error: toastError, info: toastInfo } };
 });
 
 import { AdminPrasadScreen } from '../admin-prasad-screen';
@@ -66,6 +67,7 @@ beforeEach(() => {
   assignRemainingPrasad.mockReset();
   toastSuccess.mockReset();
   toastError.mockReset();
+  toastInfo.mockReset();
   fetchPrasadAssignments.mockResolvedValue([]);
 });
 
@@ -154,6 +156,43 @@ describe('AdminPrasadScreen', () => {
     // onMutated → load() refetches the assignments (initial + refresh).
     await waitFor(() => expect(fetchPrasadAssignments).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(toastSuccess).toHaveBeenCalled());
+  });
+
+  it('re-enables the surviving row controls after a successful assign refetches the row as assigned', async () => {
+    fetchPrasadPreview.mockResolvedValue(previewFixture());
+    // Same paid + same date → the refetched row reuses the SAME AssignmentRow
+    // instance (same key, same date group). Its controls must not stay busy.
+    fetchPrasadAssignments
+      .mockResolvedValueOnce([assignmentFixture({ paid: 'pa-1', familyName: 'Patel', status: 'proposed' })])
+      .mockResolvedValueOnce([assignmentFixture({ paid: 'pa-1', familyName: 'Patel', status: 'assigned' })]);
+    adminReassignPrasad.mockResolvedValue(undefined);
+    render(<AdminPrasadScreen />);
+
+    const assignBtn = (await screen.findAllByTestId('prasad-assign'))[0]!;
+    await userEvent.click(assignBtn);
+    await waitFor(() => expect(fetchPrasadAssignments).toHaveBeenCalledTimes(2));
+    // Status flipped → the Assign button is gone…
+    await waitFor(() => expect(screen.queryByTestId('prasad-assign')).toBeNull());
+    // …and the surviving instance's Move select + Cancel are enabled again.
+    const select = screen.getAllByRole('combobox', { name: /reassign patel/i })[0]!;
+    expect(select).toBeEnabled();
+    const cancelBtn = screen.getAllByRole('button', { name: /cancel patel/i })[0]!;
+    expect(cancelBtn).toBeEnabled();
+  });
+
+  it('shows the notifications-disabled heads-up toast after a publish whose notify report says disabled', async () => {
+    fetchPrasadPreview.mockResolvedValue(previewFixture());
+    publishPrasad.mockResolvedValue({
+      ...previewFixture(),
+      notify: { disabled: true, checked: 0, sent: 0, skipped: 0, failed: 0 },
+    });
+    render(<AdminPrasadScreen />);
+    const publishBtn = (await screen.findAllByTestId('prasad-publish'))[0]!;
+    await userEvent.click(publishBtn);
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(toastInfo).toHaveBeenCalledWith(expect.stringContaining('notifications are disabled')),
+    );
   });
 
   it('renders status counts and bulk-assigns all unconfirmed after window.confirm', async () => {

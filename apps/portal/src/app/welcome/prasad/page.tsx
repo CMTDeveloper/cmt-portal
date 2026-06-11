@@ -155,12 +155,14 @@ function SundayCard({ sunday }: { sunday: PrasadSunday }) {
 }
 
 // YYYY-MM-DD → "Sun, Mar 22" in en-CA, parsed as UTC so the calendar day never
-// shifts across the Vercel function's timezone.
+// shifts across the Vercel function's timezone. Malformed input falls back to
+// the raw string (same guard as the other prasad formatters).
 function formatSunday(ymd: string): string {
   const [y, m, d] = ymd.split('-').map(Number);
+  if (!y || !m || !d) return ymd;
   return new Intl.DateTimeFormat('en-CA', {
     weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC',
-  }).format(new Date(Date.UTC(y!, m! - 1, d!)));
+  }).format(new Date(Date.UTC(y, m - 1, d)));
 }
 
 // "Asha Patel · asha@x.com · (416) 555-1212" with null parts omitted.

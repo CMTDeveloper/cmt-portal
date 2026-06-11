@@ -2,7 +2,8 @@ import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestor
 import { resolveSender } from '@/lib/aws/resolve-sender';
 import { formatPrasadDate } from './constants';
 
-export interface ProposalNotifyResult { disabled?: boolean; checked: number; sent: number; skipped: number; failed: number }
+/** `error` is set by the publish route when the whole fan-out threw (the publish itself landed). */
+export interface ProposalNotifyResult { disabled?: boolean; error?: boolean; checked: number; sent: number; skipped: number; failed: number }
 
 /** Families are processed in chunks of this size with Promise.allSettled. */
 const CONCURRENCY = 10;

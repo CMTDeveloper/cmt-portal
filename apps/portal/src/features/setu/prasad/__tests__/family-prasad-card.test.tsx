@@ -267,6 +267,22 @@ describe('FamilyPrasadCard', () => {
       expect(refresh).not.toHaveBeenCalled();
     });
 
+    it('shows the choose-mode empty copy (confirm-in-place still possible) when no Sundays have room', async () => {
+      fetchMoveOptions.mockResolvedValue([]);
+      const user = userEvent.setup();
+      render(<FamilyPrasadCard assignment={proposedAssignment} />);
+
+      await user.click(screen.getByRole('button', { name: /pick a different sunday/i }));
+
+      await waitFor(() =>
+        expect(
+          screen.getByText(
+            'No other Sundays have room right now — you can still confirm your suggested date, or check back later.',
+          ),
+        ).toBeTruthy(),
+      );
+    });
+
     it('shows the target-full toast and reloads options on a target-full rejection in the choose sheet', async () => {
       fetchMoveOptions.mockResolvedValue(moveOptions);
       confirmPrasad.mockRejectedValueOnce(new Error('target-full'));
