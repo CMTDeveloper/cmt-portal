@@ -1,10 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import {
+  PRASAD_STATUSES,
   PrasadAssignmentDocSchema,
   PrasadConfigDocSchema,
   PrasadPreviewBodySchema,
   PrasadMoveBodySchema,
   PrasadAdminReassignBodySchema,
+  PrasadConfirmBodySchema,
+  PrasadAssignRemainingBodySchema,
 } from '../prasad';
 
 const baseDoc = {
@@ -43,5 +46,51 @@ describe('prasad schemas', () => {
     expect(PrasadPreviewBodySchema.parse({ pid: 'x' }).cap).toBeUndefined();
     expect(PrasadMoveBodySchema.safeParse({ date: 'nope' }).success).toBe(false);
     expect(PrasadAdminReassignBodySchema.parse({ paid: 'p', date: '2026-03-22' }).date).toBe('2026-03-22');
+  });
+});
+
+describe('propose→confirm lifecycle', () => {
+  const lifecycleDoc = {
+    ...baseDoc,
+    status: 'proposed' as const,
+    confirmedAt: null,
+    confirmedBy: null,
+    proposalNotifiedAt: null,
+  };
+
+  it('accepts proposed status and the lifecycle fields', () => {
+    expect(PRASAD_STATUSES).toContain('proposed');
+    const parsed = PrasadAssignmentDocSchema.parse(lifecycleDoc);
+    expect(parsed.status).toBe('proposed');
+    expect(parsed.confirmedBy).toBeNull();
+  });
+
+  it('round-trips confirmedBy family|admin (no silent strip)', () => {
+    const parsed = PrasadAssignmentDocSchema.parse({
+      ...lifecycleDoc, status: 'assigned', confirmedAt: new Date(), confirmedBy: 'admin',
+      proposalNotifiedAt: new Date(),
+    });
+    expect(parsed.confirmedBy).toBe('admin');
+    expect(parsed.proposalNotifiedAt).toBeInstanceOf(Date);
+  });
+
+  it('rejects unknown confirmedBy', () => {
+    expect(() => PrasadAssignmentDocSchema.parse({ ...lifecycleDoc, confirmedBy: 'sevak' })).toThrow();
+  });
+
+  it('confirm body: empty {} and {date} both valid; bad date rejected', () => {
+    expect(PrasadConfirmBodySchema.parse({})).toEqual({});
+    expect(PrasadConfirmBodySchema.parse({ date: '2026-04-05' }).date).toBe('2026-04-05');
+    expect(() => PrasadConfirmBodySchema.parse({ date: 'nope' })).toThrow();
+  });
+
+  it('assign-remaining body requires pid', () => {
+    expect(PrasadAssignRemainingBodySchema.parse({ pid: 'bv-brampton-2025-26' }).pid).toBe('bv-brampton-2025-26');
+    expect(() => PrasadAssignRemainingBodySchema.parse({})).toThrow();
+  });
+
+  it('admin reassign body accepts assign:true', () => {
+    const p = PrasadAdminReassignBodySchema.parse({ paid: 'x-y', assign: true });
+    expect(p.assign).toBe(true);
   });
 });
