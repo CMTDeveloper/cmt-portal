@@ -1,148 +1,176 @@
 # Teacher module — how it works, end to end
 
-Bala Vihar teachers take Sunday attendance in the portal. An admin assigns a
-teacher to one or more **levels** (classes); the teacher opens their class
-each Sunday, marks every child **Present / Late / Absent**, and the results
-flow straight to the family dashboards and the welcome-team reports.
+**What this is:** the guide to Sunday attendance in the portal — for Bala
+Vihar teachers, and for the admins who set them up.
 
-The one idea that makes everything else make sense: **"teacher" is not a role
-you grant — it's a capability that follows from being assigned to a level.**
-There is no teacher checkbox on `/admin/users` (teacher status shows there
-read-only). The moment a person is assigned to at least one level at
-`/admin/levels` and signs in again, they are a teacher.
+Here is the whole flow in one breath. An admin assigns a teacher to one or
+more **levels** (classes). Each Sunday the teacher opens their class, marks
+every child **Present / Late / Absent**, and saves. The marks flow straight
+to the family dashboards and the welcome-team reports — nothing else to
+publish.
 
-Spec: `docs/superpowers/specs/2026-05-29-slice-4-teacher-attendance-design.md`.
+One idea makes everything else make sense: **"teacher" is not a role you
+grant — it comes automatically from being assigned to a class.** There is no
+teacher checkbox on the user list (/admin/users); teacher status shows there
+for information only. The moment someone is assigned to at least one level in
+**Level management** (/admin/levels) and signs in again, they are a teacher.
 
 ---
 
 ## Part 1 — Admin: onboarding a teacher
 
-### Prerequisite: the teacher must be a registered family member
+### First: the teacher must be a registered family member
 
-Teachers are identified by their **member id (mid)** — so a prospective
-teacher must already exist in a Setu family (register them like any family if
-they aren't). A "standalone teacher" with no family **cannot sign in today**;
-every real teacher is a parent/adult in a registered family.
+The portal identifies teachers by their **member ID (mid)** — the ID the
+portal gives each person in a family. So a prospective teacher must already
+be part of a registered family. If they aren't, register them like any family
+first. A "standalone teacher" with no family **cannot sign in today** —
+every real teacher is a parent or adult in a registered family.
 
-**Finding the mid:** open `/welcome/roster`, search the person's family,
-click through to their member profile — the mid (format `CMT-XXXX1111-01`) is
-the last segment of the page URL `/welcome/family/{fid}/members/{mid}`.
+**How to find someone's member ID:**
 
-### Assign levels (`/admin/levels` — the whole onboarding)
+1. Open the roster (/welcome/roster).
+2. Search for the person's family and click into it.
+3. Click the person's name to open their member profile.
+4. Look at the page address. It looks like
+   `/welcome/family/{fid}/members/{mid}`, and the member ID (format
+   `CMT-XXXX1111-01`) is the last part.
 
-1. Open `/admin/levels` → **"Assign teacher"** form.
-2. Enter the teacher's mid in the ref box.
-3. Tick every level they teach. **Ticking sets the teacher's FULL level set**
-   — this is a *replace*, not an add. To add one level to an existing teacher
-   you must re-tick all the levels they should keep; ticking only the new one
-   silently unassigns the rest. (The form does not pre-load their current
-   set — check their row at `/admin/users`, filter "Teacher", to see it.)
-4. Save. The toast says it plainly: **"Takes effect on their next sign-in."**
-   Tell the teacher to sign out and back in — there is no refresh shortcut.
+### Assign their classes — this is the whole onboarding
 
-A "universal teacher" (sees every class, both locations) is simply a teacher
-assigned to **all** enabled levels — there is no special toggle.
+1. Open **Level management** (/admin/levels) and find the **Assign teacher**
+   form.
+2. Type the teacher's member ID into the ref box.
+3. Tick **every** level they teach. ⚠️ Careful here: ticking sets the
+   teacher's **full** list of classes — it *replaces* their old list, it does
+   not add to it. To give an existing teacher one more class, you must
+   re-tick all the classes they should keep; ticking only the new one quietly
+   removes them from the rest. The form does not pre-fill their current
+   classes — to see what they have today, open the user list (/admin/users)
+   and filter by "Teacher".
+4. Click **Save**. The toast says it plainly: **"Takes effect on their next
+   sign-in."** Tell the teacher to sign out and sign back in — there is no
+   shortcut to refresh it.
 
-The Levels table shows a per-level **Teachers count**, so a quick scan finds
-classes with `0` that still need someone. (Welcome-team gets a read-only view
-of levels and rosters at `/welcome/levels`; assignment itself is an
-admin-screen task.)
+A "universal teacher" (someone who sees every class, at both locations) is
+simply a teacher assigned to **all** enabled levels — there is no special
+switch for it.
 
-### Don't skip: publish the class calendar (`/admin/calendar`)
+The Levels table shows a **Teachers count** for each level, so a quick scan
+finds classes showing `0` that still need someone. (The welcome team gets a
+read-only view of levels and class rosters at /welcome/levels; the assigning
+itself happens on the admin screen.)
 
-The calendar's published `class` Sundays are the **denominator** for every
-family's "X of Y Sunday classes" — without it, percentages silently read
-misleadingly high. Marking attendance itself does *not* require the calendar,
-but the family-facing math does. Recommended order each year:
+### Don't skip: publish the class calendar
+
+On the class calendar (/admin/calendar), publish the year's class Sundays.
+Those published Sundays are what the portal counts against for every family's
+"X of Y Sunday classes" — without them, the percentages quietly read
+misleadingly high. Teachers can mark attendance without the calendar, but the
+family-facing numbers need it. Recommended order each year:
 **create/clone levels → publish calendar → assign teachers**.
 
 ## Part 2 — Teacher: the Sunday routine
 
-1. **Sign in** at `/sign-in` (normal family sign-in). Teachers land on
-   `/family` — their family role stays primary. The teacher surface is the
-   **"Teacher"** link in the sidebar's Sevak section (desktop and mobile).
-2. **`/teacher` — My classes** lists every enabled level assigned to you.
-   (New teacher with no classes yet sees: "You haven't been assigned to any
+1. **Sign in** at /sign-in — the normal family sign-in, nothing special. You
+   land on your family page (/family), because your family role stays your
+   main one. Your teacher tools are behind the **Teacher** link in the
+   sidebar's Sevak section (desktop and mobile).
+2. **My classes** (/teacher) lists every enabled level assigned to you. (A
+   new teacher with no classes yet sees: "You haven't been assigned to any
    classes yet. Ask the admin or welcome team to add you.")
-3. **Tap a class** → the attendance screen, opened on the **most recent
-   Sunday** (Toronto time). The ‹ › arrows step one week back/forward; future
-   dates show "This class is upcoming" and can't be marked. Past Sundays stay
-   fully editable — re-marking simply overwrites (no history).
-4. **Mark each child** Present / Late / Absent — tap the active status again
-   to un-mark. Children who checked in at the door kiosk arrive pre-seeded
-   **Present** with a "door" pill (you can still override — your mark always
-   wins). A red dot flags a child with **food allergies**.
-5. **Save** (the fixed bottom bar). Only marked children are recorded;
-   unmarked rows stay "unaccounted". The stats band tracks Enrolled ·
-   Checked-in · Present · Late · Absent · Unmarked with a progress bar.
-6. **Child detail:** tap any name → `/teacher/students/{mid}` — grade, an
-   always-visible allergy + emergency-contact banner, their attendance
-   summary with a heatmap, parent contact info, and achievements.
+3. **Tap a class** to open the attendance screen. It opens on the **most
+   recent Sunday** (Toronto time). The ‹ › arrows step one week back or
+   forward. Future dates show "This class is upcoming" and can't be marked.
+   Past Sundays stay fully editable — marking again simply overwrites what
+   was there (there is no history kept).
+4. **Mark each child** Present, Late, or Absent. Tap the active status again
+   to un-mark. Children who checked in at the door kiosk arrive already
+   marked **Present** with a "door" pill — you can still change it, and your
+   mark always wins. A red dot flags a child with **food allergies**.
+5. **Tap Save** in the fixed bar at the bottom. Only marked children are
+   recorded; unmarked rows stay "unaccounted". The stats band tracks
+   Enrolled · Checked-in · Present · Late · Absent · Unmarked with a progress
+   bar.
+6. **Want more on a child?** Tap any name to open their detail page
+   (/teacher/students/{mid}): grade, an always-visible allergy and
+   emergency-contact banner, their attendance summary with a heatmap, parent
+   contact info, and achievements.
 
-### Visitors and walk-ins (`Visitors →` on the attendance screen)
+### Visitors and walk-ins (the **Visitors →** link on the attendance screen)
 
-- **Door guests** that match your class's grade band appear under "Checked in
-  at the door" — one **Confirm** marks them present.
-- **Quick-add** takes a walk-in child on the spot: first name (required),
+- **Door guests** whose grade fits your class appear under "Checked in at the
+  door" — one tap on **Confirm** marks them present.
+- **Quick-add** takes in a walk-in child on the spot: first name (required),
   last name, grade, parent email/phone. ⚠️ **This creates a real (pending)
-  family record and auto-enrolls it for the period** — the parent claims it
-  when they first sign in with that contact. Always capture a parent email or
-  phone; without one the record can't be claimed. You're creating membership,
-  not just a tally mark.
+  family record and enrolls the child for the period** — the parent claims it
+  the first time they sign in with that email or phone. Always capture a
+  parent email or phone; without one, the record can never be claimed. You
+  are creating a membership, not just a tally mark.
 
-Two practical notes: a child unenrolled mid-year drops off your roster
-automatically (any stray mark for them is skipped, not saved), and when two
-teachers share a level they see and edit the same roster — the last save for
-a given child + date wins.
+Two practical notes:
+
+- A child unenrolled mid-year drops off your roster automatically. If you had
+  a stray mark for them, it is skipped, not saved.
+- When two teachers share a class, they see and edit the same roster — for
+  any one child and date, the last save wins.
 
 ## Part 3 — Where the marks go (families)
 
-- **Family dashboard** (`/family`): the Bala Vihar card shows "X of Y Sunday
-  classes" the moment you save — no publish step. The family number is a
-  *union across their children* (one present child makes the family present
-  that Sunday), and Y comes from the published class calendar.
-- **Per-child truth** lives on the member page (`/family/members/{mid}`):
-  each child's own present/late/absent record for the BV year.
-- **Welcome team / admin** see the same per-child summary plus the heatmap at
-  `/welcome/family/{fid}/members/{mid}`.
+- **Family dashboard** (/family): the Bala Vihar card shows "X of Y Sunday
+  classes" the moment you save — there is no publish step. The family's
+  number combines all their children: if any one child was present that
+  Sunday, the family counts as present. The "Y" comes from the published
+  class calendar.
+- **Each child's own record** lives on their member page
+  (/family/members/{mid}): that child's present/late/absent history for the
+  Bala Vihar year.
+- **Welcome team and admins** see the same per-child summary, plus the
+  heatmap, at /welcome/family/{fid}/members/{mid}.
 
-## Part 4 — Reports (`/welcome/reports`)
+## Part 4 — Reports
 
-The **attendance summary** card aggregates present/absent/late and an
-attendance rate per level and per program, with a date-range control and CSV
-export. No dates selected = the **last 365 days**, not all-time.
-Welcome-team and admin can run it (donations stays admin-only).
+On the reports page (/welcome/reports), the **attendance summary** card adds
+up present, absent, and late marks, plus an attendance rate, for each level
+and each program. It has a date-range control and a CSV export. With no dates
+selected it covers the **last 365 days** — not all-time. Welcome team and
+admins can run it (the donations card stays admin-only).
 
 ## Year-end: the rollover re-assignment ritual
 
 ⚠️ **The school-year rollover clones every level with an empty teacher
-list** — deliberately. After running the rollover, re-assign **every**
-teacher to the new year's levels at `/admin/levels` (their stale prior-year
-assignment keeps the Teacher link alive, but "My classes" goes empty once the
-old levels are disabled). Because saving replaces the whole set, re-ticking
-just the new year's levels cleans out the old ids in the same stroke. See
-[`school-year-rollover-guide.md`](school-year-rollover-guide.md) Step 5.
+list** — on purpose. After running the rollover, re-assign **every** teacher
+to the new year's levels in **Level management** (/admin/levels). Their stale
+prior-year assignment keeps the Teacher link visible, but their "My classes"
+page goes empty once the old levels are turned off. Because saving replaces
+the whole list, re-ticking just the new year's levels clears out the old ones
+in the same stroke. See Step 5 of the
+[school-year rollover guide](school-year-rollover-guide.md).
 
 ## Quick reference
 
 | Who | Where | Does |
 |---|---|---|
-| Admin | `/admin/levels` | Create/edit levels · **Assign teacher** (mid + tick levels — replace semantics) |
-| Admin | `/admin/calendar` | Publish class Sundays (family-% denominator) |
-| Admin | `/admin/users` (filter Teacher) | See who teaches what — read-only |
-| Teacher | sidebar **Teacher** link → `/teacher` | My classes list |
-| Teacher | `/teacher/levels/{levelId}/attendance` | Mark Present/Late/Absent per Sunday, Save |
-| Teacher | `Visitors →` | Confirm door guests · quick-add walk-ins (creates pending family) |
-| Teacher | `/teacher/students/{mid}` | Child detail: allergies, contacts, heatmap |
-| Family | `/family` + `/family/members/{mid}` | "X of Y Sundays" card · per-child history |
-| Welcome team | `/welcome/levels`, `/welcome/reports` | Read-only rosters · attendance summary + CSV |
+| Admin | **Level management** (/admin/levels) | Create/edit levels · **Assign teacher** (member ID + tick classes — ticking replaces the whole list) |
+| Admin | Class calendar (/admin/calendar) | Publish class Sundays (the "Y" in families' "X of Y") |
+| Admin | User list (/admin/users), filter "Teacher" | See who teaches what — read-only |
+| Teacher | Sidebar **Teacher** link → /teacher | My classes list |
+| Teacher | A class → its attendance screen (/teacher/levels/{levelId}/attendance) | Mark Present/Late/Absent per Sunday, then **Save** |
+| Teacher | **Visitors →** | Confirm door guests · quick-add walk-ins (creates a pending family) |
+| Teacher | /teacher/students/{mid} | Child detail: allergies, contacts, heatmap |
+| Family | /family and /family/members/{mid} | "X of Y Sundays" card · each child's history |
+| Welcome team | /welcome/levels, /welcome/reports | Read-only rosters · attendance summary + CSV |
 
-**Statuses:** `present` / `late` / `absent` (stored) · "unaccounted" =
-unmarked (derived, never stored) · guests carry `isGuest: true` and sit
-outside the roster tally.
+**Statuses:** a child is Present, Late, or Absent. A child nobody marked
+shows as "unaccounted" — that just means no mark yet; it is not a saved
+status. Guests are counted separately and sit outside the class-roster tally.
 
 ## Notes for developers
 
+- Spec: `docs/superpowers/specs/2026-05-29-slice-4-teacher-attendance-design.md`.
+- Stored status values: `present` / `late` / `absent`; "unaccounted" =
+  unmarked (derived, never stored). Guests carry `isGuest: true` and sit
+  outside the roster tally.
 - Collections: `levels/{levelId}` (id `{location}-{levelSlug}-{pid}`, holds
   the denormalized `teacherRefs: string[]`), `teacherAssignments/{ref}`
   (`levelIds`, the source of truth — `assignTeacher()` updates both in one

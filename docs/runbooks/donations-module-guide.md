@@ -1,169 +1,206 @@
 # Donations module — how it works, end to end
 
-Families pay their program **dakshina** in the portal by credit/debit card:
-the donate form hands off to a Stripe-hosted checkout page (via CMT's Cloud
-Run Stripe service — the portal never talks to Stripe directly), and the
-result shows up on the family dashboard and the welcome roster.
+**What this is:** how families pay their program **dakshina** (the suggested
+class donation) in the portal, and what you can see and do when a payment
+question comes up at the desk.
 
-Two framing facts before the steps:
+Families pay by credit or debit card. The donate form hands the family off
+to a secure payment page run by Stripe (the card-payment company), and the
+result then shows up on the family's dashboard and on the welcome roster.
+The portal itself never handles card numbers.
+
+Two things to know before anything else:
 
 1. **Portal donations are enrollment dakshina only.** General year-round
-   giving is handled off-portal (CMT decision 2026-06-04) — a bare
-   `/family/donate` visit just returns to the dashboard.
-2. **The portal's donation status is best-effort UX, not accounting truth.**
-   There is no Stripe webhook: "completed" means *the family reached the
-   thank-you page*, not *the payment settled*. Accounting reconciles from
-   Stripe directly and owns all CRA receipts (annual rollup mailed each
-   February by accounting@chinmayatoronto.org — the portal issues no
-   receipts and sends no payment emails).
-
-Specs: `docs/superpowers/specs/2026-05-26-slice-3-donations-checkout-receipts-design.md`
-(+ `2026-05-28-stripe-proxy-revision.md`, `2026-05-29-donation-period-schoolyear-tiered-pricing-revision.md`).
+   giving is handled outside the portal (CMT decision 2026-06-04). If
+   someone opens the donate page (/family/donate) without coming from an
+   enrollment, it simply returns them to the dashboard.
+2. **The portal's "paid" status is a helpful indicator, not the official
+   accounting record.** The portal never hears back from Stripe after the
+   payment: "completed" means *the family reached the thank-you page*, not
+   *the payment settled at the bank*. Accounting reconciles from Stripe
+   directly and owns all CRA tax receipts (one annual rollup, mailed each
+   February by accounting@chinmayatoronto.org). The portal issues no
+   receipts and sends no payment emails.
 
 ---
 
 ## Part 1 — Family: making a donation
 
-### Getting to the form (three doors, all need an enrollment)
+### Getting to the form (three doors — all start from an enrollment)
 
-- **Right after enrolling** in a donation program, the portal continues
-  straight to the donate form ("Enrolled! Continuing to donation.").
-- **The enroll page** of an already-enrolled program shows
-  **"Continue to donation →"**.
-- **The dashboard** donation card shows **Give** (or **Give more**) while
-  the suggested amount isn't fully donated.
+A family can reach the donate form three ways:
 
-Only the **family manager** can donate — other members see "Only the family
-manager can make a donation through the portal." There is no donations
-history screen for families; the dashboard card *is* the status view.
+1. **Right after enrolling** in a program that takes a donation, the portal
+   carries them straight to the donate form (they'll see "Enrolled!
+   Continuing to donation.").
+2. **From the enroll page** of a program they're already enrolled in — it
+   shows a **"Continue to donation →"** button.
+3. **From the dashboard** — the donation card shows a **Give** button (or
+   **Give more**) for as long as the suggested amount hasn't been fully
+   donated.
 
-### The form (`/family/donate`)
+Only the **family manager** can donate. Other family members see "Only the
+family manager can make a donation through the portal." There is no
+donations-history screen for families — the dashboard card *is* their
+status view.
 
-1. The amount is pre-filled with the enrollment's **suggested amount**, with
-   quick-pick chips (the suggested floor is labelled "· suggested").
-2. **You can give more, never less online.** Typing below the floor shows
-   "Suggested amount is $N. To give less, please contact the welcome team."
-   and disables the button (the server enforces the same rule). Lowering a
-   family's amount is a welcome-team action — see Part 3.
-3. Optional checkbox: **"Add $X processing fee so 100% of my gift reaches
-   the Mission"** (2.2% + $0.30, shown live; unchecked by default).
-4. A summary card shows Donation / Processing fee / Total today and the
-   February tax-receipt note. **Give $X →** opens the Stripe checkout page
-   (card payments; "Secured by Stripe").
+### Filling in the form (/family/donate)
 
-### After Stripe
+1. The amount comes pre-filled with the enrollment's **suggested amount**,
+   with quick-pick amount chips (the suggested minimum is labelled
+   "· suggested").
+2. **Families can give more online, never less.** If they type an amount
+   below the suggested minimum, they see "Suggested amount is $N. To give
+   less, please contact the welcome team." and the button is disabled. (The
+   system blocks it behind the scenes too, so there's no way around it
+   online.) Lowering a family's amount is a welcome-team action — see
+   Part 3.
+3. There's an optional checkbox: **"Add $X processing fee so 100% of my
+   gift reaches the Mission"** (the fee is 2.2% + $0.30, shown live as they
+   type; the box is unchecked by default).
+4. A summary card shows Donation / Processing fee / Total today, plus the
+   note about the February tax receipt. Clicking **Give $X →** opens the
+   Stripe payment page (card payments; it says "Secured by Stripe").
 
-- **Success** → the thank-you page ("Thank you for your dakshina") with the
-  tax-receipt note. Both buttons lead back to the family dashboard, where
-  the donation card now shows progress or "Thank you for your donation".
-- **Cancelled / backed out** → "Donation not completed — no charge was
-  made." ⚠️ The **"Try again" button on this page lands on the dashboard**,
-  not back on the form — retry via the dashboard's **Give** button.
-- **2025-26 BV families who paid offline** (legacy roster says paid) see
-  "Already paid for {term}" and can't double-pay online. *Partially*-paid
-  offline families are **not** blocked and would owe the full floor online —
-  send them to the welcome team instead.
+### After the payment page
 
-## Part 2 — The money model (recap)
+- **Payment went through** → they land on the thank-you page ("Thank you
+  for your dakshina") with the tax-receipt note. Both buttons there lead
+  back to the family dashboard, where the donation card now shows progress
+  or "Thank you for your donation".
+- **They cancelled or backed out** → they see "Donation not completed — no
+  charge was made." ⚠️ Watch out: the **"Try again" button on that page
+  lands on the dashboard**, not back on the form. To retry, use the
+  dashboard's **Give** button.
+- **Families from the 2025-26 Bala Vihar year who already paid offline**
+  (the old records show them as paid) see "Already paid for {term}" and
+  can't accidentally pay twice online. ⚠️ But families who *partially* paid
+  offline are **not** blocked — online they'd be asked for the full
+  suggested amount. Send those families to the welcome team instead.
 
-Covered in detail in [`programs-module-guide.md`](programs-module-guide.md); the donation-relevant core:
+## Part 2 — How the suggested amounts work (recap)
 
-- Each offering carries **pricing tiers by enrollment date** (e.g. $500 from
-  September, $300 from December — Toronto dates). A family's suggested
-  amount resolves as: **welcome-team override → live recompute from current
-  tiers at their enroll date → the snapshot frozen at enrollment**.
-- An admin who fixes a pricing mistake on the offering reaches all unpaid
-  families immediately (live recompute) — except those with an override.
-- **"Paid" = completed portal donations reaching the suggested amount.**
-  Donations are recorded against the specific enrollment (`eid`), so paying
-  Bala Vihar doesn't mark Tabla paid on the family dashboard.
+The full picture is in the [programs module guide](programs-module-guide.md).
+Here's the part that matters for donations:
+
+- Each program offering has **prices that change by enrollment date** (for
+  example, $500 if you enrol from September, $300 from December — Toronto
+  dates). The amount a family is asked for is decided in this order: **a
+  special amount the welcome team set for that family** → otherwise, **the
+  current price list applied to their enrollment date** → otherwise, **the
+  price that was saved when they enrolled**.
+- Because of that second step, when an admin fixes a pricing mistake on the
+  offering, every unpaid family sees the corrected amount right away —
+  except families who have a special amount set.
+- **"Paid" means completed portal donations add up to the suggested
+  amount.** Each donation is tied to the specific class enrollment it pays
+  for, so paying for Bala Vihar doesn't mark Tabla as paid on the family
+  dashboard.
 
 ## Part 3 — Welcome team and admin
 
 ### What you can see
 
-- **`/welcome/roster`** — the per-family payment chip: **paid** (green) /
-  **outstanding** (orange) / **unknown**. ⚠️ Two trust caveats:
-  - The chip sums a family's completed donations **all-time** against their
-    currently-active enrollments — so right after a school-year rollover,
-    last year's payers show **paid for the new year they haven't paid yet**.
-    Don't trust the chip across a rollover boundary.
-  - It only counts portal (Stripe) donations — cutover-year families who
-    paid **offline** show "outstanding" here even though their own dashboard
-    says Completed.
-- **`/welcome/reports` → Donations summary** (**admin-only** — welcome-team
-  sees no card and the API returns 403): all-time completed totals by period
-  and by program, plus paid/outstanding family counts, with CSV export. The
-  date-range control does not apply to this report (all-time by design;
-  only the program filter narrows it). The card says it itself: totals are
-  best-effort — accounting@ remains the settlement source of truth.
+- **The roster** (/welcome/roster) shows a payment chip on each family:
+  **paid** (green), **outstanding** (orange), or **unknown**. ⚠️ Two
+  reasons not to take the chip at face value:
+  - The chip adds up a family's completed donations **from all time** and
+    compares them against the enrollments that are active **right now**. So
+    just after a school-year rollover, last year's payers show as **paid**
+    for the new year — which they haven't actually paid yet. Don't trust
+    the chip across a rollover boundary.
+  - The chip only counts online (Stripe) donations. Cutover-year families
+    who paid **offline** show as "outstanding" here, even though their own
+    dashboard says Completed.
+- **Reports** (/welcome/reports) → the **Donations summary** card
+  (**admin-only** — welcome-team members don't see the card, and the data
+  is blocked for them too): all-time completed totals by period and by
+  program, plus paid/outstanding family counts, with a CSV download. Note:
+  the date-range control on the reports page does **not** apply to this
+  report — it is all-time by design; only the program filter narrows it.
+  The card says it itself: these totals are best-effort — accounting@
+  remains the source of truth for settled payments.
 
 ### What you can do
 
-- **Lower (or clear) a family's suggested amount** — API only, no screen:
-
-  ```
-  PATCH /api/welcome/enrollments/{eid}/override
-  { "suggestedAmountOverride": 300 }     // positive integer, or null to clear (0 is rejected)
-  ```
-
-  The family's donate form floor updates immediately. ⚠️ Rollover wipes
-  overrides (the new enrollment starts with none) — re-apply after each
-  promotion.
-- **That's the whole write surface.** There is no admin screen to list
-  donations, record an offline/cash donation, mark a family paid, fix a
-  stuck status, or issue a refund — all of that lives with accounting and
-  the Stripe dashboard.
+- **Lower (or clear) a family's suggested amount.** There is no screen for
+  this — ask the tech team to set it (the details they need are in the
+  developer notes below). Once set, the family's donate form switches to
+  the new minimum immediately. ⚠️ The school-year rollover wipes these
+  special amounts (each new enrollment starts without one) — they have to
+  be re-applied after every promotion.
+- **That's the only change anyone can make in the portal.** There is no
+  admin screen to list donations, record an offline/cash donation, mark a
+  family paid, fix a stuck status, or issue a refund — all of that lives
+  with accounting and the Stripe dashboard.
 
 ### Reading donation statuses (when accounting asks)
 
-A donation doc moves `redirected` → `completed` (family reached the success
-page) or `abandoned` (family hit cancel). Two patterns are **normal**:
+Behind the scenes, every donation record moves through statuses:
+**redirected** (the family was sent to the payment page) → **completed**
+(they reached the thank-you page) or **abandoned** (they hit cancel). Two
+patterns are **normal** and not a cause for alarm:
 
-- **Stuck at `redirected` even though the card was charged** — the family's
-  session expired mid-checkout, they closed the browser on Stripe's receipt
-  page, etc. Nothing in the portal fixes this; cross-check in the Stripe
-  dashboard using the donation doc id (it's Stripe's `client_reference_id`).
-- **Orphaned `redirected` rows with no Stripe session** — checkout failed
-  after the audit record was written (proxy down, config missing). Not lost
-  money, not fraud.
+- **Stuck at "redirected" even though the card was charged.** This happens
+  when the family's sign-in expired mid-checkout, or they closed the
+  browser on Stripe's receipt page, and so on. Nothing in the portal fixes
+  this. The payment can be cross-checked in the Stripe dashboard — every
+  portal donation carries a reference id that Stripe stores too (ask the
+  tech team to look it up).
+- **A "redirected" record with no matching Stripe payment at all.** That
+  means checkout broke right after the portal wrote its own record (the
+  payment service was down or misconfigured). It is not lost money and not
+  fraud.
 
 ### Payment reminders — currently manual, on purpose
 
-The weekly unpaid-family reminder cron is **disabled**
-(`WEEKLY_REMINDER_CRON_ENABLED` is not set anywhere) and ashram staff handle
-reminders manually. **Do not enable it as-is for Setu donations**: it is a
-legacy check-in feature — it reads the old RTDB roster's payment column,
-ignores Stripe donations entirely (it would nag families who already paid
-online), and its email copy is check-in-centric. A Setu-aware reminder is a
-future build. (The "donation thank-you" email is likewise a manual button on
-the legacy `/check-in/admin/unpaid` page — nothing is auto-sent on payment.)
+The weekly "you haven't paid yet" reminder email is **switched off**: the
+tech team would have to turn it on, and it is off everywhere. Ashram staff
+handle payment reminders manually. **Do not ask for it to be switched on
+as-is for Setu donations** — it is a leftover from the legacy check-in
+system: it reads the old system's payment records, knows nothing about
+online (Stripe) donations (so it would nag families who already paid
+online), and its email wording is written for check-in. A donations-aware
+reminder is a future build. (Likewise, the "donation thank-you" email is a
+manual button on the legacy check-in admin page (/check-in/admin/unpaid) —
+nothing is sent automatically when a payment comes in.)
 
 ## Year-end: rollover resets
 
-The school-year promotion closes the old enrollment and creates a fresh one
-with a new pricing snapshot — so every family starts the new year **unpaid
-on their dashboard** (correct), **overrides cleared** (re-apply via the
-API), and the **roster chip over-reporting paid** until new-year donations
-come in (see the caveat above).
+The school-year promotion closes each family's old enrollment and creates a
+fresh one with that year's pricing. Three things follow:
+
+- Every family starts the new year **unpaid on their dashboard** — that's
+  correct, not a bug.
+- Any **special amounts the welcome team had set are cleared** — ask the
+  tech team to re-apply them.
+- The **roster payment chip over-reports "paid"** until new-year donations
+  come in (see the caveat in Part 3).
 
 ## Quick reference
 
-| Who | Where | Does |
+| Who | Where | What they can do |
 |---|---|---|
-| Family manager | dashboard **Give** → `/family/donate?eid=…` | Pay dakshina by card (≥ suggested floor, optional fee cover) |
-| Family (anyone) | dashboard donation card | Progress "$X of $Y suggested" / Completed |
-| Welcome team | `/welcome/roster` | Payment chip (see trust caveats) |
-| Welcome team | `PATCH /api/welcome/enrollments/{eid}/override` | Lower/clear a family's suggested amount (API-only) |
-| Admin | `/welcome/reports` → Donations summary | All-time totals by period/program + paid/outstanding counts, CSV |
-| Accounting (off-portal) | Stripe dashboard | Settlement truth, refunds, CRA receipts (February) |
+| Family manager | **Give** on the dashboard → donate form (/family/donate) | Pay dakshina by card (at or above the suggested amount, optional fee cover) |
+| Family (anyone) | Donation card on the dashboard | See progress ("$X of $Y suggested") or Completed |
+| Welcome team | Roster (/welcome/roster) | See the payment chip (read the trust caveats above) |
+| Welcome team | Ask the tech team (no screen for this) | Lower or clear a family's suggested amount |
+| Admin | Reports (/welcome/reports) → **Donations summary** | All-time totals by period/program, paid/outstanding counts, CSV download |
+| Accounting (off-portal) | Stripe dashboard | The real payment record: settlement, refunds, CRA receipts (February) |
 
-**Statuses:** `redirected` (sent to Stripe) → `completed` (reached success
-page — client-trusted) or `abandoned` (hit cancel; revisiting the success
-link can still upgrade it). No failed/refunded states in v1.
+**Statuses:** **redirected** (sent to the payment page) → **completed**
+(reached the thank-you page — the portal takes the browser's word for it)
+or **abandoned** (hit cancel; if the family later opens the thank-you link,
+the status can still flip to completed). There is no "failed" or "refunded"
+status in this version.
 
 ## Notes for developers
 
+- Specs: `docs/superpowers/specs/2026-05-26-slice-3-donations-checkout-receipts-design.md`
+  (+ `2026-05-28-stripe-proxy-revision.md`, `2026-05-29-donation-period-schoolyear-tiered-pricing-revision.md`).
+  Checkout goes through CMT's Cloud Run Stripe proxy — the portal never
+  talks to Stripe directly, and there is **no Stripe webhook**.
 - Collection `donations/{did}` (top-level): `fid`, `donorMid/Name/Email`
   (email from the member record, never client input), `type`
   (`enrollment`|`general`), `programKey/programLabel/pid/eid`, `label`,
@@ -177,6 +214,17 @@ link can still upgrade it). No failed/refunded states in v1.
   canAccessRoute also allows family-role **GET** `/api/setu/donations/*` —
   forward-compat scaffolding; no GET handler exists. The `type:'general'`
   API branch works but no UI reaches it.
+- The "ask the tech team to lower a family's suggested amount" action in
+  Part 3 is:
+
+  ```
+  PATCH /api/welcome/enrollments/{eid}/override
+  { "suggestedAmountOverride": 300 }     // positive integer, or null to clear (0 is rejected)
+  ```
+
+  API only, no screen. The family's donate-form floor updates immediately.
+- The Donations summary report API is admin-gated — welcome-team requests
+  return 403.
 - Stripe wiring: `STRIPE_CHECKOUT_URL` (+ `_TEST` and
   `STRIPE_USE_TEST_CHECKOUT`) point at the Cloud Run proxy (shared with the
   events-registration app), authenticated by `STRIPE_API_KEY` as
@@ -189,12 +237,16 @@ link can still upgrade it). No failed/refunded states in v1.
   (`markDonationStatus`: cross-family guard, completed never downgrades).
   Known stranding path: middleware's sign-in bounce keeps the pathname but
   drops `?did=`, so a session expiry during checkout loses the completion
-  mark permanently.
+  mark permanently. The donation doc id doubles as Stripe's
+  `client_reference_id` for cross-checking in the Stripe dashboard.
 - Three different "paid" computations exist and can disagree: dashboard
   (eid-scoped, BV via `selectBalaViharEnrollment`), roster chip (all-time
   donations vs all active enrollments, live tier recompute), donations
   report (snapshot/override only, no live recompute). Legacy RTDB payment
   status is consulted by family-facing pages only.
+- The weekly unpaid-family reminder is gated by
+  `WEEKLY_REMINDER_CRON_ENABLED` (not set anywhere); it reads the legacy
+  RTDB roster's payment column, not Setu donations.
 - ⚠️ **Cron method mismatch (affects more than donations):** all three
   `/api/cron/*` routes export only `POST`, but Vercel cron invokes with
   **GET** — the scheduled invocations would 405. Moot for the weekly
