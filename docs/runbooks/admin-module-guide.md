@@ -34,13 +34,13 @@ under **More**.
 |---|---|---|---|
 | People & access | Family search | `/welcome` (roster) | — (browse, filters, CSV; family detail + set-grade) |
 | People & access | Users & roles | `/admin/users` | **this guide ↓** |
-| Bala Vihar | Programs | `/admin/programs` | `programs-module-guide.md` |
-| Bala Vihar | Level management | `/admin/levels` | **this guide ↓** + `teacher-module-guide.md` (assignment) |
+| Bala Vihar | Programs | `/admin/programs` | [`programs-module-guide.md`](programs-module-guide.md) |
+| Bala Vihar | Level management | `/admin/levels` | **this guide ↓** + [`teacher-module-guide.md`](teacher-module-guide.md) (assignment) |
 | Bala Vihar | Class calendar | `/admin/calendar` | **this guide ↓** |
-| Bala Vihar | School year rollover | `/admin/school-year` | `school-year-rollover-guide.md` |
-| Bala Vihar | Prasad rotation | `/admin/prasad` | `prasad-module-guide.md` |
+| Bala Vihar | School year rollover | `/admin/school-year` | [`school-year-rollover-guide.md`](school-year-rollover-guide.md) |
+| Bala Vihar | Prasad rotation | `/admin/prasad` | [`prasad-module-guide.md`](prasad-module-guide.md) |
 | Bala Vihar | Volunteering skills | `/admin/volunteering-skills` | **this guide ↓** |
-| Bala Vihar | Seva | `/welcome/seva` | `seva-module-guide.md` |
+| Bala Vihar | Seva | `/welcome/seva` | [`seva-module-guide.md`](seva-module-guide.md) |
 | Reports | Reports | `/welcome/reports` | enrollment + attendance (welcome-team), donations (admin-only), legacy CSVs |
 | Legacy · door app | Check-in dashboard / Guests / Unpaid families / Admin users | `/check-in/admin*` | **this guide ↓** |
 | Legacy · door app | Donation periods | redirects to `/admin/programs` | kept for bookmarks |
@@ -79,7 +79,7 @@ the family migrates into Setu.
 **Teacher is not grantable here** — teacher status shows read-only with the
 levels they teach ("Manage as teacher →" jumps to `/admin/levels`).
 Assigning levels *is* how someone becomes a teacher; see
-`teacher-module-guide.md`.
+[`teacher-module-guide.md`](teacher-module-guide.md).
 
 ### Revoking a role
 
@@ -154,7 +154,7 @@ kind (Shishu / pre-level / level / parents), display order, **grade band**
 - The **Teachers** column shows the per-level assignment count — scan for
   `0` to find uncovered classes. Assignment itself (the "Assign teacher"
   form, replace semantics, next-sign-in effect) is covered step-by-step in
-  `teacher-module-guide.md`.
+  [`teacher-module-guide.md`](teacher-module-guide.md).
 
 ## Volunteering skills (`/admin/volunteering-skills`)
 
@@ -191,16 +191,16 @@ the check-in feature flags. They dim with a "Legacy" badge:
 | Task | Where |
 |---|---|
 | Make someone admin / welcome-team | `/admin/users` → Add sevak role (next sign-in!) |
-| Make someone a teacher | `/admin/levels` → Assign teacher (`teacher-module-guide.md`) |
-| New program / offering / pricing | `/admin/programs` (`programs-module-guide.md`) |
+| Make someone a teacher | `/admin/levels` → Assign teacher ([`teacher-module-guide.md`](teacher-module-guide.md)) |
+| New program / offering / pricing | `/admin/programs` ([`programs-module-guide.md`](programs-module-guide.md)) |
 | Create/edit a level, grade bands | `/admin/levels` (this guide) |
 | Publish class Sundays + prasad toggles | `/admin/calendar` (this guide) |
-| Promote everyone to the new school year | `/admin/school-year` (`school-year-rollover-guide.md`) |
-| Propose/assign prasad Sundays | `/admin/prasad` (`prasad-module-guide.md`) |
+| Promote everyone to the new school year | `/admin/school-year` ([`school-year-rollover-guide.md`](school-year-rollover-guide.md)) |
+| Propose/assign prasad Sundays | `/admin/prasad` ([`prasad-module-guide.md`](prasad-module-guide.md)) |
 | Member-form skills list | `/admin/volunteering-skills` |
 | Find a family / export CSV / fix a grade | `/welcome` roster |
 | Reports (enrollment / attendance / donations) | `/welcome/reports` |
-| Seva year, opportunities, compliance | `/welcome/seva` (`seva-module-guide.md`) |
+| Seva year, opportunities, compliance | `/welcome/seva` ([`seva-module-guide.md`](seva-module-guide.md)) |
 
 ## Notes for developers
 

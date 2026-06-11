@@ -43,6 +43,7 @@
     "@cmt/firebase-shared": "workspace:*",
     "@cmt/shared-domain": "workspace:*",
     "@cmt/ui": "workspace:*",
+    "marked": "^18.0.5",
     "next": "^16.2.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

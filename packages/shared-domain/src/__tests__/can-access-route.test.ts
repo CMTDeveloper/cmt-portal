@@ -662,3 +662,30 @@ describe('canAccessRoute — /api/setu/prasad — view=any family, move=manager'
     expect(canAccessRoute(teacher, '/api/setu/prasad', 'GET')).toBe(false);
   });
 });
+
+describe('canAccessRoute — /docs staff documentation hub', () => {
+  it('allows admin (index + guide pages)', () => {
+    expect(canAccessRoute(admin, '/docs')).toBe(true);
+    expect(canAccessRoute(admin, '/docs/prasad')).toBe(true);
+  });
+  it('allows welcome-team', () => {
+    expect(canAccessRoute(welcomeTeam, '/docs')).toBe(true);
+    expect(canAccessRoute(welcomeTeam, '/docs/teacher')).toBe(true);
+  });
+  it('allows teacher (incl. parent-teacher via extraRoles)', () => {
+    expect(canAccessRoute(teacher, '/docs')).toBe(true);
+    const parentTeacher: SessionClaims = {
+      uid: 'pt',
+      role: 'family-manager',
+      fid: 'FAM001',
+      mid: 'FAM001-01',
+      extraRoles: ['teacher'],
+    };
+    expect(canAccessRoute(parentTeacher, '/docs/teacher')).toBe(true);
+  });
+  it('denies plain family roles', () => {
+    expect(canAccessRoute(manager, '/docs')).toBe(false);
+    expect(canAccessRoute(member, '/docs')).toBe(false);
+    expect(canAccessRoute(family, '/docs/prasad')).toBe(false);
+  });
+});

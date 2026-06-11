@@ -121,7 +121,7 @@ teacher to the new year's levels at `/admin/levels` (their stale prior-year
 assignment keeps the Teacher link alive, but "My classes" goes empty once the
 old levels are disabled). Because saving replaces the whole set, re-ticking
 just the new year's levels cleans out the old ids in the same stroke. See
-`school-year-rollover-guide.md` Step 5.
+[`school-year-rollover-guide.md`](school-year-rollover-guide.md) Step 5.
 
 ## Quick reference
 
@@ -182,5 +182,5 @@ outside the roster tally.
 - E2E: `e2e/setu/test-accounts.spec.ts` covers the three teacher personas
   (Brampton Level 1 only, Scarborough Level A only, universal ≥18 levels).
   UAT accounts: `setu-test-teacher-{brampton,scarborough,universal}@chinmayatoronto.org`
-  (see `test-accounts.md`). Gap: no E2E for the attendance-save round-trip or
+  (see [`test-accounts.md`](test-accounts.md)). Gap: no E2E for the attendance-save round-trip or
   the visitors flow.

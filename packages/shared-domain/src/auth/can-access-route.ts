@@ -50,6 +50,13 @@ export function canAccessRoute(
     return isTeacher(claims);
   }
 
+  // Staff documentation hub (/docs): admin + welcome-team + teacher. Family
+  // roles are excluded until family-facing guides exist; per-guide audience
+  // filtering happens in the page (registry-driven).
+  if (pathname === '/docs' || pathname.startsWith('/docs/')) {
+    return isWelcomeTeam(claims) || isTeacher(claims);
+  }
+
   // Setu family portal pages
   if (pathname === '/family' || pathname.startsWith('/family/')) {
     return isSetuFamily(claims);

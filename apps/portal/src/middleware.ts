@@ -152,7 +152,8 @@ function deny(req: NextRequest, reason: 'no-session' | 'unauthorized') {
   const isSetuRoute =
     pathname === '/family' || pathname.startsWith('/family/') ||
     pathname === '/welcome' || pathname.startsWith('/welcome/') ||
-    pathname === '/admin' || pathname.startsWith('/admin/');
+    pathname === '/admin' || pathname.startsWith('/admin/') ||
+    pathname === '/docs' || pathname.startsWith('/docs/');
   const loginPath = isSetuRoute ? '/sign-in' : '/login';
   const redirect = new URL(loginPath, req.nextUrl.origin);
   redirect.searchParams.set('from', pathname);

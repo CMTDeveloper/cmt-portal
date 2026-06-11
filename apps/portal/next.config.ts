@@ -1,3 +1,4 @@
+import path from 'node:path';
 import type { NextConfig } from 'next';
 
 const config: NextConfig = {
@@ -20,6 +21,17 @@ const config: NextConfig = {
   },
   // Workspace packages must be transpiled because they ship .ts source
   transpilePackages: ['@cmt/ui', '@cmt/shared-domain', '@cmt/firebase-shared'],
+  // /docs renders the repo-root markdown runbooks at request time. They live
+  // outside apps/portal, so output tracing needs (a) the tracing root lifted
+  // to the monorepo root — files outside it are never traced — and (b) the
+  // runbooks force-included for the /docs routes (globs in both root-relative
+  // and project-relative form; non-matching extras are harmless). Without
+  // this, fs reads 404 every guide on Vercel while working fine locally.
+  outputFileTracingRoot: path.join(__dirname, '../../'),
+  outputFileTracingIncludes: {
+    '/docs': ['docs/runbooks/**/*.md', '../../docs/runbooks/**/*.md'],
+    '/docs/*': ['docs/runbooks/**/*.md', '../../docs/runbooks/**/*.md'],
+  },
 };
 
 export default config;

@@ -68,7 +68,7 @@ end date first.
 For Bala Vihar, don't create next year's offerings by hand — the
 **school-year rollover** (`/admin/school-year`, Step 1) clones each BV
 offering and its levels into the new year and then promotes the enrollments
-(see `school-year-rollover-guide.md`). For other programs, use Duplicate.
+(see [`school-year-rollover-guide.md`](school-year-rollover-guide.md)). For other programs, use Duplicate.
 
 ## Part 2 — Families: finding and joining a program
 

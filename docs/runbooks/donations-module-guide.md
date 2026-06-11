@@ -66,7 +66,7 @@ history screen for families; the dashboard card *is* the status view.
 
 ## Part 2 — The money model (recap)
 
-Covered in detail in `programs-module-guide.md`; the donation-relevant core:
+Covered in detail in [`programs-module-guide.md`](programs-module-guide.md); the donation-relevant core:
 
 - Each offering carries **pricing tiers by enrollment date** (e.g. $500 from
   September, $300 from December — Toronto dates). A family's suggested
