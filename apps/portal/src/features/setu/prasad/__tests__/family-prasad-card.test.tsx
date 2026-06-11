@@ -4,15 +4,16 @@ import userEvent from '@testing-library/user-event';
 import type { FamilyPrasadView, MoveOption } from '../family-assignment';
 
 // vi.hoisted so the hoisted vi.mock factories can reference these mocks.
-const { fetchMoveOptions, movePrasad, refresh, toastSuccess, toastError } = vi.hoisted(() => ({
+const { fetchMoveOptions, movePrasad, confirmPrasad, refresh, toastSuccess, toastError } = vi.hoisted(() => ({
   fetchMoveOptions: vi.fn(),
   movePrasad: vi.fn(),
+  confirmPrasad: vi.fn(),
   refresh: vi.fn(),
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
 }));
 
-vi.mock('../prasad-client', () => ({ fetchMoveOptions, movePrasad }));
+vi.mock('../prasad-client', () => ({ fetchMoveOptions, movePrasad, confirmPrasad }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh }) }));
 vi.mock('@cmt/ui', async () => {
   const actual = await vi.importActual<typeof import('@cmt/ui')>('@cmt/ui');
@@ -32,6 +33,8 @@ const baseAssignment: FamilyPrasadView = {
   movable: true,
 };
 
+const proposedAssignment: FamilyPrasadView = { ...baseAssignment, status: 'proposed' };
+
 const moveOptions: MoveOption[] = [
   { date: '2026-03-29', seatsLeft: 3 },
   { date: '2026-04-05', seatsLeft: 1 },
@@ -40,6 +43,7 @@ const moveOptions: MoveOption[] = [
 beforeEach(() => {
   fetchMoveOptions.mockReset();
   movePrasad.mockReset();
+  confirmPrasad.mockReset();
   refresh.mockReset();
   toastSuccess.mockReset();
   toastError.mockReset();
@@ -163,5 +167,120 @@ describe('FamilyPrasadCard', () => {
     expect(screen.getByText('View details →')).toBeTruthy();
     rerender(<FamilyPrasadCard assignment={baseAssignment} expanded />);
     expect(screen.queryByText('View details →')).toBeNull();
+  });
+
+  describe('proposed state', () => {
+    it('renders the suggested heading with confirm + pick CTAs, no locked note, no Move button', () => {
+      render(<FamilyPrasadCard assignment={proposedAssignment} />);
+      expect(screen.getByText('Suggested prasad Sunday')).toBeTruthy();
+      expect(screen.queryByText('Your prasad Sunday')).toBeNull();
+      // Same date + why-line + blurb as the assigned state.
+      expect(screen.getByText('Sun, Mar 22')).toBeTruthy();
+      expect(screen.getByText("Aanya's birthday month 🎂")).toBeTruthy();
+      expect(screen.getByText(/Bring prasad for the assembly/)).toBeTruthy();
+      // Both CTAs present; assigned-state affordances absent.
+      expect(screen.getByTestId('prasad-confirm')).toBeTruthy();
+      expect(screen.getByRole('button', { name: /pick a different sunday/i })).toBeTruthy();
+      expect(screen.queryByText(/Date locked/)).toBeNull();
+      expect(screen.queryByRole('button', { name: /move my date/i })).toBeNull();
+      // Compact variant keeps the details link.
+      expect(screen.getByText('View details →')).toBeTruthy();
+    });
+
+    it('confirms in place: calls confirmPrasad(undefined), toasts, and refreshes', async () => {
+      confirmPrasad.mockResolvedValue(undefined);
+      const user = userEvent.setup();
+      render(<FamilyPrasadCard assignment={proposedAssignment} />);
+
+      await user.click(screen.getByTestId('prasad-confirm'));
+
+      await waitFor(() => expect(confirmPrasad).toHaveBeenCalledWith(undefined));
+      expect(toastSuccess).toHaveBeenCalledWith('Prasad Sunday confirmed — thank you!');
+      await waitFor(() => expect(refresh).toHaveBeenCalled());
+    });
+
+    it('shows the already-confirmed toast and re-enables on an already-confirmed rejection', async () => {
+      confirmPrasad.mockRejectedValueOnce(new Error('already-confirmed'));
+      const user = userEvent.setup();
+      render(<FamilyPrasadCard assignment={proposedAssignment} />);
+
+      const confirm = screen.getByTestId('prasad-confirm') as HTMLButtonElement;
+      await user.click(confirm);
+
+      await waitFor(() => expect(toastError).toHaveBeenCalledWith('Already confirmed.'));
+      expect(refresh).not.toHaveBeenCalled();
+      await waitFor(() => expect(confirm.disabled).toBe(false));
+    });
+
+    it('shows the generic confirm toast and re-enables on an unknown rejection', async () => {
+      confirmPrasad.mockRejectedValueOnce(new Error('boom'));
+      const user = userEvent.setup();
+      render(<FamilyPrasadCard assignment={proposedAssignment} />);
+
+      const confirm = screen.getByTestId('prasad-confirm') as HTMLButtonElement;
+      await user.click(confirm);
+
+      await waitFor(() => expect(toastError).toHaveBeenCalledWith('Could not confirm. Please try again.'));
+      expect(refresh).not.toHaveBeenCalled();
+      await waitFor(() => expect(confirm.disabled).toBe(false));
+    });
+
+    it('opens the choose sheet and confirms the picked Sunday via confirmPrasad(date)', async () => {
+      fetchMoveOptions.mockResolvedValue(moveOptions);
+      confirmPrasad.mockResolvedValue(undefined);
+      const user = userEvent.setup();
+      render(<FamilyPrasadCard assignment={proposedAssignment} />);
+
+      await user.click(screen.getByRole('button', { name: /pick a different sunday/i }));
+
+      expect(screen.getByText('Pick your prasad Sunday')).toBeTruthy();
+      expect(screen.queryByText('Move your prasad Sunday')).toBeNull();
+      await waitFor(() => expect(screen.getByText('Sun, Mar 29')).toBeTruthy());
+
+      const confirm = screen.getByRole('button', { name: /confirm this sunday/i }) as HTMLButtonElement;
+      expect(confirm.disabled).toBe(true);
+
+      await user.click(screen.getByText('Sun, Mar 29'));
+      expect(confirm.disabled).toBe(false);
+
+      await user.click(confirm);
+      await waitFor(() => expect(confirmPrasad).toHaveBeenCalledWith('2026-03-29'));
+      expect(movePrasad).not.toHaveBeenCalled();
+      expect(toastSuccess).toHaveBeenCalledWith('Prasad Sunday confirmed — thank you!');
+      await waitFor(() => expect(refresh).toHaveBeenCalled());
+    });
+
+    it('maps already-confirmed in the choose sheet to the refresh-hint toast', async () => {
+      fetchMoveOptions.mockResolvedValue(moveOptions);
+      confirmPrasad.mockRejectedValueOnce(new Error('already-confirmed'));
+      const user = userEvent.setup();
+      render(<FamilyPrasadCard assignment={proposedAssignment} />);
+
+      await user.click(screen.getByRole('button', { name: /pick a different sunday/i }));
+      await waitFor(() => expect(screen.getByText('Sun, Mar 29')).toBeTruthy());
+      await user.click(screen.getByText('Sun, Mar 29'));
+      await user.click(screen.getByRole('button', { name: /confirm this sunday/i }));
+
+      await waitFor(() =>
+        expect(toastError).toHaveBeenCalledWith('Already confirmed — refresh to see your date.'),
+      );
+      expect(refresh).not.toHaveBeenCalled();
+    });
+
+    it('shows the target-full toast and reloads options on a target-full rejection in the choose sheet', async () => {
+      fetchMoveOptions.mockResolvedValue(moveOptions);
+      confirmPrasad.mockRejectedValueOnce(new Error('target-full'));
+      const user = userEvent.setup();
+      render(<FamilyPrasadCard assignment={proposedAssignment} />);
+
+      await user.click(screen.getByRole('button', { name: /pick a different sunday/i }));
+      await waitFor(() => expect(screen.getByText('Sun, Mar 29')).toBeTruthy());
+      await user.click(screen.getByText('Sun, Mar 29'));
+      await user.click(screen.getByRole('button', { name: /confirm this sunday/i }));
+
+      await waitFor(() => expect(toastError).toHaveBeenCalledWith('That Sunday just filled up — pick another'));
+      expect(refresh).not.toHaveBeenCalled();
+      await waitFor(() => expect(fetchMoveOptions).toHaveBeenCalledTimes(2));
+    });
   });
 });

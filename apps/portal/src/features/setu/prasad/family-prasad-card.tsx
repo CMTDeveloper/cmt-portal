@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from '@cmt/ui';
 import type { FamilyPrasadView, MoveOption } from './family-assignment';
-import { fetchMoveOptions, movePrasad } from './prasad-client';
+import { confirmPrasad, fetchMoveOptions, movePrasad } from './prasad-client';
 
 interface FamilyPrasadCardProps {
   assignment: FamilyPrasadView | null;
@@ -56,14 +56,40 @@ const BLURB = 'Bring prasad for the assembly — enough to share. Thank you for 
  * dialog on desktop (one element, responsive styling). The overlay is wrapped
  * in CspRoot so the Setu brand tokens resolve — fixed-position chrome escapes
  * the page's .csp ancestor, and tokens are .csp-scoped.
+ *
+ * When `assignment.status === 'proposed'` the card renders the propose→confirm
+ * state instead: a "Confirm this date" primary CTA (confirms in place) plus a
+ * "Pick a different Sunday" secondary CTA that opens the same sheet in
+ * `'choose'` mode (picking a Sunday confirms it there). No lock note and no
+ * move button in this state — a proposal has nothing to lock.
  */
 export function FamilyPrasadCard({ assignment, expanded = false }: FamilyPrasadCardProps) {
   const router = useRouter();
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
   if (!assignment) return null;
 
+  const proposed = assignment.status === 'proposed';
   const dateLabel = formatPrasadDate(assignment.date);
+
+  async function confirmInPlace() {
+    if (confirming) return;
+    setConfirming(true);
+    try {
+      await confirmPrasad(undefined);
+      toast.success('Prasad Sunday confirmed — thank you!');
+      router.refresh();
+    } catch (err) {
+      const code = err instanceof Error ? err.message : '';
+      if (code === 'already-confirmed') {
+        toast.error('Already confirmed.');
+      } else {
+        toast.error('Could not confirm. Please try again.');
+      }
+      setConfirming(false);
+    }
+  }
 
   return (
     <>
@@ -94,7 +120,7 @@ export function FamilyPrasadCard({ assignment, expanded = false }: FamilyPrasadC
                 color: 'var(--ink)',
               }}
             >
-              Your prasad Sunday
+              {proposed ? 'Suggested prasad Sunday' : 'Your prasad Sunday'}
             </h3>
           </div>
           <span
@@ -144,7 +170,29 @@ export function FamilyPrasadCard({ assignment, expanded = false }: FamilyPrasadC
           {BLURB}
         </p>
 
-        {assignment.movable ? (
+        {proposed ? (
+          <>
+            <button
+              type="button"
+              data-testid="prasad-confirm"
+              onClick={() => void confirmInPlace()}
+              disabled={confirming}
+              className="btn btn--p btn--block"
+              style={{ marginTop: 14, minHeight: 44, fontSize: 13, opacity: confirming ? 0.6 : 1 }}
+            >
+              {confirming ? 'Confirming…' : 'Confirm this date'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setSheetOpen(true)}
+              disabled={confirming}
+              className="btn btn--s btn--block"
+              style={{ marginTop: 8, minHeight: 44, fontSize: 13 }}
+            >
+              Pick a different Sunday
+            </button>
+          </>
+        ) : assignment.movable ? (
           <button
             type="button"
             onClick={() => setSheetOpen(true)}
@@ -188,6 +236,7 @@ export function FamilyPrasadCard({ assignment, expanded = false }: FamilyPrasadC
 
       {sheetOpen && (
         <MovePrasadSheet
+          mode={proposed ? 'choose' : 'move'}
           currentDate={dateLabel}
           onClose={() => setSheetOpen(false)}
           onMoved={() => {
@@ -201,6 +250,11 @@ export function FamilyPrasadCard({ assignment, expanded = false }: FamilyPrasadC
 }
 
 interface MovePrasadSheetProps {
+  /**
+   * `'move'` — an assigned family moving its date (movePrasad). `'choose'` — a
+   * proposed family picking its Sunday; confirming calls confirmPrasad(date).
+   */
+  mode: 'move' | 'choose';
   currentDate: string;
   onClose: () => void;
   onMoved: () => void;
@@ -211,9 +265,11 @@ interface MovePrasadSheetProps {
  * Sunday. One fixed overlay, responsive panel: pinned to the bottom edge and
  * full-width on small screens, floated and width-capped on `md+`. Loads options
  * on mount; Confirm is disabled until a date is picked. Error messages are
- * mapped from the thrown Error.message the move client surfaces.
+ * mapped from the thrown Error.message the move/confirm client surfaces:
+ * `'locked'` only applies in move mode, `'already-confirmed'` only in choose
+ * mode; `'target-full'` reloads the options in both.
  */
-function MovePrasadSheet({ currentDate, onClose, onMoved }: MovePrasadSheetProps) {
+function MovePrasadSheet({ mode, currentDate, onClose, onMoved }: MovePrasadSheetProps) {
   const [options, setOptions] = useState<MoveOption[] | null>(null);
   const [picked, setPicked] = useState<string | null>(null);
   const [moving, setMoving] = useState(false);
@@ -247,8 +303,13 @@ function MovePrasadSheet({ currentDate, onClose, onMoved }: MovePrasadSheetProps
     if (!picked || moving) return;
     setMoving(true);
     try {
-      await movePrasad(picked);
-      toast.success('Prasad day moved');
+      if (mode === 'choose') {
+        await confirmPrasad(picked);
+        toast.success('Prasad Sunday confirmed — thank you!');
+      } else {
+        await movePrasad(picked);
+        toast.success('Prasad day moved');
+      }
       onMoved();
     } catch (err) {
       const code = err instanceof Error ? err.message : '';
@@ -258,8 +319,12 @@ function MovePrasadSheet({ currentDate, onClose, onMoved }: MovePrasadSheetProps
         void loadOptions();
         return;
       }
-      if (code === 'locked') {
+      if (mode === 'choose' && code === 'already-confirmed') {
+        toast.error('Already confirmed — refresh to see your date.');
+      } else if (mode === 'move' && code === 'locked') {
         toast.error('Too close to your date to move it online — please contact the welcome team.');
+      } else if (mode === 'choose') {
+        toast.error('Could not confirm. Please try again.');
       } else {
         toast.error('Could not move your date. Please try again.');
       }
@@ -305,11 +370,20 @@ function MovePrasadSheet({ currentDate, onClose, onMoved }: MovePrasadSheetProps
             id="move-prasad-title"
             style={{ fontSize: 18, fontWeight: 600, color: 'var(--ink)', letterSpacing: '-0.01em' }}
           >
-            Move your prasad Sunday
+            {mode === 'choose' ? 'Pick your prasad Sunday' : 'Move your prasad Sunday'}
           </h2>
           <p style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 5, lineHeight: 1.5 }}>
-            You&rsquo;re currently set for <strong style={{ color: 'var(--ink)' }}>{currentDate}</strong>. Pick another
-            Sunday with room.
+            {mode === 'choose' ? (
+              <>
+                You&rsquo;re suggested for <strong style={{ color: 'var(--ink)' }}>{currentDate}</strong>. Pick any
+                Sunday with room — picking one confirms it.
+              </>
+            ) : (
+              <>
+                You&rsquo;re currently set for <strong style={{ color: 'var(--ink)' }}>{currentDate}</strong>. Pick
+                another Sunday with room.
+              </>
+            )}
           </p>
         </div>
 
@@ -396,7 +470,13 @@ function MovePrasadSheet({ currentDate, onClose, onMoved }: MovePrasadSheetProps
             className="btn btn--p"
             style={{ flex: '1 1 160px', minHeight: 46, fontSize: 15, fontWeight: 600, opacity: !picked || moving ? 0.6 : 1 }}
           >
-            {moving ? 'Moving…' : 'Confirm move'}
+            {moving
+              ? mode === 'choose'
+                ? 'Confirming…'
+                : 'Moving…'
+              : mode === 'choose'
+                ? 'Confirm this Sunday'
+                : 'Confirm move'}
           </button>
           <button
             type="button"
