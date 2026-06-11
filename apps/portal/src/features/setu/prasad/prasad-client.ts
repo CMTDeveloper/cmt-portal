@@ -65,11 +65,33 @@ export async function fetchPrasadAssignments(pid: string, date?: string): Promis
   return ((await res.json()) as { assignments: AdminPrasadAssignment[] }).assignments;
 }
 
-export async function adminReassignPrasad(body: { paid: string; date?: string; cancel?: boolean }): Promise<void> {
+export async function adminReassignPrasad(body: { paid: string; date?: string; cancel?: boolean; assign?: boolean }): Promise<void> {
   const res = await fetch('/api/admin/prasad/assignment', {
     method: 'PATCH',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`reassign failed: ${res.status}`);
+}
+
+export async function confirmPrasad(date?: string): Promise<void> {
+  const res = await fetch('/api/setu/prasad/confirm', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(date ? { date } : {}),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(body?.error ?? `confirm failed: ${res.status}`);
+  }
+}
+
+export async function assignRemainingPrasad(pid: string): Promise<number> {
+  const res = await fetch('/api/admin/prasad/assign-remaining', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ pid }),
+  });
+  if (!res.ok) throw new Error(`assign-remaining failed: ${res.status}`);
+  return ((await res.json()) as { assigned: number }).assigned;
 }

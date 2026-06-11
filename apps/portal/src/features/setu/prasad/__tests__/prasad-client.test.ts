@@ -3,10 +3,12 @@ import {
   fetchMyPrasad,
   fetchMoveOptions,
   movePrasad,
+  confirmPrasad,
   fetchPrasadPreview,
   publishPrasad,
   fetchPrasadAssignments,
   adminReassignPrasad,
+  assignRemainingPrasad,
   type AdminPrasadAssignment,
 } from '../prasad-client';
 import type { FamilyPrasadView, MoveOption } from '../family-assignment';
@@ -124,6 +126,44 @@ describe('movePrasad', () => {
   });
 });
 
+describe('confirmPrasad', () => {
+  it('POSTs an empty body to confirm in place', async () => {
+    fetchMock.mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ ok: true }) });
+    await confirmPrasad();
+    expect(fetchMock).toHaveBeenCalledWith('/api/setu/prasad/confirm', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+  });
+
+  it('POSTs the target date when given one', async () => {
+    fetchMock.mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ ok: true }) });
+    await confirmPrasad('2026-09-20');
+    expect(fetchMock).toHaveBeenCalledWith('/api/setu/prasad/confirm', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ date: '2026-09-20' }),
+    });
+  });
+
+  it('throws the body error field when present', async () => {
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 409, json: async () => ({ error: 'already-confirmed' }) });
+    await expect(confirmPrasad()).rejects.toThrow('already-confirmed');
+  });
+
+  it('throws a status fallback when the body is not JSON', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      status: 502,
+      json: async () => {
+        throw new Error('not json');
+      },
+    });
+    await expect(confirmPrasad('2026-09-20')).rejects.toThrow('502');
+  });
+});
+
 describe('fetchPrasadPreview', () => {
   it('POSTs pid only when cap is omitted', async () => {
     fetchMock.mockResolvedValueOnce({ ok: true, status: 200, json: async () => previewResult });
@@ -214,5 +254,33 @@ describe('adminReassignPrasad', () => {
   it('throws on non-OK', async () => {
     fetchMock.mockResolvedValueOnce({ ok: false, status: 409 });
     await expect(adminReassignPrasad({ paid: '2026-brampton-CMT-100', cancel: true })).rejects.toThrow('409');
+  });
+
+  it('PATCHes an assign body (assign:true passed through)', async () => {
+    fetchMock.mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ ok: true }) });
+    await adminReassignPrasad({ paid: '2026-brampton-CMT-100', assign: true });
+    expect(fetchMock).toHaveBeenCalledWith('/api/admin/prasad/assignment', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ paid: '2026-brampton-CMT-100', assign: true }),
+    });
+  });
+});
+
+describe('assignRemainingPrasad', () => {
+  it('POSTs the pid and returns the assigned count', async () => {
+    fetchMock.mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ ok: true, assigned: 12 }) });
+    const result = await assignRemainingPrasad('2026-brampton');
+    expect(result).toBe(12);
+    expect(fetchMock).toHaveBeenCalledWith('/api/admin/prasad/assign-remaining', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ pid: '2026-brampton' }),
+    });
+  });
+
+  it('throws on non-OK', async () => {
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 403 });
+    await expect(assignRemainingPrasad('2026-brampton')).rejects.toThrow('403');
   });
 });
