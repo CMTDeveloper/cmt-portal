@@ -119,14 +119,53 @@ All dates in responses are ISO-8601 strings; calendar/attendance dates are `YYYY
 
 ---
 
-## 5. Portal-side prerequisites (owned by the portal repo — NOT yours to build)
+## 5. Portal-side prerequisites — ✅ SHIPPED 2026-06-12 (commit `e230061`)
 
-The app depends on a short list of portal fixes/additions. Build against what exists; stub these behind a feature check and integrate when they land:
+The three blocking portal items are now live on UAT and verified end-to-end
+over the real Bearer path (`e2e/setu/mobile-bearer.spec.ts`). Build against them
+directly — no stubbing needed:
 
-1. **Bearer-fix 7 cookie-coupled routes** (today they 401 for Bearer callers despite valid tokens): `GET /api/setu/family`, `POST /api/setu/contacts/send-code`, `POST /api/setu/contacts/verify-code`, `POST /api/setu/contacts/dismiss-nudge`, `POST /api/setu/volunteering-skills/dismiss-nudge`, `POST /api/setu/auth/set-password`, `POST /api/setu/invite/accept`. ⚠️ `GET /api/setu/family` is the app's most important read — **verify it works over Bearer before building Phase A screens**; if it 401s, the portal fix hasn't shipped yet.
-2. **`GET /api/setu/dashboard`** — the family-home aggregate (donation progress for the period, legacy paid status, family-level BV attendance roll-up). Until it ships, the app's Home composes what it can from §6 reads and hides the donation-progress number.
-3. **Donation outcome endpoints** — `POST /api/setu/donations/{did}/status` `{ status: 'completed'|'abandoned' }` + `GET /api/setu/donations`. Without these, mobile payments stay `redirected` forever portal-side (see §8).
-4. Optional: child Bala Vihar **journey** rows for member detail; API versioning (`/api/v1/`) before public release.
+1. ✅ **The 7 cookie-coupled routes now authenticate over Bearer** (`GET
+   /api/setu/family`, contacts send-code/verify-code/dismiss-nudge,
+   volunteering-skills/dismiss-nudge, auth/set-password, invite/accept).
+   Middleware forwards the verified contact as `x-portal-email`/`x-portal-phone`
+   and the handlers read the session from those headers. `GET /api/setu/family`
+   over Bearer returns 200 — confirmed against deployed UAT.
+2. ✅ **`GET /api/setu/dashboard`** — the family-home aggregate (see §6.0 for
+   the response shape).
+3. ✅ **`GET /api/setu/donations`** + **`POST /api/setu/donations/{did}/status`**
+   `{ status: 'completed'|'abandoned' }` (manager-only) — the mobile equivalent
+   of the web success/cancel pages (see §8).
+
+Still open (not blocking; build without them): child Bala Vihar **journey** rows
+for the member-detail screen, and API versioning (`/api/v1/`) before public
+release. Treat the response shapes here as the contract until versioning lands.
+
+### 6.0 GET /api/setu/dashboard response (the mobile home)
+
+```jsonc
+{
+  "family": { "fid", "name", "location" },
+  "currentMid": "CMT-…-02",
+  "isManager": false,
+  "members": [{ "mid", "firstName", "lastName", "type" }],
+  "balaVihar": {
+    "isEnrolled", "kidsEnrolled", "termLabel",
+    "suggestedAmount", "givenForPeriod", "donationComplete", "donationPct",
+    "donationHeading", "isLegacyPeriod", "legacyPaid",
+    "attendance": { "attended", "total", "pct", "hasAttendance",
+                    "marks": [{ "date": "YYYY-MM-DD", "present": true }] }
+  },
+  "otherPrograms": [{ "eid", "programKey", "label", "termLabel", "status",
+                      "showAttendance", "showDonation" }],
+  "upcoming": [{ "entryId", "date", "kind", "classType", "noClassReason",
+                 "specialEvents" }],   // next 3 class Sundays
+  "seva": { "currentSevaYear": null, "hoursPerYear": 20, "hoursEarned": 0 },
+  "prasad": { "date", "status", "reason", "youngestName", "birthMonth", "movable" } // or null
+}
+```
+UI-only fields (CSS colors, donate URLs) are deliberately omitted — build your
+own presentation. Any family role may read it.
 
 ---
 
@@ -162,6 +201,8 @@ Base: `https://cmt-setu.vercel.app`. Auth: `Authorization: Bearer <idToken>` on 
 | `POST /api/setu/enrollments` | manager | `{ oid }` | `201 { eid, suggestedAmount, donateUrl }` (200 if already enrolled — idempotent) · `422 offering-disabled/expired` |
 | `DELETE /api/setu/enrollments/{eid}` | manager | — | `{ ok: true }` |
 | `POST /api/setu/donations/checkout` | manager | `{ type: 'enrollment', eid, amountCAD, coverFee }` | `200 { url, did }` — see §8 · `422 amount-below-suggested { suggested }` · `400 donor-email-required` · `429` (5/min) · `503 checkout-not-configured` |
+| `GET /api/setu/donations` | any family role | — | `{ donations: DonationDoc[] }` (newest first; ISO dates; `status` best-effort) |
+| `POST /api/setu/donations/{did}/status` | manager | `{ status: 'completed'\|'abandoned' }` | `{ ok: true, status }` · `404` unknown did / other family · `403 manager-required` — report the Stripe return outcome (see §8) |
 
 Client rules: `amountCAD` integer 1–100000, must be ≥ `effectiveSuggestedAmount` (giving more is fine); `coverFee` adds 2.2% + $0.30 shown live; the signed-in manager needs an email on their member record.
 
@@ -206,7 +247,7 @@ Date rules: default and navigation are **Sundays in Toronto time**; the app step
 
 Screen-by-screen requirements:
 
-- **Home:** greeting by first name; Bala Vihar card ("X of Y Sunday classes", enrolled kids, donation progress — needs §5.2's dashboard endpoint; until then show enrollment + upcoming only); next-3 upcoming class dates (from calendar API, `kind` + `specialEvents` rendered); prasad card (proposed → "Suggested prasad Sunday {date} — Confirm / Pick another"; assigned → date + countdown); seva progress ("X of Y hours"); program cards. Pull-to-refresh refetches everything.
+- **Home:** greeting by first name; Bala Vihar card ("X of Y Sunday classes", enrolled kids, donation progress — all from `GET /api/setu/dashboard`, §6.0); next-3 upcoming class dates (from calendar API, `kind` + `specialEvents` rendered); prasad card (proposed → "Suggested prasad Sunday {date} — Confirm / Pick another"; assigned → date + countdown); seva progress ("X of Y hours"); program cards. Pull-to-refresh refetches everything.
 - **Family:** member list (avatar, name, type, grade, You/Manager tags, allergy badge); add member + invite buttons (manager only). Member detail: identity fields, emergency contacts, per-program attendance with a **heatmap of `marks[]`** (16×16 squares), achievements. Edit/new member forms = §6.1 field rules, sticky-footer Save.
 - **Programs:** active programs with open offerings → enroll screen: eligible members shown (server decides — display `enrolledMids` result), dakshina explainer ("suggested, not required" for donation programs; "no donation requirement" otherwise), term picker if multiple offerings, Enroll (manager-only; members see a notice) → on success continue straight into Donate prefilled with `suggestedAmount`.
 - **Donate:** amount (integer), quick-pick chips (suggested · 1.5× · 2×, suggested labelled), below-floor inline error ("To give less, please contact the welcome team"), cover-fee checkbox with live fee, summary (Donation / Fee / Total today), February tax-receipt note, "Secured by Stripe". Then §8.
@@ -222,10 +263,10 @@ Screen-by-screen requirements:
 1. `POST /api/setu/donations/checkout` (Bearer works — the server derives the return origin from its own host; no Origin header needed) → `{ url, did }`.
 2. Open `url` in a **react-native-webview modal** (not the system browser — you need navigation events).
 3. On navigation to `https://<portal>/family/donate/success` → close the modal, treat as success; to `…/donate/cancel` → close, treat as cancelled. Read `?did=` from the URL and confirm it matches.
-4. **Report the outcome:** `POST /api/setu/donations/{did}/status` `{ status: 'completed' | 'abandoned' }` (the §5.3 endpoint). This is essential: the portal has **no Stripe webhook**, and the web flow's completion marking needs a browser cookie the app doesn't have — without this call the donation stays `redirected` in the portal even though the card was charged.
+4. **Report the outcome:** `POST /api/setu/donations/{did}/status` `{ status: 'completed' | 'abandoned' }` (§6.2). This is essential: the portal has **no Stripe webhook**, and the web flow's completion marking needs a browser cookie the app doesn't have — without this call the donation stays `redirected` in the portal even though the card was charged.
 5. Success UI: "Thank you for your dakshina" + the annual-tax-receipt note (receipts come from accounting each February; the app never shows receipts).
 
-Until the status endpoint ships: still intercept and show the right outcome UI, and tell the user their payment is recorded with accounting (true — Stripe/accounting reconcile independently of portal status).
+If the status call itself fails (network), still show the right outcome UI — Stripe/accounting reconcile independently of portal status — and retry the status call opportunistically.
 
 ---
 
@@ -286,7 +327,7 @@ Shadows: cards `0 1px 0 rgba(15,26,34,0.04)`; raised `0 4px 14px rgba(15,26,34,0
 ## 12. Acceptance criteria (Definition of Done per phase)
 
 - **A:** A seeded UAT parent signs in with password, sees their family, adds/edits/deletes a member (manager) while a family-member account is correctly read-only beyond self-edit; OTP flow works for an allowlisted contact incl. the 429 countdown; registration creates a family; invite accept joins one; token expiry mid-session recovers silently (401 → refresh → retry).
-- **B:** Parent enrolls in an open offering, lands in donate prefilled, completes a Stripe **test-mode** payment in the webview, sees the thank-you state, and (once the status endpoint ships) the portal shows the donation completed; below-floor amount blocked client- AND server-side (422 surfaced).
+- **B:** Parent enrolls in an open offering, lands in donate prefilled, completes a Stripe **test-mode** payment in the webview, sees the thank-you state, the status call records it, and the portal shows the donation completed; below-floor amount blocked client- AND server-side (422 surfaced).
 - **C:** Scarborough test parent sees their proposed prasad Sunday and confirms it (or hits 409 already-confirmed on rerun — both fine); seva sign-up + cancel round-trip; calendar renders the published season.
 - **D:** Brampton teacher sees exactly their level, marks attendance for a past Sunday, response `{ saved }` matches the marks count, re-marking overwrites; universal teacher sees all levels; visitor quick-add returns `{ claimable: true }` with a parent email; allergy info visibly surfaced on roster + student detail.
 - Every phase: Maestro flow recorded against `https://cmt-setu.vercel.app`; no hardcoded prod config; zod parse failures = test failures.
@@ -295,12 +336,12 @@ Shadows: cards `0 1px 0 rgba(15,26,34,0.04)`; raised `0 4px 14px rgba(15,26,34,0
 
 ## 13. Known portal facts that will bite you if forgotten
 
-1. The **7 cookie-coupled routes** (§5.1) 401 over Bearer until the portal fix ships — `GET /api/setu/family` first among them. Check before assuming your client is broken.
+1. ~~The 7 cookie-coupled routes 401 over Bearer~~ — ✅ fixed and verified on UAT (§5). `GET /api/setu/family` over Bearer returns 200. No longer a gotcha.
 2. Middleware returns **401 for role denials** (`unauthorized`), not 403.
 3. OTP verify failure is **400**, not 401. An older portal doc says 401 — this spec wins.
 4. `POST /api/setu/family/join` does not exist. Lookup → sign-in is the join path.
 5. Magic links in OTP emails are **web-only** (they 303 to the portal with a cookie). Mobile users type the 6-digit code.
-6. Donation completion is client-trusted; without the status endpoint a charged mobile payment looks "redirected" to staff. Set expectations until §5.3 ships.
+6. Donation completion is client-trusted (no Stripe webhook). The status endpoint (§6.2, now shipped) is how you record the outcome — **call it** after the Stripe return, or a charged payment stays "redirected" to staff.
 7. Teacher APIs 404 wholesale when the deployment's teacher flag is off; same for auth/donations flags.
 8. Seva sign-up returns 200 (not 409) when already signed up — idempotent success.
 9. Prasad confirm/move re-validate capacity transactionally — design every confirm path to absorb a 409 and refresh options.
