@@ -105,13 +105,17 @@ test.describe('mobile Bearer auth path (deployed UAT)', () => {
   test('a family-member (non-manager) is allowed dashboard read but denied a manager write', async ({ baseURL }) => {
     const ctx = await bearerContext(baseURL!, memberToken);
     const dash = await ctx.get('/api/setu/dashboard');
-    expect(dash.status()).toBe(200);
-    // The donation status POST is manager-only — a member must get 403 (not 401),
-    // proving the Bearer identity carried the family-member role through.
+    expect(dash.status()).toBe(200); // member Bearer read works
+    // The donation status POST is manager-only. Against the FULL stack the
+    // middleware's canAccessRoute denies the non-manager FIRST, with 401
+    // `unauthorized` (the handler's 403 is only reachable on a direct call —
+    // see the unit test). 401 `unauthorized` (not `no-session`) proves the
+    // Bearer token was valid but carried an insufficient role.
     const post = await ctx.post('/api/setu/donations/nonexistent-did/status', {
       data: { status: 'completed' },
     });
-    expect(post.status()).toBe(403);
+    expect(post.status()).toBe(401);
+    expect((await post.json()).error).toBe('unauthorized');
     await ctx.dispose();
   });
 });
