@@ -78,6 +78,27 @@ describe('POST /api/cron/send-weekly-payment-reminders', () => {
     expect(sendPaymentReminder).toHaveBeenCalledWith('3');
   });
 
+  // Vercel cron invokes with GET — the path that actually fires in prod.
+  it('runs over GET (the Vercel cron invocation method) with a valid bearer', async () => {
+    (readRtdb as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      '2': { fid: '2', name: 'B', paymentStatus: 'unpaid', contacts: [], students: [] },
+    });
+    (sendPaymentReminder as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ sent: true });
+
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        const res = await fetch({
+          method: 'GET',
+          headers: { authorization: `Bearer ${'a'.repeat(32)}` },
+        });
+        expect(res.status).toBe(200);
+        expect((await res.json()).processed).toBe(1);
+      },
+    });
+    expect(sendPaymentReminder).toHaveBeenCalledTimes(1);
+  });
+
   it('is idempotent — rerunning within window does not double-send (throttled)', async () => {
     (readRtdb as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
       '2': { fid: '2', name: 'B', paymentStatus: 'unpaid', contacts: [], students: [] },

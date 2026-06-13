@@ -247,12 +247,12 @@ status in this version.
 - The weekly unpaid-family reminder is gated by
   `WEEKLY_REMINDER_CRON_ENABLED` (not set anywhere); it reads the legacy
   RTDB roster's payment column, not Setu donations.
-- ⚠️ **Cron method mismatch (affects more than donations):** all three
-  `/api/cron/*` routes export only `POST`, but Vercel cron invokes with
-  **GET** — the scheduled invocations would 405. Moot for the weekly
-  reminder (env-gated off) but worth fixing before relying on the daily
-  cache-reset or prasad-reminder schedules. Manual trigger: `POST` with
-  `Authorization: Bearer $CRON_SECRET`.
+- **Crons** (`/api/cron/*`) export both `GET` (how Vercel cron invokes —
+  it auto-sends `Authorization: Bearer $CRON_SECRET`) and `POST` (manual
+  trigger). All three schedules are ≤ once/day, so they're valid on the
+  Vercel **Hobby/free** plan (limits: 100 jobs, once-per-day min, ±59 min
+  precision). The weekly payment reminder is still env-gated off
+  (`WEEKLY_REMINDER_CRON_ENABLED`) and is a legacy check-in feature.
 - Flag: `NEXT_PUBLIC_FEATURE_SETU_DONATIONS` (in `turbo.json`) gates the
   form and the checkout route; donations are live behind it in UAT.
 - Test coverage: solid unit/route tests (floor enforcement, fee math,

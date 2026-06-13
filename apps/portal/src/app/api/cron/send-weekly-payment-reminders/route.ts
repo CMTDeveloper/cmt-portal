@@ -15,7 +15,7 @@ function verifyCronAuth(req: Request): boolean {
   return timingSafeEqual(a, b);
 }
 
-export async function POST(req: Request) {
+async function handle(req: Request) {
   if (!verifyCronAuth(req)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
@@ -47,3 +47,9 @@ export async function POST(req: Request) {
     { status: 200 },
   );
 }
+
+// Vercel cron triggers with an HTTP GET (vercel.com/docs/cron-jobs); POST is
+// kept for manual invocation. Both share the same handler — exporting only
+// POST silently 405'd every scheduled run.
+export const GET = handle;
+export const POST = handle;

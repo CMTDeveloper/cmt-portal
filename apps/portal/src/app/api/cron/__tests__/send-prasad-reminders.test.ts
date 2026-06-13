@@ -81,4 +81,37 @@ describe('POST /api/cron/send-prasad-reminders', () => {
     });
     expect(sendDuePrasadReminders).toHaveBeenCalledTimes(1);
   });
+
+  // Vercel cron invokes with GET — this is the path that actually fires in prod.
+  it('runs over GET (the Vercel cron invocation method) with a valid bearer', async () => {
+    (sendDuePrasadReminders as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      checked: 2,
+      sent: 2,
+      skipped: 0,
+    });
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        const res = await fetch({
+          method: 'GET',
+          headers: { authorization: `Bearer ${'a'.repeat(32)}` },
+        });
+        expect(res.status).toBe(200);
+        const body = await res.json();
+        expect(body).toEqual({ success: true, checked: 2, sent: 2, skipped: 0 });
+      },
+    });
+    expect(sendDuePrasadReminders).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns 401 over GET without a bearer (the prod cron carries one)', async () => {
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        const res = await fetch({ method: 'GET' });
+        expect(res.status).toBe(401);
+      },
+    });
+    expect(sendDuePrasadReminders).not.toHaveBeenCalled();
+  });
 });

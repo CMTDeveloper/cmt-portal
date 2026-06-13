@@ -13,7 +13,7 @@ function verifyCronAuth(req: Request): boolean {
   return timingSafeEqual(a, b);
 }
 
-export async function POST(req: Request) {
+async function handle(req: Request) {
   if (!verifyCronAuth(req)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
@@ -31,3 +31,10 @@ export async function POST(req: Request) {
   const result = await sendDuePrasadReminders();
   return NextResponse.json({ success: true, ...result }, { status: 200 });
 }
+
+// Vercel cron triggers with an HTTP GET (vercel.com/docs/cron-jobs); POST is
+// kept for manual invocation. Both share the same handler — exporting only
+// POST silently 405'd every scheduled run, so reminders never went out even
+// with the flag on.
+export const GET = handle;
+export const POST = handle;
