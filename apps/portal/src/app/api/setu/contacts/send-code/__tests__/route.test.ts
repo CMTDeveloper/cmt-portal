@@ -10,9 +10,6 @@ vi.mock('@/features/check-in/shared', () => ({
   storeVerificationCode: vi.fn(),
 }));
 vi.mock('@/lib/aws/resolve-sender', () => ({ resolveSender: vi.fn() }));
-vi.mock('@/features/setu/members/get-current-family', () => ({
-  getCurrentFamily: vi.fn(),
-}));
 vi.mock('@cmt/shared-domain/setu', () => ({
   normalizeContactForKey: (type: string, value: string) =>
     type === 'email' ? value.toLowerCase().trim() : `+1${value.replace(/\D/g, '')}`,
@@ -21,40 +18,40 @@ vi.mock('@cmt/shared-domain/setu', () => ({
 import { POST } from '../route';
 import { checkAndRecordOtpRateLimit, storeVerificationCode } from '@/features/check-in/shared';
 import { resolveSender } from '@/lib/aws/resolve-sender';
-import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 
 const mockSendEmail = vi.fn();
 const mockSendSMS = vi.fn();
 
-function makeRequest(body: unknown) {
+// The route authenticates from the middleware-set x-portal-* headers (cookie
+// AND Bearer/mobile sessions). Pass session: null for a signed-out request.
+const SIGNED_IN = { role: 'family-member', fid: 'CMT-AB12CD34', mid: 'CMT-AB12CD34-02' };
+
+function makeRequest(body: unknown, session: typeof SIGNED_IN | null = SIGNED_IN) {
+  const headers = new Headers({ 'content-type': 'application/json' });
+  if (session) {
+    headers.set('x-portal-role', session.role);
+    headers.set('x-portal-fid', session.fid);
+    headers.set('x-portal-mid', session.mid);
+  }
   return new Request('http://localhost/api/setu/contacts/send-code', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers,
     body: JSON.stringify(body),
   });
 }
-
-const signedInFamily = {
-  family: { fid: 'CMT-AB12CD34', name: 'Patel', location: 'Brampton', legacyFid: null, createdAt: new Date(), managers: ['CMT-AB12CD34-02'], searchKeys: [] },
-  members: [{ mid: 'CMT-AB12CD34-02', firstName: 'Priya', lastName: 'Patel', altEmails: [], altPhones: [] }],
-  currentMid: 'CMT-AB12CD34-02',
-  isManager: false,
-};
 
 beforeEach(() => {
   vi.clearAllMocks();
   (resolveSender as ReturnType<typeof vi.fn>).mockReturnValue({ sendEmail: mockSendEmail, sendSMS: mockSendSMS });
   (checkAndRecordOtpRateLimit as ReturnType<typeof vi.fn>).mockResolvedValue({ allowed: true });
   (storeVerificationCode as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
-  (getCurrentFamily as ReturnType<typeof vi.fn>).mockResolvedValue(signedInFamily);
   mockSendEmail.mockResolvedValue(undefined);
   mockSendSMS.mockResolvedValue(undefined);
 });
 
 describe('POST /api/setu/contacts/send-code', () => {
   it('returns 401 when not signed in', async () => {
-    (getCurrentFamily as ReturnType<typeof vi.fn>).mockResolvedValue(null);
-    const res = await POST(makeRequest({ type: 'email', value: 'new@example.com' }));
+    const res = await POST(makeRequest({ type: 'email', value: 'new@example.com' }, null));
     expect(res.status).toBe(401);
   });
 

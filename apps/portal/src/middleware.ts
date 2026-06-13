@@ -104,16 +104,35 @@ export async function middleware(req: NextRequest) {
   }
 
   const reqHeaders = new Headers(req.headers);
-  reqHeaders.set('x-portal-role', claims.role);
-  reqHeaders.set('x-portal-uid', claims.uid);
-  if (claims.familyId) reqHeaders.set('x-portal-family-id', claims.familyId);
-  if (claims.fid) reqHeaders.set('x-portal-fid', claims.fid);
-  if (claims.mid) reqHeaders.set('x-portal-mid', claims.mid);
+  // SECURITY: reqHeaders is a COPY of the inbound request headers, so a client
+  // could send a forged x-portal-* header. Every claim header below MUST be
+  // set-or-DELETED unconditionally from the verified claims — never a bare
+  // `if (claims.x) set(...)`, which would let a forged inbound value survive
+  // when the claim is absent (e.g. x-portal-email on a phone-only session,
+  // which would defeat the invite/accept email-match guard). setOrDelete()
+  // enforces that for every header.
+  const setOrDelete = (name: string, value: string | null | undefined) => {
+    if (value) reqHeaders.set(name, value);
+    else reqHeaders.delete(name);
+  };
+  setOrDelete('x-portal-role', claims.role);
+  setOrDelete('x-portal-uid', claims.uid);
+  setOrDelete('x-portal-family-id', claims.familyId);
+  setOrDelete('x-portal-fid', claims.fid);
+  setOrDelete('x-portal-mid', claims.mid);
   // Multi-role: comma-separated extras so downstream routes can build a full
   // claims object via the role helpers (hasRole / isAdmin / isWelcomeTeam).
-  if (Array.isArray(claims.extraRoles) && claims.extraRoles.length > 0) {
-    reqHeaders.set('x-portal-extra-roles', claims.extraRoles.join(','));
-  }
+  setOrDelete(
+    'x-portal-extra-roles',
+    Array.isArray(claims.extraRoles) && claims.extraRoles.length > 0
+      ? claims.extraRoles.join(',')
+      : null,
+  );
+  // Verified contact from the token claims — lets Bearer (mobile) callers use
+  // routes that need the signed-in contact (set-password, invite/accept,
+  // contacts verify). Request headers only; never echoed to the browser.
+  setOrDelete('x-portal-email', claims.email);
+  setOrDelete('x-portal-phone', claims.phone);
 
   // Forward the claims to the downstream route handler via the REQUEST headers
   // only (the x-middleware-request-* mechanism). Do NOT write them onto the

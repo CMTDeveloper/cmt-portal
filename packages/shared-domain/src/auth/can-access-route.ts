@@ -77,6 +77,11 @@ export function canAccessRoute(
     return isSetuFamily(claims);
   }
 
+  // Setu API — family dashboard aggregate (GET; any family role, mobile home).
+  if (pathname === '/api/setu/dashboard') {
+    return isSetuFamily(claims);
+  }
+
   // Member profile read — any setu family (own-family enforced in the handler)
   // OR welcome-team/admin (front-desk family support). Must precede the
   // members rule below (isSetuFamily-only, which would block welcome-team).

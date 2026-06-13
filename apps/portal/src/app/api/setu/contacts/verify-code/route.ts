@@ -3,7 +3,8 @@ import { z } from 'zod';
 import { revalidateTag } from 'next/cache';
 import { flags } from '@/lib/flags';
 import { normalizeContact, verifyCode } from '@/features/check-in/shared';
-import { getCurrentFamily } from '@/features/setu/members/get-current-family';
+import { isSetuFamily } from '@cmt/shared-domain';
+import { readSessionFromHeaders } from '@/lib/auth/headers';
 import { addVerifiedContact, ContactInUseError } from '@/features/setu/contacts/add-verified-contact';
 
 const bodySchema = z.object({
@@ -17,8 +18,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'not-found' }, { status: 404 });
   }
 
-  const current = await getCurrentFamily();
-  if (!current) {
+  // Header-based session (cookie AND Bearer/mobile callers).
+  const session = readSessionFromHeaders(req);
+  if (!session || !isSetuFamily(session) || !session.fid || !session.mid) {
     return NextResponse.json({ error: 'no-session' }, { status: 401 });
   }
 
@@ -37,8 +39,8 @@ export async function POST(req: Request) {
 
   try {
     await addVerifiedContact({
-      fid: current.family.fid,
-      mid: current.currentMid,
+      fid: session.fid,
+      mid: session.mid,
       type,
       value,
     });
@@ -49,6 +51,6 @@ export async function POST(req: Request) {
     throw err;
   }
 
-  revalidateTag(`family-${current.family.fid}`, 'max');
+  revalidateTag(`family-${session.fid}`, 'max');
   return NextResponse.json({ success: true }, { status: 200 });
 }

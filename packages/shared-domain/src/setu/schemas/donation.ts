@@ -59,6 +59,19 @@ export const CheckoutInputSchema = z.discriminatedUnion('type', [
 
 export type CheckoutInput = z.infer<typeof CheckoutInputSchema>;
 
+/**
+ * Body for POST /api/setu/donations/{did}/status — the mobile equivalent of
+ * the web success/cancel pages. A client can only report a TERMINAL outcome
+ * it observed at the Stripe return URL; it can never set 'redirected'. The
+ * handler reuses markDonationStatus (fid guard + no completed→abandoned
+ * downgrade); 'completed' stays client-trusted (no Stripe webhook).
+ */
+export const DonationStatusUpdateSchema = z.object({
+  status: z.enum(['completed', 'abandoned']),
+});
+
+export type DonationStatusUpdate = z.infer<typeof DonationStatusUpdateSchema>;
+
 // Stripe processing-fee constants — identical to the events-registration app so
 // the donor-facing "cover the fee" math matches across CMT properties.
 export const STRIPE_PERCENT_FEE = 0.022;

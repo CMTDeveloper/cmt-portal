@@ -39,10 +39,10 @@ vi.mock('@/features/setu/invite/get-invite', () => ({
   getInviteByToken: mockGetInviteByToken,
 }));
 
-// ── getCurrentSessionContact — used by POST /api/setu/invite/accept ──────────
+// ── getSessionContactFromHeaders — used by POST /api/setu/invite/accept ──────────
 const mockGetCurrentSessionContact = vi.hoisted(() => vi.fn());
 vi.mock('@/features/setu/auth/get-current-session-email', () => ({
-  getCurrentSessionContact: mockGetCurrentSessionContact,
+  getSessionContactFromHeaders: mockGetCurrentSessionContact,
 }));
 
 // ── Firestore ─────────────────────────────────────────────────────────────────
@@ -177,7 +177,7 @@ function memberHeaders(fid = FID, mid = MANAGER_MID): Record<string, string> {
 }
 
 function sessionAs(email: string, uid = 'uid-bob') {
-  mockGetCurrentSessionContact.mockResolvedValue({ type: 'email' as const, value: email, uid });
+  mockGetCurrentSessionContact.mockReturnValue({ type: 'email' as const, value: email, uid });
 }
 
 // ── Invite doc builders ───────────────────────────────────────────────────────
@@ -257,7 +257,7 @@ function setupAcceptTransaction(opts: {
 beforeEach(() => {
   vi.clearAllMocks();
   flagsMock.setuAuth = true;
-  mockGetCurrentSessionContact.mockResolvedValue(null);
+  mockGetCurrentSessionContact.mockReturnValue(null);
   mockAuth.getUser.mockResolvedValue({ uid: 'uid-bob' });
   mockAuth.createUser.mockResolvedValue({ uid: 'uid-bob' });
   mockAuth.setCustomUserClaims.mockResolvedValue(undefined);

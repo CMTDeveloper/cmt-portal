@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('@/lib/flags', () => ({ flags: { setuAuth: true } }));
-vi.mock('@/features/setu/members/get-current-family', () => ({ getCurrentFamily: vi.fn() }));
 vi.mock('next/cache', () => ({ revalidateTag: vi.fn() }));
 
 const mockUpdate = vi.fn();
@@ -15,27 +14,29 @@ vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
 }));
 
 import { POST } from '../route';
-import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 
-function makeRequest() {
-  return new Request('http://localhost/api/setu/contacts/dismiss-nudge', { method: 'POST' });
+// The route authenticates from the middleware-set x-portal-* headers (cookie
+// AND Bearer/mobile sessions). Pass session: null for a signed-out request.
+const SIGNED_IN = { role: 'family-member', fid: 'CMT-AB12CD34', mid: 'CMT-AB12CD34-02' };
+
+function makeRequest(session: typeof SIGNED_IN | null = SIGNED_IN) {
+  const headers = new Headers();
+  if (session) {
+    headers.set('x-portal-role', session.role);
+    headers.set('x-portal-fid', session.fid);
+    headers.set('x-portal-mid', session.mid);
+  }
+  return new Request('http://localhost/api/setu/contacts/dismiss-nudge', { method: 'POST', headers });
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
   mockUpdate.mockResolvedValue(undefined);
-  (getCurrentFamily as ReturnType<typeof vi.fn>).mockResolvedValue({
-    family: { fid: 'CMT-AB12CD34' },
-    members: [{ mid: 'CMT-AB12CD34-02' }],
-    currentMid: 'CMT-AB12CD34-02',
-    isManager: false,
-  });
 });
 
 describe('POST /api/setu/contacts/dismiss-nudge', () => {
   it('returns 401 when not signed in', async () => {
-    (getCurrentFamily as ReturnType<typeof vi.fn>).mockResolvedValue(null);
-    const res = await POST(makeRequest());
+    const res = await POST(makeRequest(null));
     expect(res.status).toBe(401);
   });
 

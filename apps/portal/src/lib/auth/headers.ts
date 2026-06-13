@@ -6,6 +6,9 @@ export interface PortalSessionHeaders {
   extraRoles: Role[];
   fid: string | null;
   mid: string | null;
+  /** Verified contact from the session claims (set at sign-in). */
+  email: string | null;
+  phone: string | null;
 }
 
 /**
@@ -29,5 +32,7 @@ export function readSessionFromHeaders(req: Request): PortalSessionHeaders | nul
     extraRoles,
     fid: req.headers.get('x-portal-fid'),
     mid: req.headers.get('x-portal-mid'),
+    email: req.headers.get('x-portal-email'),
+    phone: req.headers.get('x-portal-phone'),
   };
 }

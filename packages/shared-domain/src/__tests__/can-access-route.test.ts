@@ -689,3 +689,15 @@ describe('canAccessRoute — /docs staff documentation hub', () => {
     expect(canAccessRoute(family, '/docs/prasad')).toBe(false);
   });
 });
+
+describe('canAccessRoute — /api/setu/dashboard (any family role)', () => {
+  it('allows manager and member', () => {
+    expect(canAccessRoute(manager, '/api/setu/dashboard')).toBe(true);
+    expect(canAccessRoute(member, '/api/setu/dashboard')).toBe(true);
+  });
+  it('denies non-family roles', () => {
+    expect(canAccessRoute(welcomeTeam, '/api/setu/dashboard')).toBe(false);
+    expect(canAccessRoute(teacher, '/api/setu/dashboard')).toBe(false);
+    expect(canAccessRoute(family, '/api/setu/dashboard')).toBe(false);
+  });
+});

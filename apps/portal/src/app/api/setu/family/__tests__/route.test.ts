@@ -4,17 +4,6 @@ vi.mock('next/cache', () => ({ revalidateTag: vi.fn(), cacheTag: vi.fn(), cacheL
 
 vi.mock('@/lib/flags', () => ({ flags: { setuAuth: true } }));
 
-const mockCookiesGet = vi.hoisted(() => vi.fn());
-vi.mock('next/headers', () => ({
-  cookies: vi.fn().mockResolvedValue({ get: mockCookiesGet }),
-  headers: vi.fn(() => new Headers()),
-}));
-
-const mockVerifySession = vi.hoisted(() => vi.fn());
-vi.mock('@cmt/firebase-shared/admin/session', () => ({
-  verifyPortalSessionCookie: mockVerifySession,
-}));
-
 const mockGetFamilyByFid = vi.hoisted(() => vi.fn());
 vi.mock('@/features/setu/members/get-family-by-fid', () => ({
   getFamilyByFid: mockGetFamilyByFid,
@@ -50,25 +39,26 @@ const memberDoc = {
   emergencyContacts: [null, null],
 };
 
-function makeRequest() {
-  return new Request('http://localhost/api/setu/family', { method: 'GET' });
-}
-
-function setupSession(role: string, fid: string, mid: string) {
-  mockCookiesGet.mockReturnValue({ value: 'fake-cookie' });
-  mockVerifySession.mockResolvedValue({ uid: `uid-${mid}`, role, fid, mid });
+// The route authenticates from the middleware-set x-portal-* headers — this
+// is exactly what a Bearer (mobile) request looks like after middleware.
+function makeRequest(session?: { role: string; fid: string; mid: string }) {
+  const headers = new Headers();
+  if (session) {
+    headers.set('x-portal-role', session.role);
+    headers.set('x-portal-uid', `uid-${session.mid}`);
+    headers.set('x-portal-fid', session.fid);
+    headers.set('x-portal-mid', session.mid);
+  }
+  return new Request('http://localhost/api/setu/family', { method: 'GET', headers });
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
-
-  mockCookiesGet.mockReturnValue(null);
-  mockVerifySession.mockResolvedValue(null);
   mockGetFamilyByFid.mockResolvedValue({ family: familyDoc, members: [memberDoc] });
 });
 
 describe('GET /api/setu/family', () => {
-  it('returns 401 when no session', async () => {
+  it('returns 401 when no session headers', async () => {
     const res = await GET(makeRequest());
     expect(res.status).toBe(401);
     const body = await res.json();
@@ -76,15 +66,12 @@ describe('GET /api/setu/family', () => {
   });
 
   it('returns 401 when wrong role', async () => {
-    mockCookiesGet.mockReturnValue({ value: 'fake-cookie' });
-    mockVerifySession.mockResolvedValue({ uid: 'uid-x', role: 'teacher', fid: 'FAM001ABCD12', mid: 'FAM001ABCD12-01' });
-    const res = await GET(makeRequest());
+    const res = await GET(makeRequest({ role: 'teacher', fid: 'FAM001ABCD12', mid: 'FAM001ABCD12-01' }));
     expect(res.status).toBe(401);
   });
 
   it('returns 200 with family + members when session valid (manager)', async () => {
-    setupSession('family-manager', 'FAM001ABCD12', 'FAM001ABCD12-01');
-    const res = await GET(makeRequest());
+    const res = await GET(makeRequest({ role: 'family-manager', fid: 'FAM001ABCD12', mid: 'FAM001ABCD12-01' }));
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.family.fid).toBe('FAM001ABCD12');
@@ -95,18 +82,16 @@ describe('GET /api/setu/family', () => {
   });
 
   it('returns 200 with isManager false for family-member', async () => {
-    setupSession('family-member', 'FAM001ABCD12', 'FAM001ABCD12-02');
-    const res = await GET(makeRequest());
+    const res = await GET(makeRequest({ role: 'family-member', fid: 'FAM001ABCD12', mid: 'FAM001ABCD12-02' }));
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.isManager).toBe(false);
     expect(body.currentMid).toBe('FAM001ABCD12-02');
   });
 
-  it('returns 404 when family document does not exist', async () => {
-    setupSession('family-manager', 'FAM001ABCD12', 'FAM001ABCD12-01');
+  it('returns 401 when family document does not exist', async () => {
     mockGetFamilyByFid.mockResolvedValue(null);
-    const res = await GET(makeRequest());
+    const res = await GET(makeRequest({ role: 'family-manager', fid: 'FAM001ABCD12', mid: 'FAM001ABCD12-01' }));
     expect(res.status).toBe(401);
   });
 
@@ -119,8 +104,7 @@ describe('GET /api/setu/family', () => {
   });
 
   it('does not set session cookie on GET', async () => {
-    setupSession('family-manager', 'FAM001ABCD12', 'FAM001ABCD12-01');
-    const res = await GET(makeRequest());
+    const res = await GET(makeRequest({ role: 'family-manager', fid: 'FAM001ABCD12', mid: 'FAM001ABCD12-01' }));
     expect(res.headers.get('set-cookie')).toBeNull();
   });
 });

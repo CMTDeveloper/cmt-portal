@@ -7,7 +7,6 @@ vi.mock('@/features/check-in/shared', () => ({
   ),
   verifyCode: vi.fn(),
 }));
-vi.mock('@/features/setu/members/get-current-family', () => ({ getCurrentFamily: vi.fn() }));
 vi.mock('@/features/setu/contacts/add-verified-contact', async () => {
   const actual = await vi.importActual<typeof import('@/features/setu/contacts/add-verified-contact')>(
     '@/features/setu/contacts/add-verified-contact',
@@ -20,35 +19,35 @@ vi.mock('next/cache', () => ({ revalidateTag: vi.fn() }));
 
 import { POST } from '../route';
 import { verifyCode } from '@/features/check-in/shared';
-import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 import { addVerifiedContact, ContactInUseError } from '@/features/setu/contacts/add-verified-contact';
 
-function makeRequest(body: unknown) {
+// The route authenticates from the middleware-set x-portal-* headers (cookie
+// AND Bearer/mobile sessions). Pass session: null for a signed-out request.
+const SIGNED_IN = { role: 'family-member', fid: 'CMT-AB12CD34', mid: 'CMT-AB12CD34-02' };
+
+function makeRequest(body: unknown, session: typeof SIGNED_IN | null = SIGNED_IN) {
+  const headers = new Headers({ 'content-type': 'application/json' });
+  if (session) {
+    headers.set('x-portal-role', session.role);
+    headers.set('x-portal-fid', session.fid);
+    headers.set('x-portal-mid', session.mid);
+  }
   return new Request('http://localhost/api/setu/contacts/verify-code', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers,
     body: JSON.stringify(body),
   });
 }
 
-const signedInFamily = {
-  family: { fid: 'CMT-AB12CD34' },
-  members: [{ mid: 'CMT-AB12CD34-02' }],
-  currentMid: 'CMT-AB12CD34-02',
-  isManager: false,
-};
-
 beforeEach(() => {
   vi.clearAllMocks();
-  (getCurrentFamily as ReturnType<typeof vi.fn>).mockResolvedValue(signedInFamily);
   (verifyCode as ReturnType<typeof vi.fn>).mockResolvedValue(true);
   (addVerifiedContact as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
 });
 
 describe('POST /api/setu/contacts/verify-code', () => {
   it('returns 401 when not signed in', async () => {
-    (getCurrentFamily as ReturnType<typeof vi.fn>).mockResolvedValue(null);
-    const res = await POST(makeRequest({ type: 'email', value: 'x@example.com', code: '123456' }));
+    const res = await POST(makeRequest({ type: 'email', value: 'x@example.com', code: '123456' }, null));
     expect(res.status).toBe(401);
   });
 

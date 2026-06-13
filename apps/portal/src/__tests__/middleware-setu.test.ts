@@ -14,11 +14,12 @@ import { middleware } from '../middleware';
 
 const makeReq = (
   url: string,
-  init: { cookie?: string; bearer?: string; method?: string } = {},
+  init: { cookie?: string; bearer?: string; method?: string; headers?: Record<string, string> } = {},
 ) => {
   const headers = new Headers();
   if (init.bearer) headers.set('authorization', `Bearer ${init.bearer}`);
   if (init.cookie) headers.set('cookie', `__session=${init.cookie}`);
+  for (const [k, v] of Object.entries(init.headers ?? {})) headers.set(k, v);
   return new NextRequest(new URL(url, 'http://localhost'), {
     headers,
     method: init.method ?? 'GET',
@@ -128,6 +129,7 @@ describe('Authenticated family-manager on /family/*', () => {
       role: 'family-manager',
       fid: 'FAM001',
       mid: 'FAM001-01',
+      email: 'mgr@example.com',
     });
     const res = await middleware(makeReq('http://localhost/family', { cookie: 'good' }));
     expect(res.status).toBe(200);
@@ -137,11 +139,57 @@ describe('Authenticated family-manager on /family/*', () => {
     expect(res.headers.get('x-middleware-request-x-portal-uid')).toBe('u-mgr');
     expect(res.headers.get('x-middleware-request-x-portal-fid')).toBe('FAM001');
     expect(res.headers.get('x-middleware-request-x-portal-mid')).toBe('FAM001-01');
+    // Verified contact claim forwarded for Bearer/mobile-aware handlers
+    // (set-password, invite/accept, contacts verify).
+    expect(res.headers.get('x-middleware-request-x-portal-email')).toBe('mgr@example.com');
     // SECURITY: must NOT leak the claims onto the client-facing response headers.
     expect(res.headers.get('x-portal-role')).toBeNull();
     expect(res.headers.get('x-portal-uid')).toBeNull();
     expect(res.headers.get('x-portal-fid')).toBeNull();
     expect(res.headers.get('x-portal-mid')).toBeNull();
+    expect(res.headers.get('x-portal-email')).toBeNull();
+  });
+
+  // SECURITY: the load-bearing property — a forged inbound x-portal-* header
+  // must be OVERWRITTEN by the verified claim, and STRIPPED entirely when the
+  // claim is absent (otherwise a phone-only session could inject an email and
+  // defeat the invite/accept email-match guard).
+  it('overwrites a forged inbound x-portal-email with the verified email claim', async () => {
+    (verifyPortalSessionCookie as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      uid: 'u-mgr',
+      role: 'family-manager',
+      fid: 'FAM001',
+      mid: 'FAM001-01',
+      email: 'real@example.com',
+    });
+    const res = await middleware(
+      makeReq('http://localhost/family', {
+        cookie: 'good',
+        headers: { 'x-portal-email': 'forged@evil.com', 'x-portal-role': 'admin' },
+      }),
+    );
+    expect(res.headers.get('x-middleware-request-x-portal-email')).toBe('real@example.com');
+    expect(res.headers.get('x-middleware-request-x-portal-role')).toBe('family-manager');
+  });
+
+  it('STRIPS a forged inbound x-portal-email on a phone-only session (no email claim)', async () => {
+    (verifyPortalSessionCookie as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      uid: 'u-mgr',
+      role: 'family-manager',
+      fid: 'FAM001',
+      mid: 'FAM001-01',
+      phone: '+14165551234',
+    });
+    const res = await middleware(
+      makeReq('http://localhost/family', {
+        cookie: 'good',
+        headers: { 'x-portal-email': 'forged@evil.com', 'x-portal-extra-roles': 'admin' },
+      }),
+    );
+    // The forged email/extra-roles must NOT survive to the handler.
+    expect(res.headers.get('x-middleware-request-x-portal-email')).toBeNull();
+    expect(res.headers.get('x-middleware-request-x-portal-extra-roles')).toBeNull();
+    expect(res.headers.get('x-middleware-request-x-portal-phone')).toBe('+14165551234');
   });
 
   it('family-manager can access /family/members', async () => {

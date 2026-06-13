@@ -2,8 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { flags } from '@/lib/flags';
 import { portalAuth } from '@cmt/firebase-shared/admin/auth';
-import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
-import { cookies } from 'next/headers';
+import { readSessionFromHeaders } from '@/lib/auth/headers';
 
 const bodySchema = z.object({
   password: z
@@ -21,16 +20,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'not-found' }, { status: 404 });
   }
 
-  const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get('__session')?.value ?? '';
-  const claims = sessionCookie ? await verifyPortalSessionCookie(sessionCookie) : null;
-
-  if (!claims) {
+  // Header-based session (cookie AND Bearer/mobile callers) — middleware
+  // forwards the verified uid + contact claims as x-portal-* headers.
+  const session = readSessionFromHeaders(req);
+  if (!session || !session.uid) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
-  const uid = claims.uid;
-  const email = (claims as Record<string, unknown>).email as string | undefined;
+  const uid = session.uid;
+  const email = session.email;
 
   if (!email) {
     return NextResponse.json({ error: 'no-email-on-session' }, { status: 400 });

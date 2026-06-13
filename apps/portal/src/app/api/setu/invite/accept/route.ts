@@ -8,7 +8,7 @@ import {
   createPortalSessionCookie,
   exchangeCustomTokenForIdToken,
 } from '@cmt/firebase-shared/admin/session';
-import { getCurrentSessionContact } from '@/features/setu/auth/get-current-session-email';
+import { getSessionContactFromHeaders } from '@/features/setu/auth/get-current-session-email';
 import { hashContactKey } from '@/features/setu/registration/hash-contact-key';
 
 
@@ -27,7 +27,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'not-found' }, { status: 404 });
   }
 
-  const session = await getCurrentSessionContact();
+  // Header-based session contact (cookie AND Bearer/mobile callers) — the
+  // cookie-only variant made the mode:'mobile' branch unreachable for
+  // Bearer-authenticated invitees.
+  const session = getSessionContactFromHeaders(req);
   if (!session) {
     return NextResponse.json({ error: 'no-session' }, { status: 401 });
   }

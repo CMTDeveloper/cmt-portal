@@ -1,0 +1,103 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+vi.mock('@/lib/flags', () => ({ flags: { setuAuth: true } }));
+
+const mockGetFamilyByFid = vi.hoisted(() => vi.fn());
+vi.mock('@/features/setu/members/get-family-by-fid', () => ({
+  getFamilyByFid: mockGetFamilyByFid,
+}));
+
+const mockLoad = vi.hoisted(() => vi.fn());
+vi.mock('@/app/family/_helpers/load-dashboard', () => ({
+  loadFamilyDashboard: mockLoad,
+}));
+
+import { GET } from '../route';
+
+const family = { fid: 'CMT-AB12CD34', name: 'Patel', location: 'Brampton', legacyFid: null };
+const members = [
+  { mid: 'CMT-AB12CD34-01', firstName: 'Raj', lastName: 'Patel', type: 'Adult' },
+  { mid: 'CMT-AB12CD34-02', firstName: 'Anya', lastName: 'Patel', type: 'Child' },
+];
+
+const dashboardData = {
+  model: {
+    isEnrolled: true,
+    kidsEnrolled: 1,
+    enrollPeriodLabel: '2025-26',
+    suggestedAmount: 500,
+    givenForPeriod: 200,
+    donation: { complete: false, pct: 40, tone: 'warn', showGive: true, showProgress: true, heading: 'Donation pending' },
+    isLegacyPeriod: false,
+    legacyPaid: false,
+    otherProgramCards: [{ eid: 'e2', programKey: 'tabla', label: 'Tabla', termLabel: '2025-26', status: 'active', showAttendance: false, showDonation: true }],
+    attendance: { summary: { attended: 3, marks: [{ date: '2026-01-04', present: true }] }, hasAttendance: true, total: 5, pct: 60 },
+  },
+  upcoming: [{ entryId: 'x', date: '2026-01-11', kind: 'class', classType: 'regular', specialEvents: null }],
+  seva: { currentSevaYear: '2025-26', hoursPerYear: 20, hoursEarned: 4 },
+  prasad: { paid: 'p-1', pid: 'pid', date: '2026-03-01', youngestName: 'Anya', birthMonth: 3, reason: "Anya's birthday month", status: 'proposed', movable: true },
+};
+
+// Header-based session (cookie AND Bearer/mobile callers).
+function makeRequest(session?: { role: string; fid: string; mid: string }) {
+  const headers = new Headers();
+  if (session) {
+    headers.set('x-portal-role', session.role);
+    headers.set('x-portal-uid', `uid-${session.mid}`);
+    headers.set('x-portal-fid', session.fid);
+    headers.set('x-portal-mid', session.mid);
+  }
+  return new Request('http://localhost/api/setu/dashboard', { method: 'GET', headers });
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockGetFamilyByFid.mockResolvedValue({ family, members });
+  mockLoad.mockResolvedValue(dashboardData);
+});
+
+describe('GET /api/setu/dashboard', () => {
+  it('returns 401 when no session headers', async () => {
+    const res = await GET(makeRequest());
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 401 for a non-family role', async () => {
+    const res = await GET(makeRequest({ role: 'welcome-team', fid: 'CMT-AB12CD34', mid: 'x' }));
+    expect(res.status).toBe(401);
+  });
+
+  it('returns the dashboard aggregate for a family member', async () => {
+    const res = await GET(makeRequest({ role: 'family-member', fid: 'CMT-AB12CD34', mid: 'CMT-AB12CD34-02' }));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.family.fid).toBe('CMT-AB12CD34');
+    expect(body.currentMid).toBe('CMT-AB12CD34-02');
+    expect(body.isManager).toBe(false);
+    expect(body.members).toHaveLength(2);
+    expect(body.balaVihar.suggestedAmount).toBe(500);
+    expect(body.balaVihar.givenForPeriod).toBe(200);
+    expect(body.balaVihar.donationPct).toBe(40);
+    expect(body.balaVihar.attendance.pct).toBe(60);
+    expect(body.otherPrograms[0].programKey).toBe('tabla');
+    expect(body.upcoming[0].date).toBe('2026-01-11');
+    expect(body.seva.hoursEarned).toBe(4);
+    expect(body.prasad.status).toBe('proposed');
+  });
+
+  it('does NOT leak UI-only fields (pill colors, donateUrl)', async () => {
+    const res = await GET(makeRequest({ role: 'family-manager', fid: 'CMT-AB12CD34', mid: 'CMT-AB12CD34-01' }));
+    const body = await res.json();
+    expect(JSON.stringify(body)).not.toContain('var(--');
+    expect(body.donateUrl).toBeUndefined();
+    expect(body.balaVihar.enrolledPill).toBeUndefined();
+  });
+
+  it('returns 404 when feature flag is off', async () => {
+    vi.resetModules();
+    vi.doMock('@/lib/flags', () => ({ flags: { setuAuth: false } }));
+    const { GET: flaggedGET } = await import('../route');
+    const res = await flaggedGET(makeRequest({ role: 'family-manager', fid: 'CMT-AB12CD34', mid: 'CMT-AB12CD34-01' }));
+    expect(res.status).toBe(404);
+  });
+});

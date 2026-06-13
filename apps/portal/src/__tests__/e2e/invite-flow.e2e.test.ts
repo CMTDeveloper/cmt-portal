@@ -39,10 +39,10 @@ vi.mock('@/lib/env', () => ({
   })),
 }));
 
-// getCurrentSessionContact is called by the accept route — mock it per-test
+// getSessionContactFromHeaders is called by the accept route — mock it per-test
 const mockGetCurrentSessionContact = vi.fn();
 vi.mock('@/features/setu/auth/get-current-session-email', () => ({
-  getCurrentSessionContact: mockGetCurrentSessionContact,
+  getSessionContactFromHeaders: mockGetCurrentSessionContact,
 }));
 
 const hasUatCreds = Boolean(
@@ -170,8 +170,8 @@ const hasUatCreds = Boolean(
         role: 'family-member',
       });
 
-      // Mock getCurrentSessionContact to return the invitee's email
-      mockGetCurrentSessionContact.mockResolvedValue({
+      // Mock the session contact to return the invitee's email
+      mockGetCurrentSessionContact.mockReturnValue({
         type: 'email' as const,
         value: INVITEE_EMAIL,
         uid: INVITEE_UID,

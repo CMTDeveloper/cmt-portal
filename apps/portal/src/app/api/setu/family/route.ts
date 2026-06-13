@@ -1,14 +1,15 @@
 import { NextResponse } from 'next/server';
 import { flags } from '@/lib/flags';
-import { getCurrentFamily } from '@/features/setu/members/get-current-family';
+import { getSessionFamily } from '@/features/setu/members/get-session-family';
 
-
-export async function GET(_req: Request) {
+// Header-based session (works for cookie AND Bearer/mobile callers) — the
+// cookie-only getCurrentFamily() silently 401'd valid Bearer requests.
+export async function GET(req: Request) {
   if (!flags.setuAuth) {
     return NextResponse.json({ error: 'not-found' }, { status: 404 });
   }
 
-  const result = await getCurrentFamily();
+  const result = await getSessionFamily(req);
   if (!result) {
     return NextResponse.json({ error: 'no-session' }, { status: 401 });
   }

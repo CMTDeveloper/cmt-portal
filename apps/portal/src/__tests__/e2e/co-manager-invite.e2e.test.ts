@@ -49,7 +49,7 @@ vi.mock('@/lib/env', () => ({
 
 const mockGetCurrentSessionContact = vi.fn();
 vi.mock('@/features/setu/auth/get-current-session-email', () => ({
-  getCurrentSessionContact: mockGetCurrentSessionContact,
+  getSessionContactFromHeaders: mockGetCurrentSessionContact,
 }));
 
 const hasUatCreds = Boolean(
@@ -146,7 +146,7 @@ const hasUatCreds = Boolean(
 
     it('POST /api/setu/invite/accept WITHOUT a session → 401 { error: "no-session" }', async () => {
       expect(inviteToken).toBeTruthy();
-      mockGetCurrentSessionContact.mockResolvedValueOnce(null);
+      mockGetCurrentSessionContact.mockReturnValueOnce(null);
 
       const { POST } = await import('@/app/api/setu/invite/accept/route');
       const req = new Request('http://localhost/api/setu/invite/accept', {
@@ -178,7 +178,7 @@ const hasUatCreds = Boolean(
         return;
       }
 
-      mockGetCurrentSessionContact.mockResolvedValueOnce({
+      mockGetCurrentSessionContact.mockReturnValueOnce({
         type: 'email' as const,
         value: INVITEE_EMAIL,
         uid: INVITEE_UID,

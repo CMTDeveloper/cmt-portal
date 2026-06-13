@@ -10,7 +10,7 @@ vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
   },
 }));
 vi.mock('@/features/setu/auth/get-current-session-email', () => ({
-  getCurrentSessionContact: vi.fn(),
+  getSessionContactFromHeaders: vi.fn(),
 }));
 vi.mock('@/features/setu/registration/hash-contact-key', () => ({
   hashContactKey: vi.fn((type: string, value: string) => `hash:${type}:${value}`),
@@ -25,7 +25,7 @@ vi.mock('@cmt/firebase-shared/admin/session', () => ({
 
 import { POST } from '../route';
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
-import { getCurrentSessionContact } from '@/features/setu/auth/get-current-session-email';
+import { getSessionContactFromHeaders } from '@/features/setu/auth/get-current-session-email';
 import { portalAuth } from '@cmt/firebase-shared/admin/auth';
 import {
   createPortalSessionCookie,
@@ -36,7 +36,7 @@ import { revalidateTag } from 'next/cache';
 const mockSetCustomUserClaims = vi.fn();
 const mockCreateCustomToken = vi.fn();
 
-const mockGetSession = vi.mocked(getCurrentSessionContact);
+const mockGetSession = vi.mocked(getSessionContactFromHeaders);
 const mockRunTransaction = vi.fn();
 const mockGet = vi.fn();
 const mockSet = vi.fn();
@@ -154,7 +154,7 @@ describe('POST /api/setu/invite/accept', () => {
   });
 
   it('returns 401 when no session', async () => {
-    mockGetSession.mockResolvedValueOnce(null);
+    mockGetSession.mockReturnValueOnce(null);
     const res = await POST(makeRequest({ token: 'tok-abc123' }));
     expect(res.status).toBe(401);
     const body = await res.json();
@@ -162,7 +162,7 @@ describe('POST /api/setu/invite/accept', () => {
   });
 
   it('returns 400 when token missing from body', async () => {
-    mockGetSession.mockResolvedValueOnce(validSession);
+    mockGetSession.mockReturnValueOnce(validSession);
     const res = await POST(makeRequest({}));
     expect(res.status).toBe(400);
     const body = await res.json();
@@ -170,7 +170,7 @@ describe('POST /api/setu/invite/accept', () => {
   });
 
   it('returns 404 when token not found', async () => {
-    mockGetSession.mockResolvedValueOnce(validSession);
+    mockGetSession.mockReturnValueOnce(validSession);
     mockRunTransaction.mockRejectedValueOnce(new Error('invite-not-found'));
     const res = await POST(makeRequest({ token: 'missing-tok' }));
     expect(res.status).toBe(404);
@@ -179,7 +179,7 @@ describe('POST /api/setu/invite/accept', () => {
   });
 
   it('returns 410 when invite is expired', async () => {
-    mockGetSession.mockResolvedValueOnce(validSession);
+    mockGetSession.mockReturnValueOnce(validSession);
     mockRunTransaction.mockRejectedValueOnce(new Error('invite-expired'));
     const res = await POST(makeRequest({ token: 'tok-expired' }));
     expect(res.status).toBe(410);
@@ -188,7 +188,7 @@ describe('POST /api/setu/invite/accept', () => {
   });
 
   it('returns 409 when invite already accepted', async () => {
-    mockGetSession.mockResolvedValueOnce(validSession);
+    mockGetSession.mockReturnValueOnce(validSession);
     mockRunTransaction.mockRejectedValueOnce(new Error('invite-already-accepted'));
     const res = await POST(makeRequest({ token: 'tok-used' }));
     expect(res.status).toBe(409);
@@ -197,7 +197,7 @@ describe('POST /api/setu/invite/accept', () => {
   });
 
   it('returns 403 when verified-contact email does not match invite email', async () => {
-    mockGetSession.mockResolvedValueOnce({
+    mockGetSession.mockReturnValueOnce({
       type: 'email' as const,
       value: 'other@example.com',
       uid: 'uid-other',
@@ -210,7 +210,7 @@ describe('POST /api/setu/invite/accept', () => {
   });
 
   it('returns 409 when contactKey already belongs to a different family', async () => {
-    mockGetSession.mockResolvedValueOnce(validSession);
+    mockGetSession.mockReturnValueOnce(validSession);
     mockRunTransaction.mockRejectedValueOnce(new Error('contact-conflict'));
     const res = await POST(makeRequest({ token: 'tok-abc123' }));
     expect(res.status).toBe(409);
@@ -219,7 +219,7 @@ describe('POST /api/setu/invite/accept', () => {
   });
 
   it('happy path: creates member, updates family.managers, writes contactKey, marks acceptedAt', async () => {
-    mockGetSession.mockResolvedValueOnce(validSession);
+    mockGetSession.mockReturnValueOnce(validSession);
     mockRunTransaction.mockImplementationOnce(async (fn: (txn: unknown) => unknown) => {
       const txn = { get: mockGet, set: mockSet, update: mockUpdate };
       return fn(txn);
@@ -239,7 +239,7 @@ describe('POST /api/setu/invite/accept', () => {
   });
 
   it('happy path: sets __session cookie with refreshed claims after invite accept', async () => {
-    mockGetSession.mockResolvedValueOnce(validSession);
+    mockGetSession.mockReturnValueOnce(validSession);
     mockRunTransaction.mockImplementationOnce(async (fn: (txn: unknown) => unknown) => {
       const txn = { get: mockGet, set: mockSet, update: mockUpdate };
       return fn(txn);

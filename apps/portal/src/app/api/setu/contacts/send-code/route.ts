@@ -9,7 +9,8 @@ import {
   storeVerificationCode,
 } from '@/features/check-in/shared';
 import { resolveSender } from '@/lib/aws/resolve-sender';
-import { getCurrentFamily } from '@/features/setu/members/get-current-family';
+import { isSetuFamily } from '@cmt/shared-domain';
+import { readSessionFromHeaders } from '@/lib/auth/headers';
 import { normalizeContactForKey } from '@cmt/shared-domain/setu';
 
 const bodySchema = z.object({
@@ -26,10 +27,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'not-found' }, { status: 404 });
   }
 
-  // Authenticated as a family member (any role). The catch-all denies
-  // non-managers, so canAccessRoute MUST open this path (Task B2.4).
-  const current = await getCurrentFamily();
-  if (!current) {
+  // Authenticated as a family member (any role) via the middleware-set
+  // x-portal-* headers (covers cookie AND Bearer/mobile sessions). The
+  // catch-all denies non-managers, so canAccessRoute MUST open this path.
+  const session = readSessionFromHeaders(req);
+  if (!session || !isSetuFamily(session) || !session.mid) {
     return NextResponse.json({ error: 'no-session' }, { status: 401 });
   }
 
@@ -51,7 +53,7 @@ export async function POST(req: Request) {
   // Second bucket keyed by the SENDER (the caller, not the target), so an
   // authenticated member can't spray single OTPs to many arbitrary contacts.
   const senderRate = await checkAndRecordOtpRateLimit(
-    `contacts-send:${current.currentMid}`,
+    `contacts-send:${session.mid}`,
     CONTACTS_SEND_PER_SENDER_MAX,
   );
   if (!senderRate.allowed) {
