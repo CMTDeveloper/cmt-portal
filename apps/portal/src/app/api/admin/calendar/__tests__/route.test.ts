@@ -60,6 +60,16 @@ describe('POST /api/admin/calendar', () => {
     expect((await bv.json()).entryId).toBe('bala-vihar-brampton-2025-09-07');
     expect((await tabla.json()).entryId).toBe('tabla-brampton-2025-09-07');
   });
+  it('persists prasadNeeded (defaults true when omitted)', async () => {
+    const { POST } = await import('../route');
+    await POST(makeRequest('POST', '/api/admin/calendar', classBody, 'uid-a'));
+    expect(mockCreate).toHaveBeenCalledWith(expect.objectContaining({ prasadNeeded: true }));
+  });
+  it('persists prasadNeeded:false from the body (script/API "No prasad" day stays excluded)', async () => {
+    const { POST } = await import('../route');
+    await POST(makeRequest('POST', '/api/admin/calendar', { ...classBody, prasadNeeded: false }, 'uid-a'));
+    expect(mockCreate).toHaveBeenCalledWith(expect.objectContaining({ prasadNeeded: false }));
+  });
   it('400 for a class day with no classType', async () => {
     const { POST } = await import('../route');
     const res = await POST(makeRequest('POST', '/api/admin/calendar', { location: 'Brampton', date: '2025-09-07', kind: 'class' }, 'uid-a'));

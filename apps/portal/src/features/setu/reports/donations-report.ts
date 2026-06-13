@@ -36,12 +36,16 @@ export async function buildDonationsReport(params: ReportQuery): Promise<Donatio
     gAgg.cad += amt; gAgg.count++; byProgram.set(programKey, gAgg);
   }
 
-  // paid vs outstanding families (bulk; expected via snapshot/override, no live offering recompute)
+  // paid vs outstanding families (bulk; expected via snapshot/override, no live offering recompute).
+  // When `params.program` is set, BOTH the expected-enrollment and paid-donation
+  // sides are scoped to that program — otherwise a program-filtered report would
+  // show that program's dollar totals against org-wide payment chips.
   const expectedByFid = new Map<string, number>();
   const activeCountByFid = new Map<string, number>();
   for (const d of enrSnap.docs) {
     const e = d.data() as Record<string, unknown>;
     if (e['status'] !== 'active') continue;
+    if (params.program && e['programKey'] !== params.program) continue;
     const fid = String(e['fid'] ?? '');
     if (!fid) continue;
     const override = typeof e['suggestedAmountOverride'] === 'number' ? (e['suggestedAmountOverride'] as number) : null;
@@ -53,6 +57,7 @@ export async function buildDonationsReport(params: ReportQuery): Promise<Donatio
   for (const d of donSnap.docs) {
     const x = d.data() as Record<string, unknown>;
     if (x['status'] !== 'completed') continue;
+    if (params.program && x['programKey'] !== params.program) continue;
     const fid = String(x['fid'] ?? '');
     if (!fid) continue;
     paidByFid.set(fid, (paidByFid.get(fid) ?? 0) + (typeof x['amountCAD'] === 'number' ? (x['amountCAD'] as number) : 0));

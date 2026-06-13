@@ -57,6 +57,12 @@ export async function POST(req: Request) {
       noClassReason: data.noClassReason,
       specialEvents: data.specialEvents,
       enabled: data.enabled,
+      // Persist prasadNeeded (schema defaults true). Was previously dropped, so
+      // a script/API caller passing prasadNeeded:false was silently ignored and
+      // the day stayed prasad-eligible (readers treat missing as true). The UI
+      // creates with the default then toggles via PATCH, so this only bit the
+      // seed-script / direct-API path — but the schema accepts it, so persist it.
+      prasadNeeded: data.prasadNeeded,
       createdAt: now,
       createdBy: session!.uid,
       updatedAt: now,

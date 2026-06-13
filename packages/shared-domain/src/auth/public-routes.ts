@@ -53,11 +53,13 @@ export const PUBLIC_ROUTES = [
   // sends `Authorization: Bearer ${CRON_SECRET}`, which the Firebase
   // session/ID-token verifier can't decode. Without this allowlist the
   // middleware 401s the cron request before its own CRON_SECRET enforcement
-  // runs, so the daily cache-reset + weekly reminders never fire. These are
-  // public at the middleware layer but self-authenticating in the handler
-  // (same pattern as webhooks/register).
+  // runs, so the scheduled jobs never fire. These are public at the middleware
+  // layer but self-authenticating in the handler (same pattern as
+  // webhooks/register). EVERY path declared as a cron in vercel.ts MUST be
+  // listed here — a scheduled job whose route is missing here silently 401s.
   '/api/cron/reset-cache',
   '/api/cron/send-weekly-payment-reminders',
+  '/api/cron/send-prasad-reminders',
 
   // NOTE: /api/webhooks/stripe and /api/cron/archive-pledges remain
   // intentionally absent until their Stripe-signature-verifying and

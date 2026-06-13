@@ -40,6 +40,9 @@ describe('PUBLIC_ROUTES', () => {
   it('includes cron routes (their handlers self-verify CRON_SECRET)', () => {
     expect(PUBLIC_ROUTES).toContain('/api/cron/reset-cache');
     expect(PUBLIC_ROUTES).toContain('/api/cron/send-weekly-payment-reminders');
+    // Every path scheduled as a cron in vercel.ts must be here, or middleware
+    // 401s the Bearer-CRON_SECRET request before the handler runs.
+    expect(PUBLIC_ROUTES).toContain('/api/cron/send-prasad-reminders');
   });
 });
 
@@ -82,5 +85,6 @@ describe('isPublicRoute', () => {
   it('returns true for cron routes (self-verify CRON_SECRET in their handlers)', () => {
     expect(isPublicRoute('/api/cron/reset-cache')).toBe(true);
     expect(isPublicRoute('/api/cron/send-weekly-payment-reminders')).toBe(true);
+    expect(isPublicRoute('/api/cron/send-prasad-reminders')).toBe(true);
   });
 });

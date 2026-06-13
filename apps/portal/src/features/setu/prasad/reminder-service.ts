@@ -48,14 +48,25 @@ export async function sendDuePrasadReminders(now: Date = new Date()): Promise<Re
         .collection('members').where('manager', '==', true).get();
       const when = formatPrasadDate(a.date);
       const lead = kind === 'weekBefore' ? 'is one week away' : 'is this Sunday';
+      let dispatched = 0;
       for (const m of managersSnap.docs) {
         const mem = m.data() as { email?: string | null; phone?: string | null; firstName?: string };
         const msg = proposed
           ? `Namaste ${mem.firstName ?? ''}! Your family's suggested Bala Vihar prasad Sunday (${when}) ${lead} and is not confirmed yet. Please confirm or pick another date: ${base}/family/prasad — Chinmaya Mission Toronto`
           : `Namaste ${mem.firstName ?? ''}! Your family's Bala Vihar prasad day ${lead} — ${when}. Please bring prasad for the assembly. — Chinmaya Mission Toronto`;
         const subject = proposed ? `Prasad Sunday — please confirm (${when})` : `Prasad reminder — ${when}`;
-        if (mem.email) await sender.sendEmail({ to: mem.email, subject, text: msg });
-        if (mem.phone) await sender.sendSMS({ phone: mem.phone, message: msg });
+        if (mem.email) { await sender.sendEmail({ to: mem.email, subject, text: msg }); dispatched++; }
+        if (mem.phone) { await sender.sendSMS({ phone: mem.phone, message: msg }); dispatched++; }
+      }
+      // Zero messages dispatched (no manager, or no manager has an email/phone)
+      // → do NOT stamp and count as failed, so the family stays visible/retryable
+      // once a contact is added. Stamping here would permanently mark them
+      // "reminded" with nothing sent. Mirrors proposal-notify's `dispatched`
+      // guard — keep the two in sync.
+      if (dispatched === 0) {
+        console.error(`[prasad-reminder] family ${a.fid} unreachable: no manager with an email or phone — left unstamped`);
+        failed++;
+        continue;
       }
       // Relies on Admin SDK deep merge: set({ remindedAt: { [kind]: ts } }, { merge: true })
       // merges the nested map field-by-field, so stamping twoDayBefore does NOT erase a

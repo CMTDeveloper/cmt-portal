@@ -35,4 +35,21 @@ describe('buildDonationsReport', () => {
     expect(r.paidFamilies).toBe(1);
     expect(r.outstandingFamilies).toBe(1);
   });
+
+  it('scopes BOTH dollar totals AND paid/outstanding family counts to params.program', async () => {
+    mockFs.mockReturnValue(makeDb([
+      { fid: 'F1', pid: 'bv', label: 'BV', programKey: 'bala-vihar', programLabel: 'Bala Vihar', status: 'completed', amountCAD: 100 },
+      { fid: 'F2', pid: 'tb', label: 'Tabla', programKey: 'tabla', programLabel: 'Tabla', status: 'completed', amountCAD: 50 },
+    ], [
+      { fid: 'F1', programKey: 'bala-vihar', status: 'active', suggestedAmountSnapshot: 100, suggestedAmountOverride: null }, // paid (100>=100)
+      { fid: 'F2', programKey: 'tabla', status: 'active', suggestedAmountSnapshot: 200, suggestedAmountOverride: null }, // outstanding (50<200)
+    ]) as never);
+
+    const r = await buildDonationsReport({ format: 'json', program: 'bala-vihar' });
+    // dollar totals scoped to bala-vihar
+    expect(r.totalCompletedCAD).toBe(100);
+    // family counts ALSO scoped: only F1 (bala-vihar) counts; F2 (tabla) excluded
+    expect(r.paidFamilies).toBe(1);
+    expect(r.outstandingFamilies).toBe(0);
+  });
 });

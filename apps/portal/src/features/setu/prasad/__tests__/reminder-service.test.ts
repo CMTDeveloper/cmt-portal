@@ -294,6 +294,52 @@ describe('sendDuePrasadReminders', () => {
     expect(result).toEqual({ checked: 1, sent: 1, skipped: 0, failed: 0 });
   });
 
+  it('does NOT stamp and counts failed when the manager has no email or phone (nothing dispatched)', async () => {
+    const captured = { query: { where: [] as CapturedQuery['where'] }, sets: [] as CapturedSet[] };
+    mockFirestore.mockReturnValue(
+      makeDb(
+        {
+          assignments: [
+            { paid: 'p-week', fid: 'F1', date: DAY7, familyName: 'Sharma', status: 'assigned' },
+          ],
+          membersByFid: {
+            F1: [{ mid: 'm1', manager: true, email: null, phone: null, firstName: 'Asha' }],
+          },
+        },
+        captured,
+      ) as never,
+    );
+
+    const result = await sendDuePrasadReminders(NOW);
+
+    expect(emailSpy).not.toHaveBeenCalled();
+    expect(smsSpy).not.toHaveBeenCalled();
+    // No stamp — so a later run retries once a contact is added.
+    expect(captured.sets).toHaveLength(0);
+    expect(result).toEqual({ checked: 1, sent: 0, skipped: 0, failed: 1 });
+  });
+
+  it('does NOT stamp and counts failed when the family has no manager at all', async () => {
+    const captured = { query: { where: [] as CapturedQuery['where'] }, sets: [] as CapturedSet[] };
+    mockFirestore.mockReturnValue(
+      makeDb(
+        {
+          assignments: [
+            { paid: 'p-week', fid: 'F1', date: DAY7, familyName: 'Sharma', status: 'assigned' },
+          ],
+          membersByFid: { F1: [{ mid: 'm1', manager: false, email: 'child@example.com' }] },
+        },
+        captured,
+      ) as never,
+    );
+
+    const result = await sendDuePrasadReminders(NOW);
+
+    expect(emailSpy).not.toHaveBeenCalled();
+    expect(captured.sets).toHaveLength(0);
+    expect(result).toEqual({ checked: 1, sent: 0, skipped: 0, failed: 1 });
+  });
+
   it('reports {checked, sent, skipped, failed} across a mixed batch', async () => {
     const captured = { query: { where: [] as CapturedQuery['where'] }, sets: [] as CapturedSet[] };
     mockFirestore.mockReturnValue(
