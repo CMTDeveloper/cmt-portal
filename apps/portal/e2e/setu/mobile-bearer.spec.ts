@@ -7,6 +7,11 @@ import { TEST_ACCOUNT_EMAILS, TEST_ACCOUNTS_PASSWORD, hasTestAccounts } from '..
 // APIs with `Authorization: Bearer <idToken>` and NO cookie. This is the path
 // the cookie-coupled-route fix unblocks (GET /api/setu/family) plus the two new
 // mobile endpoints (dashboard, donations). Read-only — no UAT mutations.
+//
+// Rate-limit discipline: password-sign-in shares the OTP limiter (5 per contact
+// per 15 min). We sign in ONCE per persona in beforeAll and reuse the ID token
+// (valid 1h) across this file's tests — never per-test — so the whole spec
+// costs 2 sign-ins total. Serial so the personas' sign-ins don't interleave.
 test.describe.configure({ mode: 'serial' });
 
 const FIREBASE_API_KEY = process.env.NEXT_PUBLIC_PORTAL_FIREBASE_API_KEY;
@@ -31,7 +36,7 @@ async function mobileSignIn(baseURL: string, apiKey: string, email: string): Pro
   const res = await ctx.post('/api/setu/auth/password-sign-in?mode=mobile', {
     data: { email, password: TEST_ACCOUNTS_PASSWORD },
   });
-  expect(res.ok(), `password-sign-in?mode=mobile failed: ${res.status()}`).toBeTruthy();
+  expect(res.ok(), `password-sign-in?mode=mobile failed for ${email}: ${res.status()}`).toBeTruthy();
   const body = (await res.json()) as { customToken?: string };
   expect(body.customToken, 'mobile sign-in did not return a customToken').toBeTruthy();
   await ctx.dispose();
@@ -50,9 +55,17 @@ test.describe('mobile Bearer auth path (deployed UAT)', () => {
   test.skip(!hasTestAccounts, 'TEST_ACCOUNTS_PASSWORD required (run seed:test-accounts first)');
   test.skip(!FIREBASE_API_KEY, 'NEXT_PUBLIC_PORTAL_FIREBASE_API_KEY required for the token exchange');
 
+  let managerToken = '';
+  let memberToken = '';
+
+  test.beforeAll(async ({ baseURL }) => {
+    // One sign-in per persona for the whole file (ID tokens last ~1h).
+    managerToken = await mobileSignIn(baseURL!, FIREBASE_API_KEY!, TEST_ACCOUNT_EMAILS.parentBrampton);
+    memberToken = await mobileSignIn(baseURL!, FIREBASE_API_KEY!, TEST_ACCOUNT_EMAILS.memberBrampton);
+  });
+
   test('GET /api/setu/family works over Bearer (the cookie-coupled fix)', async ({ baseURL }) => {
-    const idToken = await mobileSignIn(baseURL!, FIREBASE_API_KEY!, TEST_ACCOUNT_EMAILS.parentBrampton);
-    const ctx = await bearerContext(baseURL!, idToken);
+    const ctx = await bearerContext(baseURL!, managerToken);
     const res = await ctx.get('/api/setu/family');
     expect(res.status(), `family GET over Bearer: ${await res.text()}`).toBe(200);
     const body = (await res.json()) as { family: { name: string }; members: unknown[]; isManager: boolean };
@@ -63,8 +76,7 @@ test.describe('mobile Bearer auth path (deployed UAT)', () => {
   });
 
   test('GET /api/setu/dashboard returns the family home aggregate over Bearer', async ({ baseURL }) => {
-    const idToken = await mobileSignIn(baseURL!, FIREBASE_API_KEY!, TEST_ACCOUNT_EMAILS.parentBrampton);
-    const ctx = await bearerContext(baseURL!, idToken);
+    const ctx = await bearerContext(baseURL!, managerToken);
     const res = await ctx.get('/api/setu/dashboard');
     expect(res.status(), `dashboard GET over Bearer: ${await res.text()}`).toBe(200);
     const body = (await res.json()) as {
@@ -82,8 +94,7 @@ test.describe('mobile Bearer auth path (deployed UAT)', () => {
   });
 
   test('GET /api/setu/donations lists the family donations over Bearer', async ({ baseURL }) => {
-    const idToken = await mobileSignIn(baseURL!, FIREBASE_API_KEY!, TEST_ACCOUNT_EMAILS.parentBrampton);
-    const ctx = await bearerContext(baseURL!, idToken);
+    const ctx = await bearerContext(baseURL!, managerToken);
     const res = await ctx.get('/api/setu/donations');
     expect(res.status(), `donations GET over Bearer: ${await res.text()}`).toBe(200);
     const body = (await res.json()) as { donations: unknown[] };
@@ -92,8 +103,7 @@ test.describe('mobile Bearer auth path (deployed UAT)', () => {
   });
 
   test('a family-member (non-manager) is allowed dashboard read but denied a manager write', async ({ baseURL }) => {
-    const idToken = await mobileSignIn(baseURL!, FIREBASE_API_KEY!, TEST_ACCOUNT_EMAILS.memberBrampton);
-    const ctx = await bearerContext(baseURL!, idToken);
+    const ctx = await bearerContext(baseURL!, memberToken);
     const dash = await ctx.get('/api/setu/dashboard');
     expect(dash.status()).toBe(200);
     // The donation status POST is manager-only — a member must get 403 (not 401),
