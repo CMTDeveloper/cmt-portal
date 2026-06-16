@@ -106,18 +106,12 @@ describe('RegisterPage — initial state (flag on)', () => {
 
 describe('RegisterPage — lookup returns match', () => {
   it('filling both fields triggers fetch to /api/setu/family-lookup and shows match panel', async () => {
+    // The PUBLIC lookup returns NO family PII — only that a contact matched
+    // and which one. No fid/name/location/members/initials.
     fetchMock.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
-        match: {
-          fid: 'FAM001',
-          name: 'Patel',
-          location: 'Brampton',
-          memberCount: 3,
-          managerInitials: 'R.P.',
-          matchedType: 'email',
-          matchedValue: 'raj@example.com',
-        },
+        match: { found: true, matchedType: 'email', matchedValue: 'raj@example.com' },
       }),
     });
 
@@ -141,16 +135,16 @@ describe('RegisterPage — lookup returns match', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getAllByText(/we found a family/i).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/this contact is already registered/i).length).toBeGreaterThan(0);
     });
 
-    // Shows the family name
-    expect(screen.getAllByText(/The Patel Family/i).length).toBeGreaterThan(0);
+    // Privacy: NO family name / location / manager initials are shown.
+    expect(screen.queryByText(/the patel family/i)).toBeNull();
+    expect(screen.queryByText(/brampton/i)).toBeNull();
 
-    // "Sign in to join the Patel family →" Link is present, points to /sign-in
-    // with the MATCHED contact (here: email) carried via ?type=&value=. The old
-    // /api/setu/family/join POST is gone — OTP sign-in proves contact ownership.
-    const joinLinks = screen.getAllByRole('link', { name: /sign in to join the patel family/i });
+    // "Sign in to access my family →" Link points to /sign-in with the MATCHED
+    // contact carried via ?type=&value= (the user's own contact, not a leak).
+    const joinLinks = screen.getAllByRole('link', { name: /sign in to access my family/i });
     expect(joinLinks.length).toBeGreaterThan(0);
     const href = joinLinks[0]?.getAttribute('href') ?? '';
     expect(href).toMatch(/^\/sign-in\?type=email&value=/);
@@ -167,15 +161,7 @@ describe('RegisterPage — match CTA uses the matched contact', () => {
     fetchMock.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
-        match: {
-          fid: 'FAM001',
-          name: 'Patel',
-          location: 'Brampton',
-          memberCount: 3,
-          managerInitials: 'R.P.',
-          matchedType: 'phone',
-          matchedValue: '4165550000',
-        },
+        match: { found: true, matchedType: 'phone', matchedValue: '4165550000' },
       }),
     });
 
@@ -190,10 +176,10 @@ describe('RegisterPage — match CTA uses the matched contact', () => {
     await user.tab();
 
     await waitFor(() => {
-      expect(screen.getAllByText(/we found a family/i).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/this contact is already registered/i).length).toBeGreaterThan(0);
     });
 
-    const joinLinks = screen.getAllByRole('link', { name: /sign in to join the patel family/i });
+    const joinLinks = screen.getAllByRole('link', { name: /sign in to access my family/i });
     expect(joinLinks.length).toBeGreaterThan(0);
     const href = joinLinks[0]?.getAttribute('href') ?? '';
     expect(href).toBe('/sign-in?type=phone&value=4165550000');

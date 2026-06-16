@@ -27,10 +27,10 @@ import { createMagicLink } from '@/features/setu/auth/magic-links';
 const mockSendEmail = vi.fn();
 const mockSendSMS = vi.fn();
 
-function makeRequest(body: unknown) {
+function makeRequest(body: unknown, extraHeaders: Record<string, string> = {}) {
   return new Request('http://localhost/api/setu/auth/send-code', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...extraHeaders },
     body: JSON.stringify(body),
   });
 }
@@ -77,16 +77,46 @@ describe('POST /api/setu/auth/send-code', () => {
     expect(mockSendSMS).not.toHaveBeenCalled();
   });
 
-  it('email body contains magic link URL and 6-digit code', async () => {
-    (findSetuFamilyByContact as ReturnType<typeof vi.fn>).mockResolvedValue({
-      source: 'setu', fid: 'FAM001', mid: 'FAM001-01', legacyFid: null, family: {},
-    });
-    await POST(makeRequest({ type: 'email', value: 'raj@example.com' }));
-    const [emailArg] = (mockSendEmail as ReturnType<typeof vi.fn>).mock.calls[0] as [{ text: string }];
-    // URL is derived from the request host (no NEXT_PUBLIC_PORTAL_BASE_URL needed).
-    // makeRequest uses 'http://localhost/...' so host=localhost → proto=http.
-    expect(emailArg.text).toContain('http://localhost:3000/api/setu/auth/magic/test-magic-token-abc123');
-    expect(emailArg.text).toMatch(/\d{6}/);
+  it('email body builds the magic URL from the configured canonical base + has a 6-digit code', async () => {
+    const prev = process.env.NEXT_PUBLIC_PORTAL_BASE_URL;
+    process.env.NEXT_PUBLIC_PORTAL_BASE_URL = 'https://setu.chinmayatoronto.org';
+    try {
+      (findSetuFamilyByContact as ReturnType<typeof vi.fn>).mockResolvedValue({
+        source: 'setu', fid: 'FAM001', mid: 'FAM001-01', legacyFid: null, family: {},
+      });
+      await POST(makeRequest({ type: 'email', value: 'raj@example.com' }));
+      const [emailArg] = (mockSendEmail as ReturnType<typeof vi.fn>).mock.calls[0] as [{ text: string }];
+      expect(emailArg.text).toContain(
+        'https://setu.chinmayatoronto.org/api/setu/auth/magic/test-magic-token-abc123',
+      );
+      expect(emailArg.text).toMatch(/\d{6}/);
+    } finally {
+      if (prev === undefined) delete process.env.NEXT_PUBLIC_PORTAL_BASE_URL;
+      else process.env.NEXT_PUBLIC_PORTAL_BASE_URL = prev;
+    }
+  });
+
+  // SECURITY regression: a forged x-forwarded-host must NEVER appear in the
+  // emailed magic-link URL (host-header poisoning would hand the victim a real
+  // token pointing at the attacker's domain).
+  it('ignores a forged x-forwarded-host when building the magic link', async () => {
+    const prev = process.env.NEXT_PUBLIC_PORTAL_BASE_URL;
+    delete process.env.NEXT_PUBLIC_PORTAL_BASE_URL;
+    try {
+      (findSetuFamilyByContact as ReturnType<typeof vi.fn>).mockResolvedValue({
+        source: 'setu', fid: 'FAM001', mid: 'FAM001-01', legacyFid: null, family: {},
+      });
+      await POST(
+        makeRequest({ type: 'email', value: 'raj@example.com' }, { 'x-forwarded-host': 'evil.com' }),
+      );
+      const [emailArg] = (mockSendEmail as ReturnType<typeof vi.fn>).mock.calls[0] as [{ text: string }];
+      expect(emailArg.text).not.toContain('evil.com');
+      // Falls back to the trusted prod origin, not the attacker host.
+      expect(emailArg.text).toContain('https://cmt-setu.vercel.app/api/setu/auth/magic/');
+    } finally {
+      if (prev === undefined) delete process.env.NEXT_PUBLIC_PORTAL_BASE_URL;
+      else process.env.NEXT_PUBLIC_PORTAL_BASE_URL = prev;
+    }
   });
 
   it('accepts phone contact, calls SNS sender with E.164-canonical phone', async () => {

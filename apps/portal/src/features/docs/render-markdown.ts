@@ -1,11 +1,34 @@
 import { Marked } from 'marked';
+import sanitizeHtml from 'sanitize-html';
 import { DOC_GUIDES } from './registry';
 
 // Server-side markdown → HTML for the /docs reader. The source is our own
-// repo's runbooks (trusted content reviewed in PRs), so the rendered HTML is
-// injected without sanitization — do NOT point this at user-supplied input.
+// repo's runbooks, but the rendered HTML is injected via
+// dangerouslySetInnerHTML, so we sanitize as defense-in-depth: a future
+// runbook edit with raw <script>, an inline event handler, or a
+// javascript:/data: link must not become stored XSS for staff.
 
 const marked = new Marked({ gfm: true, breaks: false });
+
+// Allowlist: the markdown prose + GFM tables our guides use. Raw HTML tags
+// not listed here are stripped; only http/https/mailto + relative/anchor
+// hrefs survive (javascript:/data: are dropped).
+const SANITIZE_OPTS: sanitizeHtml.IOptions = {
+  allowedTags: [
+    'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+    'p', 'a', 'ul', 'ol', 'li', 'blockquote', 'hr', 'br',
+    'strong', 'em', 'code', 'pre', 'span',
+    'table', 'thead', 'tbody', 'tr', 'th', 'td',
+  ],
+  allowedAttributes: {
+    a: ['href', 'title'],
+    th: ['align'],
+    td: ['align'],
+  },
+  allowedSchemes: ['http', 'https', 'mailto'],
+  // Allow relative + same-page-anchor hrefs (our /docs/{slug} cross-links).
+  allowProtocolRelative: false,
+};
 
 const FILE_TO_SLUG = new Map(DOC_GUIDES.map((g) => [g.file, g.slug]));
 
@@ -26,5 +49,6 @@ function rewriteGuideLinks(markdown: string): string {
 }
 
 export async function renderGuideHtml(markdown: string): Promise<string> {
-  return marked.parse(rewriteGuideLinks(markdown));
+  const html = await marked.parse(rewriteGuideLinks(markdown));
+  return sanitizeHtml(html, SANITIZE_OPTS);
 }

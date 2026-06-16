@@ -58,24 +58,17 @@ describe('POST /api/setu/family-lookup', () => {
     expect(body.match).toBeNull();
   });
 
-  it('returns 200 with match summary when family found', async () => {
+  it('returns 200 with a minimal, PII-free match when found', async () => {
     (lookupFamilyByContactList as ReturnType<typeof vi.fn>).mockResolvedValue({
-      fid: 'FAM001ABCD12',
-      name: 'Patel',
-      location: 'Brampton',
-      memberCount: 4,
-      managerInitials: 'R.P.',
+      found: true,
+      matchedType: 'email',
+      matchedValue: 'raj@example.com',
     });
     const res = await POST(makeRequest({ email: 'raj@example.com', phone: '4165551234' }));
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.match).toEqual({
-      fid: 'FAM001ABCD12',
-      name: 'Patel',
-      location: 'Brampton',
-      memberCount: 4,
-      managerInitials: 'R.P.',
-    });
+    // Only the caller's own matched contact — no family name/location/members.
+    expect(body.match).toEqual({ found: true, matchedType: 'email', matchedValue: 'raj@example.com' });
   });
 
   it('maps legacy { email, phone } body to a contact list', async () => {

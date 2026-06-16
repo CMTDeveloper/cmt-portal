@@ -1,15 +1,13 @@
 // apps/portal/src/features/setu/reports/report-csv.ts
 import type { EnrollmentReport, AttendanceReport, DonationsReport } from '@cmt/shared-domain';
-
-function escapeField(v: unknown): string {
-  const s = v === undefined || v === null ? '' : String(v);
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-}
+import { csvCell } from '@/lib/csv';
 
 function table(headers: string[], rows: Array<Array<unknown>>): string {
   const head = headers.join(',');
   if (rows.length === 0) return head;
-  return `${head}\n${rows.map((r) => r.map(escapeField).join(',')).join('\n')}`;
+  // csvCell neutralizes spreadsheet formula injection (=,+,-,@,tab,cr) in
+  // user-controlled cells (program/level labels) on top of CSV quoting.
+  return `${head}\n${rows.map((r) => r.map(csvCell).join(',')).join('\n')}`;
 }
 
 export function enrollmentReportToCsv(r: EnrollmentReport): string {

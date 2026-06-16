@@ -9,12 +9,11 @@ import { flags } from '@/lib/flags';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+// The public lookup deliberately returns NO family PII (name/location/members)
+// — only whether one of your own contacts is on file, and which one matched.
+// Family details are revealed after you prove ownership via OTP sign-in.
 type LookupMatch = {
-  fid: string;
-  name: string;
-  location: string;
-  memberCount: number;
-  managerInitials: string;
+  found: true;
   matchedType: 'email' | 'phone';
   matchedValue: string;
 };
@@ -275,13 +274,6 @@ function RegisterReal() {
 
   const isLoading = lookupState === 'loading';
 
-  const familyLabel = match
-    ? `The ${match.name} Family`
-    : '';
-  const familySubtitle = match
-    ? `${match.location} · ${match.memberCount} member${match.memberCount !== 1 ? 's' : ''} · managed by ${match.managerInitials}`
-    : '';
-
   const formContent = (
     <>
       <Suspense fallback={null}><ContactVerifiedBanner/></Suspense>
@@ -385,28 +377,22 @@ function RegisterReal() {
             <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'var(--accentSoft)', display: 'grid', placeItems: 'center', color: 'var(--accentDeep)' }}>
               <SetuIcon.info/>
             </div>
-            <strong style={{ fontSize: 14 }}>We found a family with this contact</strong>
+            <strong style={{ fontSize: 14 }}>This contact is already registered</strong>
           </div>
-          <div style={{ padding: '12px 14px', background: 'var(--bg)', borderRadius: 'var(--radiusSm)', marginBottom: 14 }}>
-            <div className="row" style={{ gap: 10 }}>
-              <SetuAvatar name={familyLabel} size={36}/>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 600, fontSize: 14 }}>{familyLabel}</div>
-                <div style={{ fontSize: 11, color: 'var(--muted)' }}>{familySubtitle}</div>
-              </div>
-            </div>
-          </div>
-          {/* SIGN-IN, NOT a direct join POST. The previous /api/setu/family/join
-              endpoint accepted an unverified contactProof and was an account-
-              takeover vector. OTP sign-in proves ownership of the contact,
-              and verify-code resolves the existing family via contactKey →
-              sets family-manager/member claims → /family. Same result, secure. */}
+          {/* No family details are shown here — the public lookup returns none.
+              The user proves ownership by OTP sign-in, after which /family
+              shows their household. (Sign-in, not a direct join POST: OTP
+              proves contact ownership and verify-code resolves the family via
+              contactKey → family-manager/member claims.) */}
+          <p style={{ fontSize: 13, color: 'var(--body-text)', margin: '0 0 14px', lineHeight: 1.5 }}>
+            Your <strong>{match.matchedValue}</strong> is linked to an existing family. Sign in to access it — we&apos;ll send a verification code.
+          </p>
           <Link
             href={`/sign-in?type=${match.matchedType}&value=${encodeURIComponent(match.matchedValue)}`}
             className="btn btn--p btn--block"
             style={{ marginBottom: 8, display: 'flex' }}
           >
-            Sign in to join the {match.name} family →
+            Sign in to access my family →
           </Link>
           <a
             href="mailto:info@chinmayatoronto.org?subject=Setu%20account%20issue"
