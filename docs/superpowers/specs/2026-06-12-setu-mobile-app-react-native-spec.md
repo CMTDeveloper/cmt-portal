@@ -77,7 +77,7 @@ The portal mints **Firebase custom tokens** for mobile. The canonical sequence:
 
 2. POST /api/setu/auth/verify-code?mode=mobile   { type, value, code: '123456' }
    → 200 { customToken }                          (existing family)
-   → 200 { redirectTo: '/register?contact=verified' }  (no family — go to registration, NO credential yet)
+   → 200 { redirectTo: '/register?contact=verified', registrationGrant }  (no family — go to registration; the grant proves the email; required by register)
    → 400 { error: 'invalid-or-expired' }          (wrong/old code — codes live 10 minutes)
 
 3. firebase: await signInWithCustomToken(auth, customToken)
@@ -99,8 +99,8 @@ The **password path** is identical via `POST /api/setu/auth/password-sign-in?mod
 
 ### 4.2 Registration & joining a family
 
-- **New family:** after the `redirectTo: '/register?contact=verified'` branch, collect: `email`, `phone`, `familyName`, `location` (one of the 4 CMT locations — fetch the literal list from the team: Brampton, Scarborough are the two active ones), `manager { firstName, lastName, gender }`, `additionalMembers[]`. `POST /api/setu/register?mode=mobile` → `201/200 { fid, mid, customToken }` → sign in with it. Errors: `409 duplicate-contact`, `409 duplicate-contact-in-form`, `429 rate-limited`.
-- **Find my family first:** `POST /api/setu/family-lookup` `{ emails?: string[], phones?: string[] }` → `{ match: { fid, name, … } | null }` (rate-limited ~30/window per IP). If matched, the user simply **signs in via OTP with that contact** — the portal lazily attaches/migrates them. ⚠️ **There is NO `/api/setu/family/join` endpoint** (it was removed; an older portal doc still mentions it — ignore that).
+- **New family:** registration is **OTP-gated** — the email must be verified first. Flow: `send-code` (email) → `verify-code?mode=mobile` for an email with no family returns `{ redirectTo, registrationGrant }` (a one-time, 20-min, email-bound token; NO session). Collect `email`, `phone`, `familyName`, `location` (one of the 4 CMT locations — fetch the literal list from the team: Brampton, Scarborough are the two active ones), `manager { firstName, lastName, gender }`, `additionalMembers[]`, **and the `registrationGrant`**. `POST /api/setu/register?mode=mobile` with all of those → `200 { fid, mid, customToken }` → sign in with it. Errors: `403 registration-unverified` (grant missing/expired/mismatched — resend the code), `400 bad-request` (grant absent), `409 duplicate-contact`, `409 duplicate-contact-in-form`, `429 rate-limited`. The grant is single-use; on a `registration-unverified` 403, re-run send-code/verify-code for a fresh one.
+- **Find my family first:** `POST /api/setu/family-lookup` `{ emails?: string[], phones?: string[] }` → `{ match: { found: true, matchedType, matchedValue } | null }` (rate-limited ~30/window per IP). Privacy: it returns **no** family details (name/location/members) — only that one of your own contacts is on file and which one — so show a generic "already registered, sign in" and route to OTP with `matchedValue`. If matched, the user simply **signs in via OTP with that contact** — the portal lazily attaches/migrates them. ⚠️ **There is NO `/api/setu/family/join` endpoint** (it was removed; an older portal doc still mentions it — ignore that).
 - **Invite accept:** invite emails carry a token. App flow: user signs in (OTP — invitees with a pending invite DO receive codes even with no family) → `GET /api/setu/invite/{token}` (any signed-in role) → `{ familyName, inviterName, relation, expiresAt }` or 404/409/410 → `POST /api/setu/invite/accept?mode=mobile` `{ token }` → `200 { mid, fid, customToken }` → `signInWithCustomToken` again (claims changed). 403 means the invite email doesn't match the signed-in contact — show which email was invited.
 
 ### 4.3 Error & rate-limit contract (encode exactly)

@@ -161,6 +161,13 @@ function RegisterFamilyReal() {
   const [submitting, setSubmitting] = useState(false);
   const [showAddMember, setShowAddMember] = useState(false);
 
+  // Email-verification gate: before the family is created the manager proves
+  // they own the email via a 6-digit code. 'form' collects details; 'code'
+  // collects the OTP, then verify-code → registrationGrant → register.
+  const [phase, setPhase] = useState<'form' | 'code'>('form');
+  const [code, setCode] = useState('');
+  const [codeError, setCodeError] = useState('');
+
   // New-member draft state
   const [draftFirstName, setDraftFirstName] = useState('');
   const [draftLastName, setDraftLastName] = useState('');
@@ -206,6 +213,8 @@ function RegisterFamilyReal() {
     setAdditionalMembers(prev => prev.filter(m => m.id !== id));
   }, []);
 
+  // Step 1: validate the form, then email the manager a verification code and
+  // advance to the code step. The family is NOT created yet.
   async function handleSubmit() {
     setFieldErrors({});
     const errors: Record<string, string> = {};
@@ -220,6 +229,67 @@ function RegisterFamilyReal() {
 
     setSubmitting(true);
     try {
+      const res = await fetch('/api/setu/auth/send-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        // purpose:'register' so a brand-new email actually receives the code
+        // (sign-in's anti-enumeration silent-200 would otherwise send nothing).
+        body: JSON.stringify({ type: 'email', value: email, purpose: 'register' }),
+      });
+      if (res.status === 429) {
+        const body = await res.json().catch(() => ({})) as { resetAt?: string };
+        toast.error(
+          body.resetAt
+            ? `Too many code requests. Try again after ${new Date(body.resetAt).toLocaleTimeString()}.`
+            : 'Too many code requests. Please wait a few minutes.',
+        );
+        return;
+      }
+      if (!res.ok) {
+        toast.error('Could not send your verification code. Please try again.');
+        return;
+      }
+      setCode('');
+      setCodeError('');
+      setPhase('code');
+    } catch {
+      toast.error('Network error. Check your connection and try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  // Step 2: verify the emailed code, obtain a one-time registration grant, then
+  // create the family. The grant proves the manager owns the email.
+  async function handleVerifyAndCreate() {
+    if (!/^\d{6}$/.test(code.trim())) {
+      setCodeError('Enter the 6-digit code from your email.');
+      return;
+    }
+    setCodeError('');
+    setSubmitting(true);
+    try {
+      const verifyRes = await fetch('/api/setu/auth/verify-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'email', value: email, code: code.trim() }),
+      });
+      if (verifyRes.status === 400) {
+        setCodeError('That code is invalid or expired. Check your email or resend.');
+        return;
+      }
+      if (!verifyRes.ok) {
+        toast.error('Could not verify the code. Please try again.');
+        return;
+      }
+      const verified = await verifyRes.json() as { registrationGrant?: string; redirectTo?: string };
+      // Race: the email already belongs to a family / staff account → verify-code
+      // signed them in (no grant). Just follow the redirect.
+      if (!verified.registrationGrant) {
+        window.location.href = verified.redirectTo ?? '/family';
+        return;
+      }
+
       const res = await fetch('/api/setu/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -241,6 +311,7 @@ function RegisterFamilyReal() {
             ...(email ? { email } : {}),
             ...(phone ? { phone } : {}),
           })),
+          registrationGrant: verified.registrationGrant,
         }),
       });
 
@@ -248,16 +319,20 @@ function RegisterFamilyReal() {
         const body = await res.json().catch(() => ({})) as { error?: string; fields?: Record<string, string> };
         if (body.fields) {
           setFieldErrors(body.fields);
+          setPhase('form');
         } else {
           const messages: Record<string, string> = {
             'duplicate-contact-in-form':
               'The same email or phone is entered for more than one family member. Give each member a distinct email or phone, or leave it blank.',
             'duplicate-contact':
               "One of those contacts is already registered. If it's you, sign in instead.",
+            'registration-unverified':
+              'Your verification expired. Please resend the code and try again.',
           };
           toast.error(
             (body.error && messages[body.error]) ?? body.error ?? 'Registration failed. Please try again.',
           );
+          if (body.error === 'registration-unverified') setCode('');
         }
         return;
       }
@@ -515,13 +590,74 @@ function RegisterFamilyReal() {
         onClick={handleSubmit}
         disabled={submitting}
       >
-        {submitting ? 'Creating family…' : 'Create family & continue →'}
+        {submitting ? 'Sending code…' : 'Verify email & create family →'}
       </button>
       <p style={{ marginTop: 14, fontSize: 11, color: 'var(--muted)', textAlign: 'center' }}>
-        You can edit anything after — this is just to get you started.
+        We&apos;ll email a quick code to <strong>{email}</strong> to confirm it&apos;s yours, then create your family.
       </p>
     </>
   );
+
+  const codeStepContent = (
+    <>
+      <StepHeader step={2} of={2} label="Verify your email"/>
+      <h1 style={{ fontSize: 26, fontWeight: 400, marginTop: 18, marginBottom: 8 }}>Enter your code.</h1>
+      <p style={{ fontSize: 14, color: 'var(--body-text)', marginBottom: 22, lineHeight: 1.5 }}>
+        We emailed a 6-digit code to <strong>{email}</strong>. Enter it to confirm the email is yours and create your family.
+      </p>
+
+      <div className="field" style={{ marginBottom: 6 }}>
+        <label>6-digit code <span className="req">·</span></label>
+        <input
+          className="input"
+          type="text"
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          maxLength={6}
+          placeholder="000000"
+          value={code}
+          onChange={e => { setCode(e.target.value.replace(/\D/g, '').slice(0, 6)); setCodeError(''); }}
+          aria-label="6-digit verification code"
+          aria-invalid={Boolean(codeError)}
+          autoFocus
+          style={{ letterSpacing: '0.3em', fontSize: 18 }}
+        />
+        {codeError && <div className="hint" style={{ color: 'var(--err)' }}>{codeError}</div>}
+      </div>
+
+      <button
+        className="btn btn--p btn--block"
+        onClick={handleVerifyAndCreate}
+        disabled={submitting}
+        style={{ marginTop: 14 }}
+      >
+        {submitting ? 'Creating family…' : 'Verify & create my family →'}
+      </button>
+
+      <div className="row" style={{ gap: 16, marginTop: 14, justifyContent: 'center' }}>
+        <button
+          type="button"
+          className="focus-ring"
+          style={{ background: 'transparent', border: 0, color: 'var(--accent)', fontSize: 13, fontWeight: 600, padding: 0, cursor: 'pointer' }}
+          onClick={() => void handleSubmit()}
+          disabled={submitting}
+        >
+          Resend code
+        </button>
+        <button
+          type="button"
+          className="focus-ring"
+          style={{ background: 'transparent', border: 0, color: 'var(--body-text)', fontSize: 13, padding: 0, cursor: 'pointer' }}
+          onClick={() => { setPhase('form'); setCode(''); setCodeError(''); }}
+          disabled={submitting}
+        >
+          ← Back to details
+        </button>
+      </div>
+    </>
+  );
+
+  const content = phase === 'code' ? codeStepContent : formContent;
 
   return (
     <>
@@ -532,7 +668,7 @@ function RegisterFamilyReal() {
             <Link href="/register" className="focus-ring" style={{ background: 'transparent', border: 0, padding: 6, marginLeft: -6, marginBottom: 12, color: 'var(--body-text)', display: 'inline-flex' }}>
               <SetuIcon.back/>
             </Link>
-            {formContent}
+            {content}
           </div>
         </CspRoot>
       </div>
@@ -548,7 +684,7 @@ function RegisterFamilyReal() {
               <SetuLogo size={22}/>
             </div>
             <div style={{ maxWidth: 520, width: '100%', alignSelf: 'center', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', paddingBottom: 60 }}>
-              {formContent}
+              {content}
             </div>
             <div style={{ fontSize: 12, color: 'var(--muted)', display: 'flex', gap: 18 }}>
               <span>setu.chinmayatoronto.org</span>

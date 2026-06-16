@@ -27,6 +27,9 @@ vi.mock('@/features/setu/auth/member-roles', () => ({
 vi.mock('@/features/setu/teacher/assignments', () => ({
   isTeacherAssigned: vi.fn(async () => false),
 }));
+vi.mock('@/features/setu/registration/registration-grant', () => ({
+  issueRegistrationGrant: vi.fn(async () => 'grant-tok-xyz'),
+}));
 
 import { POST } from '../route';
 import { verifyCode } from '@/features/check-in/shared';
@@ -162,7 +165,7 @@ describe('POST /api/setu/auth/verify-code', () => {
     );
   });
 
-  it('correct code with no family redirects to /register', async () => {
+  it('correct code with no family redirects to /register AND issues a registration grant (email)', async () => {
     (verifyCode as ReturnType<typeof vi.fn>).mockResolvedValue(true);
     (findSetuFamilyByContact as ReturnType<typeof vi.fn>).mockResolvedValue({
       source: null, fid: null, mid: null, legacyFid: null, family: null,
@@ -171,7 +174,22 @@ describe('POST /api/setu/auth/verify-code', () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.redirectTo).toBe('/register?contact=verified');
+    // The grant proves the email was OTP-verified; register requires it.
+    expect(body.registrationGrant).toBe('grant-tok-xyz');
     expect(mockSetCustomUserClaims).not.toHaveBeenCalled();
+    // No session minted for a contact with no family.
+    expect(res.headers.get('set-cookie')).toBeNull();
+  });
+
+  it('does NOT issue a registration grant for a phone with no family (phone reg unsupported v1)', async () => {
+    (verifyCode as ReturnType<typeof vi.fn>).mockResolvedValue(true);
+    (findSetuFamilyByContact as ReturnType<typeof vi.fn>).mockResolvedValue({
+      source: null, fid: null, mid: null, legacyFid: null, family: null,
+    });
+    const res = await POST(makeRequest({ type: 'phone', value: '4165550000', code: '111111' }));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.registrationGrant).toBeUndefined();
   });
 
   it('creates user if not found in Firebase Auth', async () => {

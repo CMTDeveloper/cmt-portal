@@ -6,6 +6,7 @@ import {
   checkAndRecordOtpRateLimit,
   normalizeContact,
   storeVerificationCode,
+  REGISTER_RATE_LIMIT_MAX,
 } from '@/features/check-in/shared';
 import { resolveSender } from '@/lib/aws/resolve-sender';
 import { findSetuFamilyByContact } from '@/features/setu/auth/find-family-by-contact';
@@ -19,6 +20,13 @@ import { normalizeContactForKey } from '@cmt/shared-domain/setu';
 const bodySchema = z.object({
   type: z.enum(['email', 'phone']),
   value: z.string().min(3),
+  // 'signin' (default): anti-enumeration — unknown contacts get a silent 200
+  // with NO code. 'register': the user is explicitly signing up, so we DO send
+  // a code to a brand-new email (otherwise the OTP-gated registration flow can
+  // never deliver a code to a net-new family). Sending a signup code to an
+  // email leaks nothing to a third party — only the mailbox owner sees it, and
+  // the per-contact rate limit bounds abuse.
+  purpose: z.enum(['signin', 'register']).optional(),
 });
 
 function generateCode(): string {
@@ -36,7 +44,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'bad-request' }, { status: 400 });
   }
 
-  const { type, value } = parsed.data;
+  const { type, value, purpose } = parsed.data;
   const normalized = normalizeContact(type, value);
   const hashPrefix = createHash('sha256').update(normalized).digest('hex').slice(0, 8);
 
@@ -44,6 +52,19 @@ export async function POST(req: Request) {
   if (!rate.allowed) {
     console.log(`[send-code] hash=${hashPrefix} type=${type} → rate-limited`);
     return NextResponse.json({ error: 'rate-limited', resetAt: rate.resetAt }, { status: 429 });
+  }
+
+  // purpose=register sends a code to UNKNOWN addresses (so net-new families get
+  // their OTP). The per-contact limit above caps one target, but not a spray of
+  // many distinct victim addresses from one host — add a per-IP bucket for the
+  // register-send path so the new "email any address a signup code" capability
+  // can't be abused as an unsolicited-mail amplifier.
+  if (purpose === 'register') {
+    const ip = req.headers.get('x-forwarded-for') ?? 'unknown';
+    const ipRate = await checkAndRecordOtpRateLimit(`register-send:${ip}`, REGISTER_RATE_LIMIT_MAX);
+    if (!ipRate.allowed) {
+      return NextResponse.json({ error: 'rate-limited', resetAt: ipRate.resetAt }, { status: 429 });
+    }
   }
 
   // Look up Setu family first; fall back to legacy roster.
@@ -99,7 +120,17 @@ export async function POST(req: Request) {
     }
   }
 
-  if (result.source === null && !hasPendingInvite && !hasAdminRoleUser) {
+  // Anti-enumeration silent-200 for SIGN-IN: an unknown contact (no family, no
+  // pending invite, no admin role) gets a 200 with no code, so probing can't
+  // tell registered from unregistered. REGISTRATION explicitly opts out
+  // (purpose='register') — a net-new family must receive its code, and the
+  // uniform 200 + per-contact rate limit keep it enumeration-safe.
+  if (
+    purpose !== 'register' &&
+    result.source === null &&
+    !hasPendingInvite &&
+    !hasAdminRoleUser
+  ) {
     return NextResponse.json({ success: true }, { status: 200 });
   }
 

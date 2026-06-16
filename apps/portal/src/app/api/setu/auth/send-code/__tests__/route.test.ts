@@ -7,6 +7,7 @@ vi.mock('@/features/check-in/shared', () => ({
   ),
   checkAndRecordOtpRateLimit: vi.fn(),
   storeVerificationCode: vi.fn(),
+  REGISTER_RATE_LIMIT_MAX: 10,
 }));
 vi.mock('@/lib/aws/resolve-sender', () => ({
   resolveSender: vi.fn(),
@@ -57,13 +58,38 @@ describe('POST /api/setu/auth/send-code', () => {
     expect(res.status).toBe(400);
   });
 
-  it('returns 200 when contact not found (no enumeration)', async () => {
+  it('returns 200 when contact not found (no enumeration) — sign-in path sends NOTHING', async () => {
     (findSetuFamilyByContact as ReturnType<typeof vi.fn>).mockResolvedValue({
       source: null, fid: null, mid: null, legacyFid: null, family: null,
     });
     const res = await POST(makeRequest({ type: 'email', value: 'unknown@example.com' }));
     expect(res.status).toBe(200);
     expect(storeVerificationCode).not.toHaveBeenCalled();
+    expect(mockSendEmail).not.toHaveBeenCalled();
+  });
+
+  it('purpose=register DELIVERS a code to a brand-new (unknown) email', async () => {
+    // Without this, the OTP-gated registration flow could never send a net-new
+    // family its code (the silent-200 above would swallow it).
+    (findSetuFamilyByContact as ReturnType<typeof vi.fn>).mockResolvedValue({
+      source: null, fid: null, mid: null, legacyFid: null, family: null,
+    });
+    const res = await POST(makeRequest({ type: 'email', value: 'brandnew@example.com', purpose: 'register' }));
+    expect(res.status).toBe(200);
+    expect(storeVerificationCode).toHaveBeenCalled();
+    expect(mockSendEmail).toHaveBeenCalledWith(expect.objectContaining({ to: 'brandnew@example.com' }));
+  });
+
+  it('purpose=register is bounded by a per-IP bucket (429 when the IP bucket is exhausted)', async () => {
+    // First call (per-contact) passes, second call (per-IP register-send) fails.
+    (checkAndRecordOtpRateLimit as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({ allowed: true })
+      .mockResolvedValueOnce({ allowed: false, resetAt: '2026-06-16T12:00:00.000Z' });
+    const res = await POST(
+      makeRequest({ type: 'email', value: 'spray@example.com', purpose: 'register' }),
+    );
+    expect(res.status).toBe(429);
+    expect(checkAndRecordOtpRateLimit).toHaveBeenLastCalledWith(expect.stringMatching(/^register-send:/), 10);
     expect(mockSendEmail).not.toHaveBeenCalled();
   });
 

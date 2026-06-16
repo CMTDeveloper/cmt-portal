@@ -14,6 +14,7 @@ import {
   buildSessionClaimsForContact,
   hasSession,
 } from '@/features/setu/auth/build-session-claims';
+import { issueRegistrationGrant } from '@/features/setu/registration/registration-grant';
 
 
 const bodySchema = z.object({
@@ -48,7 +49,18 @@ export async function POST(req: Request) {
   });
 
   if (!hasSession(sessionResult)) {
-    return NextResponse.json({ redirectTo: sessionResult.redirectTo }, { status: 200 });
+    // No family for this contact → the user is headed to registration. For an
+    // email, mint a one-time registration grant proving this email was just
+    // OTP-verified; /api/setu/register requires it before creating the family
+    // (closes the unauthenticated-registration / contact-squatting hole). Phone
+    // registration is not supported in v1, so no grant is issued for phone.
+    const body: { redirectTo: string; registrationGrant?: string } = {
+      redirectTo: sessionResult.redirectTo,
+    };
+    if (type === 'email') {
+      body.registrationGrant = await issueRegistrationGrant(value);
+    }
+    return NextResponse.json(body, { status: 200 });
   }
 
   const { uid, claims, redirectTo: baseRedirectTo } = sessionResult;

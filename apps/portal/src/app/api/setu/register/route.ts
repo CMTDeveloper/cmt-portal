@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { flags } from '@/lib/flags';
 import { registerFamily, type AdditionalMember } from '@/features/setu/registration/register-family';
+import { consumeRegistrationGrant } from '@/features/setu/registration/registration-grant';
 import { portalAuth } from '@cmt/firebase-shared/admin/auth';
 import {
   createPortalSessionCookie,
@@ -38,6 +39,10 @@ const bodySchema = z.object({
     gender: z.enum(['Male', 'Female', 'PreferNotToSay']),
   }),
   additionalMembers: z.array(additionalMemberSchema).default([]),
+  // Proof that THIS email was just OTP-verified — issued by verify-code on the
+  // no-family path, required here so registration can't mint a family-manager
+  // session for an email the caller doesn't own. Consumed below.
+  registrationGrant: z.string().min(1),
   // Mobile clients pass mode='mobile' (in body or as ?mode=mobile in URL) to
   // get back a `customToken` instead of an httpOnly session cookie. They
   // exchange that via the Firebase SDK locally and use the resulting ID
@@ -68,6 +73,15 @@ export async function POST(req: Request) {
   const rate = await checkAndRecordOtpRateLimit(`register:${ip}`, REGISTER_RATE_LIMIT_MAX);
   if (!rate.allowed) {
     return NextResponse.json({ error: 'rate-limited', resetAt: rate.resetAt }, { status: 429 });
+  }
+
+  // OWNERSHIP GATE: consume the one-time registration grant proving this email
+  // was just OTP-verified (issued by verify-code). Done BEFORE any write so an
+  // unverified caller never creates a family or reserves a contact key. The
+  // grant is bound to this exact email, so it can't be replayed for another.
+  const verified = await consumeRegistrationGrant(parsed.data.registrationGrant, parsed.data.email);
+  if (!verified) {
+    return NextResponse.json({ error: 'registration-unverified' }, { status: 403 });
   }
 
   // Strip undefined optional fields to satisfy exactOptionalPropertyTypes in RegisterFamilyInput

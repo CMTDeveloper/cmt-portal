@@ -4,6 +4,9 @@ vi.mock('@/lib/flags', () => ({ flags: { setuAuth: true } }));
 vi.mock('@/features/setu/registration/register-family', () => ({
   registerFamily: vi.fn(),
 }));
+vi.mock('@/features/setu/registration/registration-grant', () => ({
+  consumeRegistrationGrant: vi.fn(),
+}));
 // Preserve the real contact helpers the route also pulls from this barrel
 // (sha256Hex, normalizeContact) while overriding the rate-limit surface.
 vi.mock('@/features/check-in/shared', async (importActual) => {
@@ -25,6 +28,7 @@ vi.mock('@cmt/firebase-shared/admin/session', () => ({
 import { POST } from '../route';
 import { checkAndRecordOtpRateLimit } from '@/features/check-in/shared';
 import { registerFamily } from '@/features/setu/registration/register-family';
+import { consumeRegistrationGrant } from '@/features/setu/registration/registration-grant';
 import { portalAuth } from '@cmt/firebase-shared/admin/auth';
 import {
   createPortalSessionCookie,
@@ -43,6 +47,7 @@ const validBody = {
   location: 'Brampton',
   manager: { firstName: 'Raj', lastName: 'Patel', gender: 'Male' },
   additionalMembers: [],
+  registrationGrant: 'grant-token-abc',
 };
 
 function makeRequest(body: unknown) {
@@ -71,6 +76,8 @@ beforeEach(() => {
     fid: 'FAM001ABCD12',
     mid: 'FAM001ABCD12-01',
   });
+  // Default: a valid, matching registration grant (email was OTP-verified).
+  (consumeRegistrationGrant as ReturnType<typeof vi.fn>).mockResolvedValue(true);
 });
 
 describe('POST /api/setu/register', () => {
@@ -106,6 +113,28 @@ describe('POST /api/setu/register', () => {
       manager: { lastName: 'Patel', gender: 'Male' },
     }));
     expect(res.status).toBe(400);
+  });
+
+  it('returns 400 when the registrationGrant is missing (ownership proof required)', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { registrationGrant, ...rest } = validBody;
+    const res = await POST(makeRequest(rest));
+    expect(res.status).toBe(400);
+    expect(registerFamily).not.toHaveBeenCalled();
+  });
+
+  it('returns 403 and creates NOTHING when the grant is invalid/expired/mismatched', async () => {
+    (consumeRegistrationGrant as ReturnType<typeof vi.fn>).mockResolvedValue(false);
+    const res = await POST(makeRequest(validBody));
+    expect(res.status).toBe(403);
+    expect((await res.json()).error).toBe('registration-unverified');
+    expect(registerFamily).not.toHaveBeenCalled();
+    expect(mockSetCustomUserClaims).not.toHaveBeenCalled();
+  });
+
+  it('consumes the grant against the submitted email before any write', async () => {
+    await POST(makeRequest(validBody));
+    expect(consumeRegistrationGrant).toHaveBeenCalledWith('grant-token-abc', 'raj@example.com');
   });
 
   it('returns 429 when the per-IP register rate limit is exceeded — and does NOT call registerFamily', async () => {

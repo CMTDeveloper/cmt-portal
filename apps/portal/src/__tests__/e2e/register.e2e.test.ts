@@ -57,6 +57,10 @@ describe.skipIf(!hasUatCreds)(
       const { POST } = await import(
         '@/app/api/setu/register/route'
       );
+      // Registration now requires proof the email was OTP-verified — issue a
+      // real grant (as verify-code would) so the route can consume it.
+      const { issueRegistrationGrant } = await import('@/features/setu/registration/registration-grant');
+      const registrationGrant = await issueRegistrationGrant(EMAIL);
 
       const body = {
         email: EMAIL,
@@ -65,6 +69,7 @@ describe.skipIf(!hasUatCreds)(
         location: 'Brampton',
         manager: { firstName: 'E2EFirst', lastName: 'E2ELast', gender: 'PreferNotToSay' },
         additionalMembers: [],
+        registrationGrant,
       };
 
       const req = new Request('http://localhost/api/setu/register', {
@@ -164,6 +169,10 @@ describe.skipIf(!hasUatCreds)(
 
     it('second registration with same email returns 409 duplicate-contact', async () => {
       const { POST } = await import('@/app/api/setu/register/route');
+      // A fresh grant (the first was consumed); the route consumes it, then
+      // registerFamily throws duplicate-contact → 409.
+      const { issueRegistrationGrant } = await import('@/features/setu/registration/registration-grant');
+      const registrationGrant = await issueRegistrationGrant(EMAIL);
       const body = {
         email: EMAIL,
         phone: `555${(Date.now() + 1).toString(36).replace(/[^0-9]/g, '0').slice(0, 7)}`,
@@ -171,6 +180,7 @@ describe.skipIf(!hasUatCreds)(
         location: 'Brampton' as const,
         manager: { firstName: 'Dup', lastName: 'Manager', gender: 'PreferNotToSay' as const },
         additionalMembers: [],
+        registrationGrant,
       };
       const req = new Request('http://localhost/api/setu/register', {
         method: 'POST',

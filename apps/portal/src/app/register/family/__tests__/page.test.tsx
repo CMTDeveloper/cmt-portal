@@ -62,6 +62,50 @@ beforeEach(() => {
   window.location.href = '';
 });
 
+// ── Flow helpers ────────────────────────────────────────────────────────────
+// Registration is now OTP-gated: fill the form → submit emails a code →
+// enter the code → verify-code returns a one-time grant → register creates the
+// family. These helpers drive that 3-fetch flow.
+
+type Json = { ok: boolean; status?: number; json: () => Promise<unknown> };
+
+/** Queue: send-code 200, verify-code 200 {registrationGrant}, then `register`. */
+function queueOtpThenRegister(register: Json) {
+  fetchMock
+    .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ success: true }) })
+    .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ registrationGrant: 'grant-xyz' }) })
+    .mockResolvedValueOnce(register);
+}
+
+async function fillForm(
+  user: ReturnType<typeof userEvent.setup>,
+  opts: { family: string; location: string; first: string; last: string },
+) {
+  const textInputs = document.querySelectorAll('input[type="text"]');
+  await user.type(textInputs[0] as HTMLElement, opts.family);
+  await user.click(screen.getAllByRole('button', { name: opts.location })[0]!);
+  await user.type(textInputs[1] as HTMLElement, opts.first);
+  await user.type(textInputs[2] as HTMLElement, opts.last);
+}
+
+/** Click "Verify email & create family", wait for the code step to appear. */
+async function submitToCodeStep(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getAllByRole('button', { name: /verify email & create family/i })[0]!);
+  await waitFor(() => expect(screen.getAllByText(/enter your code/i).length).toBeGreaterThan(0));
+}
+
+/** Type the code and click "Verify & create my family". (Mobile + desktop trees
+ *  both render, so every element is duplicated — pick the first.) */
+async function enterCodeAndCreate(user: ReturnType<typeof userEvent.setup>, code = '123456') {
+  await user.type(screen.getAllByLabelText(/6-digit verification code/i)[0]!, code);
+  await user.click(screen.getAllByRole('button', { name: /verify & create my family/i })[0]!);
+}
+
+function registerCallBody(): Record<string, unknown> {
+  const call = fetchMock.mock.calls.find((c) => c[0] === '/api/setu/register');
+  return JSON.parse((call?.[1]?.body as string) ?? '{}');
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Flag-off: renders prototype
 // ─────────────────────────────────────────────────────────────────────────────
@@ -158,75 +202,59 @@ describe('RegisterFamilyPage — client-side validation', () => {
 // Happy path submit
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe('RegisterFamilyPage — successful submit', () => {
-  it('posts to /api/setu/register and navigates to redirectTo', async () => {
-    fetchMock.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ redirectTo: '/family' }),
-    });
+describe('RegisterFamilyPage — successful submit (OTP-gated)', () => {
+  it('clicking submit emails a code first (no register yet), then code → register → redirect', async () => {
+    queueOtpThenRegister({ ok: true, json: async () => ({ redirectTo: '/family' }) });
 
     const user = userEvent.setup();
     render(<RegisterFamilyPage />);
+    await fillForm(user, { family: 'Sharma', location: 'Mississauga', first: 'Priya', last: 'Sharma' });
 
-    // Fill family name
-    const textInputs = document.querySelectorAll('input[type="text"]');
-    // First text input is family name
-    await user.type(textInputs[0] as HTMLElement, 'Sharma');
+    await submitToCodeStep(user);
+    // The FIRST call is send-code — NOT register (the family isn't created yet).
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/setu/auth/send-code');
+    expect(fetchMock.mock.calls.some((c) => c[0] === '/api/setu/register')).toBe(false);
 
-    // Select Mississauga
-    const msBtn = screen.getAllByRole('button', { name: 'Mississauga' });
-    await user.click(msBtn[0]!);
-
-    // Fill manager first + last name (inputs after family name)
-    await user.type(textInputs[1] as HTMLElement, 'Priya');
-    await user.type(textInputs[2] as HTMLElement, 'Sharma');
-
-    // Submit
-    const submitBtns = screen.getAllByRole('button', { name: /create family/i });
-    await user.click(submitBtns[0]!);
+    await enterCodeAndCreate(user);
 
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith(
-        '/api/setu/register',
-        expect.objectContaining({
-          method: 'POST',
-          body: expect.stringContaining('Sharma'),
-        }),
-      );
+      const reg = fetchMock.mock.calls.find((c) => c[0] === '/api/setu/register');
+      expect(reg).toBeTruthy();
+      expect(reg?.[1]?.body as string).toContain('Sharma');
     });
+    await waitFor(() => expect(window.location.href).toBe('/family'));
+  });
+
+  it('the register POST carries the email/phone from search params AND the grant', async () => {
+    queueOtpThenRegister({ ok: true, json: async () => ({ redirectTo: '/family' }) });
+
+    const user = userEvent.setup();
+    render(<RegisterFamilyPage />);
+    await fillForm(user, { family: 'Verma', location: 'Brampton', first: 'Amit', last: 'Verma' });
+    await submitToCodeStep(user);
+    await enterCodeAndCreate(user);
 
     await waitFor(() => {
-      expect(window.location.href).toBe('/family');
+      const body = registerCallBody();
+      expect(body.email).toBe('raj@example.com');
+      expect(body.phone).toBe('4165550100');
+      expect(body.registrationGrant).toBe('grant-xyz');
     });
   });
 
-  it('posts email and phone from search params', async () => {
-    fetchMock.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ redirectTo: '/family' }),
-    });
+  it('a wrong code shows an inline error and never calls register', async () => {
+    fetchMock
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ success: true }) }) // send-code
+      .mockResolvedValueOnce({ ok: false, status: 400, json: async () => ({ error: 'invalid-or-expired' }) }); // verify-code
 
     const user = userEvent.setup();
     render(<RegisterFamilyPage />);
+    await fillForm(user, { family: 'Sharma', location: 'Brampton', first: 'Priya', last: 'Sharma' });
+    await submitToCodeStep(user);
+    await enterCodeAndCreate(user, '000000');
 
-    const textInputs = document.querySelectorAll('input[type="text"]');
-    await user.type(textInputs[0] as HTMLElement, 'Verma');
-
-    const bBtn = screen.getAllByRole('button', { name: 'Brampton' });
-    await user.click(bBtn[0]!);
-
-    await user.type(textInputs[1] as HTMLElement, 'Amit');
-    await user.type(textInputs[2] as HTMLElement, 'Verma');
-
-    const submitBtns = screen.getAllByRole('button', { name: /create family/i });
-    await user.click(submitBtns[0]!);
-
-    await waitFor(() => {
-      const call = fetchMock.mock.calls[0];
-      const body = JSON.parse(call?.[1]?.body as string) as { email?: string; phone?: string };
-      expect(body.email).toBe('raj@example.com');
-      expect(body.phone).toBe('4165550100');
-    });
+    await waitFor(() => expect(screen.getAllByText(/invalid or expired/i).length).toBeGreaterThan(0));
+    expect(fetchMock.mock.calls.some((c) => c[0] === '/api/setu/register')).toBe(false);
   });
 });
 
@@ -234,81 +262,45 @@ describe('RegisterFamilyPage — successful submit', () => {
 // Server validation errors surface as field errors
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe('RegisterFamilyPage — server validation errors', () => {
-  it('surfaces field errors returned from server', async () => {
-    fetchMock.mockResolvedValueOnce({
+describe('RegisterFamilyPage — server validation errors (after OTP)', () => {
+  it('surfaces field errors returned by register and returns to the form', async () => {
+    queueOtpThenRegister({
       ok: false,
       status: 400,
-      json: async () => ({
-        error: 'validation-error',
-        fields: { familyName: 'Family name already taken.' },
-      }),
+      json: async () => ({ error: 'validation-error', fields: { familyName: 'Family name already taken.' } }),
     });
 
     const user = userEvent.setup();
     render(<RegisterFamilyPage />);
-
-    const textInputs = document.querySelectorAll('input[type="text"]');
-    await user.type(textInputs[0] as HTMLElement, 'Patel');
-
-    const bBtn = screen.getAllByRole('button', { name: 'Brampton' });
-    await user.click(bBtn[0]!);
-
-    await user.type(textInputs[1] as HTMLElement, 'Raj');
-    await user.type(textInputs[2] as HTMLElement, 'Patel');
-
-    const submitBtns = screen.getAllByRole('button', { name: /create family/i });
-    await user.click(submitBtns[0]!);
+    await fillForm(user, { family: 'Patel', location: 'Brampton', first: 'Raj', last: 'Patel' });
+    await submitToCodeStep(user);
+    await enterCodeAndCreate(user);
 
     await waitFor(() => {
       expect(screen.getAllByText(/family name already taken/i).length).toBeGreaterThan(0);
     });
   });
 
-  it('shows the existing fallback toast for an unrecognized server error code', async () => {
-    fetchMock.mockResolvedValueOnce({
-      ok: false,
-      status: 409,
-      json: async () => ({ error: 'some-unmapped-code' }),
-    });
+  it('shows the fallback toast for an unrecognized register error code', async () => {
+    queueOtpThenRegister({ ok: false, status: 409, json: async () => ({ error: 'some-unmapped-code' }) });
 
     const user = userEvent.setup();
     render(<RegisterFamilyPage />);
+    await fillForm(user, { family: 'Patel', location: 'Brampton', first: 'Raj', last: 'Patel' });
+    await submitToCodeStep(user);
+    await enterCodeAndCreate(user);
 
-    const textInputs = document.querySelectorAll('input[type="text"]');
-    await user.type(textInputs[0] as HTMLElement, 'Patel');
-
-    const bBtn = screen.getAllByRole('button', { name: 'Brampton' });
-    await user.click(bBtn[0]!);
-
-    await user.type(textInputs[1] as HTMLElement, 'Raj');
-    await user.type(textInputs[2] as HTMLElement, 'Patel');
-
-    const submitBtns = screen.getAllByRole('button', { name: /create family/i });
-    await user.click(submitBtns[0]!);
-
-    await waitFor(() => {
-      expect(toastMock.error).toHaveBeenCalledWith('some-unmapped-code');
-    });
+    await waitFor(() => expect(toastMock.error).toHaveBeenCalledWith('some-unmapped-code'));
   });
 
   it('shows friendly intra-family copy for duplicate-contact-in-form', async () => {
-    fetchMock.mockResolvedValueOnce({
-      ok: false,
-      status: 409,
-      json: async () => ({ error: 'duplicate-contact-in-form' }),
-    });
+    queueOtpThenRegister({ ok: false, status: 409, json: async () => ({ error: 'duplicate-contact-in-form' }) });
 
     const user = userEvent.setup();
     render(<RegisterFamilyPage />);
-
-    const textInputs = document.querySelectorAll('input[type="text"]');
-    await user.type(textInputs[0] as HTMLElement, 'Patel');
-    await user.click(screen.getAllByRole('button', { name: 'Brampton' })[0]!);
-    await user.type(textInputs[1] as HTMLElement, 'Raj');
-    await user.type(textInputs[2] as HTMLElement, 'Patel');
-
-    await user.click(screen.getAllByRole('button', { name: /create family/i })[0]!);
+    await fillForm(user, { family: 'Patel', location: 'Brampton', first: 'Raj', last: 'Patel' });
+    await submitToCodeStep(user);
+    await enterCodeAndCreate(user);
 
     await waitFor(() => {
       expect(toastMock.error).toHaveBeenCalledWith(
@@ -318,27 +310,30 @@ describe('RegisterFamilyPage — server validation errors', () => {
   });
 
   it('shows friendly already-registered copy for duplicate-contact', async () => {
-    fetchMock.mockResolvedValueOnce({
-      ok: false,
-      status: 409,
-      json: async () => ({ error: 'duplicate-contact' }),
-    });
+    queueOtpThenRegister({ ok: false, status: 409, json: async () => ({ error: 'duplicate-contact' }) });
 
     const user = userEvent.setup();
     render(<RegisterFamilyPage />);
-
-    const textInputs = document.querySelectorAll('input[type="text"]');
-    await user.type(textInputs[0] as HTMLElement, 'Patel');
-    await user.click(screen.getAllByRole('button', { name: 'Brampton' })[0]!);
-    await user.type(textInputs[1] as HTMLElement, 'Raj');
-    await user.type(textInputs[2] as HTMLElement, 'Patel');
-
-    await user.click(screen.getAllByRole('button', { name: /create family/i })[0]!);
+    await fillForm(user, { family: 'Patel', location: 'Brampton', first: 'Raj', last: 'Patel' });
+    await submitToCodeStep(user);
+    await enterCodeAndCreate(user);
 
     await waitFor(() => {
-      expect(toastMock.error).toHaveBeenCalledWith(
-        expect.stringMatching(/already registered.*sign in/i),
-      );
+      expect(toastMock.error).toHaveBeenCalledWith(expect.stringMatching(/already registered.*sign in/i));
+    });
+  });
+
+  it('an expired grant (registration-unverified) prompts a resend', async () => {
+    queueOtpThenRegister({ ok: false, status: 403, json: async () => ({ error: 'registration-unverified' }) });
+
+    const user = userEvent.setup();
+    render(<RegisterFamilyPage />);
+    await fillForm(user, { family: 'Patel', location: 'Brampton', first: 'Raj', last: 'Patel' });
+    await submitToCodeStep(user);
+    await enterCodeAndCreate(user);
+
+    await waitFor(() => {
+      expect(toastMock.error).toHaveBeenCalledWith(expect.stringMatching(/verification expired.*resend/i));
     });
   });
 });
@@ -430,60 +425,33 @@ describe('RegisterFamilyPage — additional members', () => {
     });
   });
 
-  it('included additional members in POST body', async () => {
-    fetchMock.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ redirectTo: '/family' }),
-    });
+  it('included additional members in the register POST body', async () => {
+    queueOtpThenRegister({ ok: true, json: async () => ({ redirectTo: '/family' }) });
 
     const user = userEvent.setup();
     render(<RegisterFamilyPage />);
+    await fillForm(user, { family: 'Gupta', location: 'Scarborough', first: 'Sunita', last: 'Gupta' });
 
-    // Fill form
-    const textInputs = document.querySelectorAll('input[type="text"]');
-    await user.type(textInputs[0] as HTMLElement, 'Gupta');
+    await user.click(screen.getAllByRole('button', { name: /add another member/i })[0]!);
+    await user.type(screen.getAllByLabelText(/member first name/i)[0]!, 'Rahul');
+    await user.type(screen.getAllByLabelText(/member last name/i)[0]!, 'Gupta');
+    await user.click(screen.getAllByRole('button', { name: /^add member$/i })[0]!);
 
-    const bBtn = screen.getAllByRole('button', { name: 'Scarborough' });
-    await user.click(bBtn[0]!);
-
-    await user.type(textInputs[1] as HTMLElement, 'Sunita');
-    await user.type(textInputs[2] as HTMLElement, 'Gupta');
-
-    // Add additional member
-    const addBtns = screen.getAllByRole('button', { name: /add another member/i });
-    await user.click(addBtns[0]!);
-
-    const memberFirstInput = screen.getAllByLabelText(/member first name/i);
-    const memberLastInput = screen.getAllByLabelText(/member last name/i);
-    await user.type(memberFirstInput[0]!, 'Rahul');
-    await user.type(memberLastInput[0]!, 'Gupta');
-
-    const addMemberBtns = screen.getAllByRole('button', { name: /^add member$/i });
-    await user.click(addMemberBtns[0]!);
-
-    const submitBtns = screen.getAllByRole('button', { name: /create family/i });
-    await user.click(submitBtns[0]!);
+    await submitToCodeStep(user);
+    await enterCodeAndCreate(user);
 
     await waitFor(() => {
-      const call = fetchMock.mock.calls[0];
-      const body = JSON.parse(call?.[1]?.body as string) as {
-        additionalMembers?: Array<{ firstName: string }>;
-      };
-      expect(body.additionalMembers?.some(m => m.firstName === 'Rahul')).toBe(true);
+      const body = registerCallBody() as { additionalMembers?: Array<{ firstName: string }> };
+      expect(body.additionalMembers?.some((m) => m.firstName === 'Rahul')).toBe(true);
     });
   });
 
-  it("includes a member's email and phone in the POST body", async () => {
-    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ redirectTo: '/family' }) });
+  it("includes a member's email and phone in the register POST body", async () => {
+    queueOtpThenRegister({ ok: true, json: async () => ({ redirectTo: '/family' }) });
 
     const user = userEvent.setup();
     render(<RegisterFamilyPage />);
-
-    const textInputs = document.querySelectorAll('input[type="text"]');
-    await user.type(textInputs[0] as HTMLElement, 'Gupta');
-    await user.click(screen.getAllByRole('button', { name: 'Brampton' })[0]!);
-    await user.type(textInputs[1] as HTMLElement, 'Sunita');
-    await user.type(textInputs[2] as HTMLElement, 'Gupta');
+    await fillForm(user, { family: 'Gupta', location: 'Brampton', first: 'Sunita', last: 'Gupta' });
 
     await user.click(screen.getAllByRole('button', { name: /add another member/i })[0]!);
     await user.type(screen.getAllByLabelText(/member first name/i)[0]!, 'Anil');
@@ -492,10 +460,11 @@ describe('RegisterFamilyPage — additional members', () => {
     await user.type(screen.getAllByLabelText(/member phone/i)[0]!, '4165559999');
     await user.click(screen.getAllByRole('button', { name: /^add member$/i })[0]!);
 
-    await user.click(screen.getAllByRole('button', { name: /create family/i })[0]!);
+    await submitToCodeStep(user);
+    await enterCodeAndCreate(user);
 
     await waitFor(() => {
-      const body = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string) as {
+      const body = registerCallBody() as {
         additionalMembers?: Array<{ firstName: string; email?: string; phone?: string }>;
       };
       const anil = body.additionalMembers?.find((m) => m.firstName === 'Anil');

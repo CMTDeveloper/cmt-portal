@@ -28,6 +28,9 @@ vi.mock('@/features/setu/teacher/assignments', () => ({
 vi.mock('@/features/setu/auth/magic-links', () => ({
   createMagicLink: vi.fn().mockResolvedValue({ token: 'mock-token', expiresAt: new Date() }),
 }));
+vi.mock('@/features/setu/registration/registration-grant', () => ({
+  issueRegistrationGrant: vi.fn(async () => 'grant-tok'),
+}));
 
 // ── AWS sender ────────────────────────────────────────────────────────────────
 const fakeSender = { sendEmail: vi.fn(), sendSMS: vi.fn() };
