@@ -364,7 +364,6 @@ export default async function ProgramEnrollPage({ params }: Props) {
                   {([
                     [isBv ? 'Sunday classes' : 'Program sessions',
                       `${fmtDate(enrolledOffering.startDate)}${enrolledOffering.endDate ? ` – ${fmtDate(enrolledOffering.endDate)}` : ' · ongoing'}`],
-                    ...(isBv ? [['Year-end performance', 'Last week of the program']] : []),
                   ] as [string, string][]).map(([t, sub], i) => (
                     <div key={i} className="row" style={{ gap: 12, padding: '10px 12px', background: 'var(--bg)', borderRadius: 'var(--radiusSm)' }}>
                       <div style={{ flex: '0 0 auto', width: 28, height: 28, borderRadius: '50%', background: 'var(--accentSoft)', color: 'var(--accentDeep)', display: 'grid', placeItems: 'center' }}>
