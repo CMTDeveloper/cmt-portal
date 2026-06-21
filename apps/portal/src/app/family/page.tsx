@@ -212,7 +212,7 @@ export default async function FamilyDashboardPage() {
               {isEnrolled ? (
                 <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>Suggested Bala Vihar contribution for this year.</div>
               ) : (
-                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>A charitable gift to Chinmaya Mission Toronto — any amount welcome.</div>
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>Your Bala Vihar contribution is set by the mission, shown when you enroll.</div>
               )}
             </div>
 
@@ -417,8 +417,8 @@ export default async function FamilyDashboardPage() {
                 </>
               ) : (
                 <div style={{ marginBottom: 18 }}>
-                  <span style={{ fontSize: 28, fontWeight: 600, letterSpacing: '-0.02em' }}>Any amount welcome</span>
-                  <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6 }}>A charitable gift to Chinmaya Mission Toronto.</div>
+                  <span style={{ fontSize: 28, fontWeight: 600, letterSpacing: '-0.02em' }}>Set at enrollment</span>
+                  <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6 }}>Your Bala Vihar contribution for the year is set by the mission — shown when you enroll.</div>
                 </div>
               )}
               {showGive && (
