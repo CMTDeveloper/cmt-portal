@@ -22,6 +22,8 @@ afterEach(() => {
   delete process.env.NEXT_PUBLIC_FEATURE_CHECK_IN_NOTIFY;
   delete process.env.SETU_EMAIL_ALLOWLIST;
   delete process.env.SETU_PHONE_ALLOWLIST;
+  delete process.env.SETU_EMAIL_REDIRECT_TO;
+  delete process.env.SETU_PHONE_REDIRECT_TO;
 });
 
 describe('resolveSender', () => {
@@ -124,5 +126,78 @@ describe('resolveSender — SETU_PHONE_ALLOWLIST', () => {
     await sender.sendEmail({ to: 'random@example.com', subject: 's', text: 't' });
     expect(realSendEmail).toHaveBeenCalled();
     expect(mockSender.sendEmail).not.toHaveBeenCalled();
+  });
+});
+
+describe('resolveSender — test-mode redirects', () => {
+  it('SETU_EMAIL_REDIRECT_TO sends every email to the test inbox, original recipient in subject', async () => {
+    process.env.NEXT_PUBLIC_FEATURE_CHECK_IN_NOTIFY = 'true';
+    process.env.SETU_EMAIL_REDIRECT_TO = 'developer@chinmayatoronto.org';
+    const sender = resolveSender();
+    await sender.sendEmail({ to: 'real-family@example.com', subject: 'Your code', text: 'body' });
+    expect(realSendEmail).toHaveBeenCalledWith({
+      to: 'developer@chinmayatoronto.org',
+      subject: '[test → real-family@example.com] Your code',
+      text: 'body',
+    });
+    expect(mockSender.sendEmail).not.toHaveBeenCalled();
+  });
+
+  it('email redirect overrides the allowlist (a non-allowlisted recipient is still delivered to the test inbox)', async () => {
+    process.env.NEXT_PUBLIC_FEATURE_CHECK_IN_NOTIFY = 'true';
+    process.env.SETU_EMAIL_ALLOWLIST = 'someone-allowed@example.com';
+    process.env.SETU_EMAIL_REDIRECT_TO = 'developer@chinmayatoronto.org';
+    const sender = resolveSender();
+    await sender.sendEmail({ to: 'not-on-the-list@example.com', subject: 's', text: 't' });
+    expect(realSendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ to: 'developer@chinmayatoronto.org' }),
+    );
+    expect(mockSender.sendEmail).not.toHaveBeenCalled();
+  });
+
+  it('SETU_PHONE_REDIRECT_TO sends every SMS to the test phone, original number in the message', async () => {
+    process.env.NEXT_PUBLIC_FEATURE_CHECK_IN_NOTIFY = 'true';
+    process.env.SETU_PHONE_REDIRECT_TO = '+16473852434';
+    const sender = resolveSender();
+    await sender.sendSMS({ phone: '+14165550000', message: 'CMT code: 123456' });
+    expect(realSendSMS).toHaveBeenCalledWith({
+      phone: '+16473852434',
+      message: '[test → +14165550000] CMT code: 123456',
+    });
+    expect(mockSender.sendSMS).not.toHaveBeenCalled();
+  });
+
+  it('SMS redirect overrides the phone allowlist', async () => {
+    process.env.NEXT_PUBLIC_FEATURE_CHECK_IN_NOTIFY = 'true';
+    process.env.SETU_PHONE_ALLOWLIST = '16470000000';
+    process.env.SETU_PHONE_REDIRECT_TO = '+16473852434';
+    const sender = resolveSender();
+    await sender.sendSMS({ phone: '+19999999999', message: 'x' });
+    expect(realSendSMS).toHaveBeenCalledWith(
+      expect.objectContaining({ phone: '+16473852434' }),
+    );
+    expect(mockSender.sendSMS).not.toHaveBeenCalled();
+  });
+
+  it('the redirects are independent: an email redirect does not touch SMS, and vice versa', async () => {
+    process.env.NEXT_PUBLIC_FEATURE_CHECK_IN_NOTIFY = 'true';
+    process.env.SETU_EMAIL_REDIRECT_TO = 'developer@chinmayatoronto.org';
+    // No SETU_PHONE_REDIRECT_TO → SMS follows normal (no-allowlist) real-send path.
+    const sender = resolveSender();
+    await sender.sendSMS({ phone: '+14165550000', message: 'x' });
+    expect(realSendSMS).toHaveBeenCalledWith({ phone: '+14165550000', message: 'x' });
+  });
+
+  it('redirect still requires NOTIFY enabled (NOTIFY=false → mock, nothing sent)', async () => {
+    process.env.NEXT_PUBLIC_FEATURE_CHECK_IN_NOTIFY = 'false';
+    process.env.SETU_EMAIL_REDIRECT_TO = 'developer@chinmayatoronto.org';
+    process.env.SETU_PHONE_REDIRECT_TO = '+16473852434';
+    const sender = resolveSender();
+    await sender.sendEmail({ to: 'x@y.com', subject: 's', text: 't' });
+    await sender.sendSMS({ phone: '+14165550000', message: 'x' });
+    expect(realSendEmail).not.toHaveBeenCalled();
+    expect(realSendSMS).not.toHaveBeenCalled();
+    expect(mockSender.sendEmail).toHaveBeenCalled();
+    expect(mockSender.sendSMS).toHaveBeenCalled();
   });
 });

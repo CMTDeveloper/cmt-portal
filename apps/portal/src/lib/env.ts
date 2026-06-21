@@ -76,6 +76,17 @@ export const portalEnvSchema = z.object({
   SETU_EMAIL_ALLOWLIST: z.string().optional(),
   SETU_PHONE_ALLOWLIST: z.string().optional(),
 
+  // TEST-MODE REDIRECTS (take precedence over the allowlists). When set, EVERY
+  // outbound email / SMS is delivered to this single recipient instead of the
+  // real one — so testers see all mail/SMS in one inbox and no real family is
+  // contacted. The intended recipient is preserved in the subject/message.
+  // Unset/empty → normal allowlist behavior. Read directly from process.env in
+  // resolveSender(); listed here for schema completeness.
+  //   SETU_EMAIL_REDIRECT_TO — a single email (e.g. developer@chinmayatoronto.org)
+  //   SETU_PHONE_REDIRECT_TO — a single E.164 phone (e.g. +16473852434)
+  SETU_EMAIL_REDIRECT_TO: z.string().optional(),
+  SETU_PHONE_REDIRECT_TO: z.string().optional(),
+
 });
 
 export type PortalEnv = z.infer<typeof portalEnvSchema>;
