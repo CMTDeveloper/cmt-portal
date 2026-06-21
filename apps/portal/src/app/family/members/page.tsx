@@ -6,44 +6,7 @@ import { PromoteManagerButton } from './promote-manager-button';
 import { mockFamily } from '@/features/family/data/mock';
 import { flags } from '@/lib/flags';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
-import type { MemberDoc } from '@cmt/shared-domain/setu';
-
-type DisplayMember = {
-  mid: string;
-  name: string;
-  type: string;
-  tag: string | null;
-  isManager: boolean;
-  warn: string | null;
-  email: string | null;
-  phone: string | null;
-  role: string | null;
-  isCurrent: boolean;
-  nameMissing: boolean;
-};
-
-function memberToDisplay(m: MemberDoc, currentMid: string | null): DisplayMember {
-  const isCurrent = currentMid !== null && m.mid === currentMid;
-  const rawName = `${m.firstName ?? ''} ${m.lastName ?? ''}`.trim();
-  const nameMissing = rawName.length === 0;
-  const name = nameMissing ? (isCurrent ? 'Your profile' : 'Unnamed member') : rawName;
-  const typeLabel = m.type === 'Child'
-    ? `Child${m.schoolGrade ? ` · ${m.schoolGrade}` : ''}`
-    : 'Adult';
-  return {
-    mid: m.mid,
-    name,
-    type: typeLabel,
-    tag: m.manager ? 'Manager' : null,
-    isManager: m.manager,
-    warn: m.foodAllergies ?? null,
-    email: m.email,
-    phone: m.phone,
-    role: m.volunteeringSkills.length > 0 ? m.volunteeringSkills.join(', ') : null,
-    isCurrent,
-    nameMissing,
-  };
-}
+import { memberToDisplay, type DisplayMember } from './member-display';
 
 export default async function FamilyRosterPage() {
   let familyName = mockFamily.name;
@@ -56,6 +19,7 @@ export default async function FamilyRosterPage() {
     type: m.type === 'Child' ? `Child · ${m.grade ?? ''}` : 'Adult',
     tag: m.manager ? 'Manager' : null,
     isManager: m.manager,
+    isAdult: m.type !== 'Child',
     warn: m.allergy?.summary ?? null,
     email: m.email,
     phone: m.phone,
@@ -120,7 +84,7 @@ export default async function FamilyRosterPage() {
                       </div>
                       <SetuIcon.chevron color="var(--muted)"/>
                     </Link>
-                    {canManage && !m.isManager && (
+                    {canManage && !m.isManager && m.isAdult && (
                       <PromoteManagerButton mid={m.mid} name={m.name} variant="mobile"/>
                     )}
                   </div>
@@ -158,7 +122,7 @@ export default async function FamilyRosterPage() {
                   <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{m.type}</div>
                 </div>
                 <div className="row" style={{ gap: 8 }}>
-                  {canManage && !m.isManager && (
+                  {canManage && !m.isManager && m.isAdult && (
                     <PromoteManagerButton mid={m.mid} name={m.name} variant="desktop"/>
                   )}
                   <Link href={`/family/members/${m.mid}/profile`} className="btn btn--s" style={{ padding: '6px 10px', fontSize: 12 }}>Profile</Link>
