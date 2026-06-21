@@ -71,6 +71,7 @@ A Turborepo monorepo for the Chinmaya Mission Toronto unified portal. One Next.j
 - **Commit author** — Always `CMT Developer <developer@chinmayatoronto.org>` (set in local `.git/config`, not global).
 - **Never bypass `--no-verify`** on commits or pushes unless explicitly told.
 - **`pnpm --filter @cmt/portal test:integration`** — runs the E2E integration suite against real UAT Firestore (`chinmaya-setu-uat`). Run on-demand before releases. NOT included in the pre-push hook. Requires `.env.local` with `PORTAL_FIREBASE_PROJECT_ID=chinmaya-setu-uat` and matching service account creds. Files live in `apps/portal/src/__tests__/e2e/`. Browser E2E (Playwright) is the separate root `pnpm test:e2e` — see `apps/portal/e2e/README.md`.
+- **Mobile API contract — record every change.** The React Native app (`chinmaya-setu-mobile`) hand-mirrors this portal's `/api/setu/*` shapes in its own `src/api/schemas/*` (it does NOT import `@cmt/shared-domain`). So **any commit that changes a `/api/setu/**` route's request/response shape, error codes, or required fields — or a `@cmt/shared-domain` schema those routes use — MUST append a dated, SHA-keyed entry to `apps/portal/docs/MOBILE_API_CHANGELOG.md`** (state what changed + what the mobile must do). The mobile session's `contract-sync` cron consumes that file to keep the two repos in sync; skipping the entry = silent mobile drift. UI/copy-only changes don't need an entry.
 
 ## Pre-ship verification (don't skip)
 
