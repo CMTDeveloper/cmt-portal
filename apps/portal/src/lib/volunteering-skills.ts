@@ -7,14 +7,17 @@ import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestor
  * freely from /admin/volunteering-skills.
  */
 export const DEFAULT_VOLUNTEERING_SKILLS: readonly string[] = [
-  'Teaching',
-  'AV / Tech',
+  'Teaching / Facilitation',
+  'Program Planning & Coordination',
+  'Audio Visual / Technology',
+  'Financial & Bookkeeping',
+  'Bookstore Operations',
   'Kitchen / Prasad',
-  'Setup & Cleanup',
-  'Registration / Greeting',
-  'Decoration',
-  'Fundraising',
-  'Driving / Transport',
+  'Decoration & Event Setup',
+  'General Maintenance (Handyman)',
+  'Skilled Trades (Electrical, Drywall, etc.)',
+  'Landscaping & Groundskeeping',
+  'General Volunteer Support (happy to help where needed)',
 ];
 
 const CONFIG_COLLECTION = 'app_config';

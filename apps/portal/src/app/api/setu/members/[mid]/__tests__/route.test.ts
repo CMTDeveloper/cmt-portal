@@ -222,6 +222,77 @@ describe('PATCH /api/setu/members/[mid]', () => {
     const res = await flaggedPATCH(makeRequest('PATCH', {}, managerHeaders()), { params: Promise.resolve(params) });
     expect(res.status).toBe(404);
   });
+
+  // ── Adult volunteering-skills requirement (issue #10) ─────────────────────
+  // Only enforced when the patch touches volunteeringSkills AND the member
+  // is/will be an Adult. Children are never blocked; adults editing other
+  // fields (without touching skills) are never blocked.
+
+  const adultMemberSnap = {
+    exists: true,
+    data: () => ({ ...memberSnap.data(), type: 'Adult', volunteeringSkills: [] }),
+  };
+
+  it('returns 400 skills-required when patching an Adult skills to []', async () => {
+    mockGet
+      .mockResolvedValueOnce(familySnap)
+      .mockResolvedValueOnce(adultMemberSnap);
+
+    const res = await PATCH(makeRequest('PATCH', { volunteeringSkills: [] }, managerHeaders()), {
+      params: Promise.resolve(params),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe('skills-required');
+  });
+
+  it('returns 200 when patching an Adult skills to a non-empty array', async () => {
+    mockGet
+      .mockResolvedValueOnce(familySnap)
+      .mockResolvedValueOnce(adultMemberSnap);
+
+    const res = await PATCH(
+      makeRequest('PATCH', { volunteeringSkills: ['Teaching / Facilitation'] }, managerHeaders()),
+      { params: Promise.resolve(params) },
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it('returns 200 when patching an Adult other fields without touching skills', async () => {
+    mockGet
+      .mockResolvedValueOnce(familySnap)
+      .mockResolvedValueOnce(adultMemberSnap);
+
+    const res = await PATCH(makeRequest('PATCH', { firstName: 'Priya' }, managerHeaders()), {
+      params: Promise.resolve(params),
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it('returns 200 when patching a Child skills to [] (not blocked)', async () => {
+    mockGet
+      .mockResolvedValueOnce(familySnap)
+      .mockResolvedValueOnce(memberSnap); // memberSnap is type 'Child'
+
+    const res = await PATCH(makeRequest('PATCH', { volunteeringSkills: [] }, managerHeaders()), {
+      params: Promise.resolve(params),
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it('returns 400 skills-required when patch flips a member to Adult with empty skills', async () => {
+    mockGet
+      .mockResolvedValueOnce(familySnap)
+      .mockResolvedValueOnce(memberSnap); // existing doc is Child
+
+    const res = await PATCH(
+      makeRequest('PATCH', { type: 'Adult', volunteeringSkills: [] }, managerHeaders()),
+      { params: Promise.resolve(params) },
+    );
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe('skills-required');
+  });
 });
 
 // ─── DELETE ───────────────────────────────────────────────────────────────────

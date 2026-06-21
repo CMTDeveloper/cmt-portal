@@ -90,11 +90,22 @@ export async function PATCH(req: Request, ctx: RouteContext) {
         throw Object.assign(new Error('not-found'), { code: 'not-found' });
       }
 
-      const memberData = memberSnap.data() as { mid: string; manager: boolean; email: string | null; phone: string | null };
+      const memberData = memberSnap.data() as { mid: string; type: 'Adult' | 'Child'; manager: boolean; email: string | null; phone: string | null };
 
       // Security: ensure member belongs to caller's family by checking document path prefix
       if (!memberData.mid.startsWith(fid + '-')) {
         throw Object.assign(new Error('cross-family'), { code: 'cross-family' });
+      }
+
+      // Adults must keep at least one volunteering skill (issue #10). Only
+      // enforced when the patch actually touches volunteeringSkills, so editing
+      // other fields of an adult with legacy-empty skills still works. Adult-ness
+      // comes from the patch's `type` when provided, else the existing doc.
+      if ('volunteeringSkills' in data) {
+        const willBeAdult = data.type ? data.type === 'Adult' : memberData.type === 'Adult';
+        if (willBeAdult && (data.volunteeringSkills?.length ?? 0) < 1) {
+          throw Object.assign(new Error('skills-required'), { code: 'skills-required' });
+        }
       }
 
       // Guard against demoting the last manager
@@ -188,6 +199,9 @@ export async function PATCH(req: Request, ctx: RouteContext) {
     }
     if (code === 'cross-family') {
       return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+    }
+    if (code === 'skills-required') {
+      return NextResponse.json({ error: 'skills-required' }, { status: 400 });
     }
     if (code === 'contact-conflict') {
       const msg = err instanceof Error ? err.message : '';

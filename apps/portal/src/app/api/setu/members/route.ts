@@ -69,6 +69,13 @@ export async function POST(req: Request) {
   }
 
   const data = parsed.data;
+
+  // Adults must pick at least one volunteering skill (issue #10). Children
+  // never have skills, so this is gated to type === 'Adult'.
+  if (data.type === 'Adult' && (data.volunteeringSkills?.length ?? 0) < 1) {
+    return NextResponse.json({ error: 'skills-required' }, { status: 400 });
+  }
+
   const db = portalFirestore();
 
   const emailHash = data.email ? hashContactKey('email', data.email) : null;

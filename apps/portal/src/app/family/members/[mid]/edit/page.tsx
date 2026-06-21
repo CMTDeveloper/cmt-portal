@@ -55,6 +55,9 @@ export default function EditMemberPage() {
   const isEditingOther = data ? (data.isManager && mid !== data.currentMid) : false;
   // showManagerToggle: only when a manager edits someone other than themselves
   const showManagerToggle = isEditingOther;
+  // Adults must pick at least one volunteering skill (issue #10). Children
+  // have no skills, so this never blocks a Child save.
+  const skillsInvalid = type === 'Adult' && volunteeringSkills.length === 0;
 
   useEffect(() => {
     // Fetch via the API route — calling getCurrentFamily() directly from a
@@ -270,8 +273,11 @@ export default function EditMemberPage() {
             </div>
           </div>
           <div className="field" style={{ marginBottom: 14 }}>
-            <label>Volunteering skills</label>
+            <label>Volunteering skills <span className="req">·</span></label>
             <VolunteeringSkillsPicker value={volunteeringSkills} onChange={setVolunteeringSkills} />
+            {skillsInvalid && (
+              <p style={{ fontSize: 12, color: 'var(--err)', marginTop: 6 }}>Select at least one</p>
+            )}
           </div>
         </>
       )}
@@ -354,7 +360,7 @@ export default function EditMemberPage() {
               {formBody}
             </div>
             <div style={{ position: 'sticky', bottom: 0, left: 0, right: 0, padding: '14px 18px', background: 'var(--surface)', borderTop: '1px solid var(--line)' }}>
-              <button type="submit" className="btn btn--p btn--block" disabled={saving || loading}>
+              <button type="submit" className="btn btn--p btn--block" disabled={saving || loading || skillsInvalid}>
                 {saving ? 'Saving…' : 'Save changes'}
               </button>
             </div>
@@ -380,7 +386,7 @@ export default function EditMemberPage() {
           {formBody}
           {removeButton}
           <div style={{ marginTop: 28, paddingTop: 22, borderTop: '1px solid var(--line)', display: 'flex', gap: 10 }}>
-            <button type="submit" className="btn btn--p" style={{ padding: '14px 28px' }} disabled={saving || loading}>
+            <button type="submit" className="btn btn--p" style={{ padding: '14px 28px' }} disabled={saving || loading || skillsInvalid}>
               {saving ? 'Saving…' : 'Save changes'}
             </button>
             <Link href={`/family/members/${mid}`} className="btn btn--g">Cancel</Link>

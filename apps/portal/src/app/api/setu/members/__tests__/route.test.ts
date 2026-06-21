@@ -212,6 +212,37 @@ describe('POST /api/setu/members', () => {
     expect(memberWrite?.[1]).toMatchObject({ birthMonth: null });
   });
 
+  // ── Adult volunteering-skills requirement (issue #10) ─────────────────────
+  // Adults must pick at least one skill; children are never blocked.
+
+  it('returns 400 skills-required for an Adult with empty volunteeringSkills', async () => {
+    const body = { ...validBody, type: 'Adult', volunteeringSkills: [] };
+    const res = await POST(makeRequest(body, managerHeaders()));
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toBe('skills-required');
+  });
+
+  it('returns 400 skills-required for an Adult with omitted volunteeringSkills', async () => {
+    const body = { ...validBody, type: 'Adult' };
+    const res = await POST(makeRequest(body, managerHeaders()));
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toBe('skills-required');
+  });
+
+  it('returns 201 for an Adult with at least one volunteering skill', async () => {
+    const body = { ...validBody, type: 'Adult', volunteeringSkills: ['Teaching / Facilitation'] };
+    const res = await POST(makeRequest(body, managerHeaders()));
+    expect(res.status).toBe(201);
+  });
+
+  it('returns 201 for a Child with empty volunteeringSkills (not blocked)', async () => {
+    const body = { ...validBody, type: 'Child', volunteeringSkills: [] };
+    const res = await POST(makeRequest(body, managerHeaders()));
+    expect(res.status).toBe(201);
+  });
+
   it('rejects emergency contact with empty relation (relation is the one required EC field)', async () => {
     const body = {
       ...validBody,
