@@ -423,8 +423,6 @@ export function ChildProfileView({ profile, editHref, journey }: ChildProfileVie
                 <span>Born {profile.birthMonthYear}</span>
               </>
             )}
-            <Dot />
-            <span style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>MID {profile.mid}</span>
           </div>
         </div>
       </header>

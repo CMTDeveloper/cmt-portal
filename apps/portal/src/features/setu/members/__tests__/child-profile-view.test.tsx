@@ -47,11 +47,12 @@ function makeProfile(over: Partial<ChildProfile> = {}): ChildProfile {
 }
 
 describe('ChildProfileView', () => {
-  it('renders identity: name, Child · Grade 5 sub-line, and MID', () => {
+  it('renders identity: name and Child · Grade 5 sub-line (no internal MID shown)', () => {
     render(<ChildProfileView profile={makeProfile()} />);
     expect(screen.getByText('Anaya Patel')).toBeTruthy();
     expect(screen.getByText(/Child · Grade 5/)).toBeTruthy();
-    expect(screen.getByText(/MID CMT-FAM1-03/)).toBeTruthy();
+    // The internal Member ID is no longer surfaced to families (issue #4).
+    expect(screen.queryByText(/MID /)).toBeNull();
   });
 
   it('shows quick stats with program count and overall %', () => {

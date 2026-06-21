@@ -105,7 +105,7 @@ export default async function MemberDetailPage({ params }: Props) {
                   <SetuAvatar name={name} size={64}/>
                   <div>
                     <h1 style={{ fontSize: 24, fontWeight: 400, lineHeight: 1.1 }}>{name}</h1>
-                    <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4, fontFamily: 'var(--mono)' }}>MID {member.mid} · {typeLabel}</div>
+                    <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>{typeLabel}</div>
                   </div>
                 </div>
 
@@ -159,7 +159,7 @@ export default async function MemberDetailPage({ params }: Props) {
                 <SetuAvatar name={name} size={72}/>
                 <div>
                   <h1 style={{ fontSize: 38, fontWeight: 400, lineHeight: 1.1 }}>{name}</h1>
-                  <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 6, fontFamily: 'var(--mono)' }}>MID {member.mid} · {typeLabel}</div>
+                  <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 6 }}>{typeLabel}</div>
                 </div>
               </div>
               <div className="row" style={{ gap: 10, alignSelf: 'flex-start' }}>
@@ -232,7 +232,7 @@ export default async function MemberDetailPage({ params }: Props) {
                 <SetuAvatar name={name} size={64}/>
                 <div>
                   <h1 style={{ fontSize: 24, fontWeight: 400, lineHeight: 1.1 }}>{name}</h1>
-                  <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4, fontFamily: 'var(--mono)' }}>MID {mockMember.mid} · {mockMember.type}</div>
+                  <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>{mockMember.type}</div>
                 </div>
               </div>
 
@@ -272,7 +272,7 @@ export default async function MemberDetailPage({ params }: Props) {
               <SetuAvatar name={name} size={72}/>
               <div>
                 <h1 style={{ fontSize: 38, fontWeight: 400, lineHeight: 1.1 }}>{name}</h1>
-                <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 6, fontFamily: 'var(--mono)' }}>MID {mockMember.mid} · {mockMember.type}</div>
+                <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 6 }}>{mockMember.type}</div>
               </div>
             </div>
             <button className="btn btn--s" style={{ alignSelf: 'flex-start' }}><SetuIcon.edit/> Edit member</button>
