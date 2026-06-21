@@ -462,6 +462,14 @@ function SignInReal() {
         >
           {pwLoading ? 'Signing in…' : 'Sign in →'}
         </button>
+        {!sevakFlow && (
+          <>
+            <div style={{ marginTop: 24, padding: 14, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radiusSm)', fontSize: 12, color: 'var(--body-text)', lineHeight: 1.5 }}>
+              <strong>New to Setu?</strong> Register your family to create your account.
+            </div>
+            <Link href="/register" className="btn btn--g btn--block" style={{ marginTop: 10, fontSize: 13, display: 'flex' }}>Register your family →</Link>
+          </>
+        )}
       </>
     );
   }

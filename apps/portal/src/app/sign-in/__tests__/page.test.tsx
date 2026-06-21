@@ -450,6 +450,19 @@ describe('SignInPage — password mode toggle', () => {
     expect(document.querySelectorAll('input[type="password"]').length).toBe(0);
   });
 
+  it('shows the "Register your family" link in password mode too (new users from the password screen can register)', async () => {
+    const user = userEvent.setup();
+    render(<SignInPage />);
+
+    // Switch to password mode (the screen a returning password-user lands on first)
+    const toggleBtns = screen.getAllByText(/have a password\? sign in faster/i);
+    await user.click(toggleBtns[0]!);
+    expect(document.querySelectorAll('input[type="password"]').length).toBeGreaterThan(0);
+
+    // The register CTA must be present here, not only on the code/OTP screen.
+    expect(screen.getAllByText(/register your family/i).length).toBeGreaterThan(0);
+  });
+
   it('persists password mode preference in localStorage', async () => {
     const user = userEvent.setup();
     render(<SignInPage />);
