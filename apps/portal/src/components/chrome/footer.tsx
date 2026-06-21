@@ -1,3 +1,5 @@
+import { ORG_NAME } from '@/lib/branding';
+
 // Year is computed at build time so this component stays prerender-safe under
 // Next.js 16 cacheComponents:true (which forbids new Date() in a Server
 // Component before any dynamic API). Update the constant once a year.
@@ -7,7 +9,7 @@ export function Footer() {
   return (
     <footer className="border-t border-border bg-muted">
       <div className="container mx-auto px-4 py-8 text-center text-sm text-muted-foreground">
-        © {COPYRIGHT_YEAR} Chinmaya Mission Toronto. Built with care.
+        © {COPYRIGHT_YEAR} {ORG_NAME}. Built with care.
       </div>
     </footer>
   );

@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { GuestCheckInForm } from '@/features/check-in/kiosk/guest-check-in-form';
 import { flags } from '@/lib/flags';
 
-export const metadata = { title: 'Guest check-in — CMT Portal' };
+export const metadata = { title: 'Guest check-in' };
 
 export default function GuestCheckInPage() {
   if (!flags.checkInKiosk) notFound();

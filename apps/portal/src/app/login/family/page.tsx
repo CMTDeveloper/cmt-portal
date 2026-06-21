@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
 import { FamilyLoginForm } from '@/features/check-in/family';
 
-export const metadata = { title: 'Family sign in — CMT Portal' };
+export const metadata = { title: 'Family sign in' };
 
 export default async function FamilyLoginPage() {
   const cookieStore = await cookies();

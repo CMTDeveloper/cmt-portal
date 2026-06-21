@@ -4,7 +4,7 @@ import { GuestList } from '@/features/check-in/admin/guest-list';
 import { CursorPagination } from '@/features/check-in/admin/cursor-pagination';
 import { flags } from '@/lib/flags';
 
-export const metadata = { title: 'Guests — CMT Portal' };
+export const metadata = { title: 'Guests' };
 
 interface Props {
   searchParams: Promise<{ cursor?: string }>;

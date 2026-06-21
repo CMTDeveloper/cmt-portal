@@ -14,7 +14,7 @@ import { getOpenOfferingsForFamily } from '@/features/setu/enrollment/get-open-o
 import { getLegacyPaymentStatus } from '@/features/setu/donations/legacy-payment';
 import { getDonations } from '@/features/setu/donations/get-donations';
 
-export const metadata = { title: 'Enroll — CMT Portal' };
+export const metadata = { title: 'Enroll' };
 
 interface Props {
   params: Promise<{ programKey: string }>;

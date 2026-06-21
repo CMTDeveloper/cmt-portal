@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { Rosette, SetuIcon } from '@cmt/ui';
 
-export const metadata = { title: 'Admin — CMT Portal' };
+export const metadata = { title: 'Admin' };
 
 // Admin landing — quick-jump tiles. The legacy /check-in/admin/* pages still
 // own the data dashboards; this page is a themed entry point + jumping board

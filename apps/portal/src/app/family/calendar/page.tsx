@@ -5,7 +5,7 @@ import { CspRoot, SectionLabel } from '@/features/family/components/atoms';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 import { getPublishedCalendar, getWeeklySchedule, type CalendarEntry } from '@/features/setu/calendar/calendar';
 
-export const metadata = { title: 'Class calendar — CMT Portal' };
+export const metadata = { title: 'Class calendar' };
 
 function fmtDay(ymd: string) {
   // Render at noon to avoid TZ slippage; the date IS the Toronto class date.

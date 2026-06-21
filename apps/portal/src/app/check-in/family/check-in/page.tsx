@@ -4,7 +4,7 @@ import { StudentCheckInList } from '@/features/check-in/family';
 import { findFamilyById } from '@/features/check-in/shared';
 import { flags } from '@/lib/flags';
 
-export const metadata = { title: 'Check in my kids — CMT Portal' };
+export const metadata = { title: 'Check in my kids' };
 
 export default async function FamilySelfCheckInPage() {
   if (!flags.checkInFamily) notFound();

@@ -9,7 +9,7 @@ import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
 import { paymentSourceOf } from '@cmt/shared-domain';
 import { getLegacyPaymentStatus } from '@/features/setu/donations/legacy-payment';
 
-export const metadata = { title: 'Donate — CMT Portal' };
+export const metadata = { title: 'Donate' };
 
 export default async function DonatePage({
   searchParams,

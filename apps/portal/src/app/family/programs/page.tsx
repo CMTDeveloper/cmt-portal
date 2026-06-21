@@ -8,7 +8,7 @@ import { getOpenOfferingsForFamily } from '@/features/setu/enrollment/get-open-o
 import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
 import type { ProgramDoc, OfferingDoc } from '@cmt/shared-domain';
 
-export const metadata = { title: 'Programs — CMT Portal' };
+export const metadata = { title: 'Programs' };
 
 interface ProgramWithOfferings {
   program: ProgramDoc;

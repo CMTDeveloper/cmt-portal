@@ -11,7 +11,7 @@ import { getOpportunityRoster } from '@/features/setu/seva/get-opportunity-roste
 import { RosterManager } from '@/features/admin/seva/roster-manager';
 import type { RosterData } from '@/features/admin/seva/roster-client';
 
-export const metadata = { title: 'Seva roster — CMT Portal' };
+export const metadata = { title: 'Seva roster' };
 
 export default function WelcomeSevaRosterPage({ params }: { params: Promise<{ oppId: string }> }) {
   return (

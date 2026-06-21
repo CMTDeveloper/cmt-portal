@@ -4,7 +4,7 @@ import { SetuIcon } from '@cmt/ui';
 import { getVolunteeringSkillOptions } from '@/lib/volunteering-skills';
 import { SkillsEditor } from '@/features/admin/volunteering-skills/skills-editor';
 
-export const metadata = { title: 'Volunteering skills — CMT Portal admin' };
+export const metadata = { title: 'Volunteering skills' };
 
 export default async function AdminVolunteeringSkillsPage() {
   await connection();

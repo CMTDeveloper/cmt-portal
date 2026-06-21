@@ -9,7 +9,7 @@ import { getChildProfile } from '@/features/setu/members/get-child-profile';
 import { ChildProfileView } from '@/features/setu/members/child-profile-view';
 import { getChildBalaViharJourney } from '@/features/setu/rollover/get-child-journey';
 
-export const metadata = { title: 'Profile — CMT Portal' };
+export const metadata = { title: 'Profile' };
 
 export default async function FamilyMemberProfilePage({ params }: { params: Promise<{ mid: string }> }) {
   await connection();

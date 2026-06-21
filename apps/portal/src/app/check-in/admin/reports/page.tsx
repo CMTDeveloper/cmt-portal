@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 
-export const metadata = { title: 'Reports — CMT Portal' };
+export const metadata = { title: 'Reports' };
 
 // The legacy check-in reports page has been superseded by the unified Reports
 // hub at /welcome/reports (admin-revamp Phase 4). Anyone landing here — old

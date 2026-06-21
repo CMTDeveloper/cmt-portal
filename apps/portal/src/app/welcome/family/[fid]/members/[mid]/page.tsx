@@ -13,7 +13,7 @@ import { ChildProfileView } from '@/features/setu/members/child-profile-view';
 import { getChildBalaViharJourney } from '@/features/setu/rollover/get-child-journey';
 import { MemberGradeEditor } from '@/features/setu/rollover/member-grade-editor';
 
-export const metadata = { title: 'Profile — CMT Portal' };
+export const metadata = { title: 'Profile' };
 
 export default function WelcomeMemberProfilePage({
   params,

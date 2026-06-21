@@ -7,7 +7,7 @@ import { AssignTeacherForm } from '@/features/admin/levels/assign-teacher-form';
 import { listPrograms } from '@/features/setu/programs/get-programs';
 import type { ProgramRow } from '@/features/admin/programs/programs-table';
 
-export const metadata = { title: 'Level management — CMT Portal admin' };
+export const metadata = { title: 'Level management' };
 
 type TS = ReturnType<typeof Timestamp.now>;
 

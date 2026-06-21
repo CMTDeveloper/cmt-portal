@@ -9,7 +9,7 @@ import { CspRoot } from '@/features/family/components/atoms';
 import { getSevaCompliance } from '@/features/setu/seva/get-seva-compliance';
 import { ComplianceReport } from '@/features/admin/seva/compliance-report';
 
-export const metadata = { title: 'Seva compliance — CMT Portal' };
+export const metadata = { title: 'Seva compliance' };
 
 export default function WelcomeSevaCompliancePage() {
   return (

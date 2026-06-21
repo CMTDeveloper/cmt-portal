@@ -5,7 +5,7 @@ import { getFamilyAssignment } from '@/features/setu/prasad/family-assignment';
 import { FamilyPrasadCard } from '@/features/setu/prasad/family-prasad-card';
 import { CspRoot } from '@/features/family/components/atoms';
 
-export const metadata = { title: 'Prasad seva — CMT Portal' };
+export const metadata = { title: 'Prasad seva' };
 
 const HOW_IT_WORKS = [
   'Each family brings prasad for the assembly one Sunday per year. We suggest a date — your youngest child’s birthday month when possible.',

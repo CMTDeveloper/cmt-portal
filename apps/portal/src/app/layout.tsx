@@ -5,6 +5,7 @@ import { Header } from '@/components/chrome/header';
 import { Footer } from '@/components/chrome/footer';
 import { ChromeWrapper } from '@/components/chrome/chrome-wrapper';
 import { ToasterMount } from '@/components/chrome/toaster-mount';
+import { SITE_TITLE_DEFAULT, SITE_TITLE_TEMPLATE, SITE_DESCRIPTION } from '@/lib/branding';
 import './globals.css';
 
 const geist = Geist({
@@ -20,9 +21,11 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Chinmaya Mission Toronto',
-  description:
-    'Bridging knowledge, community, and spiritual practice — Chinmaya Mission Toronto portal.',
+  // Home/default tab title: "Chinmaya Setu | Chinmaya Mission Toronto".
+  // Child pages set a bare title (e.g. 'My family') → template makes it
+  // "My family | Chinmaya Setu". All brand wording lives in lib/branding.ts.
+  title: { default: SITE_TITLE_DEFAULT, template: SITE_TITLE_TEMPLATE },
+  description: SITE_DESCRIPTION,
 };
 
 export default function RootLayout({

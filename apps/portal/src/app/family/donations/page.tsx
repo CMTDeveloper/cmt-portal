@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 
-export const metadata = { title: 'My donations — CMT Portal' };
+export const metadata = { title: 'My donations' };
 
 // Receipts / "My donations" is hidden: general donations are handled via a
 // separate CMT process, not collected in-portal (CMT decision 2026-06-04).

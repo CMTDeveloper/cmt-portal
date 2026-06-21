@@ -7,7 +7,7 @@ import { WelcomeTeamList } from '@/features/check-in/admin/welcome-team-list';
 import { hasCapability, type ClaimsShape } from '@/lib/auth/role-claims';
 import { flags } from '@/lib/flags';
 
-export const metadata = { title: 'Welcome team — CMT Portal admin' };
+export const metadata = { title: 'Welcome team' };
 
 export default async function AdminWelcomeTeamPage() {
   if (!flags.checkInAdmin) notFound();

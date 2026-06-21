@@ -6,7 +6,7 @@ import { AddAdminForm } from '@/features/check-in/admin/add-admin-form';
 import { hasCapability, type ClaimsShape } from '@/lib/auth/role-claims';
 import { flags } from '@/lib/flags';
 
-export const metadata = { title: 'Admin users — CMT Portal' };
+export const metadata = { title: 'Admin users' };
 
 export default async function AdminUsersPage() {
   if (!flags.checkInAdmin) notFound();

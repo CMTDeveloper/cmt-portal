@@ -5,7 +5,7 @@ import { FamilyDashboard } from '@/features/check-in/family';
 import { findFamilyById, loadRecentFamilyCheckIns } from '@/features/check-in/shared';
 import { flags } from '@/lib/flags';
 
-export const metadata = { title: 'My family — CMT Portal' };
+export const metadata = { title: 'My family' };
 
 export default async function FamilyDashboardPage() {
   if (!flags.checkInFamily) notFound();

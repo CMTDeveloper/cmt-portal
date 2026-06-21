@@ -7,7 +7,7 @@ import { getRosterForClass } from '@/features/check-in/shared';
 import { flags } from '@/lib/flags';
 import type { AttendanceStatus, TeacherReportEntry } from '@cmt/shared-domain/check-in';
 
-export const metadata = { title: 'Attendance report — CMT Portal' };
+export const metadata = { title: 'Attendance report' };
 
 interface Props {
   searchParams: Promise<{ classId?: string; from?: string; to?: string }>;

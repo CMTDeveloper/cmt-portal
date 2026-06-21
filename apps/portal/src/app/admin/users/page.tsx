@@ -4,7 +4,7 @@ import { SetuIcon } from '@cmt/ui';
 import { listSevaks } from '@/features/setu/auth/manage-roles';
 import { SevakManager } from '@/features/admin/users/sevak-manager';
 
-export const metadata = { title: 'Users & roles — CMT Portal admin' };
+export const metadata = { title: 'Users & roles' };
 
 export default async function AdminUsersPage() {
   // connection() so Firebase Admin SDK's internal crypto calls don't trip

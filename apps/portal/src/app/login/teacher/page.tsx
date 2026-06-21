@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
 import { TeacherLoginForm } from '@/features/check-in/auth/teacher-login-form';
 
-export const metadata = { title: 'Teacher sign in — CMT Portal' };
+export const metadata = { title: 'Teacher sign in' };
 
 export default async function TeacherLoginPage() {
   const cookieStore = await cookies();

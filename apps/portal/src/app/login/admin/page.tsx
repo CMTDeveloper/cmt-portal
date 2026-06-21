@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
 import { AdminLoginForm } from '@/features/check-in/auth/admin-login-form';
 
-export const metadata = { title: 'Admin sign in — CMT Portal' };
+export const metadata = { title: 'Admin sign in' };
 
 export default async function AdminLoginPage() {
   const cookieStore = await cookies();

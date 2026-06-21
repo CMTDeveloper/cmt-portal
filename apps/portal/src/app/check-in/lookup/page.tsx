@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { FamilyLookupForm } from '@/features/check-in/kiosk/family-lookup-form';
 import { flags } from '@/lib/flags';
 
-export const metadata = { title: 'Find your family ID — CMT Portal' };
+export const metadata = { title: 'Find your family ID' };
 
 export default function LookupPage() {
   if (!flags.checkInKiosk) notFound();

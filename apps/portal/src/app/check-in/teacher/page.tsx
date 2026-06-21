@@ -4,7 +4,7 @@ import { listClasses, getRosterWithContacts } from '@/features/check-in/shared';
 import { TeacherCheckInList } from '@/features/check-in/teacher/teacher-check-in-list';
 import { flags } from '@/lib/flags';
 
-export const metadata = { title: 'Student Check-in — CMT Portal' };
+export const metadata = { title: 'Student Check-in' };
 
 function todayYMD(): string {
   const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Toronto' }));

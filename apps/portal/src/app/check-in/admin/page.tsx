@@ -6,7 +6,7 @@ import { AdminDashboard } from '@/features/check-in/admin';
 import { listAllFamilies } from '@/features/check-in/shared';
 import { flags } from '@/lib/flags';
 
-export const metadata = { title: 'Admin — CMT Portal' };
+export const metadata = { title: 'Admin' };
 
 async function AdminBody() {
   // connection() marks this subtree as dynamic so the request-time new Date()

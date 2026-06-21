@@ -6,7 +6,7 @@ import { getSevaRequirement } from '@/lib/seva-requirement';
 import { listOpportunities, serializeOpportunity } from '@/features/setu/seva/get-opportunities';
 import { SevaManager } from '@/features/admin/seva/seva-manager';
 
-export const metadata = { title: 'Seva — CMT Portal' };
+export const metadata = { title: 'Seva' };
 
 export default async function WelcomeSevaPage() {
   await connection();

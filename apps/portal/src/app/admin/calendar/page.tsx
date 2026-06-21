@@ -6,7 +6,7 @@ import { CalendarEditor } from '@/features/admin/calendar/calendar-editor';
 import { listPrograms } from '@/features/setu/programs/get-programs';
 import type { ProgramRow } from '@/features/admin/programs/programs-table';
 
-export const metadata = { title: 'Class calendar — CMT Portal admin' };
+export const metadata = { title: 'Class calendar' };
 
 export default async function AdminCalendarPage() {
   await connection();

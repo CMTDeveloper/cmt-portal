@@ -5,7 +5,7 @@ import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { listPrograms } from '@/features/setu/programs/get-programs';
 import { ProgramsTable, type ProgramRow } from '@/features/admin/programs/programs-table';
 
-export const metadata = { title: 'Programs — CMT Portal admin' };
+export const metadata = { title: 'Programs' };
 
 export default async function AdminProgramsPage() {
   await connection();

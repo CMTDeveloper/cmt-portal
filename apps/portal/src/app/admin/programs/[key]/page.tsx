@@ -10,7 +10,7 @@ import { OfferingsPanel, type OfferingRow } from '@/features/admin/programs/offe
 
 export async function generateMetadata({ params }: { params: Promise<{ key: string }> }) {
   const { key } = await params;
-  return { title: `Program: ${key} — CMT Portal admin` };
+  return { title: `Program: ${key}` };
 }
 
 type TS = ReturnType<typeof Timestamp.now>;

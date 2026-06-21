@@ -1,5 +1,6 @@
 import { Card, CardContent } from '@cmt/ui';
 import Link from 'next/link';
+import { ORG_NAME } from '@/lib/branding';
 
 interface ComingSoonProps {
   feature: string;
@@ -13,7 +14,7 @@ export function ComingSoon({ feature }: ComingSoonProps) {
           <h1 className="font-sans text-3xl text-heading">{feature}</h1>
           <p className="text-muted-foreground">
             This feature is coming soon. We&apos;re moving the existing {feature.toLowerCase()} app
-            into the Chinmaya Mission Toronto portal.
+            into the {ORG_NAME} portal.
           </p>
           <Link href="/" className="text-primary underline">
             ← Back to portal home

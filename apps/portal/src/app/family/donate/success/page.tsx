@@ -6,7 +6,7 @@ import { CspRoot } from '@/features/family/components/atoms';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 import { markDonationStatus } from '@/features/setu/donations/mark-donation-status';
 
-export const metadata = { title: 'Thank you — CMT Portal' };
+export const metadata = { title: 'Thank you' };
 
 export default async function DonateSuccessPage({
   searchParams,

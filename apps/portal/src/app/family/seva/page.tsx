@@ -5,7 +5,7 @@ import { getFamilySevaView } from '@/features/setu/seva/get-family-seva-view';
 import { CspRoot } from '@/features/family/components/atoms';
 import { SevaBrowser } from '@/features/setu/seva/seva-browser';
 
-export const metadata = { title: 'Seva — CMT Portal' };
+export const metadata = { title: 'Seva' };
 
 export default async function FamilySevaPage() {
   await connection();
