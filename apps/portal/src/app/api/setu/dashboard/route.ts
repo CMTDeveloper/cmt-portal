@@ -44,13 +44,6 @@ export async function GET(req: Request) {
         donationHeading: model.donation.heading,
         isLegacyPeriod: model.isLegacyPeriod,
         legacyPaid: model.legacyPaid,
-        attendance: {
-          attended: model.attendance.summary.attended,
-          total: model.attendance.total,
-          pct: model.attendance.pct,
-          hasAttendance: model.attendance.hasAttendance,
-          marks: model.attendance.summary.marks,
-        },
       },
       otherPrograms: model.otherProgramCards,
       upcoming,

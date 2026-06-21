@@ -31,7 +31,6 @@ const dashboardData = {
     isLegacyPeriod: false,
     legacyPaid: false,
     otherProgramCards: [{ eid: 'e2', programKey: 'tabla', label: 'Tabla', termLabel: '2025-26', status: 'active', showAttendance: false, showDonation: true }],
-    attendance: { summary: { attended: 3, marks: [{ date: '2026-01-04', present: true }] }, hasAttendance: true, total: 5, pct: 60 },
   },
   upcoming: [{ entryId: 'x', date: '2026-01-11', kind: 'class', classType: 'regular', specialEvents: null }],
   seva: { currentSevaYear: '2025-26', hoursPerYear: 20, hoursEarned: 4 },
@@ -78,7 +77,8 @@ describe('GET /api/setu/dashboard', () => {
     expect(body.balaVihar.suggestedAmount).toBe(500);
     expect(body.balaVihar.givenForPeriod).toBe(200);
     expect(body.balaVihar.donationPct).toBe(40);
-    expect(body.balaVihar.attendance.pct).toBe(60);
+    // Attendance is no longer a family-level / dashboard concept (#3).
+    expect(body.balaVihar.attendance).toBeUndefined();
     expect(body.otherPrograms[0].programKey).toBe('tabla');
     expect(body.upcoming[0].date).toBe('2026-01-11');
     expect(body.seva.hoursEarned).toBe(4);

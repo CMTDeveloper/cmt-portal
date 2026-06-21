@@ -11,7 +11,6 @@ import { shouldShowContactsNudge } from './_helpers/should-show-contacts-nudge';
 import { VolunteeringSkillsNudge } from '@/features/family/components/volunteering-skills-nudge';
 import { shouldShowVolunteeringSkillsNudge } from './_helpers/should-show-volunteering-nudge';
 import { type CalendarEntry } from '@/features/setu/calendar/calendar';
-import { EMPTY_RESOLVED_SUMMARY } from '@/features/setu/attendance/resolve-attendance';
 import { deriveSevaCardView, type FamilySevaProgress } from '@/features/setu/seva/get-family-seva-progress';
 import { SevaProgressCard } from '@/features/family/components/seva-progress-card';
 import { type FamilyPrasadView } from '@/features/setu/prasad/family-assignment';
@@ -21,14 +20,6 @@ import {
   buildFamilyDashboardModel,
   type FamilyDashboardModel,
 } from './_helpers/dashboard-model';
-
-function fmtSunday(ymd: string): string {
-  return new Date(`${ymd}T12:00:00`).toLocaleDateString('en-CA', {
-    month: 'short',
-    day: 'numeric',
-    timeZone: 'America/Toronto',
-  });
-}
 
 function fmtUpcoming(e: CalendarEntry): { d: string; m: string; t: string; sub: string | null } {
   const date = new Date(`${e.date}T12:00:00`);
@@ -62,17 +53,15 @@ export default async function FamilyDashboardPage() {
   // One-time "set your volunteering skills" nudge — adults with no skills yet.
   let showVolunteeringNudge = false;
 
-  // All BV-bespoke derivation (which enrollment drives the card, donation status,
-  // attendance scoping) lives in buildFamilyDashboardModel so it can be unit-
-  // tested with multi-enrollment fixtures (see __tests__/dashboard-model.test.ts).
+  // All BV-bespoke derivation (which enrollment drives the card, donation
+  // status) lives in buildFamilyDashboardModel so it can be unit-tested with
+  // multi-enrollment fixtures (see __tests__/dashboard-model.test.ts).
   // The default empty model renders the not-enrolled state for the mock /
   // non-setuAuth path; the real model is built below once data is loaded.
   let model: FamilyDashboardModel = buildFamilyDashboardModel({
     enrollments: [],
     donations: [],
     programsById: new Map(),
-    bvAttendance: EMPTY_RESOLVED_SUMMARY,
-    classSundaysHeld: 0,
     legacyPaymentStatus: null,
   });
   // Seva-hours progress (Slice D). Default renders nothing (no seva year set);
@@ -119,7 +108,6 @@ export default async function FamilyDashboardPage() {
     otherProgramCards,
     enrolledPill,
   } = model;
-  const { summary: ci, hasAttendance, total: attendanceTotal, pct: attendancePct } = model.attendance;
   const {
     complete: donationComplete,
     pct: donationPct,
@@ -183,13 +171,11 @@ export default async function FamilyDashboardPage() {
               </div>
               <div className="row" style={{ gap: 14, marginBottom: 14 }}>
                 <Stat label="Kids enrolled" value={String(kidsEnrolled)}/>
-                <div style={{ width: 1, height: 36, background: 'var(--line)' }}/>
-                <Stat label="Attendance" value={hasAttendance ? String(ci.attended) : '—'}/>
               </div>
               <div style={{ fontSize: 11, color: 'var(--muted)' }}>
-                {hasAttendance
-                  ? `Attended ${ci.attended} of ${attendanceTotal} Sunday classes.`
-                  : 'Attendance appears here once Sunday classes begin.'}
+                {isEnrolled
+                  ? 'Open a child’s profile to see their Sunday attendance.'
+                  : 'Enroll your children to join Sunday Bala Vihar classes.'}
               </div>
               {!isEnrolled && (
                 <Link href="/family/enroll" className="btn btn--s btn--block" style={{ marginTop: 12, display: 'block', textAlign: 'center', textDecoration: 'none' }}>Enroll now</Link>
@@ -223,7 +209,9 @@ export default async function FamilyDashboardPage() {
                   </div>
                 </>
               )}
-              {!isEnrolled && (
+              {isEnrolled ? (
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>Suggested Bala Vihar contribution for this year.</div>
+              ) : (
                 <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>A charitable gift to Chinmaya Mission Toronto — any amount welcome.</div>
               )}
             </div>
@@ -342,9 +330,9 @@ export default async function FamilyDashboardPage() {
           <VolunteeringSkillsNudge mid={currentMid} />
         )}
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 18 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 18 }}>
           <MetricCard
-            label="Donation"
+            label="Bala Vihar donation"
             value={legacyPaid ? 'Completed' : isEnrolled ? `$${givenForPeriod}` : '—'}
             sub={
               !isEnrolled
@@ -360,12 +348,6 @@ export default async function FamilyDashboardPage() {
             {...(donationTone ? { tone: donationTone } : {})}
           />
           <MetricCard label="Bala Vihar" value={isEnrolled ? 'Enrolled' : 'Not yet'} sub={enrollPeriodLabel ?? 'no active period'}/>
-          <MetricCard
-            label="Attendance"
-            value={hasAttendance ? String(ci.attended) : '—'}
-            sub={hasAttendance ? `of ${attendanceTotal} Sundays` : 'no classes yet'}
-            {...(hasAttendance ? { tone: attendancePct >= 75 ? ('ok' as const) : ('warn' as const) } : {})}
-          />
           <MetricCard label="Family"     value={String(memberCount)} sub={`${memberCount} member${memberCount !== 1 ? 's' : ''}`}/>
         </div>
 
@@ -376,33 +358,30 @@ export default async function FamilyDashboardPage() {
                 <h3 style={{ fontSize: 14, fontWeight: 600 }}><em className="sa">Bala Vihar</em>{enrollPeriodLabel ? ` · ${enrollPeriodLabel}` : ''}</h3>
                 {isEnrolled && <span className="pill" style={{ background: 'var(--accentSoft)', color: 'var(--accentDeep)' }}>Enrolled</span>}
               </div>
-              {hasAttendance ? (
+              {isEnrolled ? (
                 <>
-                  <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 10 }}>Sundays attended</div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
-                    {ci.marks.map((m) => (
-                      <span
-                        key={m.date}
-                        title={m.present ? 'Present' : 'Absent'}
-                        style={{
-                          fontSize: 12, fontWeight: 600, padding: '5px 10px', borderRadius: 8,
-                          background: m.present ? 'var(--accentSoft)' : 'var(--err-soft, #f6dcdc)',
-                          color: m.present ? 'var(--accentDeep)' : 'var(--err)',
-                          textDecoration: m.present ? 'none' : 'line-through',
-                        }}
-                      >
-                        {fmtSunday(m.date)}
-                      </span>
-                    ))}
+                  <div style={{ marginBottom: 14 }}>
+                    <span style={{ fontSize: 36, fontWeight: 600, letterSpacing: '-0.02em' }}>{kidsEnrolled}</span>
+                    <span style={{ color: 'var(--muted)', marginLeft: 8, fontSize: 14 }}>
+                      {kidsEnrolled === 1 ? 'child enrolled' : 'children enrolled'}
+                    </span>
                   </div>
-                  <div style={{ fontSize: 12, color: 'var(--muted)' }}>
-                    Attended <strong style={{ color: 'var(--ink)' }}>{ci.attended}</strong> of {attendanceTotal} class Sundays this year.
-                  </div>
+                  <p style={{ fontSize: 13, color: 'var(--body-text)', lineHeight: 1.5, marginBottom: 18 }}>
+                    Sunday attendance is tracked per child — open a child&apos;s profile to see their classes.
+                  </p>
+                  <Link href="/family/members" className="btn btn--s" style={{ textDecoration: 'none', display: 'inline-block' }}>
+                    View members →
+                  </Link>
                 </>
               ) : (
-                <div style={{ padding: '24px 0', color: 'var(--muted)', fontSize: 13 }}>
-                  Attendance will appear here once Sunday classes begin.
-                </div>
+                <>
+                  <div style={{ padding: '8px 0 18px', color: 'var(--muted)', fontSize: 13, lineHeight: 1.5 }}>
+                    Enroll your children to join Sunday Bala Vihar classes.
+                  </div>
+                  <Link href="/family/enroll" className="btn btn--p" style={{ textDecoration: 'none', display: 'inline-block' }}>
+                    Enroll now
+                  </Link>
+                </>
               )}
             </div>
           </Suspense>
@@ -410,7 +389,7 @@ export default async function FamilyDashboardPage() {
           <Suspense fallback={<SkeletonCard />}>
             <div className="card" style={{ padding: 24 }}>
               <div className="between" style={{ marginBottom: 14 }}>
-                <span style={{ fontSize: 14, fontWeight: 600 }}>Donation</span>
+                <span style={{ fontSize: 14, fontWeight: 600 }}>Bala Vihar donation</span>
                 <SetuIcon.info color="var(--muted)"/>
               </div>
               {legacyPaid ? (
@@ -422,6 +401,7 @@ export default async function FamilyDashboardPage() {
                 </div>
               ) : isEnrolled && suggestedAmount !== null ? (
                 <>
+                  <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 10 }}>Suggested Bala Vihar contribution for this year.</div>
                   <div style={{ marginBottom: 14 }}>
                     <span style={{ fontSize: 36, fontWeight: 600, letterSpacing: '-0.02em' }}>${givenForPeriod}</span>
                     <span style={{ color: 'var(--muted)', marginLeft: 6, fontSize: 14 }}>of ${suggestedAmount} suggested</span>

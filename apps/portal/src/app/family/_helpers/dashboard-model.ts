@@ -1,19 +1,8 @@
 import { paymentSourceOf } from '@cmt/shared-domain';
 import type { DonationDoc, ProgramDoc } from '@cmt/shared-domain';
 import type { EnrollmentWithOffering } from '@/features/setu/enrollment/get-enrollments';
-import type { ResolvedSummary } from '@/features/setu/attendance/resolve-attendance';
 import { selectBalaViharEnrollment } from './select-bv-enrollment';
 import { deriveProgramCards, type ProgramCard } from './derive-program-cards';
-
-/** YYYY-MM-DD in America/Toronto — the project-wide canonical day boundary. */
-export function torontoYmd(d: Date): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Toronto',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(d);
-}
 
 /**
  * True when the active Bala Vihar enrollment's offering is legacy-sourced (the
@@ -38,11 +27,6 @@ export interface DashboardModelInput {
   donations: DonationDoc[];
   /** Program docs keyed by programKey (for capability-aware cards). */
   programsById: Map<string, ProgramDoc>;
-  /** Family-level BV attendance union (teacher marks ∪ door check-ins), already
-   *  window-scoped to the BV offering by the caller. */
-  bvAttendance: ResolvedSummary;
-  /** Class Sundays held so far this year (calendar) — the honest denominator. */
-  classSundaysHeld: number;
   /**
    * Legacy roster payment status, fetched by the caller ONLY when
    * `isLegacyBvPeriod(enrollments)` is true; null otherwise. Compared `=== 'paid'`.
@@ -63,13 +47,6 @@ export interface FamilyDashboardModel {
   legacyPaid: boolean;
   /** One card per active NON-BV enrollment (BV has its own bespoke section). */
   otherProgramCards: ProgramCard[];
-  /** Family-level BV attendance (teacher marks ∪ door check-ins), window-scoped. */
-  attendance: {
-    summary: { attended: number; marks: { date: string; present: boolean }[] };
-    hasAttendance: boolean;
-    total: number;
-    pct: number;
-  };
   donation: {
     complete: boolean;
     pct: number;
@@ -87,15 +64,13 @@ export interface FamilyDashboardModel {
  * fetches the raw data and renders this; ALL the branching logic lives here so
  * it can be unit-tested with multi-enrollment fixtures.
  *
- * Critically, the BV card / donation / attendance all resolve through
+ * Critically, the BV card / donation both resolve through
  * `selectBalaViharEnrollment` — pinned to the active *Bala Vihar* enrollment —
- * so a newer non-BV enrollment (e.g. Tabla) cannot hijack the section or scope
- * attendance to a window with no check-ins. Every non-BV enrollment surfaces
- * separately via `deriveProgramCards`.
+ * so a newer non-BV enrollment (e.g. Tabla) cannot hijack the section. Every
+ * non-BV enrollment surfaces separately via `deriveProgramCards`.
  */
 export function buildFamilyDashboardModel(input: DashboardModelInput): FamilyDashboardModel {
-  const { enrollments, donations, programsById, bvAttendance, classSundaysHeld, legacyPaymentStatus } =
-    input;
+  const { enrollments, donations, programsById, legacyPaymentStatus } = input;
 
   const bv = selectBalaViharEnrollment(enrollments);
   const isEnrolled = bv !== null;
@@ -112,15 +87,6 @@ export function buildFamilyDashboardModel(input: DashboardModelInput): FamilyDas
 
   const isLegacyPeriod = isLegacyBvPeriod(enrollments);
   const legacyPaid = isLegacyPeriod && legacyPaymentStatus === 'paid';
-
-  // The family-level BV union is computed + window-scoped by the caller; the
-  // model just formats it. attendedPct uses classSundaysHeld as the honest
-  // denominator when known (else the union's own total).
-  const attended = bvAttendance.present + bvAttendance.late;
-  const hasAttendance = bvAttendance.total > 0;
-  const attendanceTotal = classSundaysHeld > 0 ? classSundaysHeld : bvAttendance.total;
-  const attendancePct = attendanceTotal > 0 ? Math.round((attended / attendanceTotal) * 100) : 0;
-  const attendanceMarks = bvAttendance.marks.map((m) => ({ date: m.date, present: m.status !== 'absent' }));
 
   const otherProgramCards = deriveProgramCards(enrollments, programsById).filter(
     (c) => c.programKey !== 'bala-vihar',
@@ -141,14 +107,14 @@ export function buildFamilyDashboardModel(input: DashboardModelInput): FamilyDas
   const showGive = isEnrolled && !legacyPaid;
   const showProgress = isEnrolled && suggestedAmount !== null && !legacyPaid;
   const donationHeading = !isEnrolled
-    ? 'Donation'
+    ? 'Bala Vihar donation'
     : legacyPaid
       ? 'Completed'
       : isLegacyPeriod
-        ? 'Payment pending'
+        ? 'Bala Vihar payment pending'
         : donationComplete
           ? 'Thank you for your donation'
-          : 'Donation pending';
+          : 'Bala Vihar donation pending';
   const enrolledPill = isEnrolled
     ? { text: 'Enrolled', bg: 'var(--accentSoft)', fg: 'var(--accentDeep)' }
     : { text: 'Not enrolled', bg: 'var(--surface2)', fg: 'var(--muted)' };
@@ -163,12 +129,6 @@ export function buildFamilyDashboardModel(input: DashboardModelInput): FamilyDas
     isLegacyPeriod,
     legacyPaid,
     otherProgramCards,
-    attendance: {
-      summary: { attended, marks: attendanceMarks },
-      hasAttendance,
-      total: attendanceTotal,
-      pct: attendancePct,
-    },
     donation: {
       complete: donationComplete,
       pct: donationPct,

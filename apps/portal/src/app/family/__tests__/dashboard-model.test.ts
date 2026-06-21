@@ -5,13 +5,12 @@ import {
   type DashboardModelInput,
 } from '../_helpers/dashboard-model';
 import type { EnrollmentWithOffering } from '@/features/setu/enrollment/get-enrollments';
-import type { ResolvedSummary } from '@/features/setu/attendance/resolve-attendance';
 import type { DonationDoc, ProgramDoc, OfferingDoc } from '@cmt/shared-domain';
 
 // ─── Fixtures ───────────────────────────────────────────────────────────────
-// Mirrors the real UAT scenario that produced the bug: a family enrolled in both
-// Bala Vihar 2025-26 and (more recently) Tabla 2026-27, with check-ins that fall
-// inside the BV window but NOT the Tabla window.
+// Mirrors the real UAT scenario that produced the BV-pinning bug: a family
+// enrolled in both Bala Vihar 2025-26 and (more recently) Tabla 2026-27. The BV
+// card / donation must stay pinned to the BV enrollment, never the newer Tabla.
 
 const BV_OFFERING: OfferingDoc = {
   oid: 'bv-brampton-2025-26',
@@ -128,19 +127,6 @@ const PROGRAMS = new Map<string, ProgramDoc>([
   ['tabla', tablaProgram()],
 ]);
 
-function resolved(marks: { date: string; status: 'present' | 'late' | 'absent'; source?: 'portal' | 'door' }[]): ResolvedSummary {
-  const sorted = [...marks].sort((a, b) => a.date.localeCompare(b.date)).map((m) => ({ ...m, source: m.source ?? 'door' }));
-  const present = sorted.filter((m) => m.status === 'present').length;
-  const late = sorted.filter((m) => m.status === 'late').length;
-  const absent = sorted.filter((m) => m.status === 'absent').length;
-  const total = sorted.length;
-  return { present, late, absent, total, attendedPct: total ? Math.round(((present + late) / total) * 100) : 0, marks: sorted };
-}
-
-// The family-level BV union the page now computes (teacher marks ∪ door check-ins,
-// already window-scoped by the reader) — two attended Sundays.
-const BV_ATTENDANCE = resolved([{ date: '2025-10-05', status: 'present' }, { date: '2026-01-11', status: 'present' }]);
-
 function makeDonation(overrides: Partial<DonationDoc> = {}): DonationDoc {
   return {
     fid: 'CMT-AAAA',
@@ -165,8 +151,6 @@ function input(overrides: Partial<DashboardModelInput> = {}): DashboardModelInpu
     enrollments: [TABLA_ENROLLMENT, BV_ENROLLMENT], // Tabla first (enrolledAt DESC)
     donations: [],
     programsById: PROGRAMS,
-    bvAttendance: BV_ATTENDANCE,
-    classSundaysHeld: 30,
     legacyPaymentStatus: null,
     ...overrides,
   };
@@ -182,15 +166,6 @@ describe('buildFamilyDashboardModel — BV section pins to Bala Vihar', () => {
     expect(m.suggestedAmount).toBe(200); // BV's amount, NOT Tabla's 300
   });
 
-  it('formats the passed BV attendance union (window-scoping lives in the reader)', () => {
-    const m = buildFamilyDashboardModel(input());
-    // The page now passes a pre-scoped family-level union; the model just formats
-    // it. Two attended Sundays over classSundaysHeld=30.
-    expect(m.attendance.hasAttendance).toBe(true);
-    expect(m.attendance.summary.attended).toBe(2);
-    expect(m.attendance.total).toBe(30); // classSundaysHeld
-  });
-
   it('renders one card per non-BV active enrollment (Tabla), excluding BV', () => {
     const m = buildFamilyDashboardModel(input());
     expect(m.otherProgramCards.map((c) => c.programKey)).toEqual(['tabla']);
@@ -203,6 +178,21 @@ describe('buildFamilyDashboardModel — BV section pins to Bala Vihar', () => {
     expect(m.kidsEnrolled).toBe(1);
     // Not enrolled in BV → 0, even if the family has children elsewhere.
     expect(buildFamilyDashboardModel(input({ enrollments: [TABLA_ENROLLMENT] })).kidsEnrolled).toBe(0);
+  });
+
+  it('names Bala Vihar in the donation heading for the enrolled states (#5)', () => {
+    // Enrolled, nothing given yet → the pending heading must name Bala Vihar so
+    // the family knows what the contribution is for.
+    const pending = buildFamilyDashboardModel(input());
+    expect(pending.donation.heading).toBe('Bala Vihar donation pending');
+    // Enrolled + paid in full → positive heading (Bala Vihar context lives in
+    // the surrounding card copy).
+    const paid = buildFamilyDashboardModel(
+      input({
+        donations: [makeDonation({ eid: 'CMT-AAAA-bv-brampton-2025-26', programKey: 'bala-vihar', amountCAD: 200, label: 'BV' })],
+      }),
+    );
+    expect(paid.donation.heading).toBe('Thank you for your donation');
   });
 
   it('givenForPeriod counts only donations for the BV enrollment', () => {
@@ -227,22 +217,18 @@ describe('buildFamilyDashboardModel — no BV enrollment', () => {
     expect(m.isEnrolled).toBe(false);
     expect(m.enrollPeriodLabel).toBeNull();
     expect(m.suggestedAmount).toBeNull();
-    expect(m.donation.heading).toBe('Donation');
+    expect(m.donation.heading).toBe('Bala Vihar donation');
     // General giving moved off-portal (2026-06-04): a non-BV-enrolled family has
     // no in-portal Give button.
     expect(m.donation.showGive).toBe(false);
     expect(m.enrolledPill.text).toBe('Not enrolled');
-    // The model formats whatever union it's given (the page decides whether a
-    // non-BV-enrolled family even computes one).
-    expect(m.attendance.summary.attended).toBe(2);
     // Tabla still gets its own card.
     expect(m.otherProgramCards.map((c) => c.programKey)).toEqual(['tabla']);
   });
 
-  it('handles an empty family (no enrollments, no check-ins)', () => {
-    const m = buildFamilyDashboardModel(input({ enrollments: [], bvAttendance: resolved([]), donations: [] }));
+  it('handles an empty family (no enrollments)', () => {
+    const m = buildFamilyDashboardModel(input({ enrollments: [], donations: [] }));
     expect(m.isEnrolled).toBe(false);
-    expect(m.attendance.hasAttendance).toBe(false);
     expect(m.donation.tone).toBeNull();
     expect(m.donation.showGive).toBe(false); // no general giving in-portal
   });
@@ -266,10 +252,10 @@ describe('buildFamilyDashboardModel — legacy payment bridge', () => {
     expect(m.donation.showProgress).toBe(false);
   });
 
-  it('legacy-pending shows Payment pending and still allows giving', () => {
+  it('legacy-pending shows Bala Vihar payment pending and still allows giving', () => {
     const m = buildFamilyDashboardModel(input({ enrollments: [legacyBv], legacyPaymentStatus: 'pending' }));
     expect(m.legacyPaid).toBe(false);
-    expect(m.donation.heading).toBe('Payment pending');
+    expect(m.donation.heading).toBe('Bala Vihar payment pending');
     expect(m.donation.showGive).toBe(true);
   });
 });

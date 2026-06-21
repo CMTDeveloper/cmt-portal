@@ -81,7 +81,7 @@ test.describe('mobile Bearer auth path (deployed UAT)', () => {
     expect(res.status(), `dashboard GET over Bearer: ${await res.text()}`).toBe(200);
     const body = (await res.json()) as {
       family: { fid: string };
-      balaVihar: { isEnrolled: boolean; attendance: { total: number } };
+      balaVihar: { isEnrolled: boolean };
       seva: unknown;
       members: unknown[];
     };
