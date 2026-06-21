@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Reference copy (committed for durability). The LIVE copy lives at
+  ~/Library/LaunchAgents/org.chinmayatoronto.cmt-github-monitor.plist
+  Install:  launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/org.chinmayatoronto.cmt-github-monitor.plist
+  The absolute path below is machine-specific; regenerate it if the repo moves.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>org.chinmayatoronto.cmt-github-monitor</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string>
+    <string>/Users/dineshmatta/projects/chinmaya-mission-portal/scripts/github-monitor/run-monitor.sh</string>
+  </array>
+
+  <!-- Every 15 minutes (launchd has no */15 syntax; enumerate the minutes). -->
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Minute</key><integer>15</integer></dict>
+    <dict><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Minute</key><integer>45</integer></dict>
+  </array>
+
+  <!-- Don't fire the moment it's loaded; wait for the next scheduled minute. -->
+  <key>RunAtLoad</key>
+  <false/>
+
+  <key>ProcessType</key>
+  <string>Background</string>
+
+  <key>StandardOutPath</key>
+  <string>/Users/dineshmatta/.cmt-github-monitor/launchd.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/dineshmatta/.cmt-github-monitor/launchd.err.log</string>
+</dict>
+</plist>
