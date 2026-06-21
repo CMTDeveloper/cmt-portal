@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { SetuAvatar, SetuIcon } from '@cmt/ui';
 import { CspRoot } from '@/features/family/components/atoms';
 import { MobileInviteButton, DesktopInviteButton } from './invite-button';
+import { PromoteManagerButton } from './promote-manager-button';
 import { mockFamily } from '@/features/family/data/mock';
 import { flags } from '@/lib/flags';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
@@ -12,6 +13,7 @@ type DisplayMember = {
   name: string;
   type: string;
   tag: string | null;
+  isManager: boolean;
   warn: string | null;
   email: string | null;
   phone: string | null;
@@ -33,6 +35,7 @@ function memberToDisplay(m: MemberDoc, currentMid: string | null): DisplayMember
     name,
     type: typeLabel,
     tag: m.manager ? 'Manager' : null,
+    isManager: m.manager,
     warn: m.foodAllergies ?? null,
     email: m.email,
     phone: m.phone,
@@ -52,6 +55,7 @@ export default async function FamilyRosterPage() {
     name: m.name,
     type: m.type === 'Child' ? `Child · ${m.grade ?? ''}` : 'Adult',
     tag: m.manager ? 'Manager' : null,
+    isManager: m.manager,
     warn: m.allergy?.summary ?? null,
     email: m.email,
     phone: m.phone,
@@ -59,6 +63,8 @@ export default async function FamilyRosterPage() {
     isCurrent: false,
     nameMissing: false,
   }));
+  // Only a family manager may promote others; the mock view is read-only.
+  let canManage = false;
   if (flags.setuAuth) {
     const data = await getCurrentFamily();
     if (data) {
@@ -67,6 +73,7 @@ export default async function FamilyRosterPage() {
       familyLocation = data.family.location;
       familyJoinedYear = data.family.createdAt.getFullYear();
       members = data.members.map((m) => memberToDisplay(m, data.currentMid));
+      canManage = data.isManager;
     }
   }
 
@@ -97,21 +104,26 @@ export default async function FamilyRosterPage() {
 
               <div className="col" style={{ gap: 8 }}>
                 {members.map((m, i) => (
-                  <Link key={i} href={m.nameMissing && m.isCurrent ? `/family/members/${m.mid}/edit` : `/family/members/${m.mid}`} className="focus-ring" style={{ width: '100%', padding: 14, background: 'var(--surface)', border: m.isCurrent ? '1px solid var(--accent)' : '1px solid var(--line)', borderRadius: 'var(--radius)', display: 'flex', alignItems: 'center', gap: 12, textDecoration: 'none', color: 'inherit' }}>
-                    <SetuAvatar name={m.nameMissing ? '?' : m.name} size={44}/>
-                    <div style={{ flex: 1, textAlign: 'left' }}>
-                      <div className="row" style={{ gap: 8 }}>
-                        <span style={{ fontWeight: 600, fontSize: 14, color: m.nameMissing ? 'var(--muted)' : 'inherit', fontStyle: m.nameMissing ? 'italic' : 'normal' }}>{m.name}</span>
-                        {m.isCurrent && <span style={{ fontSize: 10, padding: '1px 7px', background: 'var(--accentSoft)', color: 'var(--accentDeep)', borderRadius: 99, fontWeight: 600 }}>You</span>}
-                        {m.tag && <span style={{ fontSize: 10, padding: '1px 7px', background: 'var(--accentSoft)', color: 'var(--accentDeep)', borderRadius: 99, fontWeight: 600 }}>{m.tag}</span>}
+                  <div key={i}>
+                    <Link href={m.nameMissing && m.isCurrent ? `/family/members/${m.mid}/edit` : `/family/members/${m.mid}`} className="focus-ring" style={{ width: '100%', padding: 14, background: 'var(--surface)', border: m.isCurrent ? '1px solid var(--accent)' : '1px solid var(--line)', borderRadius: 'var(--radius)', display: 'flex', alignItems: 'center', gap: 12, textDecoration: 'none', color: 'inherit' }}>
+                      <SetuAvatar name={m.nameMissing ? '?' : m.name} size={44}/>
+                      <div style={{ flex: 1, textAlign: 'left' }}>
+                        <div className="row" style={{ gap: 8 }}>
+                          <span style={{ fontWeight: 600, fontSize: 14, color: m.nameMissing ? 'var(--muted)' : 'inherit', fontStyle: m.nameMissing ? 'italic' : 'normal' }}>{m.name}</span>
+                          {m.isCurrent && <span style={{ fontSize: 10, padding: '1px 7px', background: 'var(--accentSoft)', color: 'var(--accentDeep)', borderRadius: 99, fontWeight: 600 }}>You</span>}
+                          {m.tag && <span style={{ fontSize: 10, padding: '1px 7px', background: 'var(--accentSoft)', color: 'var(--accentDeep)', borderRadius: 99, fontWeight: 600 }}>{m.tag}</span>}
+                        </div>
+                        <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
+                          {m.nameMissing && m.isCurrent ? 'Tap to add your name →' : m.type}
+                        </div>
+                        {m.warn && <div style={{ marginTop: 6, fontSize: 11, color: 'var(--err)', display: 'flex', alignItems: 'center', gap: 4 }}><SetuIcon.warn/> {m.warn}</div>}
                       </div>
-                      <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
-                        {m.nameMissing && m.isCurrent ? 'Tap to add your name →' : m.type}
-                      </div>
-                      {m.warn && <div style={{ marginTop: 6, fontSize: 11, color: 'var(--err)', display: 'flex', alignItems: 'center', gap: 4 }}><SetuIcon.warn/> {m.warn}</div>}
-                    </div>
-                    <SetuIcon.chevron color="var(--muted)"/>
-                  </Link>
+                      <SetuIcon.chevron color="var(--muted)"/>
+                    </Link>
+                    {canManage && !m.isManager && (
+                      <PromoteManagerButton mid={m.mid} name={m.name} variant="mobile"/>
+                    )}
+                  </div>
                 ))}
               </div>
             </div>
@@ -146,6 +158,9 @@ export default async function FamilyRosterPage() {
                   <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{m.type}</div>
                 </div>
                 <div className="row" style={{ gap: 8 }}>
+                  {canManage && !m.isManager && (
+                    <PromoteManagerButton mid={m.mid} name={m.name} variant="desktop"/>
+                  )}
                   <Link href={`/family/members/${m.mid}/profile`} className="btn btn--s" style={{ padding: '6px 10px', fontSize: 12 }}>Profile</Link>
                   <Link href={`/family/members/${m.mid}/edit`} className="btn btn--s" style={{ padding: '6px 10px', fontSize: 12 }}><SetuIcon.edit/> Edit</Link>
                 </div>

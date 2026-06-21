@@ -35,7 +35,12 @@ export function InviteModal({ open, onClose }: Props) {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast.error((data as { error?: string })?.error ?? 'Could not send invite. Try again.');
+        const code = (data as { error?: string })?.error;
+        if (res.status === 409 && code === 'already-member') {
+          toast.error('That email already belongs to a member of your family.');
+          return;
+        }
+        toast.error(code ?? 'Could not send invite. Try again.');
         return;
       }
       toast.success('Invite sent!');

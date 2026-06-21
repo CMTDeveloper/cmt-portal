@@ -58,18 +58,26 @@ const validBody = {
   relation: 'Spouse',
 };
 
+type RosterMember = { email?: string | null; altEmails?: string[] };
+
 function setupFirestoreMock(overrides: {
   familyExists?: boolean;
   familyName?: string;
   memberExists?: boolean;
   inviterName?: string;
+  roster?: RosterMember[];
 } = {}) {
   const {
     familyExists = true,
     familyName = 'Sharma Family',
     memberExists = true,
     inviterName = 'Raj Sharma',
+    roster = [],
   } = overrides;
+
+  // Reset queued get() resolutions so tests that re-invoke setup (e.g. to supply
+  // a roster) don't consume the default empty-roster reads queued in beforeEach.
+  mockGet.mockReset();
 
   mockRunTransaction.mockImplementation(async (fn: (txn: unknown) => unknown) => {
     const txn = { get: mockGet, set: mockSet };
@@ -80,6 +88,11 @@ function setupFirestoreMock(overrides: {
     exists: familyExists,
     data: () => familyExists ? { fid: 'FAM001ABCD12', name: familyName } : undefined,
   };
+  // The route reads the members subcollection to reject inviting an existing
+  // member; the read returns a query snapshot with a `.docs` array.
+  const membersSnap = {
+    docs: roster.map((m) => ({ data: () => m })),
+  };
   const memberSnap = {
     exists: memberExists,
     data: () => memberExists ? { mid: 'FAM001ABCD12-01', firstName: 'Raj', lastName: 'Sharma', displayName: inviterName } : undefined,
@@ -87,6 +100,7 @@ function setupFirestoreMock(overrides: {
 
   mockGet
     .mockResolvedValueOnce(familySnap)
+    .mockResolvedValueOnce(membersSnap)
     .mockResolvedValueOnce(memberSnap);
 
   const chainRef = makeChainRef();
@@ -234,5 +248,39 @@ describe('POST /api/setu/invite/send', () => {
     expect(docData.expiresAt).toEqual({ _date: expected });
 
     vi.useRealTimers();
+  });
+
+  it('returns 409 already-member when email matches an existing member email', async () => {
+    setupFirestoreMock({ roster: [{ email: 'invitee@example.com', altEmails: [] }] });
+    const res = await POST(makeRequest(validBody, managerHeaders()));
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.error).toBe('already-member');
+    expect(mockSendEmail).not.toHaveBeenCalled();
+  });
+
+  it('returns 409 already-member matching case-insensitively', async () => {
+    setupFirestoreMock({ roster: [{ email: 'INVITEE@Example.com', altEmails: [] }] });
+    const res = await POST(makeRequest(validBody, managerHeaders()));
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.error).toBe('already-member');
+  });
+
+  it('returns 409 already-member when email matches a member altEmail', async () => {
+    setupFirestoreMock({ roster: [{ email: 'someone@else.com', altEmails: ['invitee@example.com'] }] });
+    const res = await POST(makeRequest(validBody, managerHeaders()));
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.error).toBe('already-member');
+  });
+
+  it('returns 201 for a genuinely new email even when other members exist', async () => {
+    setupFirestoreMock({ roster: [{ email: 'someone@else.com', altEmails: ['other@else.com'] }] });
+    const res = await POST(makeRequest(validBody, managerHeaders()));
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.token).toBeDefined();
+    expect(mockSendEmail).toHaveBeenCalledOnce();
   });
 });

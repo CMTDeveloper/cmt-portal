@@ -294,6 +294,9 @@ export default function EditMemberPage() {
             />
             Family manager (can add/edit/remove members)
           </label>
+          <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6 }}>
+            Tip: you can also use “Make manager” on the My family page. Uncheck here to remove manager access.
+          </p>
         </div>
       )}
 

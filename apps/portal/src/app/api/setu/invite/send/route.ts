@@ -61,6 +61,24 @@ export async function POST(req: Request) {
       const familyData = familySnap.data() as { name?: string } | undefined;
       familyName = familyData?.name ?? fid;
 
+      // Reject inviting someone who is already a member of this family. Match the
+      // normalized invite email (lowercase/trimmed) against each member's primary
+      // email and any altEmails. Scanned in memory from a single subcollection
+      // read so no array-contains/composite index is required.
+      const membersSnap = await txn.get(
+        db.collection('families').doc(fid).collection('members'),
+      );
+      const isExistingMember = (membersSnap.docs as Array<{ data: () => unknown }>).some((doc) => {
+        const m = doc.data() as { email?: string | null; altEmails?: string[] } | undefined;
+        const candidates = [m?.email ?? null, ...(m?.altEmails ?? [])];
+        return candidates.some(
+          (value) => typeof value === 'string' && value.toLowerCase().trim() === normalizedEmail,
+        );
+      });
+      if (isExistingMember) {
+        throw new Error('already-member');
+      }
+
       let resolvedInviterName = inviterMid ?? 'A family manager';
       if (inviterMid) {
         const memberRef = db.collection('families').doc(fid).collection('members').doc(inviterMid);
@@ -94,6 +112,9 @@ export async function POST(req: Request) {
     const msg = err instanceof Error ? err.message : String(err);
     if (msg === 'family-not-found') {
       return NextResponse.json({ error: 'family-not-found' }, { status: 404 });
+    }
+    if (msg === 'already-member') {
+      return NextResponse.json({ error: 'already-member' }, { status: 409 });
     }
     throw err;
   }
