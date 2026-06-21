@@ -216,7 +216,12 @@ function setupSendTransaction() {
   mockRunTransaction.mockImplementation(async (fn: (txn: unknown) => Promise<unknown>) => {
     const txn = {
       get: vi.fn()
+        // 1. txn.get(familyRef)
         .mockResolvedValueOnce({ exists: true, data: () => FAMILY_DOC })
+        // 2. txn.get(membersCollection) — existing-member guard (issue #12): no
+        //    member matches the invitee email, so the invite proceeds.
+        .mockResolvedValueOnce({ docs: [] })
+        // 3. txn.get(inviterMemberRef)
         .mockResolvedValueOnce({ exists: true, data: () => MANAGER_DOC }),
       set: mockFirestoreSet,
     };

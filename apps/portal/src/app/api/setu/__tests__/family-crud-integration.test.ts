@@ -356,7 +356,9 @@ describe('POST /api/setu/members', () => {
       throw Object.assign(new Error('Contact already registered'), { code: 'duplicate-contact' });
     });
 
-    const payload = { firstName: 'Arjun', lastName: 'Patel', type: 'Adult', gender: 'Male', email: 'arjun@example.com' };
+    // Adults must carry ≥1 volunteering skill (issue #10) — include one so the
+    // POST reaches the dedupe transaction this test is actually exercising.
+    const payload = { firstName: 'Arjun', lastName: 'Patel', type: 'Adult', gender: 'Male', email: 'arjun@example.com', volunteeringSkills: ['Teaching / Facilitation'] };
     const results = await Promise.allSettled([
       membersPOST(makeRequest('POST', '/api/setu/members', payload, managerHeaders(FAMILY_FID, MEMBER_01_MID))),
       membersPOST(makeRequest('POST', '/api/setu/members', payload, managerHeaders(FAMILY_FID, MEMBER_01_MID))),
