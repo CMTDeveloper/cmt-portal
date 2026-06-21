@@ -44,9 +44,10 @@ export default async function AdminUsersPage() {
           Users &amp; roles
         </h1>
         <p style={{ fontSize: 14, color: 'var(--body-text)', marginTop: 10, maxWidth: 680, lineHeight: 1.55 }}>
-          Every sevak and their effective roles. Grant or revoke admin &amp; welcome-team;
-          teacher status is read-only here (managed at <code>/admin/levels</code>). Granted roles
-          apply at the person&apos;s next sign-in.
+          Every sevak and their effective roles. Use <strong>Edit roles</strong> on a person to
+          change their admin &amp; welcome-team access, then <strong>Save changes</strong> — roles
+          never change from a single click. Teacher status is read-only here (managed at{' '}
+          <code>/admin/levels</code>). Saved roles apply at the person&apos;s next sign-in.
         </p>
       </header>
 

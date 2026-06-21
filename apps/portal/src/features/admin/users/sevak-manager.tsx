@@ -4,6 +4,7 @@ import { useId, useMemo, useState, useTransition, type FormEvent } from 'react';
 import Link from 'next/link';
 import { toast } from '@cmt/ui';
 import type { SevakRow, GrantableRole } from '@cmt/shared-domain';
+import { GRANTABLE_ROLES } from '@cmt/shared-domain';
 import { ROLE_REFERENCE } from '@/lib/auth/roles-reference';
 import { grantRoleClient, revokeRoleClient, listSevaksClient } from './users-client';
 import { RoleChip, TeacherBadge } from './role-badges';
@@ -22,10 +23,6 @@ function toastError(code: string, fallback: string) {
 }
 
 const GRANT_NOTE = 'Applies at their next sign-in.';
-
-// In-flight key: "grant:admin" | "revoke:welcome-team" etc. Tracks which
-// specific action on this row is pending so sibling buttons stay enabled.
-type InFlightKey = `grant:${GrantableRole}` | `revoke:${GrantableRole}`;
 
 interface SevakManagerProps {
   initialSevaks: SevakRow[];
@@ -76,7 +73,18 @@ export function SevakManager({ initialSevaks }: SevakManagerProps) {
         {filtered.length === 0 ? (
           <EmptyState />
         ) : (
-          <div className="col" style={{ gap: 10, marginTop: 14 }}>
+          // Responsive grid: fills the horizontal space (was a single cramped
+          // left column with empty white space on the right). Cards reflow to
+          // 1 / 2 / 3 columns as width allows; auto-fill keeps a sensible min.
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
+              gap: 12,
+              marginTop: 14,
+              alignItems: 'start',
+            }}
+          >
             {filtered.map((s) => (
               <SevakCard key={s.key} row={s} onChanged={refresh} mobile={false} />
             ))}
@@ -196,6 +204,9 @@ function EmptyState() {
 
 // ─── One sevak row ─────────────────────────────────────────────────────────
 
+// Roles an admin can toggle through the edit form. Teacher stays read-only
+// (managed at /admin/levels), so it is not part of the editable set.
+
 function SevakCard({
   row,
   onChanged,
@@ -205,55 +216,76 @@ function SevakCard({
   onChanged: () => void;
   mobile: boolean;
 }) {
-  // FIX #2: per-action in-flight key so only the acting button is disabled.
-  const [inFlight, setInFlight] = useState<InFlightKey | null>(null);
+  // Edit-mode workflow: a stray click can no longer mutate a role. The default
+  // view is read-only; only an explicit "Save changes" inside edit mode calls
+  // the grant/revoke endpoints (and only for the roles that actually changed).
+  const [editing, setEditing] = useState(false);
+  // Working selection while in edit mode, keyed by grantable role.
+  const [draft, setDraft] = useState<Record<GrantableRole, boolean>>(() => snapshotRoles(row));
+  const [saving, setSaving] = useState(false);
   // FIX #5: stable id for the disclosure panel (aria-controls).
   const panelId = useId();
+  const editFormId = useId();
   const [expanded, setExpanded] = useState(false);
 
-  async function handleRevoke(role: GrantableRole) {
-    if (!row.contact) {
-      toast.error('No contact on record — cannot revoke.');
-      return;
-    }
-    if (!confirm(`Revoke ${ROLE_REFERENCE[role].label} from ${row.name}?`)) return;
-    const key: InFlightKey = `revoke:${role}`;
-    setInFlight(key);
-    try {
-      await revokeRoleClient({ contact: row.contact, role });
-      toast.success(`Revoked ${ROLE_REFERENCE[role].label} from ${row.name}.`);
-      onChanged();
-    } catch (err) {
-      toastError(err instanceof Error ? err.message : 'unknown', 'Revoke failed');
-    } finally {
-      setInFlight(null);
-    }
-  }
-
-  async function handleGrant(role: GrantableRole) {
-    if (!row.contact) {
-      toast.error('No contact on record — cannot grant.');
-      return;
-    }
-    const key: InFlightKey = `grant:${role}`;
-    setInFlight(key);
-    try {
-      await grantRoleClient({ contact: row.contact, role });
-      toast.success(`Granted ${ROLE_REFERENCE[role].label} to ${row.name}. ${GRANT_NOTE}`);
-      onChanged();
-    } catch (err) {
-      toastError(err instanceof Error ? err.message : 'unknown', 'Grant failed');
-    } finally {
-      setInFlight(null);
-    }
-  }
-
-  const grantable: GrantableRole[] = ['admin', 'welcome-team'];
   // Roles present on this person, for the access expander.
   const accessRoles = [...row.roles, ...(row.isTeacher ? (['teacher'] as const) : [])];
 
-  // FIX #3: mobile tap targets ≥ 44px; secondary actions demoted to text/ghost.
+  // FIX #3: mobile tap targets ≥ 44px.
   const btnMinHeight = mobile ? 44 : 36;
+
+  function enterEdit() {
+    if (!row.contact) {
+      toast.error('No contact on record — cannot edit roles.');
+      return;
+    }
+    setDraft(snapshotRoles(row));
+    setEditing(true);
+  }
+
+  function cancelEdit() {
+    // Discard the draft entirely — no API calls, no mutation.
+    setDraft(snapshotRoles(row));
+    setEditing(false);
+  }
+
+  async function save() {
+    if (!row.contact) {
+      toast.error('No contact on record — cannot save roles.');
+      return;
+    }
+    // Diff the draft vs the row's current roles. Only changed roles are touched.
+    const toGrant = GRANTABLE_ROLES.filter((r) => draft[r] && !row.roles.includes(r));
+    const toRevoke = GRANTABLE_ROLES.filter((r) => !draft[r] && row.roles.includes(r));
+
+    if (toGrant.length === 0 && toRevoke.length === 0) {
+      setEditing(false);
+      return; // Nothing changed — no API calls.
+    }
+
+    setSaving(true);
+    try {
+      // Run grants then revokes sequentially so a mid-flight failure leaves a
+      // clear partial state, and so the last-admin / self-lockout guard on a
+      // revoke surfaces its specific code. Any throw aborts the rest.
+      for (const role of toGrant) {
+        await grantRoleClient({ contact: row.contact, role });
+      }
+      for (const role of toRevoke) {
+        await revokeRoleClient({ contact: row.contact, role });
+      }
+      toast.success(`Updated roles for ${row.name}. ${GRANT_NOTE}`);
+      setEditing(false);
+      onChanged();
+    } catch (err) {
+      // Surface the API error (last-admin / self-lockout / forbidden / …) and
+      // reload state so the UI reflects whatever the server actually persisted.
+      toastError(err instanceof Error ? err.message : 'unknown', 'Saving roles failed');
+      onChanged();
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <div
@@ -292,66 +324,112 @@ function SevakCard({
         </div>
       </div>
 
-      {/* FIX #2 + #3: primary grant/revoke pair first; secondary actions
-          ("Manage as teacher", disclosure) are ghost/text-style with lower visual
-          weight. Each button tracks its own inFlight key so siblings stay enabled. */}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
-        {grantable.map((role) => {
-          const hasRole = row.roles.includes(role);
-          if (hasRole) {
-            const key: InFlightKey = `revoke:${role}`;
-            const busy = inFlight === key;
-            return (
-              <button
-                key={role}
-                type="button"
-                onClick={() => handleRevoke(role)}
-                disabled={busy}
-                style={{ ...revokeBtn, minHeight: btnMinHeight }}
-              >
-                {busy ? 'Revoking…' : `Revoke ${ROLE_REFERENCE[role].label.toLowerCase()}`}
-              </button>
-            );
-          } else {
-            const key: InFlightKey = `grant:${role}`;
-            const busy = inFlight === key;
-            return (
-              <button
-                key={role}
-                type="button"
-                onClick={() => handleGrant(role)}
-                disabled={busy}
-                style={{ ...grantBtn, minHeight: btnMinHeight }}
-              >
-                {busy ? 'Granting…' : `Grant ${ROLE_REFERENCE[role].label.toLowerCase()}`}
-              </button>
-            );
-          }
-        })}
-      </div>
-
-      {/* FIX #3: secondary actions on their own row, visually lighter */}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
-        {row.isTeacher && (
-          <Link href="/admin/levels" style={{ ...textLinkBtn, minHeight: btnMinHeight }}>
-            Manage as teacher →
-          </Link>
-        )}
-        {/* FIX #5: aria-expanded + aria-controls on the disclosure toggle */}
-        <button
-          type="button"
-          onClick={() => setExpanded((v) => !v)}
-          aria-expanded={expanded}
-          aria-controls={panelId}
-          style={{ ...textLinkBtn, minHeight: btnMinHeight }}
+      {editing ? (
+        // ── EDIT MODE: selectable role toggles + explicit Save / Cancel ──
+        <div
+          id={editFormId}
+          role="group"
+          aria-label={`Edit roles for ${row.name}`}
+          style={{
+            marginTop: 12,
+            paddingTop: 12,
+            borderTop: '1px solid var(--line)',
+          }}
         >
-          {expanded ? 'Hide access ↑' : 'What can they access? ↓'}
-        </button>
-      </div>
+          <div className="col" style={{ gap: 8 }}>
+            {GRANTABLE_ROLES.map((role) => {
+              const checked = draft[role];
+              return (
+                <label
+                  key={role}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    minHeight: btnMinHeight,
+                    cursor: saving ? 'default' : 'pointer',
+                    fontSize: 13,
+                    fontFamily: 'var(--body)',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    disabled={saving}
+                    onChange={(e) =>
+                      setDraft((d) => ({ ...d, [role]: e.target.checked }))
+                    }
+                    style={{ width: 18, height: 18, accentColor: 'var(--accent)' }}
+                  />
+                  <span style={{ fontWeight: 600 }}>{ROLE_REFERENCE[role].label}</span>
+                  <span style={{ fontSize: 11, color: 'var(--muted)' }}>
+                    {ROLE_REFERENCE[role].summary}
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+            <button
+              type="button"
+              onClick={save}
+              disabled={saving}
+              aria-label={`Save role changes for ${row.name}`}
+              style={{ ...grantBtn, minHeight: btnMinHeight }}
+            >
+              {saving ? 'Saving…' : 'Save changes'}
+            </button>
+            <button
+              type="button"
+              onClick={cancelEdit}
+              disabled={saving}
+              aria-label={`Cancel editing roles for ${row.name}`}
+              style={{ ...secondaryBtn, minHeight: btnMinHeight }}
+            >
+              Cancel
+            </button>
+          </div>
+          {row.isTeacher && (
+            <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 10, lineHeight: 1.5 }}>
+              Teacher status is managed at <code>/admin/levels</code> and isn&apos;t editable here.
+            </p>
+          )}
+        </div>
+      ) : (
+        // ── READ-ONLY VIEW: no grant/revoke exposed; a single Edit button ──
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12, alignItems: 'center' }}>
+          <button
+            type="button"
+            onClick={enterEdit}
+            aria-label={`Edit roles for ${row.name}`}
+            aria-expanded={editing}
+            aria-controls={editFormId}
+            style={{ ...secondaryBtn, minHeight: btnMinHeight }}
+          >
+            Edit roles
+          </button>
+          {row.isTeacher && (
+            <Link href="/admin/levels" style={{ ...textLinkBtn, minHeight: btnMinHeight }}>
+              Manage as teacher →
+            </Link>
+          )}
+          {/* FIX #5: aria-expanded + aria-controls on the disclosure toggle */}
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            aria-expanded={expanded}
+            aria-controls={panelId}
+            style={{ ...textLinkBtn, minHeight: btnMinHeight }}
+          >
+            {expanded ? 'Hide access ↑' : 'What can they access? ↓'}
+          </button>
+        </div>
+      )}
 
       {/* FIX #5: matching id on the disclosure panel */}
-      <div id={panelId} hidden={!expanded}>
-        {expanded && (
+      <div id={panelId} hidden={editing || !expanded}>
+        {!editing && expanded && (
           <div
             style={{
               marginTop: 12,
@@ -388,6 +466,15 @@ function SevakCard({
       </div>
     </div>
   );
+}
+
+// Snapshot a row's current grantable roles into the checkbox draft shape.
+// noUncheckedIndexedAccess-safe: every GRANTABLE key is assigned explicitly.
+function snapshotRoles(row: SevakRow): Record<GrantableRole, boolean> {
+  return {
+    admin: row.roles.includes('admin'),
+    'welcome-team': row.roles.includes('welcome-team'),
+  };
 }
 
 // ─── Add-sevak form ────────────────────────────────────────────────────────
@@ -723,10 +810,13 @@ const grantBtn: React.CSSProperties = {
   fontFamily: 'var(--body)',
 };
 
-const revokeBtn: React.CSSProperties = {
-  background: 'transparent',
-  border: '1px solid var(--err)',
-  color: 'var(--err)',
+// Neutral outlined button — used for "Edit roles" (read-only view) and
+// "Cancel" (edit mode). Lower emphasis than the accent-filled primary so the
+// destructive-feeling action is never the visually loudest control.
+const secondaryBtn: React.CSSProperties = {
+  background: 'var(--surface)',
+  border: '1px solid var(--line)',
+  color: 'var(--body-text)',
   padding: '8px 14px',
   minHeight: 36, // overridden per-card via btnMinHeight
   borderRadius: 'var(--radiusSm)',
