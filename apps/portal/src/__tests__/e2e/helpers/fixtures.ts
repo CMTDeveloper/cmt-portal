@@ -1,4 +1,5 @@
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
+import { NO_ALLERGIES } from '@cmt/shared-domain/setu';
 import { registerFamily } from '@/features/setu/registration/register-family';
 import type { Location, Gender } from '@/features/setu/registration/register-family';
 
@@ -30,7 +31,12 @@ export async function createTestFamily(input: TestFamilyInput): Promise<TestFami
     manager: {
       firstName: input.managerFirstName ?? 'Test',
       lastName: input.managerLastName ?? 'Manager',
-      gender: input.managerGender ?? 'PreferNotToSay',
+      // Gate-complete: the profile-completion gate treats PreferNotToSay/null as
+      // missing, so a default-built fixture family would be redirected away from
+      // the dashboard and break every E2E that reuses it. Default to a real gender.
+      gender: input.managerGender && input.managerGender !== 'PreferNotToSay'
+        ? input.managerGender
+        : 'Male',
     },
     additionalMembers: [],
   });
@@ -41,13 +47,23 @@ export async function createTestFamily(input: TestFamilyInput): Promise<TestFami
   // Tag family doc with _test: true
   await db.collection('families').doc(fid).set({ _test: true }, { merge: true });
 
-  // Tag manager member doc with _test: true
+  // Tag manager member doc with _test: true AND fill the remaining required
+  // adult fields (foodAllergies + >=1 volunteeringSkill) that registerFamily
+  // hardcodes to null/[] — email + phone already come from the form input — so
+  // the manager satisfies the new per-type required matrix (the gate).
   await db
     .collection('families')
     .doc(fid)
     .collection('members')
     .doc(mid)
-    .set({ _test: true }, { merge: true });
+    .set(
+      {
+        foodAllergies: NO_ALLERGIES,
+        volunteeringSkills: ['General Volunteer Support (happy to help where needed)'],
+        _test: true,
+      },
+      { merge: true },
+    );
 
   // Tag contactKeys with _test: true so cleanup can find them
   const { hashContactKey } = await import('@/features/setu/registration/hash-contact-key');

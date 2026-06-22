@@ -28,7 +28,7 @@ vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
   FieldValue: { serverTimestamp: vi.fn(() => 'SERVER_TIMESTAMP') },
 }));
 
-import { registerFamily } from '../register-family';
+import { registerFamily, deriveBirthMonth } from '../register-family';
 import type { RegisterFamilyInput } from '../register-family';
 
 const baseInput: RegisterFamilyInput = {
@@ -131,6 +131,93 @@ describe('registerFamily — happy path', () => {
   });
 });
 
+describe('deriveBirthMonth', () => {
+  it('parses YYYY-MM into the numeric month (1-12)', () => {
+    expect(deriveBirthMonth('2016-03')).toBe(3);
+    expect(deriveBirthMonth('2020-12')).toBe(12);
+    expect(deriveBirthMonth('2020-01')).toBe(1);
+  });
+  it('returns null for absent/blank/non-YYYY-MM input', () => {
+    expect(deriveBirthMonth(undefined)).toBeNull();
+    expect(deriveBirthMonth(null)).toBeNull();
+    expect(deriveBirthMonth('')).toBeNull();
+    expect(deriveBirthMonth('Mar 2016')).toBeNull();
+    expect(deriveBirthMonth('2016-13')).toBeNull();
+    expect(deriveBirthMonth('2016-00')).toBeNull();
+  });
+});
+
+describe('registerFamily — persists the full member matrix (no hardcoded []/null)', () => {
+  function captureSets() {
+    const txnSet = vi.fn();
+    mockRunTransaction.mockImplementation(async (fn: (txn: unknown) => Promise<unknown>) => {
+      const txn = { get: vi.fn().mockResolvedValue({ exists: false }), set: txnSet };
+      return fn(txn);
+    });
+    return txnSet;
+  }
+
+  // The manager member doc is the SECOND set() call (family doc is first).
+  function managerDoc(txnSet: ReturnType<typeof vi.fn>) {
+    return txnSet.mock.calls.map((c) => c[1] as Record<string, unknown>).find((d) => d?.manager === true);
+  }
+  function memberDocByFirstName(txnSet: ReturnType<typeof vi.fn>, firstName: string) {
+    return txnSet.mock.calls
+      .map((c) => c[1] as Record<string, unknown>)
+      .find((d) => d?.firstName === firstName && d?.manager === false);
+  }
+
+  it('persists the manager foodAllergies + volunteeringSkills (not hardcoded null/[])', async () => {
+    const txnSet = captureSets();
+    await registerFamily({
+      ...baseInput,
+      manager: {
+        firstName: 'Raj', lastName: 'Patel', gender: 'Male',
+        foodAllergies: 'Peanuts', volunteeringSkills: ['Setup', 'Kitchen'],
+      },
+    });
+    const mgr = managerDoc(txnSet);
+    expect(mgr?.foodAllergies).toBe('Peanuts');
+    expect(mgr?.volunteeringSkills).toEqual(['Setup', 'Kitchen']);
+    expect(mgr?.birthMonth).toBeNull(); // adult manager has no birth month
+  });
+
+  it('persists a child member schoolGrade/birthMonthYear AND derives birthMonth', async () => {
+    const txnSet = captureSets();
+    await registerFamily({
+      ...baseInput,
+      additionalMembers: [
+        {
+          firstName: 'Diya', lastName: 'Patel', type: 'Child', gender: 'Female',
+          foodAllergies: 'None', schoolGrade: 'Grade 5', birthMonthYear: '2016-03',
+        },
+      ],
+    });
+    const diya = memberDocByFirstName(txnSet, 'Diya');
+    expect(diya?.schoolGrade).toBe('Grade 5');
+    expect(diya?.birthMonthYear).toBe('2016-03');
+    expect(diya?.birthMonth).toBe(3); // derived from '2016-03'
+    expect(diya?.foodAllergies).toBe('None');
+  });
+
+  it('persists an adult member volunteeringSkills (not hardcoded [])', async () => {
+    const txnSet = captureSets();
+    await registerFamily({
+      ...baseInput,
+      additionalMembers: [
+        {
+          firstName: 'Priya', lastName: 'Patel', type: 'Adult', gender: 'Female',
+          foodAllergies: 'None', email: 'priya@example.com', phone: '+14165550199',
+          volunteeringSkills: ['Decor'],
+        },
+      ],
+    });
+    const priya = memberDocByFirstName(txnSet, 'Priya');
+    expect(priya?.volunteeringSkills).toEqual(['Decor']);
+    expect(priya?.birthMonth).toBeNull(); // no birthMonthYear → null
+  });
+});
+
 describe('registerFamily — duplicate detection', () => {
   it('throws if email contactKey already exists', async () => {
     mockRunTransaction.mockImplementation(async (fn: (txn: unknown) => Promise<unknown>) => {
@@ -161,30 +248,49 @@ describe('registerFamily — duplicate detection', () => {
   });
 });
 
-describe('registerFamily — intra-family duplicate contact', () => {
-  it('throws BEFORE any write when manager email equals an additional member email', async () => {
+describe('registerFamily — same-family contact reuse (owner decision #3)', () => {
+  type ContactKeyDoc = { contactKey: string; type: string; fid: string; mid: string };
+  function contactKeyDocs(txnSet: ReturnType<typeof vi.fn>): ContactKeyDoc[] {
+    return txnSet.mock.calls
+      .map((c) => c[1] as Partial<ContactKeyDoc> | undefined)
+      .filter((d): d is ContactKeyDoc => !!d && typeof d.contactKey === 'string');
+  }
+
+  it('ALLOWS an additional adult to reuse the manager email + phone (shared key, manager keeps ownership)', async () => {
     const txnSet = vi.fn();
     mockRunTransaction.mockImplementation(async (fn: (txn: unknown) => Promise<unknown>) => {
+      // No contactKey pre-exists (brand-new family).
       const txn = { get: vi.fn().mockResolvedValue({ exists: false }), set: txnSet };
       return fn(txn);
     });
 
-    await expect(
-      registerFamily({
-        ...baseInput,
-        additionalMembers: [
-          // Same email as the manager (baseInput.email) → identical normalized hash.
-          { firstName: 'Diya', lastName: 'Patel', type: 'Child', gender: 'Female', email: baseInput.email },
-        ],
-      }),
-    ).rejects.toThrow('duplicate-contact-in-form');
+    // Aarti (an adult) reuses the manager's own email + phone — allowed.
+    const result = await registerFamily({
+      ...baseInput,
+      additionalMembers: [
+        {
+          firstName: 'Aarti', lastName: 'Patel', type: 'Adult', gender: 'Female',
+          foodAllergies: 'None', volunteeringSkills: ['Kitchen'],
+          email: baseInput.email, phone: baseInput.phone,
+        },
+      ],
+    });
 
-    // The guard runs before db.runTransaction, so no transaction and no writes happened.
-    expect(mockRunTransaction).not.toHaveBeenCalled();
-    expect(txnSet).not.toHaveBeenCalled();
+    expect(result.fid).toBeDefined();
+    // Exactly ONE contactKey per unique hash (manager email + manager phone), and
+    // both point to the MANAGER (-01), not the reusing member (-02) — so the
+    // manager's own sign-in still resolves to the manager, not Aarti.
+    const keys = contactKeyDocs(txnSet);
+    const managerMid = `${result.fid}-01`;
+    const emailKeys = keys.filter((d) => d.type === 'email');
+    const phoneKeys = keys.filter((d) => d.type === 'phone');
+    expect(emailKeys).toHaveLength(1);
+    expect(phoneKeys).toHaveLength(1);
+    expect(emailKeys[0]?.mid).toBe(managerMid);
+    expect(phoneKeys[0]?.mid).toBe(managerMid);
   });
 
-  it('throws BEFORE any write when two additional members share the same phone', async () => {
+  it('still REJECTS two NON-manager members claiming the same NEW contact (genuinely ambiguous)', async () => {
     const txnSet = vi.fn();
     mockRunTransaction.mockImplementation(async (fn: (txn: unknown) => Promise<unknown>) => {
       const txn = { get: vi.fn().mockResolvedValue({ exists: false }), set: txnSet };

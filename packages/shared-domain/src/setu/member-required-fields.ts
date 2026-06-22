@@ -45,18 +45,25 @@ export const REQUIRED_CHILD: readonly MemberRequiredField[] = ['schoolGrade', 'b
  * The fields needed to judge completeness. MemberDoc is assignable to this; a
  * form draft (fields possibly undefined/empty) is too. `type` is required
  * because it selects the matrix.
+ *
+ * Every value field accepts `undefined` as well as `null` — with
+ * `exactOptionalPropertyTypes` on, a present-but-`undefined` value (the natural
+ * "no value yet" from optional form state and zod `.optional()` fields) would
+ * otherwise be a type error at every caller. `undefined` is treated exactly like
+ * `null`/empty here: MISSING. This keeps the helper callable from the capture
+ * forms, the write/register routes, and the gate with one shape.
  */
 export interface MemberCompletenessInput {
   type: 'Adult' | 'Child';
-  gender?: string | null;
-  firstName?: string | null;
-  lastName?: string | null;
-  foodAllergies?: string | null;
-  email?: string | null;
-  phone?: string | null;
-  volunteeringSkills?: readonly string[] | null;
-  schoolGrade?: string | null;
-  birthMonthYear?: string | null;
+  gender?: string | null | undefined;
+  firstName?: string | null | undefined;
+  lastName?: string | null | undefined;
+  foodAllergies?: string | null | undefined;
+  email?: string | null | undefined;
+  phone?: string | null | undefined;
+  volunteeringSkills?: readonly string[] | null | undefined;
+  schoolGrade?: string | null | undefined;
+  birthMonthYear?: string | null | undefined;
 }
 
 /** The full required-field list for a given member type. */

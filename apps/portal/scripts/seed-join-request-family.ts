@@ -32,7 +32,7 @@
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { portalAuth } from '@cmt/firebase-shared/admin/auth';
 import { sha256Hex } from '@/features/check-in/shared';
-import { normalizeContactForKey } from '@cmt/shared-domain/setu';
+import { normalizeContactForKey, NO_ALLERGIES } from '@cmt/shared-domain/setu';
 import { registerFamily } from '@/features/setu/registration/register-family';
 import { hashContactKey } from '@/features/setu/registration/hash-contact-key';
 import { findSetuFamilyByContact } from '@/features/setu/auth/find-family-by-contact';
@@ -42,6 +42,8 @@ const MEMBER_EMAIL = process.env['E2E_JR_MEMBER_EMAIL'] ?? 'e2e-jr-member@chinma
 const PASSWORD = process.env['E2E_JR_PASSWORD'] ?? process.env['E2E_FAMILY_PASSWORD'];
 const MANAGER_PHONE = process.env['E2E_JR_MANAGER_PHONE'] ?? '+15195550111';
 const MEMBER_PHONE = process.env['E2E_JR_MEMBER_PHONE'] ?? '+15195550112';
+// A real volunteering skill so the adults satisfy the per-type required matrix.
+const SEED_SKILL = 'General Volunteer Support (happy to help where needed)';
 
 type Db = ReturnType<typeof portalFirestore>;
 
@@ -122,15 +124,17 @@ async function main(): Promise<void> {
       phone: MANAGER_PHONE,
       familyName: 'E2E JoinRequest Family',
       location: 'Brampton',
-      manager: { firstName: 'JR', lastName: 'Manager', gender: 'PreferNotToSay' },
+      // Gate-complete genders (PreferNotToSay reads as missing to the gate).
+      manager: { firstName: 'JR', lastName: 'Manager', gender: 'Male' },
       additionalMembers: [
         {
           firstName: 'JR',
           lastName: 'Member',
           type: 'Adult',
-          gender: 'PreferNotToSay',
+          gender: 'Female',
           email: MEMBER_EMAIL,
           phone: MEMBER_PHONE,
+          foodAllergies: NO_ALLERGIES,
         },
       ],
     });
@@ -162,14 +166,33 @@ async function main(): Promise<void> {
     if (md.email === memberCanonical && md.manager !== true) memberMid = md.mid ?? m.id;
     // Also catch a member promoted to manager:true by a prior approval run.
     if (md.email === memberCanonical && md.mid !== managerMid) memberMid = md.mid ?? m.id;
-    await m.ref.set({ _test: true }, { merge: true });
+    // Gate-complete the manager here (the gated member gets its own write below):
+    // registerFamily hardcodes foodAllergies:null / volunteeringSkills:[]. Both
+    // adults already have email + phone + a real gender from registration.
+    if (md.mid === managerMid) {
+      await m.ref.set(
+        { foodAllergies: NO_ALLERGIES, volunteeringSkills: [SEED_SKILL], _test: true },
+        { merge: true },
+      );
+    } else {
+      await m.ref.set({ _test: true }, { merge: true });
+    }
   }
   if (!memberMid) {
     console.error('Could not locate the gated member by email — aborting.');
     process.exit(1);
   }
   await db.collection('families').doc(fid).collection('members').doc(memberMid).set(
-    { manager: false, portalAccess: 'pending', _test: true },
+    // Reset the gated-member state AND gate-complete it (foodAllergies + >=1
+    // skill — registerFamily hardcodes volunteeringSkills:[]) so that once the
+    // manager approves the join request the member passes the profile gate.
+    {
+      manager: false,
+      portalAccess: 'pending',
+      foodAllergies: NO_ALLERGIES,
+      volunteeringSkills: [SEED_SKILL],
+      _test: true,
+    },
     { merge: true },
   );
   console.log(`gated member ${memberMid} reset to manager:false, portalAccess:'pending'`);

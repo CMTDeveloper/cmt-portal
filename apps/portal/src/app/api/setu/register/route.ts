@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { flags } from '@/lib/flags';
-import { registerFamily, type AdditionalMember } from '@/features/setu/registration/register-family';
+import { registerFamily, type AdditionalMember, type RegisterFamilyManager } from '@/features/setu/registration/register-family';
 import { consumeRegistrationGrant } from '@/features/setu/registration/registration-grant';
 import { portalAuth } from '@cmt/firebase-shared/admin/auth';
 import {
@@ -14,16 +14,21 @@ import {
   checkAndRecordOtpRateLimit,
   REGISTER_RATE_LIMIT_MAX,
 } from '@/features/check-in/shared';
+import { whatsMissingForMember, type MemberRequiredField } from '@cmt/shared-domain';
 
 
+// Capture-form gender is Male|Female ONLY (no PreferNotToSay) — the matrix
+// treats PreferNotToSay as missing, so accepting it would let an incomplete
+// member through registration straight into the post-sign-in gate.
 const additionalMemberSchema = z.object({
   firstName: z.string().min(1),
   lastName: z.string().min(1),
   type: z.enum(['Adult', 'Child']),
-  gender: z.enum(['Male', 'Female', 'PreferNotToSay']),
+  gender: z.enum(['Male', 'Female']),
   schoolGrade: z.string().optional(),
   birthMonthYear: z.string().optional(),
   foodAllergies: z.string().optional(),
+  volunteeringSkills: z.array(z.string()).optional(),
   email: z.string().email().optional(),
   phone: z.string().optional(),
 });
@@ -36,7 +41,9 @@ const bodySchema = z.object({
   manager: z.object({
     firstName: z.string().min(1),
     lastName: z.string().min(1),
-    gender: z.enum(['Male', 'Female', 'PreferNotToSay']),
+    gender: z.enum(['Male', 'Female']),
+    foodAllergies: z.string().optional(),
+    volunteeringSkills: z.array(z.string()).optional(),
   }),
   additionalMembers: z.array(additionalMemberSchema).default([]),
   // Proof that THIS email was just OTP-verified — issued by verify-code on the
@@ -50,6 +57,32 @@ const bodySchema = z.object({
   // apps/portal/docs/mobile-api-integration.md.
   mode: z.enum(['web', 'mobile']).optional(),
 });
+
+// Map the first matrix-missing field to the contract's 400 error code. Same
+// codes the canonical /api/setu/members write returns, so the mobile + web
+// clients share one vocabulary. `skills-required` is reused as-is.
+const MISSING_FIELD_ERROR: Partial<Record<MemberRequiredField, string>> = {
+  foodAllergies: 'foodAllergies-required',
+  email: 'contact-required',
+  phone: 'contact-required',
+  volunteeringSkills: 'skills-required',
+  schoolGrade: 'grade-required',
+  birthMonthYear: 'birthmonth-required',
+};
+
+/**
+ * Per-type required-field validation for one member, using the shared matrix
+ * helper. Returns the contract error code for the first missing field, or null
+ * when complete. firstName/lastName/gender/type are already guaranteed non-empty
+ * by the zod schema, so only the conditionally-required fields ever surface here.
+ */
+function requiredFieldError(member: Parameters<typeof whatsMissingForMember>[0]): string | null {
+  for (const field of whatsMissingForMember(member)) {
+    const code = MISSING_FIELD_ERROR[field];
+    if (code) return code;
+  }
+  return null;
+}
 
 export async function POST(req: Request) {
   if (!flags.setuAuth) {
@@ -84,6 +117,34 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'registration-unverified' }, { status: 403 });
   }
 
+  // PER-TYPE REQUIRED MATRIX (shared helper, same codes as /api/setu/members).
+  // The manager is always an Adult; its email/phone arrive at the top level
+  // (verified above), so they satisfy the adult contact requirement. Adults may
+  // reuse the manager's/family contact — the matrix only checks non-empty, so
+  // same-as-manager reuse PASSES here; cross-family contact theft is still
+  // caught later inside registerFamily's transaction.
+  const managerError = requiredFieldError({
+    type: 'Adult',
+    firstName: parsed.data.manager.firstName,
+    lastName: parsed.data.manager.lastName,
+    gender: parsed.data.manager.gender,
+    foodAllergies: parsed.data.manager.foodAllergies,
+    volunteeringSkills: parsed.data.manager.volunteeringSkills,
+    email: parsed.data.email,
+    phone: parsed.data.phone,
+  });
+  if (managerError) {
+    return NextResponse.json({ error: managerError, member: 'manager' }, { status: 400 });
+  }
+  for (let i = 0; i < parsed.data.additionalMembers.length; i++) {
+    const m = parsed.data.additionalMembers[i];
+    if (!m) continue;
+    const memberError = requiredFieldError(m);
+    if (memberError) {
+      return NextResponse.json({ error: memberError, member: i }, { status: 400 });
+    }
+  }
+
   // Strip undefined optional fields to satisfy exactOptionalPropertyTypes in RegisterFamilyInput
   const additionalMembers: AdditionalMember[] = parsed.data.additionalMembers.map((m) => {
     const member: AdditionalMember = {
@@ -95,11 +156,22 @@ export async function POST(req: Request) {
     if (m.schoolGrade !== undefined) member.schoolGrade = m.schoolGrade;
     if (m.birthMonthYear !== undefined) member.birthMonthYear = m.birthMonthYear;
     if (m.foodAllergies !== undefined) member.foodAllergies = m.foodAllergies;
+    if (m.volunteeringSkills !== undefined) member.volunteeringSkills = m.volunteeringSkills;
     if (m.email !== undefined) member.email = m.email;
     if (m.phone !== undefined) member.phone = m.phone;
     return member;
   });
-  const input = { ...parsed.data, additionalMembers };
+
+  // Same exactOptionalPropertyTypes strip for the manager's new optional fields.
+  const manager: RegisterFamilyManager = {
+    firstName: parsed.data.manager.firstName,
+    lastName: parsed.data.manager.lastName,
+    gender: parsed.data.manager.gender,
+  };
+  if (parsed.data.manager.foodAllergies !== undefined) manager.foodAllergies = parsed.data.manager.foodAllergies;
+  if (parsed.data.manager.volunteeringSkills !== undefined) manager.volunteeringSkills = parsed.data.manager.volunteeringSkills;
+
+  const input = { ...parsed.data, manager, additionalMembers };
 
   let result: { fid: string; mid: string };
   try {

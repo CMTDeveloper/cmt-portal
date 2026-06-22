@@ -4,14 +4,54 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { SetuIcon, toast } from '@cmt/ui';
+import { NO_ALLERGIES, whatsMissingForMember, type MemberRequiredField } from '@cmt/shared-domain';
 import { CspRoot, SectionLabel, FieldError } from '@/features/family/components/atoms';
 import { VolunteeringSkillsPicker } from '@/features/setu/members/volunteering-skills-picker';
 import { getCurrentFamilyClient } from '@/features/setu/members/get-current-family-client';
+import { memberWriteErrorMessage } from '@/features/setu/members/member-write-error';
 import type { FamilyWithMembers } from '@/features/setu/members/get-current-family';
 import { LoadingOm } from '@/components/chrome/loading-om';
 
 type MemberType = 'Adult' | 'Child';
-type Gender = 'Male' | 'Female' | 'PreferNotToSay';
+// Capture forms only ever offer Male|Female. A legacy member carrying the
+// 'PreferNotToSay' sentinel is mapped to no-selection on load so the manager
+// must pick a real value (the write route rejects 'PreferNotToSay').
+type Gender = 'Male' | 'Female';
+
+// Month dropdown carries the numeric value (1-12) so we persist both the
+// canonical birthMonthYear ('YYYY-MM') and the derived birthMonth (1-12).
+const MONTHS: readonly { value: number; label: string }[] = [
+  { value: 1, label: 'January' },
+  { value: 2, label: 'February' },
+  { value: 3, label: 'March' },
+  { value: 4, label: 'April' },
+  { value: 5, label: 'May' },
+  { value: 6, label: 'June' },
+  { value: 7, label: 'July' },
+  { value: 8, label: 'August' },
+  { value: 9, label: 'September' },
+  { value: 10, label: 'October' },
+  { value: 11, label: 'November' },
+  { value: 12, label: 'December' },
+];
+
+// Parse a stored birthMonthYear into the month-value + year the dropdowns use.
+// Canonical form is 'YYYY-MM'; we also tolerate a legacy 'MMM YYYY' shape so
+// older docs don't render blank.
+const LEGACY_MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+function parseBirthMonthYear(value: string): { month: string; year: string } {
+  const iso = /^(\d{4})-(\d{2})$/.exec(value.trim());
+  if (iso) {
+    const m = Number(iso[2]);
+    return { month: m >= 1 && m <= 12 ? String(m) : '', year: iso[1]! };
+  }
+  const legacy = /^([A-Za-z]{3})\w*\s+(\d{4})$/.exec(value.trim());
+  if (legacy) {
+    const idx = LEGACY_MONTHS.indexOf(legacy[1]!.toLowerCase());
+    return { month: idx >= 0 ? String(idx + 1) : '', year: legacy[2]! };
+  }
+  return { month: '', year: '' };
+}
 
 interface FieldErrors {
   firstName?: string;
@@ -34,10 +74,12 @@ export default function EditMemberPage() {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [type, setType] = useState<MemberType>('Adult');
-  const [gender, setGender] = useState<Gender>('Male');
+  const [gender, setGender] = useState<'' | Gender>('');
   const [schoolGrade, setSchoolGrade] = useState('');
-  const [birthMonthYear, setBirthMonthYear] = useState('');
+  const [birthMonth, setBirthMonth] = useState(''); // numeric value as string ('1'..'12')
+  const [birthYear, setBirthYear] = useState('');
   const [foodAllergies, setFoodAllergies] = useState('');
+  const [noAllergies, setNoAllergies] = useState(false);
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [volunteeringSkills, setVolunteeringSkills] = useState<string[]>([]);
@@ -50,14 +92,39 @@ export default function EditMemberPage() {
   const [ec2Email, setEc2Email] = useState('');
   const [saving, setSaving] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [showErrors, setShowErrors] = useState(false);
 
   // isEditingOther: manager editing a different member's profile
   const isEditingOther = data ? (data.isManager && mid !== data.currentMid) : false;
   // showManagerToggle: only when a manager edits someone other than themselves
   const showManagerToggle = isEditingOther;
-  // Adults must pick at least one volunteering skill (issue #10). Children
-  // have no skills, so this never blocks a Child save.
-  const skillsInvalid = type === 'Adult' && volunteeringSkills.length === 0;
+
+  // Canonical 'YYYY-MM' from the two dropdowns + the derived birthMonth (1-12).
+  const monthNum = birthMonth ? Number(birthMonth) : null;
+  const birthMonthYear = monthNum && birthYear ? `${birthYear}-${String(monthNum).padStart(2, '0')}` : '';
+  const currentYear = new Date().getFullYear();
+  const birthYears = Array.from({ length: 26 }, (_, i) => String(currentYear - i));
+
+  // "No known allergies" wins and writes the NO_ALLERGIES sentinel ('None') so
+  // the required food-allergies field is satisfied without inventing an allergy.
+  const effectiveAllergies = noAllergies ? NO_ALLERGIES : foodAllergies.trim();
+
+  // Single source of truth for "what's still missing" — the same shared helper
+  // the write routes + gate use, so the form blocks exactly what the server would.
+  const missing: MemberRequiredField[] = whatsMissingForMember({
+    type,
+    firstName,
+    lastName,
+    gender: gender || null,
+    foodAllergies: effectiveAllergies || null,
+    email: email || null,
+    phone: phone || null,
+    volunteeringSkills,
+    schoolGrade: schoolGrade || null,
+    birthMonthYear: birthMonthYear || null,
+  });
+  const isMissing = (f: MemberRequiredField) => missing.includes(f);
+  const canSubmit = missing.length === 0;
 
   useEffect(() => {
     // Fetch via the API route — calling getCurrentFamily() directly from a
@@ -79,10 +146,19 @@ export default function EditMemberPage() {
         setFirstName(member.firstName);
         setLastName(member.lastName);
         setType(member.type);
-        setGender(member.gender);
+        // Legacy 'PreferNotToSay' sentinel → no-selection (must pick Male/Female).
+        setGender(member.gender === 'Male' || member.gender === 'Female' ? member.gender : '');
         setSchoolGrade(member.schoolGrade ?? '');
-        setBirthMonthYear(member.birthMonthYear ?? '');
-        setFoodAllergies(member.foodAllergies ?? '');
+        const parsedBirth = parseBirthMonthYear(member.birthMonthYear ?? '');
+        setBirthMonth(parsedBirth.month);
+        setBirthYear(parsedBirth.year);
+        const allergies = member.foodAllergies ?? '';
+        if (allergies === NO_ALLERGIES) {
+          setNoAllergies(true);
+          setFoodAllergies('');
+        } else {
+          setFoodAllergies(allergies);
+        }
         setEmail(member.email ?? '');
         setPhone(member.phone ?? '');
         setVolunteeringSkills(member.volunteeringSkills);
@@ -104,6 +180,10 @@ export default function EditMemberPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!data) return;
+    if (!canSubmit) {
+      setShowErrors(true);
+      return;
+    }
     setSaving(true);
     setFieldErrors({});
 
@@ -114,7 +194,8 @@ export default function EditMemberPage() {
       gender,
       schoolGrade: schoolGrade || null,
       birthMonthYear: birthMonthYear || null,
-      foodAllergies: foodAllergies || null,
+      birthMonth: monthNum, // derived (1-12) so prasad + grade ladder stay in sync
+      foodAllergies: effectiveAllergies || null,
       volunteeringSkills,
       email: email || null,
       phone: phone || null,
@@ -142,13 +223,17 @@ export default function EditMemberPage() {
 
       const json = await res.json().catch(() => ({})) as {
         error?: string;
+        issues?: Array<{ path?: (string | number)[]; message?: string }>;
+        field?: string;
         fields?: Record<string, string>;
       };
 
       if (json.fields && Object.keys(json.fields).length > 0) {
         setFieldErrors(json.fields as FieldErrors);
       } else {
-        toast.error(json.error ?? 'Save failed');
+        // The write routes return a top-level error CODE (never a `fields` map),
+        // so map it to friendly copy rather than toasting e.g. "contact-required".
+        toast.error(memberWriteErrorMessage(json));
       }
     } catch {
       toast.error('Network error — please try again');
@@ -191,6 +276,12 @@ export default function EditMemberPage() {
     );
   }
 
+  // Client-side required marker — shown only after a blocked submit attempt.
+  const reqError = (f: MemberRequiredField, label: string) =>
+    showErrors && isMissing(f) ? (
+      <p style={{ fontSize: 12, color: 'var(--err)', marginTop: 6 }}>{label}</p>
+    ) : null;
+
   const formBody = loading ? (
     <LoadingOm padding={40} />
   ) : (
@@ -216,68 +307,102 @@ export default function EditMemberPage() {
       <div className="row" style={{ gap: 8, marginBottom: 14 }}>
         <div className="field" style={{ flex: 1 }}>
           <label>First name <span className="req">·</span></label>
-          <input className="input" value={firstName} onChange={(e) => setFirstName(e.target.value)} required/>
+          <input className="input" aria-label="First name" value={firstName} onChange={(e) => setFirstName(e.target.value)}/>
           <FieldError message={fieldErrors.firstName}/>
         </div>
         <div className="field" style={{ flex: 1 }}>
           <label>Last name <span className="req">·</span></label>
-          <input className="input" value={lastName} onChange={(e) => setLastName(e.target.value)} required/>
+          <input className="input" aria-label="Last name" value={lastName} onChange={(e) => setLastName(e.target.value)}/>
           <FieldError message={fieldErrors.lastName}/>
         </div>
       </div>
 
       <div className="field" style={{ marginBottom: 14 }}>
         <label>Gender <span className="req">·</span></label>
-        <select className="input" value={gender} onChange={(e) => setGender(e.target.value as Gender)}>
+        <select className="input" value={gender} onChange={(e) => setGender(e.target.value as '' | Gender)}>
+          <option value="">Select…</option>
           <option value="Male">Male</option>
           <option value="Female">Female</option>
-          <option value="PreferNotToSay">Prefer not to say</option>
         </select>
         <FieldError message={fieldErrors.gender}/>
+        {reqError('gender', 'Please select a gender')}
+      </div>
+
+      {/* Food allergies — required for ALL members (issue #16). The "No known
+          allergies" toggle satisfies the requirement with the NO_ALLERGIES sentinel. */}
+      <div className="field" style={{ marginBottom: 14 }}>
+        <label>Food allergies <span className="req">·</span></label>
+        <input
+          className="input"
+          value={foodAllergies}
+          onChange={(e) => setFoodAllergies(e.target.value)}
+          placeholder="e.g. Peanuts"
+          disabled={noAllergies}
+          aria-label="Food allergies"
+        />
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, fontSize: 13, color: 'var(--body-text)', cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            data-testid="no-allergies"
+            checked={noAllergies}
+            onChange={(e) => {
+              setNoAllergies(e.target.checked);
+              if (e.target.checked) setFoodAllergies('');
+            }}
+            style={{ width: 16, height: 16 }}
+          />
+          No known allergies
+        </label>
+        <FieldError message={fieldErrors.foodAllergies}/>
+        {reqError('foodAllergies', 'Record allergies or check “No known allergies”')}
       </div>
 
       {type === 'Child' && (
-        <>
-          <div className="row" style={{ gap: 8, marginBottom: 14 }}>
-            <div className="field" style={{ flex: 1 }}>
-              <label>School grade</label>
-              <input className="input" value={schoolGrade} onChange={(e) => setSchoolGrade(e.target.value)} placeholder="e.g. Grade 3"/>
-              <FieldError message={fieldErrors.schoolGrade}/>
-            </div>
-            <div className="field" style={{ flex: 1 }}>
-              <label>Birth month/year</label>
-              <input className="input" value={birthMonthYear} onChange={(e) => setBirthMonthYear(e.target.value)} placeholder="e.g. Mar 2017"/>
-              <FieldError message={fieldErrors.birthMonthYear}/>
-            </div>
+        <div className="row" style={{ gap: 8, marginBottom: 14 }}>
+          <div className="field" style={{ flex: 1 }}>
+            <label>School grade <span className="req">·</span></label>
+            <input className="input" value={schoolGrade} onChange={(e) => setSchoolGrade(e.target.value)} placeholder="e.g. Grade 3"/>
+            <FieldError message={fieldErrors.schoolGrade}/>
+            {reqError('schoolGrade', 'School grade is required')}
           </div>
-          <div className="field" style={{ marginBottom: 14 }}>
-            <label>Food allergies</label>
-            <input className="input" value={foodAllergies} onChange={(e) => setFoodAllergies(e.target.value)} placeholder="e.g. Peanuts"/>
-            <FieldError message={fieldErrors.foodAllergies}/>
+          <div className="field" style={{ flex: 1 }}>
+            <label>Birth month/year <span className="req">·</span></label>
+            <div className="row" style={{ gap: 8 }}>
+              <select className="input" aria-label="Birth month" value={birthMonth} onChange={(e) => setBirthMonth(e.target.value)} style={{ flex: 1 }}>
+                <option value="">Month</option>
+                {MONTHS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+              </select>
+              <select className="input" aria-label="Birth year" value={birthYear} onChange={(e) => setBirthYear(e.target.value)} style={{ flex: 1 }}>
+                <option value="">Year</option>
+                {birthYears.map((y) => <option key={y} value={y}>{y}</option>)}
+              </select>
+            </div>
+            <FieldError message={fieldErrors.birthMonthYear}/>
+            {reqError('birthMonthYear', 'Birth month and year are required')}
           </div>
-        </>
+        </div>
       )}
 
       {type === 'Adult' && (
         <>
           <div className="row" style={{ gap: 8, marginBottom: 14 }}>
             <div className="field" style={{ flex: 1 }}>
-              <label>Email</label>
+              <label>Email <span className="req">·</span></label>
               <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)}/>
               <FieldError message={fieldErrors.email}/>
+              {reqError('email', 'Email is required for adults')}
             </div>
             <div className="field" style={{ flex: 1 }}>
-              <label>Phone</label>
+              <label>Phone <span className="req">·</span></label>
               <input className="input" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)}/>
               <FieldError message={fieldErrors.phone}/>
+              {reqError('phone', 'Phone is required for adults')}
             </div>
           </div>
           <div className="field" style={{ marginBottom: 14 }}>
             <label>Volunteering skills <span className="req">·</span></label>
             <VolunteeringSkillsPicker value={volunteeringSkills} onChange={setVolunteeringSkills} />
-            {skillsInvalid && (
-              <p style={{ fontSize: 12, color: 'var(--err)', marginTop: 6 }}>Select at least one</p>
-            )}
+            {reqError('volunteeringSkills', 'Select at least one volunteering skill')}
           </div>
         </>
       )}
@@ -363,7 +488,7 @@ export default function EditMemberPage() {
               {formBody}
             </div>
             <div style={{ position: 'sticky', bottom: 0, left: 0, right: 0, padding: '14px 18px', background: 'var(--surface)', borderTop: '1px solid var(--line)' }}>
-              <button type="submit" className="btn btn--p btn--block" disabled={saving || loading || skillsInvalid}>
+              <button type="submit" className="btn btn--p btn--block" disabled={saving || loading}>
                 {saving ? 'Saving…' : 'Save changes'}
               </button>
             </div>
@@ -389,7 +514,7 @@ export default function EditMemberPage() {
           {formBody}
           {removeButton}
           <div style={{ marginTop: 28, paddingTop: 22, borderTop: '1px solid var(--line)', display: 'flex', gap: 10 }}>
-            <button type="submit" className="btn btn--p" style={{ padding: '14px 28px' }} disabled={saving || loading || skillsInvalid}>
+            <button type="submit" className="btn btn--p" style={{ padding: '14px 28px' }} disabled={saving || loading}>
               {saving ? 'Saving…' : 'Save changes'}
             </button>
             <Link href={`/family/members/${mid}`} className="btn btn--g">Cancel</Link>

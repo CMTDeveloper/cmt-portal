@@ -43,12 +43,29 @@ function memberHeaders(fid = 'FAM001ABCD12', mid = 'FAM001ABCD12-02'): Record<st
   return { 'x-portal-role': 'family-member', 'x-portal-fid': fid, 'x-portal-mid': mid, 'x-portal-uid': `uid-${mid}` };
 }
 
+// A gate-complete Child per the 2026-06-22 required matrix: all-fields
+// (firstName/lastName/gender/foodAllergies) + child-only (schoolGrade,
+// birthMonthYear). Used as the baseline for happy-path tests.
 const validBody = {
   firstName: 'Diya',
   lastName: 'Patel',
   type: 'Child',
   gender: 'Female',
+  foodAllergies: 'None',
   schoolGrade: 'Grade 5',
+  birthMonthYear: '2015-05',
+};
+
+// A gate-complete Adult: all-fields + adult-only (email, phone, >=1 skill).
+const validAdultBody = {
+  firstName: 'Priya',
+  lastName: 'Patel',
+  type: 'Adult',
+  gender: 'Female',
+  foodAllergies: 'None',
+  email: 'priya@example.com',
+  phone: '4165550000',
+  volunteeringSkills: ['Teaching / Facilitation'],
 };
 
 beforeEach(() => {
@@ -148,15 +165,14 @@ describe('POST /api/setu/members', () => {
   // relation-only allowance (commit 33a8891). Both bugs shipped as silent
   // 400 "bad-request" responses with no useful detail.
 
-  it('accepts null for all optional string fields (.nullish() regression)', async () => {
+  it('accepts null for the optional-by-type string fields (.nullish() regression)', async () => {
+    // An Adult satisfies its required matrix (email/phone/skills + foodAllergies)
+    // while the child-only fields (schoolGrade, birthMonthYear) are sent as null —
+    // the schema must still accept the nulls without a zod 400.
     const bodyWithNulls = {
-      ...validBody,
+      ...validAdultBody,
       schoolGrade: null,
       birthMonthYear: null,
-      foodAllergies: null,
-      email: null,
-      phone: null,
-      volunteeringSkills: null,
       emergencyContacts: null,
     };
     const res = await POST(makeRequest(bodyWithNulls, managerHeaders()));
@@ -194,17 +210,19 @@ describe('POST /api/setu/members', () => {
     expect(body.issues[0]).toHaveProperty('message');
   });
 
-  it('writes birthMonth onto the member doc when provided', async () => {
-    const res = await POST(makeRequest({ ...validBody, birthMonth: 5 }, managerHeaders()));
+  it('derives birthMonth from birthMonthYear on write', async () => {
+    // validBody has birthMonthYear '2015-05' → birthMonth 5, derived server-side
+    // (the client never has to keep the two in sync).
+    const res = await POST(makeRequest(validBody, managerHeaders()));
     expect(res.status).toBe(201);
     const memberWrite = mockSet.mock.calls.find(
       ([, data]) => data && typeof data === 'object' && 'firstName' in data,
     );
-    expect(memberWrite?.[1]).toMatchObject({ birthMonth: 5 });
+    expect(memberWrite?.[1]).toMatchObject({ birthMonth: 5, birthMonthYear: '2015-05' });
   });
 
-  it('writes birthMonth: null onto the member doc when omitted', async () => {
-    const res = await POST(makeRequest(validBody, managerHeaders()));
+  it('writes birthMonth: null when no birthMonthYear (e.g. an adult)', async () => {
+    const res = await POST(makeRequest(validAdultBody, managerHeaders()));
     expect(res.status).toBe(201);
     const memberWrite = mockSet.mock.calls.find(
       ([, data]) => data && typeof data === 'object' && 'firstName' in data,
@@ -232,8 +250,7 @@ describe('POST /api/setu/members', () => {
   });
 
   it('returns 201 for an Adult with at least one volunteering skill', async () => {
-    const body = { ...validBody, type: 'Adult', volunteeringSkills: ['Teaching / Facilitation'] };
-    const res = await POST(makeRequest(body, managerHeaders()));
+    const res = await POST(makeRequest(validAdultBody, managerHeaders()));
     expect(res.status).toBe(201);
   });
 
@@ -255,5 +272,92 @@ describe('POST /api/setu/members', () => {
     expect(res.status).toBe(400);
     const json = await res.json();
     expect(json.error).toBe('bad-request');
+  });
+
+  // ── Per-type required matrix (owner spec 2026-06-22) ──────────────────────
+  // foodAllergies required for all; adult email+phone; child schoolGrade +
+  // birthMonthYear. Each surfaces a distinct 400 error code.
+
+  it('returns 400 foodAllergies-required when foodAllergies is missing (all types)', async () => {
+    const { foodAllergies: _fa, ...rest } = validBody;
+    void _fa;
+    const res = await POST(makeRequest(rest, managerHeaders()));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('foodAllergies-required');
+  });
+
+  it('returns 400 foodAllergies-required when foodAllergies is an empty string', async () => {
+    const res = await POST(makeRequest({ ...validBody, foodAllergies: '' }, managerHeaders()));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('foodAllergies-required');
+  });
+
+  it('returns 400 contact-required when an Adult is missing email', async () => {
+    const { email: _e, ...rest } = validAdultBody;
+    void _e;
+    const res = await POST(makeRequest(rest, managerHeaders()));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('contact-required');
+  });
+
+  it('returns 400 contact-required when an Adult is missing phone', async () => {
+    const { phone: _p, ...rest } = validAdultBody;
+    void _p;
+    const res = await POST(makeRequest(rest, managerHeaders()));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('contact-required');
+  });
+
+  it('returns 400 grade-required when a Child is missing schoolGrade', async () => {
+    const { schoolGrade: _g, ...rest } = validBody;
+    void _g;
+    const res = await POST(makeRequest(rest, managerHeaders()));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('grade-required');
+  });
+
+  it('returns 400 birthmonth-required when a Child is missing birthMonthYear', async () => {
+    const { birthMonthYear: _b, ...rest } = validBody;
+    void _b;
+    const res = await POST(makeRequest(rest, managerHeaders()));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('birthmonth-required');
+  });
+
+  it('does NOT require schoolGrade/birthMonthYear on an Adult', async () => {
+    // validAdultBody omits the child-only fields entirely → still 201.
+    const res = await POST(makeRequest(validAdultBody, managerHeaders()));
+    expect(res.status).toBe(201);
+  });
+
+  it('does NOT require email/phone/skills on a Child', async () => {
+    // validBody (a Child) omits the adult-only fields → still 201.
+    const res = await POST(makeRequest(validBody, managerHeaders()));
+    expect(res.status).toBe(201);
+  });
+
+  // ── Gender write enum is Male|Female only ────────────────────────────────
+  it('rejects PreferNotToSay gender at write (read-doc keeps it; write does not)', async () => {
+    const res = await POST(makeRequest({ ...validBody, gender: 'PreferNotToSay' }, managerHeaders()));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('bad-request');
+  });
+
+  // ── Same-family contact reuse is allowed ─────────────────────────────────
+  it('accepts an Adult reusing the family/manager email+phone (no uniqueness block)', async () => {
+    // contactKey lookups resolve to this same fid → the theft guard passes and
+    // the required email/phone are satisfied by the reused values.
+    mockGet.mockReset();
+    const familySnap = { exists: true, data: () => ({ fid: 'FAM001ABCD12', managers: ['FAM001ABCD12-01'] }) };
+    const membersSnap = { size: 1, docs: [] };
+    const sameFamilyContact = { exists: true, data: () => ({ fid: 'FAM001ABCD12' }) };
+    mockGet
+      .mockResolvedValueOnce(familySnap) // family doc
+      .mockResolvedValueOnce(membersSnap) // members collection
+      .mockResolvedValueOnce(sameFamilyContact) // email contactKey (same fid)
+      .mockResolvedValueOnce(sameFamilyContact); // phone contactKey (same fid)
+
+    const res = await POST(makeRequest(validAdultBody, managerHeaders()));
+    expect(res.status).toBe(201);
   });
 });

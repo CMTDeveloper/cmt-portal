@@ -35,7 +35,7 @@
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
 import { portalAuth } from '@cmt/firebase-shared/admin/auth';
 import { sha256Hex } from '@/features/check-in/shared';
-import { normalizeContactForKey } from '@cmt/shared-domain/setu';
+import { normalizeContactForKey, NO_ALLERGIES } from '@cmt/shared-domain/setu';
 import {
   resolveSuggestedAmount,
   memberEligibleForProgram,
@@ -51,6 +51,9 @@ import { assignTeacher } from '@/features/setu/teacher/assignments';
 const PASSWORD = process.env['TEST_ACCOUNTS_PASSWORD'];
 const DOMAIN = 'chinmayatoronto.org';
 const SEED_BY = 'seed-test-accounts';
+// A real volunteering skill so adult personas satisfy the per-type required
+// matrix (>=1 skill) and pass the profile-completion gate.
+const SEED_SKILL = 'General Volunteer Support (happy to help where needed)';
 
 let failures = 0;
 
@@ -75,8 +78,8 @@ interface FamilyPersona {
   phone: string;
   familyName: string;
   location: 'Brampton' | 'Scarborough';
-  manager: { firstName: string; lastName: string };
-  secondAdult?: { firstName: string; lastName: string; email: string };
+  manager: { firstName: string; lastName: string; gender: 'Male' | 'Female' };
+  secondAdult?: { firstName: string; lastName: string; email: string; gender: 'Male' | 'Female' };
   children: ChildSpec[];
   enrollOid?: string; // BV offering to keep active (with pid for rosters)
   teacherLevels?: LevelPick;
@@ -101,11 +104,12 @@ const PERSONAS: Persona[] = [
     phone: '+15195550201',
     familyName: 'Test Family Brampton',
     location: 'Brampton',
-    manager: { firstName: 'Test', lastName: 'Parent Brampton' },
+    manager: { firstName: 'Test', lastName: 'Parent Brampton', gender: 'Female' },
     secondAdult: {
       firstName: 'Test',
       lastName: 'Member Brampton',
       email: `setu-test-member-brampton@${DOMAIN}`,
+      gender: 'Male',
     },
     children: [
       { firstName: 'Test', lastName: 'Child One', gender: 'Female', schoolGrade: 'Grade 1', birthMonthYear: '2019-09' },
@@ -121,7 +125,7 @@ const PERSONAS: Persona[] = [
     phone: '+15195550202',
     familyName: 'Test Family Scarborough',
     location: 'Scarborough',
-    manager: { firstName: 'Test', lastName: 'Parent Scarborough' },
+    manager: { firstName: 'Test', lastName: 'Parent Scarborough', gender: 'Male' },
     children: [
       { firstName: 'Test', lastName: 'Child Three', gender: 'Male', schoolGrade: 'Grade 1', birthMonthYear: '2019-11' },
       { firstName: 'Test', lastName: 'Child Four', gender: 'Female', schoolGrade: 'Grade 3', birthMonthYear: '2017-02' },
@@ -136,7 +140,7 @@ const PERSONAS: Persona[] = [
     phone: '+15195550203',
     familyName: 'Test Teacher Family Brampton',
     location: 'Brampton',
-    manager: { firstName: 'Test', lastName: 'Teacher Brampton' },
+    manager: { firstName: 'Test', lastName: 'Teacher Brampton', gender: 'Female' },
     children: [],
     teacherLevels: { type: 'named', location: 'Brampton', pid: 'bv-brampton-2025-26', levelName: 'Level 1' },
     landing: '/family (→ /teacher via nav)',
@@ -148,7 +152,7 @@ const PERSONAS: Persona[] = [
     phone: '+15195550204',
     familyName: 'Test Teacher Family Scarborough',
     location: 'Scarborough',
-    manager: { firstName: 'Test', lastName: 'Teacher Scarborough' },
+    manager: { firstName: 'Test', lastName: 'Teacher Scarborough', gender: 'Male' },
     children: [],
     teacherLevels: { type: 'named', location: 'Scarborough', pid: 'bv-scarborough-2025-26', levelName: 'Level A' },
     landing: '/family (→ /teacher via nav)',
@@ -160,7 +164,7 @@ const PERSONAS: Persona[] = [
     phone: '+15195550205',
     familyName: 'Test Teacher Family Universal',
     location: 'Brampton',
-    manager: { firstName: 'Test', lastName: 'Teacher Universal' },
+    manager: { firstName: 'Test', lastName: 'Teacher Universal', gender: 'Female' },
     children: [],
     teacherLevels: { type: 'all' },
     landing: '/family (→ /teacher via nav)',
@@ -288,7 +292,7 @@ async function ensureContactKey(
 async function createFamily(p: FamilyPersona): Promise<{ fid: string; managerMid: string }> {
   const additionalMembers: AdditionalMember[] = [
     ...(p.secondAdult
-      ? [{ ...p.secondAdult, type: 'Adult' as const, gender: 'PreferNotToSay' as const }]
+      ? [{ ...p.secondAdult, type: 'Adult' as const, gender: p.secondAdult.gender, foodAllergies: NO_ALLERGIES }]
       : []),
     ...p.children.map((c) => ({
       firstName: c.firstName,
@@ -297,6 +301,7 @@ async function createFamily(p: FamilyPersona): Promise<{ fid: string; managerMid
       gender: c.gender,
       schoolGrade: c.schoolGrade,
       birthMonthYear: c.birthMonthYear,
+      foodAllergies: NO_ALLERGIES,
     })),
   ];
   const res = await registerFamily({
@@ -304,7 +309,7 @@ async function createFamily(p: FamilyPersona): Promise<{ fid: string; managerMid
     phone: p.phone,
     familyName: p.familyName,
     location: p.location,
-    manager: { ...p.manager, gender: 'PreferNotToSay' },
+    manager: { ...p.manager },
     additionalMembers,
   });
   console.log(`  [${p.key}] created family ${res.fid}`);
@@ -370,8 +375,10 @@ async function ensureFamily(db: Db, p: FamilyPersona): Promise<{ fid: string; ma
     );
     const birthMonth = monthOf(c.birthMonthYear);
     if (found) {
+      // Gate-complete the existing child: grade + birthMonthYear + derived
+      // birthMonth + foodAllergies (children don't need skills/contact).
       await db.collection('families').doc(fid).collection('members').doc(found.mid).set(
-        { schoolGrade: c.schoolGrade, birthMonthYear: c.birthMonthYear, birthMonth, _test: true },
+        { schoolGrade: c.schoolGrade, birthMonthYear: c.birthMonthYear, birthMonth, foodAllergies: NO_ALLERGIES, _test: true },
         { merge: true },
       );
     } else {
@@ -391,7 +398,7 @@ async function ensureFamily(db: Db, p: FamilyPersona): Promise<{ fid: string; ma
         birthMonthYear: c.birthMonthYear,
         birthMonth,
         volunteeringSkills: [],
-        foodAllergies: null,
+        foodAllergies: NO_ALLERGIES,
         emergencyContacts: [null, null],
         _test: true,
       });
@@ -408,7 +415,12 @@ async function ensureFamily(db: Db, p: FamilyPersona): Promise<{ fid: string; ma
     const found = members.find((m) => m.type === 'Adult' && m.email === normalizeContactForKey('email', sa.email));
     if (found) {
       secondAdultMid = found.mid;
-      await db.collection('families').doc(fid).collection('members').doc(found.mid).set({ _test: true }, { merge: true });
+      // Gate-complete the existing second adult: real gender + foodAllergies +
+      // >=1 skill (email already present; phone reuses the family value below).
+      await db.collection('families').doc(fid).collection('members').doc(found.mid).set(
+        { gender: sa.gender, foodAllergies: NO_ALLERGIES, volunteeringSkills: [SEED_SKILL], phone: p.phone, _test: true },
+        { merge: true },
+      );
     } else {
       const mid = `${fid}-${String(nextSeq++).padStart(2, '0')}`;
       secondAdultMid = mid;
@@ -418,15 +430,18 @@ async function ensureFamily(db: Db, p: FamilyPersona): Promise<{ fid: string; ma
         firstName: sa.firstName,
         lastName: sa.lastName,
         type: 'Adult',
-        gender: 'PreferNotToSay',
+        gender: sa.gender,
         manager: false,
         joinedAt: FieldValue.serverTimestamp(),
         email: normalizeContactForKey('email', sa.email),
-        phone: null,
+        // Adults need a phone for the gate; the second adult reuses the family
+        // phone (same-family contact reuse is allowed — no contactKey is written
+        // for it here, so it does not collide with the manager's phone key).
+        phone: p.phone,
         schoolGrade: null,
         birthMonthYear: null,
-        volunteeringSkills: [],
-        foodAllergies: null,
+        volunteeringSkills: [SEED_SKILL],
+        foodAllergies: NO_ALLERGIES,
         emergencyContacts: [null, null],
         _test: true,
       });
@@ -435,8 +450,15 @@ async function ensureFamily(db: Db, p: FamilyPersona): Promise<{ fid: string; ma
   }
 
   // Tag remaining members (manager) + ensure contactKeys map and are tagged.
+  // Gate-complete the manager: registerFamily hardcodes foodAllergies:null /
+  // volunteeringSkills:[] (gender now comes from the persona) — fill the adult
+  // required fields so the manager passes the profile-completion gate. Email +
+  // phone already come from the registration form.
   const managerRef = db.collection('families').doc(fid).collection('members').doc(managerMid);
-  await managerRef.set({ _test: true }, { merge: true });
+  await managerRef.set(
+    { gender: p.manager.gender, foodAllergies: NO_ALLERGIES, volunteeringSkills: [SEED_SKILL], _test: true },
+    { merge: true },
+  );
   await ensureContactKey(db, 'email', p.email, fid, managerMid);
   await ensureContactKey(db, 'phone', p.phone, fid, managerMid);
   if (p.secondAdult && secondAdultMid) {

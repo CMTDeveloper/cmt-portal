@@ -4,6 +4,7 @@ import { revalidateTag } from 'next/cache';
 import { flags } from '@/lib/flags';
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
 import { hashContactKey } from '@/features/setu/registration/hash-contact-key';
+import { whatsMissingForMember, type MemberRequiredField } from '@cmt/shared-domain';
 
 
 // Emergency contact: only `relation` is required to be non-empty when the
@@ -26,7 +27,10 @@ const addMemberSchema = z.object({
   firstName: z.string().min(1),
   lastName: z.string().min(1),
   type: z.enum(['Adult', 'Child']),
-  gender: z.enum(['Male', 'Female', 'PreferNotToSay']),
+  // Capture/write enum is Male|Female only. The read-validated MemberDocSchema
+  // keeps 'PreferNotToSay' for the 3 internal sentinel-minting paths; this WRITE
+  // route does not accept it (the profile-completion matrix treats it as missing).
+  gender: z.enum(['Male', 'Female']),
   email: z.string().email().nullish(),
   phone: z.string().min(7).nullish(),
   schoolGrade: z.string().nullish(),
@@ -39,6 +43,60 @@ const addMemberSchema = z.object({
 
 function zeroPad(n: number): string {
   return n.toString().padStart(2, '0');
+}
+
+// Maps a missing required field (from the shared matrix) to the 400 error code
+// the write routes return. Adult email/phone collapse to one `contact-required`.
+// `volunteeringSkills` reuses the pre-existing `skills-required` code.
+const REQUIRED_FIELD_ERROR: Record<MemberRequiredField, string> = {
+  firstName: 'bad-request',
+  lastName: 'bad-request',
+  gender: 'bad-request',
+  type: 'bad-request',
+  foodAllergies: 'foodAllergies-required',
+  email: 'contact-required',
+  phone: 'contact-required',
+  volunteeringSkills: 'skills-required',
+  schoolGrade: 'grade-required',
+  birthMonthYear: 'birthmonth-required',
+};
+
+// Order in which a missing-field 400 is surfaced, so the error code is
+// deterministic when several fields are missing at once.
+const REQUIRED_FIELD_ORDER: MemberRequiredField[] = [
+  'foodAllergies',
+  'volunteeringSkills',
+  'email',
+  'phone',
+  'schoolGrade',
+  'birthMonthYear',
+];
+
+// 'YYYY-MM' -> month number (1-12), or null if unparseable/absent. The capture
+// matrix requires birthMonthYear on children; birthMonth is the derived index
+// the prasad engine + reminders read.
+function deriveBirthMonth(birthMonthYear: string | null | undefined): number | null {
+  if (typeof birthMonthYear !== 'string') return null;
+  const m = /^\d{4}-(\d{2})$/.exec(birthMonthYear.trim());
+  if (!m) return null;
+  const month = Number(m[1]);
+  return month >= 1 && month <= 12 ? month : null;
+}
+
+/**
+ * Picks the first unsatisfied required field (in REQUIRED_FIELD_ORDER) out of a
+ * set of missing fields and returns its 400 error code, or null if none of the
+ * enforced fields are missing. firstName/lastName/gender/type are already
+ * enforced by the zod schema, so they never reach here.
+ */
+function requiredFieldError(missing: MemberRequiredField[]): string | null {
+  const missingSet = new Set(missing);
+  for (const field of REQUIRED_FIELD_ORDER) {
+    if (missingSet.has(field)) {
+      return REQUIRED_FIELD_ERROR[field];
+    }
+  }
+  return null;
 }
 
 export async function POST(req: Request) {
@@ -70,11 +128,33 @@ export async function POST(req: Request) {
 
   const data = parsed.data;
 
-  // Adults must pick at least one volunteering skill (issue #10). Children
-  // never have skills, so this is gated to type === 'Adult'.
-  if (data.type === 'Adult' && (data.volunteeringSkills?.length ?? 0) < 1) {
-    return NextResponse.json({ error: 'skills-required' }, { status: 400 });
+  // Per-type required-field matrix (owner spec 2026-06-22), enforced via the
+  // single shared source of truth. `whatsMissingForMember` selects the matrix
+  // by `data.type` (always present on POST) and reports every unsatisfied
+  // required field; we surface the first as a clear 400. This covers the
+  // pre-existing adult skills-required guard (issue #10) plus foodAllergies
+  // (all), adult email/phone (contact-required), and child grade/birthMonthYear.
+  const missing = whatsMissingForMember({
+    type: data.type,
+    gender: data.gender,
+    firstName: data.firstName,
+    lastName: data.lastName,
+    foodAllergies: data.foodAllergies ?? null,
+    email: data.email ?? null,
+    phone: data.phone ?? null,
+    volunteeringSkills: data.volunteeringSkills ?? [],
+    schoolGrade: data.schoolGrade ?? null,
+    birthMonthYear: data.birthMonthYear ?? null,
+  });
+  const missingError = requiredFieldError(missing);
+  if (missingError) {
+    return NextResponse.json({ error: missingError }, { status: 400 });
   }
+
+  // birthMonth (1-12) is derived from birthMonthYear ('YYYY-MM') on every write
+  // that sets it, so the client never has to keep the two in sync. An explicit
+  // body.birthMonth is honoured only when birthMonthYear is absent.
+  const birthMonth = deriveBirthMonth(data.birthMonthYear) ?? data.birthMonth ?? null;
 
   const db = portalFirestore();
 
@@ -132,13 +212,19 @@ export async function POST(req: Request) {
       phone: data.phone ?? null,
       schoolGrade: data.schoolGrade ?? null,
       birthMonthYear: data.birthMonthYear ?? null,
-      birthMonth: data.birthMonth ?? null,
+      birthMonth,
       volunteeringSkills: data.volunteeringSkills ?? [],
       foodAllergies: data.foodAllergies ?? null,
       emergencyContacts: data.emergencyContacts ?? [null, null],
     });
 
-    if (data.email) {
+    // Write a contactKey only when this contact isn't already owned WITHIN the
+    // family. A different-fid owner already threw above (theft); a SAME-fid owner
+    // (read into emailSnap/phoneSnap) means the new member is REUSING a relative's
+    // contact (e.g. the manager's) — share it (the member doc keeps the value)
+    // rather than overwriting the key, which would re-point that contact's sign-in
+    // from its owner to this new member.
+    if (data.email && !(emailSnap && emailSnap.exists)) {
       const hash = hashContactKey('email', data.email);
       txn.set(db.collection('contactKeys').doc(hash), {
         contactKey: hash,
@@ -147,7 +233,7 @@ export async function POST(req: Request) {
         mid: newMid,
       });
     }
-    if (data.phone) {
+    if (data.phone && !(phoneSnap && phoneSnap.exists)) {
       const hash = hashContactKey('phone', data.phone);
       txn.set(db.collection('contactKeys').doc(hash), {
         contactKey: hash,

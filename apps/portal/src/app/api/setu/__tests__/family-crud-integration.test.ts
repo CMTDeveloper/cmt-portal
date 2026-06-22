@@ -304,7 +304,11 @@ describe('GET /api/setu/family', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('POST /api/setu/members', () => {
-  const newChildPayload = { firstName: 'Diya', lastName: 'Patel', type: 'Child', gender: 'Female', schoolGrade: 'Grade 5' };
+  // Gate-complete child payload (owner spec 2026-06-22 per-type matrix): a Child
+  // now needs foodAllergies (all) + schoolGrade + birthMonthYear, else the write
+  // route 400s before the transaction. (The 401/403/404/bad-request tests below
+  // short-circuit on auth/flag/zod before this matters, so reusing it is safe.)
+  const newChildPayload = { firstName: 'Diya', lastName: 'Patel', type: 'Child', gender: 'Female', schoolGrade: 'Grade 5', birthMonthYear: '2017-03', foodAllergies: 'None' };
 
   it('manager creates a new member and returns mid', async () => {
     setupPostTransaction(2);
@@ -356,9 +360,11 @@ describe('POST /api/setu/members', () => {
       throw Object.assign(new Error('Contact already registered'), { code: 'duplicate-contact' });
     });
 
-    // Adults must carry ≥1 volunteering skill (issue #10) — include one so the
-    // POST reaches the dedupe transaction this test is actually exercising.
-    const payload = { firstName: 'Arjun', lastName: 'Patel', type: 'Adult', gender: 'Male', email: 'arjun@example.com', volunteeringSkills: ['Teaching / Facilitation'] };
+    // An Adult must satisfy the full per-type matrix (owner spec 2026-06-22) —
+    // foodAllergies + email + phone + ≥1 volunteering skill — so the POST reaches
+    // the dedupe transaction this test is actually exercising (otherwise it 400s
+    // on a required field before the contactKey conflict ever fires).
+    const payload = { firstName: 'Arjun', lastName: 'Patel', type: 'Adult', gender: 'Male', email: 'arjun@example.com', phone: '4165550111', foodAllergies: 'None', volunteeringSkills: ['Teaching / Facilitation'] };
     const results = await Promise.allSettled([
       membersPOST(makeRequest('POST', '/api/setu/members', payload, managerHeaders(FAMILY_FID, MEMBER_01_MID))),
       membersPOST(makeRequest('POST', '/api/setu/members', payload, managerHeaders(FAMILY_FID, MEMBER_01_MID))),
@@ -368,6 +374,38 @@ describe('POST /api/setu/members', () => {
     expect(statuses).toContain(201);
     // Second call throws — route rethrows → 500 (not explicitly caught in members/route.ts)
     expect(statuses.some((s) => s !== 201)).toBe(true);
+  });
+
+  it('an adult REUSING the manager email/phone shares the key (no second contactKey written)', async () => {
+    // Owner decision #3: a new adult may reuse the manager's contact. The manager
+    // already OWNS contactKeys/hash:raj@example.com + hash:4165551234 (same fid).
+    // The route must create the member (201) but NOT write a second contactKey —
+    // overwriting it would re-point the manager's own sign-in to this new member.
+    const set = vi.fn();
+    mockRunTransaction.mockImplementation(async (fn: (txn: unknown) => Promise<unknown>) => {
+      const txn = {
+        get: vi.fn()
+          .mockResolvedValueOnce({ exists: true, data: () => FAMILY_A })                                 // familyRef
+          .mockResolvedValueOnce({ size: 2, docs: [] })                                                  // membersSnap
+          .mockResolvedValueOnce({ exists: true, data: () => ({ fid: FAMILY_FID, mid: MEMBER_01_MID }) }) // emailSnap — manager owns it
+          .mockResolvedValueOnce({ exists: true, data: () => ({ fid: FAMILY_FID, mid: MEMBER_01_MID }) }), // phoneSnap — manager owns it
+        set, update: vi.fn(), delete: vi.fn(),
+      };
+      return fn(txn);
+    });
+
+    const payload = {
+      firstName: 'Aarti', lastName: 'Patel', type: 'Adult', gender: 'Female',
+      foodAllergies: 'None', volunteeringSkills: ['Kitchen'],
+      email: 'raj@example.com', phone: '4165551234', // the manager's own contact
+    };
+    const res = await membersPOST(makeRequest('POST', '/api/setu/members', payload, managerHeaders(FAMILY_FID, MEMBER_01_MID)));
+    expect(res.status).toBe(201);
+
+    const contactKeyWrites = set.mock.calls
+      .map((c) => c[1] as { contactKey?: string } | undefined)
+      .filter((d): d is { contactKey: string } => !!d && typeof d.contactKey === 'string');
+    expect(contactKeyWrites).toHaveLength(0); // no key written — the member shares the manager's
   });
 });
 
@@ -453,6 +491,43 @@ describe('PATCH /api/setu/members/:mid', () => {
       makeCtx(MEMBER_02_MID),
     );
     expect(res.status).toBe(404);
+  });
+
+  it('completing a migrated member by REUSING the manager email does NOT overwrite/steal the manager contactKey', async () => {
+    // The exact mis-seating bug: a migrated spouse has email:null; the manager
+    // completes them by reusing their OWN email. The manager already owns
+    // contactKeys/hash:raj@example.com. The PATCH must update the member doc but
+    // NEITHER overwrite that key (→ sign-in would seat the manager as the spouse)
+    // NOR delete it (the spouse never owned it).
+    const migratedSpouse = { ...MEMBER_02, email: null, phone: null };
+    const set = vi.fn();
+    const del = vi.fn();
+    mockRunTransaction.mockImplementation(async (fn: (txn: unknown) => Promise<unknown>) => {
+      const txn = {
+        get: vi.fn()
+          .mockResolvedValueOnce({ exists: true, data: () => FAMILY_A })        // familySnap
+          .mockResolvedValueOnce({ exists: true, data: () => migratedSpouse })  // memberSnap
+          // newEmailSnap — the manager already owns this contact (same fid, manager mid):
+          .mockResolvedValueOnce({ exists: true, data: () => ({ fid: FAMILY_FID, mid: MEMBER_01_MID }) })
+          .mockResolvedValue({ exists: false }),
+        set, update: vi.fn(), delete: del,
+      };
+      return fn(txn);
+    });
+
+    const res = await memberPATCH(
+      makeRequest('PATCH', `/api/setu/members/${MEMBER_02_MID}`, { email: 'raj@example.com' }, managerHeaders(FAMILY_FID, MEMBER_01_MID)),
+      makeCtx(MEMBER_02_MID),
+    );
+    expect(res.status).toBe(200);
+
+    // The manager's contactKey is neither re-pointed to the spouse...
+    const contactKeyWrites = set.mock.calls
+      .map((c) => c[1] as { contactKey?: string } | undefined)
+      .filter((d): d is { contactKey: string } => !!d && typeof d.contactKey === 'string');
+    expect(contactKeyWrites.find((d) => d.contactKey === 'hash:raj@example.com')).toBeUndefined();
+    // ...nor deleted (the spouse, who never owned it, must not remove it).
+    expect(del).not.toHaveBeenCalled();
   });
 });
 

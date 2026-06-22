@@ -5,6 +5,7 @@ import { flags } from '@/lib/flags';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { assertNotLastManager, LastManagerError } from '@/features/setu/members';
 import { hashContactKey } from '@/features/setu/registration/hash-contact-key';
+import { whatsMissingForMember, type MemberRequiredField } from '@cmt/shared-domain';
 
 
 type RouteContext = { params: Promise<{ mid: string }> };
@@ -15,7 +16,10 @@ const patchSchema = z
     firstName: z.string().min(1).optional(),
     lastName: z.string().min(1).optional(),
     type: z.enum(['Adult', 'Child']).optional(),
-    gender: z.enum(['Male', 'Female', 'PreferNotToSay']).optional(),
+    // Capture/write enum is Male|Female only. The read-validated MemberDocSchema
+    // keeps 'PreferNotToSay' for the 3 internal sentinel-minting paths; this
+    // WRITE route does not accept it.
+    gender: z.enum(['Male', 'Female']).optional(),
     manager: z.boolean().optional(),
     email: z.string().email().nullable().optional(),
     phone: z.string().min(7).nullable().optional(),
@@ -32,6 +36,53 @@ const patchSchema = z
       .optional(),
   })
   .strict(); // rejects mid, uid, joinedAt
+
+// Maps a missing required field (from the shared matrix) to the 400 error code.
+// Adult email/phone collapse to `contact-required`; volunteeringSkills reuses
+// the pre-existing `skills-required`. firstName/lastName/gender/type are already
+// enforced by the zod schema, so they resolve to null here (never the cause of
+// a per-type 400 on PATCH).
+const REQUIRED_FIELD_ERROR: Record<MemberRequiredField, string | null> = {
+  firstName: null,
+  lastName: null,
+  gender: null,
+  type: null,
+  foodAllergies: 'foodAllergies-required',
+  email: 'contact-required',
+  phone: 'contact-required',
+  volunteeringSkills: 'skills-required',
+  schoolGrade: 'grade-required',
+  birthMonthYear: 'birthmonth-required',
+};
+
+// Deterministic order so the surfaced 400 is stable when several fields are missing.
+const REQUIRED_FIELD_ORDER: MemberRequiredField[] = [
+  'foodAllergies',
+  'volunteeringSkills',
+  'email',
+  'phone',
+  'schoolGrade',
+  'birthMonthYear',
+];
+
+function requiredFieldErrorPatch(missing: MemberRequiredField[]): string | null {
+  const missingSet = new Set(missing);
+  for (const field of REQUIRED_FIELD_ORDER) {
+    if (missingSet.has(field)) {
+      return REQUIRED_FIELD_ERROR[field];
+    }
+  }
+  return null;
+}
+
+// 'YYYY-MM' -> month number (1-12), or null if unparseable/absent.
+function deriveBirthMonth(birthMonthYear: string | null | undefined): number | null {
+  if (typeof birthMonthYear !== 'string') return null;
+  const m = /^\d{4}-(\d{2})$/.exec(birthMonthYear.trim());
+  if (!m) return null;
+  const month = Number(m[1]);
+  return month >= 1 && month <= 12 ? month : null;
+}
 
 export async function PATCH(req: Request, ctx: RouteContext) {
   if (!flags.setuAuth) {
@@ -90,22 +141,54 @@ export async function PATCH(req: Request, ctx: RouteContext) {
         throw Object.assign(new Error('not-found'), { code: 'not-found' });
       }
 
-      const memberData = memberSnap.data() as { mid: string; type: 'Adult' | 'Child'; manager: boolean; email: string | null; phone: string | null };
+      const memberData = memberSnap.data() as {
+        mid: string;
+        type: 'Adult' | 'Child';
+        manager: boolean;
+        gender: string | null;
+        firstName: string | null;
+        lastName: string | null;
+        email: string | null;
+        phone: string | null;
+        schoolGrade: string | null;
+        birthMonthYear: string | null;
+        volunteeringSkills: string[] | null;
+        foodAllergies: string | null;
+      };
 
       // Security: ensure member belongs to caller's family by checking document path prefix
       if (!memberData.mid.startsWith(fid + '-')) {
         throw Object.assign(new Error('cross-family'), { code: 'cross-family' });
       }
 
-      // Adults must keep at least one volunteering skill (issue #10). Only
-      // enforced when the patch actually touches volunteeringSkills, so editing
-      // other fields of an adult with legacy-empty skills still works. Adult-ness
-      // comes from the patch's `type` when provided, else the existing doc.
-      if ('volunteeringSkills' in data) {
-        const willBeAdult = data.type ? data.type === 'Adult' : memberData.type === 'Adult';
-        if (willBeAdult && (data.volunteeringSkills?.length ?? 0) < 1) {
-          throw Object.assign(new Error('skills-required'), { code: 'skills-required' });
-        }
+      // Per-type required-field matrix (owner spec 2026-06-22), enforced via the
+      // single shared source of truth against the POST-PATCH member. effectiveType
+      // is the patch's `type` when provided, else the existing doc's type. A rule
+      // is enforced only when the field is "in scope": the patch touches that
+      // field, OR the patch flips `type` (which re-evaluates every required field
+      // for the new type). A partial patch that doesn't touch a still-missing
+      // field is therefore NOT blocked — legacy-incomplete docs stay editable.
+      const effectiveType: 'Adult' | 'Child' = data.type ?? memberData.type;
+      const typeChanged = 'type' in data && data.type !== memberData.type;
+      const merged = {
+        type: effectiveType,
+        gender: 'gender' in data ? data.gender ?? null : memberData.gender,
+        firstName: 'firstName' in data ? data.firstName ?? null : memberData.firstName,
+        lastName: 'lastName' in data ? data.lastName ?? null : memberData.lastName,
+        foodAllergies: 'foodAllergies' in data ? data.foodAllergies ?? null : memberData.foodAllergies,
+        email: 'email' in data ? data.email ?? null : memberData.email,
+        phone: 'phone' in data ? data.phone ?? null : memberData.phone,
+        volunteeringSkills:
+          'volunteeringSkills' in data ? data.volunteeringSkills ?? [] : memberData.volunteeringSkills ?? [],
+        schoolGrade: 'schoolGrade' in data ? data.schoolGrade ?? null : memberData.schoolGrade,
+        birthMonthYear: 'birthMonthYear' in data ? data.birthMonthYear ?? null : memberData.birthMonthYear,
+      };
+      const missing = whatsMissingForMember(merged).filter(
+        (field) => typeChanged || field in data,
+      );
+      const missingError = requiredFieldErrorPatch(missing);
+      if (missingError) {
+        throw Object.assign(new Error(missingError), { code: 'field-required', errorBody: missingError });
       }
 
       // Guard against demoting the last manager
@@ -138,8 +221,32 @@ export async function PATCH(req: Request, ctx: RouteContext) {
         }
       }
 
+      // Read the CURRENT owner of the member's OLD contact (still in the read
+      // phase — Firestore requires all reads before writes). We delete an old
+      // contactKey only when THIS member actually owns it: a member that merely
+      // SHARED a relative's contact (owner decision #3) must not delete the key
+      // out from under its real owner when it changes its own contact.
+      const oldEmailHash =
+        'email' in data && memberData.email && memberData.email !== newEmail
+          ? hashContactKey('email', memberData.email)
+          : null;
+      const oldPhoneHash =
+        'phone' in data && memberData.phone && memberData.phone !== newPhone
+          ? hashContactKey('phone', memberData.phone)
+          : null;
+      const [oldEmailSnap, oldPhoneSnap] = await Promise.all([
+        oldEmailHash ? txn.get(db.collection('contactKeys').doc(oldEmailHash)) : Promise.resolve(null),
+        oldPhoneHash ? txn.get(db.collection('contactKeys').doc(oldPhoneHash)) : Promise.resolve(null),
+      ]);
+
       // Build update payload — only include fields that were provided
       const updates: Record<string, unknown> = { ...data };
+
+      // birthMonth (1-12) is derived from birthMonthYear on any write that sets
+      // it, keeping the two columns in sync without the client computing it.
+      if ('birthMonthYear' in data) {
+        updates['birthMonth'] = deriveBirthMonth(data.birthMonthYear);
+      }
 
       // Update managers array on family doc if manager flag is changing
       if (familySnap.exists && 'manager' in data) {
@@ -153,18 +260,25 @@ export async function PATCH(req: Request, ctx: RouteContext) {
         txn.set(familyRef, { managers }, { merge: true });
       }
 
-      // Handle contactKey mutations for email/phone changes
+      // Reconcile contactKeys with ownership awareness (owner decision #3 — the
+      // same share-don't-steal rule as registration + the POST route):
+      //  - delete the OLD key only when this member actually OWNS it
+      //    (oldEmailSnap/oldPhoneSnap.mid === targetMid); a shared reuse points at
+      //    a relative — leave their key intact;
+      //  - write the NEW key only when no one in the family owns it yet
+      //    (newEmailSnap/newPhoneSnap absent). A same-fid existing owner means
+      //    this member is SHARING that contact — never overwrite the key, which
+      //    would re-seat that contact's sign-in onto this member.
       if ('email' in data) {
-        const oldEmail = memberData.email;
-        const newEmail = data.email ?? null;
-        if (oldEmail && oldEmail !== newEmail) {
-          const oldHash = hashContactKey('email', oldEmail);
-          txn.delete(db.collection('contactKeys').doc(oldHash));
+        if (oldEmailHash && oldEmailSnap && oldEmailSnap.exists) {
+          const owner = oldEmailSnap.data() as { mid?: string } | undefined;
+          if (owner?.mid === targetMid) {
+            txn.delete(db.collection('contactKeys').doc(oldEmailHash));
+          }
         }
-        if (newEmail) {
-          const newHash = hashContactKey('email', newEmail);
-          txn.set(db.collection('contactKeys').doc(newHash), {
-            contactKey: newHash,
+        if (newEmailHash && !(newEmailSnap && newEmailSnap.exists)) {
+          txn.set(db.collection('contactKeys').doc(newEmailHash), {
+            contactKey: newEmailHash,
             type: 'email',
             fid,
             mid: targetMid,
@@ -173,16 +287,15 @@ export async function PATCH(req: Request, ctx: RouteContext) {
       }
 
       if ('phone' in data) {
-        const oldPhone = memberData.phone;
-        const newPhone = data.phone ?? null;
-        if (oldPhone && oldPhone !== newPhone) {
-          const oldHash = hashContactKey('phone', oldPhone);
-          txn.delete(db.collection('contactKeys').doc(oldHash));
+        if (oldPhoneHash && oldPhoneSnap && oldPhoneSnap.exists) {
+          const owner = oldPhoneSnap.data() as { mid?: string } | undefined;
+          if (owner?.mid === targetMid) {
+            txn.delete(db.collection('contactKeys').doc(oldPhoneHash));
+          }
         }
-        if (newPhone) {
-          const newHash = hashContactKey('phone', newPhone);
-          txn.set(db.collection('contactKeys').doc(newHash), {
-            contactKey: newHash,
+        if (newPhoneHash && !(newPhoneSnap && newPhoneSnap.exists)) {
+          txn.set(db.collection('contactKeys').doc(newPhoneHash), {
+            contactKey: newPhoneHash,
             type: 'phone',
             fid,
             mid: targetMid,
@@ -200,8 +313,12 @@ export async function PATCH(req: Request, ctx: RouteContext) {
     if (code === 'cross-family') {
       return NextResponse.json({ error: 'forbidden' }, { status: 403 });
     }
-    if (code === 'skills-required') {
-      return NextResponse.json({ error: 'skills-required' }, { status: 400 });
+    if (code === 'field-required') {
+      // Per-type required 400s share one code path; the specific error string
+      // (skills-required / foodAllergies-required / contact-required /
+      // grade-required / birthmonth-required) rides on `errorBody`.
+      const errorBody = (err as { errorBody?: string }).errorBody ?? 'bad-request';
+      return NextResponse.json({ error: errorBody }, { status: 400 });
     }
     if (code === 'contact-conflict') {
       const msg = err instanceof Error ? err.message : '';

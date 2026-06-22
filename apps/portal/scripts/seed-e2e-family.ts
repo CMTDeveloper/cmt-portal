@@ -16,7 +16,7 @@
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
 import { portalAuth } from '@cmt/firebase-shared/admin/auth';
 import { sha256Hex } from '@/features/check-in/shared';
-import { normalizeContactForKey } from '@cmt/shared-domain/setu';
+import { normalizeContactForKey, NO_ALLERGIES } from '@cmt/shared-domain/setu';
 import {
   resolveSuggestedAmount,
   memberEligibleForProgram,
@@ -155,9 +155,10 @@ async function main(): Promise<void> {
       phone: PHONE,
       familyName: 'E2E Test Family',
       location: 'Brampton',
-      manager: { firstName: 'E2E', lastName: 'Tester', gender: 'PreferNotToSay' },
+      // Gate-complete: gender Male (PreferNotToSay reads as missing to the gate).
+      manager: { firstName: 'E2E', lastName: 'Tester', gender: 'Male' },
       additionalMembers: [
-        { firstName: 'E2E', lastName: 'Child', type: 'Child', gender: 'Male', schoolGrade: 'Grade 4', birthMonthYear: '2017-03' },
+        { firstName: 'E2E', lastName: 'Child', type: 'Child', gender: 'Male', schoolGrade: 'Grade 4', birthMonthYear: '2017-03', foodAllergies: NO_ALLERGIES },
       ],
     });
     fid = res.fid;
@@ -171,14 +172,25 @@ async function main(): Promise<void> {
   const membersSnap = await db.collection('families').doc(fid).collection('members').get();
   let childMid: string | null = null;
   for (const m of membersSnap.docs) {
-    const md = m.data() as { mid?: string; type?: string };
+    const md = m.data() as { mid?: string; type?: string; birthMonthYear?: string | null };
     if (md.type === 'Child' && md.mid) childMid = md.mid;
     // The child needs legacySid = CHILD_SID so the door check-ins
     // (family-check-ins/{legacyFid}, students[].sid = CHILD_SID) link to this
     // member — getFamilyBalaViharAttendance matches door marks by legacySid, so
     // without it the dashboard attendance resolves to 0 (empty state).
     const extra = md.type === 'Child' ? { legacySid: CHILD_SID } : {};
-    await m.ref.set({ _test: true, ...extra }, { merge: true });
+    // Gate-complete every member: registerFamily hardcodes foodAllergies:null /
+    // volunteeringSkills:[] and never derives birthMonth, so a freshly-registered
+    // (or previously-reused) family would be redirected to /family/complete-profile.
+    // ALL → foodAllergies; ADULT → >=1 skill; CHILD → derived birthMonth.
+    const gate: Record<string, unknown> = { foodAllergies: NO_ALLERGIES };
+    if (md.type === 'Adult') {
+      gate['volunteeringSkills'] = ['General Volunteer Support (happy to help where needed)'];
+    } else if (md.type === 'Child') {
+      const month = md.birthMonthYear ? Number(md.birthMonthYear.slice(5, 7)) : NaN;
+      if (Number.isInteger(month) && month >= 1 && month <= 12) gate['birthMonth'] = month;
+    }
+    await m.ref.set({ _test: true, ...extra, ...gate }, { merge: true });
   }
   await db.collection('contactKeys').doc(hashContactKey('email', EMAIL)).set({ _test: true }, { merge: true });
   await db.collection('contactKeys').doc(hashContactKey('phone', PHONE)).set({ _test: true }, { merge: true });

@@ -40,14 +40,46 @@ const mockCreateUser = vi.fn();
 const mockSetCustomUserClaims = vi.fn();
 const mockCreateCustomToken = vi.fn();
 
+// Gate-complete manager: Adult required matrix = gender + foodAllergies +
+// >=1 volunteering skill (email/phone arrive at the top level). Anything less
+// now trips the per-type 400 guard before registerFamily is reached.
 const validBody = {
   email: 'raj@example.com',
   phone: '4165551234',
   familyName: 'Patel',
   location: 'Brampton',
-  manager: { firstName: 'Raj', lastName: 'Patel', gender: 'Male' },
+  manager: {
+    firstName: 'Raj',
+    lastName: 'Patel',
+    gender: 'Male',
+    foodAllergies: 'None',
+    volunteeringSkills: ['Setup'],
+  },
   additionalMembers: [],
   registrationGrant: 'grant-token-abc',
+};
+
+// A gate-complete child member (schoolGrade + birthMonthYear + foodAllergies).
+const completeChild = {
+  firstName: 'Diya',
+  lastName: 'Patel',
+  type: 'Child',
+  gender: 'Female',
+  foodAllergies: 'Peanuts',
+  schoolGrade: 'Grade 5',
+  birthMonthYear: '2016-03',
+};
+
+// A gate-complete adult member reusing the manager's contact (allowed).
+const completeAdultReusingManagerContact = {
+  firstName: 'Priya',
+  lastName: 'Patel',
+  type: 'Adult',
+  gender: 'Female',
+  foodAllergies: 'None',
+  volunteeringSkills: ['Kitchen'],
+  email: validBody.email, // same as manager — must be accepted
+  phone: validBody.phone, // same as manager — must be accepted
 };
 
 function makeRequest(body: unknown) {
@@ -224,9 +256,7 @@ describe('POST /api/setu/register', () => {
   it('passes additional members through to registerFamily', async () => {
     const bodyWithKids = {
       ...validBody,
-      additionalMembers: [
-        { firstName: 'Diya', lastName: 'Patel', type: 'Child', gender: 'Female', schoolGrade: 'Grade 5' },
-      ],
+      additionalMembers: [completeChild],
     };
     await POST(makeRequest(bodyWithKids));
     expect(registerFamily).toHaveBeenCalledWith(expect.objectContaining({
@@ -234,6 +264,129 @@ describe('POST /api/setu/register', () => {
         expect.objectContaining({ firstName: 'Diya', type: 'Child' }),
       ]),
     }));
+  });
+
+  it('forwards the manager foodAllergies + volunteeringSkills to registerFamily', async () => {
+    await POST(makeRequest(validBody));
+    expect(registerFamily).toHaveBeenCalledWith(expect.objectContaining({
+      manager: expect.objectContaining({
+        firstName: 'Raj',
+        foodAllergies: 'None',
+        volunteeringSkills: ['Setup'],
+      }),
+    }));
+  });
+
+  it('forwards a child member schoolGrade + birthMonthYear + foodAllergies', async () => {
+    await POST(makeRequest({ ...validBody, additionalMembers: [completeChild] }));
+    expect(registerFamily).toHaveBeenCalledWith(expect.objectContaining({
+      additionalMembers: expect.arrayContaining([
+        expect.objectContaining({
+          schoolGrade: 'Grade 5',
+          birthMonthYear: '2016-03',
+          foodAllergies: 'Peanuts',
+        }),
+      ]),
+    }));
+  });
+});
+
+describe('POST /api/setu/register — gender enum tightened to Male|Female', () => {
+  it('rejects manager gender PreferNotToSay (capture forms must yield a real pick)', async () => {
+    const res = await POST(makeRequest({
+      ...validBody,
+      manager: { ...validBody.manager, gender: 'PreferNotToSay' },
+    }));
+    expect(res.status).toBe(400);
+    expect(registerFamily).not.toHaveBeenCalled();
+  });
+
+  it('rejects an additional member gender PreferNotToSay', async () => {
+    const res = await POST(makeRequest({
+      ...validBody,
+      additionalMembers: [{ ...completeChild, gender: 'PreferNotToSay' }],
+    }));
+    expect(res.status).toBe(400);
+    expect(registerFamily).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/setu/register — per-type required matrix (400 guards)', () => {
+  it('400 foodAllergies-required when the manager omits foodAllergies', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { foodAllergies, ...managerNoAllergies } = validBody.manager;
+    const res = await POST(makeRequest({ ...validBody, manager: managerNoAllergies }));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('foodAllergies-required');
+    expect(registerFamily).not.toHaveBeenCalled();
+  });
+
+  it('400 skills-required when the manager has zero volunteering skills', async () => {
+    const res = await POST(makeRequest({
+      ...validBody,
+      manager: { ...validBody.manager, volunteeringSkills: [] },
+    }));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('skills-required');
+    expect(registerFamily).not.toHaveBeenCalled();
+  });
+
+  it('400 grade-required when a child member omits schoolGrade', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { schoolGrade, ...childNoGrade } = completeChild;
+    const res = await POST(makeRequest({ ...validBody, additionalMembers: [childNoGrade] }));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('grade-required');
+    expect(registerFamily).not.toHaveBeenCalled();
+  });
+
+  it('400 birthmonth-required when a child member omits birthMonthYear', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { birthMonthYear, ...childNoBirth } = completeChild;
+    const res = await POST(makeRequest({ ...validBody, additionalMembers: [childNoBirth] }));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('birthmonth-required');
+    expect(registerFamily).not.toHaveBeenCalled();
+  });
+
+  it('400 contact-required when an adult member omits email + phone', async () => {
+    const res = await POST(makeRequest({
+      ...validBody,
+      additionalMembers: [{
+        firstName: 'Arjun', lastName: 'Patel', type: 'Adult', gender: 'Male',
+        foodAllergies: 'None', volunteeringSkills: ['Setup'],
+        // no email / no phone
+      }],
+    }));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('contact-required');
+    expect(registerFamily).not.toHaveBeenCalled();
+  });
+
+  it('accepts an adult member that REUSES the manager email + phone (same-family reuse passes)', async () => {
+    const res = await POST(makeRequest({
+      ...validBody,
+      additionalMembers: [completeAdultReusingManagerContact],
+    }));
+    expect(res.status).toBe(200);
+    expect(registerFamily).toHaveBeenCalledWith(expect.objectContaining({
+      additionalMembers: expect.arrayContaining([
+        expect.objectContaining({
+          firstName: 'Priya',
+          email: validBody.email,
+          phone: validBody.phone,
+        }),
+      ]),
+    }));
+  });
+
+  it('happy path: complete adult-manager + complete child registers (200)', async () => {
+    const res = await POST(makeRequest({
+      ...validBody,
+      additionalMembers: [completeChild],
+    }));
+    expect(res.status).toBe(200);
+    expect(registerFamily).toHaveBeenCalledOnce();
   });
 
   it('returns 404 when feature flag is off', async () => {

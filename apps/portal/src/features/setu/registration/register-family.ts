@@ -14,8 +14,17 @@ export interface AdditionalMember {
   schoolGrade?: string;
   birthMonthYear?: string;
   foodAllergies?: string;
+  volunteeringSkills?: string[];
   email?: string;
   phone?: string;
+}
+
+export interface RegisterFamilyManager {
+  firstName: string;
+  lastName: string;
+  gender: Gender;
+  foodAllergies?: string;
+  volunteeringSkills?: string[];
 }
 
 export interface RegisterFamilyInput {
@@ -23,7 +32,7 @@ export interface RegisterFamilyInput {
   phone: string;
   familyName: string;
   location: Location;
-  manager: { firstName: string; lastName: string; gender: Gender };
+  manager: RegisterFamilyManager;
   additionalMembers: AdditionalMember[];
 }
 
@@ -36,6 +45,19 @@ function zeroPad(n: number): string {
   return n.toString().padStart(2, '0');
 }
 
+/**
+ * Derive the canonical numeric birthMonth (1-12) from a `'YYYY-MM'` string so
+ * prasad assignment + reads can use it directly. Returns null when the input is
+ * absent or not a recognizable `'YYYY-MM'` (defensive — never throws).
+ */
+export function deriveBirthMonth(birthMonthYear: string | undefined | null): number | null {
+  if (!birthMonthYear) return null;
+  const match = /^\d{4}-(\d{2})$/.exec(birthMonthYear.trim());
+  if (!match || !match[1]) return null;
+  const month = Number(match[1]);
+  return month >= 1 && month <= 12 ? month : null;
+}
+
 export async function registerFamily(input: RegisterFamilyInput): Promise<RegisterFamilyResult> {
   const db = portalFirestore();
   const emailHash = hashContactKey('email', input.email);
@@ -45,42 +67,44 @@ export async function registerFamily(input: RegisterFamilyInput): Promise<Regist
   const managerMid = `${fid}-01`;
   const now = FieldValue.serverTimestamp();
 
+  // The manager always owns its own email + phone contactKeys. An additional
+  // adult MAY reuse the manager's contact (owner decision #3, 2026-06-22) — that
+  // is a SHARE, not a conflict: the member doc still stores the value, but no
+  // second contactKey is written, so the manager keeps ownership and manager
+  // sign-in still resolves to the manager (not the reusing member).
+  const managerHashes = new Set<string>([emailHash, phoneHash]);
+
   // Collect every contactKey we plan to write so we can read+verify them ALL
   // inside the transaction before any writes (Firestore requires reads before
-  // writes in a txn). Tracks origin so error messages can pinpoint the offender.
+  // writes in a txn). Manager keys are always present; a member's key is added
+  // ONLY when it isn't a reuse of the manager's contact.
   const contactHashes: { hash: string; type: 'email' | 'phone'; origin: string }[] = [
     { hash: emailHash, type: 'email', origin: 'manager email' },
     { hash: phoneHash, type: 'phone', origin: 'manager phone' },
   ];
+
+  // Refuse only when two DIFFERENT non-manager members claim the SAME new contact
+  // (genuinely ambiguous — which member would sign-in resolve to?). Reusing the
+  // manager's contact is allowed (handled above). Throwing here, before the
+  // transaction, means no partial writes and each NEW contact maps to one member.
+  const memberSeen = new Set<string>();
   for (const m of input.additionalMembers) {
     if (m.email) {
-      contactHashes.push({
-        hash: hashContactKey('email', m.email),
-        type: 'email',
-        origin: `${m.firstName} ${m.lastName} email`,
-      });
+      const hash = hashContactKey('email', m.email);
+      if (!managerHashes.has(hash)) {
+        if (memberSeen.has(hash)) throw new Error('duplicate-contact-in-form');
+        memberSeen.add(hash);
+        contactHashes.push({ hash, type: 'email', origin: `${m.firstName} ${m.lastName} email` });
+      }
     }
     if (m.phone) {
-      contactHashes.push({
-        hash: hashContactKey('phone', m.phone),
-        type: 'phone',
-        origin: `${m.firstName} ${m.lastName} phone`,
-      });
+      const hash = hashContactKey('phone', m.phone);
+      if (!managerHashes.has(hash)) {
+        if (memberSeen.has(hash)) throw new Error('duplicate-contact-in-form');
+        memberSeen.add(hash);
+        contactHashes.push({ hash, type: 'phone', origin: `${m.firstName} ${m.lastName} phone` });
+      }
     }
-  }
-
-  // Refuse if the SAME normalized contact was entered for two members of THIS
-  // family (e.g. a parent typed their own email for a child, or two adults share
-  // a phone). Writing the same contactKeys/{hash} doc twice in the transaction
-  // would let the last write silently win — binding sign-in to whichever member
-  // is written last. Throwing here (before the transaction) means no partial
-  // writes happen and each contact maps to exactly one member.
-  const seenHashes = new Set<string>();
-  for (const c of contactHashes) {
-    if (seenHashes.has(c.hash)) {
-      throw new Error('duplicate-contact-in-form');
-    }
-    seenHashes.add(c.hash);
   }
 
   const result = await db.runTransaction(async (txn) => {
@@ -132,8 +156,9 @@ export async function registerFamily(input: RegisterFamilyInput): Promise<Regist
       phone: input.phone,
       schoolGrade: null,
       birthMonthYear: null,
-      volunteeringSkills: [],
-      foodAllergies: null,
+      birthMonth: null,
+      volunteeringSkills: input.manager.volunteeringSkills ?? [],
+      foodAllergies: input.manager.foodAllergies ?? null,
       emergencyContacts: [null, null],
     });
 
@@ -155,29 +180,36 @@ export async function registerFamily(input: RegisterFamilyInput): Promise<Regist
         phone: member.phone ?? null,
         schoolGrade: member.schoolGrade ?? null,
         birthMonthYear: member.birthMonthYear ?? null,
-        volunteeringSkills: [],
+        birthMonth: deriveBirthMonth(member.birthMonthYear),
+        volunteeringSkills: member.volunteeringSkills ?? [],
         foodAllergies: member.foodAllergies ?? null,
         emergencyContacts: [null, null],
       });
 
-      // Create contactKey docs for additional member contacts
+      // Create contactKey docs for additional member contacts — but NOT when the
+      // member reuses the manager's contact (the manager owns that key; writing a
+      // second doc for the same hash would re-point sign-in to this member).
       if (member.email) {
         const hash = hashContactKey('email', member.email);
-        txn.set(db.collection('contactKeys').doc(hash), {
-          contactKey: hash,
-          type: 'email',
-          fid,
-          mid,
-        });
+        if (!managerHashes.has(hash)) {
+          txn.set(db.collection('contactKeys').doc(hash), {
+            contactKey: hash,
+            type: 'email',
+            fid,
+            mid,
+          });
+        }
       }
       if (member.phone) {
         const hash = hashContactKey('phone', member.phone);
-        txn.set(db.collection('contactKeys').doc(hash), {
-          contactKey: hash,
-          type: 'phone',
-          fid,
-          mid,
-        });
+        if (!managerHashes.has(hash)) {
+          txn.set(db.collection('contactKeys').doc(hash), {
+            contactKey: hash,
+            type: 'phone',
+            fid,
+            mid,
+          });
+        }
       }
     }
 

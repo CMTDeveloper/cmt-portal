@@ -4,24 +4,45 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { SetuIcon } from '@cmt/ui';
+import { NO_ALLERGIES, whatsMissingForMember, type MemberRequiredField } from '@cmt/shared-domain';
 import { CspRoot, SectionLabel } from '@/features/family/components/atoms';
 import { VolunteeringSkillsPicker } from '@/features/setu/members/volunteering-skills-picker';
 
 type MemberType = 'Adult' | 'Child';
-type Gender = 'Male' | 'Female' | 'PreferNotToSay';
+// Capture forms only ever offer Male|Female. The read-doc schema keeps
+// 'PreferNotToSay' for the 3 internal sentinel paths, but humans never pick it.
+type Gender = 'Male' | 'Female';
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const;
+// Month dropdown carries the numeric value (1-12) so we can persist both the
+// canonical birthMonthYear ('YYYY-MM') and the derived birthMonth (1-12).
+const MONTHS: readonly { value: number; label: string }[] = [
+  { value: 1, label: 'January' },
+  { value: 2, label: 'February' },
+  { value: 3, label: 'March' },
+  { value: 4, label: 'April' },
+  { value: 5, label: 'May' },
+  { value: 6, label: 'June' },
+  { value: 7, label: 'July' },
+  { value: 8, label: 'August' },
+  { value: 9, label: 'September' },
+  { value: 10, label: 'October' },
+  { value: 11, label: 'November' },
+  { value: 12, label: 'December' },
+];
 
 export default function AddMemberPage() {
   const router = useRouter();
   const [mode, setMode] = useState<MemberType>('Child');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
-  const [gender, setGender] = useState<Gender>('Male');
+  // No default gender — the member must actively choose Male or Female (the
+  // profile-completion matrix treats an unselected gender as missing).
+  const [gender, setGender] = useState<'' | Gender>('');
   const [schoolGrade, setSchoolGrade] = useState('');
-  const [birthMonth, setBirthMonth] = useState('');
+  const [birthMonth, setBirthMonth] = useState(''); // numeric value as string ('1'..'12')
   const [birthYear, setBirthYear] = useState('');
   const [foodAllergies, setFoodAllergies] = useState('');
+  const [noAllergies, setNoAllergies] = useState(false);
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [volunteeringSkills, setVolunteeringSkills] = useState<string[]>([]);
@@ -30,15 +51,43 @@ export default function AddMemberPage() {
   const [ec1Email, setEc1Email] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showErrors, setShowErrors] = useState(false);
 
-  // Birth month/year is captured via two dropdowns and composed into the
-  // existing "MMM YYYY" string (e.g. "Mar 2017") so stored data stays compatible.
+  // Canonical 'YYYY-MM' from the two dropdowns + the derived birthMonth (1-12).
+  const monthNum = birthMonth ? Number(birthMonth) : null;
+  const birthMonthYear = monthNum && birthYear ? `${birthYear}-${String(monthNum).padStart(2, '0')}` : '';
+
   const currentYear = new Date().getFullYear();
   const birthYears = Array.from({ length: 26 }, (_, i) => String(currentYear - i));
-  const birthMonthYear = birthMonth && birthYear ? `${birthMonth} ${birthYear}` : '';
+
+  // The effective foodAllergies value: the "No known allergies" toggle wins and
+  // writes the NO_ALLERGIES sentinel ('None') so the required field is satisfied
+  // without forcing the user to invent an allergy.
+  const effectiveAllergies = noAllergies ? NO_ALLERGIES : foodAllergies.trim();
+
+  // Single source of truth for "what's still missing" — the same shared helper
+  // the write routes + gate use, so the form blocks exactly what the server would.
+  const missing: MemberRequiredField[] = whatsMissingForMember({
+    type: mode,
+    firstName,
+    lastName,
+    gender: gender || null,
+    foodAllergies: effectiveAllergies || null,
+    email: email || null,
+    phone: phone || null,
+    volunteeringSkills,
+    schoolGrade: schoolGrade || null,
+    birthMonthYear: birthMonthYear || null,
+  });
+  const isMissing = (f: MemberRequiredField) => missing.includes(f);
+  const canSubmit = missing.length === 0;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!canSubmit) {
+      setShowErrors(true);
+      return;
+    }
     setSaving(true);
     setError(null);
 
@@ -60,7 +109,8 @@ export default function AddMemberPage() {
       gender,
       schoolGrade: schoolGrade || null,
       birthMonthYear: birthMonthYear || null,
-      foodAllergies: foodAllergies || null,
+      birthMonth: monthNum, // derived (1-12) so prasad + grade ladder stay in sync
+      foodAllergies: effectiveAllergies || null,
       volunteeringSkills,
       email: email || null,
       phone: phone || null,
@@ -105,9 +155,19 @@ export default function AddMemberPage() {
       'no-session': 'Your session expired. Please sign in again.',
       'manager-required': 'Only family managers can add members.',
       'family-not-found': 'We couldn\'t find your family record. Try signing in again.',
+      'skills-required': 'Adults need at least one volunteering skill.',
+      'contact-required': 'Adults need both an email and a phone number.',
+      'foodAllergies-required': 'Please record food allergies (or pick “No known allergies”).',
+      'grade-required': 'Children need a school grade.',
+      'birthmonth-required': 'Children need a birth month and year.',
     };
     return map[code] ?? 'Couldn\'t add the member. Please try again.';
   }
+
+  const reqError = (f: MemberRequiredField, label: string) =>
+    showErrors && isMissing(f) ? (
+      <p style={{ fontSize: 12, color: 'var(--err)', marginTop: 6 }}>{label}</p>
+    ) : null;
 
   const formBody = (
     <>
@@ -138,67 +198,96 @@ export default function AddMemberPage() {
       <div className="row" style={{ gap: 8, marginBottom: 14 }}>
         <div className="field" style={{ flex: 1 }}>
           <label>First name <span className="req">·</span></label>
-          <input className="input" value={firstName} onChange={(e) => setFirstName(e.target.value)} required/>
+          <input className="input" aria-label="First name" value={firstName} onChange={(e) => setFirstName(e.target.value)}/>
+          {reqError('firstName', 'First name is required')}
         </div>
         <div className="field" style={{ flex: 1 }}>
           <label>Last name <span className="req">·</span></label>
-          <input className="input" value={lastName} onChange={(e) => setLastName(e.target.value)} required/>
+          <input className="input" aria-label="Last name" value={lastName} onChange={(e) => setLastName(e.target.value)}/>
+          {reqError('lastName', 'Last name is required')}
         </div>
       </div>
 
       <div className="field" style={{ marginBottom: 14 }}>
         <label>Gender <span className="req">·</span></label>
-        <select className="input" value={gender} onChange={(e) => setGender(e.target.value as Gender)}>
+        <select className="input" value={gender} onChange={(e) => setGender(e.target.value as '' | Gender)}>
+          <option value="">Select…</option>
           <option value="Male">Male</option>
           <option value="Female">Female</option>
-          <option value="PreferNotToSay">Prefer not to say</option>
         </select>
+        {reqError('gender', 'Please select a gender')}
+      </div>
+
+      {/* Food allergies — required for ALL members (issue #16). The "No known
+          allergies" toggle satisfies the requirement with the NO_ALLERGIES sentinel. */}
+      <div className="field" style={{ marginBottom: 14 }}>
+        <label>Food allergies <span className="req">·</span></label>
+        <input
+          className="input"
+          value={foodAllergies}
+          onChange={(e) => setFoodAllergies(e.target.value)}
+          placeholder="e.g. Peanuts"
+          disabled={noAllergies}
+          aria-label="Food allergies"
+        />
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, fontSize: 13, color: 'var(--body-text)', cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            data-testid="no-allergies"
+            checked={noAllergies}
+            onChange={(e) => {
+              setNoAllergies(e.target.checked);
+              if (e.target.checked) setFoodAllergies('');
+            }}
+            style={{ width: 16, height: 16 }}
+          />
+          No known allergies
+        </label>
+        {reqError('foodAllergies', 'Record allergies or check “No known allergies”')}
       </div>
 
       {mode === 'Child' && (
-        <>
-          <div className="row" style={{ gap: 8, marginBottom: 14 }}>
-            <div className="field" style={{ flex: 1 }}>
-              <label>School grade</label>
-              <input className="input" value={schoolGrade} onChange={(e) => setSchoolGrade(e.target.value)} placeholder="e.g. Grade 3"/>
-            </div>
-            <div className="field" style={{ flex: 1 }}>
-              <label>Birth month/year</label>
-              <div className="row" style={{ gap: 8 }}>
-                <select className="input" aria-label="Birth month" value={birthMonth} onChange={(e) => setBirthMonth(e.target.value)} style={{ flex: 1 }}>
-                  <option value="">Month</option>
-                  {MONTHS.map((m) => <option key={m} value={m}>{m}</option>)}
-                </select>
-                <select className="input" aria-label="Birth year" value={birthYear} onChange={(e) => setBirthYear(e.target.value)} style={{ flex: 1 }}>
-                  <option value="">Year</option>
-                  {birthYears.map((y) => <option key={y} value={y}>{y}</option>)}
-                </select>
-              </div>
-            </div>
+        <div className="row" style={{ gap: 8, marginBottom: 14 }}>
+          <div className="field" style={{ flex: 1 }}>
+            <label>School grade <span className="req">·</span></label>
+            <input className="input" aria-label="School grade" value={schoolGrade} onChange={(e) => setSchoolGrade(e.target.value)} placeholder="e.g. Grade 3"/>
+            {reqError('schoolGrade', 'School grade is required')}
           </div>
-
-          <div className="field" style={{ marginBottom: 14 }}>
-            <label>Food allergies</label>
-            <input className="input" value={foodAllergies} onChange={(e) => setFoodAllergies(e.target.value)} placeholder="e.g. Peanuts"/>
+          <div className="field" style={{ flex: 1 }}>
+            <label>Birth month/year <span className="req">·</span></label>
+            <div className="row" style={{ gap: 8 }}>
+              <select className="input" aria-label="Birth month" value={birthMonth} onChange={(e) => setBirthMonth(e.target.value)} style={{ flex: 1 }}>
+                <option value="">Month</option>
+                {MONTHS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+              </select>
+              <select className="input" aria-label="Birth year" value={birthYear} onChange={(e) => setBirthYear(e.target.value)} style={{ flex: 1 }}>
+                <option value="">Year</option>
+                {birthYears.map((y) => <option key={y} value={y}>{y}</option>)}
+              </select>
+            </div>
+            {reqError('birthMonthYear', 'Birth month and year are required')}
           </div>
-        </>
+        </div>
       )}
 
       {mode === 'Adult' && (
         <>
           <div className="row" style={{ gap: 8, marginBottom: 14 }}>
             <div className="field" style={{ flex: 1 }}>
-              <label>Email</label>
-              <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)}/>
+              <label>Email <span className="req">·</span></label>
+              <input className="input" aria-label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)}/>
+              {reqError('email', 'Email is required for adults')}
             </div>
             <div className="field" style={{ flex: 1 }}>
-              <label>Phone</label>
-              <input className="input" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)}/>
+              <label>Phone <span className="req">·</span></label>
+              <input className="input" aria-label="Phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)}/>
+              {reqError('phone', 'Phone is required for adults')}
             </div>
           </div>
           <div className="field" style={{ marginBottom: 14 }}>
-            <label>Volunteering skills</label>
+            <label>Volunteering skills <span className="req">·</span></label>
             <VolunteeringSkillsPicker value={volunteeringSkills} onChange={setVolunteeringSkills} />
+            {reqError('volunteeringSkills', 'Select at least one volunteering skill')}
           </div>
         </>
       )}

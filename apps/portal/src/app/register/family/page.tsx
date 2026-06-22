@@ -4,13 +4,18 @@ import { Suspense, useState, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { toast, SetuLogo, SetuAvatar, SetuIcon, Rosette } from '@cmt/ui';
+import { isMemberComplete, NO_ALLERGIES } from '@cmt/shared-domain';
 import { CspRoot, StepHeader, AddedMemberRow } from '@/features/family/components/atoms';
+import { VolunteeringSkillsPicker } from '@/features/setu/members/volunteering-skills-picker';
 import { flags } from '@/lib/flags';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Location = 'Brampton' | 'Mississauga' | 'Scarborough' | 'Markham';
-type Gender = 'Male' | 'Female' | 'PreferNotToSay';
+// Capture forms drop PreferNotToSay — the matrix treats it as missing, so a
+// human must pick Male or Female. '' is the no-selection placeholder.
+type Gender = 'Male' | 'Female';
+type GenderChoice = Gender | '';
 type MemberType = 'Adult' | 'Child';
 
 interface AdditionalMember {
@@ -19,8 +24,26 @@ interface AdditionalMember {
   lastName: string;
   type: MemberType;
   gender: Gender;
+  foodAllergies: string;
+  // Adult-only
   email?: string;
   phone?: string;
+  volunteeringSkills?: string[];
+  // Child-only
+  schoolGrade?: string;
+  birthMonthYear?: string; // canonical 'YYYY-MM'
+}
+
+const MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+] as const;
+
+// Compose a month index (1-12) + 4-digit year into the canonical 'YYYY-MM'
+// birthMonthYear the server persists (and from which it derives birthMonth).
+function toBirthMonthYear(monthNum: string, year: string): string {
+  if (!monthNum || !year) return '';
+  return `${year}-${monthNum.padStart(2, '0')}`;
 }
 
 // ─── Flag-off fallback (visual-only prototype) ────────────────────────────────
@@ -155,7 +178,10 @@ function RegisterFamilyReal() {
   const [location, setLocation] = useState<Location | null>(null);
   const [managerFirstName, setManagerFirstName] = useState('');
   const [managerLastName, setManagerLastName] = useState('');
-  const [managerGender, setManagerGender] = useState<Gender>('PreferNotToSay');
+  const [managerGender, setManagerGender] = useState<GenderChoice>('');
+  // Manager is an Adult → needs foodAllergies + at least one volunteering skill.
+  const [managerFoodAllergies, setManagerFoodAllergies] = useState('');
+  const [managerSkills, setManagerSkills] = useState<string[]>([]);
   const [additionalMembers, setAdditionalMembers] = useState<AdditionalMember[]>([]);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -172,42 +198,77 @@ function RegisterFamilyReal() {
   const [draftFirstName, setDraftFirstName] = useState('');
   const [draftLastName, setDraftLastName] = useState('');
   const [draftType, setDraftType] = useState<MemberType>('Adult');
-  const [draftGender, setDraftGender] = useState<Gender>('PreferNotToSay');
+  const [draftGender, setDraftGender] = useState<GenderChoice>('');
+  const [draftFoodAllergies, setDraftFoodAllergies] = useState('');
   const [draftEmail, setDraftEmail] = useState('');
   const [draftPhone, setDraftPhone] = useState('');
+  const [draftSkills, setDraftSkills] = useState<string[]>([]);
+  const [draftSchoolGrade, setDraftSchoolGrade] = useState('');
+  const [draftBirthMonth, setDraftBirthMonth] = useState(''); // '1'..'12'
+  const [draftBirthYear, setDraftBirthYear] = useState('');
   const [draftError, setDraftError] = useState('');
 
+  const currentYear = new Date().getFullYear();
+  const birthYears = Array.from({ length: 26 }, (_, i) => String(currentYear - i));
+
+  function resetDraft() {
+    setDraftFirstName('');
+    setDraftLastName('');
+    setDraftType('Adult');
+    setDraftGender('');
+    setDraftFoodAllergies('');
+    setDraftEmail('');
+    setDraftPhone('');
+    setDraftSkills([]);
+    setDraftSchoolGrade('');
+    setDraftBirthMonth('');
+    setDraftBirthYear('');
+    setDraftError('');
+  }
+
+  // Build the draft member object the same shape the matrix + server expect,
+  // so completeness can be judged with the SHARED helper (one rule set).
+  const draftBirthMonthYear = toBirthMonthYear(draftBirthMonth, draftBirthYear);
+  const draftMember: AdditionalMember = {
+    id: 'draft',
+    firstName: draftFirstName.trim(),
+    lastName: draftLastName.trim(),
+    type: draftType,
+    gender: (draftGender || 'Male') as Gender, // placeholder; completeness checks the real value below
+    foodAllergies: draftFoodAllergies.trim(),
+    ...(draftType === 'Adult'
+      ? {
+          ...(draftEmail.trim() ? { email: draftEmail.trim() } : {}),
+          ...(draftPhone.trim() ? { phone: draftPhone.trim() } : {}),
+          volunteeringSkills: draftSkills,
+        }
+      : {
+          ...(draftSchoolGrade.trim() ? { schoolGrade: draftSchoolGrade.trim() } : {}),
+          ...(draftBirthMonthYear ? { birthMonthYear: draftBirthMonthYear } : {}),
+        }),
+  };
+  // Completeness uses the actual selected gender ('' ⇒ matrix sees it missing).
+  const draftComplete = isMemberComplete({ ...draftMember, gender: draftGender || undefined });
+
   const handleAddMember = useCallback(() => {
-    if (!draftFirstName.trim() || !draftLastName.trim()) return;
     const email = draftEmail.trim();
-    const phone = draftPhone.trim();
-    // A member's email is optional, but if present it must look valid — otherwise
-    // the server rejects the whole registration with a cryptic 400.
-    if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
-      setDraftError('Enter a valid email or leave it blank.');
+    // A member's email, if present, must look valid before the server sees it.
+    if (draftType === 'Adult' && email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      setDraftError('Enter a valid email address.');
+      return;
+    }
+    if (!draftComplete || !draftGender) {
+      setDraftError('Please fill in all required fields for this member.');
       return;
     }
     setDraftError('');
     setAdditionalMembers(prev => [
       ...prev,
-      {
-        id: `${Date.now()}`,
-        firstName: draftFirstName.trim(),
-        lastName: draftLastName.trim(),
-        type: draftType,
-        gender: draftGender,
-        ...(email ? { email } : {}),
-        ...(phone ? { phone } : {}),
-      },
+      { ...draftMember, id: `${Date.now()}`, gender: draftGender },
     ]);
-    setDraftFirstName('');
-    setDraftLastName('');
-    setDraftEmail('');
-    setDraftPhone('');
-    setDraftType('Adult');
-    setDraftGender('PreferNotToSay');
+    resetDraft();
     setShowAddMember(false);
-  }, [draftFirstName, draftLastName, draftEmail, draftPhone, draftType, draftGender]);
+  }, [draftComplete, draftGender, draftEmail, draftType, draftMember]);
 
   const handleRemoveMember = useCallback((id: string) => {
     setAdditionalMembers(prev => prev.filter(m => m.id !== id));
@@ -222,6 +283,12 @@ function RegisterFamilyReal() {
     if (!location) errors.location = 'Please select a primary location.';
     if (!managerFirstName.trim()) errors.managerFirstName = 'Your first name is required.';
     if (!managerLastName.trim()) errors.managerLastName = 'Your last name is required.';
+    // Manager is an Adult — block until the matrix is satisfied (gender pick,
+    // foodAllergies, at least one volunteering skill; email/phone arrive from
+    // the verified query params). Mirrors the shared helper the server uses.
+    if (!managerGender) errors.managerGender = 'Please select a gender.';
+    if (!managerFoodAllergies.trim()) errors.managerFoodAllergies = 'Please tell us about allergies, or pick "No known allergies".';
+    if (managerSkills.length < 1) errors.managerSkills = 'Please pick at least one way you can help.';
     if (Object.keys(errors).length > 0) {
       setFieldErrors(errors);
       return;
@@ -302,14 +369,20 @@ function RegisterFamilyReal() {
             firstName: managerFirstName.trim(),
             lastName: managerLastName.trim(),
             gender: managerGender,
+            foodAllergies: managerFoodAllergies.trim(),
+            volunteeringSkills: managerSkills,
           },
-          additionalMembers: additionalMembers.map(({ firstName, lastName, type, gender, email, phone }) => ({
-            firstName,
-            lastName,
-            type,
-            gender,
-            ...(email ? { email } : {}),
-            ...(phone ? { phone } : {}),
+          additionalMembers: additionalMembers.map((m) => ({
+            firstName: m.firstName,
+            lastName: m.lastName,
+            type: m.type,
+            gender: m.gender,
+            foodAllergies: m.foodAllergies,
+            ...(m.email ? { email: m.email } : {}),
+            ...(m.phone ? { phone: m.phone } : {}),
+            ...(m.volunteeringSkills ? { volunteeringSkills: m.volunteeringSkills } : {}),
+            ...(m.schoolGrade ? { schoolGrade: m.schoolGrade } : {}),
+            ...(m.birthMonthYear ? { birthMonthYear: m.birthMonthYear } : {}),
           })),
           registrationGrant: verified.registrationGrant,
         }),
@@ -328,11 +401,23 @@ function RegisterFamilyReal() {
               "One of those contacts is already registered. If it's you, sign in instead.",
             'registration-unverified':
               'Your verification expired. Please resend the code and try again.',
+            // Per-type required-matrix 400s (the client already blocks these, so
+            // they only surface on a stale/edited request — bounce back to fix).
+            'foodAllergies-required': 'Please tell us about allergies for every member (or pick "No known allergies").',
+            'contact-required': 'Every adult needs an email and a phone number.',
+            'skills-required': 'Every adult needs at least one volunteering skill.',
+            'grade-required': 'Every child needs a school grade.',
+            'birthmonth-required': 'Every child needs a birth month and year.',
           };
+          const requiresFix = body.error ? Object.prototype.hasOwnProperty.call(messages, body.error) : false;
           toast.error(
             (body.error && messages[body.error]) ?? body.error ?? 'Registration failed. Please try again.',
           );
           if (body.error === 'registration-unverified') setCode('');
+          // Send the user back to the details step to correct a matrix error.
+          if (requiresFix && body.error !== 'registration-unverified' && !body.error?.startsWith('duplicate')) {
+            setPhase('form');
+          }
         }
         return;
       }
@@ -425,24 +510,62 @@ function RegisterFamilyReal() {
               {fieldErrors.managerLastName && <div className="field-error" role="alert">{fieldErrors.managerLastName}</div>}
             </div>
           </div>
-          <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
-            {(['Male', 'Female', 'PreferNotToSay'] as const).map(g => (
-              <button
-                key={g}
-                className="pill"
-                onClick={() => setManagerGender(g)}
-                disabled={submitting}
-                style={{
-                  padding: '6px 10px', fontSize: 12,
-                  background: managerGender === g ? 'var(--accent)' : 'var(--surface)',
-                  color: managerGender === g ? '#fff' : 'var(--body-text)',
-                  border: '1px solid', borderColor: managerGender === g ? 'var(--accent)' : 'var(--line2)',
-                }}
-              >
-                {g === 'PreferNotToSay' ? 'Prefer not to say' : g}
-              </button>
-            ))}
+          <div style={{ marginBottom: 10 }}>
+            <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+              {(['Male', 'Female'] as const).map(g => (
+                <button
+                  key={g}
+                  type="button"
+                  className="pill"
+                  onClick={() => setManagerGender(g)}
+                  disabled={submitting}
+                  aria-pressed={managerGender === g}
+                  style={{
+                    padding: '6px 10px', fontSize: 12,
+                    background: managerGender === g ? 'var(--accent)' : 'var(--surface)',
+                    color: managerGender === g ? '#fff' : 'var(--body-text)',
+                    border: '1px solid', borderColor: managerGender === g ? 'var(--accent)' : 'var(--line2)',
+                  }}
+                >
+                  {g}
+                </button>
+              ))}
+            </div>
+            {fieldErrors.managerGender && <div className="field-error" role="alert">{fieldErrors.managerGender}</div>}
           </div>
+
+          {/* Food allergies (required for all) */}
+          <div className="field" style={{ marginBottom: 10 }}>
+            <label style={{ fontSize: 12 }}>Food allergies <span className="req">·</span></label>
+            <input
+              className="input"
+              type="text"
+              placeholder="e.g. Peanuts"
+              value={managerFoodAllergies === NO_ALLERGIES ? '' : managerFoodAllergies}
+              onChange={e => setManagerFoodAllergies(e.target.value)}
+              disabled={submitting || managerFoodAllergies === NO_ALLERGIES}
+              aria-label="Your food allergies"
+              aria-invalid={!!fieldErrors.managerFoodAllergies}
+            />
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, marginTop: 6, fontWeight: 400 }}>
+              <input
+                type="checkbox"
+                checked={managerFoodAllergies === NO_ALLERGIES}
+                onChange={e => setManagerFoodAllergies(e.target.checked ? NO_ALLERGIES : '')}
+                disabled={submitting}
+              />
+              No known allergies
+            </label>
+            {fieldErrors.managerFoodAllergies && <div className="field-error" role="alert">{fieldErrors.managerFoodAllergies}</div>}
+          </div>
+
+          {/* Volunteering skills (adult = manager, required ≥1) */}
+          <div className="field" style={{ marginBottom: 10 }}>
+            <label style={{ fontSize: 12 }}>How can you help? <span className="req">·</span></label>
+            <VolunteeringSkillsPicker value={managerSkills} onChange={setManagerSkills} />
+            {fieldErrors.managerSkills && <div className="field-error" role="alert">{fieldErrors.managerSkills}</div>}
+          </div>
+
           <div className="row" style={{ gap: 10 }}>
             <SetuAvatar name={managerDisplayName} size={40}/>
             <div style={{ flex: 1 }}>
@@ -463,7 +586,7 @@ function RegisterFamilyReal() {
           <div key={m.id} style={{ position: 'relative' }}>
             <AddedMemberRow
               name={`${m.firstName} ${m.lastName}`}
-              type={`${m.type} · ${m.gender === 'PreferNotToSay' ? 'not specified' : m.gender}${m.email ? ` · ${m.email}` : ''}${m.phone ? ` · ${m.phone}` : ''}`}
+              type={`${m.type} · ${m.gender}${m.schoolGrade ? ` · ${m.schoolGrade}` : ''}${m.email ? ` · ${m.email}` : ''}${m.phone ? ` · ${m.phone}` : ''}`}
             />
             <button
               className="focus-ring"
@@ -479,6 +602,7 @@ function RegisterFamilyReal() {
 
         {showAddMember ? (
           <div style={{ padding: 14, background: 'var(--surface)', border: '1px solid var(--line2)', borderRadius: 'var(--radius)' }}>
+            {/* Names */}
             <div className="row" style={{ gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
               <input
                 className="input"
@@ -499,36 +623,16 @@ function RegisterFamilyReal() {
                 aria-label="Member last name"
               />
             </div>
-            <div className="row" style={{ gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
-              <input
-                className="input"
-                type="email"
-                placeholder="Email (optional)"
-                value={draftEmail}
-                onChange={e => setDraftEmail(e.target.value)}
-                style={{ flex: '1 1 100px' }}
-                aria-label="Member email"
-              />
-              <input
-                className="input"
-                type="tel"
-                placeholder="Phone (optional)"
-                value={draftPhone}
-                onChange={e => setDraftPhone(e.target.value)}
-                style={{ flex: '1 1 100px' }}
-                aria-label="Member phone"
-              />
-            </div>
-            <div className="hint" style={{ marginBottom: 10 }}>
-              Adding a member&apos;s own email or phone helps us recognize them later and avoid a duplicate family record.
-            </div>
-            {draftError && <div className="field-error" role="alert" style={{ marginBottom: 10 }}>{draftError}</div>}
+
+            {/* Type */}
             <div className="row" style={{ gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
               {(['Adult', 'Child'] as const).map(t => (
                 <button
                   key={t}
+                  type="button"
                   className="pill"
                   onClick={() => setDraftType(t)}
+                  aria-pressed={draftType === t}
                   style={{
                     padding: '6px 10px', fontSize: 12,
                     background: draftType === t ? 'var(--accent)' : 'var(--surface)',
@@ -539,11 +643,17 @@ function RegisterFamilyReal() {
                   {t}
                 </button>
               ))}
-              {(['Male', 'Female', 'PreferNotToSay'] as const).map(g => (
+            </div>
+
+            {/* Gender (required for all) */}
+            <div className="row" style={{ gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
+              {(['Male', 'Female'] as const).map(g => (
                 <button
                   key={g}
+                  type="button"
                   className="pill"
                   onClick={() => setDraftGender(g)}
+                  aria-pressed={draftGender === g}
                   style={{
                     padding: '6px 10px', fontSize: 12,
                     background: draftGender === g ? 'var(--accent)' : 'var(--surface)',
@@ -551,22 +661,119 @@ function RegisterFamilyReal() {
                     border: '1px solid', borderColor: draftGender === g ? 'var(--accent)' : 'var(--line2)',
                   }}
                 >
-                  {g === 'PreferNotToSay' ? 'Prefer not to say' : g}
+                  {g}
                 </button>
               ))}
             </div>
+
+            {/* Food allergies (required for all) */}
+            <div className="field" style={{ marginBottom: 10 }}>
+              <input
+                className="input"
+                type="text"
+                placeholder="Food allergies"
+                value={draftFoodAllergies === NO_ALLERGIES ? '' : draftFoodAllergies}
+                onChange={e => setDraftFoodAllergies(e.target.value)}
+                disabled={draftFoodAllergies === NO_ALLERGIES}
+                aria-label="Member food allergies"
+              />
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, marginTop: 6, fontWeight: 400 }}>
+                <input
+                  type="checkbox"
+                  checked={draftFoodAllergies === NO_ALLERGIES}
+                  onChange={e => setDraftFoodAllergies(e.target.checked ? NO_ALLERGIES : '')}
+                />
+                No known allergies
+              </label>
+            </div>
+
+            {/* Adult-only: contact + skills */}
+            {draftType === 'Adult' && (
+              <>
+                <div className="row" style={{ gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+                  <input
+                    className="input"
+                    type="email"
+                    placeholder="Email"
+                    value={draftEmail}
+                    onChange={e => setDraftEmail(e.target.value)}
+                    style={{ flex: '1 1 100px' }}
+                    aria-label="Member email"
+                  />
+                  <input
+                    className="input"
+                    type="tel"
+                    placeholder="Phone"
+                    value={draftPhone}
+                    onChange={e => setDraftPhone(e.target.value)}
+                    style={{ flex: '1 1 100px' }}
+                    aria-label="Member phone"
+                  />
+                </div>
+                <div className="hint" style={{ marginBottom: 10 }}>
+                  An adult&apos;s email and phone are required. It&apos;s fine to reuse the manager&apos;s.
+                </div>
+                <div className="field" style={{ marginBottom: 10 }}>
+                  <label style={{ fontSize: 12 }}>How can they help? <span className="req">·</span></label>
+                  <VolunteeringSkillsPicker value={draftSkills} onChange={setDraftSkills} />
+                </div>
+              </>
+            )}
+
+            {/* Child-only: grade + birth month/year */}
+            {draftType === 'Child' && (
+              <>
+                <div className="field" style={{ marginBottom: 10 }}>
+                  <input
+                    className="input"
+                    type="text"
+                    placeholder="School grade (e.g. Grade 3)"
+                    value={draftSchoolGrade}
+                    onChange={e => setDraftSchoolGrade(e.target.value)}
+                    aria-label="Member school grade"
+                  />
+                </div>
+                <div className="row" style={{ gap: 8, marginBottom: 10 }}>
+                  <select
+                    className="input"
+                    aria-label="Birth month"
+                    value={draftBirthMonth}
+                    onChange={e => setDraftBirthMonth(e.target.value)}
+                    style={{ flex: 1 }}
+                  >
+                    <option value="">Birth month</option>
+                    {MONTHS.map((m, i) => <option key={m} value={String(i + 1)}>{m}</option>)}
+                  </select>
+                  <select
+                    className="input"
+                    aria-label="Birth year"
+                    value={draftBirthYear}
+                    onChange={e => setDraftBirthYear(e.target.value)}
+                    style={{ flex: 1 }}
+                  >
+                    <option value="">Birth year</option>
+                    {birthYears.map(y => <option key={y} value={y}>{y}</option>)}
+                  </select>
+                </div>
+              </>
+            )}
+
+            {draftError && <div className="field-error" role="alert" style={{ marginBottom: 10 }}>{draftError}</div>}
+
             <div className="row" style={{ gap: 8 }}>
               <button
+                type="button"
                 className="btn btn--p"
                 onClick={handleAddMember}
-                disabled={!draftFirstName.trim() || !draftLastName.trim()}
+                disabled={!draftComplete}
                 style={{ flex: 1 }}
               >
                 Add member
               </button>
               <button
+                type="button"
                 className="btn btn--g"
-                onClick={() => { setShowAddMember(false); setDraftFirstName(''); setDraftLastName(''); setDraftEmail(''); setDraftPhone(''); setDraftError(''); }}
+                onClick={() => { resetDraft(); setShowAddMember(false); }}
                 style={{ flex: 1 }}
               >
                 Cancel

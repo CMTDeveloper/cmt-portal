@@ -121,12 +121,13 @@ export default async function FamilyDashboardPage() {
     heading: donationHeading,
   } = model.donation;
 
-  // Handle the lazy-migrated placeholder manager whose firstName is still
-  // empty: show a neutral greeting and surface a Complete-your-profile CTA
-  // (rendered below) so the user knows what to do next.
+  // Greeting first name. The profile-completion gate (app/family/layout.tsx)
+  // now hard-blocks any family with missing required member info — including a
+  // missing firstName — and redirects to /family/complete-profile, so by the
+  // time the dashboard renders the name is present. A null here only happens on
+  // the mock/non-setuAuth path; the greeting falls back to "Hari OM!".
   const trimmedFirst = (managerName.split(' ')[0] ?? '').trim();
   const firstName = trimmedFirst || null;
-  const needsProfile = !trimmedFirst;
   // Date rendered in America/Toronto so the dashboard greeting matches what
   // a sevak in the lobby sees on their clock (per CLAUDE.md B2 note 4).
   const todayLabel = new Date().toLocaleDateString('en-CA', {
@@ -158,13 +159,7 @@ export default async function FamilyDashboardPage() {
               </h1>
             </div>
             {showContactsNudge && <ContactsNudge />}
-            {needsProfile && currentMid && (
-              <Link href={`/family/members/${currentMid}/edit`} style={{ display: 'block', padding: '14px 16px', background: 'var(--accentSoft)', border: '1px solid var(--accent)', borderRadius: 'var(--radius)', textDecoration: 'none', color: 'var(--accentDeep)', marginBottom: 18 }}>
-                <div style={{ fontSize: 13, fontWeight: 600 }}>Complete your profile →</div>
-                <div style={{ fontSize: 12, marginTop: 2 }}>We don&apos;t have your name on file yet. Add it so sevaks know who to greet on Sunday.</div>
-              </Link>
-            )}
-            {!needsProfile && !showContactsNudge && showVolunteeringNudge && currentMid && (
+            {!showContactsNudge && showVolunteeringNudge && currentMid && (
               <VolunteeringSkillsNudge mid={currentMid} />
             )}
             {isManager && <PendingJoinRequestsPanel compact />}
@@ -325,13 +320,7 @@ export default async function FamilyDashboardPage() {
         </header>
 
         {showContactsNudge && <ContactsNudge />}
-        {needsProfile && currentMid && (
-          <Link href={`/family/members/${currentMid}/edit`} style={{ display: 'block', padding: '16px 20px', background: 'var(--accentSoft)', border: '1px solid var(--accent)', borderRadius: 'var(--radius)', textDecoration: 'none', color: 'var(--accentDeep)', marginBottom: 24 }}>
-            <div style={{ fontSize: 14, fontWeight: 600 }}>Complete your profile →</div>
-            <div style={{ fontSize: 13, marginTop: 2 }}>We don&apos;t have your name on file yet. Add it so sevaks know who to greet on Sunday.</div>
-          </Link>
-        )}
-        {!needsProfile && !showContactsNudge && showVolunteeringNudge && currentMid && (
+        {!showContactsNudge && showVolunteeringNudge && currentMid && (
           <VolunteeringSkillsNudge mid={currentMid} />
         )}
         {isManager && <PendingJoinRequestsPanel />}

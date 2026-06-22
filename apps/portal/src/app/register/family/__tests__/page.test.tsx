@@ -33,6 +33,34 @@ vi.mock('@cmt/ui', () => ({
   Rosette: () => <div />,
 }));
 
+// ── Volunteering skills picker ──────────────────────────────────────────────
+// The real picker fetches /api/setu/volunteering-skills in a mount useEffect,
+// which would crash (no queued response) and corrupt the OTP fetch ordering the
+// tests assert on. Stub it: no fetch, deterministic single-skill add via a
+// testid'd button, idempotent so repeated clicks don't grow the array.
+vi.mock('@/features/setu/members/volunteering-skills-picker', () => ({
+  VolunteeringSkillsPicker: ({
+    value,
+    onChange,
+  }: {
+    value: string[];
+    onChange: (next: string[]) => void;
+  }) => (
+    <div>
+      <button
+        type="button"
+        data-testid="skills-add"
+        onClick={() => {
+          if (value.length === 0) onChange(['Teaching / Facilitation']);
+        }}
+      >
+        Add skill
+      </button>
+      <span data-testid="skills-count">{value.length}</span>
+    </div>
+  ),
+}));
+
 // ── Chrome atoms ──────────────────────────────────────────────────────────────
 vi.mock('@/features/family/components/atoms', () => ({
   CspRoot: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
@@ -81,11 +109,21 @@ async function fillForm(
   user: ReturnType<typeof userEvent.setup>,
   opts: { family: string; location: string; first: string; last: string },
 ) {
+  // The form renders BOTH a mobile (block md:hidden) and desktop (hidden md:block)
+  // tree, so every element is duplicated. Index [0] is the mobile copy; React
+  // state is shared, so filling the mobile copy updates both. Mobile text-input
+  // order: [0]=familyName, [1]=managerFirst, [2]=managerLast, [3]=managerFoodAllergies.
   const textInputs = document.querySelectorAll('input[type="text"]');
   await user.type(textInputs[0] as HTMLElement, opts.family);
   await user.click(screen.getAllByRole('button', { name: opts.location })[0]!);
   await user.type(textInputs[1] as HTMLElement, opts.first);
   await user.type(textInputs[2] as HTMLElement, opts.last);
+
+  // Manager now requires gender + foodAllergies + >=1 volunteering skill before
+  // submit is allowed. Fill them so the OTP flow can fire.
+  await user.click(screen.getAllByRole('button', { name: 'Male' })[0]!);
+  await user.type(textInputs[3] as HTMLElement, 'None known');
+  await user.click(screen.getAllByTestId('skills-add')[0]!);
 }
 
 /** Click "Verify email & create family", wait for the code step to appear. */
@@ -104,6 +142,35 @@ async function enterCodeAndCreate(user: ReturnType<typeof userEvent.setup>, code
 function registerCallBody(): Record<string, unknown> {
   const call = fetchMock.mock.calls.find((c) => c[0] === '/api/setu/register');
   return JSON.parse((call?.[1]?.body as string) ?? '{}');
+}
+
+/**
+ * Open the add-member panel and fill a complete CHILD draft (least index-fragile:
+ * no email/phone/skills picker, just grade + birth month + year). The add panel
+ * renders in BOTH the mobile + desktop trees, and gender pills exist for both the
+ * manager AND the draft — so for 'Male' the order is
+ * [mobileManager, mobileDraft, desktopManager, desktopDraft] ⇒ draft is index [1].
+ * Returns AFTER "Add member" is clicked (the draft is added to the list).
+ */
+async function addChildMember(
+  user: ReturnType<typeof userEvent.setup>,
+  opts: { first: string; last: string },
+) {
+  await user.click(screen.getAllByRole('button', { name: /add another member/i })[0]!);
+  await user.type(screen.getAllByLabelText(/member first name/i)[0]!, opts.first);
+  await user.type(screen.getAllByLabelText(/member last name/i)[0]!, opts.last);
+  // Switch the draft to Child so grade + birth month/year inputs render.
+  await user.click(screen.getAllByRole('button', { name: 'Child' })[0]!);
+  // Draft gender pill is the second 'Male' (index [1]) — manager's is first.
+  await user.click(screen.getAllByRole('button', { name: 'Male' })[1]!);
+  await user.type(screen.getAllByLabelText(/member food allergies/i)[0]!, 'None known');
+  await user.type(screen.getAllByLabelText(/member school grade/i)[0]!, 'Grade 3');
+  await user.selectOptions(screen.getAllByLabelText(/birth month/i)[0]!, '3');
+  await user.selectOptions(
+    screen.getAllByLabelText(/birth year/i)[0]!,
+    String(new Date().getFullYear() - 8),
+  );
+  await user.click(screen.getAllByRole('button', { name: /^add member$/i })[0]!);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -358,6 +425,12 @@ describe('RegisterFamilyPage — network error', () => {
     await user.type(textInputs[1] as HTMLElement, 'Ravi');
     await user.type(textInputs[2] as HTMLElement, 'Iyer');
 
+    // Manager matrix: gender + foodAllergies + >=1 skill, so submit actually
+    // fires the (rejected) send-code fetch.
+    await user.click(screen.getAllByRole('button', { name: 'Male' })[0]!);
+    await user.type(textInputs[3] as HTMLElement, 'None known');
+    await user.click(screen.getAllByTestId('skills-add')[0]!);
+
     const submitBtns = screen.getAllByRole('button', { name: /create family/i });
     await user.click(submitBtns[0]!);
 
@@ -376,19 +449,7 @@ describe('RegisterFamilyPage — additional members', () => {
     const user = userEvent.setup();
     render(<RegisterFamilyPage />);
 
-    // Click "Add another member"
-    const addBtns = screen.getAllByRole('button', { name: /add another member/i });
-    await user.click(addBtns[0]!);
-
-    // Fill in member details
-    const memberFirstInput = screen.getAllByLabelText(/member first name/i);
-    const memberLastInput = screen.getAllByLabelText(/member last name/i);
-    await user.type(memberFirstInput[0]!, 'Diya');
-    await user.type(memberLastInput[0]!, 'Sharma');
-
-    // Click Add member
-    const addMemberBtns = screen.getAllByRole('button', { name: /^add member$/i });
-    await user.click(addMemberBtns[0]!);
+    await addChildMember(user, { first: 'Diya', last: 'Sharma' });
 
     await waitFor(() => {
       const rows = screen.getAllByTestId('added-member-row');
@@ -400,17 +461,7 @@ describe('RegisterFamilyPage — additional members', () => {
     const user = userEvent.setup();
     render(<RegisterFamilyPage />);
 
-    // Add a member
-    const addBtns = screen.getAllByRole('button', { name: /add another member/i });
-    await user.click(addBtns[0]!);
-
-    const memberFirstInput = screen.getAllByLabelText(/member first name/i);
-    const memberLastInput = screen.getAllByLabelText(/member last name/i);
-    await user.type(memberFirstInput[0]!, 'Arjun');
-    await user.type(memberLastInput[0]!, 'Sharma');
-
-    const addMemberBtns = screen.getAllByRole('button', { name: /^add member$/i });
-    await user.click(addMemberBtns[0]!);
+    await addChildMember(user, { first: 'Arjun', last: 'Sharma' });
 
     await waitFor(() => {
       expect(screen.getAllByTestId('added-member-row').some(r => r.textContent?.includes('Arjun'))).toBe(true);
@@ -430,12 +481,8 @@ describe('RegisterFamilyPage — additional members', () => {
 
     const user = userEvent.setup();
     render(<RegisterFamilyPage />);
+    await addChildMember(user, { first: 'Rahul', last: 'Gupta' });
     await fillForm(user, { family: 'Gupta', location: 'Scarborough', first: 'Sunita', last: 'Gupta' });
-
-    await user.click(screen.getAllByRole('button', { name: /add another member/i })[0]!);
-    await user.type(screen.getAllByLabelText(/member first name/i)[0]!, 'Rahul');
-    await user.type(screen.getAllByLabelText(/member last name/i)[0]!, 'Gupta');
-    await user.click(screen.getAllByRole('button', { name: /^add member$/i })[0]!);
 
     await submitToCodeStep(user);
     await enterCodeAndCreate(user);
@@ -451,15 +498,21 @@ describe('RegisterFamilyPage — additional members', () => {
 
     const user = userEvent.setup();
     render(<RegisterFamilyPage />);
-    await fillForm(user, { family: 'Gupta', location: 'Brampton', first: 'Sunita', last: 'Gupta' });
-
+    // This member must be an Adult so it carries email + phone. Adult drafts also
+    // need gender + foodAllergies + >=1 skill before "Add member" is enabled.
     await user.click(screen.getAllByRole('button', { name: /add another member/i })[0]!);
     await user.type(screen.getAllByLabelText(/member first name/i)[0]!, 'Anil');
     await user.type(screen.getAllByLabelText(/member last name/i)[0]!, 'Gupta');
+    // Draft gender pill is the second 'Male' (index [1]) — manager's is first.
+    await user.click(screen.getAllByRole('button', { name: 'Male' })[1]!);
+    await user.type(screen.getAllByLabelText(/member food allergies/i)[0]!, 'None known');
     await user.type(screen.getAllByLabelText(/member email/i)[0]!, 'anil@example.com');
     await user.type(screen.getAllByLabelText(/member phone/i)[0]!, '4165559999');
+    // The draft skills stub is the second one (index [1]) — manager's is first.
+    await user.click(screen.getAllByTestId('skills-add')[1]!);
     await user.click(screen.getAllByRole('button', { name: /^add member$/i })[0]!);
 
+    await fillForm(user, { family: 'Gupta', location: 'Brampton', first: 'Sunita', last: 'Gupta' });
     await submitToCodeStep(user);
     await enterCodeAndCreate(user);
 
@@ -477,9 +530,17 @@ describe('RegisterFamilyPage — additional members', () => {
     const user = userEvent.setup();
     render(<RegisterFamilyPage />);
 
+    // Fill EVERY other required Adult field so the ONLY blocker is the bad email:
+    // the "Add member" button is enabled (the draft is otherwise complete — a
+    // non-empty email string satisfies the matrix), and handleAddMember's regex
+    // rejects the malformed address, so the row is never added.
     await user.click(screen.getAllByRole('button', { name: /add another member/i })[0]!);
     await user.type(screen.getAllByLabelText(/member first name/i)[0]!, 'Bad');
     await user.type(screen.getAllByLabelText(/member last name/i)[0]!, 'Email');
+    await user.click(screen.getAllByRole('button', { name: 'Male' })[1]!);
+    await user.type(screen.getAllByLabelText(/member food allergies/i)[0]!, 'None known');
+    await user.type(screen.getAllByLabelText(/member phone/i)[0]!, '4165559999');
+    await user.click(screen.getAllByTestId('skills-add')[1]!);
     await user.type(screen.getAllByLabelText(/member email/i)[0]!, 'not-an-email');
     await user.click(screen.getAllByRole('button', { name: /^add member$/i })[0]!);
 

@@ -134,6 +134,14 @@ export async function middleware(req: NextRequest) {
   setOrDelete('x-portal-email', claims.email);
   setOrDelete('x-portal-phone', claims.phone);
 
+  // The current request pathname, forwarded so Server Components (which Next 16
+  // does not give the pathname directly) can read it via headers(). The
+  // profile-completion gate in app/family/layout.tsx uses it to exempt the
+  // /family/complete-profile route from its own redirect. `pathname` is the
+  // server-controlled req.nextUrl.pathname, so a plain set() (overwriting any
+  // forged inbound x-portal-pathname) is correct and safe.
+  reqHeaders.set('x-portal-pathname', pathname);
+
   // Forward the claims to the downstream route handler via the REQUEST headers
   // only (the x-middleware-request-* mechanism). Do NOT write them onto the
   // response headers — that would leak role/uid/fid/mid/extraRoles to the

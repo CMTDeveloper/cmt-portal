@@ -96,6 +96,8 @@ import EditMemberPage from '../page';
 const MANAGER_MID = 'FAMA0001ABCD-01';
 const MEMBER_MID = 'FAMA0001ABCD-02';
 
+// Gate-complete adult: required fields (gender, foodAllergies, email, phone,
+// >=1 skill) are all present so existing submit tests pass the client gate.
 const MEMBER_02 = {
   mid: MEMBER_MID,
   uid: null,
@@ -106,9 +108,9 @@ const MEMBER_02 = {
   manager: false,
   joinedAt: new Date('2024-09-01'),
   email: 'priya@example.com',
-  phone: null,
+  phone: '4165559876',
   volunteeringSkills: ['Teaching'],
-  foodAllergies: null,
+  foodAllergies: 'None',
   emergencyContacts: [
     { relation: 'Spouse', phone: '4165551234', email: 'raj@example.com' },
     null,
@@ -492,6 +494,101 @@ describe('EditMemberPage — member not found', () => {
       // The component either renders nothing or an error state for unknown mid
       const inputs = document.querySelectorAll('input');
       expect(inputs.length).toBe(0);
+    });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Profile-completion: gender has exactly Male|Female; foodAllergies shown for
+// all members; legacy PreferNotToSay maps to no-selection; required blocks submit.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function findGenderSelect(): HTMLSelectElement {
+  const selects = Array.from(document.querySelectorAll<HTMLSelectElement>('select'));
+  const genderSelect = selects.find((s) =>
+    Array.from(s.options).some((o) => o.value === 'Male'),
+  );
+  if (!genderSelect) throw new Error('gender select not found');
+  return genderSelect;
+}
+
+describe('EditMemberPage — gender capture (Male|Female only)', () => {
+  it('gender select offers exactly two real choices (no PreferNotToSay)', async () => {
+    mockGetCurrentFamily.mockResolvedValue(makeCurrentFamily({ isManager: true, currentMid: MANAGER_MID }));
+
+    render(<EditMemberPage />);
+
+    await waitFor(() => {
+      expect(document.querySelectorAll('input').length).toBeGreaterThan(0);
+    });
+
+    const genderSelect = findGenderSelect();
+    const values = Array.from(genderSelect.options).map((o) => o.value);
+    // The empty placeholder ('') plus exactly Male + Female; never PreferNotToSay.
+    expect(values).not.toContain('PreferNotToSay');
+    expect(values.filter((v) => v !== '')).toEqual(['Male', 'Female']);
+  });
+
+  it('legacy PreferNotToSay member loads with no gender selected', async () => {
+    const fam = makeCurrentFamily({ isManager: true, currentMid: MANAGER_MID });
+    // Mutate the edited member (MEMBER_02) to the legacy sentinel.
+    (fam.members[1] as { gender: string }).gender = 'PreferNotToSay';
+    mockGetCurrentFamily.mockResolvedValue(fam);
+
+    render(<EditMemberPage />);
+
+    await waitFor(() => {
+      expect(document.querySelectorAll('input').length).toBeGreaterThan(0);
+    });
+
+    const genderSelect = findGenderSelect();
+    expect(genderSelect.value).toBe('');
+  });
+});
+
+describe('EditMemberPage — foodAllergies shown for all members', () => {
+  it('renders the food allergies field for an adult member', async () => {
+    mockGetCurrentFamily.mockResolvedValue(makeCurrentFamily({ isManager: true, currentMid: MANAGER_MID }));
+
+    render(<EditMemberPage />);
+
+    await waitFor(() => {
+      expect(document.querySelectorAll('input').length).toBeGreaterThan(0);
+    });
+
+    // Adult MEMBER_02 — the foodAllergies input must be present (it used to be
+    // inside the Child-only block). Both mobile + desktop branches render it.
+    expect(screen.getAllByLabelText(/food allergies/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByTestId('no-allergies').length).toBeGreaterThan(0);
+  });
+});
+
+describe('EditMemberPage — per-type required blocks submit', () => {
+  it('does NOT PATCH when a required adult field (phone) is cleared', async () => {
+    mockGetCurrentFamily.mockResolvedValue(makeCurrentFamily({ isManager: false, currentMid: MEMBER_MID }));
+
+    const user = userEvent.setup();
+    render(<EditMemberPage />);
+
+    await waitFor(() => {
+      const inputs = document.querySelectorAll<HTMLInputElement>('input');
+      expect(Array.from(inputs).map((i) => i.value)).toContain('4165559876');
+    });
+
+    // Clear the phone (a required adult field) → the form must block submit.
+    const phoneInput = Array.from(document.querySelectorAll<HTMLInputElement>('input')).find(
+      (i) => i.value === '4165559876',
+    );
+    expect(phoneInput).toBeDefined();
+    await user.clear(phoneInput!);
+
+    const saveBtn = screen.getAllByRole('button', { name: /save|update/i })[0];
+    await user.click(saveBtn!);
+
+    // No PATCH fires; an inline required marker appears instead (mobile + desktop).
+    expect(fetchMock).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(screen.getAllByText(/phone is required for adults/i).length).toBeGreaterThan(0);
     });
   });
 });

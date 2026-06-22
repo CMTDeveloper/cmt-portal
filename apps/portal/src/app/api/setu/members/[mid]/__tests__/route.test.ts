@@ -285,13 +285,125 @@ describe('PATCH /api/setu/members/[mid]', () => {
       .mockResolvedValueOnce(familySnap)
       .mockResolvedValueOnce(memberSnap); // existing doc is Child
 
+    // Flip to Adult and supply the other adult-required fields, so the only
+    // missing one is volunteeringSkills.
     const res = await PATCH(
-      makeRequest('PATCH', { type: 'Adult', volunteeringSkills: [] }, managerHeaders()),
+      makeRequest(
+        'PATCH',
+        {
+          type: 'Adult',
+          foodAllergies: 'None',
+          email: 'p@example.com',
+          phone: '4165550000',
+          volunteeringSkills: [],
+        },
+        managerHeaders(),
+      ),
       { params: Promise.resolve(params) },
     );
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.error).toBe('skills-required');
+  });
+
+  // ── Per-type required matrix on PATCH (owner spec 2026-06-22) ─────────────
+  // A rule fires only when the post-patch member would be MISSING the field for
+  // its effective type, AND the patch touches that field OR flips `type`.
+
+  it('returns 400 foodAllergies-required when patch clears foodAllergies (all types)', async () => {
+    mockGet
+      .mockResolvedValueOnce(familySnap)
+      .mockResolvedValueOnce(memberSnap); // Child with foodAllergies already null
+
+    const res = await PATCH(makeRequest('PATCH', { foodAllergies: '' }, managerHeaders()), {
+      params: Promise.resolve(params),
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('foodAllergies-required');
+  });
+
+  it('returns 400 contact-required when patch clears an Adult email', async () => {
+    const adultWithContact = {
+      exists: true,
+      data: () => ({
+        ...memberSnap.data(),
+        type: 'Adult',
+        foodAllergies: 'None',
+        email: 'a@example.com',
+        phone: '4165550000',
+        volunteeringSkills: ['Teaching / Facilitation'],
+      }),
+    };
+    mockGet
+      .mockResolvedValueOnce(familySnap)
+      .mockResolvedValueOnce(adultWithContact);
+
+    const res = await PATCH(makeRequest('PATCH', { email: null }, managerHeaders()), {
+      params: Promise.resolve(params),
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('contact-required');
+  });
+
+  it('returns 400 grade-required when patch clears a Child schoolGrade', async () => {
+    mockGet
+      .mockResolvedValueOnce(familySnap)
+      .mockResolvedValueOnce(memberSnap); // Child with schoolGrade 'Grade 5'
+
+    const res = await PATCH(makeRequest('PATCH', { schoolGrade: null }, managerHeaders()), {
+      params: Promise.resolve(params),
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('grade-required');
+  });
+
+  it('returns 400 birthmonth-required when patch sets a Child birthMonthYear to empty', async () => {
+    mockGet
+      .mockResolvedValueOnce(familySnap)
+      .mockResolvedValueOnce(memberSnap); // Child
+
+    const res = await PATCH(makeRequest('PATCH', { birthMonthYear: '' }, managerHeaders()), {
+      params: Promise.resolve(params),
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('birthmonth-required');
+  });
+
+  it('does NOT block a partial patch that leaves a still-missing field untouched', async () => {
+    // memberSnap (Child) has foodAllergies null + birthMonthYear null already.
+    // Patching only firstName must not 400 those — legacy-incomplete docs stay
+    // editable until the field is touched or `type` flips.
+    mockGet
+      .mockResolvedValueOnce(familySnap)
+      .mockResolvedValueOnce(memberSnap);
+
+    const res = await PATCH(makeRequest('PATCH', { firstName: 'Renamed' }, managerHeaders()), {
+      params: Promise.resolve(params),
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it('rejects PreferNotToSay gender at write on PATCH', async () => {
+    const res = await PATCH(makeRequest('PATCH', { gender: 'PreferNotToSay' }, managerHeaders()), {
+      params: Promise.resolve(params),
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('bad-request');
+  });
+
+  it('derives + persists birthMonth from birthMonthYear on PATCH', async () => {
+    mockGet
+      .mockResolvedValueOnce(familySnap)
+      .mockResolvedValueOnce(memberSnap); // Child
+
+    const res = await PATCH(makeRequest('PATCH', { birthMonthYear: '2016-09' }, managerHeaders()), {
+      params: Promise.resolve(params),
+    });
+    expect(res.status).toBe(200);
+    const memberWrite = mockTxnSet.mock.calls.find(
+      ([, data]) => data && typeof data === 'object' && 'birthMonthYear' in data,
+    );
+    expect(memberWrite?.[1]).toMatchObject({ birthMonthYear: '2016-09', birthMonth: 9 });
   });
 });
 
