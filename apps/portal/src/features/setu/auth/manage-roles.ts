@@ -23,7 +23,10 @@ import { addMemberRole, removeMemberRole, listMembersWithRole } from './member-r
  * Family members → roleAssignments/{mid} (mid-keyed, applies across the
  *   person's email + phone auth uids).
  * Non-family CMT sevaks → legacy auth-claim path keyed on the canonical-form
- *   uid for the contact.
+ *   uid for the contact. The contact must already be a registered portal user
+ *   (an auth user exists at that uid); grantRole throws `registered-user-required`
+ *   rather than fabricating one, because /api/setu/register would later replace
+ *   any pre-seeded claim on that uid at first family registration.
  */
 
 function detectType(c: string): 'email' | 'phone' {

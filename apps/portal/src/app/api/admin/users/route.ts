@@ -42,7 +42,10 @@ export async function POST(req: Request) {
   try {
     result = await grantRole(parsed.data);
   } catch (err) {
-    const code = (err as { code?: string }).code ?? (err as Error).message;
+    // Match on the structured `.code` only — registeredUserRequiredError()
+    // always sets it; matching free-text `.message` would risk misclassifying
+    // an unrelated error that happens to carry the same string.
+    const code = (err as { code?: string }).code;
     if (code === 'registered-user-required') {
       return NextResponse.json({ error: 'registered-user-required' }, { status: 409 });
     }

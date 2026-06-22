@@ -78,7 +78,20 @@ async function main() {
   }
 
   if (cmd === ('grant' as Cmd)) {
-    const res = await grantRole({ contact: input, role: 'admin' });
+    let res: Awaited<ReturnType<typeof grantRole>>;
+    try {
+      res = await grantRole({ contact: input, role: 'admin' });
+    } catch (err) {
+      if ((err as { code?: string }).code === 'registered-user-required') {
+        console.error(
+          `✗ ${input} is not a registered portal user yet.\n` +
+            `  A role can only be granted to someone who has signed in at least once.\n` +
+            `  Ask them to sign in (OTP) at the portal, then re-run this grant.`,
+        );
+        process.exit(1);
+      }
+      throw err;
+    }
     if (res.path === 'roleAssignments') {
       console.log(`✓ Granted admin via roleAssignments/${res.mid}`);
       console.log(`  fid=${res.fid}  grantedVia=${input}`);

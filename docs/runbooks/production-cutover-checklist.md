@@ -126,6 +126,7 @@ Order matters — later steps depend on earlier ones:
    pnpm --filter @cmt/portal exec tsx --env-file=.env.local scripts/backfill-bv-enrollments.ts --allow-prod
    ```
 5. **Grant admin / welcome-team** to the right people (so the admin surfaces are reachable).
+   > ⚠️ `grant-admin.ts` now requires the target to be a **registered portal user** — they must sign in at least once (OTP) *before* the grant, otherwise it exits with `registered-user-required`. (`grant-welcome-team.ts` still auto-provisions a missing auth user.)
    ```bash
    pnpm --filter @cmt/portal exec tsx --env-file=.env.local scripts/grant-admin.ts <email-or-phone> --allow-prod
    pnpm --filter @cmt/portal exec tsx --env-file=.env.local scripts/grant-welcome-team.ts <email-or-phone> --allow-prod
