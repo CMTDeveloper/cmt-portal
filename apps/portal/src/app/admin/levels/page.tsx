@@ -2,8 +2,8 @@ import { connection } from 'next/server';
 import Link from 'next/link';
 import { portalFirestore, Timestamp } from '@cmt/firebase-shared/admin/firestore';
 import { SetuIcon } from '@cmt/ui';
-import { LevelsTable, type LevelRow, type PeriodOption } from '@/features/admin/levels/levels-table';
-import { AssignTeacherForm } from '@/features/admin/levels/assign-teacher-form';
+import { type LevelRow, type PeriodOption } from '@/features/admin/levels/levels-table';
+import { LevelsManagement } from '@/features/admin/levels/levels-management';
 import { listPrograms } from '@/features/setu/programs/get-programs';
 import type { ProgramRow } from '@/features/admin/programs/programs-table';
 
@@ -77,14 +77,7 @@ export default async function LevelsPage() {
         </p>
       </header>
 
-      <div className="card" style={{ padding: 22, marginBottom: 24 }}>
-        <LevelsTable initialLevels={levels} periods={periods} programs={programs} />
-      </div>
-
-      <div className="card" style={{ padding: 22 }}>
-        <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 16 }}>Assign a teacher</h2>
-        <AssignTeacherForm levels={levels} />
-      </div>
+      <LevelsManagement initialLevels={levels} periods={periods} programs={programs} />
     </>
   );
 }

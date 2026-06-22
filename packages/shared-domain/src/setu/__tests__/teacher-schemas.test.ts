@@ -64,8 +64,16 @@ describe('AssignTeacherSchema', () => {
     expect(AssignTeacherSchema.safeParse({ ref: 'CMT-AAAA1111-01', levelIds: [] }).success).toBe(true);
   });
 
+  it('accepts a teacher email instead of a ref', () => {
+    expect(AssignTeacherSchema.safeParse({ teacherEmail: 'teacher@example.com', levelIds: ['l1'] }).success).toBe(true);
+  });
+
   it('rejects an empty ref', () => {
     expect(AssignTeacherSchema.safeParse({ ref: '', levelIds: ['l1'] }).success).toBe(false);
+  });
+
+  it('rejects a payload without ref or teacherEmail', () => {
+    expect(AssignTeacherSchema.safeParse({ levelIds: ['l1'] }).success).toBe(false);
   });
 
   it('rejects an empty-string levelId', () => {

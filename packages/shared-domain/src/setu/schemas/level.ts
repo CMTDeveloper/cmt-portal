@@ -52,11 +52,12 @@ export const CreateLevelSchema = z
     pid: z.string().min(1),
     levelName: z.string().min(1),
     levelKind: z.enum(LEVEL_KINDS),
-    order: z.number().int().min(0),
+    order: z.number().int().min(0).optional(),
     gradeBand: z.array(z.string()).default([]),
     ageLabel: z.string().min(1),
     curriculum: z.string().min(1),
     enabled: z.boolean().default(true),
+    teacherEmail: z.string().trim().email().optional(),
   })
   .refine(gradeBandConsistent, {
     message: 'level and pre-level require a non-empty gradeBand',

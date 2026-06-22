@@ -6,17 +6,16 @@ import type { LevelRow } from './levels-table';
 
 interface AssignTeacherFormProps {
   levels: LevelRow[];
+  onAssignmentSaved?: (change: { ref: string; added: string[]; removed: string[] }) => void;
 }
 
 /**
- * Ref-centric assignment: enter a teacher's member id (mid) or standalone
- * teacher id (tid), tick the levels they cover, save. Maps 1:1 to
- * POST /api/admin/teacher-assignments which sets the FULL level set for a ref.
- * Writable by admin AND welcome-team. The teacher capability lands on the
- * person's next OTP sign-in.
+ * Email-centric assignment: enter the teacher's sign-in email, tick the levels
+ * they cover, save. POST /api/admin/teacher-assignments resolves the email to
+ * the member id and sets that teacher's FULL level set.
  */
-export function AssignTeacherForm({ levels }: AssignTeacherFormProps) {
-  const [ref, setRef] = useState('');
+export function AssignTeacherForm({ levels, onAssignmentSaved }: AssignTeacherFormProps) {
+  const [teacherEmail, setTeacherEmail] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [pending, startTransition] = useTransition();
 
@@ -33,9 +32,9 @@ export function AssignTeacherForm({ levels }: AssignTeacherFormProps) {
 
   function submit(ev: React.FormEvent) {
     ev.preventDefault();
-    const trimmed = ref.trim();
-    if (!trimmed) {
-      toast.error('Enter a member id (mid) or teacher id (tid).');
+    const trimmed = teacherEmail.trim();
+    if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      toast.error('Enter the teacher email.');
       return;
     }
     startTransition(async () => {
@@ -43,13 +42,15 @@ export function AssignTeacherForm({ levels }: AssignTeacherFormProps) {
         const res = await fetch('/api/admin/teacher-assignments', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ref: trimmed, levelIds: [...selected] }),
+          body: JSON.stringify({ teacherEmail: trimmed, levelIds: [...selected] }),
         });
         if (!res.ok) {
           const json = await res.json().catch(() => ({}));
-          toast.error(json.error ?? 'Assignment failed');
+          toast.error(errorCopy(json.error) ?? 'Assignment failed');
           return;
         }
+        const json = (await res.json()) as { ref: string; added?: string[]; removed?: string[] };
+        onAssignmentSaved?.({ ref: json.ref, added: json.added ?? [], removed: json.removed ?? [] });
         toast.success(
           selected.size === 0
             ? `Cleared all level assignments for ${trimmed}.`
@@ -64,14 +65,20 @@ export function AssignTeacherForm({ levels }: AssignTeacherFormProps) {
   return (
     <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <label style={labelStyle}>
-        Teacher ref (member mid or teacher tid)
-        <input value={ref} onChange={(e) => setRef(e.target.value)} placeholder="CMT-XXXX1111-01" style={fieldStyle} />
+        Teacher email
+        <input
+          type="email"
+          value={teacherEmail}
+          onChange={(e) => setTeacherEmail(e.target.value)}
+          placeholder="teacher@example.com"
+          style={fieldStyle}
+        />
       </label>
 
       <div>
         <div style={{ ...labelStyle, marginBottom: 8 }}>Levels this teacher covers</div>
         <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 10 }}>
-          Ticking sets the teacher&apos;s full level set (unticking removes them). Re-enter the same ref to adjust later.
+          Ticking sets the teacher&apos;s full level set. Unticked levels are removed when you save.
         </div>
         {enabledLevels.length === 0 ? (
           <div style={{ fontSize: 13, color: 'var(--muted)' }}>No enabled levels to assign.</div>
@@ -89,11 +96,18 @@ export function AssignTeacherForm({ levels }: AssignTeacherFormProps) {
 
       <div>
         <button type="submit" disabled={pending} className="btn btn--p" style={{ fontSize: 13, padding: '8px 18px', opacity: pending ? 0.6 : 1 }}>
-          {pending ? 'Saving…' : 'Save assignment'}
+          {pending ? 'Saving…' : selected.size === 0 ? 'Clear assignments' : `Save ${selected.size} level${selected.size === 1 ? '' : 's'}`}
         </button>
       </div>
     </form>
   );
+}
+
+function errorCopy(code: unknown): string | null {
+  if (code === 'teacher-not-found') return 'No registered member was found for that email.';
+  if (code === 'teacher-not-active') return 'That member cannot sign in yet. Approve their family access first.';
+  if (code === 'invalid-teacher-email') return 'Enter a valid teacher email.';
+  return typeof code === 'string' ? code : null;
 }
 
 const labelStyle: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em' };

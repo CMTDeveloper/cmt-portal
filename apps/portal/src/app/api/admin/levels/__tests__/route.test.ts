@@ -4,6 +4,14 @@ const mockGet = vi.fn();
 const mockCreate = vi.fn();
 const mockPeriodGet = vi.fn();
 const mockCollection = vi.fn();
+const mockAssignTeacher = vi.fn();
+const mockGetTeacherLevelIds = vi.fn();
+const mockResolveTeacherEmail = vi.fn();
+class MockTeacherEmailResolutionError extends Error {
+  constructor(public readonly code: string) {
+    super(code);
+  }
+}
 
 vi.mock('@cmt/firebase-shared/admin/firestore', () => {
   const Timestamp = {
@@ -13,6 +21,14 @@ vi.mock('@cmt/firebase-shared/admin/firestore', () => {
   const FieldValue = { serverTimestamp: () => 'SERVER_TS' };
   return { Timestamp, FieldValue, portalFirestore: vi.fn(() => ({ collection: mockCollection })) };
 });
+vi.mock('@/features/setu/teacher/assignments', () => ({
+  assignTeacher: mockAssignTeacher,
+  getTeacherLevelIds: mockGetTeacherLevelIds,
+}));
+vi.mock('@/features/setu/teacher/resolve-teacher-email', () => ({
+  resolveTeacherEmail: mockResolveTeacherEmail,
+  TeacherEmailResolutionError: MockTeacherEmailResolutionError,
+}));
 
 const validBody = {
   programKey: 'bala-vihar',
@@ -54,12 +70,20 @@ beforeEach(() => {
     };
     return {
       orderBy: () => orderByChain,
+      get: mockGet,
       doc: vi.fn(() => ({ create: mockCreate, get: mockGet })),
     };
   });
   mockGet.mockResolvedValue({ docs: [] });
   mockCreate.mockResolvedValue(undefined);
   mockPeriodGet.mockResolvedValue({ exists: true, data: () => ({ periodLabel: '2025-26' }) });
+  mockAssignTeacher.mockResolvedValue({ added: [], removed: [] });
+  mockGetTeacherLevelIds.mockResolvedValue(['old-level']);
+  mockResolveTeacherEmail.mockResolvedValue({
+    ref: 'CMT-FAM1-01',
+    email: 'teacher@example.com',
+    name: 'Teacher One',
+  });
 });
 
 describe('GET /api/admin/levels', () => {
@@ -130,6 +154,65 @@ describe('POST /api/admin/levels', () => {
     const res = await POST(makeRequest('POST', validBody, 'uid-admin'));
     expect(res.status).toBe(201);
     expect((await res.json()).levelId).toBe('brampton-level-2-bv-brampton-2025-26');
+  });
+
+  it('computes the next order when create omits order', async () => {
+    mockGet.mockResolvedValue({
+      docs: [
+        {
+          data: () => ({
+            programKey: 'bala-vihar',
+            location: 'Brampton',
+            pid: 'bv-brampton-2025-26',
+            order: 7,
+          }),
+        },
+        {
+          data: () => ({
+            programKey: 'bala-vihar',
+            location: 'Scarborough',
+            pid: 'bv-brampton-2025-26',
+            order: 20,
+          }),
+        },
+      ],
+    });
+    const { POST } = await import('../route');
+    const res = await POST(makeRequest('POST', { ...validBody, order: undefined }, 'uid-admin'));
+    expect(res.status).toBe(201);
+    expect(mockCreate).toHaveBeenCalledWith(expect.objectContaining({ order: 8 }));
+    expect((await res.json()).order).toBe(8);
+  });
+
+  it('adds a create-time teacher email to that teacher assignment set', async () => {
+    const { POST } = await import('../route');
+    const res = await POST(
+      makeRequest('POST', { ...validBody, teacherEmail: 'teacher@example.com' }, 'uid-admin'),
+    );
+    expect(res.status).toBe(201);
+    expect(mockResolveTeacherEmail).toHaveBeenCalledWith('teacher@example.com');
+    expect(mockGetTeacherLevelIds).toHaveBeenCalledWith('CMT-FAM1-01');
+    expect(mockAssignTeacher).toHaveBeenCalledWith({
+      ref: 'CMT-FAM1-01',
+      levelIds: ['old-level', 'brampton-level-2-bv-brampton-2025-26'],
+      byUid: 'uid-admin',
+    });
+    expect(await res.json()).toMatchObject({
+      levelId: 'brampton-level-2-bv-brampton-2025-26',
+      teacherRef: 'CMT-FAM1-01',
+      teacherEmail: 'teacher@example.com',
+    });
+  });
+
+  it('returns 404 when create-time teacher email is not registered', async () => {
+    mockResolveTeacherEmail.mockRejectedValue(new MockTeacherEmailResolutionError('teacher-not-found'));
+    const { POST } = await import('../route');
+    const res = await POST(
+      makeRequest('POST', { ...validBody, teacherEmail: 'missing@example.com' }, 'uid-admin'),
+    );
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: 'teacher-not-found' });
+    expect(mockCreate).not.toHaveBeenCalled();
   });
 
   it('derives a safe levelId for "Pre-Level A"', async () => {

@@ -19,29 +19,32 @@ const LEVELS: LevelRow[] = [mk('l1', 'Level 1'), mk('l2', 'Level 2')];
 
 beforeEach(() => {
   vi.clearAllMocks();
-  global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ref: 'CMT-X-01', added: ['l1'], removed: [] }) }) as unknown as typeof fetch;
+  global.fetch = vi.fn().mockResolvedValue({
+    ok: true,
+    json: async () => ({ ref: 'CMT-X-01', added: ['l1'], removed: [] }),
+  }) as unknown as typeof fetch;
 });
 
 describe('AssignTeacherForm', () => {
-  it('POSTs ref + selected levelIds', async () => {
+  it('POSTs teacherEmail + selected levelIds', async () => {
     const user = userEvent.setup();
     render(<AssignTeacherForm levels={LEVELS} />);
 
-    await user.type(screen.getByPlaceholderText('CMT-XXXX1111-01'), 'CMT-X-01');
+    await user.type(screen.getByPlaceholderText('teacher@example.com'), 'teacher@example.com');
     await user.click(screen.getByLabelText(/Level 1/));
-    await user.click(screen.getByText('Save assignment'));
+    await user.click(screen.getByText('Save 1 level'));
 
     await waitFor(() => expect(global.fetch).toHaveBeenCalled());
     const [url, init] = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0]!;
     expect(url).toBe('/api/admin/teacher-assignments');
     const body = JSON.parse((init as RequestInit).body as string);
-    expect(body).toEqual({ ref: 'CMT-X-01', levelIds: ['l1'] });
+    expect(body).toEqual({ teacherEmail: 'teacher@example.com', levelIds: ['l1'] });
   });
 
-  it('errors when ref is empty', async () => {
+  it('errors when email is empty', async () => {
     const user = userEvent.setup();
     render(<AssignTeacherForm levels={LEVELS} />);
-    await user.click(screen.getByText('Save assignment'));
+    await user.click(screen.getByText('Clear assignments'));
     expect(toastMock.error).toHaveBeenCalled();
     expect(global.fetch).not.toHaveBeenCalled();
   });
@@ -49,8 +52,8 @@ describe('AssignTeacherForm', () => {
   it('allows clearing all levels (empty levelIds)', async () => {
     const user = userEvent.setup();
     render(<AssignTeacherForm levels={LEVELS} />);
-    await user.type(screen.getByPlaceholderText('CMT-XXXX1111-01'), 'CMT-X-01');
-    await user.click(screen.getByText('Save assignment'));
+    await user.type(screen.getByPlaceholderText('teacher@example.com'), 'teacher@example.com');
+    await user.click(screen.getByText('Clear assignments'));
     await waitFor(() => expect(global.fetch).toHaveBeenCalled());
     const body = JSON.parse(((global.fetch as ReturnType<typeof vi.fn>).mock.calls[0]![1] as RequestInit).body as string);
     expect(body.levelIds).toEqual([]);
