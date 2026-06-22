@@ -208,17 +208,16 @@ describe('POST /api/admin/offerings', () => {
     expect(res.status).toBe(201);
   });
 
-  it('returns 201 with oid and no overlapWarning when no overlapping offerings', async () => {
+  it('returns 201 with oid when no overlapping offerings exist', async () => {
     const overlapGet = vi.fn().mockResolvedValue({ docs: [] });
     mockWhere.mockReturnValue({ where: vi.fn().mockReturnValue({ where: vi.fn().mockReturnValue({ get: overlapGet }) }) });
 
     const { POST } = await import('../route');
     const res = await POST(makeRequest('POST', validBody, 'uid-admin'));
     expect(res.status).toBe(201);
-    const body = await res.json() as { oid: string; overlapWarning: boolean };
+    const body = await res.json() as { oid: string };
     expect(typeof body.oid).toBe('string');
     expect(body.oid).toContain('bala-vihar');
-    expect(body.overlapWarning).toBe(false);
   });
 
   it('derives oid from programKey + location + termLabel', async () => {
@@ -239,21 +238,25 @@ describe('POST /api/admin/offerings', () => {
     expect(body.oid).toBe('bala-vihar-all-spring-2028');
   });
 
-  it('returns 201 with overlapWarning:true when an overlapping enabled offering exists', async () => {
+  it('returns 409 when an overlapping enabled offering exists', async () => {
     const overlappingOffering = {
+      oid: 'bala-vihar-brampton-2027-28-existing',
+      termLabel: '2027-28 existing',
       startDate: { toDate: () => new Date('2027-08-01T00:00:00.000Z') },
       endDate: { toDate: () => new Date('2027-11-30T00:00:00.000Z') },
     };
-    const overlapGet = vi.fn().mockResolvedValue({ docs: [{ data: () => overlappingOffering }] });
+    const overlapGet = vi.fn().mockResolvedValue({ docs: [{ id: overlappingOffering.oid, data: () => overlappingOffering }] });
     mockWhere.mockReturnValue({
       where: vi.fn().mockReturnValue({ where: vi.fn().mockReturnValue({ get: overlapGet }) }),
     });
 
     const { POST } = await import('../route');
     const res = await POST(makeRequest('POST', validBody, 'uid-admin'));
-    expect(res.status).toBe(201);
-    const body = await res.json() as { overlapWarning: boolean };
-    expect(body.overlapWarning).toBe(true);
+    expect(res.status).toBe(409);
+    const body = await res.json() as { error: string; conflictOid: string };
+    expect(body.error).toBe('offering-date-overlap');
+    expect(body.conflictOid).toBe(overlappingOffering.oid);
+    expect(mockCreate).not.toHaveBeenCalled();
   });
 
   it('returns 409 when create() throws ALREADY_EXISTS (code 6)', async () => {
@@ -265,8 +268,10 @@ describe('POST /api/admin/offerings', () => {
     const { POST } = await import('../route');
     const res = await POST(makeRequest('POST', validBody, 'uid-admin'));
     expect(res.status).toBe(409);
-    const body = await res.json() as { error: string };
+    const body = await res.json() as { error: string; message: string; oid: string };
     expect(body.error).toBe('oid-conflict');
+    expect(body.oid).toBe('bala-vihar-brampton-2027-28');
+    expect(body.message).toContain('An offering already exists');
   });
 
   it('returns 400 invalid-term-label when termLabel produces an empty slug', async () => {
@@ -321,16 +326,14 @@ describe('POST /api/admin/offerings', () => {
     );
   });
 
-  it('does not run overlap check when location is null', async () => {
-    // No mockWhere setup — if overlap check ran, it would blow up
+  it('checks location-less offerings for overlap before creating', async () => {
     const createFn = vi.fn().mockResolvedValue(undefined);
     mockDoc.mockReturnValue({ create: createFn, get: mockGet });
 
     const { POST } = await import('../route');
     const res = await POST(makeRequest('POST', { ...validBody, location: null, pricingTiers: [] }, 'uid-admin'));
     expect(res.status).toBe(201);
-    // Confirm no overlap query was issued
-    expect(mockWhere).not.toHaveBeenCalled();
+    expect(mockWhere).toHaveBeenCalledWith('location', '==', null);
   });
 
   it('revalidates offerings tag on success', async () => {

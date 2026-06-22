@@ -1,4 +1,5 @@
 import { paymentSourceOf } from '@cmt/shared-domain';
+import type { PaymentSource } from '@cmt/shared-domain';
 import type { DonationDoc, ProgramDoc } from '@cmt/shared-domain';
 import type { EnrollmentWithOffering } from '@/features/setu/enrollment/get-enrollments';
 import { selectBalaViharEnrollment } from './select-bv-enrollment';
@@ -13,10 +14,14 @@ import { deriveProgramCards, type ProgramCard } from './derive-program-cards';
 export function isLegacyBvPeriod(enrollments: EnrollmentWithOffering[]): boolean {
   const offering = selectBalaViharEnrollment(enrollments)?.offering ?? null;
   if (!offering) return false;
-  return (
-    paymentSourceOf(
-      offering.paymentSource !== undefined ? { paymentSource: offering.paymentSource } : {},
-    ) === 'legacy'
+  return activeBvPaymentSource(enrollments) === 'legacy';
+}
+
+function activeBvPaymentSource(enrollments: EnrollmentWithOffering[]): PaymentSource {
+  const offering = selectBalaViharEnrollment(enrollments)?.offering ?? null;
+  if (!offering) return 'portal';
+  return paymentSourceOf(
+    offering.paymentSource !== undefined ? { paymentSource: offering.paymentSource } : {},
   );
 }
 
@@ -86,6 +91,7 @@ export function buildFamilyDashboardModel(input: DashboardModelInput): FamilyDas
   const donateUrl = bv ? `/family/donate?eid=${bv.eid}` : '/family/donate';
 
   const isLegacyPeriod = isLegacyBvPeriod(enrollments);
+  const teacherManagedPayment = activeBvPaymentSource(enrollments) === 'teacher-managed';
   const legacyPaid = isLegacyPeriod && legacyPaymentStatus === 'paid';
 
   const otherProgramCards = deriveProgramCards(enrollments, programsById).filter(
@@ -103,15 +109,17 @@ export function buildFamilyDashboardModel(input: DashboardModelInput): FamilyDas
       ? 'ok'
       : 'warn';
   // General giving is handled off-portal (CMT decision 2026-06-04) — only an
-  // enrolled family with an unpaid dakshina sees an in-portal Give button.
-  const showGive = isEnrolled && !legacyPaid;
-  const showProgress = isEnrolled && suggestedAmount !== null && !legacyPaid;
+  // enrolled family with an unpaid portal-managed donation sees an in-portal Give button.
+  const showGive = isEnrolled && !legacyPaid && !teacherManagedPayment;
+  const showProgress = isEnrolled && suggestedAmount !== null && !legacyPaid && !teacherManagedPayment;
   const donationHeading = !isEnrolled
     ? 'Bala Vihar donation'
     : legacyPaid
       ? 'Completed'
       : isLegacyPeriod
         ? 'Bala Vihar payment pending'
+        : teacherManagedPayment
+          ? 'Payment managed by teacher'
         : donationComplete
           ? 'Thank you for your donation'
           : 'Bala Vihar donation pending';

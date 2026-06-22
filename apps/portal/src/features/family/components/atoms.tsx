@@ -256,18 +256,20 @@ interface MetricCardProps {
   label: string;
   value: string;
   sub: string;
-  tone?: 'ok' | 'warn';
+  tone?: 'ok' | 'warn' | 'err';
 }
 
 export function MetricCard({ label, value, sub, tone }: MetricCardProps) {
-  const dot = tone === 'ok' ? 'var(--ok)' : tone === 'warn' ? 'var(--warn)' : 'var(--muted)';
+  const toneColor =
+    tone === 'ok' ? 'var(--ok)' : tone === 'warn' ? 'var(--warn)' : tone === 'err' ? 'var(--err)' : 'var(--ink)';
+  const dot = tone ? toneColor : 'var(--muted)';
   return (
     <div className="card" style={{ padding: 16 }}>
       <div className="row" style={{ gap: 6, marginBottom: 6 }}>
         <span style={{ width: 6, height: 6, borderRadius: 99, background: dot }}/>
         <span style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.06em', fontWeight: 600 }}>{label}</span>
       </div>
-      <div style={{ fontSize: 24, fontWeight: 600, letterSpacing: '-0.02em' }}>{value}</div>
+      <div style={{ fontSize: 24, fontWeight: 600, letterSpacing: '-0.02em', color: tone ? toneColor : 'var(--ink)' }}>{value}</div>
       <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{sub}</div>
     </div>
   );

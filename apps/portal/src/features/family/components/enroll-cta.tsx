@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from '@cmt/ui';
+import type { PaymentSource } from '@cmt/shared-domain';
 
 interface EnrollCtaProps {
   /** The offering id (oid) to enroll the family in. */
@@ -17,6 +18,7 @@ interface EnrollCtaProps {
    * reasons it can be false. Defaults to false (safe "enrolled" wording).
    */
   usesDonation?: boolean;
+  paymentSource?: PaymentSource;
 }
 
 function safeFrom(path: string): string {
@@ -24,7 +26,14 @@ function safeFrom(path: string): string {
   return '/family/enroll';
 }
 
-export function EnrollCta({ oid, donationsEnabled, usesDonation = false }: EnrollCtaProps) {
+function enrolledStateText(usesDonation: boolean, paymentSource: PaymentSource) {
+  if (usesDonation && paymentSource === 'teacher-managed') {
+    return 'Your family is enrolled — payment is managed by the teacher.';
+  }
+  return usesDonation ? 'Your family is enrolled — donation coming soon.' : 'Your family is enrolled.';
+}
+
+export function EnrollCta({ oid, donationsEnabled, usesDonation = false, paymentSource = 'portal' }: EnrollCtaProps) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [enrolled, setEnrolled] = useState(false);
@@ -83,7 +92,7 @@ export function EnrollCta({ oid, donationsEnabled, usesDonation = false }: Enrol
   if (enrolled) {
     return (
       <div style={{ padding: '12px 16px', background: 'var(--accentSoft)', color: 'var(--accentDeep)', borderRadius: 'var(--radiusSm)', fontSize: 14, fontWeight: 600, textAlign: 'center' }}>
-        {usesDonation ? 'Your family is enrolled — donation coming soon.' : 'Your family is enrolled.'}
+        {enrolledStateText(usesDonation, paymentSource)}
       </div>
     );
   }

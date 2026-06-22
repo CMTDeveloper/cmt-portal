@@ -15,9 +15,10 @@ export type Location = (typeof LOCATIONS)[number];
 // Where a family's payment status for a period comes from:
 //  - 'portal' → the Setu donations collection (Stripe checkouts through the portal).
 //  - 'legacy' → the prod RTDB roster `payment` field (the pre-portal system).
+//  - 'teacher-managed' → teachers collect/track payment outside the portal.
 // The 2025-26 cutover year is 'legacy' (most families already paid offline);
-// 2026-27 onward is 'portal'. Admin-set per offering.
-export const PAYMENT_SOURCES = ['portal', 'legacy'] as const;
+// most new offerings are 'portal', with exceptions set per offering.
+export const PAYMENT_SOURCES = ['portal', 'legacy', 'teacher-managed'] as const;
 export type PaymentSource = (typeof PAYMENT_SOURCES)[number];
 
 // A date-windowed pricing tier. The suggested donation is prorated by when a

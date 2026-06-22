@@ -144,6 +144,33 @@ describe('POST /api/setu/donations/checkout', () => {
     );
   });
 
+  it('blocks Stripe checkout for teacher-managed enrollments', async () => {
+    mockGetEnrollments.mockResolvedValue([
+      {
+        eid: 'fid1-teacher-managed',
+        status: 'active',
+        oid: 'teacher-managed-offering',
+        programKey: 'tabla',
+        programLabel: 'Tabla classes',
+        termLabel: '2026-27',
+        effectiveSuggestedAmount: 300,
+        offering: {
+          programKey: 'tabla',
+          programLabel: 'Tabla classes',
+          termLabel: '2026-27',
+          paymentSource: 'teacher-managed',
+        },
+      },
+    ]);
+
+    const res = await POST(makeReq({ type: 'enrollment', eid: 'fid1-teacher-managed', amountCAD: 300 }));
+    expect(res.status).toBe(422);
+    const json = await res.json();
+    expect(json.error).toBe('payment-source-teacher-managed');
+    expect(mockCreateDonation).not.toHaveBeenCalled();
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
   it('labels a non-BV program donation after its own program', async () => {
     mockGetEnrollments.mockResolvedValue([
       { eid: 'fid1-tabla', status: 'active', oid: 'tabla-brampton-2026-27', programKey: 'tabla', programLabel: 'Tabla classes', termLabel: '2026-27', effectiveSuggestedAmount: 0, offering: { programKey: 'tabla', programLabel: 'Tabla classes', termLabel: '2026-27' } },

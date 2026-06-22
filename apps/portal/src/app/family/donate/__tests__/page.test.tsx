@@ -69,13 +69,23 @@ describe('DonatePage — flag on', () => {
     expect(screen.getAllByText(/donate-form:enrollment/).length).toBeGreaterThan(0);
   });
 
+  it('shows teacher-managed message instead of the Stripe form', async () => {
+    mockGetEnrollments.mockResolvedValue([
+      { eid: 'fid1-oid1', status: 'active', programKey: 'bala-vihar', programLabel: 'Bala Vihar', termLabel: 'Fall 2026', effectiveSuggestedAmount: 500, offering: { programKey: 'bala-vihar', programLabel: 'Bala Vihar', termLabel: 'Fall 2026', paymentSource: 'teacher-managed' } },
+    ]);
+    const page = await DonatePage({ searchParams: Promise.resolve({ eid: 'fid1-oid1' }) });
+    render(page);
+    expect(screen.getAllByText(/payment is managed by the teacher/i).length).toBeGreaterThan(0);
+    expect(screen.queryByTestId('donate-form')).toBeNull();
+  });
+
   it('redirects to /family when the eid is stale/unknown (no general giving)', async () => {
     mockGetEnrollments.mockResolvedValue([]);
     await DonatePage({ searchParams: Promise.resolve({ eid: 'missing' }) });
     expect(redirectMock).toHaveBeenCalledWith('/family');
   });
 
-  it('shows the manager-only message to a non-manager (enrollment dakshina)', async () => {
+  it('shows the manager-only message to a non-manager (enrollment donation)', async () => {
     mockGetCurrentFamily.mockResolvedValue({ ...FAMILY, isManager: false });
     mockGetEnrollments.mockResolvedValue([
       { eid: 'fid1-oid1', status: 'active', programKey: 'bala-vihar', programLabel: 'Bala Vihar', termLabel: 'Fall 2026', effectiveSuggestedAmount: 500, offering: { programKey: 'bala-vihar', programLabel: 'Bala Vihar', termLabel: 'Fall 2026', amountTiers: [500, 750] } },

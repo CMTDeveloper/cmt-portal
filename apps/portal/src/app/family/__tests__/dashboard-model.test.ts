@@ -236,6 +236,7 @@ describe('buildFamilyDashboardModel — no BV enrollment', () => {
 
 describe('buildFamilyDashboardModel — legacy payment bridge', () => {
   const legacyBv = makeEnrollment({ offering: { ...BV_OFFERING, paymentSource: 'legacy' } });
+  const teacherManagedBv = makeEnrollment({ offering: { ...BV_OFFERING, paymentSource: 'teacher-managed' } });
 
   it('isLegacyBvPeriod is true only for a legacy-sourced active BV offering', () => {
     expect(isLegacyBvPeriod([legacyBv])).toBe(true);
@@ -257,5 +258,14 @@ describe('buildFamilyDashboardModel — legacy payment bridge', () => {
     expect(m.legacyPaid).toBe(false);
     expect(m.donation.heading).toBe('Bala Vihar payment pending');
     expect(m.donation.showGive).toBe(true);
+  });
+
+  it('teacher-managed payment does not show the in-portal Give button', () => {
+    const m = buildFamilyDashboardModel(input({ enrollments: [teacherManagedBv], legacyPaymentStatus: null }));
+    expect(m.isLegacyPeriod).toBe(false);
+    expect(m.legacyPaid).toBe(false);
+    expect(m.donation.heading).toBe('Payment managed by teacher');
+    expect(m.donation.showGive).toBe(false);
+    expect(m.donation.showProgress).toBe(false);
   });
 });

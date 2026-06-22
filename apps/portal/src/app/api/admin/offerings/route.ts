@@ -4,6 +4,7 @@ import { portalFirestore, FieldValue, Timestamp } from '@cmt/firebase-shared/adm
 import { CreateOfferingSchema, isAdmin, toSafeSlug } from '@cmt/shared-domain';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
 import { getProgram } from '@/features/setu/programs/get-programs';
+import { findOverlappingEnabledOffering, offeringOverlapPayload } from './overlap';
 
 export async function GET(req: Request) {
   const session = readSessionFromHeaders(req);
@@ -50,30 +51,6 @@ export async function POST(req: Request) {
   const db = portalFirestore();
   const now = FieldValue.serverTimestamp();
 
-  // Overlap check only when location is provided (location-less offerings are global)
-  let overlaps = false;
-  if (data.location != null) {
-    const overlapSnap = await db
-      .collection('offerings')
-      .where('programKey', '==', data.programKey)
-      .where('location', '==', data.location)
-      .where('enabled', '==', true)
-      .get();
-
-    const newStart = new Date(data.startDate);
-    const newEnd = data.endDate != null ? new Date(data.endDate) : null;
-
-    overlaps = overlapSnap.docs.some((d) => {
-      const existing = d.data();
-      const existStart = (existing['startDate'] as ReturnType<typeof Timestamp.now>).toDate();
-      const existEnd = existing['endDate'] != null
-        ? (existing['endDate'] as ReturnType<typeof Timestamp.now>).toDate()
-        : null;
-      if (newEnd == null || existEnd == null) return false; // rolling offerings don't overlap-check
-      return newStart <= existEnd && newEnd >= existStart;
-    });
-  }
-
   const termSlug = toSafeSlug(data.termLabel);
   if (!termSlug) {
     return NextResponse.json(
@@ -84,6 +61,17 @@ export async function POST(req: Request) {
 
   const locationSlug = data.location != null ? toSafeSlug(data.location) : 'all';
   const oid = `${toSafeSlug(data.programKey)}-${locationSlug}-${termSlug}`;
+
+  const overlap = await findOverlappingEnabledOffering(db, {
+    programKey: data.programKey,
+    location: data.location,
+    enabled: data.enabled,
+    startDate: new Date(data.startDate),
+    endDate: data.endDate != null ? new Date(data.endDate) : null,
+  });
+  if (overlap) {
+    return NextResponse.json(offeringOverlapPayload(overlap, data.location), { status: 409 });
+  }
 
   // Look up programLabel from the programs registry; fall back to the key itself
   const program = await getProgram(data.programKey);
@@ -113,11 +101,18 @@ export async function POST(req: Request) {
   } catch (err) {
     // Firestore ALREADY_EXISTS gRPC code = 6
     if ((err as { code?: number }).code === 6) {
-      return NextResponse.json({ error: 'oid-conflict', oid }, { status: 409 });
+      return NextResponse.json(
+        {
+          error: 'oid-conflict',
+          oid,
+          message: `An offering already exists for ${data.location ?? 'all locations'} ${data.termLabel}. Edit the existing offering or choose a different term label.`,
+        },
+        { status: 409 },
+      );
     }
     throw err;
   }
 
   revalidateTag('offerings', 'max');
-  return NextResponse.json({ oid, overlapWarning: overlaps }, { status: 201 });
+  return NextResponse.json({ oid }, { status: 201 });
 }

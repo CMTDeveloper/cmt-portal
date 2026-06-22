@@ -263,7 +263,7 @@ function CreateProgramModal({ onClose, onCreated }: CreateModalProps) {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 6 }}>
                 {[
                   { key: 'usesOfferings', label: 'Uses offerings (enrollable terms)', value: usesOfferings, set: setUsesOfferings },
-                  { key: 'usesDonation', label: 'Uses donation (dakshina)', value: usesDonation, set: setUsesDonation },
+                  { key: 'usesDonation', label: 'Uses donation', value: usesDonation, set: setUsesDonation },
                   { key: 'usesLevels', label: 'Uses levels (class placement)', value: usesLevels, set: setUsesLevels },
                   { key: 'usesCalendar', label: 'Uses calendar (published schedule)', value: usesCalendar, set: setUsesCalendar },
                 ].map(({ key, label: capLabel, value, set }) => (

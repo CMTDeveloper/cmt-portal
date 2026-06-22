@@ -7,8 +7,8 @@
  *   • With ONE offering → auto-selects it (no visible picker UI).
  *   • With TWO offerings → shows a picker for the family to choose.
  *   • EligibleMembersList filters by memberEligibleForProgram.
- *   • Dakshina section renders only when usesDonation=true.
- *   • Free program shows "Confirm enrollment" (no dakshina block).
+ *   • Donation section renders only when usesDonation=true.
+ *   • Free program shows "Confirm enrollment" (no donation block).
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';

@@ -36,8 +36,8 @@ vi.mock('@/features/family/components/atoms', () => ({
 }));
 
 vi.mock('@/features/family/components/enroll-cta', () => ({
-  EnrollCta: ({ oid, donationsEnabled }: { oid: string; donationsEnabled: boolean }) => (
-    <button data-donations-enabled={String(donationsEnabled)}>Enroll {oid}</button>
+  EnrollCta: ({ oid, donationsEnabled, paymentSource }: { oid: string; donationsEnabled: boolean; paymentSource?: string }) => (
+    <button data-donations-enabled={String(donationsEnabled)} data-payment-source={paymentSource ?? 'portal'}>Enroll {oid}</button>
   ),
 }));
 
@@ -246,6 +246,18 @@ describe('ProgramEnrollPage (bala-vihar) — donation flag gating (T1)', () => {
     expect(screen.queryByText(/donation coming soon/i)).toBeNull();
   });
 
+  it('donations enabled + teacher-managed enrolled: hides Continue link and explains teacher-managed payment', async () => {
+    vi.stubEnv('NEXT_PUBLIC_FEATURE_SETU_DONATIONS', 'true');
+    mockGetEnrollments.mockResolvedValue([ACTIVE_ENROLLMENT_WITH_SNAPSHOT]);
+    mockGetOpenOfferingsForFamily.mockResolvedValue([{ ...ACTIVE_PERIOD, paymentSource: 'teacher-managed' }]);
+
+    const page = await ProgramEnrollPage({ params: makeParams() });
+    render(page);
+
+    expect(screen.queryByRole('link', { name: /continue to donation/i })).toBeNull();
+    expect(screen.getAllByText(/payment is managed by the teacher/i).length).toBeGreaterThan(0);
+  });
+
   it('donations enabled + enrolled + already paid: shows paid panel, not Continue to donation', async () => {
     vi.stubEnv('NEXT_PUBLIC_FEATURE_SETU_DONATIONS', 'true');
     mockGetEnrollments.mockResolvedValue([ACTIVE_ENROLLMENT_WITH_SNAPSHOT]);
@@ -299,7 +311,7 @@ describe('ProgramEnrollPage (bala-vihar) — stale enrollment guard (M1)', () =>
   });
 });
 
-// ─── Free program: no dakshina ────────────────────────────────────────────────
+// ─── Free program: no donation ────────────────────────────────────────────────
 
 describe('ProgramEnrollPage — free program (usesDonation=false)', () => {
   const FREE_PROGRAM = {
@@ -327,14 +339,14 @@ describe('ProgramEnrollPage — free program (usesDonation=false)', () => {
     endDate: null,
   };
 
-  it('does not render dakshina block for a free program', async () => {
+  it('does not render donation block for a free program', async () => {
     mockGetProgram.mockResolvedValue(FREE_PROGRAM);
     mockGetOpenOfferingsForFamily.mockResolvedValue([FREE_OFFERING]);
 
     const page = await ProgramEnrollPage({ params: makeParams('tabla') });
     render(page);
 
-    expect(screen.queryByText(/dakshina/i)).toBeNull();
+    expect(screen.queryByText(/donation · suggested/i)).toBeNull();
     expect(screen.queryByText(/suggested donation/i)).toBeNull();
     // Confirm enrollment text is present
     expect(screen.getAllByText(/no donation requirement/i).length).toBeGreaterThan(0);

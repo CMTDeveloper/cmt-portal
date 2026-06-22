@@ -1,7 +1,7 @@
 import { Suspense } from 'react';
 import { connection } from 'next/server';
 import Link from 'next/link';
-import { SetuLogo, SetuAvatar, SetuIcon } from '@cmt/ui';
+import { SetuLogo, SetuAvatar } from '@cmt/ui';
 import { CspRoot, Stat, MetricCard, SkeletonCard } from '@/features/family/components/atoms';
 import { flags } from '@/lib/flags';
 import { mockFamily } from '@/features/family/data/mock';
@@ -100,22 +100,11 @@ export default async function FamilyDashboardPage() {
     isEnrolled,
     kidsEnrolled,
     enrollPeriodLabel,
-    suggestedAmount,
-    givenForPeriod,
     donateUrl,
-    isLegacyPeriod,
-    legacyPaid,
     otherProgramCards,
     enrolledPill,
   } = model;
-  const {
-    complete: donationComplete,
-    pct: donationPct,
-    tone: donationTone,
-    showGive,
-    showProgress,
-    heading: donationHeading,
-  } = model.donation;
+  const { complete: donationComplete, showGive } = model.donation;
 
   // Handle the lazy-migrated placeholder manager whose firstName is still
   // empty: show a neutral greeting and surface a Complete-your-profile CTA
@@ -135,6 +124,12 @@ export default async function FamilyDashboardPage() {
   void familyName;
 
   const sevaView = deriveSevaCardView(sevaProgress);
+  const donationPaid = model.legacyPaid || donationComplete;
+  const donationStatus = donationPaid ? 'Paid' : isEnrolled ? 'Pending' : 'Not enrolled';
+  const donationStatusTone: 'ok' | 'err' = donationPaid ? 'ok' : 'err';
+  const donationStatusSub = isEnrolled
+    ? enrollPeriodLabel ?? 'Bala Vihar'
+    : 'Enroll to set donation';
 
   return (
     <>
@@ -182,40 +177,6 @@ export default async function FamilyDashboardPage() {
               )}
             </div>
 
-            <div className="card" style={{ padding: 16, marginBottom: 12 }}>
-              <div className="between" style={{ marginBottom: 10 }}>
-                <div>
-                  <div style={{ fontSize: 12, color: 'var(--muted)' }}>{donationHeading}</div>
-                  <div style={{ fontSize: 22, fontWeight: 600, marginTop: 2, letterSpacing: '-0.01em' }}>
-                    {legacyPaid ? 'Completed' : isEnrolled ? `$${givenForPeriod}.00` : 'Give'}
-                  </div>
-                </div>
-                {showGive && <Link href={donateUrl} className="btn btn--p">{donationComplete ? 'Give more' : 'Give'}</Link>}
-              </div>
-              {legacyPaid && (
-                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
-                  Completed for {enrollPeriodLabel} — thank you. Recorded from our records.
-                </div>
-              )}
-              {showProgress && (
-                <>
-                  <div style={{ height: 6, background: 'var(--surface2)', borderRadius: 99, overflow: 'hidden' }}>
-                    <div style={{ width: `${donationPct}%`, height: '100%', background: 'var(--accent)' }}/>
-                  </div>
-                  <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 8 }}>
-                    {isLegacyPeriod
-                      ? `Payment pending for ${enrollPeriodLabel} · $${suggestedAmount} suggested`
-                      : `$${givenForPeriod} of $${suggestedAmount}${enrollPeriodLabel ? ` · ${enrollPeriodLabel}` : ''} · suggested`}
-                  </div>
-                </>
-              )}
-              {isEnrolled ? (
-                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>Suggested Bala Vihar contribution for this year.</div>
-              ) : (
-                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>Your Bala Vihar contribution is set by the mission, shown when you enroll.</div>
-              )}
-            </div>
-
             {sevaView.show && (
               <div style={{ marginBottom: 12 }}>
                 <SevaProgressCard
@@ -242,7 +203,7 @@ export default async function FamilyDashboardPage() {
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 10 }}>
                   {card.showDonation
-                    ? 'See dashboard for donation details.'
+                    ? 'Open enrollment for donation details.'
                     : 'No donation required for this program.'}
                 </div>
                 <Link href={`/family/enroll/${card.programKey}`} className="btn btn--s" style={{ fontSize: 12, textDecoration: 'none', display: 'inline-block' }}>
@@ -330,28 +291,18 @@ export default async function FamilyDashboardPage() {
           <VolunteeringSkillsNudge mid={currentMid} />
         )}
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 18 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 14, marginBottom: 18 }}>
           <MetricCard
-            label="Bala Vihar donation"
-            value={legacyPaid ? 'Completed' : isEnrolled ? `$${givenForPeriod}` : '—'}
-            sub={
-              !isEnrolled
-                ? 'not enrolled'
-                : legacyPaid
-                  ? `${enrollPeriodLabel ?? ''} · completed`
-                  : isLegacyPeriod
-                    ? `${enrollPeriodLabel ?? ''} · payment pending`
-                    : donationComplete
-                      ? `received · ${enrollPeriodLabel ?? ''}`
-                      : `of $${suggestedAmount} · ${enrollPeriodLabel ?? 'suggested'}`
-            }
-            {...(donationTone ? { tone: donationTone } : {})}
+            label="Donation status"
+            value={donationStatus}
+            sub={donationStatusSub}
+            tone={donationStatusTone}
           />
           <MetricCard label="Bala Vihar" value={isEnrolled ? 'Enrolled' : 'Not yet'} sub={enrollPeriodLabel ?? 'no active period'}/>
           <MetricCard label="Family"     value={String(memberCount)} sub={`${memberCount} member${memberCount !== 1 ? 's' : ''}`}/>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 18 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 18 }}>
           <Suspense fallback={<SkeletonCard />}>
             <div className="card" style={{ padding: 24 }}>
               <div className="between" style={{ marginBottom: 18 }}>
@@ -380,54 +331,6 @@ export default async function FamilyDashboardPage() {
                   </div>
                   <Link href="/family/enroll" className="btn btn--p" style={{ textDecoration: 'none', display: 'inline-block' }}>
                     Enroll now
-                  </Link>
-                </>
-              )}
-            </div>
-          </Suspense>
-
-          <Suspense fallback={<SkeletonCard />}>
-            <div className="card" style={{ padding: 24 }}>
-              <div className="between" style={{ marginBottom: 14 }}>
-                <span style={{ fontSize: 14, fontWeight: 600 }}>Bala Vihar donation</span>
-                <SetuIcon.info color="var(--muted)"/>
-              </div>
-              {legacyPaid ? (
-                <div style={{ marginBottom: 18 }}>
-                  <span className="pill" style={{ background: 'var(--accentSoft)', color: 'var(--accentDeep)', fontSize: 12 }}>Completed · {enrollPeriodLabel}</span>
-                  <div style={{ fontSize: 13, color: 'var(--body-text)', lineHeight: 1.5, marginTop: 12 }}>
-                    Your {enrollPeriodLabel} Bala Vihar contribution is recorded as completed. Thank you — no further action needed for this year.
-                  </div>
-                </div>
-              ) : isEnrolled && suggestedAmount !== null ? (
-                <>
-                  <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 10 }}>Suggested Bala Vihar contribution for this year.</div>
-                  <div style={{ marginBottom: 14 }}>
-                    <span style={{ fontSize: 36, fontWeight: 600, letterSpacing: '-0.02em' }}>${givenForPeriod}</span>
-                    <span style={{ color: 'var(--muted)', marginLeft: 6, fontSize: 14 }}>of ${suggestedAmount} suggested</span>
-                  </div>
-                  <div style={{ height: 6, background: 'var(--surface2)', borderRadius: 99, overflow: 'hidden', marginBottom: 8 }}>
-                    <div style={{ width: `${donationPct}%`, height: '100%', background: 'var(--accent)' }}/>
-                  </div>
-                  <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 18 }}>
-                    {isLegacyPeriod
-                      ? `Payment pending · ${enrollPeriodLabel}`
-                      : `${donationComplete ? 'Thank you — received in full' : `$${givenForPeriod} of $${suggestedAmount}`}${enrollPeriodLabel ? ` · ${enrollPeriodLabel}` : ''}`}
-                  </div>
-                </>
-              ) : (
-                <div style={{ marginBottom: 18 }}>
-                  <span style={{ fontSize: 28, fontWeight: 600, letterSpacing: '-0.02em' }}>Set at enrollment</span>
-                  <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6 }}>Your Bala Vihar contribution for the year is set by the mission — shown when you enroll.</div>
-                </div>
-              )}
-              {showGive && (
-                <>
-                  <p style={{ fontSize: 13, color: 'var(--body-text)', lineHeight: 1.5, marginBottom: 18 }}>
-                    Suggested, not required. Any amount welcome. Donations are tax-deductible.
-                  </p>
-                  <Link href={donateUrl} className="btn btn--p btn--block" style={{ display: 'flex' }}>
-                    {donationComplete ? 'Give more' : 'Give donation'}
                   </Link>
                 </>
               )}
@@ -463,7 +366,7 @@ export default async function FamilyDashboardPage() {
                 </div>
                 <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 14 }}>
                   {card.showDonation
-                    ? 'See dashboard for donation details.'
+                    ? 'Open enrollment for donation details.'
                     : 'No donation required for this program.'}
                 </div>
                 <Link href={`/family/enroll/${card.programKey}`} className="btn btn--s" style={{ textDecoration: 'none', display: 'inline-block' }}>

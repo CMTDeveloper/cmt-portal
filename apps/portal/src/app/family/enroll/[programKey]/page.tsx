@@ -7,6 +7,7 @@ import { EnrollCta } from '@/features/family/components/enroll-cta';
 import { EnrollPanel } from '@/features/family/components/enroll-panel';
 import { EligibleMembersList } from '@/features/family/components/eligible-members-list';
 import { resolveSuggestedAmount, paymentSourceOf, memberEligibleForProgram, BALA_VIHAR } from '@cmt/shared-domain';
+import type { OfferingDoc, PaymentSource } from '@cmt/shared-domain';
 import { getProgram } from '@/features/setu/programs/get-programs';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
@@ -27,11 +28,33 @@ function fmtDate(d: Date | null) {
   });
 }
 
-function renderAlreadyEnrolledBanner(termLabel: string, paid = false, usesDonation = false) {
+function offeringPaymentSource(offering: Pick<OfferingDoc, 'paymentSource'> | null | undefined): PaymentSource {
+  return paymentSourceOf(offering?.paymentSource !== undefined ? { paymentSource: offering.paymentSource } : {});
+}
+
+function canCollectOnline(usesDonation: boolean, donationsEnabled: boolean, paymentSource: PaymentSource) {
+  return usesDonation && donationsEnabled && paymentSource !== 'teacher-managed';
+}
+
+function enrolledStateText(usesDonation: boolean, paymentSource: PaymentSource) {
+  if (usesDonation && paymentSource === 'teacher-managed') {
+    return 'Your family is enrolled — payment is managed by the teacher.';
+  }
+  return usesDonation ? 'Your family is enrolled — donation coming soon.' : 'Your family is enrolled.';
+}
+
+function renderAlreadyEnrolledBanner(
+  termLabel: string,
+  paid = false,
+  usesDonation = false,
+  paymentSource: PaymentSource = 'portal',
+) {
   // "Proceed to donate below." only makes sense when the program actually takes
   // a donation; a free program (usesDonation=false) just confirms enrollment.
   const message = paid
     ? `Your family is enrolled in ${termLabel} and your contribution is paid. Thank you.`
+    : usesDonation && paymentSource === 'teacher-managed'
+      ? `Your family is already enrolled in ${termLabel}. Payment is managed by the teacher.`
     : usesDonation
       ? `Your family is already enrolled in ${termLabel}. Proceed to donate below.`
       : `Your family is already enrolled in ${termLabel}.`;
@@ -54,7 +77,7 @@ function renderPaidPanel(termLabel: string) {
   return (
     <div className="card" style={{ padding: 24, position: 'sticky', top: 0 }}>
       <h3 style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.16em', fontWeight: 700, fontFamily: 'var(--body)', color: 'var(--muted)', marginBottom: 14 }}>
-        <em className="sa">Dakshina</em>
+        Donation
       </h3>
       <span className="pill" style={{ background: 'var(--accentSoft)', color: 'var(--accentDeep)', padding: '6px 12px', fontSize: 12 }}>
         Paid · {termLabel}
@@ -79,7 +102,7 @@ function renderPaidBlockMobile(termLabel: string) {
   );
 }
 
-function renderDakshinaBlock(suggestedAmount: number, location: string | null, termLabel: string) {
+function renderDonationBlock(suggestedAmount: number, location: string | null, termLabel: string) {
   return (
     <div style={{ padding: 18, background: 'var(--accentSoft)', border: '1px solid var(--line2)', borderRadius: 'var(--radius)' }}>
       <div style={{ fontSize: 11, color: 'var(--accentDeep)', letterSpacing: '.1em', textTransform: 'uppercase', fontWeight: 600, marginBottom: 8 }}>
@@ -157,6 +180,8 @@ export default async function ProgramEnrollPage({ params }: Props) {
   const alreadyEnrolled = activeEnrollment !== null;
   const donationsEnabled = process.env.NEXT_PUBLIC_FEATURE_SETU_DONATIONS === 'true';
   const usesDonation = program.capabilities.usesDonation;
+  const selectedPaymentSource = offeringPaymentSource(enrolledOffering);
+  const onlineDonationsEnabled = canCollectOnline(usesDonation, donationsEnabled, selectedPaymentSource);
 
   // Legacy payment gate — BALA VIHAR ONLY. getLegacyPaymentStatus reads the BV
   // roster's `payment` column (the 2025-26 cutover), which has no program
@@ -166,7 +191,7 @@ export default async function ProgramEnrollPage({ params }: Props) {
   const isLegacyPeriod =
     programKey === 'bala-vihar' &&
     enrolledOffering != null &&
-    paymentSourceOf({ ...(enrolledOffering.paymentSource !== undefined ? { paymentSource: enrolledOffering.paymentSource } : {}) }) === 'legacy';
+    selectedPaymentSource === 'legacy';
   const legacyPaid =
     isLegacyPeriod && (await getLegacyPaymentStatus(family.legacyFid)) === 'paid';
 
@@ -211,7 +236,7 @@ export default async function ProgramEnrollPage({ params }: Props) {
             </div>
 
             <div style={{ flex: 1, overflowY: 'auto', padding: '20px 18px 100px' }}>
-              {alreadyEnrolled && renderAlreadyEnrolledBanner(activeTerm, paid, usesDonation)}
+              {alreadyEnrolled && renderAlreadyEnrolledBanner(activeTerm, paid, usesDonation, selectedPaymentSource)}
               {!enrolledOffering && !alreadyEnrolled && renderNoPeriodBanner(program.label, family.location)}
 
               {enrolledOffering && (
@@ -244,13 +269,13 @@ export default async function ProgramEnrollPage({ params }: Props) {
                     </>
                   )}
 
-                  {/* Dakshina — only when program uses donation */}
+                  {/* Donation — only when program uses donation */}
                   {usesDonation && (
                     <>
-                      <SectionLabel><em className="sa">Dakshina</em>{paid ? '' : ' · suggested donation'}</SectionLabel>
+                      <SectionLabel>Donation{paid ? '' : ' · suggested donation'}</SectionLabel>
                       {paid
                         ? renderPaidBlockMobile(activeTerm)
-                        : renderDakshinaBlock(displaySuggestedAmount ?? 0, family.location, activeTerm)}
+                        : renderDonationBlock(displaySuggestedAmount ?? 0, family.location, activeTerm)}
                     </>
                   )}
 
@@ -278,13 +303,13 @@ export default async function ProgramEnrollPage({ params }: Props) {
                   <Link href="/family" className="btn btn--p btn--block" style={{ display: 'block', textAlign: 'center', textDecoration: 'none' }}>
                     Back to dashboard
                   </Link>
-                ) : usesDonation && donationsEnabled ? (
+                ) : onlineDonationsEnabled ? (
                   <Link href={`/family/donate?eid=${activeEnrollment.eid}`} className="btn btn--p btn--block" style={{ display: 'block', textAlign: 'center', textDecoration: 'none' }}>
                     Continue to donation →
                   </Link>
                 ) : (
                   <div style={{ padding: '12px 16px', background: 'var(--accentSoft)', color: 'var(--accentDeep)', borderRadius: 'var(--radiusSm)', fontSize: 14, fontWeight: 600, textAlign: 'center' }}>
-                    {usesDonation ? 'Your family is enrolled — donation coming soon.' : 'Your family is enrolled.'}
+                    {enrolledStateText(usesDonation, selectedPaymentSource)}
                   </div>
                 )
               ) : showInlinePanel ? (
@@ -292,7 +317,7 @@ export default async function ProgramEnrollPage({ params }: Props) {
                   Cancel
                 </Link>
               ) : ctaOid && isManager ? (
-                <EnrollCta oid={ctaOid} donationsEnabled={usesDonation && donationsEnabled} usesDonation={usesDonation} />
+                <EnrollCta oid={ctaOid} donationsEnabled={onlineDonationsEnabled} usesDonation={usesDonation} paymentSource={selectedPaymentSource} />
               ) : ctaOid ? (
                 <button className="btn btn--p btn--block" disabled style={{ cursor: 'not-allowed', opacity: 0.5 }}>
                   Only the family manager can enroll
@@ -329,7 +354,7 @@ export default async function ProgramEnrollPage({ params }: Props) {
           </div>
         </header>
 
-        {alreadyEnrolled && renderAlreadyEnrolledBanner(activeTerm, paid, usesDonation)}
+        {alreadyEnrolled && renderAlreadyEnrolledBanner(activeTerm, paid, usesDonation, selectedPaymentSource)}
         {!enrolledOffering && !alreadyEnrolled && renderNoPeriodBanner(program.label, family.location)}
 
         {enrolledOffering && (
@@ -379,15 +404,15 @@ export default async function ProgramEnrollPage({ params }: Props) {
               </div>
             </div>
 
-            {/* Right: offering picker + dakshina/confirm panel */}
+            {/* Right: offering picker + donation/confirm panel */}
             <aside>
               {paid ? renderPaidPanel(activeTerm) : (
                 <div className="card" style={{ padding: 24, position: 'sticky', top: 0 }}>
-                  {/* Dakshina block — only for programs with usesDonation */}
+                  {/* Donation block — only for programs with usesDonation */}
                   {usesDonation ? (
                     <>
                       <h3 style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.16em', fontWeight: 700, fontFamily: 'var(--body)', color: 'var(--muted)', marginBottom: 14 }}>
-                        <em className="sa">Dakshina</em> · suggested donation
+                        Donation · suggested donation
                       </h3>
                       <div style={{ padding: 18, background: 'var(--accentSoft)', borderRadius: 'var(--radiusSm)', marginBottom: 18 }}>
                         <div className="row" style={{ alignItems: 'baseline', gap: 4, marginBottom: 6 }}>
@@ -414,13 +439,13 @@ export default async function ProgramEnrollPage({ params }: Props) {
                   )}
 
                   {alreadyEnrolled ? (
-                    usesDonation && donationsEnabled ? (
+                    onlineDonationsEnabled ? (
                       <Link href={`/family/donate?eid=${activeEnrollment.eid}`} className="btn btn--p btn--block" style={{ display: 'block', textAlign: 'center', textDecoration: 'none' }}>
                         Continue to donation →
                       </Link>
                     ) : (
                       <div style={{ padding: '12px 16px', background: 'var(--accentSoft)', color: 'var(--accentDeep)', borderRadius: 'var(--radiusSm)', fontSize: 14, fontWeight: 600, textAlign: 'center' }}>
-                        {usesDonation ? 'Your family is enrolled — donation coming soon.' : 'Your family is enrolled.'}
+                        {enrolledStateText(usesDonation, selectedPaymentSource)}
                       </div>
                     )
                   ) : showInlinePanel ? (
@@ -436,7 +461,7 @@ export default async function ProgramEnrollPage({ params }: Props) {
                       }
                     />
                   ) : isManager ? (
-                    <EnrollCta oid={ctaOid} donationsEnabled={usesDonation && donationsEnabled} usesDonation={usesDonation} />
+                    <EnrollCta oid={ctaOid} donationsEnabled={onlineDonationsEnabled} usesDonation={usesDonation} paymentSource={selectedPaymentSource} />
                   ) : (
                     <button className="btn btn--p btn--block" disabled style={{ cursor: 'not-allowed', opacity: 0.5 }}>
                       Only the family manager can enroll

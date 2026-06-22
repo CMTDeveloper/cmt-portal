@@ -99,7 +99,7 @@ describe('Teacher cross-link gated on showTeacher', () => {
 
 // CMT decision 2026-06-04: general donations are handled via a separate process,
 // not Stripe-in-portal, so the Giving + Receipts nav surfaces are hidden. The
-// Bala Vihar dakshina flow stays reachable from the dashboard / enroll (not nav).
+// Bala Vihar donation flow stays reachable from the dashboard / enroll (not nav).
 describe('Giving + Receipts hidden from family navigation', () => {
   it('desktop sidebar has no Giving or Receipts links', () => {
     render(<DesktopSidebar role="family" />);

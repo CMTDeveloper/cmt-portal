@@ -38,7 +38,7 @@ guide builds on them:
 | Capabilities | Uses donations? · uses levels? · uses calendar? · attendance mode (none / check-in / teacher) |
 
 The capabilities are the program's feature switches. **Uses donations**
-decides whether families see a dakshina step when they enroll. **Uses
+decides whether families see a donation step when they enroll. **Uses
 levels** plus the attendance mode control whether the teacher tooling
 applies — that's Bala Vihar. A simple program like Om Chanting has
 everything switched off.
@@ -55,7 +55,7 @@ everything switched off.
 | Term label | e.g. "2026-27" |
 | Start / end date | The term window (the end date must be after the start date) |
 | Suggested donation by enrollment date | The pricing tiers — see "The money model" below. Only shown for donation programs |
-| Payment source | **portal (Stripe)** for everything new; "legacy roster" exists only for the 2025-26 Bala Vihar cutover year |
+| Payment source | **portal (Stripe)** for online portal payments; **teacher managed** when teachers collect outside the portal; "legacy roster" exists only for the 2025-26 Bala Vihar cutover year |
 | Enabled | ✓ means **enrollment is open**. This checkbox is the on/off switch families actually feel |
 
 Handy extras on the offerings list:
@@ -63,8 +63,9 @@ Handy extras on the offerings list:
 - **Duplicate** pre-fills a copy with all dates shifted forward one year —
   the "clone last year" shortcut for non-Bala-Vihar programs.
 - **Enable/Disable** is one click per row.
-- If two enabled offerings for the same program and location overlap in
-  dates, a warning appears. It's a warning only — it won't block you.
+- Two enabled offerings for the same program and location cannot overlap in
+  dates. The save is blocked until one offering is disabled or the dates are
+  adjusted.
 
 ⚠️ **The most common pitfall:** if a program has no offering that is both
 *enabled* and *not yet ended*, the program quietly disappears from the
@@ -100,7 +101,7 @@ Here's what happens when a family taps Enroll:
 2. If the program has more than one open offering (say, two terms), a picker
    appears. With just one, it's simply a confirm button.
 3. **The wording changes with the program:**
-   - *Donation programs* show the **dakshina block**: "$X per family ·
+   - *Donation programs* show the **donation block**: "$X per family ·
      suggested — Suggested, not required. The program runs entirely on family
      donations. Any amount welcome." (plus the tax-receipt footnote).
    - *Free programs* (e.g. Om Chanting) say: "This program has no donation
@@ -131,7 +132,7 @@ Here's what happens when a family taps Enroll:
   example, the full-year amount from September, and less for a family who
   joins in January. A family's suggested amount is the latest tier whose
   date has already arrived on the day they enroll (using Toronto dates).
-- The amount is **suggested, not required** — it's dakshina. Nothing in the
+- The amount is **suggested, not required** — it's a donation. Nothing in the
   portal is ever blocked because a family hasn't paid.
 - The amount a family sees is decided in this order:
   1. A **per-family override** set by the welcome team. There's no screen
@@ -177,7 +178,7 @@ Here's what happens when a family taps Enroll:
 | Admin | **Programs** (/admin/programs) | Create/edit programs (eligibility, capabilities, status) |
 | Admin | /admin/programs/{key} | Add, edit, duplicate, enable offerings (dates, pricing tiers, payment source) |
 | Admin | **School year rollover** (/admin/school-year) | Yearly Bala Vihar offering clone + enrollment promotion |
-| Family manager | /family/programs → /family/enroll/{program} | Enroll (eligible members auto-selected), continue to dakshina, cancel |
+| Family manager | /family/programs → /family/enroll/{program} | Enroll (eligible members auto-selected), continue to donation, cancel |
 | Family (anyone) | dashboard | Program cards, attendance (Bala Vihar), donation progress |
 | Welcome team | /welcome/roster, /welcome/reports | Program filter, payment chips, headcounts, CSV; amount overrides (ask the tech team) |
 

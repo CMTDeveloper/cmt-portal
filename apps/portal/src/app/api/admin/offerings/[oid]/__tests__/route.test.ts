@@ -5,6 +5,10 @@ vi.mock('next/cache', () => ({ revalidateTag: vi.fn(), cacheTag: vi.fn(), cacheL
 const mockGet = vi.fn();
 const mockUpdate = vi.fn();
 const mockOfferingRef = { get: mockGet, update: mockUpdate };
+const mockOverlapGet = vi.fn();
+const mockWhere = vi.fn();
+const mockDoc = vi.fn();
+const mockCollection = vi.fn();
 
 vi.mock('@cmt/firebase-shared/admin/firestore', () => {
   const Timestamp = { fromDate: (d: Date) => ({ toDate: () => d }) };
@@ -13,9 +17,7 @@ vi.mock('@cmt/firebase-shared/admin/firestore', () => {
     Timestamp,
     FieldValue,
     portalFirestore: vi.fn(() => ({
-      collection: vi.fn().mockReturnValue({
-        doc: vi.fn().mockReturnValue(mockOfferingRef),
-      }),
+      collection: mockCollection,
     })),
   };
 });
@@ -47,7 +49,15 @@ function makeRequest(oid: string, body?: unknown, uid?: string, role = 'admin'):
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockWhere.mockReturnThis();
+  mockDoc.mockReturnValue(mockOfferingRef);
+  mockCollection.mockReturnValue({
+    doc: mockDoc,
+    where: mockWhere,
+    get: mockOverlapGet,
+  });
   mockGet.mockResolvedValue({ exists: true, data: () => existingOfferingData });
+  mockOverlapGet.mockResolvedValue({ docs: [] });
   mockUpdate.mockResolvedValue(undefined);
 });
 
@@ -132,6 +142,36 @@ describe('PATCH /api/admin/offerings/[oid]', () => {
     expect(res.status).toBe(200);
     const body = await res.json() as { oid: string };
     expect(body.oid).toBe('bala-vihar-brampton-2027-28');
+  });
+
+  it('returns 409 when enabling would overlap another enabled offering', async () => {
+    mockGet.mockResolvedValue({
+      exists: true,
+      data: () => ({ ...existingOfferingData, enabled: false }),
+    });
+    mockOverlapGet.mockResolvedValue({
+      docs: [{
+        id: 'bala-vihar-brampton-2027-28-overlap',
+        data: () => ({
+          oid: 'bala-vihar-brampton-2027-28-overlap',
+          termLabel: 'Overlapping term',
+          startDate: { toDate: () => new Date('2027-08-01T00:00:00.000Z') },
+          endDate: { toDate: () => new Date('2027-11-30T00:00:00.000Z') },
+        }),
+      }],
+    });
+
+    const { PATCH } = await import('../route');
+    const res = await PATCH(
+      makeRequest('bala-vihar-brampton-2027-28', { enabled: true }, 'uid-admin'),
+      { params: Promise.resolve({ oid: 'bala-vihar-brampton-2027-28' }) },
+    );
+
+    expect(res.status).toBe(409);
+    const body = await res.json() as { error: string; conflictOid: string };
+    expect(body.error).toBe('offering-date-overlap');
+    expect(body.conflictOid).toBe('bala-vihar-brampton-2027-28-overlap');
+    expect(mockUpdate).not.toHaveBeenCalled();
   });
 
   it('returns 200 on valid pricingTiers update', async () => {
