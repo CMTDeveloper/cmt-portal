@@ -21,3 +21,4 @@ export * from './grade-ladder';
 export * from './set-grade';
 export * from './prasad';
 export * from './prasad-engine';
+export * from './member-required-fields';
