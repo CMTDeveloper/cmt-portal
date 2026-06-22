@@ -23,10 +23,8 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 
 vi.mock('next/cache', () => ({
   revalidateTag: vi.fn(),
-  // get-programs.ts (via assertProgramActive) imports the unstable_* aliases.
-  // Without these the cached read throws "cacheTag is not a function".
-  unstable_cacheTag: vi.fn(),
-  unstable_cacheLife: vi.fn(),
+  // get-programs.ts (via assertProgramActive) uses Cache Components helpers.
+  // Without these the cached read throws outside a Next request scope.
   cacheTag: vi.fn(),
   cacheLife: vi.fn(),
 }));

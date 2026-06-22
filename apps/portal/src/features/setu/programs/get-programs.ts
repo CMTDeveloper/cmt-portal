@@ -1,4 +1,4 @@
-import { unstable_cacheTag as cacheTag, unstable_cacheLife as cacheLife } from 'next/cache';
+import { cacheLife, cacheTag } from 'next/cache';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import type { ProgramDoc } from '@cmt/shared-domain';
 

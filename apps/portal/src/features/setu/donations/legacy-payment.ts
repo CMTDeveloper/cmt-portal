@@ -1,4 +1,4 @@
-import { unstable_cacheTag as cacheTag, unstable_cacheLife as cacheLife } from 'next/cache';
+import { cacheLife, cacheTag } from 'next/cache';
 import { readRtdb } from '@cmt/firebase-shared/admin/rtdb';
 
 // The pre-portal Bala Vihar payment status, read live from the prod RTDB
