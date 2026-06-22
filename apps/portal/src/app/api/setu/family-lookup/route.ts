@@ -46,6 +46,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'rate-limited', resetAt: rate.resetAt }, { status: 429 });
   }
 
+  // `match` is either null (no contact on file) or a PII-free
+  // { found, matchedType, matchedValue, matchAction } shape. `matchAction`
+  // ('sign-in' | 'request-to-join') tells the client whether the matched member
+  // can sign in directly or is a gated (portalAccess:'pending') member who must
+  // request to join. No family detail is included.
   const match = await lookupFamilyByContactList(contacts);
 
   return NextResponse.json({ match }, { status: 200 });

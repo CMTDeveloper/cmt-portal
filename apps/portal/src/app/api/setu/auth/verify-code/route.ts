@@ -13,6 +13,7 @@ import {
 import {
   buildSessionClaimsForContact,
   hasSession,
+  isPendingApproval,
 } from '@/features/setu/auth/build-session-claims';
 import { issueRegistrationGrant } from '@/features/setu/registration/registration-grant';
 
@@ -47,6 +48,22 @@ export async function POST(req: Request) {
     value,
     contactProvenance: 'otp',
   });
+
+  // Gated member: the contact resolves to an existing family member whose
+  // portalAccess === 'pending' (a non-primary adult awaiting a manager's
+  // approval). We verified OTP ownership, but we do NOT mint a family session
+  // or set claims. Surface the pending signal so the sign-in UI can show
+  // "access pending your manager's approval" and offer to (re)send the request.
+  if (isPendingApproval(sessionResult)) {
+    return NextResponse.json(
+      {
+        pendingApproval: true,
+        pendingFid: sessionResult.pendingFid,
+        pendingMatchedMid: sessionResult.pendingMatchedMid,
+      },
+      { status: 200 },
+    );
+  }
 
   if (!hasSession(sessionResult)) {
     // No family for this contact → the user is headed to registration. For an

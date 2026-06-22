@@ -9,6 +9,7 @@ import {
 import {
   buildSessionClaimsForContact,
   hasSession,
+  isPendingApproval,
 } from '@/features/setu/auth/build-session-claims';
 
 function safeFrom(from: string | null): string | null {
@@ -42,6 +43,14 @@ export async function GET(
     value: consumed.email,
     contactProvenance: 'magic-link',
   });
+
+  if (isPendingApproval(sessionResult)) {
+    // Gated member — do not mint a session; the gate holds on every sign-in
+    // path. Send them to sign-in with a pending-approval notice.
+    const url = new URL('/sign-in', req.url);
+    url.searchParams.set('error', 'pending-approval');
+    return NextResponse.redirect(url);
+  }
 
   if (!hasSession(sessionResult)) {
     // No family found for this contact — redirect to register

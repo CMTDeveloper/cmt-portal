@@ -33,6 +33,7 @@
     "backfill:legacy-sid": "tsx --env-file=.env.local scripts/backfill-legacy-sid.ts",
     "backfill:bv-enrollments": "tsx --env-file=.env.local scripts/backfill-bv-enrollments.ts",
     "backfill:birth-months": "tsx --env-file=.env.local scripts/backfill-birth-months.ts",
+    "backfill:portal-access": "tsx --env-file=.env.local scripts/backfill-portal-access.ts",
     "school-year:start": "tsx --env-file=.env.local scripts/start-new-year.ts",
     "school-year:promote": "tsx --env-file=.env.local scripts/promote-families.ts",
     "refresh:check-ins": "tsx --env-file=.env.local scripts/refresh-check-ins.ts"

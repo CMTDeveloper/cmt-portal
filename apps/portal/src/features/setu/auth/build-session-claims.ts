@@ -15,12 +15,32 @@ export interface BuildSessionClaimsArgs {
 
 export type BuildSessionClaimsResult =
   | { uid: string; claims: Record<string, unknown>; redirectTo: string }
+  | { pendingApproval: true; pendingFid: string; pendingMatchedMid: string }
   | { redirectTo: '/register?contact=verified' };
 
 export function hasSession(
   result: BuildSessionClaimsResult,
 ): result is { uid: string; claims: Record<string, unknown>; redirectTo: string } {
   return 'uid' in result;
+}
+
+/**
+ * A matched member whose `portalAccess === 'pending'` (and is NOT a manager) is
+ * "gated": we recognize the family/member but must NOT mint family claims until
+ * a manager approves the join request. The verify-code route surfaces this so
+ * the sign-in UI can show "access pending your manager's approval".
+ */
+export function isPendingApproval(
+  result: BuildSessionClaimsResult,
+): result is { pendingApproval: true; pendingFid: string; pendingMatchedMid: string } {
+  return 'pendingApproval' in result;
+}
+
+/** A member is gated iff portalAccess === 'pending' AND it is not a manager. */
+function isMemberGated(member: Record<string, unknown> | undefined): boolean {
+  if (!member) return false;
+  if (member.manager === true) return false;
+  return member.portalAccess === 'pending';
 }
 
 export async function buildSessionClaimsForContact(
@@ -115,6 +135,15 @@ export async function buildSessionClaimsForContact(
   let redirectTo: string = '/register?contact=verified';
 
   if (result.source === 'setu' && result.fid && result.mid) {
+    // Gated member (portalAccess === 'pending', non-manager): recognized but not
+    // yet approved. Do NOT mint family claims — return the pending signal so the
+    // sign-in UI can show "access pending your manager's approval". A pending
+    // member who also carries a sevak (admin/welcome-team) role still gets gated
+    // here for their family identity; sevak access is granted via the auth-claim
+    // path (no family fid), not via this Setu-member resolution.
+    if (isMemberGated(result.member) && !isAdminUser && !isWelcomeTeamUser) {
+      return { pendingApproval: true, pendingFid: result.fid, pendingMatchedMid: result.mid };
+    }
     const isManager = result.member?.manager === true;
     const extras = preservedExtras();
     claims = {
@@ -135,6 +164,15 @@ export async function buildSessionClaimsForContact(
         await lazyMigrateLegacyFamily(legacyFid);
         const setuResult = await findSetuFamilyByContact(type, value);
         if (setuResult.source === 'setu' && setuResult.fid && setuResult.mid) {
+          // A freshly lazy-migrated non-primary adult is portalAccess:'pending'
+          // → gated. Short-circuit before minting any family claims.
+          if (isMemberGated(setuResult.member) && !isAdminUser && !isWelcomeTeamUser) {
+            return {
+              pendingApproval: true,
+              pendingFid: setuResult.fid,
+              pendingMatchedMid: setuResult.mid,
+            };
+          }
           const extras = preservedExtras();
           claims = {
             role: setuResult.member?.manager === true ? 'family-manager' : 'family-member',

@@ -6,10 +6,11 @@ import Link from 'next/link';
 import { toast, SetuLogo, SetuIcon, Rosette } from '@cmt/ui';
 import { CspRoot } from '@/features/family/components/atoms';
 import { OtpEntry } from '@/features/family/components/otp-entry';
+import { sendJoinRequestClient } from '@/features/setu/join-request';
 import { flags } from '@/lib/flags';
 
 type ContactType = 'email' | 'phone';
-type PageState = 'form' | 'code' | 'verifying';
+type PageState = 'form' | 'code' | 'verifying' | 'pending-approval';
 type SignInMode = 'otp' | 'password';
 
 const MODE_STORAGE_KEY = 'setu-signin-mode';
@@ -206,6 +207,12 @@ function SignInReal() {
   const [loading, setLoading] = useState(false);
   const contactRef = useRef<HTMLInputElement>(null);
 
+  // Pending-approval state: set when verify-code resolves a gated member
+  // (portalAccess:'pending') — no session is minted; the user must wait for a
+  // family manager to approve. We offer to (re)send the join request from here.
+  const [resending, setResending] = useState(false);
+  const [requestResent, setRequestResent] = useState(false);
+
   // Password mode state
   const [pwEmail, setPwEmail] = useState(initialContactType === 'email' ? initialContactValue : '');
   const [pwPassword, setPwPassword] = useState('');
@@ -289,7 +296,16 @@ function SignInReal() {
         setOtp('');
         return;
       }
-      const { redirectTo } = (await res.json()) as { redirectTo?: string };
+      const body = (await res.json()) as { redirectTo?: string; pendingApproval?: boolean };
+      // Gated member: the code was correct (contact ownership proven) but the
+      // member's portal access is pending a family manager's approval, so no
+      // session was minted. Show the pending state instead of redirecting.
+      if (body.pendingApproval) {
+        setRequestResent(false);
+        setPageState('pending-approval');
+        return;
+      }
+      const { redirectTo } = body;
       const fromQ = new URLSearchParams(window.location.search).get('from');
       const fromIsSafe =
         fromQ !== null &&
@@ -301,6 +317,27 @@ function SignInReal() {
       toast.error('Network error. Check your connection and try again.');
       setPageState('code');
     }
+  }
+
+  // (Re)send the join request to the family manager from the pending-approval
+  // screen. The send endpoint is anti-enumeration + idempotent, so a repeat just
+  // refreshes the open request. We send the contact the user just verified.
+  async function handleResendJoinRequest() {
+    const trimmed = contactValue.trim();
+    if (!trimmed) return;
+    setResending(true);
+    const contact = contactType === 'email' ? { email: trimmed } : { phone: trimmed };
+    const result = await sendJoinRequestClient(contact);
+    if (result.ok) {
+      setRequestResent(true);
+    } else if (result.error === 'rate-limited') {
+      toast.error('Too many requests. Please wait a minute and try again.');
+    } else if (result.error === 'network') {
+      toast.error('Network error. Check your connection and try again.');
+    } else {
+      toast.error('Could not send your request. Please try again.');
+    }
+    setResending(false);
   }
 
   async function handleResend() {
@@ -340,14 +377,22 @@ function SignInReal() {
         }
         return;
       }
-      const { redirectTo } = (await res.json()) as { redirectTo?: string };
+      const body = (await res.json()) as { redirectTo?: string; pendingApproval?: boolean };
+      // Gated member: valid password, but portal access is pending a family
+      // manager's approval — no session was minted. Show the pending state (the
+      // gate holds on the password path too); do not fall through to /family.
+      if (body.pendingApproval) {
+        setRequestResent(false);
+        setPageState('pending-approval');
+        return;
+      }
       const fromQ = new URLSearchParams(window.location.search).get('from');
       const fromIsSafe =
         fromQ !== null &&
         fromQ.startsWith('/') &&
         !fromQ.startsWith('//') &&
         !fromQ.includes('://');
-      window.location.assign(fromIsSafe ? fromQ : (redirectTo ?? '/family'));
+      window.location.assign(fromIsSafe ? fromQ : (body.redirectTo ?? '/family'));
     } catch {
       toast.error('Network error. Check your connection and try again.');
     } finally {
@@ -474,6 +519,50 @@ function SignInReal() {
     );
   }
 
+  // ── Pending-approval screen (shared mobile / desktop) ────────────────────────
+  // Declared as a render helper (called inline), NOT a nested component, to keep
+  // any focusable children mounted across renders (see renderPasswordForm note).
+  function renderPendingApproval(compact: boolean) {
+    return (
+      <>
+        <div style={{ width: compact ? 64 : 72, height: compact ? 64 : 72, borderRadius: '50%', background: 'var(--accentSoft)', display: 'grid', placeItems: 'center', marginBottom: compact ? 22 : 28 }}>
+          <SetuIcon.mail color="var(--accentDeep)"/>
+        </div>
+        <h1 style={{ fontSize: compact ? 28 : 40, fontWeight: 400, marginBottom: compact ? 10 : 12, lineHeight: compact ? undefined : 1.1 }}>
+          Almost there
+        </h1>
+        <p style={{ fontSize: compact ? 14 : 15, color: 'var(--body-text)', lineHeight: 1.6, marginBottom: compact ? 24 : 32 }}>
+          Your access is pending your family manager&apos;s approval. We&apos;ve let them know — once
+          they approve, sign in again with <strong>{contactValue.trim()}</strong> to access your family.
+        </p>
+        {requestResent ? (
+          <div style={{ padding: 14, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radiusSm)', fontSize: 13, color: 'var(--body-text)', marginBottom: 12 }} role="status">
+            Request sent. Your manager will review it shortly.
+          </div>
+        ) : (
+          <button
+            className="btn btn--p btn--block"
+            style={{ marginBottom: 10, ...(compact ? {} : { padding: '14px 22px' }) }}
+            onClick={handleResendJoinRequest}
+            disabled={resending}
+            type="button"
+          >
+            {resending ? 'Sending…' : 'Re-send request to my manager →'}
+          </button>
+        )}
+        <button
+          className="btn btn--g btn--block"
+          style={{ fontSize: 13 }}
+          onClick={() => { setPageState('form'); setOtp(''); }}
+          disabled={resending}
+          type="button"
+        >
+          Use a different address
+        </button>
+      </>
+    );
+  }
+
   // ── Mobile ──────────────────────────────────────────────────────────────────
   const mobileContent = (
     <CspRoot style={{ minHeight: '100dvh' }}>
@@ -579,6 +668,7 @@ function SignInReal() {
                   )}
                 </>
               )}
+              {pageState === 'pending-approval' && renderPendingApproval(true)}
             </>
           )}
         </div>
@@ -694,6 +784,7 @@ function SignInReal() {
                   )}
                 </>
               )}
+              {pageState === 'pending-approval' && renderPendingApproval(false)}
             </>
           )}
         </div>

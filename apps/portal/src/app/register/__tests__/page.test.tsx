@@ -111,7 +111,7 @@ describe('RegisterPage — lookup returns match', () => {
     fetchMock.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
-        match: { found: true, matchedType: 'email', matchedValue: 'raj@example.com' },
+        match: { found: true, matchedType: 'email', matchedValue: 'raj@example.com', matchAction: 'sign-in' },
       }),
     });
 
@@ -161,7 +161,7 @@ describe('RegisterPage — match CTA uses the matched contact', () => {
     fetchMock.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
-        match: { found: true, matchedType: 'phone', matchedValue: '4165550000' },
+        match: { found: true, matchedType: 'phone', matchedValue: '4165550000', matchAction: 'sign-in' },
       }),
     });
 
@@ -299,6 +299,82 @@ describe('RegisterPage — Continue button triggers lookup', () => {
         );
       });
     }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Third branch: matchAction === 'request-to-join' (gated non-manager member)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('RegisterPage — lookup returns request-to-join match', () => {
+  async function fillToRequestPanel(matchedValue = 'member@example.com') {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        match: { found: true, matchedType: 'email', matchedValue, matchAction: 'request-to-join' },
+      }),
+    });
+    const user = userEvent.setup();
+    render(<RegisterPage />);
+    const emailInputs = document.querySelectorAll('input[type="email"]');
+    const telInputs = document.querySelectorAll('input[type="tel"]');
+    await user.type(emailInputs[0] as HTMLElement, matchedValue);
+    await user.type(telInputs[0] as HTMLElement, '4165550100');
+    await user.tab();
+    return user;
+  }
+
+  it('shows the "We found your family" request panel (NOT the sign-in panel)', async () => {
+    await fillToRequestPanel();
+    await waitFor(() => {
+      expect(screen.getAllByText(/we found your family/i).length).toBeGreaterThan(0);
+    });
+    // The sign-in panel + its CTA must NOT appear for a gated member.
+    expect(screen.queryByText(/this contact is already registered/i)).toBeNull();
+    expect(screen.queryByRole('link', { name: /sign in to access my family/i })).toBeNull();
+    // The request CTA is present.
+    expect(screen.getAllByRole('button', { name: /send a request to your manager/i }).length).toBeGreaterThan(0);
+    // No family PII leaked.
+    expect(screen.queryByText(/the patel family/i)).toBeNull();
+  });
+
+  it('clicking the CTA POSTs to /api/setu/join-request/send with the matched email', async () => {
+    const user = await fillToRequestPanel('member@example.com');
+    await waitFor(() => {
+      expect(screen.getAllByRole('button', { name: /send a request to your manager/i }).length).toBeGreaterThan(0);
+    });
+    // The send call resolves ok.
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ ok: true }) });
+
+    await user.click(screen.getAllByRole('button', { name: /send a request to your manager/i })[0]!);
+
+    await waitFor(() => {
+      const sendCall = fetchMock.mock.calls.find((c) => c[0] === '/api/setu/join-request/send');
+      expect(sendCall).toBeTruthy();
+      const body = JSON.parse(sendCall?.[1]?.body as string) as { email?: string };
+      expect(body.email).toBe('member@example.com');
+    });
+
+    // On ok:true the confirmation copy replaces the CTA.
+    await waitFor(() => {
+      expect(screen.getAllByText(/request sent/i).length).toBeGreaterThan(0);
+    });
+  });
+
+  it('surfaces a toast on a failed send', async () => {
+    const user = await fillToRequestPanel();
+    await waitFor(() => {
+      expect(screen.getAllByRole('button', { name: /send a request to your manager/i }).length).toBeGreaterThan(0);
+    });
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({ error: 'boom' }) });
+
+    await user.click(screen.getAllByRole('button', { name: /send a request to your manager/i })[0]!);
+
+    await waitFor(() => {
+      expect(toastMock.error).toHaveBeenCalled();
+    });
+    // Still on the request panel (not confirmed).
+    expect(screen.queryByText(/request sent/i)).toBeNull();
   });
 });
 

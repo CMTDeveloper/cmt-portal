@@ -287,6 +287,74 @@ describe('SignInPage — verify-code flow', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Gated member: verify-code returns pendingApproval → pending-approval screen
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('SignInPage — pending-approval state', () => {
+  async function renderToCodeState() {
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ success: true }) });
+    const user = userEvent.setup();
+    render(<SignInPage />);
+    const emailInputs = document.querySelectorAll('input[type="email"]');
+    await user.clear(emailInputs[0] as HTMLElement);
+    await user.type(emailInputs[0] as HTMLElement, 'gated@example.com');
+    const sendBtns = screen.getAllByText(/send sign-in code/i);
+    await user.click(sendBtns[0]!);
+    await waitFor(() => {
+      expect(screen.getAllByRole('group').length).toBeGreaterThan(0);
+    });
+    return user;
+  }
+
+  async function verifyIntoPending(user: ReturnType<typeof userEvent.setup>) {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ pendingApproval: true, pendingFid: 'CMT-1', pendingMatchedMid: 'm9' }),
+    });
+    const digitInputs = screen.getAllByLabelText(/digit 1/i);
+    await user.click(digitInputs[0]!);
+    await user.paste('123456');
+    const verifyBtns = screen.getAllByText(/verify code/i);
+    await user.click(verifyBtns[0]!);
+  }
+
+  it('shows the pending-approval screen and does NOT navigate when pendingApproval is true', async () => {
+    const user = await renderToCodeState();
+    await verifyIntoPending(user);
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/pending your family manager'?s approval/i).length).toBeGreaterThan(0);
+    });
+    // No session was minted → no redirect happened.
+    expect(window.location.href).toBe('');
+    // The re-send CTA is offered.
+    expect(screen.getAllByRole('button', { name: /re-send request to my manager/i }).length).toBeGreaterThan(0);
+  });
+
+  it('re-send button POSTs to /api/setu/join-request/send and confirms', async () => {
+    const user = await renderToCodeState();
+    await verifyIntoPending(user);
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('button', { name: /re-send request to my manager/i }).length).toBeGreaterThan(0);
+    });
+
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ ok: true }) });
+    await user.click(screen.getAllByRole('button', { name: /re-send request to my manager/i })[0]!);
+
+    await waitFor(() => {
+      const sendCall = fetchMock.mock.calls.find((c) => c[0] === '/api/setu/join-request/send');
+      expect(sendCall).toBeTruthy();
+      const body = JSON.parse(sendCall?.[1]?.body as string) as { email?: string };
+      expect(body.email).toBe('gated@example.com');
+    });
+    await waitFor(() => {
+      expect(screen.getAllByText(/request sent/i).length).toBeGreaterThan(0);
+    });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // M4 fix: handleResend actually re-sends the code
 // ─────────────────────────────────────────────────────────────────────────────
 

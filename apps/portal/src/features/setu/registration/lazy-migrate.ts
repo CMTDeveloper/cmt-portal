@@ -82,6 +82,11 @@ export async function lazyMigrateLegacyFamily(legacyFid: string): Promise<LazyMi
         joinedAt: now,
         email: adult.email,
         phone: adult.phone,
+        // Non-primary (roster-origin) adults are gated out of portal access
+        // until a manager approves their join-request. The primary manager
+        // stays active (portalAccess absent ⇒ active). Children never get
+        // portalAccess (they have no contactKey / sign-in path).
+        ...(isManager ? {} : { portalAccess: 'pending' }),
         schoolGrade: null,
         birthMonthYear: null,
         volunteeringSkills: [],

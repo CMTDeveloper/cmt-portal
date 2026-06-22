@@ -14,6 +14,11 @@ vi.mock('@/features/setu/auth/firebase-rest', () => ({
 vi.mock('@/features/setu/auth/build-session-claims', () => ({
   buildSessionClaimsForContact: vi.fn(),
   hasSession: vi.fn(),
+  // Mirror the real type-guard: a result is "pending" iff it carries the
+  // pendingApproval flag. The route calls this BEFORE hasSession to short-circuit
+  // gated members with no session cookie.
+  isPendingApproval: (r: unknown) =>
+    typeof r === 'object' && r !== null && 'pendingApproval' in r,
 }));
 
 vi.mock('@cmt/firebase-shared/admin/auth', () => ({
@@ -169,6 +174,33 @@ describe('POST /api/setu/auth/password-sign-in', () => {
     const res = await POST(makeRequest({ email: 'newuser@example.com', password: 'secret' }));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ redirectTo: '/register?contact=verified' });
+  });
+
+  it('gated member: 200 { pendingApproval } with NO session cookie', async () => {
+    mockedSignIn.mockResolvedValue({
+      ok: true,
+      uid: 'uid-gated',
+      email: 'asha@example.com',
+      idToken: 'id-tok',
+      refreshToken: 'ref-tok',
+    });
+    mockedBuildClaims.mockResolvedValue({
+      pendingApproval: true,
+      pendingFid: 'CMT-001',
+      pendingMatchedMid: 'CMT-001-02',
+    });
+    // hasSession would return false for a pending result, but the route must
+    // short-circuit on isPendingApproval BEFORE it ever reaches hasSession.
+    mockedHasSession.mockReturnValue(false);
+
+    const res = await POST(makeRequest({ email: 'asha@example.com', password: 'secret' }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      pendingApproval: true,
+      pendingFid: 'CMT-001',
+      pendingMatchedMid: 'CMT-001-02',
+    });
+    expect(res.headers.get('set-cookie')).toBeNull();
   });
 
   it('passes contactProvenance:password to buildSessionClaimsForContact', async () => {

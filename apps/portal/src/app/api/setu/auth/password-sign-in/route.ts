@@ -10,6 +10,7 @@ import {
 import {
   buildSessionClaimsForContact,
   hasSession,
+  isPendingApproval,
 } from '@/features/setu/auth/build-session-claims';
 import { firebaseSignInWithPassword } from '@/features/setu/auth/firebase-rest';
 
@@ -58,6 +59,21 @@ export async function POST(req: Request) {
     value: email,
     contactProvenance: 'password',
   });
+
+  // Gated member: the email resolves to a non-manager member whose
+  // portalAccess === 'pending' (awaiting a manager's approval). Even with a
+  // valid password we do NOT mint a family session — the gate must hold on
+  // every sign-in path, not just OTP.
+  if (isPendingApproval(sessionResult)) {
+    return NextResponse.json(
+      {
+        pendingApproval: true,
+        pendingFid: sessionResult.pendingFid,
+        pendingMatchedMid: sessionResult.pendingMatchedMid,
+      },
+      { status: 200 },
+    );
+  }
 
   if (!hasSession(sessionResult)) {
     return NextResponse.json({ redirectTo: sessionResult.redirectTo }, { status: 200 });

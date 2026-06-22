@@ -167,6 +167,94 @@ describe('lazyMigrateLegacyFamily — happy path', () => {
   });
 });
 
+describe('lazyMigrateLegacyFamily — portalAccess gating', () => {
+  // 1 primary + 2 other adults — exercises the N=2 non-manager case so a second
+  // gated adult can't be masked by code that only handled a single spouse.
+  const legacyTwoSpouses = {
+    ...legacyShahFamily,
+    adults: [
+      {
+        firstName: 'Asha',
+        lastName: 'Shah',
+        gender: 'Female' as const,
+        email: 'asha@example.com',
+        phone: '4165550100',
+        isPrimary: true,
+      },
+      {
+        firstName: 'Ravi',
+        lastName: 'Shah',
+        gender: 'Male' as const,
+        email: 'ravi@example.com',
+        phone: null,
+        isPrimary: false,
+      },
+      {
+        firstName: 'Meena',
+        lastName: 'Shah',
+        gender: 'Female' as const,
+        email: 'meena@example.com',
+        phone: null,
+        isPrimary: false,
+      },
+    ],
+  };
+
+  function runMigration(legacy: unknown): Promise<[unknown, Record<string, unknown>][]> {
+    mockFetchLegacy.mockResolvedValue(legacy);
+    const txnSetCalls: [unknown, Record<string, unknown>][] = [];
+    mockRunTransaction.mockImplementation(async (fn: (txn: unknown) => Promise<unknown>) => {
+      const txn = {
+        get: vi.fn().mockResolvedValue({ empty: true, docs: [] }),
+        set: vi.fn().mockImplementation((ref: unknown, data: Record<string, unknown>) => {
+          txnSetCalls.push([ref, data]);
+        }),
+      };
+      return fn(txn);
+    });
+    return lazyMigrateLegacyFamily('42').then(() => txnSetCalls);
+  }
+
+  it('leaves the primary manager active (no portalAccess) and gates both other adults to pending', async () => {
+    const calls = await runMigration(legacyTwoSpouses);
+
+    const managerDoc = calls.find(([, d]) => d.manager === true);
+    expect(managerDoc?.[1]).toMatchObject({ firstName: 'Asha', manager: true });
+    // active ⇒ portalAccess is absent (never written), not the string 'active'.
+    expect(managerDoc?.[1]).not.toHaveProperty('portalAccess');
+
+    const gatedAdults = calls.filter(
+      ([, d]) => d.type === 'Adult' && d.manager === false,
+    );
+    expect(gatedAdults).toHaveLength(2);
+    const names = gatedAdults.map(([, d]) => d.firstName).sort();
+    expect(names).toEqual(['Meena', 'Ravi']);
+    for (const [, d] of gatedAdults) {
+      expect(d.portalAccess).toBe('pending');
+    }
+  });
+
+  it('does not set portalAccess on children', async () => {
+    const calls = await runMigration(legacyTwoSpouses);
+    const children = calls.filter(([, d]) => d.type === 'Child');
+    expect(children.length).toBeGreaterThan(0);
+    for (const [, d] of children) {
+      expect(d).not.toHaveProperty('portalAccess');
+    }
+  });
+
+  it('does not set portalAccess on a synthesized manager (adults empty)', async () => {
+    const calls = await runMigration({
+      ...legacyShahFamily,
+      adults: [],
+      children: [],
+    });
+    const managerDoc = calls.find(([, d]) => d.manager === true);
+    expect(managerDoc?.[1]).toMatchObject({ firstName: 'Asha', manager: true });
+    expect(managerDoc?.[1]).not.toHaveProperty('portalAccess');
+  });
+});
+
 describe('lazyMigrateLegacyFamily — idempotency', () => {
   it('returns migrated=false and existing fid when Setu family already exists', async () => {
     mockFetchLegacy.mockResolvedValue(legacyShahFamily);

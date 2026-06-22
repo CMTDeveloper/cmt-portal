@@ -165,6 +165,91 @@ describe('POST /api/setu/auth/verify-code', () => {
     );
   });
 
+  it('gated member (portalAccess pending) returns pendingApproval and mints NO family session', async () => {
+    (verifyCode as ReturnType<typeof vi.fn>).mockResolvedValue(true);
+    (findSetuFamilyByContact as ReturnType<typeof vi.fn>).mockResolvedValue({
+      source: 'setu', fid: 'FAM001', mid: 'FAM001-03', legacyFid: null, family: {},
+      member: { manager: false, portalAccess: 'pending' },
+    });
+    const res = await POST(makeRequest({ type: 'email', value: 'pending@example.com', code: '123456' }));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual({ pendingApproval: true, pendingFid: 'FAM001', pendingMatchedMid: 'FAM001-03' });
+    // No family claims, no session cookie.
+    expect(mockSetCustomUserClaims).not.toHaveBeenCalled();
+    expect(res.headers.get('set-cookie')).toBeNull();
+    expect(body.redirectTo).toBeUndefined();
+  });
+
+  it('manager is NOT gated even if portalAccess is pending → normal family-manager claims', async () => {
+    (verifyCode as ReturnType<typeof vi.fn>).mockResolvedValue(true);
+    (findSetuFamilyByContact as ReturnType<typeof vi.fn>).mockResolvedValue({
+      source: 'setu', fid: 'FAM001', mid: 'FAM001-01', legacyFid: null, family: {},
+      member: { manager: true, portalAccess: 'pending' },
+    });
+    const res = await POST(makeRequest({ type: 'email', value: 'raj@example.com', code: '123456' }));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.redirectTo).toBe('/family');
+    expect(body.pendingApproval).toBeUndefined();
+    expect(mockSetCustomUserClaims).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ role: 'family-manager', fid: 'FAM001', mid: 'FAM001-01' }),
+    );
+  });
+
+  it('active member (portalAccess active) is NOT gated → normal family-member claims', async () => {
+    (verifyCode as ReturnType<typeof vi.fn>).mockResolvedValue(true);
+    (findSetuFamilyByContact as ReturnType<typeof vi.fn>).mockResolvedValue({
+      source: 'setu', fid: 'FAM001', mid: 'FAM001-02', legacyFid: null, family: {},
+      member: { manager: false, portalAccess: 'active' },
+    });
+    const res = await POST(makeRequest({ type: 'email', value: 'aarti@example.com', code: '123456' }));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.redirectTo).toBe('/family');
+    expect(body.pendingApproval).toBeUndefined();
+    expect(mockSetCustomUserClaims).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ role: 'family-member', fid: 'FAM001', mid: 'FAM001-02' }),
+    );
+  });
+
+  it('member WITHOUT portalAccess (absent ⇒ active) is NOT gated → normal family-member claims', async () => {
+    (verifyCode as ReturnType<typeof vi.fn>).mockResolvedValue(true);
+    (findSetuFamilyByContact as ReturnType<typeof vi.fn>).mockResolvedValue({
+      source: 'setu', fid: 'FAM001', mid: 'FAM001-02', legacyFid: null, family: {},
+      member: { manager: false },
+    });
+    const res = await POST(makeRequest({ type: 'email', value: 'aarti@example.com', code: '123456' }));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.redirectTo).toBe('/family');
+    expect(body.pendingApproval).toBeUndefined();
+    expect(mockSetCustomUserClaims).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ role: 'family-member' }),
+    );
+  });
+
+  it('lazy-migrated non-primary adult resolves to pending → pendingApproval, no session', async () => {
+    (verifyCode as ReturnType<typeof vi.fn>).mockResolvedValue(true);
+    // First lookup: legacy hit. Post-migration re-lookup: gated pending member.
+    (findSetuFamilyByContact as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({ source: 'legacy', fid: null, mid: null, legacyFid: '42', family: {} })
+      .mockResolvedValueOnce({
+        source: 'setu', fid: 'FAMNEW', mid: 'FAMNEW-03', legacyFid: '42', family: {},
+        member: { manager: false, portalAccess: 'pending' },
+      });
+    (lazyMigrateLegacyFamily as ReturnType<typeof vi.fn>).mockResolvedValue({ migrated: true, fid: 'FAMNEW', legacyFid: '42' });
+    const res = await POST(makeRequest({ type: 'email', value: 'second.adult@example.com', code: '654321' }));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual({ pendingApproval: true, pendingFid: 'FAMNEW', pendingMatchedMid: 'FAMNEW-03' });
+    expect(mockSetCustomUserClaims).not.toHaveBeenCalled();
+    expect(res.headers.get('set-cookie')).toBeNull();
+  });
+
   it('correct code with no family redirects to /register AND issues a registration grant (email)', async () => {
     (verifyCode as ReturnType<typeof vi.fn>).mockResolvedValue(true);
     (findSetuFamilyByContact as ReturnType<typeof vi.fn>).mockResolvedValue({

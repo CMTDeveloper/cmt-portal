@@ -14,6 +14,10 @@ vi.mock('@cmt/firebase-shared/admin/session', () => ({
 vi.mock('@/features/setu/auth/build-session-claims', () => ({
   buildSessionClaimsForContact: vi.fn(),
   hasSession: vi.fn(),
+  // Mirror the real type-guard: a result is "pending" iff it carries the
+  // pendingApproval flag. The route checks this BEFORE minting a session.
+  isPendingApproval: (r: unknown) =>
+    typeof r === 'object' && r !== null && 'pendingApproval' in r,
 }));
 
 import { GET } from '../route';
@@ -125,6 +129,22 @@ describe('GET /api/setu/auth/magic/[token]', () => {
       value: 'raj@example.com',
       contactProvenance: 'magic-link',
     });
+  });
+
+  it('gated member: redirects to /sign-in?error=pending-approval with NO session cookie', async () => {
+    (consumeMagicLink as ReturnType<typeof vi.fn>).mockResolvedValue({ email: 'asha@example.com' });
+    (buildSessionClaimsForContact as ReturnType<typeof vi.fn>).mockResolvedValue({
+      pendingApproval: true,
+      pendingFid: 'FAM001',
+      pendingMatchedMid: 'FAM001-02',
+    });
+    mockHasSession.mockReturnValue(false);
+    const res = await GET(makeRequest('validtok'), makeParams('validtok'));
+    expect(res.status).toBe(307);
+    expect(res.headers.get('location')).toContain('/sign-in');
+    expect(res.headers.get('location')).toContain('error=pending-approval');
+    expect(res.headers.get('set-cookie')).toBeNull();
+    expect(mockSetCustomUserClaims).not.toHaveBeenCalled();
   });
 
   it('honors safe ?from= param over default redirect', async () => {

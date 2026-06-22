@@ -58,17 +58,39 @@ describe('POST /api/setu/family-lookup', () => {
     expect(body.match).toBeNull();
   });
 
-  it('returns 200 with a minimal, PII-free match when found', async () => {
+  it('returns 200 with a minimal, PII-free match (incl. matchAction) when found', async () => {
     (lookupFamilyByContactList as ReturnType<typeof vi.fn>).mockResolvedValue({
       found: true,
       matchedType: 'email',
       matchedValue: 'raj@example.com',
+      matchAction: 'sign-in',
     });
     const res = await POST(makeRequest({ email: 'raj@example.com', phone: '4165551234' }));
     expect(res.status).toBe(200);
     const body = await res.json();
-    // Only the caller's own matched contact — no family name/location/members.
-    expect(body.match).toEqual({ found: true, matchedType: 'email', matchedValue: 'raj@example.com' });
+    // Only the caller's own matched contact + a routing action — no family
+    // name/location/members and (critically) no fid/mid.
+    expect(body.match).toEqual({
+      found: true,
+      matchedType: 'email',
+      matchedValue: 'raj@example.com',
+      matchAction: 'sign-in',
+    });
+    const json = JSON.stringify(body.match);
+    expect(json).not.toMatch(/fid|mid|CMT-/);
+  });
+
+  it("surfaces matchAction:'request-to-join' for a gated member hit", async () => {
+    (lookupFamilyByContactList as ReturnType<typeof vi.fn>).mockResolvedValue({
+      found: true,
+      matchedType: 'email',
+      matchedValue: 'gated@example.com',
+      matchAction: 'request-to-join',
+    });
+    const res = await POST(makeRequest({ email: 'gated@example.com' }));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.match.matchAction).toBe('request-to-join');
   });
 
   it('maps legacy { email, phone } body to a contact list', async () => {

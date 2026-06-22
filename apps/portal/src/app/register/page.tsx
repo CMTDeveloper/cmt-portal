@@ -5,17 +5,22 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { toast, SetuLogo, SetuAvatar, SetuIcon, Rosette } from '@cmt/ui';
 import { CspRoot, StepHeader } from '@/features/family/components/atoms';
+import { sendJoinRequestClient } from '@/features/setu/join-request';
 import { flags } from '@/lib/flags';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 // The public lookup deliberately returns NO family PII (name/location/members)
-// — only whether one of your own contacts is on file, and which one matched.
-// Family details are revealed after you prove ownership via OTP sign-in.
+// — only whether one of your own contacts is on file, which one matched, and a
+// single action bit. Family details are revealed after you prove ownership via
+// OTP sign-in. matchAction='sign-in' when the matched member can sign in today
+// (manager or active); 'request-to-join' when the matched member is gated
+// (portalAccess:'pending') and must be approved by a manager first.
 type LookupMatch = {
   found: true;
   matchedType: 'email' | 'phone';
   matchedValue: string;
+  matchAction: 'sign-in' | 'request-to-join';
 };
 
 type LookupState = 'idle' | 'loading' | 'match' | 'nomatch';
@@ -177,6 +182,9 @@ function RegisterReal() {
   const [extraPhones, setExtraPhones] = useState<string[]>([]);
   const [lookupState, setLookupState] = useState<LookupState>('idle');
   const [match, setMatch] = useState<LookupMatch | null>(null);
+  // Join-request CTA state (only used on a 'request-to-join' match).
+  const [requesting, setRequesting] = useState(false);
+  const [requestSent, setRequestSent] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const bothFilled = email.trim() !== '' && phone.trim() !== '';
@@ -187,6 +195,7 @@ function RegisterReal() {
       const phones = [phoneVal, ...extraP].map((s) => s.trim()).filter(Boolean);
       if (emails.length === 0 && phones.length === 0) return;
       setLookupState('loading');
+      setRequestSent(false);
       try {
         const res = await fetch('/api/setu/family-lookup', {
           method: 'POST',
@@ -273,6 +282,29 @@ function RegisterReal() {
   }
 
   const isLoading = lookupState === 'loading';
+
+  // Send a join request to the matched family's manager(s). The endpoint is
+  // anti-enumeration + idempotent and ALWAYS returns { ok:true } for a
+  // well-formed body, so on success we just confirm "request sent". We send the
+  // single matched contact (the only contact we know belongs to the requester).
+  async function handleSendRequest() {
+    if (!match) return;
+    setRequesting(true);
+    const contact = match.matchedType === 'email'
+      ? { email: match.matchedValue }
+      : { phone: match.matchedValue };
+    const result = await sendJoinRequestClient(contact);
+    if (result.ok) {
+      setRequestSent(true);
+    } else if (result.error === 'rate-limited') {
+      toast.error('Too many requests. Please wait a minute and try again.');
+    } else if (result.error === 'network') {
+      toast.error('Network error. Check your connection and try again.');
+    } else {
+      toast.error('Could not send your request. Please try again.');
+    }
+    setRequesting(false);
+  }
 
   const formContent = (
     <>
@@ -371,7 +403,8 @@ function RegisterReal() {
         </div>
       )}
 
-      {lookupState === 'match' && match && (
+      {/* Branch A — matched contact can sign in today (manager or active member). */}
+      {lookupState === 'match' && match && match.matchAction === 'sign-in' && (
         <div style={{ padding: 16, border: '1px solid var(--line2)', background: 'var(--surface)', borderRadius: 'var(--radius)', marginBottom: 14 }}>
           <div className="row" style={{ gap: 10, marginBottom: 10 }}>
             <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'var(--accentSoft)', display: 'grid', placeItems: 'center', color: 'var(--accentDeep)' }}>
@@ -401,6 +434,49 @@ function RegisterReal() {
           >
             That&apos;s not me — contact admin
           </a>
+        </div>
+      )}
+
+      {/* Branch B — matched member is gated (portalAccess:'pending'). They must
+          ask the family manager to approve before they can access the family. */}
+      {lookupState === 'match' && match && match.matchAction === 'request-to-join' && (
+        <div style={{ padding: 16, border: '1px solid var(--line2)', background: 'var(--surface)', borderRadius: 'var(--radius)', marginBottom: 14 }}>
+          <div className="row" style={{ gap: 10, marginBottom: 10 }}>
+            <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'var(--accentSoft)', display: 'grid', placeItems: 'center', color: 'var(--accentDeep)' }}>
+              <SetuIcon.info/>
+            </div>
+            <strong style={{ fontSize: 14 }}>We found your family</strong>
+          </div>
+          {requestSent ? (
+            <p style={{ fontSize: 13, color: 'var(--body-text)', margin: 0, lineHeight: 1.5 }} role="status">
+              Request sent — your manager will review it. Once they approve, sign in with{' '}
+              <strong>{match.matchedValue}</strong> to access your family.
+            </p>
+          ) : (
+            <>
+              <p style={{ fontSize: 13, color: 'var(--body-text)', margin: '0 0 14px', lineHeight: 1.5 }}>
+                Your <strong>{match.matchedValue}</strong> is part of an existing family. To keep your
+                household secure, your family manager needs to approve before you can access it. Send
+                them a request now.
+              </p>
+              <button
+                type="button"
+                className="btn btn--p btn--block"
+                style={{ marginBottom: 8, display: 'flex' }}
+                onClick={handleSendRequest}
+                disabled={requesting}
+              >
+                {requesting ? 'Sending…' : 'Send a request to your manager →'}
+              </button>
+              <a
+                href="mailto:info@chinmayatoronto.org?subject=Setu%20account%20issue"
+                className="btn btn--g btn--block"
+                style={{ fontSize: 13, display: 'flex' }}
+              >
+                That&apos;s not me — contact admin
+              </a>
+            </>
+          )}
         </div>
       )}
 

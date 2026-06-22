@@ -7,6 +7,7 @@ import { flags } from '@/lib/flags';
 import { mockFamily } from '@/features/family/data/mock';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 import { ContactsNudge } from '@/features/family/components/contacts-nudge';
+import { PendingJoinRequestsPanel } from '@/features/family/components/pending-join-requests-panel';
 import { shouldShowContactsNudge } from './_helpers/should-show-contacts-nudge';
 import { VolunteeringSkillsNudge } from '@/features/family/components/volunteering-skills-nudge';
 import { shouldShowVolunteeringSkillsNudge } from './_helpers/should-show-volunteering-nudge';
@@ -46,6 +47,8 @@ export default async function FamilyDashboardPage() {
   let memberCount = mockFamily.members.length;
   let displayMembers: { name: string; mid?: string }[] = mockFamily.members.map((m) => ({ name: m.name }));
   let currentMid: string | null = null;
+  // Only managers can review/approve gated co-manager join requests.
+  let isManager = false;
   // Upcoming class dates from the managed calendar (Slice 4b), by family location.
   let upcomingEntries: CalendarEntry[] = [];
   // One-time "add your other contacts" nudge — shown until the current member dismisses it (B3).
@@ -81,6 +84,7 @@ export default async function FamilyDashboardPage() {
         showVolunteeringNudge = shouldShowVolunteeringSkillsNudge(currentMember);
       }
       currentMid = data.currentMid;
+      isManager = data.isManager;
       familyName = data.family.name;
       memberCount = data.members.length;
       displayMembers = data.members.map((m) => ({ name: `${m.firstName} ${m.lastName}`, mid: m.mid }));
@@ -163,6 +167,7 @@ export default async function FamilyDashboardPage() {
             {!needsProfile && !showContactsNudge && showVolunteeringNudge && currentMid && (
               <VolunteeringSkillsNudge mid={currentMid} />
             )}
+            {isManager && <PendingJoinRequestsPanel compact />}
 
             <div className="card" style={{ padding: 16, marginBottom: 12 }}>
               <div className="between" style={{ marginBottom: 14 }}>
@@ -329,6 +334,7 @@ export default async function FamilyDashboardPage() {
         {!needsProfile && !showContactsNudge && showVolunteeringNudge && currentMid && (
           <VolunteeringSkillsNudge mid={currentMid} />
         )}
+        {isManager && <PendingJoinRequestsPanel />}
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 18 }}>
           <MetricCard
