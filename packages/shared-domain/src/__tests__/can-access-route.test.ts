@@ -304,6 +304,47 @@ describe('canAccessRoute — GET /api/setu/invite/{token} — any signed-in user
   });
 });
 
+describe('canAccessRoute — /api/setu/join-request/send — open to any caller', () => {
+  // Mirrors the public lookup: the requester may have no session yet. The
+  // handler is IP rate-limited and resolves fid/matchedMid server-side.
+  const nullRole = { uid: 'anon' } as unknown as SessionClaims;
+  it('allows a null/no-role caller on POST /api/setu/join-request/send', () => {
+    expect(canAccessRoute(nullRole, '/api/setu/join-request/send', 'POST')).toBe(true);
+  });
+  it('allows every authenticated role on /api/setu/join-request/send', () => {
+    expect(canAccessRoute(family, '/api/setu/join-request/send', 'POST')).toBe(true);
+    expect(canAccessRoute(member, '/api/setu/join-request/send', 'POST')).toBe(true);
+    expect(canAccessRoute(manager, '/api/setu/join-request/send', 'POST')).toBe(true);
+    expect(canAccessRoute(welcomeTeam, '/api/setu/join-request/send', 'POST')).toBe(true);
+    expect(canAccessRoute(admin, '/api/setu/join-request/send', 'POST')).toBe(true);
+  });
+});
+
+describe('canAccessRoute — /api/setu/join-request/{token,approve,decline} — manager only', () => {
+  const nullRole = { uid: 'anon' } as unknown as SessionClaims;
+  it('allows family-manager on GET /api/setu/join-request/<token>', () => {
+    expect(canAccessRoute(manager, '/api/setu/join-request/tok_abc', 'GET')).toBe(true);
+  });
+  it('allows family-manager on POST approve + decline', () => {
+    expect(canAccessRoute(manager, '/api/setu/join-request/approve', 'POST')).toBe(true);
+    expect(canAccessRoute(manager, '/api/setu/join-request/decline', 'POST')).toBe(true);
+  });
+  it('denies family-member on approve + decline + GET token', () => {
+    expect(canAccessRoute(member, '/api/setu/join-request/approve', 'POST')).toBe(false);
+    expect(canAccessRoute(member, '/api/setu/join-request/decline', 'POST')).toBe(false);
+    expect(canAccessRoute(member, '/api/setu/join-request/tok_abc', 'GET')).toBe(false);
+  });
+  it('denies a null/no-role caller on approve + decline', () => {
+    expect(canAccessRoute(nullRole, '/api/setu/join-request/approve', 'POST')).toBe(false);
+    expect(canAccessRoute(nullRole, '/api/setu/join-request/decline', 'POST')).toBe(false);
+  });
+  it('denies legacy family + welcome-team + teacher on approve', () => {
+    expect(canAccessRoute(family, '/api/setu/join-request/approve', 'POST')).toBe(false);
+    expect(canAccessRoute(welcomeTeam, '/api/setu/join-request/approve', 'POST')).toBe(false);
+    expect(canAccessRoute(teacher, '/api/setu/join-request/approve', 'POST')).toBe(false);
+  });
+});
+
 describe('canAccessRoute — /welcome/* — welcome-team', () => {
   it('allows welcome-team on /welcome', () => {
     expect(canAccessRoute(welcomeTeam, '/welcome')).toBe(true);

@@ -28,6 +28,8 @@ export const MemberDocSchema = z.object({
   // One-time post-sign-in "set your volunteering skills" nudge (adults only,
   // shown until they add a skill or dismiss). Same null/absent/Date semantics.
   volunteeringSkillsNudgeDismissedAt: z.date().nullable().optional(),
+  // optional; absent ⇒ active. Only the legacy-migration path sets 'pending' (gates non-manager portal access).
+  portalAccess: z.enum(['active', 'pending']).optional(),
   schoolGrade: z.string().nullable(),
   birthMonthYear: z.string().nullable(),
   // Birth month only (1-12), no year — the legacy roster's `dob_m`. Used by the

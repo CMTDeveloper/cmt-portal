@@ -121,6 +121,21 @@ export function canAccessRoute(
     return claims.role != null;
   }
 
+  // Setu API — join-request flow (member→manager request to join a family).
+  //   - POST /api/setu/join-request/send is OPEN to any caller (incl. no role):
+  //     the requester may not have a session yet, exactly like the public
+  //     lookup. The handler is IP rate-limited and resolves fid/matchedMid
+  //     server-side from the supplied contact. Must precede the manager-only
+  //     paths below and the catch-all.
+  //   - GET /api/setu/join-request/{token}, POST .../approve, POST .../decline
+  //     are manager-only (the handler also enforces claims.fid === request.fid).
+  if (pathname === '/api/setu/join-request/send') {
+    return true;
+  }
+  if (pathname.startsWith('/api/setu/join-request/')) {
+    return isSetuManager(claims);
+  }
+
   // Setu API — set-password is reachable by any authenticated Setu user (self-service)
   if (pathname === '/api/setu/auth/set-password') {
     return isSetuFamily(claims) || isWelcomeTeam(claims) || isAdmin(claims);

@@ -145,6 +145,25 @@ describe('MemberDocSchema', () => {
   it('accepts string uid (post-sign-in)', () => {
     expect(MemberDocSchema.safeParse({ ...validAdult, uid: 'firebase-uid-abc' }).success).toBe(true);
   });
+
+  // portalAccess is optional; absent ⇒ active. Tightening it would break every
+  // existing member doc on read, so the WITHOUT case must keep parsing.
+  it('accepts a member doc WITHOUT portalAccess (absent ⇒ active)', () => {
+    expect('portalAccess' in validAdult).toBe(false);
+    expect(MemberDocSchema.safeParse(validAdult).success).toBe(true);
+  });
+
+  it("accepts portalAccess: 'pending'", () => {
+    expect(MemberDocSchema.safeParse({ ...validAdult, portalAccess: 'pending' }).success).toBe(true);
+  });
+
+  it("accepts portalAccess: 'active'", () => {
+    expect(MemberDocSchema.safeParse({ ...validAdult, portalAccess: 'active' }).success).toBe(true);
+  });
+
+  it('rejects an unknown portalAccess value', () => {
+    expect(MemberDocSchema.safeParse({ ...validAdult, portalAccess: 'revoked' }).success).toBe(false);
+  });
 });
 
 // ── ContactKeyDoc ─────────────────────────────────────────────────────────────

@@ -2,6 +2,7 @@ export * from './session-claims';
 export * from './schemas/family';
 export * from './schemas/member';
 export * from './schemas/contact-key';
+export * from './schemas/join-request';
 export * from './schemas/offering';
 export * from './schemas/program';
 export * from './schemas/enrollment';

@@ -25,6 +25,14 @@
       ]
     },
     {
+      "collectionGroup": "joinRequests",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "donationPeriods",
       "queryScope": "COLLECTION",
       "fields": [
@@ -221,6 +229,13 @@
   "fieldOverrides": [
     {
       "collectionGroup": "invites",
+      "fieldPath": "token",
+      "indexes": [
+        { "queryScope": "COLLECTION_GROUP", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "joinRequests",
       "fieldPath": "token",
       "indexes": [
         { "queryScope": "COLLECTION_GROUP", "order": "ASCENDING" }

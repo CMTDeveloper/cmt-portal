@@ -22,6 +22,14 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
+## `<pending>` · 2026-06-22 · family-lookup classification + join-request flow
+- **POST `/api/setu/family-lookup`** — the found response will gain **`matchAction: 'sign-in' | 'request-to-join'`** alongside the existing `{ found, matchedType, matchedValue }`. `'sign-in'` = the matched contact is a manager or active member (sign in as today); `'request-to-join'` = a roster-origin non-manager member whose access is gated until a manager approves.
+  - **Mobile:** add `matchAction` to the family-lookup response schema in `src/api/schemas/auth.ts`; on `'request-to-join'` show a "send a request to your manager" CTA instead of the sign-in CTA.
+- **POST `/api/setu/auth/verify-code`** — for a `portalAccess: 'pending'` member the response will carry a **`pendingApproval: true`** signal (+ `fid`, `matchedMid`) and grant **no** family-member claims; the user must wait for manager approval. Managers and active/absent members are unchanged.
+  - **Mobile:** handle `pendingApproval` in the verify-code response — surface "access pending your manager's approval" and offer to (re)send the join request rather than landing in the family home.
+- **New `POST /api/setu/join-request/send`** (open + IP rate-limited), **`GET /api/setu/join-request/[token]`** (manager-only), **`POST /api/setu/join-request/approve`** and **`POST /api/setu/join-request/decline`** (manager-only) — the member→manager join-request flow. `send` writes a pending request and notifies managers; `approve` promotes the matched member to co-manager.
+  - **Mobile:** add the four endpoints + their request/response schemas (mirror the invite flow shapes) once they ship.
+
 ## `1d469cf` · 2026-06-21 · #12 invite existing-member guard
 - **POST `/api/setu/invite/send`** — now returns **`409 { error: 'already-member' }`** when the invited email already belongs to a family member (primary email or `altEmails`). Previously only `201` / `family-not-found`.
   - **Mobile:** handle the 409 `already-member` case in the invite flow ("already a member of your family"). `src/api/auth.ts:148` already documents it — just verify it's wired in the UI. No response-schema change.
