@@ -49,6 +49,14 @@ suite against the deployed URL above. `/family` renders correctly in production.
 ## Layout
 - `auth.setup.ts` — logs in once via password-sign-in, saves `e2e/.auth/family.json` (gitignored).
 - `setu/*.spec.ts` — authenticated read/render specs (dashboard, enroll wording, programs).
+- `setu/registration/join-request.spec.ts` — the gated co-manager join-request flow
+  (lookup classification → request → manager approve → co-manager sign-in). MUTATING +
+  serial: its `beforeAll` re-seeds its OWN dedicated fixture family via
+  `pnpm --filter @cmt/portal seed:join-request-family` (a manager + a `portalAccess:'pending'`
+  member, both `_test:true`) to reset the flow, so it is self-resetting and repeatable.
+  Creates its own isolated request contexts (empty storageState) so it never inherits the
+  admin family's session. Consumes the per-email OTP rate limit (5/15 min) for the two
+  fixture emails — a 429 is reported as environmental, re-run after the window resets.
 - `unauth.spec.ts` — redirect spec (no storageState).
 - `legacy/*.spec.ts` — stale Slice-B check-in specs (kept, skip-guarded).
 

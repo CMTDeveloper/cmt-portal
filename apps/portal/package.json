@@ -12,6 +12,7 @@
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.e2e.config.ts",
     "seed:e2e-family": "tsx --env-file=.env.local scripts/seed-e2e-family.ts",
+    "seed:join-request-family": "tsx --env-file=.env.local scripts/seed-join-request-family.ts",
     "seed:test-accounts": "tsx --env-file=.env.local scripts/seed-test-accounts.ts",
     "seed:admin": "tsx --env-file=.env.local scripts/seed-admin.ts",
     "attendance:report": "tsx --env-file=.env.local scripts/attendance-report.ts",

@@ -24,3 +24,14 @@ export const TEST_ACCOUNT_EMAILS = {
   sevak: 'setu-test-sevak@chinmayatoronto.org',
   admin: 'setu-test-admin@chinmayatoronto.org',
 } as const;
+
+// Dedicated fixture for the gated co-manager join-request flow, seeded by
+// scripts/seed-join-request-family.ts (UAT). A MANAGER (sign-in) + a GATED
+// member (portalAccess:'pending' → request-to-join). Password defaults to
+// E2E_FAMILY_PASSWORD when E2E_JR_PASSWORD is unset (the seed does the same).
+export const JR_MANAGER_EMAIL =
+  process.env.E2E_JR_MANAGER_EMAIL ?? 'e2e-jr-manager@chinmayatoronto.org';
+export const JR_MEMBER_EMAIL =
+  process.env.E2E_JR_MEMBER_EMAIL ?? 'e2e-jr-member@chinmayatoronto.org';
+export const JR_PASSWORD = process.env.E2E_JR_PASSWORD ?? process.env.E2E_FAMILY_PASSWORD;
+export const hasJoinRequestCreds = Boolean(JR_PASSWORD);
