@@ -16,6 +16,10 @@ export interface DonateFormProps {
   requiresAcknowledgements?: boolean;
 }
 
+// PLACEHOLDER copy — the acknowledgements gate currently ships DORMANT (wired
+// off at the call site, app/family/donate/page.tsx). Replace all four strings
+// with CMT's final disclaimer text BEFORE re-enabling the gate, or families
+// would have to accept placeholder terms to donate.
 const BALA_VIHAR_DONATION_DISCLAIMERS = [
   'Dummy disclaimer 1: I acknowledge the Bala Vihar participation guidelines.',
   'Dummy disclaimer 2: I understand parent or guardian responsibilities during program activities.',

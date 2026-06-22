@@ -6,7 +6,7 @@ import { CspRoot } from '@/features/family/components/atoms';
 import { DonateForm } from '@/features/family/components/donate-form';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
-import { BALA_VIHAR, paymentSourceOf } from '@cmt/shared-domain';
+import { paymentSourceOf } from '@cmt/shared-domain';
 import { getLegacyPaymentStatus } from '@/features/setu/donations/legacy-payment';
 
 export const metadata = { title: 'Donate' };
@@ -107,7 +107,11 @@ export default async function DonatePage({
       suggestedAmount={suggestedAmount}
       periodLabel={periodLabel}
       tiers={tiers}
-      requiresAcknowledgements={programKey === BALA_VIHAR}
+      // DORMANT: the Bala Vihar donation acknowledgements ship with placeholder
+      // copy and are gated OFF until CMT provides the final disclaimer text. To
+      // re-enable: re-add the `BALA_VIHAR` import and set this to
+      // {programKey === BALA_VIHAR}.
+      requiresAcknowledgements={false}
     />
   ) : (
     <div style={{ padding: '14px 16px', background: 'var(--accentSoft)', color: 'var(--accentDeep)', borderRadius: 'var(--radiusSm)', fontSize: 14, fontWeight: 600 }}>

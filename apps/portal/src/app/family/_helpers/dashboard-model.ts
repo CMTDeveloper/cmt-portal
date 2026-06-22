@@ -50,6 +50,9 @@ export interface FamilyDashboardModel {
   donateUrl: string;
   isLegacyPeriod: boolean;
   legacyPaid: boolean;
+  /** True when the active BV offering's payment is collected by the teacher
+   *  off-portal — there is no in-portal donation to make or track. */
+  teacherManaged: boolean;
   /** One card per active NON-BV enrollment (BV has its own bespoke section). */
   otherProgramCards: ProgramCard[];
   donation: {
@@ -136,6 +139,7 @@ export function buildFamilyDashboardModel(input: DashboardModelInput): FamilyDas
     donateUrl,
     isLegacyPeriod,
     legacyPaid,
+    teacherManaged: teacherManagedPayment,
     otherProgramCards,
     donation: {
       complete: donationComplete,

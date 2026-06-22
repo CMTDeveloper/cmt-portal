@@ -130,11 +130,25 @@ export default async function FamilyDashboardPage() {
 
   const sevaView = deriveSevaCardView(sevaProgress);
   const donationPaid = model.legacyPaid || donationComplete;
-  const donationStatus = donationPaid ? 'Paid' : isEnrolled ? 'Pending' : 'Not enrolled';
-  const donationStatusTone: 'ok' | 'err' = donationPaid ? 'ok' : 'err';
-  const donationStatusSub = isEnrolled
-    ? enrollPeriodLabel ?? 'Bala Vihar'
-    : 'Enroll to set donation';
+  // Teacher-managed BV offerings collect payment off-portal — there's nothing to
+  // pay or track here, so show a neutral status, NOT a red "Pending".
+  const donationStatus = model.teacherManaged
+    ? 'Off-portal'
+    : donationPaid
+      ? 'Paid'
+      : isEnrolled
+        ? 'Pending'
+        : 'Not enrolled';
+  const donationStatusTone: 'ok' | 'warn' | 'err' = model.teacherManaged
+    ? 'warn'
+    : donationPaid
+      ? 'ok'
+      : 'err';
+  const donationStatusSub = model.teacherManaged
+    ? 'Managed by your teacher'
+    : isEnrolled
+      ? enrollPeriodLabel ?? 'Bala Vihar'
+      : 'Enroll to set donation';
 
   return (
     <>

@@ -22,6 +22,11 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
+## `096463e` · 2026-06-22 · teacher-managed payment source — checkout 422
+- **`teacher-managed`** added to the offering `paymentSource` enum (`@cmt/shared-domain` `PAYMENT_SOURCES` is now `['portal','legacy','teacher-managed']`) — an offering whose donation is collected by the teacher OFF-portal. **Additive**; existing values unchanged.
+- **POST `/api/setu/donations/checkout`** — when the target enrollment's offering is `paymentSource: 'teacher-managed'`, the route now returns **`422 { error: 'payment-source-teacher-managed' }`** BEFORE any Stripe checkout-session is created (no in-portal donation is possible for these offerings).
+  - **Mobile:** add `'teacher-managed'` to the paymentSource enum in the offering/enrollment schemas; in the donate flow, hide the in-portal Give/checkout action for a teacher-managed enrollment and handle the `payment-source-teacher-managed` 422 (surface "payment is collected by your teacher", not a generic error). `GET /api/setu/dashboard` + family reads are unchanged in shape. (The admin offering-overlap `409 offering-date-overlap` change is on `/api/admin/*` — web-only, no mobile mirror.)
+
 ## `120c885` · 2026-06-22 · profile-completion gate + required member-field matrix
 A per-type "required member info" matrix is now enforced at every member write. The mobile add/edit-member + registration forms must capture + validate the same fields and handle the new 400 codes, or members it creates will be incomplete.
 - **Matrix:** ALL members → `gender` (now **`Male|Female` only** on write — `PreferNotToSay` is rejected by the write enums), `foodAllergies` (non-empty; offer a "No known allergies" choice that sends the sentinel **`'None'`**). ADULTS → `email` + `phone` + `volunteeringSkills` (≥ 1). CHILDREN → `schoolGrade` + `birthMonthYear` (`'YYYY-MM'`). `birthMonth` (1-12) is now **derived server-side** from `birthMonthYear` — the client need not send it (it's still honoured when `birthMonthYear` is absent).

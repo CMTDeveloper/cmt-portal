@@ -267,5 +267,13 @@ describe('buildFamilyDashboardModel — legacy payment bridge', () => {
     expect(m.donation.heading).toBe('Payment managed by teacher');
     expect(m.donation.showGive).toBe(false);
     expect(m.donation.showProgress).toBe(false);
+    // Surfaced to the dashboard so the status chip shows a neutral "Off-portal",
+    // not a red "Pending" (payment is collected by the teacher off-portal).
+    expect(m.teacherManaged).toBe(true);
+  });
+
+  it('a portal-managed BV offering is not teacher-managed', () => {
+    const m = buildFamilyDashboardModel(input({ enrollments: [BV_ENROLLMENT], legacyPaymentStatus: null }));
+    expect(m.teacherManaged).toBe(false);
   });
 });
