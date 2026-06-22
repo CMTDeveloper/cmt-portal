@@ -87,4 +87,13 @@ describe('isPublicRoute', () => {
     expect(isPublicRoute('/api/cron/send-weekly-payment-reminders')).toBe(true);
     expect(isPublicRoute('/api/cron/send-prasad-reminders')).toBe(true);
   });
+  it('makes ONLY join-request/send public (the rest is manager-only)', () => {
+    // The requester is mid-registration with no session, so /send must skip the
+    // middleware session gate; everything else under join-request is auth-gated.
+    expect(isPublicRoute('/api/setu/join-request/send')).toBe(true);
+    expect(isPublicRoute('/api/setu/join-request')).toBe(false);
+    expect(isPublicRoute('/api/setu/join-request/approve')).toBe(false);
+    expect(isPublicRoute('/api/setu/join-request/decline')).toBe(false);
+    expect(isPublicRoute('/api/setu/join-request/sometoken')).toBe(false);
+  });
 });

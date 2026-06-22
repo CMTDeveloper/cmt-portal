@@ -30,6 +30,13 @@ export const PUBLIC_ROUTES = [
   '/api/setu/family-lookup',
   '/api/setu/register',
 
+  // Join-request: the "request to join your family manager" send endpoint is
+  // public — the requester is mid-registration with no session yet. The rest of
+  // /api/setu/join-request/* (list, [token], approve, decline) is manager-only
+  // via canAccessRoute. The handler is IP rate-limited + anti-enumeration
+  // (always {ok:true}), like family-lookup, so middleware must not 401 it.
+  '/api/setu/join-request/send',
+
   // Kiosk (public) — feature-flagged in the app layer
   '/check-in',
   '/check-in/guest',
