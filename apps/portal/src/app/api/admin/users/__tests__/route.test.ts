@@ -103,6 +103,19 @@ describe('POST /api/admin/users', () => {
     expect(res.status).toBe(400);
   });
 
+  it('returns 409 when the target contact is not a registered portal user', async () => {
+    mockGrantRole.mockRejectedValue(
+      Object.assign(new Error('registered-user-required'), {
+        code: 'registered-user-required',
+      }),
+    );
+    const { POST } = await import('../route');
+    const res = await POST(makeRequest('POST', { contact: 'new@example.com', role: 'admin' }));
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: 'registered-user-required' });
+  });
+
   it('denies welcome-team (403)', async () => {
     const { POST } = await import('../route');
     const res = await POST(makeRequest('POST', { contact: 'a@b.com', role: 'admin' }, 'welcome-team'));

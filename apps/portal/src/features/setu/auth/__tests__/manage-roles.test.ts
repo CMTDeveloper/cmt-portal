@@ -83,27 +83,16 @@ describe('grantRole — family (roleAssignments) path', () => {
 });
 
 describe('grantRole — non-family (auth-claim) path', () => {
-  it('creates the auth user if missing then sets the admin capability claim', async () => {
+  it('rejects a non-family contact when the auth user is missing', async () => {
     mockFind.mockResolvedValue(NO_FAMILY);
     mockGetUser.mockRejectedValue({ code: 'auth/user-not-found' });
 
-    const res = await grantRole({ contact: 'staff@example.com', role: 'admin' });
+    await expect(grantRole({ contact: 'staff@example.com', role: 'admin' })).rejects.toThrow(
+      'registered-user-required',
+    );
 
-    expect(mockCreateUser).toHaveBeenCalledWith({
-      uid: 'uid-staff@example.com',
-      email: 'staff@example.com',
-      disabled: false,
-    });
-    expect(mockSetCustomUserClaims).toHaveBeenCalledTimes(1);
-    const [uid, claims] = mockSetCustomUserClaims.mock.calls[0]!;
-    expect(uid).toBe('uid-staff@example.com');
-    expect(claims.role).toBe('admin');
-    expect(res).toEqual({
-      path: 'auth-claim',
-      mid: null,
-      fid: null,
-      uid: 'uid-staff@example.com',
-    });
+    expect(mockCreateUser).not.toHaveBeenCalled();
+    expect(mockSetCustomUserClaims).not.toHaveBeenCalled();
   });
 
   it('reuses an existing auth user (no createUser) and stacks the capability', async () => {
