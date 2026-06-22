@@ -179,7 +179,7 @@ export function ProgramForm({ program }: ProgramFormProps) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 6 }}>
             {[
               { key: 'usesOfferings', capLabel: 'Uses offerings (enrollable terms)', value: usesOfferings, set: setUsesOfferings },
-              { key: 'usesDonation', capLabel: 'Uses donation (dakshina)', value: usesDonation, set: setUsesDonation },
+              { key: 'usesDonation', capLabel: 'Uses donation', value: usesDonation, set: setUsesDonation },
               { key: 'usesLevels', capLabel: 'Uses levels (class placement)', value: usesLevels, set: setUsesLevels },
               { key: 'usesCalendar', capLabel: 'Uses calendar (published schedule)', value: usesCalendar, set: setUsesCalendar },
             ].map(({ key, capLabel, value, set }) => (

@@ -2,7 +2,13 @@ import { NextResponse } from 'next/server';
 import { revalidateTag } from 'next/cache';
 import { portalFirestore, FieldValue, Timestamp } from '@cmt/firebase-shared/admin/firestore';
 import { UpdateOfferingSchema, isAdmin } from '@cmt/shared-domain';
+import type { Location } from '@cmt/shared-domain';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
+import {
+  findOverlappingEnabledOffering,
+  offeringOverlapPayload,
+  timestampValueToDate,
+} from '../overlap';
 
 export async function PATCH(
   req: Request,
@@ -36,24 +42,30 @@ export async function PATCH(
   const data = parsed.data;
   const existing = snap.data() as Record<string, unknown>;
 
-  function tsToDate(v: unknown): Date {
-    if (v !== null && typeof v === 'object' && typeof (v as { toDate?: unknown }).toDate === 'function') {
-      return (v as { toDate: () => Date }).toDate();
-    }
-    return v instanceof Date ? v : new Date(v as string);
-  }
-
   // Validate date ordering when only one side is provided and both sides are non-null
-  const startDate = data.startDate != null ? new Date(data.startDate) : tsToDate(existing['startDate']);
+  const startDate = data.startDate != null ? new Date(data.startDate) : timestampValueToDate(existing['startDate']);
   const newEndDate = data.endDate !== undefined ? data.endDate : existing['endDate'];
+  let endDate: Date | null = null;
   if (newEndDate != null) {
-    const endDate = typeof newEndDate === 'string' ? new Date(newEndDate) : tsToDate(newEndDate);
+    endDate = typeof newEndDate === 'string' ? new Date(newEndDate) : timestampValueToDate(newEndDate);
     if (endDate <= startDate) {
       return NextResponse.json(
         { error: 'bad-request', issues: [{ path: ['endDate'], message: 'endDate must be after startDate' }] },
         { status: 400 },
       );
     }
+  }
+
+  const location = (existing['location'] ?? null) as Location | null;
+  const overlap = await findOverlappingEnabledOffering(db, {
+    programKey: existing['programKey'] as string,
+    location,
+    enabled: data.enabled !== undefined ? data.enabled : Boolean(existing['enabled']),
+    startDate,
+    endDate,
+  }, oid);
+  if (overlap) {
+    return NextResponse.json(offeringOverlapPayload(overlap, location), { status: 409 });
   }
 
   const update: Record<string, unknown> = {

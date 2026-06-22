@@ -18,7 +18,7 @@ export default function HomePage() {
               The family portal for <em style={{ fontStyle: 'italic', color: 'var(--accent)' }}>our mission</em>.
             </h1>
             <p style={{ fontSize: 14, color: 'var(--body-text)', marginTop: 14, lineHeight: 1.6 }}>
-              Enroll in <em className="sa">Bala Vihar</em>, manage your family, and give your <em className="sa">dakshina</em> — all in one place. Member access only.
+              Enroll in <em className="sa">Bala Vihar</em>, manage your family, and give your donation — all in one place. Member access only.
             </p>
           </div>
           <div style={{ flex: '0 0 auto' }}>

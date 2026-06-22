@@ -102,9 +102,8 @@ const hasUatCreds = Boolean(
       );
 
       expect(res.status).toBe(201);
-      const body = (await res.json()) as { oid: string; overlapWarning: boolean };
+      const body = (await res.json()) as { oid: string };
       expect(body.oid).toBe(EXPECTED_OID);
-      expect(typeof body.overlapWarning).toBe('boolean');
       createdOid = body.oid;
     });
 

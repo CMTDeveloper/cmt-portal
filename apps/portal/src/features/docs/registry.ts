@@ -95,7 +95,7 @@ export const DOC_GUIDES: DocGuide[] = [
     file: 'donations-module-guide.md',
     title: 'Donations module',
     description:
-      'The family dakshina checkout, what the statuses really mean, payment chips, the admin report, and amount overrides.',
+      'The family donation checkout, what the statuses really mean, payment chips, the admin report, and amount overrides.',
     category: 'Programs & donations',
     audience: ['admin', 'welcome-team'],
   },

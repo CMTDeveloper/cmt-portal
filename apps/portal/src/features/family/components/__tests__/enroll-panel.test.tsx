@@ -138,6 +138,25 @@ describe('EnrollPanel', () => {
     await waitFor(() => expect(screen.getByText(/donation coming soon/i)).toBeTruthy());
   });
 
+  it('selected teacher-managed offering does not continue to Stripe even when donations are enabled', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ eid: 'x', donateUrl: '/family/donate?eid=x' }),
+    } as Response);
+
+    const portal = makeOffering({ oid: 'bv-brampton-fall-2026', termLabel: 'Fall 2026', paymentSource: 'portal' });
+    const teacherManaged = makeOffering({ oid: 'tabla-brampton-2026', termLabel: 'Teacher term', paymentSource: 'teacher-managed' });
+
+    render(<EnrollPanel offerings={[portal, teacherManaged]} defaultOid={portal.oid} donationsEnabled={true} usesDonation={true} />);
+    await user.click(screen.getAllByRole('radio')[1]!);
+    await user.click(screen.getByRole('button', { name: /enroll/i }));
+
+    await waitFor(() => expect(screen.getByText(/payment is managed by the teacher/i)).toBeTruthy());
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
   it('forwards usesDonation to the CTA: no-donation program → "enrolled" without "coming soon"', async () => {
     const user = userEvent.setup();
     vi.spyOn(global, 'fetch').mockResolvedValue({

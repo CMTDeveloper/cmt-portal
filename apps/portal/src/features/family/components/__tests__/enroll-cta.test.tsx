@@ -61,6 +61,24 @@ describe('EnrollCta', () => {
     expect(screen.getByText(/donation coming soon/i)).toBeTruthy();
   });
 
+  it('teacher-managed donation program: does not navigate to Stripe and shows teacher-managed message', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ eid: 'CMT-AAAA-bv-brampton-fall-2026', donateUrl: '/family/donate?eid=CMT-AAAA-bv-brampton-fall-2026' }),
+    } as Response);
+
+    render(<EnrollCta oid={OID} donationsEnabled={false} usesDonation={true} paymentSource="teacher-managed"/>);
+    await user.click(screen.getByRole('button', { name: /enroll/i }));
+
+    await waitFor(() => expect(toastMock.success).toHaveBeenCalledWith('Your family is enrolled!'));
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(screen.getByText(/payment is managed by the teacher/i)).toBeTruthy();
+    expect(screen.queryByText(/donation coming soon/i)).toBeNull();
+  });
+
+
   it('no-donation program: shows "enrolled" WITHOUT "donation coming soon"', async () => {
     const user = userEvent.setup();
     vi.spyOn(global, 'fetch').mockResolvedValueOnce({

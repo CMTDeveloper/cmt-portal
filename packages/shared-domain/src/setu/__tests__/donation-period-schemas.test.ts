@@ -125,10 +125,14 @@ describe('CreateOfferingSchema', () => {
     if (result.success) expect(result.data.paymentSource).toBe('portal');
   });
 
-  it('accepts paymentSource legacy', () => {
-    const result = CreateOfferingSchema.safeParse({ ...validCreate, paymentSource: 'legacy' });
-    expect(result.success).toBe(true);
-    if (result.success) expect(result.data.paymentSource).toBe('legacy');
+  it('accepts external payment sources', () => {
+    const legacy = CreateOfferingSchema.safeParse({ ...validCreate, paymentSource: 'legacy' });
+    expect(legacy.success).toBe(true);
+    if (legacy.success) expect(legacy.data.paymentSource).toBe('legacy');
+
+    const teacherManaged = CreateOfferingSchema.safeParse({ ...validCreate, paymentSource: 'teacher-managed' });
+    expect(teacherManaged.success).toBe(true);
+    if (teacherManaged.success) expect(teacherManaged.data.paymentSource).toBe('teacher-managed');
   });
 
   it('rejects an unknown paymentSource', () => {
@@ -143,6 +147,7 @@ describe('paymentSourceOf', () => {
   it('returns the explicit source', () => {
     expect(paymentSourceOf({ paymentSource: 'legacy' })).toBe('legacy');
     expect(paymentSourceOf({ paymentSource: 'portal' })).toBe('portal');
+    expect(paymentSourceOf({ paymentSource: 'teacher-managed' })).toBe('teacher-managed');
   });
 });
 

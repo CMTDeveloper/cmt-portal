@@ -6,7 +6,7 @@ import { CspRoot } from '@/features/family/components/atoms';
 import { DonateForm } from '@/features/family/components/donate-form';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
-import { paymentSourceOf } from '@cmt/shared-domain';
+import { BALA_VIHAR, paymentSourceOf } from '@cmt/shared-domain';
 import { getLegacyPaymentStatus } from '@/features/setu/donations/legacy-payment';
 
 export const metadata = { title: 'Donate' };
@@ -45,6 +45,7 @@ export default async function DonatePage({
   let resolvedEid: string | null = null;
   // Legacy cutover year already settled offline → block the online checkout.
   let alreadyPaidLegacy = false;
+  let teacherManagedPayment = false;
 
   if (eid) {
     const enrollments = await getEnrollments(family.fid);
@@ -58,28 +59,40 @@ export default async function DonatePage({
       programKey = enrollment.programKey;
       tiers = enrollment.offering?.amountTiers ?? [];
 
-      if (enrollment.offering && paymentSourceOf({ ...(enrollment.offering.paymentSource !== undefined ? { paymentSource: enrollment.offering.paymentSource } : {}) }) === 'legacy') {
-        alreadyPaidLegacy = (await getLegacyPaymentStatus(family.legacyFid)) === 'paid';
+      if (enrollment.offering) {
+        const paymentSource = paymentSourceOf(enrollment.offering.paymentSource !== undefined ? { paymentSource: enrollment.offering.paymentSource } : {});
+        if (paymentSource === 'legacy') {
+          alreadyPaidLegacy = (await getLegacyPaymentStatus(family.legacyFid)) === 'paid';
+        }
+        teacherManagedPayment = paymentSource === 'teacher-managed';
       }
     }
     // If the eid is stale/unknown, fall through to general giving rather than erroring.
   }
 
   // General year-round giving is handled off-portal (CMT decision 2026-06-04):
-  // only the enrollment dakshina (?eid=) collects through the portal now. A bare
+  // only the enrollment donation (?eid=) collects through the portal now. A bare
   // /family/donate (or a stale eid that fell through to 'general') redirects home.
   if (mode === 'general') {
     redirect('/family');
   }
 
-  const heading = mode === 'enrollment' ? 'Your dakshina' : 'Make a donation';
+  const heading = mode === 'enrollment' ? 'Your donation' : 'Make a donation';
   const backHref = mode === 'enrollment' && programKey ? `/family/enroll/${programKey}` : '/family';
   const sub =
     mode === 'enrollment'
       ? `${programLabel ?? 'Program'}${periodLabel ? ` · ${periodLabel}` : ''} · ${family.location}`
       : 'A charitable gift to Chinmaya Mission Toronto';
 
-  const form = alreadyPaidLegacy ? (
+  const form = teacherManagedPayment ? (
+    <div style={{ padding: '16px 18px', background: 'var(--accentSoft)', color: 'var(--accentDeep)', borderRadius: 'var(--radius)', fontSize: 14, lineHeight: 1.55 }}>
+      <strong>Payment is managed by the teacher for {periodLabel}.</strong>
+      <div style={{ marginTop: 6, color: 'var(--body-text)' }}>
+        There&apos;s nothing to pay in the portal for this enrollment.
+        {' '}<Link href="/family" style={{ color: 'var(--accentDeep)', fontWeight: 600 }}>Back to dashboard</Link>
+      </div>
+    </div>
+  ) : alreadyPaidLegacy ? (
     <div style={{ padding: '16px 18px', background: 'var(--accentSoft)', color: 'var(--accentDeep)', borderRadius: 'var(--radius)', fontSize: 14, lineHeight: 1.55 }}>
       <strong>Already paid for {periodLabel}.</strong>
       <div style={{ marginTop: 6, color: 'var(--body-text)' }}>
@@ -94,6 +107,7 @@ export default async function DonatePage({
       suggestedAmount={suggestedAmount}
       periodLabel={periodLabel}
       tiers={tiers}
+      requiresAcknowledgements={programKey === BALA_VIHAR}
     />
   ) : (
     <div style={{ padding: '14px 16px', background: 'var(--accentSoft)', color: 'var(--accentDeep)', borderRadius: 'var(--radiusSm)', fontSize: 14, fontWeight: 600 }}>
@@ -128,7 +142,7 @@ export default async function DonatePage({
             </div>
             <div style={{ flex: 1, overflowY: 'auto', padding: '20px 18px 84px' }}>
               <h1 style={{ fontSize: 26, fontWeight: 400, marginBottom: 6 }}>
-                {mode === 'enrollment' ? <>Your <em className="sa">dakshina</em></> : heading}
+                {heading}
               </h1>
               <p style={{ fontSize: 13, color: 'var(--body-text)', marginBottom: 18, lineHeight: 1.5 }}>{sub}</p>
               {form}
@@ -147,7 +161,7 @@ export default async function DonatePage({
           <div>
             <p style={{ fontSize: 11, letterSpacing: '.16em', textTransform: 'uppercase', color: 'var(--muted)' }}>{sub}</p>
             <h1 style={{ fontSize: 38, fontWeight: 400, marginTop: 6 }}>
-              {mode === 'enrollment' ? <>Your <em className="sa">dakshina</em></> : heading}
+              {heading}
             </h1>
           </div>
         </header>

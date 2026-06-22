@@ -70,6 +70,17 @@ function fmtPricing(tiers: PricingTier[]) {
   return tiers.map(fmtTierShort).join(' · ');
 }
 
+function paymentSourceLabel(source: PaymentSource | undefined) {
+  switch (source ?? 'portal') {
+    case 'legacy':
+      return 'Legacy roster';
+    case 'teacher-managed':
+      return 'Teacher managed';
+    case 'portal':
+      return 'Portal (Stripe)';
+  }
+}
+
 function tiersFromRows(rows: TierRow[]): PricingTier[] {
   return rows
     .filter((r) => r.effectiveFrom && r.amountCAD)
@@ -227,17 +238,15 @@ function OfferingModal({ programKey, editing, duplicateFrom, usesDonation, onClo
         }
 
         if (!res.ok) {
-          const json = await res.json().catch(() => ({}));
-          toast.error((json as { error?: string }).error ?? 'Save failed');
+          const json = await res.json().catch(() => ({})) as { error?: string; message?: string };
+          toast.error(json.error === 'offering-date-overlap'
+            ? json.message ?? 'This offering overlaps with an existing enabled offering.'
+            : json.message ?? json.error ?? 'Save failed');
           return;
         }
 
-        const json = await res.json() as { oid?: string; overlapWarning?: boolean };
-        if (json.overlapWarning) {
-          toast.warning('Saved — but this offering overlaps with an existing enabled offering for the same program + location.');
-        } else {
-          toast.success(isEdit ? 'Offering updated.' : 'Offering created.');
-        }
+        const json = await res.json() as { oid?: string };
+        toast.success(isEdit ? 'Offering updated.' : 'Offering created.');
 
         const now = new Date().toISOString();
         if (isEdit) {
@@ -379,6 +388,7 @@ function OfferingModal({ programKey, editing, duplicateFrom, usesDonation, onClo
               <select value={paymentSource} onChange={(e) => setPaymentSource(e.target.value as PaymentSource)} style={fieldStyle}>
                 <option value="portal">Portal (Stripe) — families pay online here</option>
                 <option value="legacy">Legacy roster — status read from the old system</option>
+                <option value="teacher-managed">Teacher managed — teachers collect outside the portal</option>
               </select>
             </label>
             </>)}
@@ -470,7 +480,13 @@ export function OfferingsPanel({ programKey, initialOfferings, usesDonation }: O
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ enabled: !row.enabled }),
       });
-      if (!res.ok) { toast.error('Toggle failed'); return; }
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({})) as { error?: string; message?: string };
+        toast.error(json.error === 'offering-date-overlap'
+          ? json.message ?? 'This offering overlaps with an existing enabled offering.'
+          : json.message ?? 'Toggle failed');
+        return;
+      }
       setOfferings((prev) => prev.map((o) => o.oid === row.oid ? { ...o, enabled: !o.enabled } : o));
       toast.success(row.enabled ? 'Offering disabled.' : 'Offering enabled.');
     } catch {
@@ -519,7 +535,7 @@ export function OfferingsPanel({ programKey, initialOfferings, usesDonation }: O
                   <span style={cardKeyStyle}>Pricing</span>
                   <span style={{ color: 'var(--body-text)' }}>{fmtPricing(o.pricingTiers)}</span>
                   <span style={cardKeyStyle}>Payment</span>
-                  <span style={{ color: 'var(--body-text)' }}>{(o.paymentSource ?? 'portal') === 'legacy' ? 'Legacy roster' : 'Portal (Stripe)'}</span>
+                  <span style={{ color: 'var(--body-text)' }}>{paymentSourceLabel(o.paymentSource)}</span>
                 </div>
                 <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
                   <button onClick={() => openEdit(o)} style={{ ...actionBtnStyle, flex: 1, textAlign: 'center', padding: '9px 12px' }}>Edit</button>

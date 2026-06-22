@@ -5,6 +5,7 @@ import {
   checkoutLineItemName,
   processingFeeCAD,
   isSetuManager,
+  paymentSourceOf,
 } from '@cmt/shared-domain';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
 import { getStripeCheckoutUrl } from '@/lib/stripe-config';
@@ -130,6 +131,12 @@ export async function POST(req: Request) {
     const enrollment = enrollments.find((e) => e.eid === input.eid && e.status === 'active');
     if (!enrollment) {
       return NextResponse.json({ error: 'enrollment-not-found' }, { status: 404 });
+    }
+    if (
+      enrollment.offering &&
+      paymentSourceOf(enrollment.offering.paymentSource !== undefined ? { paymentSource: enrollment.offering.paymentSource } : {}) === 'teacher-managed'
+    ) {
+      return NextResponse.json({ error: 'payment-source-teacher-managed' }, { status: 422 });
     }
     if (input.amountCAD < enrollment.effectiveSuggestedAmount) {
       return NextResponse.json(

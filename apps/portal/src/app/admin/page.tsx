@@ -44,7 +44,7 @@ const GROUPS: Array<{
     tiles: [
       { href: '/check-in/admin', title: 'Check-in dashboard', icon: 'home', tone: 'legacy', sub: 'Live check-in counts and operational stats.' },
       { href: '/check-in/admin/guests', title: 'Guests', icon: 'people', tone: 'legacy', sub: 'Recent guest check-ins from the Sunday kiosk.' },
-      { href: '/check-in/admin/unpaid', title: 'Unpaid families', icon: 'warn', tone: 'legacy', sub: 'Families whose dakshina is outstanding.' },
+      { href: '/check-in/admin/unpaid', title: 'Unpaid families', icon: 'warn', tone: 'legacy', sub: 'Families whose donation is outstanding.' },
       { href: '/check-in/admin/users', title: 'Admin users', icon: 'shield', tone: 'legacy', sub: 'Add or remove other admins.' },
       { href: '/admin/donation-periods', title: 'Donation periods', icon: 'receipt', tone: 'legacy', sub: 'Redirects to Programs → Offerings. Kept for bookmarks.' },
     ],

@@ -44,4 +44,5 @@ describe('CreateOfferingSchema', () => {
 describe('paymentSourceOf', () => {
   it('defaults to portal', () => { expect(paymentSourceOf({})).toBe('portal'); });
   it('honors legacy', () => { expect(paymentSourceOf({ paymentSource: 'legacy' })).toBe('legacy'); });
+  it('honors teacher-managed', () => { expect(paymentSourceOf({ paymentSource: 'teacher-managed' })).toBe('teacher-managed'); });
 });

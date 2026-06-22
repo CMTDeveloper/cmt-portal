@@ -18,7 +18,7 @@ const TABS: { id: Tab; label: string; icon: keyof typeof SetuIcon; href: string 
 // Secondary destinations that live in the "More" sheet rather than the bar.
 // Giving + Receipts ("My donations") are intentionally omitted: general
 // donations are handled via a separate CMT process/site, not Stripe-in-portal
-// (CMT decision 2026-06-04). The Bala Vihar dakshina flow stays reachable from
+// (CMT decision 2026-06-04). The Bala Vihar donation flow stays reachable from
 // the dashboard / enroll.
 const MORE_ITEMS: { label: string; icon: keyof typeof SetuIcon; href: string }[] = [
   { label: 'Seva', icon: 'heart', href: '/family/seva' },

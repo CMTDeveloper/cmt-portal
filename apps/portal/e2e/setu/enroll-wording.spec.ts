@@ -4,9 +4,9 @@ import { visibleText, hasFamilyCreds } from '../_helpers';
 test.describe('enroll page wording', () => {
   test.skip(!hasFamilyCreds, 'E2E family creds required');
 
-  test('Bala Vihar (donation) shows the dakshina block', async ({ page }) => {
+  test('Bala Vihar (donation) shows the donation block', async ({ page }) => {
     await page.goto('/family/enroll/bala-vihar');
-    await expect(visibleText(page, /Dakshina/i).first()).toBeVisible();
+    await expect(visibleText(page, /Donation/i).first()).toBeVisible();
     await expect(visibleText(page, /suggested donation/i).first()).toBeVisible();
   });
 

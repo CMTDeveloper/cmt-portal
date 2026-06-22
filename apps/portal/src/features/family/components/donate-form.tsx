@@ -13,22 +13,43 @@ export interface DonateFormProps {
   periodLabel: string | null;
   /** bala-vihar quick-pick chips; empty for general. */
   tiers: number[];
+  requiresAcknowledgements?: boolean;
 }
+
+const BALA_VIHAR_DONATION_DISCLAIMERS = [
+  'Dummy disclaimer 1: I acknowledge the Bala Vihar participation guidelines.',
+  'Dummy disclaimer 2: I understand parent or guardian responsibilities during program activities.',
+  'Dummy disclaimer 3: I understand attendance and communication expectations for Bala Vihar.',
+  'Dummy disclaimer 4: I agree this placeholder will be replaced with the final disclaimer text.',
+] as const;
 
 function safeFrom(path: string): string {
   if (path.startsWith('/') && !path.startsWith('//') && !path.includes('://')) return path;
   return '/family/donate';
 }
 
-export function DonateForm({ mode, eid, suggestedAmount, periodLabel, tiers }: DonateFormProps) {
+export function DonateForm({
+  mode,
+  eid,
+  suggestedAmount,
+  periodLabel,
+  tiers,
+  requiresAcknowledgements = mode === 'enrollment',
+}: DonateFormProps) {
   const router = useRouter();
   const floor = mode === 'enrollment' ? (suggestedAmount ?? 1) : 1;
   const [amount, setAmount] = useState<number>(mode === 'enrollment' ? floor : 0);
   const [coverFee, setCoverFee] = useState(false);
+  const [acceptedDisclaimers, setAcceptedDisclaimers] = useState<boolean[]>(
+    () => BALA_VIHAR_DONATION_DISCLAIMERS.map(() => false),
+  );
   const [pending, setPending] = useState(false);
 
   const belowFloor = mode === 'enrollment' && amount < floor;
-  const invalid = amount < 1 || belowFloor;
+  const needsDisclaimers = requiresAcknowledgements;
+  const allDisclaimersAccepted = !needsDisclaimers || acceptedDisclaimers.every(Boolean);
+  const invalid = amount < 1 || belowFloor || !allDisclaimersAccepted;
+  const buttonDisabled = pending || invalid;
 
   // Give-more quick-pick chips: explicit amountTiers if provided, else derived
   // from the (possibly prorated) suggested amount.
@@ -151,6 +172,41 @@ export function DonateForm({ mode, eid, suggestedAmount, periodLabel, tiers }: D
         </span>
       </label>
 
+      {requiresAcknowledgements && (
+        <div
+          role="group"
+          aria-label="Bala Vihar donation acknowledgements"
+          style={{ padding: 14, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radius)', marginBottom: 14 }}
+        >
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--body-text)', marginBottom: 10 }}>
+            Bala Vihar acknowledgements
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {BALA_VIHAR_DONATION_DISCLAIMERS.map((text, index) => (
+              <label key={text} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 12, color: 'var(--body-text)', lineHeight: 1.45, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={acceptedDisclaimers[index] ?? false}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setAcceptedDisclaimers((current) =>
+                      current.map((value, i) => (i === index ? checked : value)),
+                    );
+                  }}
+                  style={{ marginTop: 2, accentColor: 'var(--accent)' }}
+                />
+                <span style={{ flex: 1 }}>{text}</span>
+              </label>
+            ))}
+          </div>
+          {!allDisclaimersAccepted && (
+            <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 10, lineHeight: 1.45 }}>
+              Check all four acknowledgements to continue to payment.
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Summary */}
       <div style={{ padding: 14, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radius)', marginBottom: 16 }}>
         <div className="row" style={{ marginBottom: 6 }}>
@@ -173,9 +229,9 @@ export function DonateForm({ mode, eid, suggestedAmount, periodLabel, tiers }: D
       <button
         type="button"
         className="btn btn--p btn--block"
-        disabled={pending || invalid}
+        disabled={buttonDisabled}
         onClick={handleGive}
-        style={{ padding: '14px', opacity: pending || invalid ? 0.6 : 1, cursor: pending || invalid ? 'not-allowed' : 'pointer' }}
+        style={{ padding: '14px', opacity: buttonDisabled ? 0.6 : 1, cursor: buttonDisabled ? 'not-allowed' : 'pointer' }}
       >
         {pending ? 'Starting checkout…' : `Give $${total.toFixed(2)} →`}
       </button>

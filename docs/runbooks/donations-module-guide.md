@@ -1,6 +1,6 @@
 # Donations module — how it works, end to end
 
-**What this is:** how families pay their program **dakshina** (the suggested
+**What this is:** how families make their program **donation** (the suggested
 class donation) in the portal, and what you can see and do when a payment
 question comes up at the desk.
 
@@ -11,7 +11,7 @@ The portal itself never handles card numbers.
 
 Two things to know before anything else:
 
-1. **Portal donations are enrollment dakshina only.** General year-round
+1. **Portal donations are enrollment donations only.** General year-round
    giving is handled outside the portal (CMT decision 2026-06-04). If
    someone opens the donate page (/family/donate) without coming from an
    enrollment, it simply returns them to the dashboard.
@@ -66,7 +66,7 @@ status view.
 ### After the payment page
 
 - **Payment went through** → they land on the thank-you page ("Thank you
-  for your dakshina") with the tax-receipt note. Both buttons there lead
+  for your donation") with the tax-receipt note. Both buttons there lead
   back to the family dashboard, where the donation card now shows progress
   or "Thank you for your donation".
 - **They cancelled or backed out** → they see "Donation not completed — no
@@ -182,7 +182,7 @@ fresh one with that year's pricing. Three things follow:
 
 | Who | Where | What they can do |
 |---|---|---|
-| Family manager | **Give** on the dashboard → donate form (/family/donate) | Pay dakshina by card (at or above the suggested amount, optional fee cover) |
+| Family manager | **Give** on the dashboard → donate form (/family/donate) | Pay the donation by card (at or above the suggested amount, optional fee cover) |
 | Family (anyone) | Donation card on the dashboard | See progress ("$X of $Y suggested") or Completed |
 | Welcome team | Roster (/welcome/roster) | See the payment chip (read the trust caveats above) |
 | Welcome team | Ask the tech team (no screen for this) | Lower or clear a family's suggested amount |

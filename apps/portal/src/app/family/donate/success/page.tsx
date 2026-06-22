@@ -33,7 +33,7 @@ export default async function DonateSuccessPage({
           <SetuIcon.check />
         </div>
         <h1 style={{ fontSize: 30, fontWeight: 400, marginBottom: 10 }}>
-          Thank you for your <em className="sa">dakshina</em>
+          Thank you for your donation
         </h1>
         <p style={{ fontSize: 14, color: 'var(--body-text)', lineHeight: 1.6, marginBottom: 8 }}>
           Your donation to Chinmaya Mission Toronto has been received. <em className="sa">Hari OM</em> — your seva keeps our programs running.

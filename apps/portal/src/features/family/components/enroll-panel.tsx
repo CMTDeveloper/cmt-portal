@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { paymentSourceOf } from '@cmt/shared-domain';
 import type { OfferingDoc } from '@cmt/shared-domain';
 import { OfferingPicker } from './offering-picker';
 import { EnrollCta } from './enroll-cta';
@@ -29,6 +30,9 @@ interface EnrollPanelProps {
  */
 export function EnrollPanel({ offerings, defaultOid, donationsEnabled, usesDonation = false, pickerLabel }: EnrollPanelProps) {
   const [selectedOid, setSelectedOid] = useState(defaultOid);
+  const selectedOffering = offerings.find((o) => o.oid === selectedOid) ?? offerings[0] ?? null;
+  const paymentSource = paymentSourceOf(selectedOffering?.paymentSource !== undefined ? { paymentSource: selectedOffering.paymentSource } : {});
+  const onlineDonationsEnabled = donationsEnabled && paymentSource !== 'teacher-managed';
 
   return (
     <>
@@ -38,7 +42,7 @@ export function EnrollPanel({ offerings, defaultOid, donationsEnabled, usesDonat
         selectedOid={selectedOid}
         onSelect={setSelectedOid}
       />
-      <EnrollCta oid={selectedOid} donationsEnabled={donationsEnabled} usesDonation={usesDonation} />
+      <EnrollCta oid={selectedOid} donationsEnabled={onlineDonationsEnabled} usesDonation={usesDonation} paymentSource={paymentSource} />
     </>
   );
 }

@@ -44,7 +44,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   global.fetch = vi.fn().mockResolvedValue({
     ok: true,
-    json: async () => ({ oid: 'bala-vihar-brampton-2026-27', overlapWarning: false }),
+    json: async () => ({ oid: 'bala-vihar-brampton-2026-27' }),
   }) as unknown as typeof fetch;
 });
 
@@ -66,6 +66,13 @@ describe('OfferingsPanel', () => {
     render(<OfferingsPanel programKey="bala-vihar" initialOfferings={[]} usesDonation={true} />);
     await user.click(screen.getByRole('button', { name: /new offering/i }));
     expect(screen.getByRole('dialog')).toBeTruthy();
+  });
+
+  it('shows teacher-managed as a payment source option', async () => {
+    const user = userEvent.setup();
+    render(<OfferingsPanel programKey="bala-vihar" initialOfferings={[]} usesDonation={true} />);
+    await user.click(screen.getByRole('button', { name: /new offering/i }));
+    expect(screen.getByRole('option', { name: /teacher managed/i })).toBeTruthy();
   });
 
   it('hides the donation + payment fields for a no-donation program', async () => {
@@ -120,6 +127,25 @@ describe('OfferingsPanel', () => {
     expect(body.termLabel).toBe('2026-27');
   });
 
+  it('POSTs teacher-managed paymentSource when selected', async () => {
+    const user = userEvent.setup();
+    render(<OfferingsPanel programKey="bala-vihar" initialOfferings={[]} usesDonation={true} />);
+    await user.click(screen.getByRole('button', { name: /new offering/i }));
+
+    await user.type(screen.getByPlaceholderText('2025-26'), '2026-27');
+    const dateInputs = document.querySelectorAll('input[type="date"]');
+    await user.type(dateInputs[0] as HTMLElement, '2026-09-01');
+    await user.type(dateInputs[1] as HTMLElement, '2027-06-01');
+    await user.type(dateInputs[2] as HTMLElement, '2026-09-01');
+    await user.selectOptions(screen.getByLabelText(/payment source/i), 'teacher-managed');
+    await user.click(screen.getByRole('button', { name: /create offering/i }));
+
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+    const [, init] = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0]!;
+    const body = JSON.parse((init as RequestInit).body as string);
+    expect(body.paymentSource).toBe('teacher-managed');
+  });
+
   it('shows "Duplicate" button for existing offerings', () => {
     render(<OfferingsPanel programKey="bala-vihar" initialOfferings={[BASE_OFFERING]} usesDonation={true} />);
     // Duplicate button appears in at least one of mobile/desktop renders
@@ -147,5 +173,51 @@ describe('OfferingsPanel', () => {
     await user.type(dateInputs[2] as HTMLElement, '2026-09-01');
     await user.click(screen.getByRole('button', { name: /create offering/i }));
     await waitFor(() => expect(toastMock.success).toHaveBeenCalledWith('Offering created.'));
+  });
+
+  it('shows a clear error when the API blocks overlapping dates', async () => {
+    const user = userEvent.setup();
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      json: async () => ({
+        error: 'offering-date-overlap',
+        message: 'This enabled offering overlaps with an existing Brampton offering.',
+      }),
+    }) as unknown as typeof fetch;
+
+    render(<OfferingsPanel programKey="bala-vihar" initialOfferings={[]} usesDonation={true} />);
+    await user.click(screen.getByRole('button', { name: /new offering/i }));
+    await user.type(screen.getByPlaceholderText('2025-26'), '2026-27');
+    const dateInputs = document.querySelectorAll('input[type="date"]');
+    await user.type(dateInputs[0] as HTMLElement, '2026-09-01');
+    await user.type(dateInputs[1] as HTMLElement, '2027-06-01');
+    await user.type(dateInputs[2] as HTMLElement, '2026-09-01');
+    await user.click(screen.getByRole('button', { name: /create offering/i }));
+
+    await waitFor(() => expect(toastMock.error).toHaveBeenCalledWith('This enabled offering overlaps with an existing Brampton offering.'));
+    expect(toastMock.success).not.toHaveBeenCalled();
+  });
+
+  it('shows the server message when the generated offering id already exists', async () => {
+    const user = userEvent.setup();
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      json: async () => ({
+        error: 'oid-conflict',
+        message: 'An offering already exists for Brampton 2026-27.',
+      }),
+    }) as unknown as typeof fetch;
+
+    render(<OfferingsPanel programKey="bala-vihar" initialOfferings={[]} usesDonation={true} />);
+    await user.click(screen.getByRole('button', { name: /new offering/i }));
+    await user.type(screen.getByPlaceholderText('2025-26'), '2026-27');
+    const dateInputs = document.querySelectorAll('input[type="date"]');
+    await user.type(dateInputs[0] as HTMLElement, '2026-09-01');
+    await user.type(dateInputs[1] as HTMLElement, '2027-06-01');
+    await user.type(dateInputs[2] as HTMLElement, '2026-09-01');
+    await user.click(screen.getByRole('button', { name: /create offering/i }));
+
+    await waitFor(() => expect(toastMock.error).toHaveBeenCalledWith('An offering already exists for Brampton 2026-27.'));
+    expect(toastMock.success).not.toHaveBeenCalled();
   });
 });
