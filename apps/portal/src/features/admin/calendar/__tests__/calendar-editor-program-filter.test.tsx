@@ -1,11 +1,29 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ReactNode, SVGProps } from 'react';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
 const toastMock = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
-vi.mock('@cmt/ui', () => ({ toast: toastMock }));
+vi.mock('@cmt/ui', async () => {
+  const React = await import('react');
+  const passthrough = ({ children }: { children: ReactNode }) => React.createElement(React.Fragment, null, children);
+  return {
+    toast: toastMock,
+    SetuIcon: {
+      plus: (props: SVGProps<SVGSVGElement>) => React.createElement('svg', props),
+    },
+    Dialog: ({ open, children }: { open?: boolean; children: ReactNode }) => (
+      open ? React.createElement(React.Fragment, null, children) : null
+    ),
+    DialogContent: ({ children, ...props }: { children: ReactNode } & Record<string, unknown>) => (
+      React.createElement('div', { role: 'dialog', ...props }, children)
+    ),
+    DialogHeader: passthrough,
+    DialogTitle: ({ children }: { children: ReactNode }) => React.createElement('h2', null, children),
+  };
+});
 
 import { CalendarEditor } from '../calendar-editor';
 import type { ProgramRow } from '../../programs/programs-table';
@@ -125,9 +143,10 @@ describe('CalendarEditor — program filter', () => {
       json: async () => ({ entryId: 'brampton-2026-09-06' }),
     });
 
+    await user.click(screen.getByRole('button', { name: /add a calendar entry/i }));
     const dateInput = screen.getByLabelText('Date') as HTMLInputElement;
     await user.type(dateInput, '2026-09-06');
-    await user.click(screen.getByRole('button', { name: /add entry/i }));
+    await user.click(screen.getByRole('button', { name: /^add entry$/i }));
 
     await waitFor(() => expect(global.fetch).toHaveBeenCalled());
     const allCalls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls as [string, RequestInit][];
@@ -135,6 +154,34 @@ describe('CalendarEditor — program filter', () => {
     expect(postCall).toBeTruthy();
     const body = JSON.parse((postCall![1]).body as string);
     expect(body.programKey).toBe('bala-vihar');
+    expect(body.prasadNeeded).toBe(true);
+  });
+
+  it('allows a class entry to be added with prasad disabled', async () => {
+    const user = userEvent.setup();
+    render(<CalendarEditor locations={['Brampton']} programs={PROGRAMS} />);
+
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+    (global.fetch as ReturnType<typeof vi.fn>).mockClear();
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ entryId: 'brampton-2026-09-13' }),
+    });
+
+    await user.click(screen.getByRole('button', { name: /add a calendar entry/i }));
+    const prasadCheckbox = screen.getByLabelText('Prasad needed') as HTMLInputElement;
+    expect(prasadCheckbox.checked).toBe(true);
+
+    await user.type(screen.getByLabelText('Date'), '2026-09-13');
+    await user.click(prasadCheckbox);
+    await user.click(screen.getByRole('button', { name: /^add entry$/i }));
+
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+    const allCalls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls as [string, RequestInit][];
+    const postCall = allCalls.find(([, init]) => init.method === 'POST');
+    expect(postCall).toBeTruthy();
+    const body = JSON.parse((postCall![1]).body as string);
+    expect(body.prasadNeeded).toBe(false);
   });
 
   it('shows only the selected program\'s entries (two programs, same date)', async () => {

@@ -1,7 +1,14 @@
 'use client';
 
 import { useEffect, useState, useTransition } from 'react';
-import { toast } from '@cmt/ui';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  SetuIcon,
+  toast,
+} from '@cmt/ui';
 import type {
   CalendarKind,
   ClassType,
@@ -46,11 +53,13 @@ export function CalendarEditor({ locations, programs }: CalendarEditorProps) {
   const [pending, startTransition] = useTransition();
 
   // New-entry form state
+  const [addOpen, setAddOpen] = useState(false);
   const [date, setDate] = useState('');
   const [kind, setKind] = useState<CalendarKind>('class');
   const [classType, setClassType] = useState<ClassType>('regular');
   const [noClassReason, setNoClassReason] = useState('');
   const [specialEvents, setSpecialEvents] = useState('');
+  const [prasadNeeded, setPrasadNeeded] = useState(true);
 
   async function load(loc: Location) {
     setLoading(true);
@@ -76,6 +85,20 @@ export function CalendarEditor({ locations, programs }: CalendarEditorProps) {
     void load(location);
   }, [location]);
 
+  function resetAddForm() {
+    setDate('');
+    setKind('class');
+    setClassType('regular');
+    setNoClassReason('');
+    setSpecialEvents('');
+    setPrasadNeeded(true);
+  }
+
+  function openAddDialog() {
+    resetAddForm();
+    setAddOpen(true);
+  }
+
   function addEntry(ev: React.FormEvent) {
     ev.preventDefault();
     if (!date) {
@@ -91,7 +114,7 @@ export function CalendarEditor({ locations, programs }: CalendarEditorProps) {
       noClassReason: kind === 'no-class' ? noClassReason.trim() || null : null,
       specialEvents: specialEvents.trim() || null,
       enabled: true,
-      prasadNeeded: true,
+      prasadNeeded: kind === 'class' ? prasadNeeded : false,
     };
     startTransition(async () => {
       const res = await fetch('/api/admin/calendar', {
@@ -105,10 +128,9 @@ export function CalendarEditor({ locations, programs }: CalendarEditorProps) {
         return;
       }
       toast.success('Entry added.');
-      setDate('');
-      setSpecialEvents('');
-      setNoClassReason('');
       await load(location);
+      resetAddForm();
+      setAddOpen(false);
     });
   }
 
@@ -159,27 +181,87 @@ export function CalendarEditor({ locations, programs }: CalendarEditorProps) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-      {calendarPrograms.length > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em' }}>Program</span>
-          <select
-            value={programKey}
-            onChange={(e) => setProgramKey(e.target.value)}
-            style={{ ...fieldStyle, maxWidth: 240 }}
-            aria-label="Program"
-          >
-            {calendarPrograms.map((p) => (
-              <option key={p.programKey} value={p.programKey}>{p.label}</option>
-            ))}
-          </select>
+      <div style={toolbarStyle}>
+        <div style={toolbarFieldsStyle}>
+          {calendarPrograms.length > 0 && (
+            <label style={{ ...labelStyle, minWidth: 240, maxWidth: 300 }}>
+              Program
+              <select
+                value={programKey}
+                onChange={(e) => setProgramKey(e.target.value)}
+                style={fieldStyle}
+                aria-label="Program"
+              >
+                {calendarPrograms.map((p) => (
+                  <option key={p.programKey} value={p.programKey}>{p.label}</option>
+                ))}
+              </select>
+            </label>
+          )}
+          <label style={{ ...labelStyle, minWidth: 240, maxWidth: 300 }}>
+            Location
+            <select value={location} onChange={(e) => setLocation(e.target.value as Location)} style={fieldStyle}>
+              {locations.map((l) => <option key={l} value={l}>{l}</option>)}
+            </select>
+          </label>
         </div>
-      )}
-      <label style={labelStyle}>
-        Location
-        <select value={location} onChange={(e) => setLocation(e.target.value as Location)} style={{ ...fieldStyle, maxWidth: 240 }}>
-          {locations.map((l) => <option key={l} value={l}>{l}</option>)}
-        </select>
-      </label>
+        <button type="button" onClick={openAddDialog} className="btn btn--p" style={addEntryButtonStyle}>
+          <SetuIcon.plus aria-hidden="true" />
+          Add a calendar entry
+        </button>
+      </div>
+
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        <DialogContent
+          aria-describedby={undefined}
+          className="sm:max-w-3xl"
+          style={{ maxHeight: 'calc(100vh - 48px)', overflowY: 'auto' }}
+        >
+          <DialogHeader>
+            <DialogTitle>Add a calendar entry</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={addEntry} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label style={labelStyle}>Date<input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={fieldStyle} /></label>
+            <label style={labelStyle}>Kind
+              <select
+                value={kind}
+                onChange={(e) => setKind(e.target.value as CalendarKind)}
+                style={fieldStyle}
+              >
+                <option value="class">Class</option>
+                <option value="no-class">No class</option>
+              </select>
+            </label>
+            {kind === 'class' ? (
+              <label style={labelStyle}>Class type
+                <select value={classType} onChange={(e) => setClassType(e.target.value as ClassType)} style={fieldStyle}>
+                  <option value="regular">Regular</option>
+                  <option value="first">First class</option>
+                  <option value="short">Short class</option>
+                </select>
+              </label>
+            ) : (
+              <label style={labelStyle}>No-class reason<input value={noClassReason} placeholder="Winter Break" onChange={(e) => setNoClassReason(e.target.value)} style={fieldStyle} /></label>
+            )}
+            <label style={labelStyle}>Special events (optional)<input value={specialEvents} placeholder="Ganesh Puja" onChange={(e) => setSpecialEvents(e.target.value)} style={fieldStyle} /></label>
+            {kind === 'class' && (
+              <label style={checkboxLabelStyle}>
+                <input
+                  type="checkbox"
+                  checked={prasadNeeded}
+                  onChange={(e) => setPrasadNeeded(e.target.checked)}
+                  style={checkboxStyle}
+                />
+                <span>Prasad needed</span>
+              </label>
+            )}
+            <div style={dialogActionsStyle}>
+              <button type="button" onClick={() => setAddOpen(false)} disabled={pending} className="btn" style={secondaryButtonStyle}>Cancel</button>
+              <button type="submit" disabled={pending} className="btn btn--p" style={{ fontSize: 13, padding: '8px 18px', minHeight: 40 }}>Add entry</button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Weekly schedule */}
       <div className="card" style={{ padding: 18 }}>
@@ -197,35 +279,6 @@ export function CalendarEditor({ locations, programs }: CalendarEditorProps) {
           <button type="button" onClick={() => setWeekly((p) => [...p, { time: '', label: '' }])} style={linkBtn}>+ Add row</button>
           <button type="button" onClick={saveWeekly} disabled={pending} className="btn btn--p" style={{ fontSize: 13, padding: '6px 14px' }}>Save schedule</button>
         </div>
-      </div>
-
-      {/* Add entry */}
-      <div className="card" style={{ padding: 18 }}>
-        <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>Add a calendar entry</h3>
-        <form onSubmit={addEntry} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <label style={labelStyle}>Date<input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={fieldStyle} /></label>
-          <label style={labelStyle}>Kind
-            <select value={kind} onChange={(e) => setKind(e.target.value as CalendarKind)} style={fieldStyle}>
-              <option value="class">Class</option>
-              <option value="no-class">No class</option>
-            </select>
-          </label>
-          {kind === 'class' ? (
-            <label style={labelStyle}>Class type
-              <select value={classType} onChange={(e) => setClassType(e.target.value as ClassType)} style={fieldStyle}>
-                <option value="regular">Regular</option>
-                <option value="first">First class</option>
-                <option value="short">Short class</option>
-              </select>
-            </label>
-          ) : (
-            <label style={labelStyle}>No-class reason<input value={noClassReason} placeholder="Winter Break" onChange={(e) => setNoClassReason(e.target.value)} style={fieldStyle} /></label>
-          )}
-          <label style={labelStyle}>Special events (optional)<input value={specialEvents} placeholder="Ganesh Puja" onChange={(e) => setSpecialEvents(e.target.value)} style={fieldStyle} /></label>
-          <div style={{ gridColumn: '1 / -1' }}>
-            <button type="submit" disabled={pending} className="btn btn--p" style={{ fontSize: 13, padding: '8px 18px' }}>Add entry</button>
-          </div>
-        </form>
       </div>
 
       {/* Entry list */}
@@ -310,6 +363,13 @@ export function CalendarEditor({ locations, programs }: CalendarEditorProps) {
 
 const labelStyle: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em', display: 'flex', flexDirection: 'column', gap: 6 };
 const fieldStyle: React.CSSProperties = { padding: '8px 10px', borderRadius: 'var(--radiusSm)', border: '1px solid var(--line2)', background: 'var(--bg)', fontSize: 13, color: 'var(--ink)', fontFamily: 'var(--body)', boxSizing: 'border-box', width: '100%' };
+const toolbarStyle: React.CSSProperties = { display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' };
+const toolbarFieldsStyle: React.CSSProperties = { display: 'flex', alignItems: 'flex-end', gap: 14, flexWrap: 'wrap' };
+const addEntryButtonStyle: React.CSSProperties = { marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, padding: '9px 16px', minHeight: 44 };
+const checkboxLabelStyle: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 10, minHeight: 40, fontSize: 13, fontWeight: 600, color: 'var(--ink)', gridColumn: '1 / -1' };
+const checkboxStyle: React.CSSProperties = { width: 18, height: 18, accentColor: 'var(--accent)' };
+const dialogActionsStyle: React.CSSProperties = { gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 4 };
+const secondaryButtonStyle: React.CSSProperties = { fontSize: 13, padding: '8px 18px', minHeight: 40, border: '1px solid var(--line2)', background: 'var(--surface)', color: 'var(--ink)' };
 const td: React.CSSProperties = { padding: '10px 10px', verticalAlign: 'middle' };
 const pill: React.CSSProperties = { display: 'inline-block', padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 600 };
 const removeBtn: React.CSSProperties = { background: 'transparent', border: 0, color: 'var(--muted)', fontSize: 18, cursor: 'pointer', padding: '0 6px' };
