@@ -1,17 +1,15 @@
 /**
- * Backfill members.portalAccess='pending' on gated (non-manager) members.
+ * Backfill members.portalAccess='pending' on already-migrated roster members.
  *
- * Iterates the UAT `members` collectionGroup. For each member whose mid is NOT
- * in its family's `managers` array AND which lacks `portalAccess`, sets
- * `portalAccess:'pending'`. Managers and members that already have a
- * portalAccess value are left untouched (absent ⇒ active; the gate only
- * applies to non-manager roster-origin members). Idempotent — re-runs skip
- * members that already carry a portalAccess value.
- *
- * Children technically have no contactKey / sign-in path, but the gate keys off
- * manager-membership (not type), so any non-manager member without portalAccess
- * is marked pending; this is harmless for children (they never sign in) and
- * keeps the rule a single, auditable condition.
+ * Families bulk-migrated BEFORE the gate shipped lack the portalAccess flag that
+ * lazy-migrate now writes. This backfill brings them in line, gating exactly the
+ * same members lazy-migrate gates: a NON-MANAGER ADULT of a MIGRATED family
+ * (`families/{fid}.legacyFid` present). It deliberately does NOT touch:
+ *   - registration-added members of NEW Setu families (no legacyFid) — their
+ *     manager added them, so they keep portal access;
+ *   - managers (or any member already in family.managers);
+ *   - children (no contactKey / sign-in path);
+ *   - any member that already carries a portalAccess value (idempotent).
  *
  * Usage:
  *   pnpm --filter @cmt/portal backfill:portal-access [--dry-run] [--limit N] [--fid CMT-X]
@@ -52,7 +50,7 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  console.log(`\nBackfill portalAccess='pending' on gated (non-manager) members`);
+  console.log(`\nBackfill portalAccess='pending' on migrated non-manager adults`);
   console.log(`  Target:   ${project} (Firestore${args.dryRun ? ', DRY-RUN — no writes' : ''})`);
   if (args.limit !== null) console.log(`  Limit:    first ${args.limit} eligible members`);
   if (args.fid !== null) console.log(`  Filter:   fid=${args.fid} only`);
@@ -60,16 +58,20 @@ async function main(): Promise<void> {
 
   const db = portalFirestore();
 
-  // Cache family.managers per fid so we read each family doc at most once.
-  const managersByFid = new Map<string, string[]>();
-  async function managersFor(fid: string): Promise<string[]> {
-    const cached = managersByFid.get(fid);
+  // Cache family.managers + migrated-ness (legacyFid present) per fid so we read
+  // each family doc at most once.
+  const familyByFid = new Map<string, { managers: string[]; migrated: boolean }>();
+  async function familyFor(fid: string): Promise<{ managers: string[]; migrated: boolean }> {
+    const cached = familyByFid.get(fid);
     if (cached) return cached;
     const snap = await db.collection('families').doc(fid).get();
-    const data = snap.data() as { managers?: string[] } | undefined;
-    const managers = Array.isArray(data?.managers) ? data.managers : [];
-    managersByFid.set(fid, managers);
-    return managers;
+    const data = snap.data() as { managers?: string[]; legacyFid?: string | null } | undefined;
+    const info = {
+      managers: Array.isArray(data?.managers) ? data.managers : [],
+      migrated: typeof data?.legacyFid === 'string' && data.legacyFid.length > 0,
+    };
+    familyByFid.set(fid, info);
+    return info;
   }
 
   const membersSnap = await db.collectionGroup('members').get();
@@ -79,11 +81,14 @@ async function main(): Promise<void> {
   let updated = 0;
   let skippedManager = 0;
   let skippedHasAccess = 0;
+  let skippedNotMigrated = 0;
+  let skippedChild = 0;
 
   for (const doc of membersSnap.docs) {
     const m = doc.data() as {
       mid?: string;
       manager?: boolean;
+      type?: 'Adult' | 'Child';
       portalAccess?: 'active' | 'pending';
     };
     const fid = doc.ref.parent.parent?.id ?? '';
@@ -97,11 +102,24 @@ async function main(): Promise<void> {
       continue;
     }
 
+    const family = await familyFor(fid);
+    // Only MIGRATED families are gated (registration-added members keep access).
+    if (!family.migrated) {
+      skippedNotMigrated++;
+      continue;
+    }
+
     const mid = m.mid ?? doc.id;
-    const managers = await managersFor(fid);
-    const isManager = m.manager === true || managers.includes(mid);
+    const isManager = m.manager === true || family.managers.includes(mid);
     if (isManager) {
       skippedManager++;
+      continue;
+    }
+
+    // Only adults are gated — children have no contactKey / sign-in path. Mirrors
+    // lazy-migrate, which sets pending only on non-primary adults.
+    if (m.type !== 'Adult') {
+      skippedChild++;
       continue;
     }
 
@@ -114,9 +132,11 @@ async function main(): Promise<void> {
   }
 
   console.log(`\nSummary:`);
-  console.log(`  Processed:        ${processed}`);
-  console.log(`  Set to pending:   ${updated}${args.dryRun ? ' (dry-run, not written)' : ''}`);
-  console.log(`  Skipped manager:  ${skippedManager}`);
+  console.log(`  Processed:            ${processed}`);
+  console.log(`  Set to pending:       ${updated}${args.dryRun ? ' (dry-run, not written)' : ''}`);
+  console.log(`  Skipped manager:      ${skippedManager}`);
+  console.log(`  Skipped non-migrated: ${skippedNotMigrated}`);
+  console.log(`  Skipped child:        ${skippedChild}`);
   console.log(`  Skipped (has access): ${skippedHasAccess}`);
 }
 
