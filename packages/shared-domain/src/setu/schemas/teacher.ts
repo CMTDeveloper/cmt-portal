@@ -28,9 +28,15 @@ export const TeacherAssignmentDocSchema = z.object({
 export type TeacherAssignmentDoc = z.infer<typeof TeacherAssignmentDocSchema>;
 
 // POST body for /api/admin/teacher-assignments — set the levels a teacher covers.
-export const AssignTeacherSchema = z.object({
-  ref: z.string().min(1),
-  levelIds: z.array(z.string().min(1)),
-});
+export const AssignTeacherSchema = z
+  .object({
+    ref: z.string().trim().min(1).optional(),
+    teacherEmail: z.string().trim().email().optional(),
+    levelIds: z.array(z.string().min(1)),
+  })
+  .refine((d) => Boolean(d.ref || d.teacherEmail), {
+    message: 'ref or teacherEmail is required',
+    path: ['teacherEmail'],
+  });
 
 export type AssignTeacherInput = z.infer<typeof AssignTeacherSchema>;

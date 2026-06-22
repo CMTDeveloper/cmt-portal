@@ -62,6 +62,17 @@ describe('CreateLevelSchema', () => {
     expect(CreateLevelSchema.safeParse({ ...validCreate, order: -1 }).success).toBe(false);
   });
 
+  it('accepts omitted order so the API can assign display order', () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { order, ...rest } = validCreate;
+    expect(CreateLevelSchema.safeParse(rest).success).toBe(true);
+  });
+
+  it('accepts an optional teacher email for create-time assignment', () => {
+    expect(CreateLevelSchema.safeParse({ ...validCreate, teacherEmail: 'teacher@example.com' }).success).toBe(true);
+    expect(CreateLevelSchema.safeParse({ ...validCreate, teacherEmail: 'not-an-email' }).success).toBe(false);
+  });
+
   it('rejects an empty levelName', () => {
     expect(CreateLevelSchema.safeParse({ ...validCreate, levelName: '' }).success).toBe(false);
   });

@@ -4,8 +4,20 @@ const { mockAssignTeacher, mockFindMissingLevelIds } = vi.hoisted(() => ({
   mockAssignTeacher: vi.fn(),
   mockFindMissingLevelIds: vi.fn(),
 }));
+const { mockResolveTeacherEmail, MockTeacherEmailResolutionError } = vi.hoisted(() => ({
+  mockResolveTeacherEmail: vi.fn(),
+  MockTeacherEmailResolutionError: class TeacherEmailResolutionError extends Error {
+    constructor(public readonly code: string) {
+      super(code);
+    }
+  },
+}));
 vi.mock('@/features/setu/teacher/assignments', () => ({ assignTeacher: mockAssignTeacher }));
 vi.mock('@/features/setu/teacher/levels', () => ({ findMissingLevelIds: mockFindMissingLevelIds }));
+vi.mock('@/features/setu/teacher/resolve-teacher-email', () => ({
+  resolveTeacherEmail: mockResolveTeacherEmail,
+  TeacherEmailResolutionError: MockTeacherEmailResolutionError,
+}));
 
 function makeRequest(body?: unknown, uid?: string, role = 'admin'): Request {
   const headers: Record<string, string> = { 'content-type': 'application/json', 'x-portal-role': role };
@@ -21,6 +33,11 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockAssignTeacher.mockResolvedValue({ added: ['l1'], removed: [] });
   mockFindMissingLevelIds.mockResolvedValue([]);
+  mockResolveTeacherEmail.mockResolvedValue({
+    ref: 'CMT-FAM1-01',
+    email: 'teacher@example.com',
+    name: 'Teacher One',
+  });
 });
 
 describe('POST /api/admin/teacher-assignments', () => {
@@ -82,5 +99,23 @@ describe('POST /api/admin/teacher-assignments', () => {
     expect(res.status).toBe(200);
     expect(mockFindMissingLevelIds).toHaveBeenCalledWith(['l1']);
     expect(mockAssignTeacher).toHaveBeenCalledWith({ ref: 'CMT-FAM1-01', levelIds: ['l1'], byUid: 'uid-admin' });
+  });
+
+  it('resolves a teacher email before assigning', async () => {
+    const { POST } = await import('../route');
+    const res = await POST(makeRequest({ teacherEmail: 'teacher@example.com', levelIds: ['l1'] }, 'uid-admin'));
+    expect(res.status).toBe(200);
+    expect(mockResolveTeacherEmail).toHaveBeenCalledWith('teacher@example.com');
+    expect(mockAssignTeacher).toHaveBeenCalledWith({ ref: 'CMT-FAM1-01', levelIds: ['l1'], byUid: 'uid-admin' });
+    expect(await res.json()).toMatchObject({ ref: 'CMT-FAM1-01', teacherEmail: 'teacher@example.com' });
+  });
+
+  it('returns a friendly status when teacher email is not registered', async () => {
+    mockResolveTeacherEmail.mockRejectedValue(new MockTeacherEmailResolutionError('teacher-not-found'));
+    const { POST } = await import('../route');
+    const res = await POST(makeRequest({ teacherEmail: 'missing@example.com', levelIds: ['l1'] }, 'uid-admin'));
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: 'teacher-not-found' });
+    expect(mockAssignTeacher).not.toHaveBeenCalled();
   });
 });

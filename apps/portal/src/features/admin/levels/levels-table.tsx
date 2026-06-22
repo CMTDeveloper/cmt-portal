@@ -28,6 +28,7 @@ interface LevelsTableProps {
   periods: PeriodOption[];
   /** Optional list of programs to show a program selector (E3). When absent the selector is hidden. */
   programs?: ProgramRow[];
+  onLevelsChange?: (levels: LevelRow[]) => void;
 }
 
 const LEVEL_KIND_LABELS: Record<LevelKind, string> = {
@@ -65,10 +66,10 @@ function LevelModal({ editing, periods, programKey: propProgramKey, onClose, onS
   const [pid, setPid] = useState(editing?.pid ?? periods[0]?.pid ?? '');
   const [levelName, setLevelName] = useState(editing?.levelName ?? '');
   const [levelKind, setLevelKind] = useState<LevelKind>(editing?.levelKind ?? 'level');
-  const [order, setOrder] = useState(String(editing?.order ?? ''));
   const [gradeBand, setGradeBand] = useState((editing?.gradeBand ?? []).join(', '));
   const [ageLabel, setAgeLabel] = useState(editing?.ageLabel ?? '');
   const [curriculum, setCurriculum] = useState(editing?.curriculum ?? '');
+  const [teacherEmail, setTeacherEmail] = useState('');
   const [enabled, setEnabled] = useState(editing?.enabled ?? true);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -78,9 +79,11 @@ function LevelModal({ editing, periods, programKey: propProgramKey, onClose, onS
     const e: Record<string, string> = {};
     if (!isEdit && !pid) e.pid = 'Select a period';
     if (!levelName.trim()) e.levelName = 'Required';
-    if (order === '' || !Number.isInteger(Number(order)) || Number(order) < 0) e.order = 'Whole number ≥ 0';
     if (!ageLabel.trim()) e.ageLabel = 'Required';
     if (!curriculum.trim()) e.curriculum = 'Required';
+    if (!isEdit && teacherEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(teacherEmail.trim())) {
+      e.teacherEmail = 'Enter a valid email';
+    }
     if (bandNeedsGrades(levelKind) && parseBand(gradeBand).length === 0) {
       e.gradeBand = 'Levels and pre-levels need at least one grade';
     }
@@ -100,7 +103,6 @@ function LevelModal({ editing, periods, programKey: propProgramKey, onClose, onS
           const body: UpdateLevelInput = {};
           if (levelName !== editing.levelName) body.levelName = levelName;
           if (levelKind !== editing.levelKind) body.levelKind = levelKind;
-          if (Number(order) !== editing.order) body.order = Number(order);
           if (JSON.stringify(band) !== JSON.stringify(editing.gradeBand)) body.gradeBand = band;
           if (ageLabel !== editing.ageLabel) body.ageLabel = ageLabel;
           if (curriculum !== editing.curriculum) body.curriculum = curriculum;
@@ -118,12 +120,12 @@ function LevelModal({ editing, periods, programKey: propProgramKey, onClose, onS
             pid,
             levelName,
             levelKind,
-            order: Number(order),
             gradeBand: band,
             ageLabel,
             curriculum,
             enabled,
           };
+          if (teacherEmail.trim()) body.teacherEmail = teacherEmail.trim();
           res = await fetch('/api/admin/levels', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -133,11 +135,21 @@ function LevelModal({ editing, periods, programKey: propProgramKey, onClose, onS
 
         if (!res.ok) {
           const json = await res.json().catch(() => ({}));
-          toast.error(json.error ?? 'Save failed');
+          toast.error(saveErrorCopy(json.error) ?? json.error ?? 'Save failed');
           return;
         }
-        const json = (await res.json()) as { levelId?: string };
-        toast.success(isEdit ? 'Level updated.' : 'Level created.');
+        const json = (await res.json()) as {
+          levelId?: string;
+          order?: number;
+          teacherRef?: string | null;
+        };
+        toast.success(
+          isEdit
+            ? 'Level updated.'
+            : json.teacherRef
+              ? 'Level created and teacher assigned.'
+              : 'Level created.',
+        );
 
         const now = new Date().toISOString();
         const period = periods.find((p) => p.pid === pid);
@@ -147,13 +159,13 @@ function LevelModal({ editing, periods, programKey: propProgramKey, onClose, onS
           location: period?.location ?? editing?.location ?? 'Brampton',
           levelName,
           levelKind,
-          order: Number(order),
+          order: json.order ?? editing?.order ?? 0,
           gradeBand: band,
           ageLabel,
           curriculum,
           pid,
           periodLabel: period?.periodLabel ?? editing?.periodLabel ?? '',
-          teacherRefs: editing?.teacherRefs ?? [],
+          teacherRefs: isEdit ? editing.teacherRefs : json.teacherRef ? [json.teacherRef] : [],
           enabled,
           createdAt: editing?.createdAt ?? now,
           createdBy: editing?.createdBy ?? '',
@@ -201,11 +213,6 @@ function LevelModal({ editing, periods, programKey: propProgramKey, onClose, onS
                 <input value={levelName} onChange={(e) => setLevelName(e.target.value)} placeholder="Level 2" style={fieldStyle} />
                 {errors.levelName && <FieldError msg={errors.levelName} />}
               </label>
-              <label style={labelStyle}>
-                Order
-                <input type="number" min={0} step={1} value={order} onChange={(e) => setOrder(e.target.value)} placeholder="4" style={fieldStyle} />
-                {errors.order && <FieldError msg={errors.order} />}
-              </label>
             </div>
 
             <label style={labelStyle}>
@@ -242,6 +249,20 @@ function LevelModal({ editing, periods, programKey: propProgramKey, onClose, onS
               </label>
             </div>
 
+            {!isEdit && (
+              <label style={labelStyle}>
+                Teacher email (optional)
+                <input
+                  type="email"
+                  value={teacherEmail}
+                  onChange={(e) => setTeacherEmail(e.target.value)}
+                  placeholder="teacher@example.com"
+                  style={fieldStyle}
+                />
+                {errors.teacherEmail && <FieldError msg={errors.teacherEmail} />}
+              </label>
+            )}
+
             <label style={{ ...labelStyle, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
               <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} style={{ width: 16, height: 16, accentColor: 'var(--accent)' }} />
               Enabled
@@ -266,12 +287,20 @@ function FieldError({ msg }: { msg: string }) {
   return <span style={{ fontSize: 11, color: 'var(--err)', marginTop: 4, display: 'block' }}>{msg}</span>;
 }
 
+function saveErrorCopy(code: unknown): string | null {
+  if (code === 'teacher-not-found') return 'No registered member was found for that teacher email.';
+  if (code === 'teacher-not-active') return 'That member cannot sign in yet. Approve their family access first.';
+  if (code === 'invalid-teacher-email') return 'Enter a valid teacher email.';
+  if (code === 'level-conflict') return 'A level with that name already exists for this period.';
+  return null;
+}
+
 const labelStyle: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.08em' };
 const fieldStyle: React.CSSProperties = { display: 'block', width: '100%', marginTop: 6, padding: '8px 10px', borderRadius: 'var(--radiusSm)', border: '1px solid var(--line2)', background: 'var(--bg)', fontSize: 13, color: 'var(--ink)', fontFamily: 'var(--body)', boxSizing: 'border-box' };
 
 // ─── Main table ────────────────────────────────────────────────────────────────
 
-export function LevelsTable({ initialLevels, periods, programs }: LevelsTableProps) {
+export function LevelsTable({ initialLevels, periods, programs, onLevelsChange }: LevelsTableProps) {
   const [levels, setLevels] = useState<LevelRow[]>(initialLevels);
   const [showDisabled, setShowDisabled] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -285,8 +314,16 @@ export function LevelsTable({ initialLevels, periods, programs }: LevelsTablePro
   const displayed = (showDisabled ? levels : levels.filter((l) => l.enabled))
     .filter((l) => !programs || l.programKey === selectedProgramKey);
 
-  function handleSaved(updated: LevelRow) {
+  function updateLevels(updater: (prev: LevelRow[]) => LevelRow[]) {
     setLevels((prev) => {
+      const next = updater(prev);
+      onLevelsChange?.(next);
+      return next;
+    });
+  }
+
+  function handleSaved(updated: LevelRow) {
+    updateLevels((prev) => {
       const idx = prev.findIndex((l) => l.levelId === updated.levelId);
       if (idx >= 0) {
         const next = [...prev];
@@ -305,7 +342,7 @@ export function LevelsTable({ initialLevels, periods, programs }: LevelsTablePro
         body: JSON.stringify({ enabled: !row.enabled }),
       });
       if (!res.ok) { toast.error('Toggle failed'); return; }
-      setLevels((prev) => prev.map((l) => (l.levelId === row.levelId ? { ...l, enabled: !l.enabled } : l)));
+      updateLevels((prev) => prev.map((l) => (l.levelId === row.levelId ? { ...l, enabled: !l.enabled } : l)));
       toast.success(row.enabled ? 'Level disabled.' : 'Level enabled.');
     } catch {
       toast.error('Network error');
@@ -354,7 +391,7 @@ export function LevelsTable({ initialLevels, periods, programs }: LevelsTablePro
                       <span style={{ fontSize: 15, fontWeight: 600 }}>{l.levelName}</span>
                       <span style={{ padding: '2px 9px', borderRadius: 99, fontSize: 11, fontWeight: 700, background: 'var(--surface2)', color: 'var(--ink)', border: '1px solid var(--line2)' }}>{l.location}</span>
                     </div>
-                    <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 3 }}>{l.periodLabel} · #{l.order}</div>
+                    <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 3 }}>{l.periodLabel}</div>
                   </div>
                   <span style={{ flex: '0 0 auto', padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 600, background: l.enabled ? 'var(--accentSoft)' : 'var(--surface2)', color: l.enabled ? 'var(--accentDeep)' : 'var(--muted)' }}>
                     {l.enabled ? 'Enabled' : 'Disabled'}
@@ -378,12 +415,12 @@ export function LevelsTable({ initialLevels, periods, programs }: LevelsTablePro
             ))}
           </div>
 
-          {/* Desktop: full 10-column table. */}
+          {/* Desktop: full table. */}
           <div className="hidden md:block" style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
                 <tr style={{ borderBottom: '2px solid var(--line)' }}>
-                  {['Location', 'Period', '#', 'Level', 'Kind', 'Grades', 'Curriculum', 'Teachers', 'Status', 'Actions'].map((h) => (
+                  {['Location', 'Period', 'Level', 'Kind', 'Grades', 'Curriculum', 'Teachers', 'Status', 'Actions'].map((h) => (
                     <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontSize: 11, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--muted)', fontWeight: 700, whiteSpace: 'nowrap' }}>{h}</th>
                   ))}
                 </tr>
@@ -393,7 +430,6 @@ export function LevelsTable({ initialLevels, periods, programs }: LevelsTablePro
                   <tr key={l.levelId} style={{ borderBottom: '1px solid var(--line)', background: i % 2 === 0 ? 'transparent' : 'var(--bg)' }}>
                     <td style={tdStyle}>{l.location}</td>
                     <td style={tdStyle}>{l.periodLabel}</td>
-                    <td style={{ ...tdStyle, color: 'var(--muted)' }}>{l.order}</td>
                     <td style={{ ...tdStyle, fontWeight: 600 }}>{l.levelName}</td>
                     <td style={{ ...tdStyle, color: 'var(--body-text)' }}>{l.levelKind}</td>
                     <td style={{ ...tdStyle, color: 'var(--body-text)' }}>{l.gradeBand.length ? l.gradeBand.join(', ') : '—'}</td>

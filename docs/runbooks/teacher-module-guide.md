@@ -21,26 +21,18 @@ for information only. The moment someone is assigned to at least one level in
 
 ### First: the teacher must be a registered family member
 
-The portal identifies teachers by their **member ID (mid)** — the ID the
-portal gives each person in a family. So a prospective teacher must already
-be part of a registered family. If they aren't, register them like any family
-first. A "standalone teacher" with no family **cannot sign in today** —
-every real teacher is a parent or adult in a registered family.
-
-**How to find someone's member ID:**
-
-1. Open the roster (/welcome/roster).
-2. Search for the person's family and click into it.
-3. Click the person's name to open their member profile.
-4. Look at the page address. It looks like
-   `/welcome/family/{fid}/members/{mid}`, and the member ID (format
-   `CMT-XXXX1111-01`) is the last part.
+The portal identifies teachers from the **email they use to sign in** and
+resolves that email to the person's registered family member record. So a
+prospective teacher must already be part of an active registered family. If
+they aren't, register them like any family first. A "standalone teacher" with
+no family **cannot sign in today** — every real teacher is a parent or adult
+in a registered family.
 
 ### Assign their classes — this is the whole onboarding
 
 1. Open **Level management** (/admin/levels) and find the **Assign teacher**
    form.
-2. Type the teacher's member ID into the ref box.
+2. Type the teacher's sign-in email.
 3. Tick **every** level they teach. ⚠️ Careful here: ticking sets the
    teacher's **full** list of classes — it *replaces* their old list, it does
    not add to it. To give an existing teacher one more class, you must
@@ -151,7 +143,7 @@ in the same stroke. See Step 5 of the
 
 | Who | Where | Does |
 |---|---|---|
-| Admin | **Level management** (/admin/levels) | Create/edit levels · **Assign teacher** (member ID + tick classes — ticking replaces the whole list) |
+| Admin | **Level management** (/admin/levels) | Create/edit levels · **Assign teacher** (email + tick classes — ticking replaces the whole list) |
 | Admin | Class calendar (/admin/calendar) | Publish class Sundays (the "Y" in families' "X of Y") |
 | Admin | User list (/admin/users), filter "Teacher" | See who teaches what — read-only |
 | Teacher | Sidebar **Teacher** link → /teacher | My classes list |

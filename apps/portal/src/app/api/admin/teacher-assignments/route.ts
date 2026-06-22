@@ -3,9 +3,15 @@ import { AssignTeacherSchema, isAdmin, isWelcomeTeam } from '@cmt/shared-domain'
 import { readSessionFromHeaders } from '@/lib/auth/headers';
 import { assignTeacher } from '@/features/setu/teacher/assignments';
 import { findMissingLevelIds } from '@/features/setu/teacher/levels';
+import {
+  resolveTeacherEmail,
+  TeacherEmailResolutionError,
+} from '@/features/setu/teacher/resolve-teacher-email';
 
-// Set the levels a teacher (member mid or standalone tid) covers. Writable by
-// admin AND welcome-team (RBB-2 front-desk flexibility). The `teacher`
+// Set the levels a teacher covers. The preferred operator input is a teacher
+// email that resolves to a registered member mid; legacy ref input is still
+// accepted for scripted/back-compat paths. Writable by admin AND welcome-team
+// (RBB-2 front-desk flexibility). The `teacher`
 // capability is computed from the resulting doc at the person's next sign-in.
 export async function POST(req: Request) {
   const session = readSessionFromHeaders(req);
@@ -22,7 +28,23 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'bad-request', issues: parsed.error.issues }, { status: 400 });
   }
 
-  const { ref, levelIds } = parsed.data;
+  const { levelIds } = parsed.data;
+  let ref = parsed.data.ref?.trim() ?? '';
+  let teacherEmail: string | null = null;
+
+  if (parsed.data.teacherEmail) {
+    try {
+      const resolved = await resolveTeacherEmail(parsed.data.teacherEmail);
+      ref = resolved.ref;
+      teacherEmail = resolved.email;
+    } catch (err) {
+      if (err instanceof TeacherEmailResolutionError) {
+        const status = err.code === 'teacher-not-found' ? 404 : err.code === 'teacher-not-active' ? 409 : 400;
+        return NextResponse.json({ error: err.code }, { status });
+      }
+      throw err;
+    }
+  }
 
   const missing = await findMissingLevelIds(levelIds);
   if (missing.length > 0) {
@@ -30,5 +52,5 @@ export async function POST(req: Request) {
   }
 
   const { added, removed } = await assignTeacher({ ref, levelIds, byUid: session.uid });
-  return NextResponse.json({ ref, levelIds, added, removed });
+  return NextResponse.json({ ref, teacherEmail, levelIds, added, removed });
 }

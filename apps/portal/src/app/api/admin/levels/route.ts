@@ -3,8 +3,33 @@ import { portalFirestore, FieldValue, Timestamp } from '@cmt/firebase-shared/adm
 import { CreateLevelSchema, isAdmin } from '@cmt/shared-domain';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
 import { levelIdFor } from '@/features/setu/teacher/levels';
+import { assignTeacher, getTeacherLevelIds } from '@/features/setu/teacher/assignments';
+import {
+  resolveTeacherEmail,
+  TeacherEmailResolutionError,
+} from '@/features/setu/teacher/resolve-teacher-email';
 
 type TS = ReturnType<typeof Timestamp.now>;
+
+async function nextLevelOrder(
+  db: ReturnType<typeof portalFirestore>,
+  data: { programKey: string; location: string; pid: string },
+): Promise<number> {
+  const snap = await db.collection('levels').get();
+  let max = -1;
+  for (const doc of snap.docs) {
+    const level = doc.data();
+    if (
+      level.programKey === data.programKey &&
+      level.location === data.location &&
+      level.pid === data.pid &&
+      typeof level.order === 'number'
+    ) {
+      max = Math.max(max, level.order);
+    }
+  }
+  return max + 1;
+}
 
 export async function GET(req: Request) {
   const session = readSessionFromHeaders(req);
@@ -60,6 +85,28 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'period-not-found', pid: data.pid }, { status: 400 });
   }
   const periodLabel = (periodSnap.data()?.periodLabel as string | undefined) ?? data.pid;
+  const order =
+    data.order ??
+    (await nextLevelOrder(db, {
+      programKey: data.programKey,
+      location: data.location,
+      pid: data.pid,
+    }));
+
+  let teacher: Awaited<ReturnType<typeof resolveTeacherEmail>> | null = null;
+  let teacherLevelIds: string[] | null = null;
+  if (data.teacherEmail) {
+    try {
+      teacher = await resolveTeacherEmail(data.teacherEmail);
+      teacherLevelIds = [...new Set([...(await getTeacherLevelIds(teacher.ref)), levelId])];
+    } catch (err) {
+      if (err instanceof TeacherEmailResolutionError) {
+        const status = err.code === 'teacher-not-found' ? 404 : err.code === 'teacher-not-active' ? 409 : 400;
+        return NextResponse.json({ error: err.code }, { status });
+      }
+      throw err;
+    }
+  }
 
   const now = FieldValue.serverTimestamp();
   try {
@@ -69,7 +116,7 @@ export async function POST(req: Request) {
       location: data.location,
       levelName: data.levelName,
       levelKind: data.levelKind,
-      order: data.order,
+      order,
       gradeBand: data.gradeBand,
       ageLabel: data.ageLabel,
       curriculum: data.curriculum,
@@ -82,6 +129,9 @@ export async function POST(req: Request) {
       updatedAt: now,
       updatedBy: session.uid,
     });
+    if (teacher && teacherLevelIds) {
+      await assignTeacher({ ref: teacher.ref, levelIds: teacherLevelIds, byUid: session.uid });
+    }
   } catch (err) {
     if ((err as { code?: number }).code === 6) {
       return NextResponse.json({ error: 'level-conflict', levelId }, { status: 409 });
@@ -89,5 +139,13 @@ export async function POST(req: Request) {
     throw err;
   }
 
-  return NextResponse.json({ levelId }, { status: 201 });
+  return NextResponse.json(
+    {
+      levelId,
+      order,
+      teacherRef: teacher?.ref ?? null,
+      teacherEmail: teacher?.email ?? null,
+    },
+    { status: 201 },
+  );
 }

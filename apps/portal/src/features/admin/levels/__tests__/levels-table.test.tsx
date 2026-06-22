@@ -55,10 +55,10 @@ describe('LevelsTable', () => {
 
     await user.click(screen.getByText('+ New level'));
     await user.type(screen.getByPlaceholderText('Level 2'), 'Level 1');
-    await user.type(screen.getByPlaceholderText('4'), '3');
     await user.type(screen.getByPlaceholderText('2, 3'), '1');
     await user.type(screen.getByPlaceholderText('Grade 2 & 3'), 'Grade 1');
     await user.type(screen.getByPlaceholderText('Hanuman'), 'Krishna Krishna');
+    await user.type(screen.getByPlaceholderText('teacher@example.com'), 'asha@example.com');
     await user.click(screen.getByText('Create level'));
 
     await waitFor(() => expect(global.fetch).toHaveBeenCalled());
@@ -71,10 +71,11 @@ describe('LevelsTable', () => {
       pid: 'bv-brampton-2025-26',
       levelName: 'Level 1',
       levelKind: 'level',
-      order: 3,
       gradeBand: ['1'],
       curriculum: 'Krishna Krishna',
+      teacherEmail: 'asha@example.com',
     });
+    expect(body).not.toHaveProperty('order');
   });
 
   it('blocks creating a level/pre-level with no grades', async () => {
@@ -82,7 +83,6 @@ describe('LevelsTable', () => {
     render(<LevelsTable initialLevels={[]} periods={PERIODS} />);
     await user.click(screen.getByText('+ New level'));
     await user.type(screen.getByPlaceholderText('Level 2'), 'Level 1');
-    await user.type(screen.getByPlaceholderText('4'), '3');
     await user.type(screen.getByPlaceholderText('Grade 2 & 3'), 'Grade 1');
     await user.type(screen.getByPlaceholderText('Hanuman'), 'X');
     await user.click(screen.getByText('Create level'));
