@@ -214,7 +214,10 @@ export function CalendarEditor({ locations, programs }: CalendarEditorProps) {
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent
           aria-describedby={undefined}
-          className="sm:max-w-3xl"
+          // `csp` is required: DialogContent portals into document.body, OUTSIDE
+          // the admin CspRoot, so the Setu brand tokens (var(--ink)/--surface/
+          // --accent…) used by the inner form only resolve with `.csp` here.
+          className="csp sm:max-w-3xl"
           style={{ maxHeight: 'calc(100vh - 48px)', overflowY: 'auto' }}
         >
           <DialogHeader>
