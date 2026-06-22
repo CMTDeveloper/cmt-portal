@@ -2,8 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // ── next/cache ────────────────────────────────────────────────────────────────
 vi.mock('next/cache', () => ({
-  unstable_cacheTag: vi.fn(),
-  unstable_cacheLife: vi.fn(),
+  cacheTag: vi.fn(),
+  cacheLife: vi.fn(),
 }));
 
 // ── Firestore ─────────────────────────────────────────────────────────────────

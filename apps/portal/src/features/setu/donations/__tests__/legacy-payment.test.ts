@@ -9,8 +9,8 @@ vi.mock('@cmt/firebase-shared/admin/rtdb', () => ({
 // 'use cache' is a compiler directive (no-op in vitest); the cacheTag/cacheLife
 // calls it pairs with must be stubbed so they don't throw outside a Next scope.
 vi.mock('next/cache', () => ({
-  unstable_cacheTag: vi.fn(),
-  unstable_cacheLife: vi.fn(),
+  cacheTag: vi.fn(),
+  cacheLife: vi.fn(),
 }));
 
 /** Set the whole /roster payload returned by readRtdb. */

@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('next/cache', () => ({
-  unstable_cacheTag: vi.fn(),
-  unstable_cacheLife: vi.fn(),
+  cacheTag: vi.fn(),
+  cacheLife: vi.fn(),
 }));
 
 const mockFamilyGet = vi.fn();
