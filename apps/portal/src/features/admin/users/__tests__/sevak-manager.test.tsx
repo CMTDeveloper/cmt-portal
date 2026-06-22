@@ -4,7 +4,13 @@ import userEvent from '@testing-library/user-event';
 import type { SevakRow } from '@cmt/shared-domain';
 
 const toastMock = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), warning: vi.fn() }));
-vi.mock('@cmt/ui', () => ({ toast: toastMock }));
+vi.mock('@cmt/ui', () => ({
+  SetuIcon: {
+    plus: () => <svg aria-hidden="true" />,
+    x: () => <svg aria-hidden="true" />,
+  },
+  toast: toastMock,
+}));
 
 const { mockGrant, mockRevoke, mockList } = vi.hoisted(() => ({
   mockGrant: vi.fn(),
@@ -95,6 +101,17 @@ describe('SevakManager — edit-mode workflow', () => {
   function desktop() {
     return document.querySelector('.hidden.md\\:block') as HTMLElement;
   }
+
+  it('opens the add-sevak form from the desktop top action', async () => {
+    const user = userEvent.setup();
+    render(<SevakManager initialSevaks={[PLAIN_ADMIN]} />);
+    const d = within(desktop());
+
+    expect(d.queryByLabelText('Registered portal email')).toBeNull();
+    await user.click(d.getByRole('button', { name: 'Add sevak role' }));
+    const dialog = d.getByRole('dialog', { name: 'Add sevak role' });
+    expect(within(dialog).getByLabelText('Registered portal email')).toBeTruthy();
+  });
 
   it('default view exposes NO grant/revoke controls — only an Edit roles button', () => {
     render(<SevakManager initialSevaks={[PLAIN_ADMIN]} />);

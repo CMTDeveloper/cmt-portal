@@ -2,7 +2,7 @@
 
 import { useId, useMemo, useState, useTransition, type FormEvent } from 'react';
 import Link from 'next/link';
-import { toast } from '@cmt/ui';
+import { SetuIcon, toast } from '@cmt/ui';
 import type { SevakRow, GrantableRole } from '@cmt/shared-domain';
 import { GRANTABLE_ROLES } from '@cmt/shared-domain';
 import { ROLE_REFERENCE } from '@/lib/auth/roles-reference';
@@ -18,6 +18,8 @@ function toastError(code: string, fallback: string) {
     'self-lockout': 'You cannot revoke your own admin role.',
     forbidden: 'You do not have permission to do that.',
     'no-session': 'Your session expired. Sign in again.',
+    'registered-user-required':
+      'This email is not registered in the portal. Ask the sevak to register first.',
   };
   toast.error(map[code] ?? fallback);
 }
@@ -32,6 +34,7 @@ export function SevakManager({ initialSevaks }: SevakManagerProps) {
   const [sevaks, setSevaks] = useState<SevakRow[]>(initialSevaks);
   const [roleFilter, setRoleFilter] = useState<GrantableRole | 'teacher' | null>(null);
   const [query, setQuery] = useState('');
+  const [desktopAddOpen, setDesktopAddOpen] = useState(false);
   const [, startRefresh] = useTransition();
 
   function refresh() {
@@ -62,6 +65,30 @@ export function SevakManager({ initialSevaks }: SevakManagerProps) {
     <>
       {/* ── Desktop ──────────────────────────────────────────────── */}
       <div className="hidden md:block">
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
+          <button
+            type="button"
+            className="btn btn--p"
+            onClick={() => setDesktopAddOpen(true)}
+            aria-haspopup="dialog"
+            style={{ minHeight: 40, padding: '10px 16px' }}
+          >
+            <SetuIcon.plus aria-hidden="true" />
+            Add sevak role
+          </button>
+        </div>
+
+        {desktopAddOpen && (
+          <DesktopDialog title="Add sevak role" onClose={() => setDesktopAddOpen(false)}>
+            <AddSevakForm
+              onGranted={() => {
+                refresh();
+                setDesktopAddOpen(false);
+              }}
+            />
+          </DesktopDialog>
+        )}
+
         {/* Filter + list: primary focus, full-width */}
         <FilterBar
           roleFilter={roleFilter}
@@ -91,15 +118,8 @@ export function SevakManager({ initialSevaks }: SevakManagerProps) {
           </div>
         )}
 
-        {/* Add form: collapsed by default so the search input isn't doubled */}
-        <DesktopDisclosure heading="Add sevak role +" style={{ marginTop: 28 }}>
-          <div style={{ maxWidth: 480 }}>
-            <AddSevakForm onGranted={refresh} />
-          </div>
-        </DesktopDisclosure>
-
         {/* Roles reference: collapsed by default, below the list */}
-        <DesktopDisclosure heading="Roles reference ↓" style={{ marginTop: 12 }}>
+        <DesktopDisclosure heading="Roles reference ↓" style={{ marginTop: 28 }}>
           <RolesReferencePanel />
         </DesktopDisclosure>
       </div>
@@ -491,13 +511,18 @@ function AddSevakForm({ onGranted }: { onGranted: () => void }) {
     e.preventDefault();
     const trimmed = contact.trim();
     if (!trimmed) {
-      toast.error('Enter an email or phone');
+      toast.error('Enter a registered portal email');
       return;
     }
+    if (!trimmed.includes('@')) {
+      toast.error('Enter a valid registered portal email');
+      return;
+    }
+    const email = trimmed.toLowerCase();
     startTransition(async () => {
       try {
-        await grantRoleClient({ contact: trimmed, role });
-        toast.success(`Granted ${ROLE_REFERENCE[role].label} to ${trimmed}. ${GRANT_NOTE}`);
+        await grantRoleClient({ contact: email, role });
+        toast.success(`Granted ${ROLE_REFERENCE[role].label} to ${email}. ${GRANT_NOTE}`);
         setContact('');
         onGranted();
       } catch (err) {
@@ -510,13 +535,15 @@ function AddSevakForm({ onGranted }: { onGranted: () => void }) {
     <form onSubmit={onSubmit}>
       <div className="field" style={{ marginBottom: 12 }}>
         {/* FIX #5: htmlFor tied to input id */}
-        <label htmlFor={contactId}>Email or phone</label>
+        <label htmlFor={contactId}>Registered portal email</label>
         <input
           id={contactId}
+          type="email"
           className="input"
           value={contact}
           onChange={(e) => setContact(e.target.value)}
-          placeholder="person@example.com or +1…"
+          placeholder="person@example.com"
+          autoComplete="email"
           disabled={pending}
           required
         />
@@ -569,10 +596,80 @@ function AddSevakForm({ onGranted }: { onGranted: () => void }) {
         {pending ? 'Granting…' : 'Grant role →'}
       </button>
       <p style={{ marginTop: 12, fontSize: 12, color: 'var(--muted)', lineHeight: 1.55 }}>
-        Family members are granted via their member record; CMT sevaks via an auth claim. Either way
-        it applies at their next sign-in.
+        Use the email they already registered with in the portal. New sevaks must register before a
+        role can be granted.
       </p>
     </form>
+  );
+}
+
+function DesktopDialog({
+  title,
+  onClose,
+  children,
+}: {
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  const titleId = useId();
+  return (
+    <div
+      className="csp"
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 60,
+        background: 'rgba(15, 23, 42, .42)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 24,
+      }}
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: 'min(100%, 520px)',
+          maxHeight: 'calc(100dvh - 48px)',
+          overflowY: 'auto',
+          background: 'var(--surface)',
+          border: '1px solid var(--line)',
+          borderRadius: 'var(--radius)',
+          padding: 22,
+          boxShadow: '0 24px 80px rgba(15, 23, 42, .22)',
+        }}
+      >
+        <div className="between" style={{ marginBottom: 18, gap: 12 }}>
+          <h2 id={titleId} style={{ fontSize: 18, fontWeight: 600 }}>
+            {title}
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              minHeight: 40,
+              minWidth: 40,
+              border: '1px solid var(--line)',
+              borderRadius: 'var(--radiusSm)',
+              background: 'var(--surface)',
+              color: 'var(--muted)',
+            }}
+          >
+            <SetuIcon.x aria-hidden="true" />
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
   );
 }
 
@@ -652,7 +749,8 @@ function MobileSevaks({
           style={{ flex: 1, minHeight: 44 }}
           onClick={() => setSheet('add')}
         >
-          + Add sevak role
+          <SetuIcon.plus aria-hidden="true" />
+          Add sevak role
         </button>
         <button
           type="button"

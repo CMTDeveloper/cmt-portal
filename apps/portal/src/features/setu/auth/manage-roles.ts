@@ -36,6 +36,12 @@ function uidOf(type: 'email' | 'phone', value: string): string {
   return sha256Hex(normalizeContactForKey(type, value));
 }
 
+function registeredUserRequiredError(): Error {
+  return Object.assign(new Error('registered-user-required'), {
+    code: 'registered-user-required',
+  });
+}
+
 export interface GrantResult {
   path: 'roleAssignments' | 'auth-claim';
   mid: string | null;
@@ -68,11 +74,7 @@ export async function grantRole(args: {
     existing = ((await auth.getUser(uid)).customClaims as ClaimsShape | undefined) ?? null;
   } catch (err) {
     if ((err as { code?: string }).code === 'auth/user-not-found') {
-      await auth.createUser(
-        type === 'email'
-          ? { uid, email: args.contact, disabled: false }
-          : { uid, disabled: false },
-      );
+      throw registeredUserRequiredError();
     } else {
       throw err;
     }

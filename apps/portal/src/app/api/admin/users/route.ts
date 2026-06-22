@@ -38,7 +38,16 @@ export async function POST(req: Request) {
     );
   }
 
-  const result = await grantRole(parsed.data);
+  let result: Awaited<ReturnType<typeof grantRole>>;
+  try {
+    result = await grantRole(parsed.data);
+  } catch (err) {
+    const code = (err as { code?: string }).code ?? (err as Error).message;
+    if (code === 'registered-user-required') {
+      return NextResponse.json({ error: 'registered-user-required' }, { status: 409 });
+    }
+    throw err;
+  }
   // The granted capability applies at the target's next sign-in (claims are
   // baked into the session cookie). The UI surfaces that note.
   return NextResponse.json(
