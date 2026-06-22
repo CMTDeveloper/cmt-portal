@@ -35,3 +35,14 @@ export const JR_MEMBER_EMAIL =
   process.env.E2E_JR_MEMBER_EMAIL ?? 'e2e-jr-member@chinmayatoronto.org';
 export const JR_PASSWORD = process.env.E2E_JR_PASSWORD ?? process.env.E2E_FAMILY_PASSWORD;
 export const hasJoinRequestCreds = Boolean(JR_PASSWORD);
+
+// Dedicated fixture for the profile-completion gate, seeded by
+// scripts/seed-profile-completion-family.ts (UAT). A MANAGER who is deliberately
+// gate-INCOMPLETE (a real gender + email + phone, but no foodAllergies and no
+// volunteeringSkills) → signing in redirects to /family/complete-profile.
+// Password defaults to E2E_FAMILY_PASSWORD when E2E_PC_PASSWORD is unset (the
+// seed does the same).
+export const PC_MANAGER_EMAIL =
+  process.env.E2E_PC_MANAGER_EMAIL ?? 'e2e-pc-manager@chinmayatoronto.org';
+export const PC_PASSWORD = process.env.E2E_PC_PASSWORD ?? process.env.E2E_FAMILY_PASSWORD;
+export const hasProfileCompletionCreds = Boolean(PC_PASSWORD);

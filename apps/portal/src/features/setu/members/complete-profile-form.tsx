@@ -200,9 +200,11 @@ export function CompleteProfileForm() {
     for (const member of scoped) {
       const draft = drafts[member.mid];
       if (!draft) continue;
-      const shape = draftToMemberShape(member, draft);
-      // Skip members that are already complete — nothing to write.
-      if (isMemberComplete(shape)) continue;
+      // Skip members whose SERVER record is already complete — only the members
+      // the gate flagged need a write. (Checking the DRAFT here was a bug: the
+      // user has JUST completed the draft, so it always looked complete and the
+      // PATCH was skipped, persisting nothing and looping the gate.)
+      if (isMemberComplete(member)) continue;
 
       const monthNum = draft.birthMonth ? Number(draft.birthMonth) : null;
       const birthMonthYear =
@@ -452,26 +454,23 @@ export function CompleteProfileForm() {
     );
   });
 
-  // Defensive: gate sent the user here, but if everything's already complete
-  // (e.g. completed in another tab), offer a way back rather than an empty form.
-  const emptyState = targets.length === 0 ? (
-    <div className="card" style={{ padding: 24, textAlign: 'center' }}>
-      <p style={{ fontSize: 14, marginBottom: 14 }}>Your family profile is complete.</p>
-      <button
-        type="button"
-        className="btn btn--p"
-        onClick={() => { router.push('/family'); router.refresh(); }}
-      >
-        Go to dashboard
-      </button>
+  // As the user fills fields, satisfied fields (and eventually whole member
+  // cards) drop out of `targets` — so once everything is filled `targets` is
+  // empty. That's the moment we MOST need the Save button (to PATCH the drafts),
+  // so the button is ALWAYS rendered here; it just toggles enabled on
+  // `allComplete`. Gating its existence on `targets.length > 0` (as before) made
+  // it vanish exactly when it became clickable, leaving no way to save.
+  const allSetNote = targets.length === 0 ? (
+    <div className="card" style={{ padding: 18, marginBottom: 16 }}>
+      <p style={{ fontSize: 14 }}>Everything looks complete — save to continue to your dashboard.</p>
     </div>
   ) : null;
 
-  const submitBtn = targets.length > 0 ? (
-    <button type="submit" className="btn btn--p btn--block" disabled={saving || !allComplete}>
+  const submitBtn = (
+    <button type="submit" className="btn btn--p btn--block" disabled={saving || !allComplete} data-testid="complete-profile-save">
       {saving ? 'Saving…' : 'Save and continue'}
     </button>
-  ) : null;
+  );
 
   return (
     <form onSubmit={handleSubmit}>
@@ -480,14 +479,12 @@ export function CompleteProfileForm() {
         <CspRoot style={{ minHeight: '100dvh' }}>
           <div style={{ padding: '18px 18px 110px', minHeight: '100dvh' }}>
             {intro}
-            {emptyState}
+            {allSetNote}
             {memberCards}
           </div>
-          {submitBtn && (
-            <div className="csp" style={{ position: 'fixed', bottom: 0, left: 0, right: 0, padding: '14px 18px', background: 'var(--surface)', borderTop: '1px solid var(--line)' }}>
-              {submitBtn}
-            </div>
-          )}
+          <div className="csp" style={{ position: 'fixed', bottom: 0, left: 0, right: 0, padding: '14px 18px', background: 'var(--surface)', borderTop: '1px solid var(--line)' }}>
+            {submitBtn}
+          </div>
         </CspRoot>
       </div>
 
@@ -495,11 +492,9 @@ export function CompleteProfileForm() {
       <div className="hidden md:block">
         <div style={{ maxWidth: 640 }}>
           {intro}
-          {emptyState}
+          {allSetNote}
           {memberCards}
-          {targets.length > 0 && (
-            <div style={{ marginTop: 8 }}>{submitBtn}</div>
-          )}
+          <div style={{ marginTop: 8 }}>{submitBtn}</div>
         </div>
       </div>
     </form>
