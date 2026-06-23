@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { RolloverReport, StartYearResult } from '@cmt/shared-domain';
+import type { RolloverReport, StartYearResult, YearReadiness } from '@cmt/shared-domain';
 
 vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
@@ -29,6 +29,22 @@ vi.mock('@/features/setu/rollover/school-year-config', () => ({
   getSchoolYearConfig: (...a: unknown[]) => mockGetSchoolYearConfig(...a),
   setSchoolYearConfig: (...a: unknown[]) => mockSetSchoolYearConfig(...a),
 }));
+
+const mockComputeYearReadiness = vi.fn();
+vi.mock('@/features/setu/rollover/year-readiness', () => ({
+  computeYearReadiness: (...a: unknown[]) => mockComputeYearReadiness(...a),
+}));
+
+const READINESS: YearReadiness = {
+  toYear: '2026-27',
+  promotionRan: false,
+  offerings: true,
+  levels: true,
+  calendar: false,
+  teachers: false,
+  prasad: false,
+  seva: false,
+};
 
 const START_RESULT: StartYearResult = {
   fromYear: '2025-26',
@@ -86,6 +102,7 @@ beforeEach(() => {
   mockPromoteFamilies.mockResolvedValue(REPORT);
   mockGetSchoolYearConfig.mockResolvedValue({ currentYear: '2025-26' });
   mockSetSchoolYearConfig.mockResolvedValue({ currentYear: '2026-27' });
+  mockComputeYearReadiness.mockResolvedValue(READINESS);
 });
 
 // ── GET/PUT /api/admin/school-year ─────────────────────────────────────────────
@@ -99,11 +116,19 @@ describe('GET /api/admin/school-year', () => {
     expect(mockGetSchoolYearConfig).not.toHaveBeenCalled();
   });
 
-  it('returns the configured current year and derived next year for admin', async () => {
+  it('returns the configured current year, derived next year, and readiness for admin', async () => {
     const { GET } = await import('../route');
     const res = await GET(makeRequest('/api/admin/school-year', undefined, 'admin', 'uid-admin', 'GET'));
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ config: { currentYear: '2025-26' }, nextYear: '2026-27' });
+    expect(await res.json()).toEqual({
+      config: { currentYear: '2025-26' },
+      nextYear: '2026-27',
+      readiness: READINESS,
+    });
+    expect(mockComputeYearReadiness).toHaveBeenCalledWith(expect.anything(), {
+      fromYear: '2025-26',
+      toYear: '2026-27',
+    });
   });
 });
 

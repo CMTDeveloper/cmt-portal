@@ -8,6 +8,7 @@ import {
   setSchoolYearConfig,
 } from '@/features/setu/rollover/school-year-config';
 import { deriveNextSchoolYear } from '@/features/setu/rollover/school-year';
+import { computeYearReadiness } from '@/features/setu/rollover/year-readiness';
 
 export async function GET(req: Request) {
   const session = readSessionFromHeaders(req);
@@ -15,8 +16,11 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
 
-  const config = await getSchoolYearConfig(portalFirestore());
-  return NextResponse.json({ config, nextYear: deriveNextSchoolYear(config.currentYear) });
+  const db = portalFirestore();
+  const config = await getSchoolYearConfig(db);
+  const toYear = deriveNextSchoolYear(config.currentYear);
+  const readiness = await computeYearReadiness(db, { fromYear: config.currentYear, toYear });
+  return NextResponse.json({ config, nextYear: toYear, readiness });
 }
 
 export async function PUT(req: Request) {
