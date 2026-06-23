@@ -33,9 +33,15 @@ export async function GET(
     return NextResponse.json({ error: 'not-found' }, { status: 404 });
   }
 
-  // A manager may only view a request that belongs to their own family.
+  // A manager may only view a request that belongs to their own family. Return a
+  // DISTINCT code (not the bare 'not-found') so a manager signed in as a
+  // DIFFERENT family gets a clear "wrong account" message instead of a dead-end
+  // "Request not found". Keep the 404 STATUS (not 401/403): the review page is
+  // public and its client treats 401/403 as "go sign in" — for an already-
+  // signed-in user that would loop through /sign-in. The target family's name is
+  // intentionally NOT included (no cross-family info leak).
   if (result.fid !== fid) {
-    return NextResponse.json({ error: 'not-found' }, { status: 404 });
+    return NextResponse.json({ error: 'wrong-family' }, { status: 404 });
   }
 
   return NextResponse.json({

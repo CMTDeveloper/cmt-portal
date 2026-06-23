@@ -70,14 +70,20 @@ export type JoinRequestMetadata = {
 
 export async function getJoinRequestClient(
   token: string,
-): Promise<JoinRequestMetadata | { error: 'expired' | 'not-found' | 'forbidden' }> {
+): Promise<JoinRequestMetadata | { error: 'expired' | 'not-found' | 'forbidden' | 'wrong-family' }> {
   try {
     const res = await fetch(`/api/setu/join-request/${encodeURIComponent(token)}`, {
       credentials: 'same-origin',
     });
     if (res.status === 410) return { error: 'expired' };
     if (res.status === 401 || res.status === 403) return { error: 'forbidden' };
-    if (!res.ok) return { error: 'not-found' };
+    if (!res.ok) {
+      // The route returns 404 {error:'wrong-family'} when a signed-in manager
+      // opens another family's request — surface it as a distinct "wrong
+      // account" state rather than the generic not-found.
+      const body = (await res.json().catch(() => null)) as { error?: string } | null;
+      return { error: body?.error === 'wrong-family' ? 'wrong-family' : 'not-found' };
+    }
     return (await res.json()) as JoinRequestMetadata;
   } catch {
     return { error: 'not-found' };

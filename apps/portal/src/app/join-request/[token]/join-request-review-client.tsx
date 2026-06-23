@@ -19,7 +19,7 @@ interface Props {
 type ViewState =
   | { kind: 'loading' }
   | { kind: 'ok'; meta: JoinRequestMetadata }
-  | { kind: 'error'; code: 'expired' | 'not-found' | 'forbidden' }
+  | { kind: 'error'; code: 'expired' | 'not-found' | 'wrong-family' }
   | { kind: 'approved' }
   | { kind: 'declined' };
 
@@ -78,11 +78,41 @@ export function JoinRequestReviewClient({ token, compact = false }: Props) {
     setBusy(false);
   }
 
+  async function switchAccount() {
+    // Sign out the current (wrong-family) session, then return to /sign-in with a
+    // `from` so re-auth as the correct manager lands back on this request.
+    await fetch('/api/setu/auth/signout', { method: 'POST' }).catch(() => undefined);
+    window.location.href = `/sign-in?from=/join-request/${encodeURIComponent(token)}`;
+  }
+
   if (view.kind === 'loading') {
     return <p style={{ fontSize: 14, color: 'var(--muted)' }}>Loading request…</p>;
   }
 
   if (view.kind === 'error') {
+    // Signed in as a manager of a DIFFERENT family — actionable, not a dead end.
+    if (view.code === 'wrong-family') {
+      return (
+        <>
+          <h2 style={{ fontSize: compact ? 24 : 30, fontWeight: 400, marginBottom: 12 }}>
+            Signed in as a different family
+          </h2>
+          <p style={{ fontSize: 14, color: 'var(--body-text)', lineHeight: 1.6, marginBottom: 24 }}>
+            This request was sent to another family&apos;s manager, but you&apos;re signed in with a
+            different account. Sign in as the manager it was emailed to, then open this link again.
+          </p>
+          <button
+            type="button"
+            className="btn btn--p btn--block"
+            style={{ marginBottom: 10, display: 'flex' }}
+            onClick={() => { void switchAccount(); }}
+          >
+            Sign in with a different account →
+          </button>
+          <Link href="/family" className="btn btn--g btn--block" style={{ display: 'flex' }}>Back to my family</Link>
+        </>
+      );
+    }
     const headline =
       view.code === 'expired' ? 'This request has expired' : 'Request not found';
     const body =

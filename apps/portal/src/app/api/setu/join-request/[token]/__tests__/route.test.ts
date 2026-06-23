@@ -35,19 +35,24 @@ describe('GET /api/setu/join-request/[token]', () => {
     expect(mockGet).not.toHaveBeenCalled();
   });
 
-  it('404 when not found', async () => {
+  it('404 not-found when the token does not resolve', async () => {
     mockGet.mockResolvedValue({ error: 'not-found' });
     const res = await GET(makeRequest(managerHeaders()), { params });
     expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: 'not-found' });
   });
 
-  it('404 when the request belongs to another family', async () => {
+  it('404 wrong-family (distinct from not-found) when the request belongs to another family', async () => {
     mockGet.mockResolvedValue({
       token: 'tok', fid: 'F2', requesterEmail: 'a@b.com', familyName: 'Other',
       status: 'pending', expiresAt: new Date('2026-07-01T00:00:00.000Z'),
     });
     const res = await GET(makeRequest(managerHeaders('F1')), { params });
+    // 404 status (not 401/403 — avoids the public review page's sign-in loop) but
+    // a distinct body so the client shows a "wrong account" message, and the
+    // target family name is NOT leaked.
     expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: 'wrong-family' });
   });
 
   it('happy path: returns metadata for the manager\'s own family', async () => {
