@@ -9,6 +9,7 @@ import {
   getSchoolYearConfig,
   listBalaViharSourceOids,
 } from '@/features/setu/rollover/school-year-config';
+import { computeYearReadiness } from '@/features/setu/rollover/year-readiness';
 import { RolloverPage, type RolloverPageState } from '@/features/setu/rollover/components/rollover-page';
 
 export const metadata = { title: 'School Year Rollover — Admin' };
@@ -31,9 +32,11 @@ export default async function SchoolYearPage() {
 
   // Read-only counts for the page header + Step 1 explainer. Firestore `in`
   // takes up to 10 values — two oids per side, comfortably within the limit.
-  const [sourceLevelsSnap, targetLevelsSnap] = await Promise.all([
+  // Step 3's per-item readiness is computed alongside (index-safe queries).
+  const [sourceLevelsSnap, targetLevelsSnap, readiness] = await Promise.all([
     db.collection('levels').where('pid', 'in', sourceOids).get(),
     db.collection('levels').where('pid', 'in', targetOids).get(),
+    computeYearReadiness(db, { fromYear, toYear }),
   ]);
 
   const state: RolloverPageState = {
@@ -43,6 +46,7 @@ export default async function SchoolYearPage() {
     sourceLevelCount: sourceLevelsSnap.size,
     sourceOfferingCount: configuredSourceOids.length,
     targetLevelCount: targetLevelsSnap.size,
+    readiness,
   };
 
   return <RolloverPage state={state} />;

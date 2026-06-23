@@ -4,12 +4,18 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { toast, SetuIcon } from '@cmt/ui';
-import type { RolloverReport } from '@cmt/shared-domain';
-import { commitPromotionClient, saveSchoolYearConfigClient } from '@/features/setu/rollover/rollover-client';
+import type { RolloverReport, YearReadiness } from '@cmt/shared-domain';
+import {
+  activateSchoolYearClient,
+  commitPromotionClient,
+  copyCalendarFromLastYearClient,
+  saveSchoolYearConfigClient,
+} from '@/features/setu/rollover/rollover-client';
 import { Spinner, StartStep } from './start-step';
 import { PromoteStep } from './promote-step';
 import { PromoteResult } from './promote-result';
 import { ConfirmDialog } from './confirm-dialog';
+import { YearReadinessChecklist } from './year-readiness-checklist';
 
 export interface RolloverPageState {
   fromYear: string;
@@ -19,6 +25,8 @@ export interface RolloverPageState {
   sourceLevelCount: number;
   sourceOfferingCount: number;
   targetLevelCount: number;
+  /** Per-item next-year readiness + the promotion gate — backs Step 3. */
+  readiness: YearReadiness;
 }
 
 type Phase = 'idle' | 'preview' | 'committing' | 'done';
@@ -41,6 +49,8 @@ export function RolloverPage({ state }: RolloverPageProps) {
   const [editingYear, setEditingYear] = useState(false);
   const [yearDraft, setYearDraft] = useState(fromYear);
   const [savingYear, setSavingYear] = useState(false);
+  const [activating, setActivating] = useState(false);
+  const [copyingCalendar, setCopyingCalendar] = useState(false);
 
   useEffect(() => {
     setYearDraft(fromYear);
@@ -49,6 +59,8 @@ export function RolloverPage({ state }: RolloverPageProps) {
     setReport(null);
     setPhase('idle');
     setConfirmOpen(false);
+    setActivating(false);
+    setCopyingCalendar(false);
   }, [fromYear, toYear]);
 
   const nextYearReady = state.nextYearReady || startedThisSession;
@@ -84,6 +96,37 @@ export function RolloverPage({ state }: RolloverPageProps) {
       toast.error('Enter a school year like 2026-27.');
     } finally {
       setSavingYear(false);
+    }
+  }
+
+  async function activate() {
+    setActivating(true);
+    try {
+      await activateSchoolYearClient();
+      toast.success(`${toYear} is now the live school year`);
+      router.refresh(); // re-reads server state: the live year flips, the flow resets via the [fromYear,toYear] effect
+    } catch (e) {
+      const code = (e as { code?: string }).code;
+      toast.error(code === 'promotion-not-run' ? 'Promote families first, then activate.' : 'Could not activate. Please try again.');
+    } finally {
+      setActivating(false);
+    }
+  }
+
+  async function copyCalendar() {
+    setCopyingCalendar(true);
+    try {
+      const r = await copyCalendarFromLastYearClient();
+      toast.success(
+        r.created.length > 0
+          ? `Copied ${r.created.length} calendar date${r.created.length === 1 ? '' : 's'} into ${toYear}`
+          : `Calendar already in sync for ${toYear}`,
+      );
+      router.refresh();
+    } catch {
+      toast.error('Could not copy the calendar. Please try again.');
+    } finally {
+      setCopyingCalendar(false);
     }
   }
 
@@ -206,7 +249,7 @@ export function RolloverPage({ state }: RolloverPageProps) {
           />
         </StepRow>
 
-        <StepRow index={2} done={promoteDone} active={startDone && !promoteDone} last>
+        <StepRow index={2} done={promoteDone} active={startDone && !promoteDone} last={false} spineDone={promoteDone}>
           {phase === 'done' && report ? (
             <PromoteResult
               report={report}
@@ -229,6 +272,16 @@ export function RolloverPage({ state }: RolloverPageProps) {
               onPromote={() => setConfirmOpen(true)}
             />
           )}
+        </StepRow>
+
+        <StepRow index={3} done={false} active={promoteDone || state.readiness.promotionRan} last>
+          <YearReadinessChecklist
+            readiness={state.readiness}
+            onActivate={activate}
+            onCopyCalendar={copyCalendar}
+            activating={activating}
+            copyingCalendar={copyingCalendar}
+          />
         </StepRow>
       </div>
 

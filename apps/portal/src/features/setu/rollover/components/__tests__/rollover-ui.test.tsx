@@ -24,6 +24,8 @@ vi.mock('@/features/setu/rollover/rollover-client', () => ({
   previewPromotionClient: vi.fn(),
   commitPromotionClient: vi.fn(),
   saveSchoolYearConfigClient: vi.fn(),
+  activateSchoolYearClient: vi.fn(),
+  copyCalendarFromLastYearClient: vi.fn(),
 }));
 vi.mock('../../set-grade-client', () => ({
   setGradeClient: vi.fn(),
@@ -42,6 +44,16 @@ function state(over: Partial<RolloverPageState> = {}): RolloverPageState {
     sourceLevelCount: 18,
     sourceOfferingCount: 2,
     targetLevelCount: 0,
+    readiness: {
+      toYear: '2026-27',
+      promotionRan: false,
+      offerings: true,
+      levels: true,
+      calendar: false,
+      teachers: false,
+      prasad: false,
+      seva: false,
+    },
     ...over,
   };
 }
