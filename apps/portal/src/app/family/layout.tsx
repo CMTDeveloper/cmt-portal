@@ -2,7 +2,6 @@ import { Suspense } from 'react';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
-import { getRequestPathname } from '@/features/setu/members/get-request-pathname';
 import { CspRoot } from '@/features/family/components/atoms';
 import { DesktopSidebar, DesktopSidebarLive } from '@/features/family/components/desktop-sidebar';
 import { MobileBottomNav } from '@/features/family/components/mobile-bottom-nav';
@@ -17,9 +16,16 @@ import {
 } from '@cmt/shared-domain';
 import { flags } from '@/lib/flags';
 
-// Route the gate redirects an incomplete family to. Exempted from the gate
-// itself so the completion screen can render (no infinite redirect loop).
-const COMPLETE_PROFILE_PATH = '/family/complete-profile';
+// Route the gate redirects an incomplete family to. It lives at a TOP-LEVEL
+// route, OUTSIDE this /family layout, on purpose. When the completion screen was
+// nested at /family/complete-profile it inherited THIS gate, which then had to
+// exempt itself via the current request pathname — and under a soft client-side
+// navigation that header is stale (it read '/family' while the layout
+// re-rendered for the completion route), so the gate redirected to itself
+// forever: a blank page with flickering chrome. Redirecting OUTSIDE /family
+// means the gate never re-runs at the destination — no exemption to get wrong,
+// nothing to loop.
+const COMPLETE_PROFILE_PATH = '/complete-profile';
 
 // Profile-completion gate (owner spec 2026-06-22). Runs on every /family/*
 // render. A MANAGER must complete the WHOLE family (children included — they
@@ -27,31 +33,21 @@ const COMPLETE_PROFILE_PATH = '/family/complete-profile';
 // (canAccessRoute lets a member edit only themselves). The completeness rules
 // come from the single shared @cmt/shared-domain helper so the gate, the forms,
 // and the write routes all agree.
-//
-// Loop-safety: we only redirect once we can positively confirm the current
-// pathname is NOT the completion route. getRequestPathname() fails open
-// (returns null) when the path can't be determined, in which case we DON'T
-// redirect — a missing pathname can never lock a family out or loop.
 export async function ProfileCompletionGate() {
   // flags.setuAuth false ⇒ the mock/prototype path with no real session; the
   // dashboard renders its mock family and there's nothing to gate.
   if (!flags.setuAuth) return null;
 
-  const [data, pathname] = await Promise.all([getCurrentFamily(), getRequestPathname()]);
+  const data = await getCurrentFamily();
   if (!data) return null; // unauthenticated — middleware already handles redirect
 
-  // Already on the completion screen → never redirect (would loop). Also the
-  // fail-open case: unknown pathname ⇒ don't redirect.
-  if (pathname === null || pathname === COMPLETE_PROFILE_PATH) return null;
-
-  let incomplete: boolean;
-  if (data.isManager) {
-    incomplete = incompleteMembers(data.members).length > 0;
-  } else {
-    const me = data.members.find((m) => m.mid === data.currentMid);
-    // No own record found ⇒ nothing this member can complete; don't trap them.
-    incomplete = me ? !isMemberComplete(me) : false;
-  }
+  const incomplete = data.isManager
+    ? incompleteMembers(data.members).length > 0
+    : (() => {
+        const me = data.members.find((m) => m.mid === data.currentMid);
+        // No own record found ⇒ nothing this member can complete; don't trap them.
+        return me ? !isMemberComplete(me) : false;
+      })();
 
   if (incomplete) redirect(COMPLETE_PROFILE_PATH);
   return null;

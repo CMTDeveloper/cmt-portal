@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { toast } from '@cmt/ui';
+import { toast, SetuLogo } from '@cmt/ui';
 import {
   whatsMissingForMember,
   isMemberComplete,
@@ -474,10 +474,12 @@ export function CompleteProfileForm() {
 
   return (
     <form onSubmit={handleSubmit}>
-      {/* Mobile */}
+      {/* Mobile — standalone full-screen (this is a top-level /complete-profile
+          route, NOT under the /family sidebar chrome). */}
       <div className="block md:hidden">
         <CspRoot style={{ minHeight: '100dvh' }}>
-          <div style={{ padding: '18px 18px 110px', minHeight: '100dvh' }}>
+          <div style={{ padding: '20px 18px 110px', minHeight: '100dvh' }}>
+            <div style={{ marginBottom: 18 }}><SetuLogo size={18} /></div>
             {intro}
             {allSetNote}
             {memberCards}
@@ -488,14 +490,17 @@ export function CompleteProfileForm() {
         </CspRoot>
       </div>
 
-      {/* Desktop — family layout owns the sidebar + main wrapper */}
+      {/* Desktop — standalone, centered focused screen (no family sidebar). */}
       <div className="hidden md:block">
-        <div style={{ maxWidth: 640 }}>
-          {intro}
-          {allSetNote}
-          {memberCards}
-          <div style={{ marginTop: 8 }}>{submitBtn}</div>
-        </div>
+        <CspRoot style={{ minHeight: '100dvh' }}>
+          <div style={{ maxWidth: 600, margin: '0 auto', padding: '56px 24px 72px' }}>
+            <div style={{ marginBottom: 30 }}><SetuLogo size={22} /></div>
+            {intro}
+            {allSetNote}
+            {memberCards}
+            <div style={{ marginTop: 8 }}>{submitBtn}</div>
+          </div>
+        </CspRoot>
       </div>
     </form>
   );

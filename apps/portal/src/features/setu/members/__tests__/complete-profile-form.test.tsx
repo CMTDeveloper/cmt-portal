@@ -11,7 +11,7 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ push, refresh }) }));
 
 // ── @cmt/ui toast ─────────────────────────────────────────────────────────────
 const toastMock = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
-vi.mock('@cmt/ui', () => ({ toast: toastMock }));
+vi.mock('@cmt/ui', () => ({ toast: toastMock, SetuLogo: () => <div data-testid="setu-logo" /> }));
 
 // ── client data wrappers ──────────────────────────────────────────────────────
 const getFamily = vi.hoisted(() => vi.fn());

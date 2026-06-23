@@ -14,17 +14,19 @@ vi.mock('next/navigation', () => ({ redirect: mockRedirect }));
 const flagsMock = vi.hoisted(() => ({ setuAuth: true }));
 vi.mock('@/lib/flags', () => ({ flags: flagsMock }));
 
-// ── The two awaited data sources ──────────────────────────────────────────────
+// ── The awaited data source ───────────────────────────────────────────────────
 const mockGetCurrentFamily = vi.hoisted(() => vi.fn());
 vi.mock('@/features/setu/members/get-current-family', () => ({
   getCurrentFamily: mockGetCurrentFamily,
 }));
-const mockGetRequestPathname = vi.hoisted(() => vi.fn());
-vi.mock('@/features/setu/members/get-request-pathname', () => ({
-  getRequestPathname: mockGetRequestPathname,
-}));
 
 import { ProfileCompletionGate } from '../layout';
+
+// The gate redirects an incomplete family to the TOP-LEVEL /complete-profile
+// route (NOT /family/complete-profile). Living outside the /family layout is
+// what stops the redirect loop, so the gate no longer needs a pathname-based
+// self-exemption — there is no exemption to test.
+const COMPLETE = '/complete-profile';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 function adult(over: Partial<MemberDoc> = {}): MemberDoc {
@@ -87,10 +89,7 @@ function family(members: MemberDoc[], over: Partial<FamilyWithMembers> = {}): Fa
 beforeEach(() => {
   mockRedirect.mockClear();
   mockGetCurrentFamily.mockReset();
-  mockGetRequestPathname.mockReset();
   flagsMock.setuAuth = true;
-  // Default: a normal /family path (not the completion route).
-  mockGetRequestPathname.mockResolvedValue('/family');
 });
 
 describe('ProfileCompletionGate', () => {
@@ -100,8 +99,8 @@ describe('ProfileCompletionGate', () => {
       family([adult(), child({ schoolGrade: null })]),
     );
 
-    await expect(ProfileCompletionGate()).rejects.toThrow('NEXT_REDIRECT:/family/complete-profile');
-    expect(mockRedirect).toHaveBeenCalledWith('/family/complete-profile');
+    await expect(ProfileCompletionGate()).rejects.toThrow(`NEXT_REDIRECT:${COMPLETE}`);
+    expect(mockRedirect).toHaveBeenCalledWith(COMPLETE);
   });
 
   it('redirects a manager whose own record is missing a required field', async () => {
@@ -110,31 +109,20 @@ describe('ProfileCompletionGate', () => {
       family([adult({ volunteeringSkills: [] }), child()]),
     );
 
-    await expect(ProfileCompletionGate()).rejects.toThrow('NEXT_REDIRECT:/family/complete-profile');
-    expect(mockRedirect).toHaveBeenCalledWith('/family/complete-profile');
+    await expect(ProfileCompletionGate()).rejects.toThrow(`NEXT_REDIRECT:${COMPLETE}`);
+    expect(mockRedirect).toHaveBeenCalledWith(COMPLETE);
+  });
+
+  it('redirects to the TOP-LEVEL /complete-profile, never /family/complete-profile', async () => {
+    // Regression guard for the loop fix: the target must be OUTSIDE /family, so
+    // the /family gate can't re-run at the destination and loop.
+    mockGetCurrentFamily.mockResolvedValue(family([adult({ foodAllergies: null }), child()]));
+    await expect(ProfileCompletionGate()).rejects.toThrow('NEXT_REDIRECT:/complete-profile');
+    expect(mockRedirect).not.toHaveBeenCalledWith('/family/complete-profile');
   });
 
   it('does NOT redirect when the family is fully complete', async () => {
     mockGetCurrentFamily.mockResolvedValue(family([adult(), child()]));
-
-    const result = await ProfileCompletionGate();
-    expect(result).toBeNull();
-    expect(mockRedirect).not.toHaveBeenCalled();
-  });
-
-  it('exempts the completion route itself (no infinite loop)', async () => {
-    // Family is incomplete, but we are already ON /family/complete-profile.
-    mockGetCurrentFamily.mockResolvedValue(family([adult(), child({ schoolGrade: null })]));
-    mockGetRequestPathname.mockResolvedValue('/family/complete-profile');
-
-    const result = await ProfileCompletionGate();
-    expect(result).toBeNull();
-    expect(mockRedirect).not.toHaveBeenCalled();
-  });
-
-  it('fails open (no redirect) when the pathname cannot be determined', async () => {
-    mockGetCurrentFamily.mockResolvedValue(family([adult(), child({ schoolGrade: null })]));
-    mockGetRequestPathname.mockResolvedValue(null);
 
     const result = await ProfileCompletionGate();
     expect(result).toBeNull();
@@ -164,8 +152,8 @@ describe('ProfileCompletionGate', () => {
       }),
     );
 
-    await expect(ProfileCompletionGate()).rejects.toThrow('NEXT_REDIRECT:/family/complete-profile');
-    expect(mockRedirect).toHaveBeenCalledWith('/family/complete-profile');
+    await expect(ProfileCompletionGate()).rejects.toThrow(`NEXT_REDIRECT:${COMPLETE}`);
+    expect(mockRedirect).toHaveBeenCalledWith(COMPLETE);
   });
 
   it('does nothing when setuAuth is off (mock/prototype path)', async () => {

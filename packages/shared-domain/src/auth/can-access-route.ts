@@ -62,6 +62,13 @@ export function canAccessRoute(
     return isSetuFamily(claims);
   }
 
+  // Profile-completion screen — a top-level route (NOT under /family, to avoid the
+  // gate redirect loop) that the /family gate sends an incomplete family to.
+  // Reachable by any signed-in Setu family member.
+  if (pathname === '/complete-profile' || pathname.startsWith('/complete-profile/')) {
+    return isSetuFamily(claims);
+  }
+
   // Welcome-team portal pages
   if (pathname === '/welcome' || pathname.startsWith('/welcome/')) {
     return isWelcomeTeam(claims);

@@ -12,8 +12,8 @@ import { PC_MANAGER_EMAIL, PC_PASSWORD, hasProfileCompletionCreds } from '../../
  * The fixture (scripts/seed-profile-completion-family.ts) is a single-manager
  * family whose manager is deliberately GATE-INCOMPLETE — a real gender + email +
  * phone, but no foodAllergies and no volunteeringSkills (the two adult required
- * fields). Signing in succeeds, then the layout gate redirects to
- * /family/complete-profile until the family is complete.
+ * fields). Signing in succeeds, then the layout gate redirects to the top-level
+ * /complete-profile route until the family is complete.
  *
  * SEQUENTIAL + MUTATING: the second test completes the manager's profile, so the
  * suite RE-SEEDS in beforeAll to reset the manager to incomplete and stays in
@@ -66,14 +66,16 @@ test.describe('registration — profile-completion gate', () => {
     }
   });
 
-  // ── 1. An incomplete family is gated to /family/complete-profile ───────────
-  test('signing in with an incomplete family redirects to /family/complete-profile', async ({ browser }) => {
+  // ── 1. An incomplete family is gated to /complete-profile ──────────────────
+  test('signing in with an incomplete family redirects to /complete-profile', async ({ browser }) => {
     const ctx = await managerContext(browser);
     const page = await ctx.newPage();
     try {
       await page.goto('/family');
-      // The layout gate redirects (client-side under cacheComponents streaming).
-      await expect(page).toHaveURL(/\/family\/complete-profile/, { timeout: 30_000 });
+      // The layout gate redirects (client-side under cacheComponents streaming)
+      // to the TOP-LEVEL /complete-profile route (outside /family — that's what
+      // stops the redirect loop on soft navigation).
+      await expect(page).toHaveURL(/\/complete-profile(\/|$|\?)/, { timeout: 30_000 });
       // The completion screen renders and names the two missing adult fields.
       await expect(visible(page, /A few details before you continue/i).first()).toBeVisible({ timeout: 20_000 });
       await expect(visible(page, /Food allergies/i).first()).toBeVisible();
@@ -89,7 +91,7 @@ test.describe('registration — profile-completion gate', () => {
     const ctx = await managerContext(browser);
     const page = await ctx.newPage();
     try {
-      await page.goto('/family/complete-profile');
+      await page.goto('/complete-profile');
 
       // foodAllergies → "No known allergies" (writes the 'None' sentinel). Use
       // click(), not check(): satisfying the field immediately removes it from

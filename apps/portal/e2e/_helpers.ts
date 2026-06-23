@@ -39,7 +39,7 @@ export const hasJoinRequestCreds = Boolean(JR_PASSWORD);
 // Dedicated fixture for the profile-completion gate, seeded by
 // scripts/seed-profile-completion-family.ts (UAT). A MANAGER who is deliberately
 // gate-INCOMPLETE (a real gender + email + phone, but no foodAllergies and no
-// volunteeringSkills) → signing in redirects to /family/complete-profile.
+// volunteeringSkills) → signing in redirects to /complete-profile.
 // Password defaults to E2E_FAMILY_PASSWORD when E2E_PC_PASSWORD is unset (the
 // seed does the same).
 export const PC_MANAGER_EMAIL =

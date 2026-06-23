@@ -112,7 +112,7 @@ export default async function FamilyDashboardPage() {
 
   // Greeting first name. The profile-completion gate (app/family/layout.tsx)
   // now hard-blocks any family with missing required member info — including a
-  // missing firstName — and redirects to /family/complete-profile, so by the
+  // missing firstName — and redirects to /complete-profile, so by the
   // time the dashboard renders the name is present. A null here only happens on
   // the mock/non-setuAuth path; the greeting falls back to "Hari OM!".
   const trimmedFirst = (managerName.split(' ')[0] ?? '').trim();
