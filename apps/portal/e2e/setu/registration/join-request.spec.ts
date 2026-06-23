@@ -184,6 +184,17 @@ test.describe('registration — gated co-manager join-request', () => {
       await expect(row.first()).toBeVisible({ timeout: 20_000 });
       await expect(row.first().getByText(JR_MEMBER_EMAIL.toLowerCase())).toBeVisible();
 
+      // The emailed "Review request" link target — /join-request/{token} — is a
+      // PUBLIC page whose client GETs the (manager-only) request and renders
+      // Approve/Decline. Regression guard for the bug where the page was missing
+      // from PUBLIC_ROUTES, so a signed-in manager was denied 'unauthorized' and
+      // bounced to the legacy /login instead of seeing the approve UI.
+      await page.goto(`/join-request/${reqRow!.token}`);
+      await expect(
+        page.getByRole('button', { name: /approve & add as co-manager/i }).filter({ visible: true }),
+      ).toBeVisible({ timeout: 20_000 });
+      expect(page.url()).not.toContain('/login');
+
       // Approve via the API (the same call the panel button fires) for a
       // deterministic, race-free assertion of the promotion.
       const approve = await managerCtx.post('/api/setu/join-request/approve', {

@@ -15,6 +15,13 @@ export const PUBLIC_ROUTES = [
   '/register',
   '/register/family',
   '/invite/:token',
+  // Join-request review PAGE — the emailed "Review request" link target. Public
+  // like /invite/:token: a static shell whose client GETs the request (the
+  // manager-only /api/setu/join-request/:token API) and, on 401/403, redirects
+  // to /sign-in?from=/join-request/:token. WITHOUT this entry the page is
+  // auth-gated by canAccessRoute (which has no page rule for it), so even a
+  // signed-in manager is denied 'unauthorized' and bounced to the LEGACY /login.
+  '/join-request/:token',
 
   // Setu OTP auth APIs (public — unauthenticated users call these to sign in)
   '/api/setu/auth/send-code',

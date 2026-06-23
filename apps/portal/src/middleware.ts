@@ -180,7 +180,10 @@ function deny(req: NextRequest, reason: 'no-session' | 'unauthorized') {
     pathname === '/family' || pathname.startsWith('/family/') ||
     pathname === '/welcome' || pathname.startsWith('/welcome/') ||
     pathname === '/admin' || pathname.startsWith('/admin/') ||
-    pathname === '/docs' || pathname.startsWith('/docs/');
+    pathname === '/docs' || pathname.startsWith('/docs/') ||
+    // Token-link pages (public, but harden the destination): if ever auth-gated,
+    // send the manager/invitee to the Setu /sign-in, never the legacy /login.
+    pathname.startsWith('/join-request/') || pathname.startsWith('/invite/');
   const loginPath = isSetuRoute ? '/sign-in' : '/login';
   const redirect = new URL(loginPath, req.nextUrl.origin);
   redirect.searchParams.set('from', pathname);

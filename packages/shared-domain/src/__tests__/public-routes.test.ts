@@ -14,6 +14,17 @@ describe('PUBLIC_ROUTES', () => {
     expect(PUBLIC_ROUTES).not.toContain('/family');
     expect(PUBLIC_ROUTES).not.toContain('/family/');
   });
+  it('includes the token-link review pages (invite + join-request)', () => {
+    // Both are public shells whose client handles auth and redirects to
+    // /sign-in on 401/403. The join-request page (the emailed "Review request"
+    // link) was missing — a signed-in manager got bounced to legacy /login.
+    expect(PUBLIC_ROUTES).toContain('/invite/:token');
+    expect(PUBLIC_ROUTES).toContain('/join-request/:token');
+    expect(isPublicRoute('/join-request/VKHm7ipgMig9ObEo24BSljHlGtlpjjng')).toBe(true);
+    expect(isPublicRoute('/invite/abc123')).toBe(true);
+    // The manager-only APIs stay gated (not public).
+    expect(isPublicRoute('/api/setu/join-request/VKHm7ipgMig9ObEo24BSljHlGtlpjjng')).toBe(false);
+  });
   it('includes Setu OTP auth API routes', () => {
     expect(PUBLIC_ROUTES).toContain('/api/setu/auth/send-code');
     expect(PUBLIC_ROUTES).toContain('/api/setu/auth/verify-code');
