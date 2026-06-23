@@ -53,6 +53,14 @@ export const StartYearResultSchema = z.object({
 });
 export type StartYearResult = z.infer<typeof StartYearResultSchema>;
 
+export const CalendarCopyResultSchema = z.object({
+  fromYear: z.string(),
+  toYear: z.string(),
+  created: z.array(z.string()),
+  existing: z.array(z.string()),
+});
+export type CalendarCopyResult = z.infer<typeof CalendarCopyResultSchema>;
+
 // Request bodies (shared web↔native). Years optional → engine defaults.
 export const StartYearBodySchema = z.object({
   fromYear: SchoolYearLabelSchema.optional(), toYear: SchoolYearLabelSchema.optional(),

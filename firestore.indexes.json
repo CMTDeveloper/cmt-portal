@@ -137,6 +137,14 @@
       ]
     },
     {
+      "collectionGroup": "classCalendarEntries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "programKey", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "enrollments",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
