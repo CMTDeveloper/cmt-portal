@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { toast, SetuIcon } from '@cmt/ui';
 import type { RolloverReport } from '@cmt/shared-domain';
-import { commitPromotionClient } from '@/features/setu/rollover/rollover-client';
-import { StartStep } from './start-step';
+import { commitPromotionClient, saveSchoolYearConfigClient } from '@/features/setu/rollover/rollover-client';
+import { Spinner, StartStep } from './start-step';
 import { PromoteStep } from './promote-step';
 import { PromoteResult } from './promote-result';
 import { ConfirmDialog } from './confirm-dialog';
@@ -31,11 +32,24 @@ interface RolloverPageProps {
  *  success/error via Sonner toast. */
 export function RolloverPage({ state }: RolloverPageProps) {
   const { fromYear, toYear, sourceLevelCount, sourceOfferingCount } = state;
+  const router = useRouter();
 
   const [startedThisSession, setStartedThisSession] = useState(false);
   const [report, setReport] = useState<RolloverReport | null>(null);
   const [phase, setPhase] = useState<Phase>('idle');
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [editingYear, setEditingYear] = useState(false);
+  const [yearDraft, setYearDraft] = useState(fromYear);
+  const [savingYear, setSavingYear] = useState(false);
+
+  useEffect(() => {
+    setYearDraft(fromYear);
+    setEditingYear(false);
+    setStartedThisSession(false);
+    setReport(null);
+    setPhase('idle');
+    setConfirmOpen(false);
+  }, [fromYear, toYear]);
 
   const nextYearReady = state.nextYearReady || startedThisSession;
   const committing = phase === 'committing';
@@ -51,6 +65,25 @@ export function RolloverPage({ state }: RolloverPageProps) {
     } catch {
       setPhase('preview');
       toast.error('Promotion failed. No changes were committed — please try again.');
+    }
+  }
+
+  async function saveCurrentYear() {
+    const nextYearDraft = yearDraft.trim();
+    if (nextYearDraft === fromYear) {
+      setEditingYear(false);
+      return;
+    }
+    setSavingYear(true);
+    try {
+      await saveSchoolYearConfigClient(nextYearDraft);
+      toast.success('Current school year saved');
+      setEditingYear(false);
+      router.refresh();
+    } catch {
+      toast.error('Enter a school year like 2026-27.');
+    } finally {
+      setSavingYear(false);
     }
   }
 
@@ -100,6 +133,21 @@ export function RolloverPage({ state }: RolloverPageProps) {
           Move every Bala Vihar family from {fromYear} into {toYear} — advance grades, re-assign levels, and keep each
           child&rsquo;s history.
         </p>
+
+        <SchoolYearSetting
+          currentYear={fromYear}
+          nextYear={toYear}
+          editing={editingYear}
+          draft={yearDraft}
+          saving={savingYear}
+          onEdit={() => setEditingYear(true)}
+          onDraft={setYearDraft}
+          onCancel={() => {
+            setYearDraft(fromYear);
+            setEditingYear(false);
+          }}
+          onSave={saveCurrentYear}
+        />
 
         {/* Active year → Next year status. A single banded panel so the two-step
             journey reads as one continuous arc. The two short year codes sit
@@ -197,6 +245,109 @@ export function RolloverPage({ state }: RolloverPageProps) {
         />
       )}
     </div>
+  );
+}
+
+function SchoolYearSetting({
+  currentYear,
+  nextYear,
+  editing,
+  draft,
+  saving,
+  onEdit,
+  onDraft,
+  onCancel,
+  onSave,
+}: {
+  currentYear: string;
+  nextYear: string;
+  editing: boolean;
+  draft: string;
+  saving: boolean;
+  onEdit: () => void;
+  onDraft: (value: string) => void;
+  onCancel: () => void;
+  onSave: () => void;
+}) {
+  return (
+    <section
+      style={{
+        marginTop: 16,
+        padding: 14,
+        borderRadius: 'var(--radiusSm)',
+        border: '1px solid var(--line)',
+        background: 'var(--surface)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 14,
+        flexWrap: 'wrap',
+      }}
+    >
+      <div style={{ minWidth: 0 }}>
+        <p style={{ fontSize: 11, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600 }}>
+          Current school year
+        </p>
+        {editing ? (
+          <input
+            aria-label="Current school year"
+            value={draft}
+            onChange={(event) => onDraft(event.target.value)}
+            placeholder="2026-27"
+            disabled={saving}
+            style={{
+              width: 132,
+              marginTop: 7,
+              padding: '9px 11px',
+              borderRadius: 'var(--radiusSm)',
+              border: '1px solid var(--line2)',
+              background: 'var(--surface2)',
+              color: 'var(--ink)',
+              fontFamily: 'var(--mono)',
+              fontSize: 16,
+              fontWeight: 700,
+              boxSizing: 'border-box',
+            }}
+          />
+        ) : (
+          <p style={{ fontSize: 18, fontWeight: 700, color: 'var(--ink)', marginTop: 4, fontFamily: 'var(--mono)' }}>{currentYear}</p>
+        )}
+        <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 5 }}>
+          Next year: <span style={{ fontFamily: 'var(--mono)', fontWeight: 700 }}>{nextYear}</span>
+        </p>
+      </div>
+      {editing ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={saving}
+            className="btn"
+            style={{ minHeight: 38, fontSize: 13, opacity: saving ? 0.6 : 1 }}
+          >
+            <SetuIcon.x /> Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={saving}
+            className="btn btn--p"
+            style={{ minHeight: 38, fontSize: 13, opacity: saving ? 0.7 : 1 }}
+          >
+            {saving ? <Spinner /> : <SetuIcon.check />} Save
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={onEdit}
+          className="btn"
+          style={{ minHeight: 38, fontSize: 13 }}
+        >
+          <SetuIcon.edit /> Edit
+        </button>
+      )}
+    </section>
   );
 }
 

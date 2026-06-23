@@ -1,12 +1,14 @@
 import { connection } from 'next/server';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
-import { BALA_VIHAR } from '@cmt/shared-domain';
 import {
-  DEFAULT_FROM_YEAR,
-  DEFAULT_TO_YEAR,
-  BV_SOURCE_OIDS,
+  balaViharSourceOidsForYear,
+  deriveNextSchoolYear,
   targetOidOf,
 } from '@/features/setu/rollover/school-year';
+import {
+  getSchoolYearConfig,
+  listBalaViharSourceOids,
+} from '@/features/setu/rollover/school-year-config';
 import { RolloverPage, type RolloverPageState } from '@/features/setu/rollover/components/rollover-page';
 
 export const metadata = { title: 'School Year Rollover — Admin' };
@@ -17,20 +19,19 @@ export default async function SchoolYearPage() {
   // the Vercel build fails the prerender check otherwise) — mirrors admin/levels/page.tsx.
   await connection();
 
-  const fromYear = DEFAULT_FROM_YEAR;
-  const toYear = DEFAULT_TO_YEAR;
-  const sourceOids = [...BV_SOURCE_OIDS];
+  const db = portalFirestore();
+  const schoolYearConfig = await getSchoolYearConfig(db);
+  const fromYear = schoolYearConfig.currentYear;
+  const toYear = deriveNextSchoolYear(fromYear);
+  const configuredSourceOids = await listBalaViharSourceOids(db, fromYear);
+  const sourceOids = configuredSourceOids.length > 0
+    ? configuredSourceOids
+    : balaViharSourceOidsForYear(fromYear);
   const targetOids = sourceOids.map((oid) => targetOidOf(oid, fromYear, toYear));
 
-  const db = portalFirestore();
   // Read-only counts for the page header + Step 1 explainer. Firestore `in`
   // takes up to 10 values — two oids per side, comfortably within the limit.
-  const [sourceOfferingsSnap, sourceLevelsSnap, targetLevelsSnap] = await Promise.all([
-    db
-      .collection('offerings')
-      .where('programKey', '==', BALA_VIHAR)
-      .where('termLabel', '==', fromYear)
-      .get(),
+  const [sourceLevelsSnap, targetLevelsSnap] = await Promise.all([
     db.collection('levels').where('pid', 'in', sourceOids).get(),
     db.collection('levels').where('pid', 'in', targetOids).get(),
   ]);
@@ -40,7 +41,7 @@ export default async function SchoolYearPage() {
     toYear,
     nextYearReady: targetLevelsSnap.size > 0,
     sourceLevelCount: sourceLevelsSnap.size,
-    sourceOfferingCount: sourceOfferingsSnap.size,
+    sourceOfferingCount: configuredSourceOids.length,
     targetLevelCount: targetLevelsSnap.size,
   };
 

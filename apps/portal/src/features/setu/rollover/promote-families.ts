@@ -6,7 +6,8 @@ import {
   type PromotionRow,
   type RolloverReport,
 } from '@cmt/shared-domain';
-import { BV_SOURCE_OIDS, DEFAULT_FROM_YEAR, DEFAULT_TO_YEAR, targetOidOf } from './school-year';
+import { targetOidOf } from './school-year';
+import { resolveBalaViharSourceOids, resolveRolloverYearContext } from './school-year-config';
 import { planFamilyPromotion, type FamilyPromotionPlan } from './plan-family-promotion';
 
 type Db = FirebaseFirestore.Firestore;
@@ -178,6 +179,15 @@ function familyProgressed(plan: FamilyPromotionPlan): boolean {
   return plan.promotedMids.length > 0 || plan.rows.some((r) => r.outcomeKind === 'graduate');
 }
 
+function gradeLabel(grade: string | null): string {
+  if (grade === null) return 'No grade';
+  return grade === 'JK' || grade === 'SK' ? grade : `Grade ${grade}`;
+}
+
+function transitionLabel(row: PromotionRow): string {
+  return `${gradeLabel(row.fromGrade)} → ${gradeLabel(row.toGrade)} · ${row.fromLevelName ?? '—'} → ${row.toLevelName ?? '—'}`;
+}
+
 /** Fold one family's plan into the accumulator. */
 function aggregate(acc: Acc, plan: FamilyPromotionPlan, dryRun: boolean): void {
   acc.promoted += plan.promotedMids.length;
@@ -201,7 +211,7 @@ function aggregate(acc: Acc, plan: FamilyPromotionPlan, dryRun: boolean): void {
     }
     // byTransition is over PROMOTED rows only (advance + shishu-stays).
     if (row.outcomeKind === 'advance' || row.outcomeKind === 'shishu-stays') {
-      const label = `${row.fromLevelName ?? '—'} → ${row.toLevelName ?? '—'}`;
+      const label = transitionLabel(row);
       acc.byTransition.set(label, (acc.byTransition.get(label) ?? 0) + 1);
     }
     if (dryRun || acc.rows.length < COMMIT_ROW_CAP) acc.rows.push(row);
@@ -209,13 +219,13 @@ function aggregate(acc: Acc, plan: FamilyPromotionPlan, dryRun: boolean): void {
 }
 
 export async function promoteFamilies(db: Db, args: PromoteArgs): Promise<RolloverReport> {
-  const fromYear = args.fromYear ?? DEFAULT_FROM_YEAR;
-  const toYear = args.toYear ?? DEFAULT_TO_YEAR;
+  const { fromYear, toYear } = await resolveRolloverYearContext(db, args);
+  const sourceOids = await resolveBalaViharSourceOids(db, fromYear);
   const now = new Date();
 
   // 1. Build per-sourceOid context.
   const contexts = await Promise.all(
-    BV_SOURCE_OIDS.map((sourceOid) => buildSourceContext(db, sourceOid, fromYear, toYear)),
+    sourceOids.map((sourceOid) => buildSourceContext(db, sourceOid, fromYear, toYear)),
   );
 
   // 2. Discover families across all source offerings.

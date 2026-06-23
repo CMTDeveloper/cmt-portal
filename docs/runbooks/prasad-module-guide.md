@@ -100,9 +100,9 @@ This guide walks you through the whole flow, from setup to prasad Sunday.
 
 - **A new family enrolls mid-year** → click **"Publish proposals"** again;
   only the new family gets a date and a notification.
-- **School-year rollover** → ask the tech team to point the prasad module at
-  the new school year's programs, enter the new class calendar, then publish
-  fresh. (Same rhythm as the rest of the rollover ritual.)
+- **School-year rollover** → set the current school year in the admin
+  school-year page, enter the new class calendar, then publish fresh prasad
+  proposals. Prasad follows the Bala Vihar offerings for that current year.
 
 ## Quick reference
 
@@ -139,6 +139,10 @@ turns sending on.
 - Birth months live at `members.birthMonth`, backfilled for 906 children from
   the legacy roster via `backfill:birth-months`; new children get the field
   from their member record.
-- School-year rollover: bump `CURRENT_PRASAD_PIDS` in
-  `apps/portal/src/features/setu/prasad/constants.ts` to the new year's
-  program ids.
+- School-year rollover: no code or Vercel env change is needed for prasad.
+  The current prasad periods come from the app-managed current school year and
+  the matching Bala Vihar offerings. If those offerings are not present yet,
+  prasad falls back to the standard ids for that year.
+- `pid` means "program/period id" in this area of the codebase: the Bala Vihar
+  offering id such as `bv-brampton-2026-27`. It appears as `offerings.oid`,
+  `enrollments.pid`, `prasadAssignments.pid`, and `prasadConfig/{pid}`.

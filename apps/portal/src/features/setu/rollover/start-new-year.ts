@@ -1,6 +1,7 @@
 import { FieldValue } from '@cmt/firebase-shared/admin/firestore';
 import { BALA_VIHAR, type StartYearResult } from '@cmt/shared-domain';
-import { DEFAULT_FROM_YEAR, DEFAULT_TO_YEAR, targetOidOf } from './school-year';
+import { targetOidOf } from './school-year';
+import { resolveRolloverYearContext } from './school-year-config';
 
 type Db = FirebaseFirestore.Firestore;
 
@@ -42,8 +43,7 @@ function plusOneYear(d: Date): Date {
  * created/existing lists by reading existence but performs no writes.
  */
 export async function startNewYear(db: Db, args: StartArgs): Promise<StartYearResult> {
-  const fromYear = args.fromYear ?? DEFAULT_FROM_YEAR;
-  const toYear = args.toYear ?? DEFAULT_TO_YEAR;
+  const { fromYear, toYear } = await resolveRolloverYearContext(db, args);
 
   const offeringsCreated: string[] = [];
   const offeringsExisting: string[] = [];

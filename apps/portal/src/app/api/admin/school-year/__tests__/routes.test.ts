@@ -1,7 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { RolloverReport, StartYearResult } from '@cmt/shared-domain';
 
-vi.mock('next/cache', () => ({ revalidateTag: vi.fn(), cacheTag: vi.fn(), cacheLife: vi.fn() }));
+vi.mock('next/cache', () => ({
+  revalidatePath: vi.fn(),
+  revalidateTag: vi.fn(),
+  cacheTag: vi.fn(),
+  cacheLife: vi.fn(),
+}));
 
 // portalFirestore is only passed through to the (mocked) engines.
 vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
@@ -16,6 +21,13 @@ vi.mock('@/features/setu/rollover/start-new-year', () => ({
 const mockPromoteFamilies = vi.fn();
 vi.mock('@/features/setu/rollover/promote-families', () => ({
   promoteFamilies: (...a: unknown[]) => mockPromoteFamilies(...a),
+}));
+
+const mockGetSchoolYearConfig = vi.fn();
+const mockSetSchoolYearConfig = vi.fn();
+vi.mock('@/features/setu/rollover/school-year-config', () => ({
+  getSchoolYearConfig: (...a: unknown[]) => mockGetSchoolYearConfig(...a),
+  setSchoolYearConfig: (...a: unknown[]) => mockSetSchoolYearConfig(...a),
 }));
 
 const START_RESULT: StartYearResult = {
@@ -57,12 +69,12 @@ const REPORT: RolloverReport = {
   ],
 };
 
-function makeRequest(path: string, body?: unknown, role?: string, uid = 'uid-admin'): Request {
+function makeRequest(path: string, body?: unknown, role?: string, uid = 'uid-admin', method = 'POST'): Request {
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   if (role) headers['x-portal-role'] = role;
   if (uid) headers['x-portal-uid'] = uid;
   return new Request(`http://localhost${path}`, {
-    method: 'POST',
+    method,
     headers,
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });
@@ -72,6 +84,55 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockStartNewYear.mockResolvedValue(START_RESULT);
   mockPromoteFamilies.mockResolvedValue(REPORT);
+  mockGetSchoolYearConfig.mockResolvedValue({ currentYear: '2025-26' });
+  mockSetSchoolYearConfig.mockResolvedValue({ currentYear: '2026-27' });
+});
+
+// ── GET/PUT /api/admin/school-year ─────────────────────────────────────────────
+
+describe('GET /api/admin/school-year', () => {
+  it('returns 403 when no session header', async () => {
+    const { GET } = await import('../route');
+    const res = await GET(makeRequest('/api/admin/school-year', undefined, undefined, 'uid-admin', 'GET'));
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: 'forbidden' });
+    expect(mockGetSchoolYearConfig).not.toHaveBeenCalled();
+  });
+
+  it('returns the configured current year and derived next year for admin', async () => {
+    const { GET } = await import('../route');
+    const res = await GET(makeRequest('/api/admin/school-year', undefined, 'admin', 'uid-admin', 'GET'));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ config: { currentYear: '2025-26' }, nextYear: '2026-27' });
+  });
+});
+
+describe('PUT /api/admin/school-year', () => {
+  it('returns 403 for a non-admin role', async () => {
+    const { PUT } = await import('../route');
+    const res = await PUT(makeRequest('/api/admin/school-year', { currentYear: '2026-27' }, 'family-manager', 'uid-family', 'PUT'));
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: 'forbidden' });
+    expect(mockSetSchoolYearConfig).not.toHaveBeenCalled();
+  });
+
+  it('persists a valid current year and revalidates the page', async () => {
+    const { revalidatePath } = await import('next/cache');
+    const { PUT } = await import('../route');
+    const res = await PUT(makeRequest('/api/admin/school-year', { currentYear: '2026-27' }, 'admin', 'uid-admin', 'PUT'));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ config: { currentYear: '2026-27' }, nextYear: '2027-28' });
+    expect(mockSetSchoolYearConfig).toHaveBeenCalledWith(expect.anything(), { currentYear: '2026-27' }, 'uid-admin');
+    expect(revalidatePath).toHaveBeenCalledWith('/admin/school-year');
+  });
+
+  it('returns 400 for an invalid school year label', async () => {
+    const { PUT } = await import('../route');
+    const res = await PUT(makeRequest('/api/admin/school-year', { currentYear: '2026' }, 'admin', 'uid-admin', 'PUT'));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('bad-request');
+    expect(mockSetSchoolYearConfig).not.toHaveBeenCalled();
+  });
 });
 
 // ── POST /api/admin/school-year/start ──────────────────────────────────────────

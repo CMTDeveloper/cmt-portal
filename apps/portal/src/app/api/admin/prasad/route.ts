@@ -3,7 +3,7 @@ import { isAdmin } from '@cmt/shared-domain';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
 import { flags } from '@/lib/flags';
-import { CURRENT_PRASAD_PIDS } from '@/features/setu/prasad/constants';
+import { findCurrentPrasadPeriod } from '@/features/setu/prasad/current-periods';
 
 /** Firestore Timestamp → ISO string, null-safe (anything without `.toDate` stays as-is). */
 function toIso(v: unknown): string | null {
@@ -28,11 +28,12 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const pid = url.searchParams.get('pid');
   const date = url.searchParams.get('date');
-  if (!pid || !CURRENT_PRASAD_PIDS.some((p) => p.pid === pid)) {
+  const db = portalFirestore();
+  if (!pid || !(await findCurrentPrasadPeriod(db, pid))) {
     return NextResponse.json({ error: 'bad-request' }, { status: 400 });
   }
 
-  let query = portalFirestore().collection('prasadAssignments').where('pid', '==', pid);
+  let query = db.collection('prasadAssignments').where('pid', '==', pid);
   if (date) query = query.where('date', '==', date);
   const snap = await query.get();
 

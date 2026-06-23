@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { isAdmin, PrasadPublishBodySchema } from '@cmt/shared-domain';
+import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
 import { flags } from '@/lib/flags';
-import { CURRENT_PRASAD_PIDS } from '@/features/setu/prasad/constants';
+import { findCurrentPrasadPeriod } from '@/features/setu/prasad/current-periods';
 import { publishAssignments } from '@/features/setu/prasad/publish-assignments';
 import { notifyUnnotifiedProposals, type ProposalNotifyResult } from '@/features/setu/prasad/proposal-notify';
 
@@ -22,7 +23,7 @@ export async function POST(req: Request) {
   }
   const parsed = PrasadPublishBodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: 'bad-request', issues: parsed.error?.issues }, { status: 400 });
-  const period = CURRENT_PRASAD_PIDS.find((p) => p.pid === parsed.data.pid);
+  const period = await findCurrentPrasadPeriod(portalFirestore(), parsed.data.pid);
   if (!period) return NextResponse.json({ error: 'unknown-pid' }, { status: 400 });
   const actor = session.mid ?? session.uid ?? 'admin';
   const result = await publishAssignments(period.pid, period.location, parsed.data.cap, actor);

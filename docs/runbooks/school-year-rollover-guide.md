@@ -48,17 +48,21 @@ the family up after you fix the data. Nobody gets stranded.
    the tech team has to deploy a database index. ⚠️ There is an important
    safety warning for them about how to deploy it — see the **Notes for
    developers** section at the end of this guide.
-2. **Grades on file**: the cleaner the grade data, the shorter the
+2. **Set the current school year**: on **School year rollover**
+   (`/admin/school-year`), confirm the **Current school year** value first.
+   The page derives the next year automatically.
+3. **Grades on file**: the cleaner the grade data, the shorter the
    need-attention list will be. You can fix grades during the flow (see
    Step 3), so this doesn't block you.
-3. **You need the admin role** — only admins can open the page or run any of
+4. **You need the admin role** — only admins can open the page or run any of
    the steps.
 
 ## Step 1 — "Start {next year}" (set up the new year's shell)
 
 Open **School year rollover** (`/admin/school-year`). The header shows
 **Active year → Next year**; the Next-year card reads "Ready" once Step 1
-has run.
+has run. If the active year is wrong, edit **Current school year** on this
+page before starting.
 
 Click **Start 2026-27** (or whatever the next year is). For each location,
 this copies the old year's setup into the new year:
@@ -163,11 +167,9 @@ families are already on the new year").
    enrollments), so the order you do this in doesn't matter.
 2. **Enter the new class calendar** at `/admin/calendar` for each location
    (including the "prasad needed" toggles).
-3. **Ask the tech team to point the prasad module at the new year** — it's a
-   small code change plus a deploy (details in **Notes for developers**).
-   Then publish fresh prasad proposals from the prasad admin page
-   (`/admin/prasad`). Without this change, prasad silently keeps running
-   against the old year.
+3. **Publish fresh prasad proposals** from `/admin/prasad`. Prasad follows
+   the current school year configured in this app, so confirm that the
+   school-year page shows the new year before publishing.
 4. **Resolve any leftover need-attention children**: set the grade, run the
    preview again, then commit again. Families already promoted are skipped
    automatically.
@@ -228,7 +230,8 @@ door-app's indexes).
 
 ### Access & endpoints
 
-- The `/admin/school-year` page and all three rollover APIs are admin-only.
+- The `/admin/school-year` page and all four school-year admin APIs are
+  admin-only.
 - Both Set-grade paths in Step 3 (the inline row dropdown and the
   "Admin · Set grade" editor on the member page) write the same admin
   set-grade endpoint.
@@ -237,6 +240,9 @@ door-app's indexes).
 
 - Shishu age is computed from `birthMonthYear` (18–59 months = stays;
   ≥ 60 months = aged out).
+- Current year is stored in Firestore at `app_config/school_year.currentYear`.
+  If that doc is missing or malformed, the app falls back to `2025-26`.
+  Next year is derived from current year (`2026-27` → `2027-28`).
 - Step 1 clones offerings as e.g. `bv-brampton-2025-26` →
   `bv-brampton-2026-27`; new-year levels are created with
   `teacherRefs: []`.
@@ -256,13 +262,17 @@ door-app's indexes).
 | Engine | `decidePromotion` (shared-domain) | advance · graduate · shishu-stays · shishu-aged-out · needs-grade |
 | Data | `members.schoolGrade`, `enrollments/{fid}-{oid}` | Grade +1; old enrollment cancelled `promoted-{year}` + snapshots; new active enrollment with `pid` |
 
-### Prasad pointer bump (Step 5.3)
+### Prasad current-year link (Step 5.3)
 
-Bump `CURRENT_PRASAD_PIDS`
-(`apps/portal/src/features/setu/prasad/constants.ts`) to the new year's
-pids — a code change + deploy — then the admin publishes fresh prasad
-proposals from `/admin/prasad`. Without the bump, prasad silently keeps
-running against the old year.
+Prasad no longer needs a code-level pointer bump at rollover. It reads the
+app-managed current school year, finds the matching Bala Vihar offerings, and
+uses those offering ids as the active prasad periods. If the offering docs are
+missing, it falls back to the standard `bv-brampton-{year}` and
+`bv-scarborough-{year}` ids for the configured year.
+
+In this codebase, a `pid` is the program/period id for an offering, such as
+`bv-brampton-2026-27`. It is the same identifier stored as `offerings.oid`,
+`enrollments.pid`, `prasadAssignments.pid`, and `prasadConfig/{pid}`.
 
 ### Verification helper (Step 5.5)
 
@@ -279,7 +289,8 @@ new pids after every rollover.
 ### CLI equivalents (same engines, same writes)
 
 For ops/scripted runs — both UAT-guarded (refuse non-`chinmaya-setu-uat`
-unless `--allow-prod`):
+unless `--allow-prod`). With no `--from/--to`, scripts use the app-managed
+current year and derived next year:
 
 ```bash
 pnpm --filter @cmt/portal school-year:start   -- --dry-run   # preview Step 1

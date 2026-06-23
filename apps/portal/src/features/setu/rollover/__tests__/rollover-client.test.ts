@@ -1,8 +1,9 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import {
-  startNewYearClient,
-  previewPromotionClient,
   commitPromotionClient,
+  previewPromotionClient,
+  saveSchoolYearConfigClient,
+  startNewYearClient,
 } from '../rollover-client';
 import type { RolloverReport, StartYearResult } from '@cmt/shared-domain';
 
@@ -53,6 +54,27 @@ describe('startNewYearClient', () => {
   it('throws on non-OK', async () => {
     fetchMock.mockResolvedValueOnce({ ok: false, status: 403 });
     await expect(startNewYearClient()).rejects.toThrow('403');
+  });
+});
+
+describe('saveSchoolYearConfigClient', () => {
+  it('persists the current year with PUT and parses the config', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ config: { currentYear: '2026-27' }, nextYear: '2027-28' }),
+    });
+    const result = await saveSchoolYearConfigClient('2026-27');
+    expect(result).toEqual({ currentYear: '2026-27' });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/admin/school-year',
+      expect.objectContaining({ method: 'PUT', body: JSON.stringify({ currentYear: '2026-27' }) }),
+    );
+  });
+
+  it('throws on non-OK', async () => {
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 400 });
+    await expect(saveSchoolYearConfigClient('bad')).rejects.toThrow('400');
   });
 });
 

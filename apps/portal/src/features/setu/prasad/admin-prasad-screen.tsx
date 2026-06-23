@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { toast, SetuIcon } from '@cmt/ui';
-import { CURRENT_PRASAD_PIDS } from './constants';
+import { FALLBACK_PRASAD_PERIODS } from './constants';
+import type { PrasadPeriodOption } from './current-periods';
 import type { PrasadPreviewResult } from './publish-assignments';
 import {
   fetchPrasadPreview,
@@ -21,7 +22,7 @@ import {
 // disclosure groups, reason chips, module-scope sub-components) so the two
 // once-a-year BV admin flows feel like one family.
 
-type PeriodOption = (typeof CURRENT_PRASAD_PIDS)[number];
+type PeriodOption = PrasadPeriodOption;
 
 // ---------------------------------------------------------------------------
 // Pure helpers (module scope — no remount churn, easy to reason about)
@@ -769,8 +770,9 @@ function AssignmentsManager({ pid, sundays }: { pid: string; sundays: string[] }
 // Screen
 // ---------------------------------------------------------------------------
 
-export function AdminPrasadScreen() {
-  const [period, setPeriod] = useState<PeriodOption>(CURRENT_PRASAD_PIDS[0]);
+export function AdminPrasadScreen({ periods = FALLBACK_PRASAD_PERIODS }: { periods?: readonly PeriodOption[] }) {
+  const periodOptions = periods.length > 0 ? periods : FALLBACK_PRASAD_PERIODS;
+  const [period, setPeriod] = useState<PeriodOption>(periodOptions[0]);
   const [preview, setPreview] = useState<PrasadPreviewResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -780,6 +782,13 @@ export function AdminPrasadScreen() {
   const [cap, setCap] = useState<number | undefined>(undefined);
 
   const { pid, location } = period;
+
+  useEffect(() => {
+    if (periodOptions.some((option) => option.pid === pid)) return;
+    setPreview(null);
+    setCap(undefined);
+    setPeriod(periodOptions[0]);
+  }, [periodOptions, pid]);
 
   const runPreview = useCallback(
     (nextCap?: number) => {
@@ -875,7 +884,7 @@ export function AdminPrasadScreen() {
           then spilled to fill each Sunday up to the cap. Preview, then publish.
         </p>
         <div style={{ marginTop: 18 }}>
-          <LocationTabs options={CURRENT_PRASAD_PIDS} activePid={pid} onSelect={selectPeriod} />
+          <LocationTabs options={periodOptions} activePid={pid} onSelect={selectPeriod} />
         </div>
       </header>
 

@@ -154,6 +154,8 @@ pnpm --filter @cmt/portal exec tsx --env-file=.env.local scripts/promote-familie
 ```
 Requires the `enrollments (oid, status)` collectionGroup index (deploy via §5 first). Promotion is grade-driven, idempotent, history-preserving (`levelSnapshots`); a family with only missing-grade kids keeps its enrollment active (never stranded).
 
+**Current school year is app-managed (no code bump at rollover).** The active year lives in Firestore at `app_config/school_year` (`{ currentYear: 'YYYY-YY' }`), set by admins via the editor on `/admin/school-year` (GET/PUT `/api/admin/school-year`, admin-only). Prasad period resolution (`getCurrentPrasadPeriods`) and the rollover `from`/`to` defaults read it, so the old per-rollover bump of `CURRENT_PRASAD_PIDS` / `DEFAULT_TO_YEAR` is gone — those constants are now `FALLBACK_PRASAD_PERIODS` / `DEFAULT_FROM_YEAR` fallbacks only. At rollover, update the year once in `/admin/school-year` (no deploy). No new Firestore index — the config read reuses the existing `offerings (programKey, termLabel)` shape. The `e2e/setu/test-accounts.spec.ts` BV/level pins are still hand-bumped at rollover (separate from prasad).
+
 ---
 
 ## 8. Feature-flag flip sequence (Vercel Production)

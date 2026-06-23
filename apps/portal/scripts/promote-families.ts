@@ -23,13 +23,11 @@
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { promoteFamilies } from '@/features/setu/rollover/promote-families';
 
-const DEFAULT_FROM_YEAR = '2025-26';
-const DEFAULT_TO_YEAR = '2026-27';
 const ACTOR_MID = 'script:promote-families';
 
 interface Args {
-  fromYear: string;
-  toYear: string;
+  fromYear: string | null;
+  toYear: string | null;
   dryRun: boolean;
   limit: number | null;
   fid: string | null;
@@ -38,8 +36,8 @@ interface Args {
 
 function parseArgs(argv: string[]): Args {
   const args: Args = {
-    fromYear: DEFAULT_FROM_YEAR,
-    toYear: DEFAULT_TO_YEAR,
+    fromYear: null,
+    toYear: null,
     dryRun: false,
     limit: null,
     fid: null,
@@ -74,15 +72,15 @@ async function main(): Promise<void> {
 
   console.log('\nSchool-year rollover — promote families');
   console.log(`  Write to:   ${portalProject} (Firestore${args.dryRun ? ', DRY-RUN — no writes' : ''})`);
-  console.log(`  From year:  ${args.fromYear}`);
-  console.log(`  To year:    ${args.toYear}`);
+  console.log(`  From year:  ${args.fromYear ?? '(app current year)'}`);
+  console.log(`  To year:    ${args.toYear ?? '(derived next year)'}`);
   if (args.limit !== null) console.log(`  Limit:      first ${args.limit} families`);
   if (args.fid !== null) console.log(`  Filter:     fid=${args.fid} only`);
   console.log('');
 
   const report = await promoteFamilies(portalFirestore(), {
-    fromYear: args.fromYear,
-    toYear: args.toYear,
+    ...(args.fromYear ? { fromYear: args.fromYear } : {}),
+    ...(args.toYear ? { toYear: args.toYear } : {}),
     actorMid: ACTOR_MID,
     dryRun: args.dryRun,
     ...(args.limit != null ? { limit: args.limit } : {}),

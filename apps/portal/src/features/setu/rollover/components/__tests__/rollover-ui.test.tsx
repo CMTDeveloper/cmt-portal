@@ -6,14 +6,24 @@ import type { RolloverReport } from '@cmt/shared-domain';
 vi.mock('next/link', () => ({
   default: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a>,
 }));
+const navigationMocks = vi.hoisted(() => ({ refresh: vi.fn() }));
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ refresh: navigationMocks.refresh }),
+}));
 vi.mock('@cmt/ui', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
-  SetuIcon: { back: () => <span>←</span> },
+  SetuIcon: {
+    back: () => <span>←</span>,
+    check: () => <span>check</span>,
+    edit: () => <span>edit</span>,
+    x: () => <span>x</span>,
+  },
 }));
 vi.mock('@/features/setu/rollover/rollover-client', () => ({
   startNewYearClient: vi.fn(),
   previewPromotionClient: vi.fn(),
   commitPromotionClient: vi.fn(),
+  saveSchoolYearConfigClient: vi.fn(),
 }));
 vi.mock('../../set-grade-client', () => ({
   setGradeClient: vi.fn(),
@@ -21,7 +31,7 @@ vi.mock('../../set-grade-client', () => ({
 
 import { RolloverPage, type RolloverPageState } from '../rollover-page';
 import { PromotionPreview } from '../promotion-preview';
-import { previewPromotionClient, commitPromotionClient } from '@/features/setu/rollover/rollover-client';
+import { previewPromotionClient, commitPromotionClient, saveSchoolYearConfigClient } from '@/features/setu/rollover/rollover-client';
 import { setGradeClient } from '../../set-grade-client';
 
 function state(over: Partial<RolloverPageState> = {}): RolloverPageState {
@@ -48,8 +58,8 @@ const REPORT: RolloverReport = {
   graduated: 18,
   needsAttention: 14,
   byTransition: [
-    { label: 'Level 1 → Level 2', count: 53 },
-    { label: 'Level 2 → Level 3', count: 23 },
+    { label: 'Grade 1 → Grade 2 · Level 1 → Level 2', count: 53 },
+    { label: 'Grade 3 → Grade 4 · Level 2 → Level 3', count: 23 },
   ],
   graduates: [{ fid: 'F-G1', mid: 'M-G1', childName: 'Aanya R.', location: 'Brampton', outcomeKind: 'graduate', fromGrade: '12', fromLevelName: 'Level 5', toGrade: null, toLevelName: null }],
   attention: [
@@ -62,7 +72,9 @@ const REPORT: RolloverReport = {
 beforeEach(() => {
   vi.mocked(previewPromotionClient).mockReset();
   vi.mocked(commitPromotionClient).mockReset();
+  vi.mocked(saveSchoolYearConfigClient).mockReset();
   vi.mocked(setGradeClient).mockReset();
+  navigationMocks.refresh.mockReset();
 });
 
 it('renders Step 1 and a LOCKED Step 2 when the next year is not ready', () => {
@@ -89,7 +101,7 @@ it('clicking "Preview run" calls previewPromotionClient and renders the report',
   expect(screen.getByText('14')).toBeDefined();
 
   // A byTransition row renders.
-  expect(screen.getByText('Level 1 → Level 2')).toBeDefined();
+  expect(screen.getByText('Grade 1 → Grade 2 · Level 1 → Level 2')).toBeDefined();
   expect(screen.getByText('53')).toBeDefined();
 
   // The attention row renders with a Review link whose href contains the fid.
@@ -123,6 +135,20 @@ it('renders Step 1 in its confirmed state and unlocks Step 2 when next year is a
   // Step 2 is unlocked: the "Preview run" action is available, no lock copy.
   expect(screen.getByRole('button', { name: /preview run/i })).toBeDefined();
   expect(screen.queryByText(/Complete Step 1 first/i)).toBeNull();
+});
+
+it('saves the current school year and refreshes server-rendered counts', async () => {
+  vi.mocked(saveSchoolYearConfigClient).mockResolvedValue({ currentYear: '2026-27' });
+  const user = userEvent.setup();
+  render(<RolloverPage state={state()} />);
+
+  await user.click(screen.getByRole('button', { name: /edit/i }));
+  await user.clear(screen.getByRole('textbox', { name: /current school year/i }));
+  await user.type(screen.getByRole('textbox', { name: /current school year/i }), '2026-27');
+  await user.click(screen.getByRole('button', { name: /save/i }));
+
+  expect(saveSchoolYearConfigClient).toHaveBeenCalledWith('2026-27');
+  expect(navigationMocks.refresh).toHaveBeenCalledTimes(1);
 });
 
 it('inline Set grade on a need-attention row calls setGradeClient and refreshes the preview', async () => {

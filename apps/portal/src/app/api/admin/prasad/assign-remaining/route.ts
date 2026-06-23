@@ -3,7 +3,7 @@ import { isAdmin, PrasadAssignRemainingBodySchema } from '@cmt/shared-domain';
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
 import { flags } from '@/lib/flags';
-import { CURRENT_PRASAD_PIDS } from '@/features/setu/prasad/constants';
+import { findCurrentPrasadPeriod } from '@/features/setu/prasad/current-periods';
 
 /** POST /api/admin/prasad/assign-remaining — flip every still-PROPOSED row for
  *  the pid to assigned (confirmedBy:'admin'). The "assign the stragglers"
@@ -17,11 +17,11 @@ export async function POST(req: Request) {
   }
   const parsed = PrasadAssignRemainingBodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: 'bad-request', issues: parsed.error?.issues }, { status: 400 });
-  if (!CURRENT_PRASAD_PIDS.some((p) => p.pid === parsed.data.pid)) {
+  const db = portalFirestore();
+  if (!(await findCurrentPrasadPeriod(db, parsed.data.pid))) {
     return NextResponse.json({ error: 'unknown-pid' }, { status: 400 });
   }
 
-  const db = portalFirestore();
   const snap = await db.collection('prasadAssignments')
     .where('pid', '==', parsed.data.pid).where('status', '==', 'proposed').get();
 

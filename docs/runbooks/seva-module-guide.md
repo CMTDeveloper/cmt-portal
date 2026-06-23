@@ -184,8 +184,8 @@ sign-ups and never touches existing ones.
 - Status enums: sign-ups are `signed-up` → `completed` | `no-show`, plus
   `cancelled` (re-signup reactivates the same doc); opportunities are
   `open` ↔ `closed`.
-- The "prasad update" referenced under Year-end is the `CURRENT_PRASAD_PIDS`
-  bump done at each school-year rollover.
+- The "prasad update" referenced under Year-end is now handled by the
+  app-managed current school year; no prasad code pointer bump is needed.
 - No feature flag — gated purely by roles (`isSetuFamily` for
   `/api/setu/seva/*`, `isWelcomeTeam` for `/api/welcome/seva/*`, admin for
   the requirement).

@@ -3,8 +3,20 @@ import {
   EnrollmentDocSchema,
   LevelSnapshotSchema,
   RolloverReportSchema,
+  SchoolYearConfigSchema,
   StartYearResultSchema,
 } from '../../index';
+
+describe('school-year config schema', () => {
+  it('accepts a canonical current school year', () => {
+    expect(SchoolYearConfigSchema.parse({ currentYear: '2026-27' })).toEqual({ currentYear: '2026-27' });
+  });
+
+  it('rejects malformed and non-sequential school years', () => {
+    expect(SchoolYearConfigSchema.safeParse({ currentYear: '2026' }).success).toBe(false);
+    expect(SchoolYearConfigSchema.safeParse({ currentYear: '2026-28' }).success).toBe(false);
+  });
+});
 
 describe('enrollment schema — rollover extensions', () => {
   const base = {

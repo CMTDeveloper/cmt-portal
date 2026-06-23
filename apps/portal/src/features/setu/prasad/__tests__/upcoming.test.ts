@@ -4,12 +4,19 @@ vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
   portalFirestore: vi.fn(),
 }));
 
-// Pin "today" so the date>= filter is deterministic. CURRENT_PRASAD_PIDS is the
-// real constant (Brampton + Scarborough) — the mock keys assignments by pid.
+// Pin "today" so the date>= filter is deterministic. The current periods mock
+// keeps the test keyed to the Brampton + Scarborough pid pair.
 vi.mock('../constants', async () => {
   const actual = await vi.importActual<typeof import('../constants')>('../constants');
   return { ...actual, torontoToday: () => '2026-03-01' };
 });
+
+vi.mock('../current-periods', () => ({
+  getCurrentPrasadPeriods: vi.fn(async () => [
+    { pid: 'bv-brampton-2025-26', location: 'Brampton' },
+    { pid: 'bv-scarborough-2025-26', location: 'Scarborough' },
+  ]),
+}));
 
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { getUpcomingPrasad } from '../upcoming';

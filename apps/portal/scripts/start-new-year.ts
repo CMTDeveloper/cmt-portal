@@ -21,21 +21,19 @@
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { startNewYear } from '@/features/setu/rollover/start-new-year';
 
-const DEFAULT_FROM_YEAR = '2025-26';
-const DEFAULT_TO_YEAR = '2026-27';
 const ACTOR_MID = 'script:start-new-year';
 
 interface Args {
-  fromYear: string;
-  toYear: string;
+  fromYear: string | null;
+  toYear: string | null;
   dryRun: boolean;
   allowProd: boolean;
 }
 
 function parseArgs(argv: string[]): Args {
   const args: Args = {
-    fromYear: DEFAULT_FROM_YEAR,
-    toYear: DEFAULT_TO_YEAR,
+    fromYear: null,
+    toYear: null,
     dryRun: false,
     allowProd: false,
   };
@@ -66,13 +64,13 @@ async function main(): Promise<void> {
 
   console.log('\nSchool-year rollover — start new year');
   console.log(`  Write to:   ${portalProject} (Firestore${args.dryRun ? ', DRY-RUN — no writes' : ''})`);
-  console.log(`  From year:  ${args.fromYear}`);
-  console.log(`  To year:    ${args.toYear}`);
+  console.log(`  From year:  ${args.fromYear ?? '(app current year)'}`);
+  console.log(`  To year:    ${args.toYear ?? '(derived next year)'}`);
   console.log('');
 
   const result = await startNewYear(portalFirestore(), {
-    fromYear: args.fromYear,
-    toYear: args.toYear,
+    ...(args.fromYear ? { fromYear: args.fromYear } : {}),
+    ...(args.toYear ? { toYear: args.toYear } : {}),
     actorMid: ACTOR_MID,
     dryRun: args.dryRun,
   });

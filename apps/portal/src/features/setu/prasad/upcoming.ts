@@ -1,5 +1,6 @@
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
-import { CURRENT_PRASAD_PIDS, torontoToday } from './constants';
+import { torontoToday } from './constants';
+import { getCurrentPrasadPeriods } from './current-periods';
 
 /** One manager contact for a family on a prasad Sunday. Null parts are kept so the UI can omit them. */
 export interface PrasadContact {
@@ -37,7 +38,7 @@ const QUERY_LIMIT = 60;
 
 /**
  * "Who's bringing prasad this/next Sunday + how to reach them" for the welcome
- * team. For each CURRENT_PRASAD_PIDS period: read upcoming assignments (backed
+ * team. For each current prasad period: read upcoming assignments (backed
  * by the (pid,date) index), keep assigned + proposed (confirmed first;
  * cancelled/moved-out rows excluded), group by date, take the first 4 dates,
  * then join each family's manager contacts (bulk per-fid fetch).
@@ -53,7 +54,7 @@ export async function getUpcomingPrasad(): Promise<UpcomingPrasadResponse> {
   // Intermediate: per-location grouped dates (fids only) before the contact join.
   const grouped: Array<{ location: string; sundays: Array<{ date: string; rows: Array<{ fid: string; familyName: string; status: 'proposed' | 'assigned' }> }> }> = [];
 
-  for (const { pid, location } of CURRENT_PRASAD_PIDS) {
+  for (const { pid, location } of await getCurrentPrasadPeriods(db)) {
     const snap = await db.collection('prasadAssignments')
       .where('pid', '==', pid)
       .where('date', '>=', todayYmd)

@@ -13,6 +13,13 @@ vi.mock('@/features/setu/prasad/publish-assignments', () => ({ previewAssignment
 const { notifyUnnotifiedProposals } = vi.hoisted(() => ({ notifyUnnotifiedProposals: vi.fn() }));
 vi.mock('@/features/setu/prasad/proposal-notify', () => ({ notifyUnnotifiedProposals }));
 
+const { findCurrentPrasadPeriod } = vi.hoisted(() => ({
+  findCurrentPrasadPeriod: vi.fn(async (_db: unknown, pid: string) =>
+    pid === 'bv-brampton-2025-26' ? { pid, location: 'Brampton' } : null,
+  ),
+}));
+vi.mock('@/features/setu/prasad/current-periods', () => ({ findCurrentPrasadPeriod }));
+
 // ── fake Firestore ────────────────────────────────────────────────────────────
 // Supports collection().where().where().get() (list), collection().doc().get()/
 // .update() (patch), runTransaction with tx.get(docRef)/tx.update(docRef, patch),
@@ -116,7 +123,7 @@ vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
   FieldValue: { serverTimestamp: () => SERVER_TS },
 }));
 
-const PID = 'bv-brampton-2025-26'; // a real CURRENT_PRASAD_PIDS entry
+const PID = 'bv-brampton-2025-26';
 const PREVIEW_RESULT = {
   rows: [{ fid: 'CMT-0001', familyName: 'Iyer', location: 'Brampton', date: '2026-03-15' }],
   defaultCap: 3,
@@ -142,6 +149,9 @@ beforeEach(() => {
   previewAssignments.mockResolvedValue(PREVIEW_RESULT);
   publishAssignments.mockResolvedValue(PREVIEW_RESULT);
   notifyUnnotifiedProposals.mockResolvedValue(NOTIFY_RESULT);
+  findCurrentPrasadPeriod.mockImplementation(async (_db: unknown, pid: string) =>
+    pid === PID ? { pid, location: 'Brampton' } : null,
+  );
   dbState.listDocs = [];
   dbState.docStore = new Map();
   dbState.lastWhere = [];

@@ -289,8 +289,8 @@ describe('promoteFamilies', () => {
     expect(report.fromYear).toBe('2025-26');
     expect(report.toYear).toBe('2026-27');
     expect(report.dryRun).toBe(false);
-    expect(report.byTransition).toContainEqual({ label: 'Level 2 → Level 2', count: 1 });
-    expect(report.byTransition).toContainEqual({ label: 'Level 2 → Level 3', count: 1 });
+    expect(report.byTransition).toContainEqual({ label: 'Grade 2 → Grade 3 · Level 2 → Level 2', count: 1 });
+    expect(report.byTransition).toContainEqual({ label: 'Grade 3 → Grade 4 · Level 2 → Level 3', count: 1 });
 
     // ── affectedFids: F1 was mutated on this commit run (used for revalidation) ──
     expect(report.affectedFids).toContain('F1');

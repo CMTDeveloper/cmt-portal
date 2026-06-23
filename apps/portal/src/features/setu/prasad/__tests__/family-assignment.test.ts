@@ -5,6 +5,13 @@ vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
   FieldValue: { serverTimestamp: () => '__ts__' },
 }));
 
+vi.mock('../current-periods', () => ({
+  getCurrentPrasadPeriods: vi.fn(async () => [
+    { pid: 'bv-brampton-2025-26', location: 'Brampton' },
+    { pid: 'bv-scarborough-2025-26', location: 'Scarborough' },
+  ]),
+}));
+
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { getFamilyAssignment, getMoveOptions, moveAssignment, confirmAssignment } from '../family-assignment';
 import { FALLBACK_CAP } from '../constants';

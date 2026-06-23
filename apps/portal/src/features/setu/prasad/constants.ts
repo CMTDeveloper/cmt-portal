@@ -1,9 +1,12 @@
-// Active prasad periods per location. Bump both to the new year's pids when
-// school-year:start seeds the next calendar (same cadence as rollover).
-export const CURRENT_PRASAD_PIDS = [
+// Fallback prasad periods per location when app-managed school-year config or
+// offerings are not available yet.
+export const FALLBACK_PRASAD_PERIODS = [
   { pid: 'bv-brampton-2025-26', location: 'Brampton' },
   { pid: 'bv-scarborough-2025-26', location: 'Scarborough' },
 ] as const;
+
+/** @deprecated Use getCurrentPrasadPeriods(); kept for older tests/imports. */
+export const CURRENT_PRASAD_PIDS = FALLBACK_PRASAD_PERIODS;
 
 export const MOVE_LOCK_DAYS = 7;
 

@@ -1,5 +1,31 @@
 import { describe, it, expect } from 'vitest';
-import { targetOidOf, buildLevelSnapshot } from '../school-year';
+import {
+  balaViharSourceOidsForYear,
+  buildLevelSnapshot,
+  deriveNextSchoolYear,
+  targetOidOf,
+} from '../school-year';
+
+describe('deriveNextSchoolYear', () => {
+  it('derives the next school year label', () => {
+    expect(deriveNextSchoolYear('2025-26')).toBe('2026-27');
+    expect(deriveNextSchoolYear('2099-00')).toBe('2100-01');
+  });
+
+  it('rejects non-canonical labels', () => {
+    expect(() => deriveNextSchoolYear('2025')).toThrow('Invalid school year');
+    expect(() => deriveNextSchoolYear('2025-27')).toThrow('Invalid school year');
+  });
+});
+
+describe('balaViharSourceOidsForYear', () => {
+  it('builds the known Bala Vihar offering ids for a year', () => {
+    expect(balaViharSourceOidsForYear('2026-27')).toEqual([
+      'bv-brampton-2026-27',
+      'bv-scarborough-2026-27',
+    ]);
+  });
+});
 
 describe('targetOidOf', () => {
   it('swaps the term in a bv oid, preserving prefix+location', () => {

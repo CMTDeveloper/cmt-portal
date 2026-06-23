@@ -116,7 +116,8 @@ arrives.
   email per 15 minutes; exceeding it returns a 429 for that persona.
 - **Rollover pins:** the seed pins the `bv-*-2025-26` offerings and level
   names, and `e2e/setu/test-accounts.spec.ts` pins the matching levelId
-  constants. Bump both at rollover (same ritual as `CURRENT_PRASAD_PIDS`).
+  constants. Bump those test pins at rollover; prasad itself now follows the
+  app-managed current school year.
   Note the seed's single-BV invariant cancels any OTHER active BV enrollment —
   including one a rollover created for the new year — until the pins are
   bumped.

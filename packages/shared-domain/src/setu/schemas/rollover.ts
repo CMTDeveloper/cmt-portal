@@ -1,5 +1,21 @@
 import { z } from 'zod';
 
+export const SchoolYearLabelSchema = z
+  .string()
+  .trim()
+  .regex(/^\d{4}-\d{2}$/, 'Use a school year like 2026-27')
+  .refine((value) => {
+    const start = Number(value.slice(0, 4));
+    const end = Number(value.slice(5, 7));
+    return end === (start + 1) % 100;
+  }, 'School year must advance by one year');
+export type SchoolYearLabel = z.infer<typeof SchoolYearLabelSchema>;
+
+export const SchoolYearConfigSchema = z.object({
+  currentYear: SchoolYearLabelSchema,
+});
+export type SchoolYearConfig = z.infer<typeof SchoolYearConfigSchema>;
+
 export const PromotionOutcomeKind = z.enum([
   'advance', 'graduate', 'shishu-stays', 'shishu-aged-out', 'needs-grade',
 ]);
@@ -39,9 +55,9 @@ export type StartYearResult = z.infer<typeof StartYearResultSchema>;
 
 // Request bodies (shared web↔native). Years optional → engine defaults.
 export const StartYearBodySchema = z.object({
-  fromYear: z.string().optional(), toYear: z.string().optional(),
+  fromYear: SchoolYearLabelSchema.optional(), toYear: SchoolYearLabelSchema.optional(),
 });
 export const PromoteBodySchema = z.object({
-  fromYear: z.string().optional(), toYear: z.string().optional(),
+  fromYear: SchoolYearLabelSchema.optional(), toYear: SchoolYearLabelSchema.optional(),
   dryRun: z.boolean(),
 });

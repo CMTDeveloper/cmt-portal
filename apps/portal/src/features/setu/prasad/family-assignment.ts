@@ -1,5 +1,6 @@
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
-import { CURRENT_PRASAD_PIDS, FALLBACK_CAP, MOVE_LOCK_DAYS, daysUntil, torontoToday } from './constants';
+import { FALLBACK_CAP, MOVE_LOCK_DAYS, daysUntil, torontoToday } from './constants';
+import { getCurrentPrasadPeriods } from './current-periods';
 
 export interface FamilyPrasadView {
   paid: string; pid: string; date: string;
@@ -13,7 +14,7 @@ export async function getFamilyAssignment(fid: string): Promise<FamilyPrasadView
   // One-assignment-per-family invariant: a family enrolls at ONE location, so at
   // most one pid yields an assigned doc. If both ever exist (two-campus anomaly),
   // first-pid-wins and the second stays hidden — enforced by enrollment data, not here.
-  for (const { pid } of CURRENT_PRASAD_PIDS) {
+  for (const { pid } of await getCurrentPrasadPeriods(db)) {
     const snap = await db.collection('prasadAssignments').doc(`${pid}-${fid}`).get();
     if (!snap.exists) continue;
     const a = snap.data() as { pid: string; date: string; youngestName: string | null; birthMonth: number | null; reason: string; status: string };
@@ -35,7 +36,8 @@ export async function getMoveOptions(fid: string): Promise<{ paid: string; optio
   const current = await getFamilyAssignment(fid);
   if (!current) return null;
   const db = portalFirestore();
-  const period = CURRENT_PRASAD_PIDS.find((p) => p.pid === current.pid)!;
+  const period = (await getCurrentPrasadPeriods(db)).find((p) => p.pid === current.pid);
+  if (!period) return null;
   const todayYmd = torontoToday();
 
   const [calSnap, cfgSnap, assignedSnap] = await Promise.all([
