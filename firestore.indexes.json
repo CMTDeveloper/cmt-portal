@@ -186,6 +186,14 @@
       ]
     },
     {
+      "collectionGroup": "seva_opportunities",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "sevaYear", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "enrollments",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
