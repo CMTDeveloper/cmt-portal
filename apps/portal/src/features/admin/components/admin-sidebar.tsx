@@ -11,6 +11,10 @@ interface AdminSidebarProps {
   displayEmail: string;
   hasFamily: boolean;
   showTeacher?: boolean;
+  // A pre-rendered server element (the async <SchoolYearBadge/>) passed across
+  // the RSC boundary as a ReactNode so this 'use client' shell never imports the
+  // server-only badge. Optional, so Suspense fallbacks render without it.
+  yearBadge?: React.ReactNode;
 }
 
 const NAV_GROUPS: Array<{ heading: string; items: Array<{ label: string; href: string; legacy?: boolean }> }> = [
@@ -67,10 +71,11 @@ export function deriveAdminActive(pathname: string): string {
 // Pure — no hooks — so it can render inside a Suspense fallback (prerendered
 // statically under Next 16 cacheComponents). For pathname-driven highlighting
 // use AdminSidebarLive.
-export function AdminSidebar({ active = '', displayEmail, hasFamily, showTeacher = false }: AdminSidebarProps) {
+export function AdminSidebar({ active = '', displayEmail, hasFamily, showTeacher = false, yearBadge }: AdminSidebarProps) {
   return (
     <aside style={{ width: 248, background: 'var(--surface)', borderRight: '1px solid var(--line)', padding: '22px 18px', display: 'flex', flexDirection: 'column' }}>
       <div style={{ marginBottom: 28 }}><SetuLogo size={20}/></div>
+      {yearBadge && <div style={{ margin: '-16px 0 20px' }}>{yearBadge}</div>}
       <nav style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 14 }}>
         {(hasFamily || showTeacher) && (
           <>

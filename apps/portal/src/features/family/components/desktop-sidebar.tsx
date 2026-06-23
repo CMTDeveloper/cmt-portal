@@ -23,6 +23,10 @@ interface DesktopSidebarProps {
   // link this shows in both the family AND welcome-team sidebars (a teacher
   // may be browsing either surface), so it's gated on showTeacher alone.
   showTeacher?: boolean;
+  // A pre-rendered server element (the async <SchoolYearBadge/>) passed across
+  // the RSC boundary as a ReactNode so this 'use client' shell never imports the
+  // server-only badge. Optional, so Suspense fallbacks render without it.
+  yearBadge?: React.ReactNode;
 }
 
 const FAMILY_NAV_ITEMS: [SidebarTab, string, keyof typeof SetuIcon, string][] = [
@@ -69,7 +73,7 @@ function deriveActiveFromPathname(pathname: string): SidebarTab {
 // DesktopSidebar is pure — it does not call hooks. This lets it render inside
 // Suspense fallbacks (which Next.js 16 cacheComponents prerenders statically).
 // For pathname-driven self-highlighting, use DesktopSidebarLive instead.
-export function DesktopSidebar({ active, role = 'family', displayName, subtitle, showSignOut, isAdmin, showTeacher = false }: DesktopSidebarProps) {
+export function DesktopSidebar({ active, role = 'family', displayName, subtitle, showSignOut, isAdmin, showTeacher = false, yearBadge }: DesktopSidebarProps) {
   const navItems = role === 'welcome-team' ? WELCOME_NAV_ITEMS : FAMILY_NAV_ITEMS;
   const trimmed = (displayName ?? '').trim();
   const name = trimmed || (role === 'welcome-team' ? 'Welcome team' : 'Family member');
@@ -85,6 +89,7 @@ export function DesktopSidebar({ active, role = 'family', displayName, subtitle,
   return (
     <aside style={{ width: 248, background: 'var(--surface)', borderRight: '1px solid var(--line)', padding: '22px 18px', display: 'flex', flexDirection: 'column' }}>
       <div style={{ marginBottom: 28 }}><SetuLogo size={20}/></div>
+      {yearBadge && <div style={{ margin: '-16px 0 20px' }}>{yearBadge}</div>}
       <nav style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 14 }}>
         {navItems.map(([id, label, iconKey, href, disabled]) => {
           const Icon = SetuIcon[iconKey];

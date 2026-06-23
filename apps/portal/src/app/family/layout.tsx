@@ -6,6 +6,7 @@ import { CspRoot } from '@/features/family/components/atoms';
 import { DesktopSidebar, DesktopSidebarLive } from '@/features/family/components/desktop-sidebar';
 import { MobileBottomNav } from '@/features/family/components/mobile-bottom-nav';
 import { LoadingOm } from '@/components/chrome/loading-om';
+import { SchoolYearBadge } from '@/components/chrome/school-year-badge';
 import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
 import {
   isAdmin,
@@ -67,7 +68,7 @@ async function SidebarWithIdentity() {
     if (currentMember) displayName = `${currentMember.firstName} ${currentMember.lastName}`;
     subtitle = `${data.family.name}${data.family.legacyFid ? ` · FID ${data.family.fid} · Legacy ${data.family.legacyFid}` : ` · FID ${data.family.fid}`}`;
   }
-  return <DesktopSidebarLive displayName={displayName} subtitle={subtitle} showSignOut isAdmin={sevak.isAdmin} showTeacher={sevak.showTeacher}/>;
+  return <DesktopSidebarLive displayName={displayName} subtitle={subtitle} showSignOut isAdmin={sevak.isAdmin} showTeacher={sevak.showTeacher} yearBadge={<SchoolYearBadge />}/>;
 }
 
 // Mobile bottom nav needs isAdmin/showTeacher to decide whether the "More" sheet

@@ -35,7 +35,14 @@ const myFamilyLinkStyle: React.CSSProperties = {
   whiteSpace: 'nowrap',
 };
 
-export function TeacherTopBar() {
+interface TeacherTopBarProps {
+  // A pre-rendered server element (the async <SchoolYearBadge/>) passed across
+  // the RSC boundary as a ReactNode so this 'use client' bar never imports the
+  // server-only badge. Optional, so a denied/no-data render works without it.
+  yearBadge?: React.ReactNode;
+}
+
+export function TeacherTopBar({ yearBadge }: TeacherTopBarProps = {}) {
   return (
     <header
       style={{
@@ -91,6 +98,7 @@ export function TeacherTopBar() {
             visible at every width — the labels are short and the flex row
             shrinks gracefully (minWidth:0 on the brand link absorbs slack). */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+          {yearBadge}
           <Link href="/family" style={{ ...myFamilyLinkStyle, padding: '7px 10px', borderRadius: 'var(--radiusSm)' }}>
             My&nbsp;family
           </Link>

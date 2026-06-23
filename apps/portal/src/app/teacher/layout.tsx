@@ -5,6 +5,7 @@ import { isTeacher, type WithRole } from '@cmt/shared-domain';
 import { CspRoot } from '@/features/family/components/atoms';
 import { TeacherTopBar } from '@/features/setu/teacher/components/teacher-top-bar';
 import { LoadingOm } from '@/components/chrome/loading-om';
+import { SchoolYearBadge } from '@/components/chrome/school-year-badge';
 
 // Defensive re-verify (middleware also gates /teacher → isTeacher). isTeacher
 // passes a teacher-only role, a parent with extraRoles=['teacher'], and admin
@@ -25,7 +26,7 @@ async function TeacherGate({ children }: { children: React.ReactNode }) {
 
   return (
     <CspRoot style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column' }}>
-      <TeacherTopBar />
+      <TeacherTopBar yearBadge={<SchoolYearBadge />} />
       <main style={{ flex: 1, maxWidth: 760, width: '100%', margin: '0 auto', padding: '24px 20px 48px' }}>
         {allowed ? (
           children
