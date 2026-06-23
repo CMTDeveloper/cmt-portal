@@ -61,6 +61,21 @@ export const CalendarCopyResultSchema = z.object({
 });
 export type CalendarCopyResult = z.infer<typeof CalendarCopyResultSchema>;
 
+// Per-item readiness for next year (toYear). Backs the Year-center checklist +
+// the Activate gate. `promotionRan` is the gate (did this year's families get
+// promoted into toYear yet); the rest are setup signals.
+export const YearReadinessSchema = z.object({
+  toYear: z.string(),
+  promotionRan: z.boolean(),
+  offerings: z.boolean(),
+  levels: z.boolean(),
+  calendar: z.boolean(),
+  teachers: z.boolean(),
+  prasad: z.boolean(),
+  seva: z.boolean(),
+});
+export type YearReadiness = z.infer<typeof YearReadinessSchema>;
+
 // Request bodies (shared web↔native). Years optional → engine defaults.
 export const StartYearBodySchema = z.object({
   fromYear: SchoolYearLabelSchema.optional(), toYear: SchoolYearLabelSchema.optional(),
