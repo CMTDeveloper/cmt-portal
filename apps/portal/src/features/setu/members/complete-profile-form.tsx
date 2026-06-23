@@ -1,12 +1,10 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { toast, SetuLogo } from '@cmt/ui';
 import {
   whatsMissingForMember,
   isMemberComplete,
-  incompleteMembers,
   NO_ALLERGIES,
   type MemberRequiredField,
 } from '@cmt/shared-domain';
@@ -15,6 +13,7 @@ import { CspRoot, FieldError } from '@/features/family/components/atoms';
 import { VolunteeringSkillsPicker } from '@/features/setu/members/volunteering-skills-picker';
 import { getCurrentFamilyClient } from '@/features/setu/members/get-current-family-client';
 import { patchMemberClient } from '@/features/setu/members/patch-member-client';
+import { navigateTo } from '@/features/setu/members/navigate-to';
 import { memberWriteErrorMessage } from '@/features/setu/members/member-write-error';
 import type { FamilyWithMembers } from '@/features/setu/members/get-current-family';
 import { LoadingOm } from '@/components/chrome/loading-om';
@@ -121,7 +120,6 @@ const FIELD_LABEL: Record<MemberRequiredField, string> = {
  * agrees exactly with the gate that sent the user here and with the write route.
  */
 export function CompleteProfileForm() {
-  const router = useRouter();
   const [data, setData] = useState<FamilyWithMembers | null>(null);
   const [loading, setLoading] = useState(true);
   const [drafts, setDrafts] = useState<Record<string, MemberDraft>>({});
@@ -129,17 +127,38 @@ export function CompleteProfileForm() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, Record<string, string>>>({});
 
   useEffect(() => {
+    let cancelled = false;
     getCurrentFamilyClient()
       .then((result) => {
-        if (result) {
-          setData(result);
-          const seeded: Record<string, MemberDraft> = {};
-          for (const m of result.members) seeded[m.mid] = seedDraft(m);
-          setDrafts(seeded);
+        if (cancelled) return;
+        if (!result) {
+          setLoading(false);
+          return;
         }
+        // If everything in scope is ALREADY complete (a stale tab, a direct
+        // visit, or a prior save whose navigation was interrupted), don't sit on
+        // a "save to continue" screen — hard-navigate straight to the dashboard.
+        // The /family gate re-checks server-side. Keep loading=true so the form
+        // never flashes before we leave.
+        const scoped = result.isManager
+          ? result.members
+          : result.members.filter((m) => m.mid === result.currentMid);
+        if (scoped.every((m) => isMemberComplete(m))) {
+          navigateTo('/family');
+          return;
+        }
+        setData(result);
+        const seeded: Record<string, MemberDraft> = {};
+        for (const m of result.members) seeded[m.mid] = seedDraft(m);
+        setDrafts(seeded);
         setLoading(false);
       })
-      .catch(() => setLoading(false));
+      .catch(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // The members this person must complete + what each still needs, recomputed
@@ -197,38 +216,46 @@ export function CompleteProfileForm() {
     const errors: Record<string, Record<string, string>> = {};
     let anyFailed = false;
 
-    for (const member of scoped) {
-      const draft = drafts[member.mid];
-      if (!draft) continue;
-      // Skip members whose SERVER record is already complete — only the members
-      // the gate flagged need a write. (Checking the DRAFT here was a bug: the
-      // user has JUST completed the draft, so it always looked complete and the
-      // PATCH was skipped, persisting nothing and looping the gate.)
-      if (isMemberComplete(member)) continue;
+    try {
+      for (const member of scoped) {
+        const draft = drafts[member.mid];
+        if (!draft) continue;
+        // Skip members whose SERVER record is already complete — only the members
+        // the gate flagged need a write. (Checking the DRAFT here was a bug: the
+        // user has JUST completed the draft, so it always looked complete and the
+        // PATCH was skipped, persisting nothing and looping the gate.)
+        if (isMemberComplete(member)) continue;
 
-      const monthNum = draft.birthMonth ? Number(draft.birthMonth) : null;
-      const birthMonthYear =
-        monthNum && draft.birthYear ? `${draft.birthYear}-${String(monthNum).padStart(2, '0')}` : null;
-      const foodAllergies = draft.noAllergies ? NO_ALLERGIES : draft.foodAllergies.trim() || null;
+        const monthNum = draft.birthMonth ? Number(draft.birthMonth) : null;
+        const birthMonthYear =
+          monthNum && draft.birthYear ? `${draft.birthYear}-${String(monthNum).padStart(2, '0')}` : null;
+        const foodAllergies = draft.noAllergies ? NO_ALLERGIES : draft.foodAllergies.trim() || null;
 
-      const body: Record<string, unknown> = {
-        type: member.type,
-        gender: draft.gender || undefined,
-        foodAllergies,
-        email: draft.email.trim() || null,
-        phone: draft.phone.trim() || null,
-        volunteeringSkills: draft.volunteeringSkills,
-        schoolGrade: draft.schoolGrade.trim() || null,
-        birthMonthYear,
-        ...(birthMonthYear ? { birthMonth: monthNum } : {}),
-      };
+        const body: Record<string, unknown> = {
+          type: member.type,
+          gender: draft.gender || undefined,
+          foodAllergies,
+          email: draft.email.trim() || null,
+          phone: draft.phone.trim() || null,
+          volunteeringSkills: draft.volunteeringSkills,
+          schoolGrade: draft.schoolGrade.trim() || null,
+          birthMonthYear,
+          ...(birthMonthYear ? { birthMonth: monthNum } : {}),
+        };
 
-      const result = await patchMemberClient(member.mid, body);
-      if (!result.ok) {
-        anyFailed = true;
-        if (result.fields) errors[member.mid] = result.fields;
-        else toast.error(memberWriteErrorMessage({ error: result.error }));
+        const result = await patchMemberClient(member.mid, body);
+        if (!result.ok) {
+          anyFailed = true;
+          if (result.fields) errors[member.mid] = result.fields;
+          else toast.error(memberWriteErrorMessage({ error: result.error }));
+        }
       }
+    } catch {
+      // A network failure (fetch reject) must never strand the button on
+      // "Saving…" forever — re-enable it so the user can retry.
+      toast.error('Something went wrong saving your profile. Please try again.');
+      setSaving(false);
+      return;
     }
 
     if (anyFailed) {
@@ -237,31 +264,18 @@ export function CompleteProfileForm() {
       return;
     }
 
-    // Refetch so completeness reflects what's actually persisted, then either
-    // re-render the (now smaller) form or go to the dashboard.
-    const refreshed = await getCurrentFamilyClient().catch(() => null);
-    if (refreshed) {
-      const stillScoped = refreshed.isManager
-        ? incompleteMembers(refreshed.members)
-        : (() => {
-            const me = refreshed.members.find((m) => m.mid === refreshed.currentMid);
-            return me && !isMemberComplete(me) ? [{ mid: me.mid, missing: [] }] : [];
-          })();
-      if (stillScoped.length === 0) {
-        router.push('/family');
-        router.refresh();
-        return;
-      }
-      setData(refreshed);
-      const seeded: Record<string, MemberDraft> = {};
-      for (const m of refreshed.members) seeded[m.mid] = seedDraft(m);
-      setDrafts(seeded);
-    } else {
-      router.push('/family');
-      router.refresh();
-      return;
-    }
-    setSaving(false);
+    // Every still-incomplete member in scope was just PATCHed to completion — the
+    // Save button only enables once every scoped member is complete by draft, and
+    // a 200 from the write route means that member now satisfies the matrix — so
+    // the family is now complete. Leave via a HARD navigation rather than refetch
+    // + router.push: the refetch races the `use cache` revalidation, and a soft
+    // push into the /family gate can read the pre-save (stale) family and bounce
+    // back to /complete-profile on the SAME route, preserving this component with
+    // saving=true → a permanent "Saving…". A full document load re-runs the gate
+    // server-side on fresh data. We intentionally leave saving=true: assign() is
+    // async, but the page is unloading imminently and we don't want the button to
+    // flicker back to "Save and continue" in the meantime.
+    navigateTo('/family');
   }
 
   if (loading) {
@@ -317,6 +331,27 @@ export function CompleteProfileForm() {
         <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 14 }}>
           {member.type} · still needs {missing.map((f) => FIELD_LABEL[f]).join(', ')}
         </div>
+
+        {/* firstName / lastName / type have NO input on this screen (they're set
+            at registration). If one is somehow missing, the card would otherwise
+            render an empty shell with a permanently-disabled Save and no way
+            forward — explain it instead of stranding the user. */}
+        {(() => {
+          const unfillable = missing.filter(
+            (f) => f === 'firstName' || f === 'lastName' || f === 'type',
+          );
+          if (unfillable.length === 0) return null;
+          return (
+            <p
+              data-testid={`member-unfillable-${member.mid}`}
+              style={{ fontSize: 12.5, color: 'var(--err)', marginBottom: 14, lineHeight: 1.5 }}
+            >
+              {unfillable.map((f) => FIELD_LABEL[f]).join(' and ')} can&apos;t be edited here — please
+              ask a sevak (welcome team) to update {unfillable.length > 1 ? 'them' : 'it'} so you can
+              continue.
+            </p>
+          );
+        })()}
 
         {show('gender') && (
           <div className="field" style={{ marginBottom: 14 }}>

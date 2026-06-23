@@ -1,19 +1,22 @@
 /**
  * UAT-only, idempotent seed for the profile-completion-gate E2E (shipped
  * 2026-06-22). Provisions ONE persistent _test family whose MANAGER is
- * deliberately GATE-INCOMPLETE, so signing in redirects to
- * `/family/complete-profile`.
+ * deliberately GATE-INCOMPLETE, so signing in redirects to `/complete-profile`.
  *
  * The manager (E2E_PC_MANAGER_EMAIL) is a password Auth user (so
  * /api/setu/auth/password-sign-in works without OTP) with a real gender + email
  * + phone but **no foodAllergies and no volunteeringSkills** — the two adult
- * required fields the matrix (member-required-fields) treats as MISSING. The
- * family has no other members, so `incompleteMembers()` returns exactly the
- * manager and the gate fires.
+ * required fields the matrix (member-required-fields) treats as MISSING.
  *
- * The seed RESETS the manager to the incomplete state on every run (foodAllergies
- * null, volunteeringSkills []) so the spec is repeatable even after a prior run's
- * completion submit filled them in.
+ * The family is intentionally MULTI-MEMBER (manager + a 2nd incomplete adult +
+ * an incomplete child) so the spec exercises the MANAGER scope — a manager must
+ * complete the WHOLE family. This reproduces the real 3-person family that got
+ * stranded on "Saving…": the single-member fixture never exercised N>1, and the
+ * stuck-Saving loop only surfaced once the manager had to complete several
+ * members and the post-save navigation bounced through the /family gate.
+ *
+ * The seed RESETS every member to its incomplete state on each run so the spec
+ * is repeatable even after a prior run's completion submit filled them in.
  *
  * Mirrors seed-join-request-family.ts: PURE shared-domain helpers + direct
  * Firestore writes only (no 'use cache' server fns). Refuses to run unless the
@@ -130,6 +133,60 @@ async function main(): Promise<void> {
   );
   console.log(`manager ${managerMid} reset to INCOMPLETE (foodAllergies:null, volunteeringSkills:[])`);
 
+  // 3b) Ensure two MORE incomplete members so the MANAGER scope spans the whole
+  //     family (the N>1 path that stranded the real family). These never sign in
+  //     (no contactKeys needed) — the manager completes them. Deterministic mids
+  //     (-02 adult, -03 child); the manager is -01 and this seed creates no other
+  //     members, so the slots never collide. RESET to incomplete on every run.
+  const coAdultMid = `${fid}-02`;
+  const childMid = `${fid}-03`;
+
+  // 2nd adult — missing foodAllergies + volunteeringSkills (same as the manager).
+  await db.collection('families').doc(fid).collection('members').doc(coAdultMid).set(
+    {
+      mid: coAdultMid,
+      uid: null,
+      firstName: 'Co',
+      lastName: 'Adult',
+      type: 'Adult',
+      gender: 'Female',
+      manager: false,
+      email: 'e2e-pc-coadult@chinmayatoronto.org',
+      phone: '+15195550132',
+      schoolGrade: null,
+      birthMonthYear: null,
+      foodAllergies: null,
+      volunteeringSkills: [],
+      emergencyContacts: [null, null],
+      _test: true,
+    },
+    { merge: true },
+  );
+
+  // Child — missing foodAllergies + birthMonthYear (schoolGrade is present).
+  await db.collection('families').doc(fid).collection('members').doc(childMid).set(
+    {
+      mid: childMid,
+      uid: null,
+      firstName: 'Kid',
+      lastName: 'Manager',
+      type: 'Child',
+      gender: 'Male',
+      manager: false,
+      email: null,
+      phone: null,
+      schoolGrade: 'Grade 2',
+      birthMonthYear: null,
+      birthMonth: null,
+      foodAllergies: null,
+      volunteeringSkills: [],
+      emergencyContacts: [null, null],
+      _test: true,
+    },
+    { merge: true },
+  );
+  console.log(`extra members reset to INCOMPLETE — adult ${coAdultMid}, child ${childMid}`);
+
   // 4) Tag the manager's contactKeys _test (cleanup-sweep convention).
   for (const h of [hashContactKey('email', MANAGER_EMAIL), hashContactKey('phone', MANAGER_PHONE)]) {
     await db.collection('contactKeys').doc(h).set({ _test: true }, { merge: true });
@@ -139,8 +196,8 @@ async function main(): Promise<void> {
   const managerUid = await ensureAuthPassword(MANAGER_EMAIL, PASSWORD);
   console.log(`auth password set — manager uid ${managerUid}`);
 
-  console.log(`\n=== done. fid=${fid} managerMid=${managerMid} ===`);
-  console.log(`    manager: ${MANAGER_EMAIL}  (signs in → gated to /family/complete-profile)\n`);
+  console.log(`\n=== done. fid=${fid} managerMid=${managerMid} (3 members: manager + adult + child) ===`);
+  console.log(`    manager: ${MANAGER_EMAIL}  (signs in → gated to /complete-profile until ALL 3 are complete)\n`);
 }
 
 main().then(() => process.exit(0)).catch((e) => { console.error(e); process.exit(1); });

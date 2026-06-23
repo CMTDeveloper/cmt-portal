@@ -86,33 +86,28 @@ test.describe('registration — profile-completion gate', () => {
     }
   });
 
-  // ── 2. Completing the profile lands on the dashboard ───────────────────────
-  test('filling the missing fields completes the profile and reaches the dashboard', async ({ browser }) => {
+  // ── 2. Completing the WHOLE family (manager scope) lands on the dashboard ───
+  test('completing every member (manager + adult + child) reaches the dashboard', async ({ browser }) => {
     const ctx = await managerContext(browser);
     const page = await ctx.newPage();
     try {
       await page.goto('/complete-profile');
 
-      // foodAllergies → "No known allergies" (writes the 'None' sentinel). Use
-      // click(), not check(): satisfying the field immediately removes it from
-      // the card (the form shows only still-missing fields), so check()'s
-      // post-click "is it checked?" assertion would race the unmount.
-      const noAllergies = page.getByRole('checkbox', { name: /No known allergies/i }).filter({ visible: true });
-      await expect(noAllergies.first()).toBeVisible({ timeout: 20_000 });
-      await noAllergies.first().click();
+      // A MANAGER must complete the whole family — manager + 2nd adult + child.
+      // Fill the first still-visible member card until none remain (order-robust;
+      // each satisfied member drops out of the form). This exercises the N>1
+      // manager scope that stranded the real 3-person family on "Saving…".
+      await completeAllVisibleMembers(page);
 
-      // volunteeringSkills → toggle the first available skill chip.
-      const skillsGroup = page.getByRole('group', { name: 'Volunteering skills' }).filter({ visible: true });
-      await expect(skillsGroup.first()).toBeVisible({ timeout: 20_000 });
-      await skillsGroup.first().getByRole('button').first().click();
-
-      // Now complete → Save enables → submit → the gate is satisfied → dashboard.
+      // Now everything is complete → Save enables → submit → HARD-navigates to
+      // /family. The whole point of the fix: this must NOT loop back to
+      // /complete-profile and strand on "Saving…".
       const save = page.getByRole('button', { name: /Save and continue/i }).filter({ visible: true });
       await expect(save.first()).toBeEnabled({ timeout: 10_000 });
       await save.first().click();
 
       await expect(page).toHaveURL(/\/family\/?($|\?)/, { timeout: 30_000 });
-      // Sanity: we are NOT back on the completion screen.
+      // Sanity: we landed on the dashboard, NOT stuck back on the completion screen.
       expect(page.url()).not.toContain('/complete-profile');
     } finally {
       await page.close();
@@ -122,7 +117,7 @@ test.describe('registration — profile-completion gate', () => {
 
   // ── 3. A now-complete family goes straight to the dashboard ────────────────
   test('a complete family is no longer gated (straight to /family)', async ({ browser }) => {
-    // Test 2 just completed the manager; signing in again must NOT redirect.
+    // Test 2 just completed the whole family; signing in again must NOT redirect.
     const ctx = await managerContext(browser);
     const page = await ctx.newPage();
     try {
@@ -145,6 +140,60 @@ test.describe('registration — profile-completion gate', () => {
 /** The completion screen renders mobile + desktop blocks; pick the visible one. */
 function visible(page: import('@playwright/test').Page, text: string | RegExp) {
   return page.getByText(text).filter({ visible: true });
+}
+
+/**
+ * Complete every still-incomplete member by filling whatever the first VISIBLE
+ * member card asks for (allergies, skills, birth month/year), then waiting for
+ * that card to drop out, repeating until none remain. Order-robust: it doesn't
+ * assume which member (adult vs child) renders first, and each card only shows
+ * the fields it's still missing. The form renders mobile + desktop trees; the
+ * `:visible` filter targets the one the viewport actually shows.
+ */
+async function completeAllVisibleMembers(page: import('@playwright/test').Page): Promise<void> {
+  for (let i = 0; i < 8; i++) {
+    const cards = page.locator('[data-testid^="member-card-"]:visible');
+    if ((await cards.count()) === 0) break;
+    const card = cards.first();
+    const tid = await card.getAttribute('data-testid');
+
+    // foodAllergies → "No known allergies" (click, not check — the field unmounts
+    // the moment it's satisfied, which would race check()'s post-click assertion).
+    const noAllergies = card.getByRole('checkbox', { name: /No known allergies/i });
+    if (await noAllergies.count()) await noAllergies.first().click();
+
+    // volunteeringSkills (adults) → toggle the first available skill chip.
+    const skills = card.getByRole('group', { name: 'Volunteering skills' });
+    if (await skills.count()) await skills.first().getByRole('button').first().click();
+
+    // birthMonthYear (child) → pick the first real month + year option (index 0
+    // is the disabled placeholder). Both are required, so set both.
+    const month = card.getByRole('combobox', { name: /Birth month/i });
+    if (await month.count()) {
+      await month.first().selectOption({ index: 1 });
+      await card.getByRole('combobox', { name: /Birth year/i }).first().selectOption({ index: 1 });
+    }
+
+    // Wait for THIS member to drop out (fully satisfied) before the next card.
+    // Fail fast with the card's own "still needs …" text if it doesn't clear —
+    // the filler only handles allergies/skills/birthMonthYear, so a future seed
+    // that leaves gender/schoolGrade/email/phone blank would otherwise hang for
+    // 10s and fail with a cryptic timeout.
+    if (tid) {
+      const stillVisible = page.locator(`[data-testid="${tid}"]:visible`);
+      try {
+        await expect(stillVisible).toHaveCount(0, { timeout: 10_000 });
+      } catch {
+        const text = (await stillVisible.first().innerText().catch(() => '')) || '(card text unavailable)';
+        throw new Error(
+          `completeAllVisibleMembers: card ${tid} did not complete after filling all known field ` +
+            `types — it still needs a field this helper does not handle. Card text: ${text}`,
+        );
+      }
+    }
+  }
+  // Every member satisfied → no cards left; the "all set" note is showing.
+  await expect(page.locator('[data-testid^="member-card-"]:visible')).toHaveCount(0, { timeout: 10_000 });
 }
 
 /**

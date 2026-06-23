@@ -1,13 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { MemberDoc } from '@cmt/shared-domain/setu';
 import type { FamilyWithMembers } from '@/features/setu/members/get-current-family';
 
-// ── next/navigation ───────────────────────────────────────────────────────────
-const push = vi.hoisted(() => vi.fn());
-const refresh = vi.hoisted(() => vi.fn());
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push, refresh }) }));
+// ── navigate-to (the HARD navigation the form uses to leave the gate) ─────────
+// The form no longer uses next/navigation's router — it hard-navigates so a
+// stale `use cache` gate read can't bounce it back onto the same route and
+// strand "Saving…". The test mocks the wrapper instead of window.location.
+const navigateTo = vi.hoisted(() => vi.fn());
+vi.mock('@/features/setu/members/navigate-to', () => ({ navigateTo }));
 
 // ── @cmt/ui toast ─────────────────────────────────────────────────────────────
 const toastMock = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
@@ -63,6 +65,19 @@ function manager(over: Partial<MemberDoc> = {}): MemberDoc {
   } as MemberDoc;
 }
 
+// A SECOND incomplete adult (co-manager) so the manager-scope (N>1) path is
+// exercised — the exact shape that stranded a real 3-person family on "Saving…".
+function coManager(over: Partial<MemberDoc> = {}): MemberDoc {
+  return manager({
+    mid: 'CMT-1-02',
+    firstName: 'Co',
+    lastName: 'Manager',
+    email: 'co@example.com',
+    phone: '+14165559999',
+    ...over,
+  });
+}
+
 function family(members: MemberDoc[]): FamilyWithMembers {
   return {
     family: { fid: 'CMT-1', name: 'PC Family' } as FamilyWithMembers['family'],
@@ -78,10 +93,9 @@ beforeEach(() => {
 
 describe('CompleteProfileForm — submit flow (regression: the Save button must stay clickable when complete)', () => {
   it('enables Save once the matrix is satisfied, PATCHes the member, and returns to the dashboard', async () => {
-    // 1st load: incomplete manager. After PATCH, the refetch returns a complete one.
-    getFamily
-      .mockResolvedValueOnce(family([manager()]))
-      .mockResolvedValueOnce(family([manager({ foodAllergies: 'None', volunteeringSkills: ['Kitchen'] })]));
+    // Incomplete manager on load; on a successful PATCH the form hard-navigates
+    // to /family WITHOUT a refetch (the refetch raced the cache revalidation).
+    getFamily.mockResolvedValue(family([manager()]));
     patchMember.mockResolvedValue({ ok: true, status: 200 });
 
     const user = userEvent.setup();
@@ -105,12 +119,12 @@ describe('CompleteProfileForm — submit flow (regression: the Save button must 
 
     await user.click(save());
 
-    // It PATCHes the manager with the filled values, then navigates to /family.
+    // It PATCHes the manager with the filled values, then HARD-navigates to /family.
     await waitFor(() => expect(patchMember).toHaveBeenCalledTimes(1));
     const [mid, body] = patchMember.mock.calls[0]!;
     expect(mid).toBe('CMT-1-01');
     expect(body).toMatchObject({ foodAllergies: 'None', volunteeringSkills: ['Kitchen'] });
-    await waitFor(() => expect(push).toHaveBeenCalledWith('/family'));
+    await waitFor(() => expect(navigateTo).toHaveBeenCalledWith('/family'));
   });
 
   it('surfaces a field-level toast and does NOT navigate when a PATCH fails', async () => {
@@ -130,6 +144,61 @@ describe('CompleteProfileForm — submit flow (regression: the Save button must 
     await waitFor(() => expect(patchMember).toHaveBeenCalled());
     // Friendly copy, not the raw code; and we stay on the completion screen.
     await waitFor(() => expect(toastMock.error).toHaveBeenCalledWith(expect.stringMatching(/email and a phone/i)));
-    expect(push).not.toHaveBeenCalled();
+    expect(navigateTo).not.toHaveBeenCalled();
+  });
+
+  // Regression for the real 3-person family stranded on "Saving…": a MANAGER's
+  // scope is the WHOLE family, so every incomplete member must be PATCHed and the
+  // form must hard-navigate exactly ONCE — never re-render/refetch into a loop.
+  it('manager scope (N>1): completes every member, then hard-navigates exactly once', async () => {
+    getFamily.mockResolvedValue(family([manager(), coManager()]));
+    patchMember.mockResolvedValue({ ok: true, status: 200 });
+
+    const user = userEvent.setup();
+    render(<CompleteProfileForm />);
+
+    await waitFor(() => expect(screen.getAllByTestId('member-card-CMT-1-01').length).toBeGreaterThan(0));
+    const save = () => screen.getAllByTestId('complete-profile-save')[0]!;
+    expect(save()).toBeDisabled();
+
+    // Complete member 1 (PC). Its card drops out once satisfied.
+    await user.click(screen.getAllByRole('checkbox', { name: /No known allergies for PC/i })[0]!);
+    await user.click(within(screen.getAllByTestId('member-card-CMT-1-01')[0]!).getByTestId('skills-add'));
+
+    // Member 2 (Co) is still incomplete → Save stays disabled.
+    await waitFor(() => expect(screen.getAllByTestId('member-card-CMT-1-02').length).toBeGreaterThan(0));
+    expect(save()).toBeDisabled();
+
+    // Complete member 2 (Co).
+    await user.click(screen.getAllByRole('checkbox', { name: /No known allergies for Co/i })[0]!);
+    await user.click(within(screen.getAllByTestId('member-card-CMT-1-02')[0]!).getByTestId('skills-add'));
+
+    await waitFor(() => expect(save()).toBeEnabled());
+    await user.click(save());
+
+    // BOTH members PATCHed; exactly one hard navigation (no loop).
+    await waitFor(() => expect(patchMember).toHaveBeenCalledTimes(2));
+    expect(patchMember.mock.calls.map((c) => c[0]).sort()).toEqual(['CMT-1-01', 'CMT-1-02']);
+    await waitFor(() => expect(navigateTo).toHaveBeenCalledWith('/family'));
+    expect(navigateTo).toHaveBeenCalledTimes(1);
+  });
+
+  // A member missing an UNFILLABLE field (firstName/lastName/type have no input
+  // on this screen) must not strand the user on a silent dead-end: explain it and
+  // keep Save disabled (never navigate while incomplete → no gate bounce).
+  it('explains an unfillable missing field and keeps Save disabled', async () => {
+    getFamily.mockResolvedValue(
+      family([manager({ firstName: '', foodAllergies: 'None', volunteeringSkills: ['Kitchen'] })]),
+    );
+
+    render(<CompleteProfileForm />);
+    await waitFor(() => expect(screen.getAllByTestId('member-card-CMT-1-01').length).toBeGreaterThan(0));
+
+    // The explanatory note is shown (firstName can't be edited here)…
+    expect(screen.getAllByTestId('member-unfillable-CMT-1-01').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/can't be edited here/i).length).toBeGreaterThan(0);
+    // …and there's no way to satisfy it → Save stays disabled and we never navigate.
+    expect(screen.getAllByTestId('complete-profile-save')[0]!).toBeDisabled();
+    expect(navigateTo).not.toHaveBeenCalled();
   });
 });
