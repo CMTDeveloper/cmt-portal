@@ -56,3 +56,12 @@ export function buildLevelSnapshot(
     levelName: match?.levelName ?? null,
   };
 }
+
+/** A school year's calendar window as YYYY-MM-DD date strings: Aug 1 (start
+ *  year) through Jul 31 (end year). Used to scope classCalendarEntries by year. */
+export function schoolYearDateRange(year: string): { start: string; end: string } {
+  const match = /^(\d{4})-(\d{2})$/.exec(year.trim());
+  if (!match) throw new Error(`Invalid school year: ${year}`);
+  const startYear = Number(match[1]);
+  return { start: `${startYear}-08-01`, end: `${startYear + 1}-07-31` };
+}

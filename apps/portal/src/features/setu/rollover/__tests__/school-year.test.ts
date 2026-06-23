@@ -3,6 +3,7 @@ import {
   balaViharSourceOidsForYear,
   buildLevelSnapshot,
   deriveNextSchoolYear,
+  schoolYearDateRange,
   targetOidOf,
 } from '../school-year';
 
@@ -52,5 +53,14 @@ describe('buildLevelSnapshot', () => {
     const snap = buildLevelSnapshot({ schoolGrade: null, birthMonthYear: '2023-12' }, levels, NOW);
     expect(snap.levelName).toBe('Shishu Vihar');
     expect(snap.schoolGrade).toBeNull();
+  });
+});
+
+describe('schoolYearDateRange', () => {
+  it('maps "2025-26" to an Aug→Jul date-string window', () => {
+    expect(schoolYearDateRange('2025-26')).toEqual({ start: '2025-08-01', end: '2026-07-31' });
+  });
+  it('throws on a malformed year', () => {
+    expect(() => schoolYearDateRange('2025')).toThrow();
   });
 });
