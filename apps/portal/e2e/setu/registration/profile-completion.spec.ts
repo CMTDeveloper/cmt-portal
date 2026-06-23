@@ -151,11 +151,28 @@ function visible(page: import('@playwright/test').Page, text: string | RegExp) {
  * `:visible` filter targets the one the viewport actually shows.
  */
 async function completeAllVisibleMembers(page: import('@playwright/test').Page): Promise<void> {
+  // Wait for the form to FINISH loading (the first card appears) before filling.
+  // The screen fetches the family client-side after navigation, so for a beat it
+  // renders a loading state with ZERO member cards. Without this guard the loop
+  // below sees 0 cards on its first check, breaks immediately having filled
+  // nothing, and the "0 cards" reads (falsely) as "everything complete" — then
+  // the real, still-empty cards stream in and Save stays disabled. (This loading
+  // race, not the product, is what made the multi-member walkthrough flake.)
+  await expect(page.locator('[data-testid^="member-card-"]:visible').first()).toBeVisible({
+    timeout: 30_000,
+  });
+
   for (let i = 0; i < 8; i++) {
-    const cards = page.locator('[data-testid^="member-card-"]:visible');
-    if ((await cards.count()) === 0) break;
-    const card = cards.first();
-    const tid = await card.getAttribute('data-testid');
+    const firstCard = page.locator('[data-testid^="member-card-"]:visible').first();
+    if ((await firstCard.count()) === 0) break;
+    const tid = await firstCard.getAttribute('data-testid');
+    if (!tid) break;
+    // PIN every field interaction to THIS card by id. A live `.first()` locator
+    // shifts to the next card the instant this one unmounts mid-fill, so a later
+    // field (e.g. the child's birth month/year) could spill onto a sibling card or
+    // be skipped — a timing-dependent flake. A by-id locator can only ever resolve
+    // to this card (and to nothing once it unmounts), never a sibling.
+    const card = page.locator(`[data-testid="${tid}"]:visible`);
 
     // foodAllergies → "No known allergies" (click, not check — the field unmounts
     // the moment it's satisfied, which would race check()'s post-click assertion).
