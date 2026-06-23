@@ -22,6 +22,10 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
+## `357b460` · 2026-06-22 · join-request review — distinct `wrong-family` error
+- **GET `/api/setu/join-request/[token]`** — when a signed-in manager opens a request that belongs to a **different family**, the route now returns **`404 { error: 'wrong-family' }`** instead of the old `404 { error: 'not-found' }`. The status stays **404** (deliberately not 401/403 — the review page is public and treats 401/403 as "go sign in", which would loop an already-signed-in user); the target family's name is **not** included. A genuinely missing/handled token still returns `404 { error: 'not-found' }`.
+  - **Mobile:** if/when the app builds the join-request review screen, map `wrong-family` to a distinct "you're signed in as a different family — switch accounts" state (vs. the not-found/invalid-link copy). No change to `approve`/`decline` or to the request/response shape otherwise.
+
 ## `096463e` · 2026-06-22 · teacher-managed payment source — checkout 422
 - **`teacher-managed`** added to the offering `paymentSource` enum (`@cmt/shared-domain` `PAYMENT_SOURCES` is now `['portal','legacy','teacher-managed']`) — an offering whose donation is collected by the teacher OFF-portal. **Additive**; existing values unchanged.
 - **POST `/api/setu/donations/checkout`** — when the target enrollment's offering is `paymentSource: 'teacher-managed'`, the route now returns **`422 { error: 'payment-source-teacher-managed' }`** BEFORE any Stripe checkout-session is created (no in-portal donation is possible for these offerings).
