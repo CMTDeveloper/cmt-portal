@@ -11,11 +11,13 @@ test.describe('family dashboard', () => {
     await expect(visibleText(page, /Bala Vihar/i).first()).toBeVisible();
     await expect(visibleText(page, /Enrolled/i).first()).toBeVisible();
 
-    // Attendance rendered from the seeded check-ins — the regression guard.
-    // Accept either block's phrasing ("class Sundays" desktop / "Sunday classes"
-    // mobile) so a copy tweak to one doesn't break the guard; visibleText still
-    // pins it to the visible (desktop) instance.
-    await expect(visibleText(page, /Attended \d+ of \d+ (class Sundays|Sunday classes)/i)).toBeVisible();
+    // a75613d moved attendance off the family dashboard to per-child profiles:
+    // the BV card now shows a "tracked per child" pointer instead of a
+    // family-level "Attended X of Y" count. The regression guard (originally
+    // "not the hijack empty state") is that the BV card renders its ENROLLED
+    // body — this pointer — never the not-enrolled empty state the hijack bug
+    // produced.
+    await expect(visibleText(page, /attendance is tracked per child/i).first()).toBeVisible();
     await expect(page.getByText(/Attendance will appear here once Sunday classes begin/i)).toHaveCount(0);
   });
 

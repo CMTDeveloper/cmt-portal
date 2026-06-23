@@ -38,8 +38,12 @@ test.describe('Admin — school-year config', () => {
     await expect(
       page.getByRole('heading', { name: /school year rollover/i }).filter({ visible: true }).first(),
     ).toBeVisible({ timeout: 20_000 });
+    // The setting shows the current year as text + an Edit button; the input
+    // (aria-label "Current school year") only renders once editing.
+    await expect(page.getByText('Current school year').filter({ visible: true }).first()).toBeVisible();
+    await page.getByRole('button', { name: 'Edit' }).filter({ visible: true }).first().click();
     await expect(
-      page.getByLabel(/current school year/i).filter({ visible: true }).first(),
+      page.getByLabel('Current school year').filter({ visible: true }).first(),
     ).toBeVisible();
   });
 });

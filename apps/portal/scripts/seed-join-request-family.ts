@@ -167,11 +167,13 @@ async function main(): Promise<void> {
     // Also catch a member promoted to manager:true by a prior approval run.
     if (md.email === memberCanonical && md.mid !== managerMid) memberMid = md.mid ?? m.id;
     // Gate-complete the manager here (the gated member gets its own write below):
-    // registerFamily hardcodes foodAllergies:null / volunteeringSkills:[]. Both
-    // adults already have email + phone + a real gender from registration.
+    // registerFamily hardcodes foodAllergies:null / volunteeringSkills:[], and a
+    // family reused from an older seed predates the gate's gender requirement —
+    // so set gender too, else the manager's /family is stuck on the completion
+    // gate and the pending-requests panel never renders.
     if (md.mid === managerMid) {
       await m.ref.set(
-        { foodAllergies: NO_ALLERGIES, volunteeringSkills: [SEED_SKILL], _test: true },
+        { foodAllergies: NO_ALLERGIES, volunteeringSkills: [SEED_SKILL], gender: 'Male', _test: true },
         { merge: true },
       );
     } else {
@@ -191,6 +193,7 @@ async function main(): Promise<void> {
       portalAccess: 'pending',
       foodAllergies: NO_ALLERGIES,
       volunteeringSkills: [SEED_SKILL],
+      gender: 'Female',
       _test: true,
     },
     { merge: true },

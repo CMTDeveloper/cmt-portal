@@ -183,7 +183,11 @@ async function main(): Promise<void> {
     // volunteeringSkills:[] and never derives birthMonth, so a freshly-registered
     // (or previously-reused) family would be redirected to /family/complete-profile.
     // ALL → foodAllergies; ADULT → >=1 skill; CHILD → derived birthMonth.
-    const gate: Record<string, unknown> = { foodAllergies: NO_ALLERGIES };
+    // gender too: a family reused from an older seed (created before the
+    // profile-completion gate required gender) keeps a blank gender otherwise,
+    // and the manager would be redirected to /family/complete-profile. 'Male'
+    // is gate-valid (PreferNotToSay reads as missing).
+    const gate: Record<string, unknown> = { foodAllergies: NO_ALLERGIES, gender: 'Male' };
     if (md.type === 'Adult') {
       gate['volunteeringSkills'] = ['General Volunteer Support (happy to help where needed)'];
     } else if (md.type === 'Child') {
