@@ -5,9 +5,6 @@ export const FALLBACK_PRASAD_PERIODS = [
   { pid: 'bv-scarborough-2025-26', location: 'Scarborough' },
 ] as const;
 
-/** @deprecated Use getCurrentPrasadPeriods(); kept for older tests/imports. */
-export const CURRENT_PRASAD_PIDS = FALLBACK_PRASAD_PERIODS;
-
 export const MOVE_LOCK_DAYS = 7;
 
 /** Cap fallback when prasadConfig/{pid} is missing (assignments seeded without a publish). */

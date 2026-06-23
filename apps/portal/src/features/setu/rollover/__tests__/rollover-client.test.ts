@@ -13,18 +13,18 @@ global.fetch = fetchMock;
 beforeEach(() => fetchMock.mockReset());
 
 const startResult: StartYearResult = {
-  fromYear: '2025-2026',
-  toYear: '2026-2027',
+  fromYear: '2025-26',
+  toYear: '2026-27',
   offeringsCreated: ['bala-vihar'],
   offeringsExisting: [],
   levelsCreated: ['grade-1'],
   levelsExisting: [],
-  donationPeriodsCreated: ['2026-2027'],
+  donationPeriodsCreated: ['2026-27'],
 };
 
 const rolloverReport: RolloverReport = {
-  fromYear: '2025-2026',
-  toYear: '2026-2027',
+  fromYear: '2025-26',
+  toYear: '2026-27',
   dryRun: true,
   familiesProcessed: 3,
   familiesSkippedAlreadyPromoted: 0,
