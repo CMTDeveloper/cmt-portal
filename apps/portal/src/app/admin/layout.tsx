@@ -7,7 +7,10 @@ import { CspRoot } from '@/features/family/components/atoms';
 import { LoadingOm } from '@/components/chrome/loading-om';
 import { AdminMobileNav } from '@/features/admin/components/admin-mobile-nav';
 import { AdminSidebarLive } from '@/features/admin/components/admin-sidebar';
-import { SchoolYearBadge } from '@/components/chrome/school-year-badge';
+import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
+import { getLiveSchoolYearCached } from '@/features/setu/rollover/live-school-year';
+import { listKnownSchoolYears } from '@/features/setu/rollover/view-year';
+import { SchoolYearSwitcher } from '@/features/setu/rollover/components/school-year-switcher';
 
 // Themed admin chrome. Re-verifies admin role defensively (middleware already
 // blocks non-admin, but the role check inside Suspense protects against
@@ -59,9 +62,13 @@ async function AdminChromeAndChildren({ children }: { children: React.ReactNode 
   const { allowed, displayEmail, hasFamily, showTeacher } = await resolveAdminIdentity();
   if (!allowed) return <AccessDenied />;
 
+  const db = portalFirestore();
+  const liveYear = await getLiveSchoolYearCached();
+  const years = await listKnownSchoolYears(db, liveYear);
+
   return (
     <CspRoot style={{ display: 'flex', width: '100%', minHeight: '100dvh' }}>
-      <AdminSidebarLive displayEmail={displayEmail} hasFamily={hasFamily} showTeacher={showTeacher} yearBadge={<SchoolYearBadge />}/>
+      <AdminSidebarLive displayEmail={displayEmail} hasFamily={hasFamily} showTeacher={showTeacher} yearBadge={<SchoolYearSwitcher years={years} liveYear={liveYear} />}/>
       <main style={{ flex: 1, padding: '32px 40px', overflow: 'auto' }}>{children}</main>
     </CspRoot>
   );

@@ -8,6 +8,10 @@ import { DesktopSidebarLive } from '@/features/family/components/desktop-sidebar
 import { AdminSidebarLive } from '@/features/admin/components/admin-sidebar';
 import { WelcomeMobileNav } from '@/features/family/components/welcome-mobile-nav';
 import { LoadingOm } from '@/components/chrome/loading-om';
+import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
+import { getLiveSchoolYearCached } from '@/features/setu/rollover/live-school-year';
+import { listKnownSchoolYears } from '@/features/setu/rollover/view-year';
+import { SchoolYearSwitcher } from '@/features/setu/rollover/components/school-year-switcher';
 
 // The layout is synchronous so cacheComponents:true can stream the shell.
 // The role check is async (cookies + session verify) so it lives inside its
@@ -38,13 +42,23 @@ async function WelcomeChromeAndChildren({ children }: { children: React.ReactNod
     }
   }
 
+  // Only read Firestore for the school-year set when access is granted — the
+  // denied branch renders an empty rail with no sidebar, so skip the read.
+  let yearBadge: React.ReactNode = null;
+  if (allowed) {
+    const db = portalFirestore();
+    const liveYear = await getLiveSchoolYearCached();
+    const years = await listKnownSchoolYears(db, liveYear);
+    yearBadge = <SchoolYearSwitcher years={years} liveYear={liveYear} />;
+  }
+
   return (
     <CspRoot style={{ display: 'flex', width: '100%', minHeight: '100dvh' }}>
       {allowed ? (
         admin ? (
-          <AdminSidebarLive displayEmail={email ?? 'Admin'} hasFamily={hasFamily} showTeacher={showTeacher} />
+          <AdminSidebarLive displayEmail={email ?? 'Admin'} hasFamily={hasFamily} showTeacher={showTeacher} yearBadge={yearBadge} />
         ) : (
-          <DesktopSidebarLive role="welcome-team" displayName="Welcome team" subtitle="Welcome team" showSignOut showTeacher={showTeacher} />
+          <DesktopSidebarLive role="welcome-team" displayName="Welcome team" subtitle="Welcome team" showSignOut showTeacher={showTeacher} yearBadge={yearBadge} />
         )
       ) : (
         <div style={{ width: 248, background: 'var(--surface)', borderRight: '1px solid var(--line)' }}/>
