@@ -5,6 +5,11 @@ import { readSessionFromHeaders } from '@/lib/auth/headers';
 import { flags } from '@/lib/flags';
 import { findCurrentPrasadPeriod } from '@/features/setu/prasad/current-periods';
 import { publishAssignments } from '@/features/setu/prasad/publish-assignments';
+import {
+  assertWritableYear,
+  PastYearWriteError,
+} from '@/features/setu/rollover/assert-writable-year';
+import { schoolYearOfPid } from '@/features/setu/rollover/school-year';
 import { notifyUnnotifiedProposals, type ProposalNotifyResult } from '@/features/setu/prasad/proposal-notify';
 
 // Publish + the synchronous proposal-notify fan-out (~357 families × members
@@ -23,8 +28,20 @@ export async function POST(req: Request) {
   }
   const parsed = PrasadPublishBodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: 'bad-request', issues: parsed.error?.issues }, { status: 400 });
-  const period = await findCurrentPrasadPeriod(portalFirestore(), parsed.data.pid);
+  const db = portalFirestore();
+  const period = await findCurrentPrasadPeriod(db, parsed.data.pid);
   if (!period) return NextResponse.json({ error: 'unknown-pid' }, { status: 400 });
+
+  // Past school years are read-only history; live + preparing stay editable.
+  try {
+    await assertWritableYear(db, schoolYearOfPid(period.pid));
+  } catch (e) {
+    if (e instanceof PastYearWriteError) {
+      return NextResponse.json({ error: 'past-year', year: e.year, liveYear: e.liveYear }, { status: 409 });
+    }
+    throw e;
+  }
+
   const actor = session.mid ?? session.uid ?? 'admin';
   const result = await publishAssignments(period.pid, period.location, parsed.data.cap, actor);
   // Fire the one-time proposal notifications for anything still un-notified

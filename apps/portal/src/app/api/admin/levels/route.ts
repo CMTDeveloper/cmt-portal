@@ -5,6 +5,10 @@ import { readSessionFromHeaders } from '@/lib/auth/headers';
 import { levelIdFor } from '@/features/setu/teacher/levels';
 import { assignTeacher, getTeacherLevelIds } from '@/features/setu/teacher/assignments';
 import {
+  assertWritableYear,
+  PastYearWriteError,
+} from '@/features/setu/rollover/assert-writable-year';
+import {
   resolveTeacherEmail,
   TeacherEmailResolutionError,
 } from '@/features/setu/teacher/resolve-teacher-email';
@@ -85,6 +89,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'period-not-found', pid: data.pid }, { status: 400 });
   }
   const periodLabel = (periodSnap.data()?.periodLabel as string | undefined) ?? data.pid;
+
+  // Past school years are read-only history; live + preparing stay editable.
+  // periodLabel is the period's school-year string (e.g. "2025-26").
+  try {
+    await assertWritableYear(db, periodLabel);
+  } catch (e) {
+    if (e instanceof PastYearWriteError) {
+      return NextResponse.json({ error: 'past-year', year: e.year, liveYear: e.liveYear }, { status: 409 });
+    }
+    throw e;
+  }
+
   const order =
     data.order ??
     (await nextLevelOrder(db, {

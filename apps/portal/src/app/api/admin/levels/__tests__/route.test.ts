@@ -30,6 +30,12 @@ vi.mock('@/features/setu/teacher/resolve-teacher-email', () => ({
   TeacherEmailResolutionError: MockTeacherEmailResolutionError,
 }));
 
+// The past-year guard resolves the live year via getSchoolYearConfig.
+const { mockGetSchoolYearConfig } = vi.hoisted(() => ({ mockGetSchoolYearConfig: vi.fn() }));
+vi.mock('@/features/setu/rollover/school-year-config', () => ({
+  getSchoolYearConfig: mockGetSchoolYearConfig,
+}));
+
 const validBody = {
   programKey: 'bala-vihar',
   location: 'Brampton',
@@ -77,6 +83,7 @@ beforeEach(() => {
   mockGet.mockResolvedValue({ docs: [] });
   mockCreate.mockResolvedValue(undefined);
   mockPeriodGet.mockResolvedValue({ exists: true, data: () => ({ periodLabel: '2025-26' }) });
+  mockGetSchoolYearConfig.mockResolvedValue({ currentYear: '2025-26' });
   mockAssignTeacher.mockResolvedValue({ added: [], removed: [] });
   mockGetTeacherLevelIds.mockResolvedValue(['old-level']);
   mockResolveTeacherEmail.mockResolvedValue({
@@ -237,5 +244,22 @@ describe('POST /api/admin/levels', () => {
     const res = await POST(makeRequest('POST', validBody, 'uid-admin'));
     expect(res.status).toBe(409);
     expect((await res.json()).error).toBe('level-conflict');
+  });
+
+  it('returns 409 past-year when the period is in a past school year', async () => {
+    // live = 2025-26; the period belongs to 2024-25 (past).
+    mockPeriodGet.mockResolvedValue({ exists: true, data: () => ({ periodLabel: '2024-25' }) });
+    const { POST } = await import('../route');
+    const res = await POST(makeRequest('POST', validBody, 'uid-admin'));
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: 'past-year', year: '2024-25', liveYear: '2025-26' });
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it('does NOT reject a live-year period (proceeds to create → 201)', async () => {
+    const { POST } = await import('../route');
+    const res = await POST(makeRequest('POST', validBody, 'uid-admin'));
+    expect(res.status).toBe(201);
+    expect(mockCreate).toHaveBeenCalled();
   });
 });

@@ -57,6 +57,20 @@ export function buildLevelSnapshot(
   };
 }
 
+/** School year ("2025-26") that a YYYY-MM-DD date falls in (Aug 1 boundary). */
+export function schoolYearOfDate(ymd: string): string {
+  const [y, m] = ymd.split('-').map(Number);
+  const startYear = (m ?? 1) >= 8 ? (y ?? 0) : (y ?? 0) - 1;
+  return `${startYear}-${String((startYear + 1) % 100).padStart(2, '0')}`;
+}
+
+/** School year embedded in a BV oid/pid like "bv-brampton-2025-26" → "2025-26". */
+export function schoolYearOfPid(pid: string): string {
+  const m = /(\d{4}-\d{2})$/.exec(pid);
+  if (!m) throw new Error(`no school year in pid: ${pid}`);
+  return m[1]!;
+}
+
 /** A school year's calendar window as YYYY-MM-DD date strings: Aug 1 (start
  *  year) through Jul 31 (end year). Used to scope classCalendarEntries by year. */
 export function schoolYearDateRange(year: string): { start: string; end: string } {

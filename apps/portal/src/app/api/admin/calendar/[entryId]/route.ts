@@ -7,6 +7,11 @@ import {
   type ClassCalendarEntryDoc,
 } from '@cmt/shared-domain';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
+import {
+  assertWritableYear,
+  PastYearWriteError,
+} from '@/features/setu/rollover/assert-writable-year';
+import { schoolYearOfDate } from '@/features/setu/rollover/school-year';
 
 function sevak(req: Request) {
   const session = readSessionFromHeaders(req);
@@ -34,6 +39,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entryI
   }
   const data = parsed.data;
   const existing = snap.data() as ClassCalendarEntryDoc;
+
+  // Past school years are read-only history; live + preparing stay editable.
+  try {
+    await assertWritableYear(portalFirestore(), schoolYearOfDate(existing.date));
+  } catch (e) {
+    if (e instanceof PastYearWriteError) {
+      return NextResponse.json({ error: 'past-year', year: e.year, liveYear: e.liveYear }, { status: 409 });
+    }
+    throw e;
+  }
 
   // Reconcile kind/classType against the merged result so a partial PATCH can't
   // leave a class day with no classType or a no-class day with one.
@@ -72,6 +87,18 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ entry
   const ref = portalFirestore().collection('classCalendarEntries').doc(entryId);
   const snap = await ref.get();
   if (!snap.exists) return NextResponse.json({ error: 'not-found' }, { status: 404 });
+
+  // Past school years are read-only history; live + preparing stay editable.
+  const existing = snap.data() as ClassCalendarEntryDoc;
+  try {
+    await assertWritableYear(portalFirestore(), schoolYearOfDate(existing.date));
+  } catch (e) {
+    if (e instanceof PastYearWriteError) {
+      return NextResponse.json({ error: 'past-year', year: e.year, liveYear: e.liveYear }, { status: 409 });
+    }
+    throw e;
+  }
+
   await ref.delete();
   return NextResponse.json({ entryId, deleted: true });
 }

@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server';
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
 import { isAdmin, UpdateLevelSchema, type LevelDoc } from '@cmt/shared-domain';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
+import {
+  assertWritableYear,
+  PastYearWriteError,
+} from '@/features/setu/rollover/assert-writable-year';
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ levelId: string }> }) {
   const session = readSessionFromHeaders(req);
@@ -30,6 +34,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ levelI
   // gradeBand consistency against the resulting (merged) levelKind: a partial
   // PATCH may change only one of the pair, so validate against the existing doc.
   const existing = snap.data() as LevelDoc;
+
+  // Past school years are read-only history; live + preparing stay editable.
+  // periodLabel is the level's school-year string (e.g. "2025-26").
+  try {
+    await assertWritableYear(db, existing.periodLabel);
+  } catch (e) {
+    if (e instanceof PastYearWriteError) {
+      return NextResponse.json({ error: 'past-year', year: e.year, liveYear: e.liveYear }, { status: 409 });
+    }
+    throw e;
+  }
+
   const effectiveKind = data.levelKind ?? existing.levelKind;
   const effectiveBand = data.gradeBand ?? existing.gradeBand;
   if ((effectiveKind === 'level' || effectiveKind === 'pre-level') && effectiveBand.length === 0) {

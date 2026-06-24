@@ -19,6 +19,17 @@ vi.mock('@/features/setu/teacher/resolve-teacher-email', () => ({
   TeacherEmailResolutionError: MockTeacherEmailResolutionError,
 }));
 
+// The past-year guard reads each targeted level's pid via portalFirestore().getAll
+// and resolves the live year via getSchoolYearConfig. Mock both.
+const { mockGetAll, mockLevelDoc } = vi.hoisted(() => ({ mockGetAll: vi.fn(), mockLevelDoc: vi.fn() }));
+vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
+  portalFirestore: () => ({ collection: () => ({ doc: mockLevelDoc }), getAll: mockGetAll }),
+}));
+const { mockGetSchoolYearConfig } = vi.hoisted(() => ({ mockGetSchoolYearConfig: vi.fn() }));
+vi.mock('@/features/setu/rollover/school-year-config', () => ({
+  getSchoolYearConfig: mockGetSchoolYearConfig,
+}));
+
 function makeRequest(body?: unknown, uid?: string, role = 'admin'): Request {
   const headers: Record<string, string> = { 'content-type': 'application/json', 'x-portal-role': role };
   if (uid) headers['x-portal-uid'] = uid;
@@ -38,6 +49,10 @@ beforeEach(() => {
     email: 'teacher@example.com',
     name: 'Teacher One',
   });
+  // Default: every targeted level is in the LIVE year (guard passes).
+  mockLevelDoc.mockImplementation((id: string) => ({ id }));
+  mockGetAll.mockResolvedValue([{ data: () => ({ pid: 'bv-brampton-2025-26' }) }]);
+  mockGetSchoolYearConfig.mockResolvedValue({ currentYear: '2025-26' });
 });
 
 describe('POST /api/admin/teacher-assignments', () => {
@@ -117,5 +132,31 @@ describe('POST /api/admin/teacher-assignments', () => {
     expect(res.status).toBe(404);
     expect(await res.json()).toEqual({ error: 'teacher-not-found' });
     expect(mockAssignTeacher).not.toHaveBeenCalled();
+  });
+
+  it('409 past-year when a targeted level is in a past school year', async () => {
+    // live = 2025-26 (default); the targeted level belongs to 2024-25 (past).
+    mockGetAll.mockResolvedValue([{ data: () => ({ pid: 'bv-brampton-2024-25' }) }]);
+    const { POST } = await import('../route');
+    const res = await POST(makeRequest(body, 'uid-admin'));
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: 'past-year', year: '2024-25', liveYear: '2025-26' });
+    expect(mockAssignTeacher).not.toHaveBeenCalled();
+  });
+
+  it('does NOT reject a live-year level (guard passes → assigns)', async () => {
+    mockGetAll.mockResolvedValue([{ data: () => ({ pid: 'bv-brampton-2025-26' }) }]);
+    const { POST } = await import('../route');
+    const res = await POST(makeRequest(body, 'uid-admin'));
+    expect(res.status).toBe(200);
+    expect(mockAssignTeacher).toHaveBeenCalled();
+  });
+
+  it('does NOT reject a preparing (future) level (prep writes are allowed)', async () => {
+    mockGetAll.mockResolvedValue([{ data: () => ({ pid: 'bv-brampton-2026-27' }) }]);
+    const { POST } = await import('../route');
+    const res = await POST(makeRequest(body, 'uid-admin'));
+    expect(res.status).toBe(200);
+    expect(mockAssignTeacher).toHaveBeenCalled();
   });
 });

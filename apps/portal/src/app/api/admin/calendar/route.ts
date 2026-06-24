@@ -10,6 +10,11 @@ import {
 } from '@cmt/shared-domain';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
 import { getCalendarSerialized } from '@/features/setu/calendar/calendar';
+import {
+  assertWritableYear,
+  PastYearWriteError,
+} from '@/features/setu/rollover/assert-writable-year';
+import { schoolYearOfDate } from '@/features/setu/rollover/school-year';
 
 function sevak(req: Request) {
   const session = readSessionFromHeaders(req);
@@ -44,10 +49,21 @@ export async function POST(req: Request) {
   }
   const data = parsed.data;
   const entryId = calendarEntryId(data.programKey, data.location, data.date);
+
+  const db = portalFirestore();
+  try {
+    await assertWritableYear(db, schoolYearOfDate(data.date));
+  } catch (e) {
+    if (e instanceof PastYearWriteError) {
+      return NextResponse.json({ error: 'past-year', year: e.year, liveYear: e.liveYear }, { status: 409 });
+    }
+    throw e;
+  }
+
   const now = FieldValue.serverTimestamp();
 
   try {
-    await portalFirestore().collection('classCalendarEntries').doc(entryId).create({
+    await db.collection('classCalendarEntries').doc(entryId).create({
       entryId,
       programKey: data.programKey,
       location: data.location,

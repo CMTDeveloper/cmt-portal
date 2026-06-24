@@ -3,6 +3,12 @@ import { AssignTeacherSchema, isAdmin, isWelcomeTeam } from '@cmt/shared-domain'
 import { readSessionFromHeaders } from '@/lib/auth/headers';
 import { assignTeacher } from '@/features/setu/teacher/assignments';
 import { findMissingLevelIds } from '@/features/setu/teacher/levels';
+import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
+import {
+  assertWritableYear,
+  PastYearWriteError,
+} from '@/features/setu/rollover/assert-writable-year';
+import { schoolYearOfPid } from '@/features/setu/rollover/school-year';
 import {
   resolveTeacherEmail,
   TeacherEmailResolutionError,
@@ -49,6 +55,26 @@ export async function POST(req: Request) {
   const missing = await findMissingLevelIds(levelIds);
   if (missing.length > 0) {
     return NextResponse.json({ error: 'unknown-levels', missing }, { status: 400 });
+  }
+
+  // Past school years are read-only history; live + preparing stay editable.
+  // Each target level's school year comes from its `pid` (bv-{loc}-{year});
+  // reject the whole write if ANY targeted level is in a past year.
+  if (levelIds.length > 0) {
+    const db = portalFirestore();
+    const refs = [...new Set(levelIds)].map((id) => db.collection('levels').doc(id));
+    const snaps = await db.getAll(...refs);
+    try {
+      for (const snap of snaps) {
+        const pid = snap.data()?.pid as string | undefined;
+        if (pid) await assertWritableYear(db, schoolYearOfPid(pid));
+      }
+    } catch (e) {
+      if (e instanceof PastYearWriteError) {
+        return NextResponse.json({ error: 'past-year', year: e.year, liveYear: e.liveYear }, { status: 409 });
+      }
+      throw e;
+    }
   }
 
   const { added, removed } = await assignTeacher({ ref, levelIds, byUid: session.uid });

@@ -4,6 +4,8 @@ import {
   buildLevelSnapshot,
   deriveNextSchoolYear,
   schoolYearDateRange,
+  schoolYearOfDate,
+  schoolYearOfPid,
   targetOidOf,
 } from '../school-year';
 
@@ -62,5 +64,26 @@ describe('schoolYearDateRange', () => {
   });
   it('throws on a malformed year', () => {
     expect(() => schoolYearDateRange('2025')).toThrow();
+  });
+});
+
+describe('schoolYearOfDate', () => {
+  it('maps a date in the start half (Sep) to its school year', () => {
+    expect(schoolYearOfDate('2025-09-07')).toBe('2025-26');
+  });
+  it('keeps Jul 31 in the prior school year (before the Aug 1 boundary)', () => {
+    expect(schoolYearOfDate('2026-07-31')).toBe('2025-26');
+  });
+  it('rolls Aug 1 forward into the next school year', () => {
+    expect(schoolYearOfDate('2026-08-01')).toBe('2026-27');
+  });
+});
+
+describe('schoolYearOfPid', () => {
+  it('extracts the trailing school year from a bv pid', () => {
+    expect(schoolYearOfPid('bv-brampton-2025-26')).toBe('2025-26');
+  });
+  it('throws when no school year is embedded', () => {
+    expect(() => schoolYearOfPid('bv-brampton')).toThrow('no school year in pid');
   });
 });

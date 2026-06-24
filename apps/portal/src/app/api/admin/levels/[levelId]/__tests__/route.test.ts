@@ -10,6 +10,12 @@ vi.mock('@cmt/firebase-shared/admin/firestore', () => {
   return { FieldValue, portalFirestore: vi.fn(() => ({ collection: mockCollection })) };
 });
 
+// The past-year guard resolves the live year via getSchoolYearConfig.
+const { mockGetSchoolYearConfig } = vi.hoisted(() => ({ mockGetSchoolYearConfig: vi.fn() }));
+vi.mock('@/features/setu/rollover/school-year-config', () => ({
+  getSchoolYearConfig: mockGetSchoolYearConfig,
+}));
+
 function makeRequest(method: string, body?: unknown, uid?: string, role = 'admin'): Request {
   const headers: Record<string, string> = { 'content-type': 'application/json', 'x-portal-role': role };
   if (uid) headers['x-portal-uid'] = uid;
@@ -24,6 +30,7 @@ const EXISTING = {
   levelId: 'brampton-level-2-bv-brampton-2025-26',
   levelKind: 'level',
   gradeBand: ['Gr 2', 'Gr 3'],
+  periodLabel: '2025-26',
 };
 
 const params = (levelId = 'brampton-level-2-bv-brampton-2025-26') => ({
@@ -36,6 +43,7 @@ beforeEach(() => {
   mockCollection.mockReturnValue({ doc: mockDoc });
   mockGet.mockResolvedValue({ exists: true, data: () => EXISTING });
   mockUpdate.mockResolvedValue(undefined);
+  mockGetSchoolYearConfig.mockResolvedValue({ currentYear: '2025-26' });
 });
 
 describe('PATCH /api/admin/levels/[levelId]', () => {
@@ -82,5 +90,22 @@ describe('PATCH /api/admin/levels/[levelId]', () => {
       params(),
     );
     expect(res.status).toBe(200);
+  });
+
+  it('returns 409 past-year when the level is in a past school year', async () => {
+    // live = 2025-26; this level's periodLabel is 2024-25 (past).
+    mockGet.mockResolvedValue({ exists: true, data: () => ({ ...EXISTING, periodLabel: '2024-25' }) });
+    const { PATCH } = await import('../route');
+    const res = await PATCH(makeRequest('PATCH', { enabled: false }, 'uid-admin'), params());
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: 'past-year', year: '2024-25', liveYear: '2025-26' });
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it('does NOT reject a live-year level (updates)', async () => {
+    const { PATCH } = await import('../route');
+    const res = await PATCH(makeRequest('PATCH', { enabled: false }, 'uid-admin'), params());
+    expect(res.status).toBe(200);
+    expect(mockUpdate).toHaveBeenCalled();
   });
 });

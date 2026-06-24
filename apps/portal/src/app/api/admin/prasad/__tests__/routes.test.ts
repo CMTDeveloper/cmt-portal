@@ -20,6 +20,10 @@ const { findCurrentPrasadPeriod } = vi.hoisted(() => ({
 }));
 vi.mock('@/features/setu/prasad/current-periods', () => ({ findCurrentPrasadPeriod }));
 
+// The publish past-year guard resolves the live year via getSchoolYearConfig.
+const { getSchoolYearConfig } = vi.hoisted(() => ({ getSchoolYearConfig: vi.fn() }));
+vi.mock('@/features/setu/rollover/school-year-config', () => ({ getSchoolYearConfig }));
+
 // ── fake Firestore ────────────────────────────────────────────────────────────
 // Supports collection().where().where().get() (list), collection().doc().get()/
 // .update() (patch), runTransaction with tx.get(docRef)/tx.update(docRef, patch),
@@ -149,8 +153,13 @@ beforeEach(() => {
   previewAssignments.mockResolvedValue(PREVIEW_RESULT);
   publishAssignments.mockResolvedValue(PREVIEW_RESULT);
   notifyUnnotifiedProposals.mockResolvedValue(NOTIFY_RESULT);
+  getSchoolYearConfig.mockResolvedValue({ currentYear: '2025-26' });
   findCurrentPrasadPeriod.mockImplementation(async (_db: unknown, pid: string) =>
-    pid === PID ? { pid, location: 'Brampton' } : null,
+    pid === PID
+      ? { pid, location: 'Brampton' }
+      : pid === 'bv-brampton-2024-25'
+        ? { pid, location: 'Brampton' }
+        : null,
   );
   dbState.listDocs = [];
   dbState.docStore = new Map();
@@ -231,6 +240,24 @@ describe('POST /api/admin/prasad/publish', () => {
     expect(await res.json()).toEqual({ ...PREVIEW_RESULT, notify: { checked: 5, sent: 4, skipped: 1, failed: 0 } });
     expect(publishAssignments).toHaveBeenCalledWith(PID, 'Brampton', 4, 'CMT-9999-01');
     expect(notifyUnnotifiedProposals).toHaveBeenCalledWith(PID);
+  });
+
+  it('409 past-year when the period is in a past school year', async () => {
+    const { POST } = await import('../publish/route');
+    const res = await POST(
+      req('/api/admin/prasad/publish', { method: 'POST', body: { pid: 'bv-brampton-2024-25', cap: 3 }, headers: ADMIN }),
+    );
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: 'past-year', year: '2024-25', liveYear: '2025-26' });
+    expect(publishAssignments).not.toHaveBeenCalled();
+    expect(notifyUnnotifiedProposals).not.toHaveBeenCalled();
+  });
+
+  it('does NOT reject a live-year period (publishes)', async () => {
+    const { POST } = await import('../publish/route');
+    const res = await POST(req('/api/admin/prasad/publish', { method: 'POST', body: { pid: PID, cap: 3 }, headers: ADMIN }));
+    expect(res.status).toBe(200);
+    expect(publishAssignments).toHaveBeenCalled();
   });
 
   it('200 with notify.error when the notify fan-out throws after a landed publish', async () => {
