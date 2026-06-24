@@ -4,6 +4,7 @@ import { SetuIcon } from '@cmt/ui';
 import { CspRoot, SectionLabel } from '@/features/family/components/atoms';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 import { getPublishedCalendar, getWeeklySchedule, type CalendarEntry } from '@/features/setu/calendar/calendar';
+import { getLiveSchoolYearCached } from '@/features/setu/rollover/live-school-year';
 
 export const metadata = { title: 'Class calendar' };
 
@@ -46,9 +47,11 @@ export default async function FamilyCalendarPage() {
   const location = data?.family.location ?? null;
 
   // BV-centric family calendar — scope to 'bala-vihar' so a second usesCalendar
-  // program's dates don't appear under the Bala Vihar heading.
+  // program's dates don't appear under the Bala Vihar heading, and to the live
+  // school year so cloned next-year (preparing) Sundays stay hidden until Activate.
+  const liveYear = await getLiveSchoolYearCached();
   const [entries, weekly] = location
-    ? await Promise.all([getPublishedCalendar(location, 'bala-vihar'), getWeeklySchedule(location)])
+    ? await Promise.all([getPublishedCalendar(location, 'bala-vihar', liveYear), getWeeklySchedule(location)])
     : [[], []];
 
   const months = groupByMonth(entries);

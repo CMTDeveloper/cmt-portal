@@ -22,6 +22,10 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
+## `6ea9ecd` · 2026-06-24 · calendar scoped to the live school year
+- **GET `/api/setu/calendar`** — the returned `entries` are now filtered to the **live school year's window** (Aug 1 → Jul 31 of the operational year). Both prior-year and next-year **preparing** Sundays (cloned for the upcoming year as `enabled:true` before an admin Activates it) are now **excluded**. **Response shape is UNCHANGED** — same `{ location, programKey, entries, weekly }`, same entry fields; only the *set* of `entries` is narrower (live-year-only).
+  - **Mobile:** no schema change. The calendar / upcoming list will no longer include other-school-year dates, so update any fixtures/expectations to the live-year set (a test asserting a future-year or prior-year date in `entries` will now fail). `GET /api/setu/dashboard`'s `upcoming` is filtered the same way (also no shape change).
+
 ## `357b460` · 2026-06-22 · join-request review — distinct `wrong-family` error
 - **GET `/api/setu/join-request/[token]`** — when a signed-in manager opens a request that belongs to a **different family**, the route now returns **`404 { error: 'wrong-family' }`** instead of the old `404 { error: 'not-found' }`. The status stays **404** (deliberately not 401/403 — the review page is public and treats 401/403 as "go sign in", which would loop an already-signed-in user); the target family's name is **not** included. A genuinely missing/handled token still returns `404 { error: 'not-found' }`.
   - **Mobile:** if/when the app builds the join-request review screen, map `wrong-family` to a distinct "you're signed in as a different family — switch accounts" state (vs. the not-found/invalid-link copy). No change to `approve`/`decline` or to the request/response shape otherwise.

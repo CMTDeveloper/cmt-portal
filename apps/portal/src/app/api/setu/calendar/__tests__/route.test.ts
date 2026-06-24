@@ -1,9 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockPublished, mockWeekly } = vi.hoisted(() => ({ mockPublished: vi.fn(), mockWeekly: vi.fn() }));
+const { mockPublished, mockWeekly, mockLiveYear } = vi.hoisted(() => ({
+  mockPublished: vi.fn(),
+  mockWeekly: vi.fn(),
+  mockLiveYear: vi.fn(),
+}));
 vi.mock('@/features/setu/calendar/calendar', () => ({
   getPublishedCalendar: mockPublished,
   getWeeklySchedule: mockWeekly,
+}));
+vi.mock('@/features/setu/rollover/live-school-year', () => ({
+  getLiveSchoolYearCached: mockLiveYear,
 }));
 
 function req(url: string, role?: string): Request {
@@ -17,6 +24,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockPublished.mockResolvedValue([{ entryId: 'brampton-2025-09-07', date: '2025-09-07', kind: 'class' }]);
   mockWeekly.mockResolvedValue([{ time: '10:00', label: 'Assembly' }]);
+  mockLiveYear.mockResolvedValue('2025-26');
 });
 
 describe('GET /api/setu/calendar', () => {
@@ -31,15 +39,16 @@ describe('GET /api/setu/calendar', () => {
     const body = await res.json();
     expect(body.entries).toHaveLength(1);
     expect(body.weekly).toEqual([{ time: '10:00', label: 'Assembly' }]);
-    // Defaults to the Bala Vihar program when no ?programKey= is given.
-    expect(mockPublished).toHaveBeenCalledWith('Brampton', 'bala-vihar');
+    // Defaults to the Bala Vihar program when no ?programKey= is given, scoped to
+    // the live school year.
+    expect(mockPublished).toHaveBeenCalledWith('Brampton', 'bala-vihar', '2025-26');
   });
   it('honors an explicit ?programKey= for a non-BV program', async () => {
     const { GET } = await import('../route');
     const res = await GET(req('/api/setu/calendar?location=Brampton&programKey=tabla', 'family-member'));
     expect(res.status).toBe(200);
     expect((await res.json()).programKey).toBe('tabla');
-    expect(mockPublished).toHaveBeenCalledWith('Brampton', 'tabla');
+    expect(mockPublished).toHaveBeenCalledWith('Brampton', 'tabla', '2025-26');
   });
   it('allows a teacher to read', async () => {
     const { GET } = await import('../route');

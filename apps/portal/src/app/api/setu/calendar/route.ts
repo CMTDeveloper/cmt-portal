@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { LOCATIONS, type Location } from '@cmt/shared-domain';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
 import { getPublishedCalendar, getWeeklySchedule } from '@/features/setu/calendar/calendar';
+import { getLiveSchoolYearCached } from '@/features/setu/rollover/live-school-year';
 
 // Published class calendar for a location — readable by any signed-in user.
 // Returns only enabled entries plus the weekly time schedule.
@@ -20,8 +21,9 @@ export async function GET(req: Request) {
   // today); a mobile client can request another via ?programKey=.
   const programKey = params.get('programKey') || 'bala-vihar';
 
+  const liveYear = await getLiveSchoolYearCached();
   const [entries, weekly] = await Promise.all([
-    getPublishedCalendar(location as Location, programKey),
+    getPublishedCalendar(location as Location, programKey, liveYear),
     getWeeklySchedule(location as Location),
   ]);
   return NextResponse.json({ location, programKey, entries, weekly });

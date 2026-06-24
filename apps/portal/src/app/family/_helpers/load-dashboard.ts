@@ -3,6 +3,7 @@ import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
 import { getDonations } from '@/features/setu/donations/get-donations';
 import { getLegacyPaymentStatus } from '@/features/setu/donations/legacy-payment';
 import { getUpcoming, type CalendarEntry } from '@/features/setu/calendar/calendar';
+import { getLiveSchoolYearCached } from '@/features/setu/rollover/live-school-year';
 import { listPrograms } from '@/features/setu/programs/get-programs';
 import { getFamilySevaProgress, type FamilySevaProgress } from '@/features/setu/seva/get-family-seva-progress';
 import { getFamilyAssignment, type FamilyPrasadView } from '@/features/setu/prasad/family-assignment';
@@ -40,6 +41,11 @@ export async function loadFamilyDashboard(
   family: FamilyDoc,
   _members: MemberDoc[],
 ): Promise<FamilyDashboardData> {
+  // The live school year scopes the calendar read so cloned next-year Sundays
+  // stay hidden until Activate; it's a cached read so resolving it before the
+  // fan-out adds no meaningful latency.
+  const liveYear = await getLiveSchoolYearCached();
+
   // Everything below is independent of everything else — fan them all out at
   // once rather than in sequential Promise.all groups.
   const [enrollments, donations, allPrograms, { upcoming }, seva, prasad] = await Promise.all([
@@ -47,8 +53,9 @@ export async function loadFamilyDashboard(
     getDonations(family.fid),
     listPrograms(),
     // Calendar is the Bala Vihar program's — scope to 'bala-vihar' so a second
-    // usesCalendar program can't leak dates into the family home.
-    getUpcoming(family.location, 'bala-vihar', undefined, 3),
+    // usesCalendar program can't leak dates into the family home, and to the live
+    // school year so next-year (preparing) Sundays stay hidden until Activate.
+    getUpcoming(family.location, 'bala-vihar', liveYear, undefined, 3),
     getFamilySevaProgress(family.fid),
     getFamilyAssignment(family.fid),
   ]);

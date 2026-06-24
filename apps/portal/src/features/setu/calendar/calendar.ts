@@ -1,5 +1,6 @@
 import { portalFirestore, Timestamp } from '@cmt/firebase-shared/admin/firestore';
 import type { ClassCalendarEntryDoc, WeeklyScheduleDoc, Location } from '@cmt/shared-domain';
+import { schoolYearDateRange } from '@/features/setu/rollover/school-year';
 
 const ENTRIES = 'classCalendarEntries';
 const SCHEDULES = 'weeklySchedules';
@@ -60,10 +61,25 @@ export async function getCalendar(location: Location, programKey: string): Promi
   return snap.docs.map((d) => docToEntry(d.data()));
 }
 
-/** Published (enabled) entries only — family/teacher view, per program. */
-export async function getPublishedCalendar(location: Location, programKey: string): Promise<CalendarEntry[]> {
+/**
+ * Published (enabled) entries only — family/teacher view, per program, scoped to
+ * the LIVE school year. `liveYear` is REQUIRED so every family/teacher caller is
+ * compiler-forced to pass it (an unscoped path is the bug this guards against).
+ *
+ * The filter is the live year's FULL window `[start, end]` (Aug 1 → Jul 31), not
+ * just a lower bound: a pure lower bound hides prior-year Sundays but NOT the
+ * next-year (preparing) Sundays cloned for the upcoming year — those are
+ * `enabled:true` and have dates AFTER the live year's start, so only the upper
+ * bound hides them until an admin Activates the new year.
+ */
+export async function getPublishedCalendar(
+  location: Location,
+  programKey: string,
+  liveYear: string,
+): Promise<CalendarEntry[]> {
   const entries = await getCalendar(location, programKey);
-  return entries.filter((e) => e.enabled);
+  const { start, end } = schoolYearDateRange(liveYear);
+  return entries.filter((e) => e.enabled && e.date >= start && e.date <= end);
 }
 
 export interface UpcomingSummary {
@@ -75,10 +91,11 @@ export interface UpcomingSummary {
 export async function getUpcoming(
   location: Location,
   programKey: string,
+  liveYear: string,
   todayYmd: string = torontoToday(),
   limit = 4,
 ): Promise<UpcomingSummary> {
-  const entries = await getPublishedCalendar(location, programKey);
+  const entries = await getPublishedCalendar(location, programKey, liveYear);
   const future = entries.filter((e) => e.date >= todayYmd);
   const nextClass = future.find((e) => e.kind === 'class') ?? null;
   return { nextClass, upcoming: future.slice(0, limit) };
@@ -91,9 +108,10 @@ export async function getUpcoming(
 export async function getClassDatesHeld(
   location: Location,
   programKey: string,
+  liveYear: string,
   todayYmd: string = torontoToday(),
 ): Promise<string[]> {
-  const entries = await getPublishedCalendar(location, programKey);
+  const entries = await getPublishedCalendar(location, programKey, liveYear);
   return entries
     .filter((e) => e.kind === 'class' && e.date <= todayYmd)
     .map((e) => e.date)
