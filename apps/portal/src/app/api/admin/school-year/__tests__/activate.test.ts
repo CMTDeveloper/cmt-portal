@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { CalendarCopyResult, YearReadiness } from '@cmt/shared-domain';
+import type { PrasadCopyResult } from '@/features/setu/rollover/clone-prasad-config';
 
 vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
@@ -44,6 +45,11 @@ vi.mock('@/features/setu/rollover/clone-calendar', () => ({
   cloneCalendarYear: (...a: unknown[]) => mockCloneCalendarYear(...a),
 }));
 
+const mockClonePrasadConfig = vi.fn();
+vi.mock('@/features/setu/rollover/clone-prasad-config', () => ({
+  clonePrasadConfig: (...a: unknown[]) => mockClonePrasadConfig(...a),
+}));
+
 function makeRequest(path: string, role?: string, uid = 'uid-admin', mid?: string): Request {
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   if (role) headers['x-portal-role'] = role;
@@ -70,6 +76,13 @@ const CALENDAR_RESULT: CalendarCopyResult = {
   existing: [],
 };
 
+const PRASAD_RESULT: PrasadCopyResult = {
+  fromYear: '2025-26',
+  toYear: '2026-27',
+  created: ['bv-brampton-2026-27'],
+  existing: [],
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   mockGetSchoolYearConfig.mockResolvedValue({ currentYear: '2025-26' });
@@ -79,6 +92,7 @@ beforeEach(() => {
   mockSetSevaRequirement.mockResolvedValue(undefined);
   mockActivateSchoolYear.mockResolvedValue({ config: { currentYear: '2026-27' }, sevaYear: '2026-27' });
   mockCloneCalendarYear.mockResolvedValue(CALENDAR_RESULT);
+  mockClonePrasadConfig.mockResolvedValue(PRASAD_RESULT);
 });
 
 // ── POST /api/admin/school-year/activate ────────────────────────────────────────
@@ -146,6 +160,31 @@ describe('POST /api/admin/school-year/copy-calendar', () => {
       fromYear: '2025-26',
       toYear: '2026-27',
       dryRun: false,
+    });
+  });
+});
+
+// ── POST /api/admin/school-year/copy-prasad ─────────────────────────────────────
+
+describe('POST /api/admin/school-year/copy-prasad', () => {
+  it('returns 403 for a non-admin role', async () => {
+    const { POST } = await import('../copy-prasad/route');
+    const res = await POST(makeRequest('/api/admin/school-year/copy-prasad', 'family-member'));
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: 'forbidden' });
+    expect(mockClonePrasadConfig).not.toHaveBeenCalled();
+  });
+
+  it('clones the prasad config from current → next year with the actor mid and returns the result', async () => {
+    const { POST } = await import('../copy-prasad/route');
+    const res = await POST(makeRequest('/api/admin/school-year/copy-prasad', 'admin', 'uid-admin', 'A1'));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual(PRASAD_RESULT);
+    expect(mockClonePrasadConfig).toHaveBeenCalledWith(expect.anything(), {
+      fromYear: '2025-26',
+      toYear: '2026-27',
+      dryRun: false,
+      actorMid: 'A1',
     });
   });
 });
