@@ -7,6 +7,7 @@ export async function fetchRosterClient(params: Partial<RosterQuery>): Promise<R
   const qs = new URLSearchParams();
   if (params.location) qs.set('location', params.location);
   if (params.program) qs.set('program', params.program);
+  if (params.year) qs.set('year', params.year);
   if (params.cursor) qs.set('cursor', params.cursor);
   if (params.limit) qs.set('limit', String(params.limit));
   const res = await fetch(`/api/welcome/families?${qs.toString()}`, { credentials: 'same-origin' });

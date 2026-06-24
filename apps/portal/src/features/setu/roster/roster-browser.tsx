@@ -138,7 +138,7 @@ function SearchHitCard({ hit }: { hit: FamilySearchHit }) {
 }
 
 // ── Core content (rendered into both mobile + desktop branches) ────────────────
-function RosterContent() {
+function RosterContent({ year }: { year?: string }) {
   // Filters
   const [location, setLocation] = useState<Location | null>(null);
   const [program, setProgram] = useState<string | null>(null);
@@ -171,6 +171,7 @@ function RosterContent() {
         limit: PAGE_SIZE,
         ...(location ? { location } : {}),
         ...(program ? { program } : {}),
+        ...(year ? { year } : {}),
       });
       setRows(res.families);
       setNextCursor(res.nextCursor);
@@ -183,7 +184,7 @@ function RosterContent() {
     } finally {
       setBrowseLoading(false);
     }
-  }, [location, program]);
+  }, [location, program, year]);
 
   useEffect(() => {
     void loadBrowse();
@@ -198,6 +199,7 @@ function RosterContent() {
         cursor: nextCursor,
         ...(location ? { location } : {}),
         ...(program ? { program } : {}),
+        ...(year ? { year } : {}),
       });
       setRows((prev) => [...prev, ...res.families]);
       setNextCursor(res.nextCursor);
@@ -295,7 +297,7 @@ function RosterContent() {
             ? (searched && !searching ? `${hits.length} match${hits.length === 1 ? '' : 'es'}` : ' ')
             : (total !== null ? `${total.toLocaleString()} famil${total === 1 ? 'y' : 'ies'}` : ' ')}
         </span>
-        <RosterExportButton location={location} program={program} />
+        <RosterExportButton location={location} program={program} {...(year ? { year } : {})} />
       </div>
 
       {/* Results */}
@@ -364,7 +366,7 @@ function Notice({ tone, children }: { tone: 'muted' | 'err'; children: React.Rea
   return <p style={{ fontSize: 14, color: 'var(--muted)', textAlign: 'center', margin: '24px 0' }}>{children}</p>;
 }
 
-export function RosterBrowser() {
+export function RosterBrowser({ year }: { year?: string }) {
   return (
     <>
       {/* Mobile — own CspRoot + 90px bottom padding for the fixed WelcomeMobileNav. */}
@@ -380,7 +382,7 @@ export function RosterBrowser() {
                 Browse every family, filter by location or program, and search by name, email, phone, or FID.
               </p>
             </header>
-            <RosterContent />
+            <RosterContent {...(year ? { year } : {})} />
           </div>
         </CspRoot>
       </div>
@@ -394,7 +396,7 @@ export function RosterBrowser() {
           </p>
         </header>
         <div style={{ maxWidth: 720 }}>
-          <RosterContent />
+          <RosterContent {...(year ? { year } : {})} />
         </div>
       </div>
     </>

@@ -19,8 +19,8 @@ interface FamilySeed {
   location: string;
   legacyFid: string | null;
   members: number;
-  // active enrollments: { programKey, programLabel }
-  enrollments: Array<{ programKey: string; programLabel: string; status: string }>;
+  // active enrollments: { programKey, programLabel, status, termLabel? }
+  enrollments: Array<{ programKey: string; programLabel: string; status: string; termLabel?: string }>;
 }
 
 interface DocSnap {
@@ -187,7 +187,7 @@ function makeDb(families: FamilySeed[]) {
             f.enrollments.forEach((e, i) => {
               if (programKey && e.programKey !== programKey) return;
               if (status && e.status !== status) return;
-              rows.push({ id: `${f.fid}-e-${i}`, data: () => ({ fid: f.fid }) });
+              rows.push({ id: `${f.fid}-e-${i}`, data: () => ({ fid: f.fid, termLabel: e.termLabel }) });
             });
           }
           return { docs: rows };
@@ -298,6 +298,73 @@ describe('listRosterFamilies', () => {
     const res = await listRosterFamilies({ limit: 50, format: 'json' });
     const target = res.families.find((f) => f.fid === 'CMT-FOUR');
     expect(target?.memberCount).toBe(4);
+  });
+
+  it('year filter (no program) returns only families with an active enrollment in that year', async () => {
+    const families = [
+      fam({
+        fid: 'CMT-25',
+        name: 'TwentyFive',
+        enrollments: [{ programKey: 'bala-vihar', programLabel: 'Bala Vihar', status: 'active', termLabel: '2025-26' }],
+      }),
+      fam({
+        fid: 'CMT-24',
+        name: 'TwentyFour',
+        enrollments: [{ programKey: 'bala-vihar', programLabel: 'Bala Vihar', status: 'active', termLabel: '2024-25' }],
+      }),
+    ];
+    mockFirestore.mockReturnValue(makeDb(families) as never);
+
+    const res = await listRosterFamilies({ year: '2024-25', limit: 50, format: 'json' });
+    expect(res.families.map((f) => f.fid)).toEqual(['CMT-24']);
+    expect(res.total).toBe(1);
+  });
+
+  it('year filter WITH program intersects on both program and termLabel', async () => {
+    const families = [
+      fam({
+        fid: 'CMT-BV25',
+        name: 'BvTwentyFive',
+        enrollments: [{ programKey: 'bala-vihar', programLabel: 'Bala Vihar', status: 'active', termLabel: '2025-26' }],
+      }),
+      fam({
+        fid: 'CMT-BV24',
+        name: 'BvTwentyFour',
+        enrollments: [{ programKey: 'bala-vihar', programLabel: 'Bala Vihar', status: 'active', termLabel: '2024-25' }],
+      }),
+      fam({
+        fid: 'CMT-TB24',
+        name: 'TablaTwentyFour',
+        enrollments: [{ programKey: 'tabla', programLabel: 'Tabla', status: 'active', termLabel: '2024-25' }],
+      }),
+    ];
+    mockFirestore.mockReturnValue(makeDb(families) as never);
+
+    const res = await listRosterFamilies({ program: 'bala-vihar', year: '2024-25', limit: 50, format: 'json' });
+    // only the bala-vihar + 2024-25 family; CMT-BV25 (wrong year) and CMT-TB24 (wrong program) excluded
+    expect(res.families.map((f) => f.fid)).toEqual(['CMT-BV24']);
+  });
+
+  it('no year param ⇒ every family (live-year behavior unchanged)', async () => {
+    const families = [
+      fam({
+        fid: 'CMT-25',
+        name: 'TwentyFive',
+        enrollments: [{ programKey: 'bala-vihar', programLabel: 'Bala Vihar', status: 'active', termLabel: '2025-26' }],
+      }),
+      fam({
+        fid: 'CMT-24',
+        name: 'TwentyFour',
+        enrollments: [{ programKey: 'bala-vihar', programLabel: 'Bala Vihar', status: 'active', termLabel: '2024-25' }],
+      }),
+      fam({ fid: 'CMT-NONE', name: 'NoEnrollments' }),
+    ];
+    mockFirestore.mockReturnValue(makeDb(families) as never);
+
+    const res = await listRosterFamilies({ limit: 50, format: 'json' });
+    // unscoped: lists every family (even the one with no enrollment), name-ordered
+    expect(res.families.map((f) => f.fid).sort()).toEqual(['CMT-24', 'CMT-25', 'CMT-NONE']);
+    expect(res.total).toBe(3);
   });
 
   it('returns total only on the first page (no cursor)', async () => {

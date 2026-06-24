@@ -45,6 +45,48 @@ async function toRow(fid: string, d: RawFamily): Promise<RosterFamilyRow> {
   };
 }
 
+/**
+ * Shared "fids → page" assembly for the in-memory intersect paths (program
+ * filter and year-without-program). Resolves each fid to its family doc, applies
+ * the location filter, sorts by name (fid tiebreak), and paginates by the fid
+ * cursor with the same total/nextCursor semantics as the program path.
+ */
+async function pageFromFids(fids: string[], params: RosterQuery): Promise<RosterListResponse> {
+  const db = portalFirestore();
+  const familiesCol = db.collection('families');
+  const limit = params.limit ?? 50;
+
+  const docs: Array<{ fid: string; data: RawFamily }> = [];
+  for (let i = 0; i < fids.length; i += PROGRAM_FAMILY_CHUNK) {
+    const refs = fids.slice(i, i + PROGRAM_FAMILY_CHUNK).map((f) => familiesCol.doc(f));
+    const got = await db.getAll(...refs);
+    for (const snap of got) {
+      if (!snap.exists) continue;
+      const data = snap.data() as RawFamily;
+      if (params.location && locationOf(data) !== params.location) continue;
+      docs.push({ fid: snap.id, data });
+    }
+  }
+  docs.sort((a, b) => {
+    const c = nameOf(a.fid, a.data).localeCompare(nameOf(b.fid, b.data));
+    return c !== 0 ? c : a.fid.localeCompare(b.fid);
+  });
+  let startIdx = 0;
+  if (params.cursor) {
+    const idx = docs.findIndex((x) => x.fid === params.cursor);
+    // Stale/invalid cursor (family left the program/location set, or a
+    // hand-edited cursor): return a terminal empty page rather than silently
+    // rewinding to page 1 (which could make a paging consumer loop).
+    if (idx < 0) return { families: [], nextCursor: null, total: null };
+    startIdx = idx + 1;
+  }
+  const slice = docs.slice(startIdx, startIdx + limit);
+  const families = await Promise.all(slice.map((x) => toRow(x.fid, x.data)));
+  const lastFid = slice.at(-1)?.fid ?? null;
+  const nextCursor = startIdx + limit < docs.length ? lastFid : null;
+  return { families, nextCursor, total: params.cursor ? null : docs.length };
+}
+
 export async function listRosterFamilies(params: RosterQuery): Promise<RosterListResponse> {
   const db = portalFirestore();
   const familiesCol = db.collection('families');
@@ -57,37 +99,31 @@ export async function listRosterFamilies(params: RosterQuery): Promise<RosterLis
       .where('programKey', '==', params.program)
       .where('status', '==', 'active')
       .get();
-    const fids = [...new Set(enrSnap.docs.map((e) => String((e.data() as { fid?: unknown }).fid ?? '')).filter(Boolean))];
+    // Year scope (in-memory, no index): the (programKey,status) index already
+    // serves this read; filtering on termLabel afterwards adds no index.
+    const fids = [...new Set(
+      enrSnap.docs
+        .filter((e) => !params.year || String((e.data() as { termLabel?: unknown }).termLabel ?? '') === params.year)
+        .map((e) => String((e.data() as { fid?: unknown }).fid ?? ''))
+        .filter(Boolean),
+    )];
+    return pageFromFids(fids, params);
+  }
 
-    const docs: Array<{ fid: string; data: RawFamily }> = [];
-    for (let i = 0; i < fids.length; i += PROGRAM_FAMILY_CHUNK) {
-      const refs = fids.slice(i, i + PROGRAM_FAMILY_CHUNK).map((f) => familiesCol.doc(f));
-      const got = await db.getAll(...refs);
-      for (const snap of got) {
-        if (!snap.exists) continue;
-        const data = snap.data() as RawFamily;
-        if (params.location && locationOf(data) !== params.location) continue;
-        docs.push({ fid: snap.id, data });
-      }
-    }
-    docs.sort((a, b) => {
-      const c = nameOf(a.fid, a.data).localeCompare(nameOf(b.fid, b.data));
-      return c !== 0 ? c : a.fid.localeCompare(b.fid);
-    });
-    let startIdx = 0;
-    if (params.cursor) {
-      const idx = docs.findIndex((x) => x.fid === params.cursor);
-      // Stale/invalid cursor (family left the program/location set, or a
-      // hand-edited cursor): return a terminal empty page rather than silently
-      // rewinding to page 1 (which could make a paging consumer loop).
-      if (idx < 0) return { families: [], nextCursor: null, total: null };
-      startIdx = idx + 1;
-    }
-    const slice = docs.slice(startIdx, startIdx + limit);
-    const families = await Promise.all(slice.map((x) => toRow(x.fid, x.data)));
-    const lastFid = slice.at(-1)?.fid ?? null;
-    const nextCursor = startIdx + limit < docs.length ? lastFid : null;
-    return { families, nextCursor, total: params.cursor ? null : docs.length };
+  // --- Year filter, no program: collectionGroup intersect path ---
+  // Families aren't year-tagged, so we can't order them directly. Read every
+  // active enrollment (status is single-field / auto-indexed — no composite),
+  // filter to the year in memory, collect the fid set, then reuse the same
+  // getAll+sort+cursor assembly as the program path.
+  if (params.year) {
+    const enrSnap = await db.collectionGroup('enrollments').where('status', '==', 'active').get();
+    const fids = [...new Set(
+      enrSnap.docs
+        .filter((e) => String((e.data() as { termLabel?: unknown }).termLabel ?? '') === params.year)
+        .map((e) => String((e.data() as { fid?: unknown }).fid ?? ''))
+        .filter(Boolean),
+    )];
+    return pageFromFids(fids, params);
   }
 
   // --- No program filter: Firestore-ordered cursor path ---

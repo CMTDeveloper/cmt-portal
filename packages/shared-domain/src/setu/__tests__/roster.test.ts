@@ -21,6 +21,12 @@ describe('roster schemas', () => {
     expect(RosterQuerySchema.safeParse({ limit: 500 }).success).toBe(false);
   });
 
+  it('RosterQuerySchema keeps a valid year and rejects a malformed one', () => {
+    expect(RosterQuerySchema.parse({ year: '2025-26' }).year).toBe('2025-26');
+    expect(RosterQuerySchema.parse({}).year).toBeUndefined();
+    expect(RosterQuerySchema.safeParse({ year: '2025' }).success).toBe(false);
+  });
+
   it('RosterFamilyRowSchema requires a known payment value', () => {
     const row = {
       fid: 'CMT-X', legacyFid: '123', name: 'Patel', location: 'Brampton',

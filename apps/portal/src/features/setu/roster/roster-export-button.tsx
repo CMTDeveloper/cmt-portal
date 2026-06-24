@@ -8,6 +8,8 @@ interface Props {
   /** Current filters so the export matches what's on screen. */
   location?: Location | null;
   program?: string | null;
+  /** School-year scope ("2025-26"); omitted for the live year. */
+  year?: string;
 }
 
 /**
@@ -15,7 +17,7 @@ interface Props {
  * fetch→blob→`a.download` pattern from check-in's report-export-button, but
  * targets `/api/welcome/families?…&format=csv` (one row per person).
  */
-export function RosterExportButton({ location, program }: Props) {
+export function RosterExportButton({ location, program, year }: Props) {
   const [pending, startTransition] = useTransition();
   const [failed, setFailed] = useState(false);
 
@@ -26,6 +28,7 @@ export function RosterExportButton({ location, program }: Props) {
         const qs = new URLSearchParams({ format: 'csv' });
         if (location) qs.set('location', location);
         if (program) qs.set('program', program);
+        if (year) qs.set('year', year);
         const res = await fetch(`/api/welcome/families?${qs.toString()}`, { credentials: 'same-origin' });
         if (!res.ok) throw new Error(`export-failed-${res.status}`);
         const blob = await res.blob();

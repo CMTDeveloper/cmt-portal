@@ -31,6 +31,10 @@ export const RosterQuerySchema = z.object({
   // Keeping `q` out of this schema avoids a silently-ignored param.
   location: z.enum(LOCATIONS).optional(),
   program: programKeySchema.optional(),
+  // School-year scope ("2025-26"). When set, the roster lists only families with
+  // an active enrollment in that year (in-memory filter on the enrollments read,
+  // index-free). Omitted ⇒ unscoped (every family, the live-year behavior).
+  year: z.string().regex(/^\d{4}-\d{2}$/).optional(),
   cursor: z.string().optional(), // last fid from the prior page
   limit: z.coerce.number().int().min(1).max(100).default(50),
   format: z.enum(['json', 'csv']).default('json'),
