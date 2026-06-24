@@ -72,5 +72,11 @@ describe('LevelsManagement', () => {
     expect(screen.getByRole('tabpanel', { name: 'Teacher assignments' })).toBeTruthy();
     expect(screen.getByPlaceholderText('teacher@example.com')).toBeTruthy();
   });
+
+  it('disables the "New level" control when readOnly (viewing a past year)', () => {
+    render(<LevelsManagement initialLevels={LEVELS} periods={PERIODS} programs={PROGRAMS} readOnly />);
+    expect(screen.getByText('Viewing a past year — read-only.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /new level/i })).toBeDisabled();
+  });
 });
 

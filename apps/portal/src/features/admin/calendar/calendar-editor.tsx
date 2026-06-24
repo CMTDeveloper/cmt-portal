@@ -42,9 +42,11 @@ interface CalendarEditorProps {
   /** Optional school-year window (YYYY-MM-DD). When set, entries are filtered to this range. */
   windowStart?: string;
   windowEnd?: string;
+  /** When true (viewing a past school year), mutate controls are disabled. */
+  readOnly?: boolean;
 }
 
-export function CalendarEditor({ locations, programs, windowStart, windowEnd }: CalendarEditorProps) {
+export function CalendarEditor({ locations, programs, windowStart, windowEnd, readOnly = false }: CalendarEditorProps) {
   const [location, setLocation] = useState<Location>(locations[0] ?? 'Brampton');
 
   // Programs that use calendar — for the program selector
@@ -189,6 +191,11 @@ export function CalendarEditor({ locations, programs, windowStart, windowEnd }: 
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      {readOnly && (
+        <p style={{ fontSize: 13, color: 'var(--muted)', margin: 0 }}>
+          Viewing a past year — read-only.
+        </p>
+      )}
       <div style={toolbarStyle}>
         <div style={toolbarFieldsStyle}>
           {calendarPrograms.length > 0 && (
@@ -213,7 +220,7 @@ export function CalendarEditor({ locations, programs, windowStart, windowEnd }: 
             </select>
           </label>
         </div>
-        <button type="button" onClick={openAddDialog} className="btn btn--p" style={addEntryButtonStyle}>
+        <button type="button" onClick={openAddDialog} disabled={readOnly} className="btn btn--p" style={{ ...addEntryButtonStyle, opacity: readOnly ? 0.5 : 1 }}>
           <SetuIcon.plus aria-hidden="true" />
           Add a calendar entry
         </button>
@@ -280,15 +287,15 @@ export function CalendarEditor({ locations, programs, windowStart, windowEnd }: 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {weekly.map((r, i) => (
             <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8 }}>
-              <input value={r.time} placeholder="10:00 – 10:45 am" onChange={(e) => setWeekly((p) => p.map((x, idx) => idx === i ? { ...x, time: e.target.value } : x))} style={fieldStyle} />
-              <input value={r.label} placeholder="Assembly" onChange={(e) => setWeekly((p) => p.map((x, idx) => idx === i ? { ...x, label: e.target.value } : x))} style={fieldStyle} />
-              <button type="button" onClick={() => setWeekly((p) => p.filter((_, idx) => idx !== i))} style={removeBtn} aria-label="Remove row">×</button>
+              <input value={r.time} placeholder="10:00 – 10:45 am" onChange={(e) => setWeekly((p) => p.map((x, idx) => idx === i ? { ...x, time: e.target.value } : x))} disabled={readOnly} style={fieldStyle} />
+              <input value={r.label} placeholder="Assembly" onChange={(e) => setWeekly((p) => p.map((x, idx) => idx === i ? { ...x, label: e.target.value } : x))} disabled={readOnly} style={fieldStyle} />
+              <button type="button" onClick={() => setWeekly((p) => p.filter((_, idx) => idx !== i))} disabled={readOnly} style={{ ...removeBtn, opacity: readOnly ? 0.5 : 1 }} aria-label="Remove row">×</button>
             </div>
           ))}
         </div>
         <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
-          <button type="button" onClick={() => setWeekly((p) => [...p, { time: '', label: '' }])} style={linkBtn}>+ Add row</button>
-          <button type="button" onClick={saveWeekly} disabled={pending} className="btn btn--p" style={{ fontSize: 13, padding: '6px 14px' }}>Save schedule</button>
+          <button type="button" onClick={() => setWeekly((p) => [...p, { time: '', label: '' }])} disabled={readOnly} style={{ ...linkBtn, opacity: readOnly ? 0.5 : 1 }}>+ Add row</button>
+          <button type="button" onClick={saveWeekly} disabled={pending || readOnly} className="btn btn--p" style={{ fontSize: 13, padding: '6px 14px', opacity: readOnly ? 0.5 : 1 }}>Save schedule</button>
         </div>
       </div>
 
@@ -306,15 +313,15 @@ export function CalendarEditor({ locations, programs, windowStart, windowEnd }: 
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
                   <span style={{ fontSize: 14, fontWeight: 600 }}>{e.date}</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <button onClick={() => toggleEnabled(e)} style={{ ...pill, background: e.enabled ? 'var(--accentSoft)' : 'var(--surface2)', color: e.enabled ? 'var(--accentDeep)' : 'var(--muted)', cursor: 'pointer', border: 0 }}>
+                    <button onClick={() => toggleEnabled(e)} disabled={readOnly} style={{ ...pill, background: e.enabled ? 'var(--accentSoft)' : 'var(--surface2)', color: e.enabled ? 'var(--accentDeep)' : 'var(--muted)', cursor: readOnly ? 'default' : 'pointer', border: 0, opacity: readOnly ? 0.5 : 1 }}>
                       {e.enabled ? 'Published' : 'Draft'}
                     </button>
                     {e.kind === 'class' && (
-                      <button onClick={() => togglePrasadNeeded(e)} style={{ ...pill, background: e.prasadNeeded ? 'var(--accentSoft)' : 'var(--surface2)', color: e.prasadNeeded ? 'var(--accentDeep)' : 'var(--muted)', cursor: 'pointer', border: 0 }}>
+                      <button onClick={() => togglePrasadNeeded(e)} disabled={readOnly} style={{ ...pill, background: e.prasadNeeded ? 'var(--accentSoft)' : 'var(--surface2)', color: e.prasadNeeded ? 'var(--accentDeep)' : 'var(--muted)', cursor: readOnly ? 'default' : 'pointer', border: 0, opacity: readOnly ? 0.5 : 1 }}>
                         {e.prasadNeeded ? 'Prasad' : 'No prasad'}
                       </button>
                     )}
-                    <button onClick={() => remove(e)} style={removeBtn} aria-label="Delete entry">×</button>
+                    <button onClick={() => remove(e)} disabled={readOnly} style={{ ...removeBtn, opacity: readOnly ? 0.5 : 1 }} aria-label="Delete entry">×</button>
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 7 }}>
@@ -349,17 +356,17 @@ export function CalendarEditor({ locations, programs, windowStart, windowEnd }: 
                     <td style={{ ...td, color: 'var(--body-text)' }}>{e.specialEvents ?? '—'}</td>
                     <td style={td}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <button onClick={() => toggleEnabled(e)} style={{ ...pill, background: e.enabled ? 'var(--accentSoft)' : 'var(--surface2)', color: e.enabled ? 'var(--accentDeep)' : 'var(--muted)', cursor: 'pointer', border: 0 }}>
+                        <button onClick={() => toggleEnabled(e)} disabled={readOnly} style={{ ...pill, background: e.enabled ? 'var(--accentSoft)' : 'var(--surface2)', color: e.enabled ? 'var(--accentDeep)' : 'var(--muted)', cursor: readOnly ? 'default' : 'pointer', border: 0, opacity: readOnly ? 0.5 : 1 }}>
                           {e.enabled ? 'Published' : 'Draft'}
                         </button>
                         {e.kind === 'class' && (
-                          <button onClick={() => togglePrasadNeeded(e)} style={{ ...pill, background: e.prasadNeeded ? 'var(--accentSoft)' : 'var(--surface2)', color: e.prasadNeeded ? 'var(--accentDeep)' : 'var(--muted)', cursor: 'pointer', border: 0 }}>
+                          <button onClick={() => togglePrasadNeeded(e)} disabled={readOnly} style={{ ...pill, background: e.prasadNeeded ? 'var(--accentSoft)' : 'var(--surface2)', color: e.prasadNeeded ? 'var(--accentDeep)' : 'var(--muted)', cursor: readOnly ? 'default' : 'pointer', border: 0, opacity: readOnly ? 0.5 : 1 }}>
                             {e.prasadNeeded ? 'Prasad' : 'No prasad'}
                           </button>
                         )}
                       </div>
                     </td>
-                    <td style={td}><button onClick={() => remove(e)} style={removeBtn} aria-label="Delete entry">×</button></td>
+                    <td style={td}><button onClick={() => remove(e)} disabled={readOnly} style={{ ...removeBtn, opacity: readOnly ? 0.5 : 1 }} aria-label="Delete entry">×</button></td>
                   </tr>
                 ))}
               </tbody>

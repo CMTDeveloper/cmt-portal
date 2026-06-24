@@ -22,5 +22,5 @@ export default async function PrasadPage({
   const years = await listKnownSchoolYears(db, liveYear);
   const view = resolveViewYear(years, liveYear, (await searchParams).year ?? null);
   const periods = await getPrasadPeriodsForYear(db, view.year);
-  return <AdminPrasadScreen periods={periods} />;
+  return <AdminPrasadScreen periods={periods} readOnly={view.status === 'past'} />;
 }

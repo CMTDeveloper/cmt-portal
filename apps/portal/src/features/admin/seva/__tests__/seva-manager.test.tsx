@@ -184,4 +184,18 @@ describe('SevaManager', () => {
     );
     expect(screen.queryByRole('button', { name: /edit requirement/i })).not.toBeInTheDocument();
   });
+
+  it('disables the "New opportunity" control when readOnly (viewing a past year)', () => {
+    render(
+      <SevaManager
+        initialRequirement={reqWithYear}
+        initialOpportunities={[]}
+        canEditRequirement
+        readOnly
+      />,
+    );
+    expect(screen.getByText('Viewing a past year — read-only.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /new opportunity/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /edit requirement/i })).toBeDisabled();
+  });
 });

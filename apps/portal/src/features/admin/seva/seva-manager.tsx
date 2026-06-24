@@ -16,6 +16,8 @@ interface SevaManagerProps {
   initialRequirement: SevaRequirement;
   initialOpportunities: SerializedOpportunity[];
   canEditRequirement: boolean;
+  /** When true (viewing a past seva year), mutate controls are disabled. */
+  readOnly?: boolean;
 }
 
 // ─── shared styles ─────────────────────────────────────────────────────────────
@@ -113,6 +115,7 @@ export function SevaManager({
   initialRequirement,
   initialOpportunities,
   canEditRequirement,
+  readOnly = false,
 }: SevaManagerProps) {
   const [requirement, setRequirement] = useState<SevaRequirement>(initialRequirement);
   const [opportunities, setOpportunities] = useState<SerializedOpportunity[]>(initialOpportunities);
@@ -366,6 +369,11 @@ export function SevaManager({
         <p style={{ fontSize: 15, color: 'var(--body-text)', marginTop: 12, maxWidth: 560, lineHeight: 1.55 }}>
           Post seva opportunities for families to sign up for, and set the yearly seva-hours target.
         </p>
+        {readOnly && (
+          <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 12 }}>
+            Viewing a past year — read-only.
+          </p>
+        )}
       </header>
 
       {/* Requirement panel */}
@@ -404,8 +412,8 @@ export function SevaManager({
                 type="button"
                 className="btn btn--p"
                 onClick={submitReq}
-                disabled={savingReq}
-                style={formActionBtn}
+                disabled={savingReq || readOnly}
+                style={{ ...formActionBtn, opacity: readOnly ? 0.5 : 1 }}
               >
                 {savingReq ? 'Saving…' : 'Save requirement'}
               </button>
@@ -455,7 +463,7 @@ export function SevaManager({
               )}
             </div>
             {canEditRequirement && (
-              <button type="button" className="btn btn--s" onClick={openReqEdit} style={{ flex: '0 0 auto', minHeight: 42 }}>
+              <button type="button" className="btn btn--s" onClick={openReqEdit} disabled={readOnly} style={{ flex: '0 0 auto', minHeight: 42, opacity: readOnly ? 0.5 : 1 }}>
                 <SetuIcon.edit /> Edit requirement
               </button>
             )}
@@ -493,7 +501,8 @@ export function SevaManager({
                 setCreateErrors({});
                 setCreating(true);
               }}
-              style={{ minHeight: 46 }}
+              disabled={readOnly}
+              style={{ minHeight: 46, opacity: readOnly ? 0.5 : 1 }}
             >
               <SetuIcon.plus /> New opportunity
             </button>
@@ -510,8 +519,8 @@ export function SevaManager({
               type="button"
               className="btn btn--p"
               onClick={submitCreate}
-              disabled={savingCreate}
-              style={formActionBtn}
+              disabled={savingCreate || readOnly}
+              style={{ ...formActionBtn, opacity: readOnly ? 0.5 : 1 }}
             >
               {savingCreate ? 'Posting…' : 'Create opportunity'}
             </button>
@@ -561,7 +570,8 @@ export function SevaManager({
                 setCreateErrors({});
                 setCreating(true);
               }}
-              style={{ marginTop: 20, minHeight: 46 }}
+              disabled={readOnly}
+              style={{ marginTop: 20, minHeight: 46, opacity: readOnly ? 0.5 : 1 }}
             >
               <SetuIcon.plus /> Post an opportunity
             </button>
@@ -591,8 +601,8 @@ export function SevaManager({
                         type="button"
                         className="btn btn--p"
                         onClick={() => submitEdit(o.oppId)}
-                        disabled={savingEdit}
-                        style={formActionBtn}
+                        disabled={savingEdit || readOnly}
+                        style={{ ...formActionBtn, opacity: readOnly ? 0.5 : 1 }}
                       >
                         {savingEdit ? 'Saving…' : 'Save changes'}
                       </button>
@@ -666,7 +676,8 @@ export function SevaManager({
                         type="button"
                         className="btn btn--s"
                         onClick={() => openEdit(o)}
-                        style={{ flex: '1 1 auto', minWidth: 120, minHeight: 44 }}
+                        disabled={readOnly}
+                        style={{ flex: '1 1 auto', minWidth: 120, minHeight: 44, opacity: readOnly ? 0.5 : 1 }}
                       >
                         <SetuIcon.edit /> Edit
                       </button>
@@ -675,8 +686,8 @@ export function SevaManager({
                           type="button"
                           className="btn btn--g"
                           onClick={() => closeOpp(o.oppId)}
-                          disabled={closingId === o.oppId}
-                          style={{ flex: '1 1 auto', minWidth: 120, minHeight: 44 }}
+                          disabled={closingId === o.oppId || readOnly}
+                          style={{ flex: '1 1 auto', minWidth: 120, minHeight: 44, opacity: readOnly ? 0.5 : 1 }}
                         >
                           {closingId === o.oppId ? 'Closing…' : 'Close'}
                         </button>

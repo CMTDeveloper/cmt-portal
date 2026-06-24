@@ -83,7 +83,7 @@ export default async function LevelsPage({ searchParams }: { searchParams: Promi
         </p>
       </header>
 
-      <LevelsManagement initialLevels={levels} periods={periods} programs={programs} />
+      <LevelsManagement initialLevels={levels} periods={periods} programs={programs} readOnly={view.status === 'past'} />
     </>
   );
 }

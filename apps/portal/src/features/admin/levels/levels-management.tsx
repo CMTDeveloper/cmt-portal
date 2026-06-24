@@ -10,11 +10,13 @@ interface LevelsManagementProps {
   initialLevels: LevelRow[];
   periods: PeriodOption[];
   programs: ProgramRow[];
+  /** When true (viewing a past school year), mutate controls are disabled. */
+  readOnly?: boolean;
 }
 
 type Tab = 'levels' | 'teachers';
 
-export function LevelsManagement({ initialLevels, periods, programs }: LevelsManagementProps) {
+export function LevelsManagement({ initialLevels, periods, programs, readOnly = false }: LevelsManagementProps) {
   const [levels, setLevels] = useState(initialLevels);
   const [tab, setTab] = useState<Tab>('levels');
 
@@ -34,6 +36,11 @@ export function LevelsManagement({ initialLevels, periods, programs }: LevelsMan
 
   return (
     <section>
+      {readOnly && (
+        <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 14 }}>
+          Viewing a past year — read-only.
+        </p>
+      )}
       <div
         role="tablist"
         aria-label="Level management sections"
@@ -78,6 +85,7 @@ export function LevelsManagement({ initialLevels, periods, programs }: LevelsMan
             periods={periods}
             programs={programs}
             onLevelsChange={setLevels}
+            readOnly={readOnly}
           />
         </div>
       ) : (
@@ -89,7 +97,7 @@ export function LevelsManagement({ initialLevels, periods, programs }: LevelsMan
           style={{ padding: 22 }}
         >
           <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 16 }}>Assign a teacher</h2>
-          <AssignTeacherForm levels={levels} onAssignmentSaved={handleAssignmentSaved} />
+          <AssignTeacherForm levels={levels} onAssignmentSaved={handleAssignmentSaved} readOnly={readOnly} />
         </div>
       )}
     </section>

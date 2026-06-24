@@ -221,6 +221,14 @@ describe('AdminPrasadScreen', () => {
     }
   });
 
+  it('disables publish and shows the read-only notice when readOnly (viewing a past year)', async () => {
+    fetchPrasadPreview.mockResolvedValue(previewFixture());
+    render(<AdminPrasadScreen readOnly />);
+    const publishBtn = (await screen.findAllByTestId('prasad-publish'))[0]!;
+    expect(publishBtn).toBeDisabled();
+    expect(screen.getAllByText('Viewing a past year — read-only.').length).toBeGreaterThanOrEqual(1);
+  });
+
   it('hides the bulk-assign button when there are no proposed rows', async () => {
     fetchPrasadPreview.mockResolvedValue(previewFixture());
     fetchPrasadAssignments.mockResolvedValue([

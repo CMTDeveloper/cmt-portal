@@ -29,6 +29,8 @@ interface LevelsTableProps {
   /** Optional list of programs to show a program selector (E3). When absent the selector is hidden. */
   programs?: ProgramRow[];
   onLevelsChange?: (levels: LevelRow[]) => void;
+  /** When true (viewing a past school year), mutate controls are disabled. */
+  readOnly?: boolean;
 }
 
 const LEVEL_KIND_LABELS: Record<LevelKind, string> = {
@@ -300,7 +302,7 @@ const fieldStyle: React.CSSProperties = { display: 'block', width: '100%', margi
 
 // ─── Main table ────────────────────────────────────────────────────────────────
 
-export function LevelsTable({ initialLevels, periods, programs, onLevelsChange }: LevelsTableProps) {
+export function LevelsTable({ initialLevels, periods, programs, onLevelsChange, readOnly = false }: LevelsTableProps) {
   const [levels, setLevels] = useState<LevelRow[]>(initialLevels);
   const [showDisabled, setShowDisabled] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -372,7 +374,7 @@ export function LevelsTable({ initialLevels, periods, programs, onLevelsChange }
           Show disabled levels
         </label>
         <div style={{ flex: 1 }} />
-        <button className="btn btn--p" onClick={() => { setEditing(null); setModalOpen(true); }} style={{ fontSize: 13, padding: '8px 18px' }}>+ New level</button>
+        <button className="btn btn--p" onClick={() => { setEditing(null); setModalOpen(true); }} disabled={readOnly} style={{ fontSize: 13, padding: '8px 18px', opacity: readOnly ? 0.5 : 1 }}>+ New level</button>
       </div>
 
       {displayed.length === 0 ? (
@@ -408,8 +410,8 @@ export function LevelsTable({ initialLevels, periods, programs, onLevelsChange }
                   <span style={{ color: 'var(--body-text)' }}>{l.teacherRefs.length}</span>
                 </div>
                 <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                  <button onClick={() => { setEditing(l); setModalOpen(true); }} style={{ ...actionBtnStyle, flex: 1, textAlign: 'center', padding: '9px 12px' }}>Edit</button>
-                  <button onClick={() => handleToggle(l)} style={{ ...actionBtnStyle, flex: 1, textAlign: 'center', padding: '9px 12px' }}>{l.enabled ? 'Disable' : 'Enable'}</button>
+                  <button onClick={() => { setEditing(l); setModalOpen(true); }} disabled={readOnly} style={{ ...actionBtnStyle, flex: 1, textAlign: 'center', padding: '9px 12px', opacity: readOnly ? 0.5 : 1 }}>Edit</button>
+                  <button onClick={() => handleToggle(l)} disabled={readOnly} style={{ ...actionBtnStyle, flex: 1, textAlign: 'center', padding: '9px 12px', opacity: readOnly ? 0.5 : 1 }}>{l.enabled ? 'Disable' : 'Enable'}</button>
                 </div>
               </div>
             ))}
@@ -441,8 +443,8 @@ export function LevelsTable({ initialLevels, periods, programs, onLevelsChange }
                       </span>
                     </td>
                     <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>
-                      <button onClick={() => { setEditing(l); setModalOpen(true); }} style={actionBtnStyle}>Edit</button>
-                      <button onClick={() => handleToggle(l)} style={{ ...actionBtnStyle, marginLeft: 6 }}>{l.enabled ? 'Disable' : 'Enable'}</button>
+                      <button onClick={() => { setEditing(l); setModalOpen(true); }} disabled={readOnly} style={{ ...actionBtnStyle, opacity: readOnly ? 0.5 : 1 }}>Edit</button>
+                      <button onClick={() => handleToggle(l)} disabled={readOnly} style={{ ...actionBtnStyle, marginLeft: 6, opacity: readOnly ? 0.5 : 1 }}>{l.enabled ? 'Disable' : 'Enable'}</button>
                     </td>
                   </tr>
                 ))}

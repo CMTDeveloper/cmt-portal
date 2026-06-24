@@ -46,7 +46,7 @@ export default async function AdminCalendarPage({ searchParams }: { searchParams
         </p>
       </header>
 
-      <CalendarEditor locations={locations} programs={programs} windowStart={windowStart} windowEnd={windowEnd} />
+      <CalendarEditor locations={locations} programs={programs} windowStart={windowStart} windowEnd={windowEnd} readOnly={view.status === 'past'} />
     </>
   );
 }

@@ -7,6 +7,8 @@ import type { LevelRow } from './levels-table';
 interface AssignTeacherFormProps {
   levels: LevelRow[];
   onAssignmentSaved?: (change: { ref: string; added: string[]; removed: string[] }) => void;
+  /** When true (viewing a past school year), the form's mutate controls are disabled. */
+  readOnly?: boolean;
 }
 
 /**
@@ -14,7 +16,7 @@ interface AssignTeacherFormProps {
  * they cover, save. POST /api/admin/teacher-assignments resolves the email to
  * the member id and sets that teacher's FULL level set.
  */
-export function AssignTeacherForm({ levels, onAssignmentSaved }: AssignTeacherFormProps) {
+export function AssignTeacherForm({ levels, onAssignmentSaved, readOnly = false }: AssignTeacherFormProps) {
   const [teacherEmail, setTeacherEmail] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [pending, startTransition] = useTransition();
@@ -85,8 +87,8 @@ export function AssignTeacherForm({ levels, onAssignmentSaved }: AssignTeacherFo
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 280, overflowY: 'auto' }}>
             {enabledLevels.map((l) => (
-              <label key={l.levelId} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, cursor: 'pointer', padding: '4px 0' }}>
-                <input type="checkbox" checked={selected.has(l.levelId)} onChange={() => toggle(l.levelId)} style={{ accentColor: 'var(--accent)' }} />
+              <label key={l.levelId} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, cursor: readOnly ? 'default' : 'pointer', padding: '4px 0' }}>
+                <input type="checkbox" checked={selected.has(l.levelId)} onChange={() => toggle(l.levelId)} disabled={readOnly} style={{ accentColor: 'var(--accent)' }} />
                 <span><strong>{l.location}</strong> · {l.levelName} <span style={{ color: 'var(--muted)' }}>({l.periodLabel})</span></span>
               </label>
             ))}
@@ -95,7 +97,7 @@ export function AssignTeacherForm({ levels, onAssignmentSaved }: AssignTeacherFo
       </div>
 
       <div>
-        <button type="submit" disabled={pending} className="btn btn--p" style={{ fontSize: 13, padding: '8px 18px', opacity: pending ? 0.6 : 1 }}>
+        <button type="submit" disabled={pending || readOnly} className="btn btn--p" style={{ fontSize: 13, padding: '8px 18px', opacity: pending || readOnly ? 0.6 : 1 }}>
           {pending ? 'Saving…' : selected.size === 0 ? 'Clear assignments' : `Save ${selected.size} level${selected.size === 1 ? '' : 's'}`}
         </button>
       </div>

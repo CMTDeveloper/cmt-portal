@@ -416,16 +416,18 @@ function AssignmentRow({
   assignment,
   sundays,
   onMutated,
+  readOnly,
 }: {
   assignment: AdminPrasadAssignment;
   sundays: string[];
   onMutated: () => void;
+  readOnly: boolean;
 }) {
   const [target, setTarget] = useState('');
   const [saving, setSaving] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [assigning, setAssigning] = useState(false);
-  const busy = saving || cancelling || assigning;
+  const busy = saving || cancelling || assigning || readOnly;
 
   // Reassign options = the OTHER Sundays present in the preview (never the
   // family's current date).
@@ -664,7 +666,7 @@ function RetryLine({ message, onRetry }: { message: string; onRetry: () => void 
 // Published-assignments manager (own fetch lifecycle, keyed to the active pid)
 // ---------------------------------------------------------------------------
 
-function AssignmentsManager({ pid, sundays }: { pid: string; sundays: string[] }) {
+function AssignmentsManager({ pid, sundays, readOnly }: { pid: string; sundays: string[]; readOnly: boolean }) {
   const [assignments, setAssignments] = useState<AdminPrasadAssignment[] | null>(null);
   const [error, setError] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -742,9 +744,9 @@ function AssignmentsManager({ pid, sundays }: { pid: string; sundays: string[] }
             type="button"
             data-testid="prasad-assign-remaining"
             onClick={assignAll}
-            disabled={bulkAssigning}
+            disabled={bulkAssigning || readOnly}
             className="btn btn--s"
-            style={{ minHeight: 44, fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', opacity: bulkAssigning ? 0.6 : 1 }}
+            style={{ minHeight: 44, fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', opacity: bulkAssigning || readOnly ? 0.6 : 1 }}
           >
             {bulkAssigning ? 'Assigning…' : `Assign all unconfirmed (${proposedCount})`}
           </button>
@@ -756,7 +758,7 @@ function AssignmentsManager({ pid, sundays }: { pid: string; sundays: string[] }
           <Disclosure key={d} title={prettySunday(d)} count={list.length} defaultOpen={i === 0}>
             <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
               {list.map((a) => (
-                <AssignmentRow key={a.paid} assignment={a} sundays={sundays} onMutated={load} />
+                <AssignmentRow key={a.paid} assignment={a} sundays={sundays} onMutated={load} readOnly={readOnly} />
               ))}
             </ul>
           </Disclosure>
@@ -770,7 +772,14 @@ function AssignmentsManager({ pid, sundays }: { pid: string; sundays: string[] }
 // Screen
 // ---------------------------------------------------------------------------
 
-export function AdminPrasadScreen({ periods = FALLBACK_PRASAD_PERIODS }: { periods?: readonly PeriodOption[] }) {
+export function AdminPrasadScreen({
+  periods = FALLBACK_PRASAD_PERIODS,
+  readOnly = false,
+}: {
+  periods?: readonly PeriodOption[];
+  /** When true (viewing a past school year), mutate controls are disabled. */
+  readOnly?: boolean;
+}) {
   const periodOptions = periods.length > 0 ? periods : FALLBACK_PRASAD_PERIODS;
   const [period, setPeriod] = useState<PeriodOption>(periodOptions[0]);
   const [preview, setPreview] = useState<PrasadPreviewResult | null>(null);
@@ -883,6 +892,11 @@ export function AdminPrasadScreen({ periods = FALLBACK_PRASAD_PERIODS }: { perio
           Assign each Bala Vihar family one prasad Sunday for the year — clustered near a child&rsquo;s birthday month,
           then spilled to fill each Sunday up to the cap. Preview, then publish.
         </p>
+        {readOnly && (
+          <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 12 }}>
+            Viewing a past year — read-only.
+          </p>
+        )}
         <div style={{ marginTop: 18 }}>
           <LocationTabs options={periodOptions} activePid={pid} onSelect={selectPeriod} />
         </div>
@@ -905,6 +919,7 @@ export function AdminPrasadScreen({ periods = FALLBACK_PRASAD_PERIODS }: { perio
           loading={loading}
           onCommitCap={commitCap}
           onPublish={onPublish}
+          readOnly={readOnly}
         />
       )}
 
@@ -919,7 +934,7 @@ export function AdminPrasadScreen({ periods = FALLBACK_PRASAD_PERIODS }: { perio
           <p style={{ fontSize: 13, color: 'var(--body-text)', marginBottom: 14, lineHeight: 1.5 }}>
             Move a family to another Sunday, or remove one that has left. Changes are saved immediately.
           </p>
-          <AssignmentsManager key={pid} pid={pid} sundays={preview.perSunday.map((s) => s.date)} />
+          <AssignmentsManager key={pid} pid={pid} sundays={preview.perSunday.map((s) => s.date)} readOnly={readOnly} />
         </section>
       )}
     </div>
@@ -982,12 +997,14 @@ function PreviewBody({
   loading,
   onCommitCap,
   onPublish,
+  readOnly,
 }: {
   preview: PrasadPreviewResult;
   publishing: boolean;
   loading: boolean;
   onCommitCap: (cap: number) => void;
   onPublish: () => void;
+  readOnly: boolean;
 }) {
   const { stats, rows, perSunday, cap } = preview;
   const allAssigned = rows.length === 0 && stats.keptExisting > 0;
@@ -1037,7 +1054,7 @@ function PreviewBody({
           background: 'var(--surface)',
         }}
       >
-        <CapInput defaultCap={cap} disabled={publishing || loading} onCommit={onCommitCap} />
+        <CapInput defaultCap={cap} disabled={publishing || loading || readOnly} onCommit={onCommitCap} />
         <span style={{ fontSize: 12.5, color: 'var(--muted)', lineHeight: 1.5 }}>
           {preview.eligibleSundayCount} class Sunday{preview.eligibleSundayCount === 1 ? '' : 's'} available
         </span>
@@ -1104,14 +1121,14 @@ function PreviewBody({
         type="button"
         data-testid="prasad-publish"
         onClick={onPublish}
-        disabled={publishing || loading || hasUnplaced}
+        disabled={publishing || loading || hasUnplaced || readOnly}
         className="btn btn--p prasad-cta"
         style={{
           width: '100%',
           minHeight: 48,
           fontSize: 15,
           fontWeight: 600,
-          opacity: publishing || loading || hasUnplaced ? 0.6 : 1,
+          opacity: publishing || loading || hasUnplaced || readOnly ? 0.6 : 1,
         }}
       >
         {publishing ? (

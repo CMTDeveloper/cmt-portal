@@ -209,6 +209,12 @@ describe('CalendarEditor — program filter', () => {
     expect(screen.queryByText('BV Diwali')).toBeNull();
   });
 
+  it('disables the "Add a calendar entry" control when readOnly (viewing a past year)', () => {
+    render(<CalendarEditor locations={['Brampton']} programs={PROGRAMS} readOnly />);
+    expect(screen.getByText('Viewing a past year — read-only.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /add a calendar entry/i })).toBeDisabled();
+  });
+
   it('renders a Prasad toggle on class rows (defaulting missing prasadNeeded to on)', async () => {
     global.fetch = vi.fn().mockImplementation((url: string) =>
       Promise.resolve({
