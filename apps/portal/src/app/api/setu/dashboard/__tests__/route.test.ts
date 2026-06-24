@@ -12,6 +12,11 @@ vi.mock('@/app/family/_helpers/load-dashboard', () => ({
   loadFamilyDashboard: mockLoad,
 }));
 
+const mockGetLiveSchoolYear = vi.hoisted(() => vi.fn());
+vi.mock('@/features/setu/rollover/live-school-year', () => ({
+  getLiveSchoolYearCached: mockGetLiveSchoolYear,
+}));
+
 import { GET } from '../route';
 
 const family = { fid: 'CMT-AB12CD34', name: 'Patel', location: 'Brampton', legacyFid: null };
@@ -53,6 +58,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockGetFamilyByFid.mockResolvedValue({ family, members });
   mockLoad.mockResolvedValue(dashboardData);
+  mockGetLiveSchoolYear.mockResolvedValue('2025-26');
 });
 
 describe('GET /api/setu/dashboard', () => {
@@ -83,6 +89,9 @@ describe('GET /api/setu/dashboard', () => {
     expect(body.upcoming[0].date).toBe('2026-01-11');
     expect(body.seva.hoursEarned).toBe(4);
     expect(body.prasad.status).toBe('proposed');
+    // Top-level live school year (mobile counterpart of the web SchoolYearBadge),
+    // distinct from balaVihar.termLabel (the family's enrollment period).
+    expect(body.schoolYear).toBe('2025-26');
   });
 
   it('does NOT leak UI-only fields (pill colors, donateUrl)', async () => {

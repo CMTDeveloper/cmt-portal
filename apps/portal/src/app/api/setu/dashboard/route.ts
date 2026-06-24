@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { flags } from '@/lib/flags';
 import { getSessionFamily } from '@/features/setu/members/get-session-family';
 import { loadFamilyDashboard } from '@/app/family/_helpers/load-dashboard';
+import { getLiveSchoolYearCached } from '@/features/setu/rollover/live-school-year';
 
 /**
  * GET /api/setu/dashboard — the family home aggregate for mobile (and any
@@ -21,9 +22,11 @@ export async function GET(req: Request) {
   }
 
   const { model, upcoming, seva, prasad } = await loadFamilyDashboard(fam.family, fam.members);
+  const schoolYear = await getLiveSchoolYearCached();
 
   return NextResponse.json(
     {
+      schoolYear,
       family: { fid: fam.family.fid, name: fam.family.name, location: fam.family.location },
       currentMid: fam.currentMid,
       isManager: fam.isManager,

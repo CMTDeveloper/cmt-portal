@@ -22,6 +22,10 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
+## `PENDING-SCHOOLYEAR` · 2026-06-24 · dashboard exposes the live `schoolYear`
+- **GET `/api/setu/dashboard`** — the 200 JSON gains a top-level **`schoolYear: string`** (e.g. `'2025-26'`). This is the **LIVE / operational** school year families and teachers are currently in (the mobile counterpart of the web school-year badge). It is **distinct from `balaVihar.termLabel`**, which is the *family's enrollment period* — `balaVihar.termLabel` is unchanged. **Additive** — no existing field changed.
+  - **Mobile:** add `schoolYear` to the dashboard response schema/type in `src/api/schemas/*`, and render the live-year label on the home screen (the mobile counterpart of the web school-year badge). No request-shape change.
+
 ## `PENDING` · 2026-06-24 · seva opportunity status gains `draft`
 - **`SevaOpportunityStatus`** (`@cmt/shared-domain`) gains an additive **`'draft'`** value — now `['open','closed','draft']`. A `'draft'` opp is an admin-only, unscheduled rollover copy (a "decide the date later" placeholder) that families must NEVER see. **Additive only**; existing `'open'`/`'closed'` values and all existing docs are unchanged.
 - **GET `/api/setu/seva/opportunities`** (family view) — **continues to EXCLUDE drafts**: the family browse list is built from `status:'open'` only, so a `'draft'` opp is never returned. **No response-shape change** — the status enum simply has a new member that the family endpoint won't emit.
