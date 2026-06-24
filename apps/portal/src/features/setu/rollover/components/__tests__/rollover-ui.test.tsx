@@ -18,6 +18,10 @@ vi.mock('@cmt/ui', () => ({
     edit: () => <span>edit</span>,
     x: () => <span>x</span>,
   },
+  Dialog: ({ open, children }: { open: boolean; children: React.ReactNode }) => (open ? <div data-testid="dialog">{children}</div> : null),
+  DialogContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DialogHeader: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DialogTitle: ({ children }: { children: React.ReactNode }) => <h2>{children}</h2>,
 }));
 vi.mock('@/features/setu/rollover/rollover-client', () => ({
   startNewYearClient: vi.fn(),
@@ -26,6 +30,10 @@ vi.mock('@/features/setu/rollover/rollover-client', () => ({
   saveSchoolYearConfigClient: vi.fn(),
   activateSchoolYearClient: vi.fn(),
   copyCalendarFromLastYearClient: vi.fn(),
+  copyPrasadFromLastYearClient: vi.fn(),
+  copyTeachersFromLastYearClient: vi.fn(),
+  copySevaFromLastYearClient: vi.fn(),
+  listSevaCandidatesClient: vi.fn(),
 }));
 vi.mock('../../set-grade-client', () => ({
   setGradeClient: vi.fn(),

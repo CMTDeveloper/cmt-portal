@@ -9,6 +9,12 @@ interface YearReadinessChecklistProps {
   onCopyCalendar: () => void;
   activating: boolean;
   copyingCalendar?: boolean;
+  onCopyPrasad?: () => void;
+  copyingPrasad?: boolean;
+  onCopyTeachers?: () => void;
+  copyingTeachers?: boolean;
+  onCopySeva?: () => void;
+  copyingSeva?: boolean;
 }
 
 const ITEMS: { key: keyof Omit<YearReadiness, 'toYear' | 'promotionRan'>; label: string }[] = [
@@ -30,6 +36,12 @@ export function YearReadinessChecklist({
   onCopyCalendar,
   activating,
   copyingCalendar = false,
+  onCopyPrasad,
+  copyingPrasad = false,
+  onCopyTeachers,
+  copyingTeachers = false,
+  onCopySeva,
+  copyingSeva = false,
 }: YearReadinessChecklistProps) {
   const canActivate = readiness.promotionRan;
 
@@ -75,28 +87,10 @@ export function YearReadinessChecklist({
             >
               <StatusChip ok={ok} />
               <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', flex: 1, minWidth: 0 }}>{label}</span>
-              {key === 'calendar' && (
-                <button
-                  type="button"
-                  onClick={onCopyCalendar}
-                  disabled={copyingCalendar}
-                  className="rollover-textbtn"
-                  style={{
-                    background: 'transparent',
-                    border: 0,
-                    padding: '2px 0',
-                    fontSize: 13,
-                    fontWeight: 600,
-                    color: 'var(--accentDeep)',
-                    cursor: copyingCalendar ? 'default' : 'pointer',
-                    fontFamily: 'var(--body)',
-                    opacity: copyingCalendar ? 0.6 : 1,
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {copyingCalendar ? 'Copying…' : 'Copy from last year'}
-                </button>
-              )}
+              {key === 'calendar' && copyTextButton({ onClick: onCopyCalendar, busy: copyingCalendar })}
+              {key === 'prasad' && onCopyPrasad && copyTextButton({ onClick: onCopyPrasad, busy: copyingPrasad })}
+              {key === 'teachers' && onCopyTeachers && copyTextButton({ onClick: onCopyTeachers, busy: copyingTeachers })}
+              {key === 'seva' && onCopySeva && copyTextButton({ onClick: onCopySeva, busy: copyingSeva, label: 'Copy from last year…' })}
             </li>
           );
         })}
@@ -133,6 +127,34 @@ export function YearReadinessChecklist({
         )}
       </div>
     </section>
+  );
+}
+
+/** Shared "Copy from last year" text-button for the calendar/prasad/teachers/seva
+ *  rows. A plain render function (called as copyTextButton(...)) — NOT a nested
+ *  component — so React never remounts it. */
+function copyTextButton({ onClick, busy, label = 'Copy from last year' }: { onClick: () => void; busy: boolean; label?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={busy}
+      className="rollover-textbtn"
+      style={{
+        background: 'transparent',
+        border: 0,
+        padding: '2px 0',
+        fontSize: 13,
+        fontWeight: 600,
+        color: 'var(--accentDeep)',
+        cursor: busy ? 'default' : 'pointer',
+        fontFamily: 'var(--body)',
+        opacity: busy ? 0.6 : 1,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {busy ? 'Copying…' : label}
+    </button>
   );
 }
 

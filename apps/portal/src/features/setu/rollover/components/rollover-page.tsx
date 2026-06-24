@@ -3,13 +3,18 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { toast, SetuIcon } from '@cmt/ui';
+import { toast, SetuIcon, Dialog, DialogContent, DialogHeader, DialogTitle } from '@cmt/ui';
 import type { RolloverReport, YearReadiness } from '@cmt/shared-domain';
 import {
   activateSchoolYearClient,
   commitPromotionClient,
   copyCalendarFromLastYearClient,
+  copyPrasadFromLastYearClient,
+  copySevaFromLastYearClient,
+  copyTeachersFromLastYearClient,
+  listSevaCandidatesClient,
   saveSchoolYearConfigClient,
+  type SevaCandidateC,
 } from '@/features/setu/rollover/rollover-client';
 import { Spinner, StartStep } from './start-step';
 import { PromoteStep } from './promote-step';
@@ -51,6 +56,14 @@ export function RolloverPage({ state }: RolloverPageProps) {
   const [savingYear, setSavingYear] = useState(false);
   const [activating, setActivating] = useState(false);
   const [copyingCalendar, setCopyingCalendar] = useState(false);
+  const [copyingPrasad, setCopyingPrasad] = useState(false);
+  const [copyingTeachers, setCopyingTeachers] = useState(false);
+  const [copyingSeva, setCopyingSeva] = useState(false);
+  const [sevaPickerOpen, setSevaPickerOpen] = useState(false);
+  const [candidates, setCandidates] = useState<SevaCandidateC[]>([]);
+  const [loadingCandidates, setLoadingCandidates] = useState(false);
+  const [selectedOppIds, setSelectedOppIds] = useState<string[]>([]);
+  const [decideLater, setDecideLater] = useState(false);
 
   useEffect(() => {
     setYearDraft(fromYear);
@@ -61,6 +74,14 @@ export function RolloverPage({ state }: RolloverPageProps) {
     setConfirmOpen(false);
     setActivating(false);
     setCopyingCalendar(false);
+    setCopyingPrasad(false);
+    setCopyingTeachers(false);
+    setCopyingSeva(false);
+    setSevaPickerOpen(false);
+    setCandidates([]);
+    setLoadingCandidates(false);
+    setSelectedOppIds([]);
+    setDecideLater(false);
   }, [fromYear, toYear]);
 
   const nextYearReady = state.nextYearReady || startedThisSession;
@@ -127,6 +148,75 @@ export function RolloverPage({ state }: RolloverPageProps) {
       toast.error('Could not copy the calendar. Please try again.');
     } finally {
       setCopyingCalendar(false);
+    }
+  }
+
+  async function copyPrasad() {
+    setCopyingPrasad(true);
+    try {
+      const r = await copyPrasadFromLastYearClient();
+      toast.success(
+        r.created.length > 0
+          ? `Copied ${r.created.length} prasad assignment${r.created.length === 1 ? '' : 's'} into ${toYear}`
+          : `Prasad already assigned for ${toYear}`,
+      );
+      router.refresh();
+    } catch {
+      toast.error('Could not copy prasad. Please try again.');
+    } finally {
+      setCopyingPrasad(false);
+    }
+  }
+
+  async function copyTeachers() {
+    setCopyingTeachers(true);
+    try {
+      const r = await copyTeachersFromLastYearClient();
+      toast.success(
+        r.filled.length > 0
+          ? `Pre-filled teachers for ${r.filled.length} level${r.filled.length === 1 ? '' : 's'}`
+          : `Teachers already assigned for ${toYear}`,
+      );
+      router.refresh();
+    } catch {
+      toast.error('Could not pre-fill teachers. Please try again.');
+    } finally {
+      setCopyingTeachers(false);
+    }
+  }
+
+  async function openSevaPicker() {
+    setSelectedOppIds([]);
+    setDecideLater(false);
+    setSevaPickerOpen(true);
+    setLoadingCandidates(true);
+    try {
+      const items = await listSevaCandidatesClient(fromYear);
+      setCandidates(items);
+    } catch {
+      setCandidates([]);
+      toast.error("Could not load last year's seva. Please try again.");
+    } finally {
+      setLoadingCandidates(false);
+    }
+  }
+
+  function toggleOpp(oppId: string) {
+    setSelectedOppIds((prev) => (prev.includes(oppId) ? prev.filter((id) => id !== oppId) : [...prev, oppId]));
+  }
+
+  async function copySeva() {
+    if (selectedOppIds.length === 0) return;
+    setCopyingSeva(true);
+    try {
+      const r = await copySevaFromLastYearClient(selectedOppIds, decideLater);
+      toast.success(`Copied ${r.created.length} seva item${r.created.length === 1 ? '' : 's'} into ${toYear}`);
+      setSevaPickerOpen(false);
+      router.refresh();
+    } catch {
+      toast.error('Could not copy seva. Please try again.');
+    } finally {
+      setCopyingSeva(false);
     }
   }
 
@@ -281,6 +371,12 @@ export function RolloverPage({ state }: RolloverPageProps) {
             onCopyCalendar={copyCalendar}
             activating={activating}
             copyingCalendar={copyingCalendar}
+            onCopyPrasad={copyPrasad}
+            copyingPrasad={copyingPrasad}
+            onCopyTeachers={copyTeachers}
+            copyingTeachers={copyingTeachers}
+            onCopySeva={openSevaPicker}
+            copyingSeva={copyingSeva}
           />
         </StepRow>
       </div>
@@ -297,8 +393,102 @@ export function RolloverPage({ state }: RolloverPageProps) {
           }}
         />
       )}
+
+      <Dialog open={sevaPickerOpen} onOpenChange={(open) => { if (!copyingSeva) setSevaPickerOpen(open); }}>
+        {/* `csp` is required: DialogContent portals into document.body, OUTSIDE the
+            admin CspRoot, so the Setu brand tokens only resolve with `.csp` here. */}
+        <DialogContent aria-describedby={undefined} className="csp" style={{ maxHeight: 'calc(100vh - 48px)', overflowY: 'auto' }}>
+          <DialogHeader>
+            <DialogTitle>Copy seva into {toYear}</DialogTitle>
+          </DialogHeader>
+          <p style={{ fontSize: 13, color: 'var(--body-text)', marginTop: 4, lineHeight: 1.5 }}>
+            Pick which of {fromYear}&rsquo;s seva opportunities to copy into {toYear}. Nothing is copied until you choose.
+          </p>
+
+          {loadingCandidates ? (
+            <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Spinner /> Loading last year&rsquo;s seva…
+            </p>
+          ) : candidates.length === 0 ? (
+            <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 16, lineHeight: 1.5 }}>
+              No seva opportunities found for {fromYear}.
+            </p>
+          ) : (
+            <ul style={{ listStyle: 'none', margin: '14px 0 0', padding: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {candidates.map((c) => (
+                <li key={c.oppId}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 2px', borderBottom: '1px solid var(--line)', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={selectedOppIds.includes(c.oppId)}
+                      onChange={() => toggleOpp(c.oppId)}
+                      style={{ width: 16, height: 16, flexShrink: 0, accentColor: 'var(--accent)' }}
+                    />
+                    <span style={{ minWidth: 0, flex: 1 }}>
+                      <span style={{ display: 'block', fontSize: 14, fontWeight: 500, color: 'var(--ink)' }}>{c.title}</span>
+                      <span style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{formatSevaDate(c.date)}</span>
+                    </span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {candidates.length > 0 && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14, fontSize: 13, color: 'var(--ink)', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={decideLater}
+                onChange={(e) => setDecideLater(e.target.checked)}
+                style={{ width: 16, height: 16, flexShrink: 0, accentColor: 'var(--accent)' }}
+              />
+              Decide dates later (copy as drafts)
+            </label>
+          )}
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={() => setSevaPickerOpen(false)}
+              disabled={copyingSeva}
+              className="btn"
+              style={{ minHeight: 40, fontSize: 13, opacity: copyingSeva ? 0.6 : 1 }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={copySeva}
+              disabled={copyingSeva || selectedOppIds.length === 0}
+              className="btn btn--p"
+              style={{
+                minHeight: 40,
+                fontSize: 13,
+                opacity: copyingSeva || selectedOppIds.length === 0 ? 0.6 : 1,
+                cursor: copyingSeva || selectedOppIds.length === 0 ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {copyingSeva ? (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  <Spinner /> Copying…
+                </span>
+              ) : (
+                'Copy selected'
+              )}
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
+}
+
+/** Render the seva opportunity's ISO date as a short Toronto-local label. Falls
+ *  back to the raw string if it isn't a parseable date. */
+function formatSevaDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString('en-CA', { timeZone: 'America/Toronto', year: 'numeric', month: 'short', day: 'numeric' });
 }
 
 function SchoolYearSetting({
