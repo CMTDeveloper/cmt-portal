@@ -1,19 +1,33 @@
 import { connection } from 'next/server';
 import { cookies } from 'next/headers';
+import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
 import { isAdmin, type WithRole } from '@cmt/shared-domain';
 import { getSevaRequirement } from '@/lib/seva-requirement';
 import { listOpportunities, serializeOpportunity } from '@/features/setu/seva/get-opportunities';
+import { getLiveSchoolYearCached } from '@/features/setu/rollover/live-school-year';
+import { listKnownSchoolYears, resolveViewYear } from '@/features/setu/rollover/view-year';
 import { SevaManager } from '@/features/admin/seva/seva-manager';
 
 export const metadata = { title: 'Seva' };
 
-export default async function WelcomeSevaPage() {
+export default async function WelcomeSevaPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ year?: string }>;
+}) {
   await connection();
   const cookieStore = await cookies();
   const raw = await verifyPortalSessionCookie(cookieStore.get('__session')?.value ?? '').catch(() => null);
   const canEditRequirement = !!raw && isAdmin(raw as unknown as WithRole);
-  const [requirement, opportunities] = await Promise.all([getSevaRequirement(), listOpportunities()]);
+  const db = portalFirestore();
+  const liveYear = await getLiveSchoolYearCached();
+  const years = await listKnownSchoolYears(db, liveYear);
+  const view = resolveViewYear(years, liveYear, (await searchParams).year ?? null);
+  const [requirement, opportunities] = await Promise.all([
+    getSevaRequirement(),
+    listOpportunities({ sevaYear: view.year }),
+  ]);
   const manager = (
     <SevaManager
       initialRequirement={requirement}

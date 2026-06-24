@@ -32,12 +32,11 @@ function sortPrasadPeriods(periods: PrasadPeriodOption[]): PrasadPeriodOption[] 
   );
 }
 
-export async function getCurrentPrasadPeriods(db: Db): Promise<PrasadPeriodOption[]> {
-  const { currentYear } = await getSchoolYearConfig(db);
+export async function getPrasadPeriodsForYear(db: Db, year: string): Promise<PrasadPeriodOption[]> {
   const snap = await db
     .collection('offerings')
     .where('programKey', '==', BALA_VIHAR)
-    .where('termLabel', '==', currentYear)
+    .where('termLabel', '==', year)
     .get();
 
   const periods = snap.docs.flatMap((doc) => {
@@ -49,7 +48,12 @@ export async function getCurrentPrasadPeriods(db: Db): Promise<PrasadPeriodOptio
 
   return periods.length > 0
     ? sortPrasadPeriods(periods)
-    : fallbackPrasadPeriodsForYear(currentYear);
+    : fallbackPrasadPeriodsForYear(year);
+}
+
+export async function getCurrentPrasadPeriods(db: Db): Promise<PrasadPeriodOption[]> {
+  const { currentYear } = await getSchoolYearConfig(db);
+  return getPrasadPeriodsForYear(db, currentYear);
 }
 
 export async function findCurrentPrasadPeriod(db: Db, pid: string): Promise<PrasadPeriodOption | null> {
