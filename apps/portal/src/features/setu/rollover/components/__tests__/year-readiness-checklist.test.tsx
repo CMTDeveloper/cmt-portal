@@ -72,4 +72,17 @@ describe('YearReadinessChecklist', () => {
     await user.click(screen.getByRole('button', { name: /copy from last year/i }));
     expect(onCopyCalendar).toHaveBeenCalledTimes(1);
   });
+
+  it('announces each row ready state to screen readers (aria-label)', () => {
+    render(
+      <YearReadinessChecklist
+        readiness={readiness({ offerings: true, calendar: false })}
+        onActivate={() => {}}
+        onCopyCalendar={() => {}}
+        activating={false}
+      />,
+    );
+    expect(screen.getByRole('listitem', { name: 'Offerings: ready' })).toBeInTheDocument();
+    expect(screen.getByRole('listitem', { name: 'Class calendar: not ready' })).toBeInTheDocument();
+  });
 });

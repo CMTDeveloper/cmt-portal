@@ -31,6 +31,14 @@ vi.mock('@/lib/seva-requirement', () => ({
   setSevaRequirement: (...a: unknown[]) => mockSetSevaRequirement(...a),
 }));
 
+// The route delegates the atomic year+seva flip to this helper (a single
+// Firestore transaction). The route test asserts the delegation + gate; the
+// transaction itself is covered by activate-school-year.test.ts.
+const mockActivateSchoolYear = vi.fn();
+vi.mock('@/features/setu/rollover/activate-school-year', () => ({
+  activateSchoolYear: (...a: unknown[]) => mockActivateSchoolYear(...a),
+}));
+
 const mockCloneCalendarYear = vi.fn();
 vi.mock('@/features/setu/rollover/clone-calendar', () => ({
   cloneCalendarYear: (...a: unknown[]) => mockCloneCalendarYear(...a),
@@ -69,6 +77,7 @@ beforeEach(() => {
   mockComputeYearReadiness.mockResolvedValue(READINESS_PROMOTED);
   mockGetSevaRequirement.mockResolvedValue({ hoursPerYear: 20, currentSevaYear: '2025-26' });
   mockSetSevaRequirement.mockResolvedValue(undefined);
+  mockActivateSchoolYear.mockResolvedValue({ config: { currentYear: '2026-27' }, sevaYear: '2026-27' });
   mockCloneCalendarYear.mockResolvedValue(CALENDAR_RESULT);
 });
 
@@ -80,7 +89,7 @@ describe('POST /api/admin/school-year/activate', () => {
     const res = await POST(makeRequest('/api/admin/school-year/activate', undefined));
     expect(res.status).toBe(403);
     expect(await res.json()).toEqual({ error: 'forbidden' });
-    expect(mockSetSchoolYearConfig).not.toHaveBeenCalled();
+    expect(mockActivateSchoolYear).not.toHaveBeenCalled();
   });
 
   it('returns 403 for a non-admin role', async () => {
@@ -88,8 +97,7 @@ describe('POST /api/admin/school-year/activate', () => {
     const res = await POST(makeRequest('/api/admin/school-year/activate', 'family-member'));
     expect(res.status).toBe(403);
     expect(await res.json()).toEqual({ error: 'forbidden' });
-    expect(mockSetSchoolYearConfig).not.toHaveBeenCalled();
-    expect(mockSetSevaRequirement).not.toHaveBeenCalled();
+    expect(mockActivateSchoolYear).not.toHaveBeenCalled();
   });
 
   it('blocks Activate when promotion has not run', async () => {
@@ -98,18 +106,15 @@ describe('POST /api/admin/school-year/activate', () => {
     const res = await POST(makeRequest('/api/admin/school-year/activate', 'admin'));
     expect(res.status).toBe(409);
     expect((await res.json()).error).toBe('promotion-not-run');
-    expect(mockSetSchoolYearConfig).not.toHaveBeenCalled();
-    expect(mockSetSevaRequirement).not.toHaveBeenCalled();
+    expect(mockActivateSchoolYear).not.toHaveBeenCalled();
   });
 
-  it('flips currentYear AND currentSevaYear on success', async () => {
+  it('flips currentYear AND currentSevaYear on success (delegates to the atomic helper)', async () => {
     const { POST } = await import('../activate/route');
     const res = await POST(makeRequest('/api/admin/school-year/activate', 'admin', 'uid-admin', 'A1'));
     expect(res.status).toBe(200);
-    expect(mockSetSchoolYearConfig).toHaveBeenCalledWith(expect.anything(), { currentYear: '2026-27' }, 'A1');
-    expect(mockSetSevaRequirement).toHaveBeenCalledWith(
-      expect.objectContaining({ currentSevaYear: '2026-27', hoursPerYear: 20 }),
-    );
+    expect(mockActivateSchoolYear).toHaveBeenCalledWith(expect.anything(), { toYear: '2026-27', actorMid: 'A1' });
+    expect(await res.json()).toEqual({ config: { currentYear: '2026-27' }, sevaYear: '2026-27' });
   });
 
   it('revalidates the school-year tag and Year-center path on success', async () => {

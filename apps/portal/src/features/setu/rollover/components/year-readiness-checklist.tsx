@@ -62,6 +62,9 @@ export function YearReadinessChecklist({
           return (
             <li
               key={key}
+              // The ✓/○ chip is decorative (aria-hidden); carry the ready state
+              // on the row so a screen reader announces "Class calendar: ready".
+              aria-label={`${label}: ${ok ? 'ready' : 'not ready'}`}
               style={{
                 display: 'flex',
                 alignItems: 'center',
