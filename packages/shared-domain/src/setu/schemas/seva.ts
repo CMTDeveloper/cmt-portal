@@ -6,7 +6,7 @@ export const SevaRequirementConfigSchema = z.object({
 });
 export type SevaRequirementConfig = z.infer<typeof SevaRequirementConfigSchema>;
 
-export const SevaOpportunityStatus = z.enum(['open', 'closed']);
+export const SevaOpportunityStatus = z.enum(['open', 'closed', 'draft']);
 export type SevaOpportunityStatusType = z.infer<typeof SevaOpportunityStatus>;
 
 export const SevaOpportunityDocSchema = z.object({

@@ -72,6 +72,20 @@ describe('getFamilySevaView', () => {
     const v = await getFamilySevaView('F');
     expect(v.hoursEarned).toBe(4);
   });
+  it('excludes a draft opportunity from the browse list (drives off the status:open query)', async () => {
+    // The browse list comes from listOpportunities({ status: 'open' }); a draft
+    // is never in that result, so families never see an unscheduled copy. Mock
+    // listOpportunities to honour the status filter so this asserts the real
+    // exclusion mechanism (the status:'open' query), not a redundant filter.
+    const open = opp({ oppId: 'o1', status: 'open' });
+    const draft = opp({ oppId: 'o-draft', status: 'draft' });
+    vi.mocked(listOpportunities).mockImplementation(async (f) =>
+      (f?.status === 'open' ? [open] : [open, draft]) as never,
+    );
+    const v = await getFamilySevaView('F');
+    expect(v.opportunities.map((o) => o.oppId)).toEqual(['o1']);
+    expect(v.opportunities.some((o) => o.oppId === 'o-draft')).toBe(false);
+  });
   it('joins a since-closed opportunity into mySignups (all-statuses query backs the join)', async () => {
     const open = opp({ oppId: 'o1', status: 'open' });
     const closed = opp({ oppId: 'o2', status: 'closed' });

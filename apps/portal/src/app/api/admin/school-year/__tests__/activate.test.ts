@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { CalendarCopyResult, YearReadiness } from '@cmt/shared-domain';
 import type { PrasadCopyResult } from '@/features/setu/rollover/clone-prasad-config';
+import type { SevaCopyResult } from '@/features/setu/rollover/copy-seva-opportunities';
 
 vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
@@ -50,12 +51,21 @@ vi.mock('@/features/setu/rollover/clone-prasad-config', () => ({
   clonePrasadConfig: (...a: unknown[]) => mockClonePrasadConfig(...a),
 }));
 
-function makeRequest(path: string, role?: string, uid = 'uid-admin', mid?: string): Request {
+const mockCopySevaOpportunities = vi.fn();
+vi.mock('@/features/setu/rollover/copy-seva-opportunities', () => ({
+  copySevaOpportunities: (...a: unknown[]) => mockCopySevaOpportunities(...a),
+}));
+
+function makeRequest(path: string, role?: string, uid = 'uid-admin', mid?: string, body?: unknown): Request {
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   if (role) headers['x-portal-role'] = role;
   if (uid) headers['x-portal-uid'] = uid;
   if (mid) headers['x-portal-mid'] = mid;
-  return new Request(`http://localhost${path}`, { method: 'POST', headers });
+  return new Request(`http://localhost${path}`, {
+    method: 'POST',
+    headers,
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+  });
 }
 
 const READINESS_PROMOTED: YearReadiness = {
@@ -83,6 +93,13 @@ const PRASAD_RESULT: PrasadCopyResult = {
   existing: [],
 };
 
+const SEVA_RESULT: SevaCopyResult = {
+  fromYear: '2025-26',
+  toYear: '2026-27',
+  created: ['opp-a-2026-27'],
+  existing: [],
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   mockGetSchoolYearConfig.mockResolvedValue({ currentYear: '2025-26' });
@@ -93,6 +110,7 @@ beforeEach(() => {
   mockActivateSchoolYear.mockResolvedValue({ config: { currentYear: '2026-27' }, sevaYear: '2026-27' });
   mockCloneCalendarYear.mockResolvedValue(CALENDAR_RESULT);
   mockClonePrasadConfig.mockResolvedValue(PRASAD_RESULT);
+  mockCopySevaOpportunities.mockResolvedValue(SEVA_RESULT);
 });
 
 // ── POST /api/admin/school-year/activate ────────────────────────────────────────
@@ -186,5 +204,62 @@ describe('POST /api/admin/school-year/copy-prasad', () => {
       dryRun: false,
       actorMid: 'A1',
     });
+  });
+});
+
+// ── POST /api/admin/school-year/copy-seva ───────────────────────────────────────
+
+describe('POST /api/admin/school-year/copy-seva', () => {
+  it('returns 403 for a non-admin role', async () => {
+    const { POST } = await import('../copy-seva/route');
+    const res = await POST(
+      makeRequest('/api/admin/school-year/copy-seva', 'family-member', 'uid-admin', undefined, {
+        oppIds: ['opp-a'],
+      }),
+    );
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: 'forbidden' });
+    expect(mockCopySevaOpportunities).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 when the body is missing oppIds', async () => {
+    const { POST } = await import('../copy-seva/route');
+    const res = await POST(
+      makeRequest('/api/admin/school-year/copy-seva', 'admin', 'uid-admin', 'A1', { decideLater: true }),
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('bad-request');
+    expect(mockCopySevaOpportunities).not.toHaveBeenCalled();
+  });
+
+  it('copies the selected opps with the actor mid and returns the result', async () => {
+    const { POST } = await import('../copy-seva/route');
+    const res = await POST(
+      makeRequest('/api/admin/school-year/copy-seva', 'admin', 'uid-admin', 'A1', {
+        oppIds: ['opp-a'],
+        decideLater: true,
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual(SEVA_RESULT);
+    expect(mockCopySevaOpportunities).toHaveBeenCalledWith(expect.anything(), {
+      fromYear: '2025-26',
+      toYear: '2026-27',
+      oppIds: ['opp-a'],
+      decideLater: true,
+      actorMid: 'A1',
+    });
+  });
+
+  it('defaults decideLater to false when omitted', async () => {
+    const { POST } = await import('../copy-seva/route');
+    const res = await POST(
+      makeRequest('/api/admin/school-year/copy-seva', 'admin', 'uid-admin', 'A1', { oppIds: ['opp-a'] }),
+    );
+    expect(res.status).toBe(200);
+    expect(mockCopySevaOpportunities).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ decideLater: false }),
+    );
   });
 });

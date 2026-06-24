@@ -12,7 +12,7 @@ export interface SevaOppView {
   defaultHours: number;
   capacity: number | null;
   sevaYear: string;
-  status: 'open' | 'closed';
+  status: 'open' | 'closed' | 'draft';
   mySignupStatus: 'signed-up' | 'completed' | 'no-show' | 'cancelled' | null;
   spotsLeft: number | null;
 }

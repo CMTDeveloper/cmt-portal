@@ -17,7 +17,7 @@ export interface SerializedOpportunity {
   defaultHours: number;
   capacity: number | null;
   sevaYear: string;
-  status: 'open' | 'closed';
+  status: 'open' | 'closed' | 'draft';
   createdAt: string;
   updatedAt: string;
   createdBy: string;
