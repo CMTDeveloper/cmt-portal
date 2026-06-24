@@ -39,9 +39,12 @@ interface CalendarEditorProps {
   locations: Location[];
   /** Optional: list of programs. When provided, shows a program selector filtered to usesCalendar programs. */
   programs?: ProgramRow[];
+  /** Optional school-year window (YYYY-MM-DD). When set, entries are filtered to this range. */
+  windowStart?: string;
+  windowEnd?: string;
 }
 
-export function CalendarEditor({ locations, programs }: CalendarEditorProps) {
+export function CalendarEditor({ locations, programs, windowStart, windowEnd }: CalendarEditorProps) {
   const [location, setLocation] = useState<Location>(locations[0] ?? 'Brampton');
 
   // Programs that use calendar — for the program selector
@@ -177,7 +180,12 @@ export function CalendarEditor({ locations, programs }: CalendarEditorProps) {
   // selected program — otherwise, now that two programs can share a date+location
   // (program-scoped ids), the list would show indistinguishable rows. Creation,
   // toggle, and delete already act per-row via the stored (program-scoped) entryId.
-  const visibleEntries = entries.filter((e) => e.programKey === programKey);
+  const visibleEntries = entries.filter(
+    (e) =>
+      e.programKey === programKey &&
+      (windowStart === undefined || e.date >= windowStart) &&
+      (windowEnd === undefined || e.date <= windowEnd),
+  );
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>

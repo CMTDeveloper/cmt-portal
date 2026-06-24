@@ -1,15 +1,29 @@
 import { connection } from 'next/server';
 import Link from 'next/link';
+import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { SetuIcon } from '@cmt/ui';
 import { LOCATIONS, type Location } from '@cmt/shared-domain';
 import { CalendarEditor } from '@/features/admin/calendar/calendar-editor';
 import { listPrograms } from '@/features/setu/programs/get-programs';
 import type { ProgramRow } from '@/features/admin/programs/programs-table';
+import { getLiveSchoolYearCached } from '@/features/setu/rollover/live-school-year';
+import { listKnownSchoolYears, resolveViewYear } from '@/features/setu/rollover/view-year';
+import { schoolYearDateRange } from '@/features/setu/rollover/school-year';
 
 export const metadata = { title: 'Class calendar' };
 
-export default async function AdminCalendarPage() {
+export default async function AdminCalendarPage({ searchParams }: { searchParams: Promise<{ year?: string }> }) {
   await connection();
+
+  const db = portalFirestore();
+  const liveYear = await getLiveSchoolYearCached();
+  const years = await listKnownSchoolYears(db, liveYear);
+  const view = resolveViewYear(years, liveYear, (await searchParams).year ?? null);
+
+  // schoolYearDateRange returns canonical YYYY-MM-DD strings (Aug-1 → Jul-31),
+  // so they compare directly against the entries' "YYYY-MM-DD" date strings.
+  const { start: windowStart, end: windowEnd } = schoolYearDateRange(view.year);
+
   const locations = [...LOCATIONS] as Location[];
   const programDocs = await listPrograms();
   const programs: ProgramRow[] = programDocs.map((p) => ({
@@ -32,7 +46,7 @@ export default async function AdminCalendarPage() {
         </p>
       </header>
 
-      <CalendarEditor locations={locations} programs={programs} />
+      <CalendarEditor locations={locations} programs={programs} windowStart={windowStart} windowEnd={windowEnd} />
     </>
   );
 }
