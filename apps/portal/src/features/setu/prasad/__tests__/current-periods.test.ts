@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   fallbackPrasadPeriodsForYear,
   findCurrentPrasadPeriod,
+  findPrasadPeriodForPid,
   getCurrentPrasadPeriods,
 } from '../current-periods';
 
@@ -91,5 +92,20 @@ describe('current prasad periods', () => {
       location: 'Brampton',
     });
     await expect(findCurrentPrasadPeriod(db, 'bv-scarborough-2025-26')).resolves.toBeNull();
+  });
+
+  it('findPrasadPeriodForPid resolves against the pid OWN year, not the live year', async () => {
+    // Live year is 2025-26, but a PREPARING 2026-27 offering exists. The
+    // live-year-only resolver misses it; the pid-year resolver finds it.
+    const db = dbWithConfigAndOfferings('2025-26', [
+      { oid: 'bv-brampton-2025-26', programKey: 'bala-vihar', termLabel: '2025-26', location: 'Brampton' },
+      { oid: 'bv-brampton-2026-27', programKey: 'bala-vihar', termLabel: '2026-27', location: 'Brampton' },
+    ]);
+
+    await expect(findCurrentPrasadPeriod(db, 'bv-brampton-2026-27')).resolves.toBeNull();
+    await expect(findPrasadPeriodForPid(db, 'bv-brampton-2026-27')).resolves.toEqual({
+      pid: 'bv-brampton-2026-27',
+      location: 'Brampton',
+    });
   });
 });

@@ -198,4 +198,17 @@ describe('SevaManager', () => {
     expect(screen.getByRole('button', { name: /new opportunity/i })).toBeDisabled();
     expect(screen.getByRole('button', { name: /edit requirement/i })).toBeDisabled();
   });
+
+  it('disables the "New opportunity" control and shows the copy-seva hint when canCreate is false (non-live year)', () => {
+    render(
+      <SevaManager
+        initialRequirement={reqWithYear}
+        initialOpportunities={[]}
+        canEditRequirement
+        canCreate={false}
+      />,
+    );
+    expect(screen.getByRole('button', { name: /new opportunity/i })).toBeDisabled();
+    expect(screen.getByText(/copy seva/i)).toBeInTheDocument();
+  });
 });

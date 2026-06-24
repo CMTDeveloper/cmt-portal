@@ -18,6 +18,10 @@ interface SevaManagerProps {
   canEditRequirement: boolean;
   /** When true (viewing a past seva year), mutate controls are disabled. */
   readOnly?: boolean;
+  /** When false (viewing a non-live year), the create control is hidden —
+   *  next year's seva is populated via School-year rollover → Copy seva, and
+   *  the POST route only ever writes to the live year. Defaults to true. */
+  canCreate?: boolean;
 }
 
 // ─── shared styles ─────────────────────────────────────────────────────────────
@@ -116,6 +120,7 @@ export function SevaManager({
   initialOpportunities,
   canEditRequirement,
   readOnly = false,
+  canCreate = true,
 }: SevaManagerProps) {
   const [requirement, setRequirement] = useState<SevaRequirement>(initialRequirement);
   const [opportunities, setOpportunities] = useState<SerializedOpportunity[]>(initialOpportunities);
@@ -501,14 +506,20 @@ export function SevaManager({
                 setCreateErrors({});
                 setCreating(true);
               }}
-              disabled={readOnly}
-              style={{ minHeight: 46, opacity: readOnly ? 0.5 : 1 }}
+              disabled={readOnly || !canCreate}
+              style={{ minHeight: 46, opacity: readOnly || !canCreate ? 0.5 : 1 }}
             >
               <SetuIcon.plus /> New opportunity
             </button>
           )}
         </div>
       </div>
+
+      {!readOnly && !canCreate && (
+        <p className="csp" style={{ fontSize: 13, color: 'var(--muted)', marginTop: -8, marginBottom: 18 }}>
+          Add next year&rsquo;s seva via School-year rollover → Copy seva.
+        </p>
+      )}
 
       {creating && (
         <div className="card" style={{ padding: 'clamp(18px, 4vw, 24px)', marginBottom: 22 }}>
@@ -570,8 +581,8 @@ export function SevaManager({
                 setCreateErrors({});
                 setCreating(true);
               }}
-              disabled={readOnly}
-              style={{ marginTop: 20, minHeight: 46, opacity: readOnly ? 0.5 : 1 }}
+              disabled={readOnly || !canCreate}
+              style={{ marginTop: 20, minHeight: 46, opacity: readOnly || !canCreate ? 0.5 : 1 }}
             >
               <SetuIcon.plus /> Post an opportunity
             </button>

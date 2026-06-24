@@ -3,7 +3,7 @@ import { isAdmin, PrasadPreviewBodySchema } from '@cmt/shared-domain';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
 import { flags } from '@/lib/flags';
-import { findCurrentPrasadPeriod } from '@/features/setu/prasad/current-periods';
+import { findPrasadPeriodForPid } from '@/features/setu/prasad/current-periods';
 import { previewAssignments } from '@/features/setu/prasad/publish-assignments';
 
 /** POST /api/admin/prasad/preview — dry-run the prasad assigner for one period. Admin-only. */
@@ -16,7 +16,14 @@ export async function POST(req: Request) {
   }
   const parsed = PrasadPreviewBodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: 'bad-request', issues: parsed.error?.issues }, { status: 400 });
-  const period = await findCurrentPrasadPeriod(portalFirestore(), parsed.data.pid);
+  // Resolve against the pid's OWN year so preparing-year previews work; a
+  // malformed pid throws in schoolYearOfPid → fall through to the 400 below.
+  let period = null;
+  try {
+    period = await findPrasadPeriodForPid(portalFirestore(), parsed.data.pid);
+  } catch {
+    /* malformed pid → treated as not found */
+  }
   if (!period) return NextResponse.json({ error: 'unknown-pid' }, { status: 400 });
   const result = await previewAssignments(period.pid, period.location, parsed.data.cap);
   return NextResponse.json(result, { status: 200 });

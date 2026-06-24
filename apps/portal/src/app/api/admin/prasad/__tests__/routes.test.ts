@@ -13,12 +13,17 @@ vi.mock('@/features/setu/prasad/publish-assignments', () => ({ previewAssignment
 const { notifyUnnotifiedProposals } = vi.hoisted(() => ({ notifyUnnotifiedProposals: vi.fn() }));
 vi.mock('@/features/setu/prasad/proposal-notify', () => ({ notifyUnnotifiedProposals }));
 
-const { findCurrentPrasadPeriod } = vi.hoisted(() => ({
-  findCurrentPrasadPeriod: vi.fn(async (_db: unknown, pid: string) =>
-    pid === 'bv-brampton-2025-26' ? { pid, location: 'Brampton' } : null,
+// Routes resolve the request pid against the pid's OWN year via
+// findPrasadPeriodForPid (not the live-year-only findCurrentPrasadPeriod), so
+// preparing-year pids resolve. Mock returns a period for any well-formed
+// bv-* pid; the live/past distinction is enforced by assertWritableYear on the
+// WRITE routes (which reads the mocked getSchoolYearConfig below).
+const { findPrasadPeriodForPid } = vi.hoisted(() => ({
+  findPrasadPeriodForPid: vi.fn(async (_db: unknown, pid: string) =>
+    /^bv-brampton-\d{4}-\d{2}$/.test(pid) ? { pid, location: 'Brampton' } : null,
   ),
 }));
-vi.mock('@/features/setu/prasad/current-periods', () => ({ findCurrentPrasadPeriod }));
+vi.mock('@/features/setu/prasad/current-periods', () => ({ findPrasadPeriodForPid }));
 
 // The publish past-year guard resolves the live year via getSchoolYearConfig.
 const { getSchoolYearConfig } = vi.hoisted(() => ({ getSchoolYearConfig: vi.fn() }));
@@ -154,12 +159,8 @@ beforeEach(() => {
   publishAssignments.mockResolvedValue(PREVIEW_RESULT);
   notifyUnnotifiedProposals.mockResolvedValue(NOTIFY_RESULT);
   getSchoolYearConfig.mockResolvedValue({ currentYear: '2025-26' });
-  findCurrentPrasadPeriod.mockImplementation(async (_db: unknown, pid: string) =>
-    pid === PID
-      ? { pid, location: 'Brampton' }
-      : pid === 'bv-brampton-2024-25'
-        ? { pid, location: 'Brampton' }
-        : null,
+  findPrasadPeriodForPid.mockImplementation(async (_db: unknown, pid: string) =>
+    /^bv-brampton-\d{4}-\d{2}$/.test(pid) ? { pid, location: 'Brampton' } : null,
   );
   dbState.listDocs = [];
   dbState.docStore = new Map();
@@ -212,6 +213,15 @@ describe('POST /api/admin/prasad/preview', () => {
     expect(await res.json()).toEqual(PREVIEW_RESULT);
     expect(previewAssignments).toHaveBeenCalledWith(PID, 'Brampton', 5);
   });
+
+  it('200 resolves a PREPARING-year pid (live=2025-26) — no past-year guard on the dry-run', async () => {
+    const { POST } = await import('../preview/route');
+    const res = await POST(
+      req('/api/admin/prasad/preview', { method: 'POST', body: { pid: 'bv-brampton-2026-27', cap: 3 }, headers: ADMIN }),
+    );
+    expect(res.status).toBe(200);
+    expect(previewAssignments).toHaveBeenCalledWith('bv-brampton-2026-27', 'Brampton', 3);
+  });
 });
 
 // ── POST /api/admin/prasad/publish ─────────────────────────────────────────────
@@ -258,6 +268,15 @@ describe('POST /api/admin/prasad/publish', () => {
     const res = await POST(req('/api/admin/prasad/publish', { method: 'POST', body: { pid: PID, cap: 3 }, headers: ADMIN }));
     expect(res.status).toBe(200);
     expect(publishAssignments).toHaveBeenCalled();
+  });
+
+  it('publishes a PREPARING-year period (live=2025-26 → 2026-27 is writable)', async () => {
+    const { POST } = await import('../publish/route');
+    const res = await POST(
+      req('/api/admin/prasad/publish', { method: 'POST', body: { pid: 'bv-brampton-2026-27', cap: 3 }, headers: ADMIN }),
+    );
+    expect(res.status).toBe(200);
+    expect(publishAssignments).toHaveBeenCalledWith('bv-brampton-2026-27', 'Brampton', 3, 'CMT-9999-01');
   });
 
   it('200 with notify.error when the notify fan-out throws after a landed publish', async () => {
@@ -551,5 +570,26 @@ describe('POST /api/admin/prasad/assign-remaining', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true, assigned: 0, skipped: 0 });
     expect(dbState.refUpdates).toEqual([]);
+  });
+
+  it('409 past-year when the period is in a past school year (write blocked)', async () => {
+    dbState.listDocs = [proposedDoc('a')];
+    const { POST } = await import('../assign-remaining/route');
+    const res = await POST(
+      req('/api/admin/prasad/assign-remaining', { method: 'POST', body: { pid: 'bv-brampton-2024-25' }, headers: ADMIN }),
+    );
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: 'past-year', year: '2024-25', liveYear: '2025-26' });
+    expect(dbState.refUpdates).toEqual([]);
+  });
+
+  it('200 assigns a PREPARING-year period (live=2025-26 → 2026-27 is writable)', async () => {
+    dbState.listDocs = [proposedDoc('a'), proposedDoc('b')];
+    const { POST } = await import('../assign-remaining/route');
+    const res = await POST(
+      req('/api/admin/prasad/assign-remaining', { method: 'POST', body: { pid: 'bv-brampton-2026-27' }, headers: ADMIN }),
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, assigned: 2, skipped: 0 });
   });
 });

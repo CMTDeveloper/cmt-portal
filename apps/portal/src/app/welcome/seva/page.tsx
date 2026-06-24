@@ -34,6 +34,7 @@ export default async function WelcomeSevaPage({
       initialOpportunities={opportunities.map(serializeOpportunity)}
       canEditRequirement={canEditRequirement}
       readOnly={view.status === 'past'}
+      canCreate={view.status === 'live'}
     />
   );
   return (

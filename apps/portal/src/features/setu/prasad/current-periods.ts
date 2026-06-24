@@ -1,6 +1,6 @@
 import { BALA_VIHAR, type Location } from '@cmt/shared-domain';
 import { getSchoolYearConfig } from '@/features/setu/rollover/school-year-config';
-import { balaViharSourceOidsForYear } from '@/features/setu/rollover/school-year';
+import { balaViharSourceOidsForYear, schoolYearOfPid } from '@/features/setu/rollover/school-year';
 
 type Db = FirebaseFirestore.Firestore;
 
@@ -58,4 +58,10 @@ export async function getCurrentPrasadPeriods(db: Db): Promise<PrasadPeriodOptio
 
 export async function findCurrentPrasadPeriod(db: Db, pid: string): Promise<PrasadPeriodOption | null> {
   return (await getCurrentPrasadPeriods(db)).find((period) => period.pid === pid) ?? null;
+}
+
+/** Resolve a prasad period for the pid's OWN school year (not the live year) —
+ *  so preparing/past-year pids resolve. Returns null if absent. */
+export async function findPrasadPeriodForPid(db: Db, pid: string): Promise<PrasadPeriodOption | null> {
+  return (await getPrasadPeriodsForYear(db, schoolYearOfPid(pid))).find((p) => p.pid === pid) ?? null;
 }

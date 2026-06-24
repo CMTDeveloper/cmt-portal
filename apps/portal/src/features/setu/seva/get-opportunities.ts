@@ -38,7 +38,7 @@ function docToOpportunity(data: Record<string, unknown>): SevaOpportunityDoc {
  */
 export async function listOpportunities(filters?: {
   sevaYear?: string;
-  status?: 'open' | 'closed';
+  status?: 'open' | 'closed' | 'draft';
 }): Promise<SevaOpportunityDoc[]> {
   let q: FirebaseFirestore.Query = portalFirestore().collection('seva_opportunities');
 

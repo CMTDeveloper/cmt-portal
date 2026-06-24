@@ -3,7 +3,7 @@ import { isAdmin } from '@cmt/shared-domain';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
 import { flags } from '@/lib/flags';
-import { findCurrentPrasadPeriod } from '@/features/setu/prasad/current-periods';
+import { findPrasadPeriodForPid } from '@/features/setu/prasad/current-periods';
 
 /** Firestore Timestamp → ISO string, null-safe (anything without `.toDate` stays as-is). */
 function toIso(v: unknown): string | null {
@@ -29,7 +29,17 @@ export async function GET(req: Request) {
   const pid = url.searchParams.get('pid');
   const date = url.searchParams.get('date');
   const db = portalFirestore();
-  if (!pid || !(await findCurrentPrasadPeriod(db, pid))) {
+  // Resolve against the pid's OWN year (not just live) so preparing-year pids
+  // load. A malformed pid throws in schoolYearOfPid → treat as not found (400).
+  let period = null;
+  if (pid) {
+    try {
+      period = await findPrasadPeriodForPid(db, pid);
+    } catch {
+      /* malformed pid → treated as not found */
+    }
+  }
+  if (!pid || !period) {
     return NextResponse.json({ error: 'bad-request' }, { status: 400 });
   }
 
