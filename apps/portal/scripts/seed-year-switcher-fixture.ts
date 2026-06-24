@@ -29,7 +29,12 @@
  * (no --allow-prod escape hatch on purpose — this is a test fixture).
  *
  * Usage:
- *   pnpm --filter @cmt/portal seed:year-switcher-fixture
+ *   pnpm --filter @cmt/portal seed:year-switcher-fixture            # seed
+ *   pnpm --filter @cmt/portal seed:year-switcher-fixture --cleanup  # remove the fixture
+ *
+ * --cleanup deletes ONLY the docs this script seeds, and ONLY when the doc still
+ * carries `_test: true` — a real doc that happens to share an id is left
+ * untouched. Restores the clean pre-rollover state (live year never touched).
  */
 
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
@@ -160,9 +165,51 @@ async function seedLevel(db: Db, fx: YearFixture, now: Timestamp, tally: Tally):
   }, tally);
 }
 
+/** Every (collection, id) this fixture writes — the single source of truth for
+ *  both the seed tally and the cleanup. */
+function seededDocRefs(): Array<{ collection: string; id: string }> {
+  const refs: Array<{ collection: string; id: string }> = [];
+  for (const fx of [PAST, PREPARING]) {
+    refs.push({ collection: 'offerings', id: fx.oid });
+    refs.push({ collection: 'donationPeriods', id: fx.oid });
+    refs.push({ collection: 'levels', id: `${toSafeSlug(LOCATION)}-${levelSlug(fx.level.levelName)}-${fx.oid}` });
+  }
+  refs.push({ collection: 'seva_opportunities', id: `seva-year-switcher-${PAST.year}` });
+  refs.push({ collection: 'classCalendarEntries', id: calendarEntryId(BALA_VIHAR, LOCATION, '2026-09-06') });
+  return refs;
+}
+
+/** Delete the seeded docs — but ONLY those still flagged `_test: true`. A real
+ *  doc sharing an id (e.g. a manual rollover later created `bv-brampton-2026-27`)
+ *  is NEVER deleted. */
+async function cleanup(db: Db): Promise<void> {
+  const deleted: string[] = [];
+  const skipped: string[] = [];
+  for (const { collection, id } of seededDocRefs()) {
+    const ref = db.collection(collection).doc(id);
+    const snap = await ref.get();
+    if (!snap.exists) {
+      skipped.push(`${collection}/${id} (absent)`);
+      continue;
+    }
+    if ((snap.data() as { _test?: unknown })._test !== true) {
+      skipped.push(`${collection}/${id} (NOT _test — left untouched)`);
+      continue;
+    }
+    await ref.delete();
+    deleted.push(`${collection}/${id}`);
+  }
+  console.log(`Deleted (${deleted.length}):`);
+  for (const id of deleted) console.log(`  - ${id}`);
+  console.log(`\nSkipped (${skipped.length}):`);
+  for (const id of skipped) console.log(`  · ${id}`);
+  console.log('\nDone. Clean pre-rollover state restored (app_config/school_year was never touched).');
+}
+
 async function main(): Promise<void> {
   const projectId = process.env['PORTAL_FIREBASE_PROJECT_ID'];
-  console.log(`\n=== seed-year-switcher-fixture — project: ${projectId} ===\n`);
+  const isCleanup = process.argv.includes('--cleanup');
+  console.log(`\n=== seed-year-switcher-fixture${isCleanup ? ' --cleanup' : ''} — project: ${projectId} ===\n`);
   if (projectId !== 'chinmaya-setu-uat') {
     // No --allow-prod escape hatch on purpose: this is a test fixture and must
     // never exist in prod.
@@ -171,6 +218,12 @@ async function main(): Promise<void> {
   }
 
   const db = getFirestore(getPortalApp());
+
+  if (isCleanup) {
+    await cleanup(db);
+    process.exit(0);
+  }
+
   const now = Timestamp.now();
   const tally: Tally = { created: [], existing: [] };
 
