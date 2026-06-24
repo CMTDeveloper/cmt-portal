@@ -18,6 +18,11 @@ describe('report schemas', () => {
     expect(ReportQuerySchema.safeParse({ from: '2026/01/01' }).success).toBe(false);
     expect(ReportQuerySchema.safeParse({ format: 'pdf' }).success).toBe(false);
   });
+  it('ReportQuerySchema keeps a valid year and rejects a malformed one', () => {
+    expect(ReportQuerySchema.parse({ year: '2025-26' }).year).toBe('2025-26');
+    expect(ReportQuerySchema.parse({}).year).toBeUndefined();
+    expect(ReportQuerySchema.safeParse({ year: '2025' }).success).toBe(false);
+  });
   it('report response schemas parse representative payloads', () => {
     expect(EnrollmentReportSchema.parse({
       byProgram: [{ programKey: 'bala-vihar', programLabel: 'Bala Vihar', families: 10, members: 14 }],

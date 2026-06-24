@@ -20,6 +20,7 @@ export interface FetchReportParams {
   from?: string;
   to?: string;
   program?: string;
+  year?: string;
 }
 
 /**
@@ -38,6 +39,7 @@ export async function fetchReport<K extends ReportKindKey>(
   if (params.from) qs.set('from', params.from);
   if (params.to) qs.set('to', params.to);
   if (params.program) qs.set('program', params.program);
+  if (params.year) qs.set('year', params.year);
   const query = qs.toString();
   const res = await fetch(`/api/welcome/reports/${kind}${query ? `?${query}` : ''}`, {
     credentials: 'same-origin',

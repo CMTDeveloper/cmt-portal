@@ -11,6 +11,7 @@ import { flags } from '@/lib/flags';
 import { buildEnrollmentReport } from '@/features/setu/reports/enrollment-report';
 import { buildAttendanceReport } from '@/features/setu/reports/attendance-report';
 import { buildDonationsReport } from '@/features/setu/reports/donations-report';
+import { schoolYearDateRange } from '@/features/setu/rollover/school-year';
 import {
   attendanceReportToCsv,
   donationsReportToCsv,
@@ -68,7 +69,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
   }
 
   if (k === 'attendance') {
-    const withRange = { ...q, from: q.from ?? ymdDaysAgo(365), to: q.to ?? ymdDaysAgo(0) };
+    // Year window wins over the 365-day default, but explicit from/to still win.
+    const win = q.year ? schoolYearDateRange(q.year) : undefined;
+    const withRange = {
+      ...q,
+      from: q.from ?? win?.start ?? ymdDaysAgo(365),
+      to: q.to ?? win?.end ?? ymdDaysAgo(0),
+    };
     const report = await buildAttendanceReport(withRange);
     return q.format === 'csv'
       ? csv(attendanceReportToCsv(report), 'attendance-summary')

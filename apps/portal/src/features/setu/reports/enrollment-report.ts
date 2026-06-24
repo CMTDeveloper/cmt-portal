@@ -4,7 +4,7 @@ import type { EnrollmentReport, ReportQuery } from '@cmt/shared-domain';
 
 type RawEnr = {
   fid?: unknown; programKey?: unknown; programLabel?: unknown; status?: unknown;
-  enrolledMids?: unknown; levelSnapshots?: unknown;
+  enrolledMids?: unknown; levelSnapshots?: unknown; termLabel?: unknown;
 };
 
 export async function buildEnrollmentReport(params: ReportQuery): Promise<EnrollmentReport> {
@@ -30,6 +30,8 @@ export async function buildEnrollmentReport(params: ReportQuery): Promise<Enroll
   for (const d of enrSnap.docs) {
     const e = d.data() as RawEnr;
     if (e.status !== 'active') continue;
+    // Year scope (in-memory, no index): the read is already unfiltered.
+    if (params.year && String(e.termLabel ?? '') !== params.year) continue;
     const programKey = String(e.programKey ?? '');
     if (!programKey) continue;
     if (params.program && programKey !== params.program) continue;

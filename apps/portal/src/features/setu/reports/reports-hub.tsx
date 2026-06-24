@@ -185,17 +185,18 @@ function LoadingNote({ children }: { children: React.ReactNode }) {
 
 // ── Cards (each owns its own fetch-on-mount; fails independently) ───────────────
 
-function EnrollmentCard() {
+function EnrollmentCard({ year }: { year?: string }) {
   const [data, setData] = useState<EnrollmentReport | null>(null);
   const [state, setState] = useState<'loading' | 'ok' | 'error'>('loading');
 
   useEffect(() => {
     let alive = true;
-    fetchReport('enrollment')
+    setState('loading');
+    fetchReport('enrollment', { ...(year ? { year } : {}) })
       .then((r) => { if (alive) { setData(r); setState('ok'); } })
       .catch(() => { if (alive) setState('error'); });
     return () => { alive = false; };
-  }, []);
+  }, [year]);
 
   return (
     <CardShell
@@ -231,7 +232,7 @@ function EnrollmentCard() {
             rows={data.byLevel.map((l) => ({ __key: l.levelId, levelName: l.levelName, members: l.members }))}
           />
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <ReportExportButton kind="enrollment" filename="enrollment-people" label="Export people CSV" />
+            <ReportExportButton kind="enrollment" filename="enrollment-people" label="Export people CSV" {...(year ? { year } : {})} />
             <span style={{ fontSize: 12, color: 'var(--muted)' }}>One row per family member.</span>
           </div>
         </>
@@ -272,22 +273,23 @@ function DateInput({ id, label, value, onChange }: { id: string; label: string; 
   );
 }
 
-function AttendanceCard() {
+function AttendanceCard({ year }: { year?: string }) {
   const initial = defaultRange();
   const [from, setFrom] = useState(initial.from);
   const [to, setTo] = useState(initial.to);
   const [data, setData] = useState<AttendanceReport | null>(null);
   const [state, setState] = useState<'loading' | 'ok' | 'error'>('loading');
 
-  // Re-fetch whenever the range changes.
+  // Re-fetch whenever the range or year changes. The explicit date inputs still
+  // win over the year window server-side (year only fills the default range).
   useEffect(() => {
     let alive = true;
     setState('loading');
-    fetchReport('attendance', { from, to })
+    fetchReport('attendance', { from, to, ...(year ? { year } : {}) })
       .then((r) => { if (alive) { setData(r); setState('ok'); } })
       .catch(() => { if (alive) setState('error'); });
     return () => { alive = false; };
-  }, [from, to]);
+  }, [from, to, year]);
 
   const attCols: Col[] = [
     { key: 'present', label: 'Present', numeric: true },
@@ -328,7 +330,7 @@ function AttendanceCard() {
             cols={[{ key: 'programLabel', label: 'Program' }, ...attCols]}
             rows={data.byProgram.map((p) => ({ __key: p.programKey, programLabel: p.programLabel, present: p.present, absent: p.absent, late: p.late, total: p.total, rate: p.rate }))}
           />
-          <ReportExportButton kind="attendance" filename="attendance-summary" params={{ from, to }} />
+          <ReportExportButton kind="attendance" filename="attendance-summary" params={{ from, to }} {...(year ? { year } : {})} />
         </>
       )}
     </CardShell>
@@ -339,17 +341,18 @@ function moneyCAD(n: number): string {
   return `$${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 }
 
-function DonationsCard() {
+function DonationsCard({ year }: { year?: string }) {
   const [data, setData] = useState<DonationsReport | null>(null);
   const [state, setState] = useState<'loading' | 'ok' | 'error'>('loading');
 
   useEffect(() => {
     let alive = true;
-    fetchReport('donations')
+    setState('loading');
+    fetchReport('donations', { ...(year ? { year } : {}) })
       .then((r) => { if (alive) { setData(r); setState('ok'); } })
       .catch(() => { if (alive) setState('error'); });
     return () => { alive = false; };
-  }, []);
+  }, [year]);
 
   return (
     <CardShell
@@ -386,7 +389,7 @@ function DonationsCard() {
             ]}
             rows={data.byProgram.map((p) => ({ __key: p.programKey, programLabel: p.programLabel, completedCAD: p.completedCAD, completedCount: p.completedCount }))}
           />
-          <ReportExportButton kind="donations" filename="donations-summary" />
+          <ReportExportButton kind="donations" filename="donations-summary" {...(year ? { year } : {})} />
           <p style={{ fontSize: 11.5, color: 'var(--muted)', lineHeight: 1.5, margin: 0 }}>
             Totals are best-effort — accounting@ remains the settlement source of truth (no Stripe webhook).
             All-time, by donation period.
@@ -418,18 +421,18 @@ function LegacyCard() {
 
 // ── Shared body (rendered into both mobile + desktop branches) ──────────────────
 
-function HubBody({ isAdmin }: { isAdmin: boolean }) {
+function HubBody({ isAdmin, year }: { isAdmin: boolean; year?: string }) {
   return (
     <div className="col" style={{ gap: 16, maxWidth: 760 }}>
-      <EnrollmentCard />
-      <AttendanceCard />
-      {isAdmin && <DonationsCard />}
+      <EnrollmentCard {...(year ? { year } : {})} />
+      <AttendanceCard {...(year ? { year } : {})} />
+      {isAdmin && <DonationsCard {...(year ? { year } : {})} />}
       {isAdmin && <LegacyCard />}
     </div>
   );
 }
 
-export function ReportsHub({ isAdmin }: { isAdmin: boolean }) {
+export function ReportsHub({ isAdmin, year }: { isAdmin: boolean; year?: string }) {
   return (
     <>
       {/* Mobile — own CspRoot + 90px bottom padding for the fixed WelcomeMobileNav. */}
@@ -445,7 +448,7 @@ export function ReportsHub({ isAdmin }: { isAdmin: boolean }) {
                 Enrollment, attendance, and donation summaries — view on screen or export to CSV.
               </p>
             </header>
-            <HubBody isAdmin={isAdmin} />
+            <HubBody isAdmin={isAdmin} {...(year ? { year } : {})} />
           </div>
         </CspRoot>
       </div>
@@ -458,7 +461,7 @@ export function ReportsHub({ isAdmin }: { isAdmin: boolean }) {
             Enrollment, attendance, and donation summaries — view on screen or export to CSV.
           </p>
         </header>
-        <HubBody isAdmin={isAdmin} />
+        <HubBody isAdmin={isAdmin} {...(year ? { year } : {})} />
       </div>
     </>
   );

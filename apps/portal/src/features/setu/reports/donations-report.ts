@@ -15,6 +15,21 @@ export async function buildDonationsReport(params: ReportQuery): Promise<Donatio
     db.collectionGroup('enrollments').get(),
   ]);
 
+  // Year scope: donations carry no year field, but `donationPeriods/{pid}` docs
+  // carry `periodLabel` (= the year "2025-26"). So map year → pid set and keep
+  // only this year's periods. A donation whose pid is null/other-year is excluded
+  // (correct — general/other-year donations aren't this year's). One extra bulk
+  // read, all in-memory after — no index.
+  let pidsForYear: Set<string> | null = null;
+  if (params.year) {
+    const pSnap = await db.collection('donationPeriods').get();
+    pidsForYear = new Set(
+      pSnap.docs
+        .filter((d) => (d.data() as { periodLabel?: unknown }).periodLabel === params.year)
+        .map((d) => d.id),
+    );
+  }
+
   type Agg = { cad: number; count: number; label: string; programLabel: string };
   const byPeriod = new Map<string, Agg>();
   const byProgram = new Map<string, Agg>();
@@ -24,6 +39,7 @@ export async function buildDonationsReport(params: ReportQuery): Promise<Donatio
     const x = d.data() as Record<string, unknown>;
     if (x['status'] !== 'completed') continue;
     if (params.program && x['programKey'] !== params.program) continue;
+    if (pidsForYear && !(typeof x['pid'] === 'string' && pidsForYear.has(x['pid']))) continue;
     const amt = typeof x['amountCAD'] === 'number' ? x['amountCAD'] : 0;
     totalCompletedCAD += amt;
     const pid = typeof x['pid'] === 'string' ? x['pid'] : '(none)';
@@ -46,6 +62,7 @@ export async function buildDonationsReport(params: ReportQuery): Promise<Donatio
     const e = d.data() as Record<string, unknown>;
     if (e['status'] !== 'active') continue;
     if (params.program && e['programKey'] !== params.program) continue;
+    if (params.year && String(e['termLabel'] ?? '') !== params.year) continue;
     const fid = String(e['fid'] ?? '');
     if (!fid) continue;
     const override = typeof e['suggestedAmountOverride'] === 'number' ? (e['suggestedAmountOverride'] as number) : null;
@@ -58,6 +75,7 @@ export async function buildDonationsReport(params: ReportQuery): Promise<Donatio
     const x = d.data() as Record<string, unknown>;
     if (x['status'] !== 'completed') continue;
     if (params.program && x['programKey'] !== params.program) continue;
+    if (pidsForYear && !(typeof x['pid'] === 'string' && pidsForYear.has(x['pid']))) continue;
     const fid = String(x['fid'] ?? '');
     if (!fid) continue;
     paidByFid.set(fid, (paidByFid.get(fid) ?? 0) + (typeof x['amountCAD'] === 'number' ? (x['amountCAD'] as number) : 0));

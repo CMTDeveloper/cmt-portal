@@ -12,6 +12,8 @@ interface Props {
   label?: string;
   /** Mirrors the on-screen scope so the export matches what's shown. */
   params?: FetchReportParams;
+  /** School-year scope ("2025-26"); omitted for the live year. */
+  year?: string;
 }
 
 /**
@@ -20,7 +22,7 @@ interface Props {
  * non-OK response instead of silently doing nothing (a dead button is
  * confusing on a large/slow export).
  */
-export function ReportExportButton({ kind, filename, label = 'Export CSV', params = {} }: Props) {
+export function ReportExportButton({ kind, filename, label = 'Export CSV', params = {}, year }: Props) {
   const [pending, startTransition] = useTransition();
   const [failed, setFailed] = useState(false);
 
@@ -32,6 +34,7 @@ export function ReportExportButton({ kind, filename, label = 'Export CSV', param
         if (params.from) qs.set('from', params.from);
         if (params.to) qs.set('to', params.to);
         if (params.program) qs.set('program', params.program);
+        if (year) qs.set('year', year);
         const res = await fetch(`/api/welcome/reports/${kind}?${qs.toString()}`, {
           credentials: 'same-origin',
         });

@@ -46,4 +46,26 @@ describe('buildEnrollmentReport', () => {
     expect(r.byProgram).toHaveLength(1);
     expect(r.byProgram[0]!.programKey).toBe('bala-vihar');
   });
+
+  it('year filter excludes enrollments from other school years (in-memory)', async () => {
+    mockFs.mockReturnValue(makeDb([
+      { fid: 'F1', programKey: 'bala-vihar', programLabel: 'Bala Vihar', status: 'active', termLabel: '2025-26', enrolledMids: ['F1-1'], levelSnapshots: {} },
+      { fid: 'F2', programKey: 'bala-vihar', programLabel: 'Bala Vihar', status: 'active', termLabel: '2024-25', enrolledMids: ['F2-1'], levelSnapshots: {} },
+    ], []) as never);
+
+    const r = await buildEnrollmentReport({ format: 'json', year: '2025-26' });
+    expect(r.totalActiveEnrollments).toBe(1); // only F1 (2024-25 F2 excluded)
+    expect(r.byProgram.find((p) => p.programKey === 'bala-vihar')!.families).toBe(1);
+    expect(r.totalMembers).toBe(1); // only F1-1
+  });
+
+  it('no year param ⇒ unscoped (counts every active enrollment regardless of term)', async () => {
+    mockFs.mockReturnValue(makeDb([
+      { fid: 'F1', programKey: 'bala-vihar', programLabel: 'Bala Vihar', status: 'active', termLabel: '2025-26', enrolledMids: ['F1-1'], levelSnapshots: {} },
+      { fid: 'F2', programKey: 'bala-vihar', programLabel: 'Bala Vihar', status: 'active', termLabel: '2024-25', enrolledMids: ['F2-1'], levelSnapshots: {} },
+    ], []) as never);
+
+    const r = await buildEnrollmentReport({ format: 'json' });
+    expect(r.totalActiveEnrollments).toBe(2); // both years counted
+  });
 });

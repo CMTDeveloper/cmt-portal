@@ -16,6 +16,10 @@ export const ReportQuerySchema = z.object({
   from: YMD.optional(),
   to: YMD.optional(),
   program: programKeySchema.optional(),
+  // School-year scope ("2025-26"). When set, enrollment/attendance/donations are
+  // filtered to that year (in-memory, index-free). Omitted ⇒ unscoped (all-time /
+  // all-families). The SchoolYearSwitcher omits it for the live year on purpose.
+  year: z.string().regex(/^\d{4}-\d{2}$/).optional(),
 });
 export type ReportQuery = z.infer<typeof ReportQuerySchema>;
 
