@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { CalendarCopyResult, YearReadiness } from '@cmt/shared-domain';
 import type { PrasadCopyResult } from '@/features/setu/rollover/clone-prasad-config';
 import type { SevaCopyResult } from '@/features/setu/rollover/copy-seva-opportunities';
+import type { TeacherPrefillResult } from '@/features/setu/rollover/prefill-teachers';
 
 vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
@@ -56,6 +57,11 @@ vi.mock('@/features/setu/rollover/copy-seva-opportunities', () => ({
   copySevaOpportunities: (...a: unknown[]) => mockCopySevaOpportunities(...a),
 }));
 
+const mockPrefillTeachers = vi.fn();
+vi.mock('@/features/setu/rollover/prefill-teachers', () => ({
+  prefillTeachers: (...a: unknown[]) => mockPrefillTeachers(...a),
+}));
+
 function makeRequest(path: string, role?: string, uid = 'uid-admin', mid?: string, body?: unknown): Request {
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   if (role) headers['x-portal-role'] = role;
@@ -100,6 +106,13 @@ const SEVA_RESULT: SevaCopyResult = {
   existing: [],
 };
 
+const TEACHER_RESULT: TeacherPrefillResult = {
+  fromYear: '2025-26',
+  toYear: '2026-27',
+  filled: ['brampton-grade1-bv-brampton-2026-27'],
+  skipped: [],
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   mockGetSchoolYearConfig.mockResolvedValue({ currentYear: '2025-26' });
@@ -111,6 +124,7 @@ beforeEach(() => {
   mockCloneCalendarYear.mockResolvedValue(CALENDAR_RESULT);
   mockClonePrasadConfig.mockResolvedValue(PRASAD_RESULT);
   mockCopySevaOpportunities.mockResolvedValue(SEVA_RESULT);
+  mockPrefillTeachers.mockResolvedValue(TEACHER_RESULT);
 });
 
 // ── POST /api/admin/school-year/activate ────────────────────────────────────────
@@ -199,6 +213,31 @@ describe('POST /api/admin/school-year/copy-prasad', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual(PRASAD_RESULT);
     expect(mockClonePrasadConfig).toHaveBeenCalledWith(expect.anything(), {
+      fromYear: '2025-26',
+      toYear: '2026-27',
+      dryRun: false,
+      actorMid: 'A1',
+    });
+  });
+});
+
+// ── POST /api/admin/school-year/copy-teachers ───────────────────────────────────
+
+describe('POST /api/admin/school-year/copy-teachers', () => {
+  it('returns 403 for a non-admin role', async () => {
+    const { POST } = await import('../copy-teachers/route');
+    const res = await POST(makeRequest('/api/admin/school-year/copy-teachers', 'family-member'));
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: 'forbidden' });
+    expect(mockPrefillTeachers).not.toHaveBeenCalled();
+  });
+
+  it('pre-fills teachers from current → next year with the actor mid and returns the result', async () => {
+    const { POST } = await import('../copy-teachers/route');
+    const res = await POST(makeRequest('/api/admin/school-year/copy-teachers', 'admin', 'uid-admin', 'A1'));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual(TEACHER_RESULT);
+    expect(mockPrefillTeachers).toHaveBeenCalledWith(expect.anything(), {
       fromYear: '2025-26',
       toYear: '2026-27',
       dryRun: false,
