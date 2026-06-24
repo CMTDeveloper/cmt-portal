@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveViewYear, type SchoolYearStatus } from '../view-year';
+import { resolveViewYear } from '../view-year';
 
 const YEARS = ['2024-25', '2025-26', '2026-27']; // sorted ascending
 
