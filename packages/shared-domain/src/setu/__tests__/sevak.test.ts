@@ -14,6 +14,7 @@ describe('sevak schemas', () => {
       isTeacher: true,
       teacherLevels: ['Level 2 (West)'],
       source: 'family',
+      lastSignIn: '2026-06-22T14:00:00.000Z',
     };
     expect(SevakRowSchema.parse(row)).toEqual(row);
   });

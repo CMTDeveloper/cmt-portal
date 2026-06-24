@@ -37,6 +37,7 @@ const SEVAKS: SevakRow[] = [
     isTeacher: false,
     teacherLevels: [],
     source: 'family',
+    lastSignIn: null,
   },
 ];
 

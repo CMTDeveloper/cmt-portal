@@ -2,12 +2,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { SevakRow } from '@cmt/shared-domain';
+import { SevakManager, type SelfIdentity } from '../sevak-manager';
 
 const toastMock = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), warning: vi.fn() }));
 vi.mock('@cmt/ui', () => ({
   SetuIcon: {
     plus: () => <svg aria-hidden="true" />,
     x: () => <svg aria-hidden="true" />,
+    check: () => <svg aria-hidden="true" />,
   },
   toast: toastMock,
 }));
@@ -23,224 +25,195 @@ vi.mock('../users-client', () => ({
   listSevaksClient: mockList,
 }));
 
-import { SevakManager } from '../sevak-manager';
-
 // N=2: a dual-role admin+welcome-team person AND a teacher with two levels.
 const DUAL: SevakRow = {
-  key: 'CMT-FAM1-01',
-  mid: 'CMT-FAM1-01',
-  fid: 'CMT-FAM1',
-  uid: null,
-  name: 'Asha Rao',
-  contact: 'asha@example.com',
-  roles: ['admin', 'welcome-team'],
-  isTeacher: false,
-  teacherLevels: [],
-  source: 'family',
+  key: 'CMT-FAM1-01', mid: 'CMT-FAM1-01', fid: 'CMT-FAM1', uid: null,
+  name: 'Asha Rao', contact: 'asha@example.com', roles: ['admin', 'welcome-team'],
+  isTeacher: false, teacherLevels: [], source: 'family', lastSignIn: '2026-06-22T14:00:00.000Z',
 };
-
 const TEACHER: SevakRow = {
-  key: 'CMT-FAM2-02',
-  mid: 'CMT-FAM2-02',
-  fid: 'CMT-FAM2',
-  uid: null,
-  name: 'Ravi Kumar',
-  contact: 'ravi@example.com',
-  roles: [],
-  isTeacher: true,
-  teacherLevels: ['Level 2 (West)', 'Level 3 (West)'],
-  source: 'family',
+  key: 'CMT-FAM2-02', mid: 'CMT-FAM2-02', fid: 'CMT-FAM2', uid: null,
+  name: 'Ravi Kumar', contact: 'ravi@example.com', roles: [],
+  isTeacher: true, teacherLevels: ['Level 2 (West)', 'Level 3 (West)'], source: 'family', lastSignIn: null,
+};
+const PLAIN_ADMIN: SevakRow = {
+  key: 'uid-staff', mid: null, fid: null, uid: 'uid-staff',
+  name: 'Staff Person', contact: 'staff@example.com', roles: ['admin'],
+  isTeacher: false, teacherLevels: [], source: 'staff', lastSignIn: null,
 };
 
-const PLAIN_ADMIN: SevakRow = {
-  key: 'uid-staff',
-  mid: null,
-  fid: null,
-  uid: 'uid-staff',
-  name: 'Staff Person',
-  contact: 'staff@example.com',
-  roles: ['admin'],
-  isTeacher: false,
-  teacherLevels: [],
-  source: 'staff',
-};
+const NO_SELF: SelfIdentity = { mid: null, uid: null, contact: '' };
+function renderMgr(rows: SevakRow[], self: SelfIdentity = NO_SELF) {
+  return render(<SevakManager initialSevaks={rows} self={self} />);
+}
+const desktop = () => document.querySelector('.hidden.md\\:block') as HTMLElement;
+const drawer = () => screen.getByTestId('sevak-drawer');
 
 beforeEach(() => {
   vi.clearAllMocks();
   mockList.mockResolvedValue([DUAL, TEACHER, PLAIN_ADMIN]);
 });
 
-describe('SevakManager — role badges (N=2)', () => {
-  it('renders BOTH chips for a dual-role admin + welcome-team person', () => {
-    render(<SevakManager initialSevaks={[DUAL]} />);
-    // Rendered in both desktop and mobile branches (DOM-hidden via CSS, both present).
-    expect(screen.getAllByText('Admin').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Welcome team').length).toBeGreaterThan(0);
-    // The dual person's name shows.
-    expect(screen.getAllByText('Asha Rao').length).toBeGreaterThan(0);
+describe('SevakManager — rows + drawer', () => {
+  it('opening a row shows its granted-role chips in the drawer (N=2 dual-role)', async () => {
+    const user = userEvent.setup();
+    renderMgr([DUAL]);
+    await user.click(within(desktop()).getAllByTestId('sevak-row')[0]!);
+    const d = within(drawer());
+    // "Admin"/"Welcome team" appear as the granted-role chips (and again as
+    // access-section headings) — both roles are represented in the drawer.
+    expect(d.getAllByText('Admin').length).toBeGreaterThan(0);
+    expect(d.getAllByText('Welcome team').length).toBeGreaterThan(0);
+    expect(d.getByText('Asha Rao')).toBeTruthy();
   });
 
   it('renders the teacher badge with its level names', () => {
-    render(<SevakManager initialSevaks={[TEACHER]} />);
+    renderMgr([TEACHER]);
     expect(screen.getAllByText('Teacher').length).toBeGreaterThan(0);
-    // Levels join into the badge text.
     expect(screen.getAllByText(/Level 2 \(West\), Level 3 \(West\)/).length).toBeGreaterThan(0);
   });
 
-  it('shows the "Manage as teacher" deep link for a teacher row', () => {
-    render(<SevakManager initialSevaks={[TEACHER]} />);
-    const links = screen.getAllByText('Manage as teacher →');
-    expect(links.length).toBeGreaterThan(0);
-    expect(links[0]!.closest('a')?.getAttribute('href')).toBe('/admin/levels');
+  it('shows the "Manage as teacher" deep link in a teacher\'s drawer', async () => {
+    const user = userEvent.setup();
+    renderMgr([TEACHER]);
+    await user.click(within(desktop()).getAllByTestId('sevak-row')[0]!);
+    const link = within(drawer()).getByText('Manage as teacher →');
+    expect(link.closest('a')?.getAttribute('href')).toBe('/admin/levels');
+  });
+
+  it('shows a Last sign-in date, and "Never" for someone who has not signed in', () => {
+    renderMgr([DUAL, TEACHER]);
+    const d = within(desktop());
+    expect(d.getByText('Jun 22')).toBeTruthy(); // DUAL signed in 2026-06-22
+    expect(d.getAllByText('Never').length).toBeGreaterThan(0); // TEACHER never
+  });
+
+  it('flags the viewer\'s own row with a "You" badge', () => {
+    renderMgr([DUAL, PLAIN_ADMIN], { mid: 'CMT-FAM1-01', uid: null, contact: '' });
+    // Asha is "me" → a You tag renders (desktop + mobile both in the DOM).
+    expect(screen.getAllByText('You').length).toBeGreaterThan(0);
   });
 });
 
-describe('SevakManager — edit-mode workflow', () => {
-  // Scope assertions to the desktop branch so the duplicated mobile DOM (both
-  // branches render; CSS hides one) doesn't double-match "Edit roles" etc.
-  function desktop() {
-    return document.querySelector('.hidden.md\\:block') as HTMLElement;
+describe('SevakManager — edit-then-save workflow', () => {
+  async function openEdit(name: string) {
+    const user = userEvent.setup();
+    // Each row carries an "Edit roles" button → opens the drawer straight in edit mode.
+    await user.click(within(desktop()).getByRole('button', { name: 'Edit roles' }));
+    return { user, d: within(drawer()), name };
   }
 
-  it('opens the add-sevak form from the desktop top action', async () => {
+  it('opens the Add-sevak dialog from the desktop action', async () => {
     const user = userEvent.setup();
-    render(<SevakManager initialSevaks={[PLAIN_ADMIN]} />);
-    const d = within(desktop());
-
-    expect(d.queryByLabelText('Registered portal email')).toBeNull();
-    await user.click(d.getByRole('button', { name: 'Add sevak role' }));
-    const dialog = d.getByRole('dialog', { name: 'Add sevak role' });
+    renderMgr([PLAIN_ADMIN]);
+    expect(screen.queryByLabelText('Registered portal email')).toBeNull();
+    await user.click(within(desktop()).getByRole('button', { name: 'Add sevak role' }));
+    const dialog = screen.getByRole('dialog', { name: 'Add sevak role' });
     expect(within(dialog).getByLabelText('Registered portal email')).toBeTruthy();
   });
 
-  it('default view exposes NO grant/revoke controls — only an Edit roles button', () => {
-    render(<SevakManager initialSevaks={[PLAIN_ADMIN]} />);
-    const d = within(desktop());
-    // The cramped one-click grant/revoke buttons are gone from the read-only view.
-    expect(d.queryByText(/^Grant /)).toBeNull();
-    expect(d.queryByText(/^Revoke /)).toBeNull();
-    // A single deliberate entry point is present instead.
-    expect(d.getByRole('button', { name: 'Edit roles for Staff Person' })).toBeTruthy();
+  it('a row click opens a read-only drawer — no checkboxes, just an Edit roles button', async () => {
+    const user = userEvent.setup();
+    renderMgr([PLAIN_ADMIN]);
+    await user.click(within(desktop()).getAllByTestId('sevak-row')[0]!);
+    const d = within(drawer());
+    expect(d.queryByRole('checkbox')).toBeNull();
+    expect(d.getByRole('button', { name: 'Edit roles' })).toBeTruthy();
   });
 
-  it('clicking Edit roles reveals role checkboxes pre-checked to current state', async () => {
-    const user = userEvent.setup();
-    render(<SevakManager initialSevaks={[DUAL]} />);
-    const d = within(desktop());
-    await user.click(d.getByRole('button', { name: 'Edit roles for Asha Rao' }));
-    // DUAL has admin + welcome-team → both checkboxes checked.
-    const admin = d.getByRole('checkbox', { name: /Admin/ }) as HTMLInputElement;
-    const welcome = d.getByRole('checkbox', { name: /Welcome team/ }) as HTMLInputElement;
-    expect(admin.checked).toBe(true);
-    expect(welcome.checked).toBe(true);
-    // Entering edit mode alone must not call any mutation endpoint.
+  it('Edit roles reveals checkboxes pre-checked to the current state, with no mutation', async () => {
+    renderMgr([DUAL]);
+    const { d } = await openEdit('Asha Rao');
+    expect((d.getByRole('checkbox', { name: /^Admin/ }) as HTMLInputElement).checked).toBe(true);
+    expect((d.getByRole('checkbox', { name: /^Welcome team/ }) as HTMLInputElement).checked).toBe(true);
     expect(mockGrant).not.toHaveBeenCalled();
     expect(mockRevoke).not.toHaveBeenCalled();
   });
 
-  it('toggling a role + Save issues exactly the changed grant/revoke calls', async () => {
-    const user = userEvent.setup();
+  it('toggling a role + Save issues exactly the changed revoke call', async () => {
     mockGrant.mockResolvedValue(undefined);
     mockRevoke.mockResolvedValue(undefined);
-    // DUAL = admin + welcome-team. We will: uncheck admin (revoke), leave
-    // welcome-team (no-op). Only one revoke call must fire.
-    render(<SevakManager initialSevaks={[DUAL]} />);
-    const d = within(desktop());
-    await user.click(d.getByRole('button', { name: 'Edit roles for Asha Rao' }));
-    await user.click(d.getByRole('checkbox', { name: /Admin/ }));
-    await user.click(d.getByRole('button', { name: 'Save role changes for Asha Rao' }));
-
+    renderMgr([DUAL]);
+    const { user, d } = await openEdit('Asha Rao');
+    await user.click(d.getByRole('checkbox', { name: /^Admin/ })); // uncheck admin → revoke
+    await user.click(d.getByRole('button', { name: 'Save changes' }));
     expect(mockRevoke).toHaveBeenCalledTimes(1);
     expect(mockRevoke).toHaveBeenCalledWith({ contact: 'asha@example.com', role: 'admin' });
-    // welcome-team was left checked → no grant, and admin's only the revoke.
     expect(mockGrant).not.toHaveBeenCalled();
   });
 
   it('granting a new role via Save issues a single grant call', async () => {
-    const user = userEvent.setup();
     mockGrant.mockResolvedValue(undefined);
-    // TEACHER has no grantable roles. Check welcome-team, then Save.
-    render(<SevakManager initialSevaks={[TEACHER]} />);
-    const d = within(desktop());
-    await user.click(d.getByRole('button', { name: 'Edit roles for Ravi Kumar' }));
-    await user.click(d.getByRole('checkbox', { name: /Welcome team/ }));
-    await user.click(d.getByRole('button', { name: 'Save role changes for Ravi Kumar' }));
-
+    renderMgr([TEACHER]);
+    const { user, d } = await openEdit('Ravi Kumar');
+    await user.click(d.getByRole('checkbox', { name: /^Welcome team/ }));
+    await user.click(d.getByRole('button', { name: 'Save changes' }));
     expect(mockGrant).toHaveBeenCalledTimes(1);
     expect(mockGrant).toHaveBeenCalledWith({ contact: 'ravi@example.com', role: 'welcome-team' });
     expect(mockRevoke).not.toHaveBeenCalled();
   });
 
-  it('Cancel discards the draft and makes NO grant/revoke calls', async () => {
-    const user = userEvent.setup();
-    render(<SevakManager initialSevaks={[DUAL]} />);
-    const d = within(desktop());
-    await user.click(d.getByRole('button', { name: 'Edit roles for Asha Rao' }));
-    // Toggle both roles off in the draft...
-    await user.click(d.getByRole('checkbox', { name: /Admin/ }));
-    await user.click(d.getByRole('checkbox', { name: /Welcome team/ }));
-    // ...then Cancel — nothing should be persisted.
-    await user.click(d.getByRole('button', { name: 'Cancel editing roles for Asha Rao' }));
-
+  it('Cancel discards the draft (no calls) and returns the drawer to read-only', async () => {
+    renderMgr([DUAL]);
+    const { user, d } = await openEdit('Asha Rao');
+    await user.click(d.getByRole('checkbox', { name: /^Admin/ }));
+    await user.click(d.getByRole('checkbox', { name: /^Welcome team/ }));
+    await user.click(d.getByRole('button', { name: 'Cancel' }));
     expect(mockGrant).not.toHaveBeenCalled();
     expect(mockRevoke).not.toHaveBeenCalled();
-    // Back to read-only: the Edit button is shown again, checkboxes gone.
-    expect(d.getByRole('button', { name: 'Edit roles for Asha Rao' })).toBeTruthy();
-    expect(d.queryByRole('checkbox', { name: /Admin/ })).toBeNull();
+    expect(within(drawer()).queryByRole('checkbox')).toBeNull();
+    expect(within(drawer()).getByRole('button', { name: 'Edit roles' })).toBeTruthy();
   });
 
   it('Save with no changes makes no calls and returns to read-only', async () => {
-    const user = userEvent.setup();
-    render(<SevakManager initialSevaks={[DUAL]} />);
-    const d = within(desktop());
-    await user.click(d.getByRole('button', { name: 'Edit roles for Asha Rao' }));
-    // No toggles — Save immediately.
-    await user.click(d.getByRole('button', { name: 'Save role changes for Asha Rao' }));
+    renderMgr([DUAL]);
+    const { user, d } = await openEdit('Asha Rao');
+    await user.click(d.getByRole('button', { name: 'Save changes' }));
     expect(mockGrant).not.toHaveBeenCalled();
     expect(mockRevoke).not.toHaveBeenCalled();
-    expect(d.getByRole('button', { name: 'Edit roles for Asha Rao' })).toBeTruthy();
+    expect(within(drawer()).getByRole('button', { name: 'Edit roles' })).toBeTruthy();
   });
 
-  it('surfaces the last-admin 409 as an error toast when Save revokes the last admin', async () => {
-    const user = userEvent.setup();
+  it('surfaces the last-admin 409 as an error toast and reloads state', async () => {
     mockRevoke.mockRejectedValue(new Error('last-admin'));
-    render(<SevakManager initialSevaks={[PLAIN_ADMIN]} />);
-    const d = within(desktop());
-    await user.click(d.getByRole('button', { name: 'Edit roles for Staff Person' }));
-    // Uncheck admin → Save attempts a revoke that the API rejects.
-    await user.click(d.getByRole('checkbox', { name: /Admin/ }));
-    await user.click(d.getByRole('button', { name: 'Save role changes for Staff Person' }));
-
+    renderMgr([PLAIN_ADMIN]);
+    const { user, d } = await openEdit('Staff Person');
+    await user.click(d.getByRole('checkbox', { name: /^Admin/ }));
+    await user.click(d.getByRole('button', { name: 'Save changes' }));
     expect(mockRevoke).toHaveBeenCalledWith({ contact: 'staff@example.com', role: 'admin' });
-    // Wait for the rejection to settle (re-renders the Save button back to idle).
-    await d.findByRole('button', { name: 'Save role changes for Staff Person' });
-    expect(toastMock.error).toHaveBeenCalledWith(
-      'Cannot revoke the last admin — grant another admin first.',
-    );
-    // State is reloaded so the UI reflects the server's actual (unchanged) roles.
+    await within(drawer()).findByRole('button', { name: 'Save changes' });
+    expect(toastMock.error).toHaveBeenCalledWith('Cannot revoke the last admin — grant another admin first.');
     expect(mockList).toHaveBeenCalled();
   });
 });
 
-describe('SevakManager — filter + search', () => {
+describe('SevakManager — filter + search + sort', () => {
   it('filters to teachers only', async () => {
     const user = userEvent.setup();
-    render(<SevakManager initialSevaks={[DUAL, TEACHER, PLAIN_ADMIN]} />);
-    // Desktop filter bar is one of the "Teachers" chips.
-    await user.click(screen.getAllByText('Teachers')[0]!);
-    // Ravi (teacher) stays; Asha (no teacher) filtered out in the desktop list.
-    const desktop = document.querySelector('.hidden.md\\:block') as HTMLElement;
-    expect(within(desktop).queryByText('Ravi Kumar')).toBeTruthy();
-    expect(within(desktop).queryByText('Asha Rao')).toBeNull();
+    renderMgr([DUAL, TEACHER, PLAIN_ADMIN]);
+    await user.click(within(desktop()).getByRole('button', { name: 'Teachers' }));
+    const d = within(desktop());
+    expect(d.queryByText('Ravi Kumar')).toBeTruthy();
+    expect(d.queryByText('Asha Rao')).toBeNull();
   });
 
   it('searches by contact', async () => {
     const user = userEvent.setup();
-    render(<SevakManager initialSevaks={[DUAL, TEACHER]} />);
-    const desktop = document.querySelector('.hidden.md\\:block') as HTMLElement;
-    const input = within(desktop).getByLabelText('Search sevaks');
-    await user.type(input, 'ravi@');
-    expect(within(desktop).queryByText('Ravi Kumar')).toBeTruthy();
-    expect(within(desktop).queryByText('Asha Rao')).toBeNull();
+    renderMgr([DUAL, TEACHER]);
+    const d = within(desktop());
+    await user.type(d.getByLabelText('Search sevaks'), 'ravi@');
+    expect(d.queryByText('Ravi Kumar')).toBeTruthy();
+    expect(d.queryByText('Asha Rao')).toBeNull();
+  });
+
+  it('sorting by name toggles ascending/descending order', async () => {
+    const user = userEvent.setup();
+    renderMgr([PLAIN_ADMIN, DUAL]); // Staff Person, Asha Rao
+    const d = within(desktop());
+    const namesAsc = d.getAllByTestId('sevak-row').map((r) => within(r).getByText(/Rao|Person/).textContent);
+    expect(namesAsc[0]).toBe('Asha Rao'); // default asc
+    await user.click(d.getByRole('button', { name: /^Name/ }));
+    const namesDesc = within(desktop()).getAllByTestId('sevak-row').map((r) => within(r).getByText(/Rao|Person/).textContent);
+    expect(namesDesc[0]).toBe('Staff Person');
   });
 });

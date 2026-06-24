@@ -37,6 +37,7 @@ function sevakRow(over: Partial<SevakRow>): SevakRow {
     isTeacher: false,
     teacherLevels: [],
     source: 'staff',
+    lastSignIn: null,
     ...over,
   };
 }

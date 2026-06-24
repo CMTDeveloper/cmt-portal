@@ -10,6 +10,14 @@ import { grantRoleClient, revokeRoleClient, listSevaksClient } from './users-cli
 import { RoleChip, TeacherBadge } from './role-badges';
 import { RolesReferencePanel } from './roles-reference-panel';
 
+// Who's viewing — used to flag their own row with a "You" badge (and the backend
+// self-lockout guard still protects against revoking your own admin).
+export interface SelfIdentity {
+  mid: string | null;
+  uid: string | null;
+  contact: string;
+}
+
 // Maps API error codes (thrown by the client wrappers) to operator-friendly
 // toast copy. Falls back to the raw code for anything unmapped.
 function toastError(code: string, fallback: string) {
@@ -26,120 +34,29 @@ function toastError(code: string, fallback: string) {
 
 const GRANT_NOTE = 'Applies at their next sign-in.';
 
-interface SevakManagerProps {
-  initialSevaks: SevakRow[];
+function snapshotRoles(row: SevakRow): Record<GrantableRole, boolean> {
+  return { admin: row.roles.includes('admin'), 'welcome-team': row.roles.includes('welcome-team') };
 }
 
-export function SevakManager({ initialSevaks }: SevakManagerProps) {
-  const [sevaks, setSevaks] = useState<SevakRow[]>(initialSevaks);
-  const [roleFilter, setRoleFilter] = useState<GrantableRole | 'teacher' | null>(null);
-  const [query, setQuery] = useState('');
-  const [desktopAddOpen, setDesktopAddOpen] = useState(false);
-  const [, startRefresh] = useTransition();
-
-  function refresh() {
-    startRefresh(async () => {
-      try {
-        const next = await listSevaksClient();
-        setSevaks(next);
-      } catch {
-        // A failed refresh is non-fatal — the optimistic state already updated.
-      }
-    });
-  }
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return sevaks.filter((s) => {
-      if (roleFilter === 'teacher' && !s.isTeacher) return false;
-      if (roleFilter && roleFilter !== 'teacher' && !s.roles.includes(roleFilter)) return false;
-      if (q) {
-        const hay = `${s.name} ${s.contact}`.toLowerCase();
-        if (!hay.includes(q)) return false;
-      }
-      return true;
-    });
-  }, [sevaks, roleFilter, query]);
-
-  return (
-    <>
-      {/* ── Desktop ──────────────────────────────────────────────── */}
-      <div className="hidden md:block">
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
-          <button
-            type="button"
-            className="btn btn--p"
-            onClick={() => setDesktopAddOpen(true)}
-            aria-haspopup="dialog"
-            style={{ minHeight: 40, padding: '10px 16px' }}
-          >
-            <SetuIcon.plus aria-hidden="true" />
-            Add sevak role
-          </button>
-        </div>
-
-        {desktopAddOpen && (
-          <DesktopDialog title="Add sevak role" onClose={() => setDesktopAddOpen(false)}>
-            <AddSevakForm
-              onGranted={() => {
-                refresh();
-                setDesktopAddOpen(false);
-              }}
-            />
-          </DesktopDialog>
-        )}
-
-        {/* Filter + list: primary focus, full-width */}
-        <FilterBar
-          roleFilter={roleFilter}
-          onRoleFilter={setRoleFilter}
-          query={query}
-          onQuery={setQuery}
-          count={filtered.length}
-        />
-        {filtered.length === 0 ? (
-          <EmptyState />
-        ) : (
-          // Responsive grid: fills the horizontal space (was a single cramped
-          // left column with empty white space on the right). Cards reflow to
-          // 1 / 2 / 3 columns as width allows; auto-fill keeps a sensible min.
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
-              gap: 12,
-              marginTop: 14,
-              alignItems: 'start',
-            }}
-          >
-            {filtered.map((s) => (
-              <SevakCard key={s.key} row={s} onChanged={refresh} mobile={false} />
-            ))}
-          </div>
-        )}
-
-        {/* Roles reference: collapsed by default, below the list */}
-        <DesktopDisclosure heading="Roles reference ↓" style={{ marginTop: 28 }}>
-          <RolesReferencePanel />
-        </DesktopDisclosure>
-      </div>
-
-      {/* ── Mobile ───────────────────────────────────────────────── */}
-      <div className="block md:hidden">
-        <MobileSevaks
-          rows={filtered}
-          roleFilter={roleFilter}
-          onRoleFilter={setRoleFilter}
-          query={query}
-          onQuery={setQuery}
-          onChanged={refresh}
-        />
-      </div>
-    </>
-  );
+/** ISO → "Jun 22" (Toronto), with the year when it isn't the current one; "Never" for null. */
+function lastSignInLabel(iso: string | null): string {
+  if (!iso) return 'Never';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return 'Never';
+  const now = new Date();
+  const sameYear = d.getUTCFullYear() === now.getUTCFullYear();
+  return d.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    ...(sameYear ? {} : { year: 'numeric' }),
+    timeZone: 'America/Toronto',
+  });
 }
 
-// ─── Filter bar (desktop) ──────────────────────────────────────────────────
+const SOURCE_LABEL: Record<SevakRow['source'], string> = { family: 'Family', staff: 'Sevak' };
+
+type SortCol = 'name' | 'source' | 'lastSignIn';
+type SortDir = 'asc' | 'desc';
 
 const FILTER_CHIPS: { key: GrantableRole | 'teacher' | null; label: string }[] = [
   { key: null, label: 'All' },
@@ -148,373 +65,491 @@ const FILTER_CHIPS: { key: GrantableRole | 'teacher' | null; label: string }[] =
   { key: 'teacher', label: 'Teachers' },
 ];
 
-function FilterBar({
-  roleFilter,
-  onRoleFilter,
-  query,
-  onQuery,
-  count,
-}: {
-  roleFilter: GrantableRole | 'teacher' | null;
-  onRoleFilter: (r: GrantableRole | 'teacher' | null) => void;
-  query: string;
-  onQuery: (q: string) => void;
-  count: number;
-}) {
-  return (
-    <div className="between" style={{ gap: 12, flexWrap: 'wrap' }}>
-      <div className="no-scrollbar" style={{ display: 'flex', gap: 6, overflowX: 'auto', maxWidth: '100%' }}>
-        {FILTER_CHIPS.map((c) => {
-          const active = roleFilter === c.key;
-          return (
-            <button
-              key={c.label}
-              type="button"
-              onClick={() => onRoleFilter(c.key)}
-              style={{
-                background: active ? 'var(--accent)' : 'transparent',
-                color: active ? '#fff' : 'var(--body-text)',
-                border: `1px solid ${active ? 'var(--accent)' : 'var(--line)'}`,
-                padding: '6px 14px',
-                minHeight: 36,
-                borderRadius: 999,
-                fontSize: 12,
-                fontWeight: 600,
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-                fontFamily: 'var(--body)',
-              }}
-            >
-              {c.label}
-            </button>
-          );
-        })}
-      </div>
-      <input
-        className="input"
-        value={query}
-        onChange={(e) => onQuery(e.target.value)}
-        placeholder="Search name or contact…"
-        style={{ flex: '1 1 200px', minWidth: 160 }}
-        aria-label="Search sevaks"
-      />
-      <span style={{ fontSize: 12, color: 'var(--muted)', whiteSpace: 'nowrap' }}>{count} shown</span>
-    </div>
-  );
+interface SevakManagerProps {
+  initialSevaks: SevakRow[];
+  self: SelfIdentity;
 }
 
-function EmptyState() {
-  return (
-    <div
-      style={{
-        marginTop: 14,
-        padding: 22,
-        background: 'var(--surface)',
-        border: '1px dashed var(--line2)',
-        borderRadius: 'var(--radius)',
-        textAlign: 'center',
-        color: 'var(--muted)',
-        fontSize: 13,
-      }}
-    >
-      No sevaks match. Adjust the filter or grant a role with the form.
-    </div>
-  );
-}
+export function SevakManager({ initialSevaks, self }: SevakManagerProps) {
+  const [sevaks, setSevaks] = useState<SevakRow[]>(initialSevaks);
+  const [roleFilter, setRoleFilter] = useState<GrantableRole | 'teacher' | null>(null);
+  const [query, setQuery] = useState('');
+  const [sortCol, setSortCol] = useState<SortCol>('name');
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [addOpen, setAddOpen] = useState(false);
+  const [refOpen, setRefOpen] = useState(false);
 
-// ─── One sevak row ─────────────────────────────────────────────────────────
-
-// Roles an admin can toggle through the edit form. Teacher stays read-only
-// (managed at /admin/levels), so it is not part of the editable set.
-
-function SevakCard({
-  row,
-  onChanged,
-  mobile,
-}: {
-  row: SevakRow;
-  onChanged: () => void;
-  mobile: boolean;
-}) {
-  // Edit-mode workflow: a stray click can no longer mutate a role. The default
-  // view is read-only; only an explicit "Save changes" inside edit mode calls
-  // the grant/revoke endpoints (and only for the roles that actually changed).
-  const [editing, setEditing] = useState(false);
-  // Working selection while in edit mode, keyed by grantable role.
-  const [draft, setDraft] = useState<Record<GrantableRole, boolean>>(() => snapshotRoles(row));
+  // Drawer: the open row's key + mode. Edit state (draft) lives here so a stray
+  // click can never mutate a role — only an explicit Save calls grant/revoke.
+  const [drawerKey, setDrawerKey] = useState<string | null>(null);
+  const [drawerMode, setDrawerMode] = useState<'view' | 'edit'>('view');
+  const [draft, setDraft] = useState<Record<GrantableRole, boolean>>({ admin: false, 'welcome-team': false });
   const [saving, setSaving] = useState(false);
-  // FIX #5: stable id for the disclosure panel (aria-controls).
-  const panelId = useId();
-  const editFormId = useId();
-  const [expanded, setExpanded] = useState(false);
+  const [, startRefresh] = useTransition();
 
-  // Roles present on this person, for the access expander.
-  const accessRoles = [...row.roles, ...(row.isTeacher ? (['teacher'] as const) : [])];
+  const refPanelId = useId();
 
-  // FIX #3: mobile tap targets ≥ 44px.
-  const btnMinHeight = mobile ? 44 : 36;
+  function isSelf(row: SevakRow): boolean {
+    if (row.mid && self.mid && row.mid === self.mid) return true;
+    if (row.uid && self.uid && row.uid === self.uid) return true;
+    if (row.contact && self.contact && row.contact.toLowerCase() === self.contact.toLowerCase()) return true;
+    return false;
+  }
 
-  function enterEdit() {
-    if (!row.contact) {
+  function refresh() {
+    startRefresh(async () => {
+      try {
+        setSevaks(await listSevaksClient());
+      } catch {
+        // A failed refresh is non-fatal — the optimistic state already updated.
+      }
+    });
+  }
+
+  const visibleRows = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const rows = sevaks.filter((s) => {
+      if (roleFilter === 'teacher' && !s.isTeacher) return false;
+      if (roleFilter && roleFilter !== 'teacher' && !s.roles.includes(roleFilter)) return false;
+      if (q && !`${s.name} ${s.contact}`.toLowerCase().includes(q)) return false;
+      return true;
+    });
+    const dir = sortDir === 'asc' ? 1 : -1;
+    rows.sort((a, b) => {
+      if (sortCol === 'lastSignIn') {
+        // Nulls (never signed in) always sort to the bottom regardless of dir.
+        if (!a.lastSignIn && !b.lastSignIn) return a.name.localeCompare(b.name);
+        if (!a.lastSignIn) return 1;
+        if (!b.lastSignIn) return -1;
+        return dir * a.lastSignIn.localeCompare(b.lastSignIn);
+      }
+      const av = sortCol === 'source' ? SOURCE_LABEL[a.source] : a.name;
+      const bv = sortCol === 'source' ? SOURCE_LABEL[b.source] : b.name;
+      return dir * (av.localeCompare(bv) || a.name.localeCompare(b.name));
+    });
+    return rows;
+  }, [sevaks, roleFilter, query, sortCol, sortDir]);
+
+  const openRow = drawerKey ? sevaks.find((s) => s.key === drawerKey) ?? null : null;
+
+  function toggleSort(col: SortCol) {
+    if (sortCol === col) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    else {
+      setSortCol(col);
+      setSortDir('asc');
+    }
+  }
+  const arrow = (col: SortCol) => (sortCol === col ? (sortDir === 'asc' ? ' ↑' : ' ↓') : '');
+
+  function openDrawer(row: SevakRow, mode: 'view' | 'edit') {
+    if (mode === 'edit' && !row.contact) {
       toast.error('No contact on record — cannot edit roles.');
       return;
     }
+    setDrawerKey(row.key);
+    setDrawerMode(mode);
     setDraft(snapshotRoles(row));
-    setEditing(true);
+  }
+  function closeDrawer() {
+    setDrawerKey(null);
+    setDrawerMode('view');
   }
 
-  function cancelEdit() {
-    // Discard the draft entirely — no API calls, no mutation.
-    setDraft(snapshotRoles(row));
-    setEditing(false);
-  }
-
-  async function save() {
-    if (!row.contact) {
+  async function saveDraft() {
+    if (!openRow) return;
+    if (!openRow.contact) {
       toast.error('No contact on record — cannot save roles.');
       return;
     }
-    // Diff the draft vs the row's current roles. Only changed roles are touched.
-    const toGrant = GRANTABLE_ROLES.filter((r) => draft[r] && !row.roles.includes(r));
-    const toRevoke = GRANTABLE_ROLES.filter((r) => !draft[r] && row.roles.includes(r));
-
+    const toGrant = GRANTABLE_ROLES.filter((r) => draft[r] && !openRow.roles.includes(r));
+    const toRevoke = GRANTABLE_ROLES.filter((r) => !draft[r] && openRow.roles.includes(r));
     if (toGrant.length === 0 && toRevoke.length === 0) {
-      setEditing(false);
-      return; // Nothing changed — no API calls.
+      setDrawerMode('view');
+      return;
     }
-
     setSaving(true);
     try {
-      // Run grants then revokes sequentially so a mid-flight failure leaves a
-      // clear partial state, and so the last-admin / self-lockout guard on a
-      // revoke surfaces its specific code. Any throw aborts the rest.
-      for (const role of toGrant) {
-        await grantRoleClient({ contact: row.contact, role });
-      }
-      for (const role of toRevoke) {
-        await revokeRoleClient({ contact: row.contact, role });
-      }
-      toast.success(`Updated roles for ${row.name}. ${GRANT_NOTE}`);
-      setEditing(false);
-      onChanged();
+      // Grants then revokes, sequential — a mid-flight failure leaves a clear
+      // partial state and surfaces the specific guard code (last-admin / self-lockout).
+      for (const role of toGrant) await grantRoleClient({ contact: openRow.contact, role });
+      for (const role of toRevoke) await revokeRoleClient({ contact: openRow.contact, role });
+      toast.success(`Updated roles for ${openRow.name}. ${GRANT_NOTE}`);
+      setDrawerMode('view');
+      refresh();
     } catch (err) {
-      // Surface the API error (last-admin / self-lockout / forbidden / …) and
-      // reload state so the UI reflects whatever the server actually persisted.
       toastError(err instanceof Error ? err.message : 'unknown', 'Saving roles failed');
-      onChanged();
+      refresh();
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <div
-      style={{
-        padding: mobile ? '14px 14px' : '14px 16px',
-        background: 'var(--surface)',
-        border: '1px solid var(--line)',
-        borderRadius: 'var(--radius)',
-      }}
-    >
-      <div className="between" style={{ gap: 12, alignItems: 'flex-start' }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 14, fontWeight: 600 }}>{row.name || '(no name)'}</div>
-          {/* FIX #6: use body-text (not muted) for the contact caption — improves contrast. */}
-          <div
-            style={{
-              fontSize: 12,
-              color: 'var(--body-text)',
-              fontFamily: 'var(--mono)',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {row.contact || '(no contact)'}
-          </div>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
-            {row.roles.map((r) => (
-              <RoleChip key={r} role={r} />
-            ))}
-            {row.isTeacher && <TeacherBadge levels={row.teacherLevels} />}
-            {row.roles.length === 0 && !row.isTeacher && (
-              <span style={{ fontSize: 11, color: 'var(--muted)' }}>No roles</span>
-            )}
-          </div>
-        </div>
-      </div>
+    <div className="csp">
+      <style>{`
+        @keyframes ur-fade { from { opacity: 0 } to { opacity: 1 } }
+        @keyframes ur-sheet { from { transform: translateY(100%) } to { transform: none } }
+        @keyframes ur-slide { from { transform: translateX(100%) } to { transform: none } }
+        .ur-backdrop { position: fixed; inset: 0; background: rgba(15,26,34,.4); z-index: 55; animation: ur-fade .15s ease; }
+        .ur-drawer { position: fixed; left: 0; right: 0; bottom: 0; z-index: 56; max-height: 88dvh; overflow-y: auto;
+          background: var(--surface); border-top-left-radius: 18px; border-top-right-radius: 18px; animation: ur-sheet .22s ease; }
+        @media (min-width: 768px) {
+          .ur-drawer { top: 0; bottom: 0; right: 0; left: auto; width: min(460px, 100%); max-height: none;
+            border-radius: 0; border-left: 1px solid var(--line); animation: ur-slide .22s ease; }
+        }
+        .ur-row { cursor: pointer; transition: background .12s ease; }
+        .ur-row:hover { background: var(--surface2); }
+        .ur-sorth { display: inline-flex; align-items: center; gap: 3px; background: none; border: none; padding: 0;
+          cursor: pointer; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+          color: var(--muted); font-family: var(--body); }
+      `}</style>
 
-      {editing ? (
-        // ── EDIT MODE: selectable role toggles + explicit Save / Cancel ──
+      {/* ── Desktop: toolbar + table ─────────────────────────────────────── */}
+      <div className="hidden md:block">
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, flex: 1, minWidth: 300 }}>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {FILTER_CHIPS.map((c) => (
+                <Chip key={c.label} active={roleFilter === c.key} label={c.label} onClick={() => setRoleFilter(c.key)} />
+              ))}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <input
+                className="input"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search name or contact…"
+                aria-label="Search sevaks"
+                style={{ flex: 1, minWidth: 240, maxWidth: 520 }}
+              />
+              <span style={{ fontSize: 12, color: 'var(--muted)', whiteSpace: 'nowrap' }}>{visibleRows.length} shown</span>
+            </div>
+          </div>
+          <button type="button" className="btn btn--p" onClick={() => setAddOpen(true)} style={{ minHeight: 42, padding: '11px 18px' }}>
+            <SetuIcon.plus aria-hidden="true" /> Add sevak role
+          </button>
+        </div>
+
         <div
-          id={editFormId}
-          role="group"
-          aria-label={`Edit roles for ${row.name}`}
           style={{
-            marginTop: 12,
-            paddingTop: 12,
-            borderTop: '1px solid var(--line)',
+            marginTop: 18,
+            border: '1px solid var(--line)',
+            borderRadius: 'var(--radius)',
+            overflow: 'hidden',
+            background: 'var(--surface)',
+            boxShadow: 'var(--setu-elev-1, 0 1px 0 rgba(15,26,34,0.04))',
           }}
         >
-          <div className="col" style={{ gap: 8 }}>
-            {GRANTABLE_ROLES.map((role) => {
-              const checked = draft[role];
-              return (
-                <label
-                  key={role}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 10,
-                    minHeight: btnMinHeight,
-                    cursor: saving ? 'default' : 'pointer',
-                    fontSize: 13,
-                    fontFamily: 'var(--body)',
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    disabled={saving}
-                    onChange={(e) =>
-                      setDraft((d) => ({ ...d, [role]: e.target.checked }))
-                    }
-                    style={{ width: 18, height: 18, accentColor: 'var(--accent)' }}
-                  />
-                  <span style={{ fontWeight: 600 }}>{ROLE_REFERENCE[role].label}</span>
-                  <span style={{ fontSize: 11, color: 'var(--muted)' }}>
-                    {ROLE_REFERENCE[role].summary}
-                  </span>
-                </label>
-              );
-            })}
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+              <thead>
+                <tr>
+                  <Th><button type="button" className="ur-sorth" onClick={() => toggleSort('name')}>Name{arrow('name')}</button></Th>
+                  <Th>Contact</Th>
+                  <Th center width={84}>Admin</Th>
+                  <Th center width={110}>Welcome team</Th>
+                  <Th>Teacher</Th>
+                  <Th width={96}><button type="button" className="ur-sorth" onClick={() => toggleSort('source')}>Source{arrow('source')}</button></Th>
+                  <Th width={130}><button type="button" className="ur-sorth" onClick={() => toggleSort('lastSignIn')}>Last sign-in{arrow('lastSignIn')}</button></Th>
+                  <Th width={108} />
+                </tr>
+              </thead>
+              <tbody>
+                {visibleRows.map((row) => {
+                  const mine = isSelf(row);
+                  return (
+                    <tr
+                      key={row.key}
+                      className="ur-row"
+                      data-testid="sevak-row"
+                      onClick={() => openDrawer(row, 'view')}
+                      style={{ borderTop: '1px solid var(--line)' }}
+                    >
+                      <Td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontWeight: 600, color: 'var(--ink)' }}>{row.name || '(no name)'}</span>
+                          {mine && <YouTag />}
+                        </div>
+                      </Td>
+                      <Td>
+                        <span style={{ fontSize: 13, color: 'var(--body-text)', fontFamily: 'var(--mono)' }}>{row.contact || '(no contact)'}</span>
+                      </Td>
+                      <Td center><CheckCell on={row.roles.includes('admin')} bg="var(--accentSoft)" fg="var(--accentDeep)" /></Td>
+                      <Td center><CheckCell on={row.roles.includes('welcome-team')} bg="var(--info-soft)" fg="var(--info-deep)" /></Td>
+                      <Td>{row.isTeacher ? <TeacherBadge levels={row.teacherLevels} /> : <Dash />}</Td>
+                      <Td><SourcePill source={row.source} /></Td>
+                      <Td>
+                        <span style={{ fontSize: 13, color: row.lastSignIn ? 'var(--body-text)' : 'var(--muted)', fontVariantNumeric: 'tabular-nums' }}>
+                          {lastSignInLabel(row.lastSignIn)}
+                        </span>
+                      </Td>
+                      <Td right>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openDrawer(row, 'edit');
+                          }}
+                          style={editRolesBtn}
+                        >
+                          Edit roles
+                        </button>
+                      </Td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
+          {visibleRows.length === 0 && (
+            <div style={{ padding: '40px 22px', textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>
+              No sevaks match. Adjust the filter or search.
+            </div>
+          )}
+        </div>
+      </div>
 
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
-            <button
-              type="button"
-              onClick={save}
-              disabled={saving}
-              aria-label={`Save role changes for ${row.name}`}
-              style={{ ...grantBtn, minHeight: btnMinHeight }}
-            >
-              {saving ? 'Saving…' : 'Save changes'}
-            </button>
-            <button
-              type="button"
-              onClick={cancelEdit}
-              disabled={saving}
-              aria-label={`Cancel editing roles for ${row.name}`}
-              style={{ ...secondaryBtn, minHeight: btnMinHeight }}
-            >
-              Cancel
-            </button>
+      {/* ── Mobile: toolbar + cards ──────────────────────────────────────── */}
+      <div className="block md:hidden">
+        <div className="col" style={{ gap: 12 }}>
+          <button type="button" className="btn btn--p" onClick={() => setAddOpen(true)} style={{ width: '100%', minHeight: 46 }}>
+            <SetuIcon.plus aria-hidden="true" /> Add sevak role
+          </button>
+          <input
+            className="input"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search name or contact…"
+            aria-label="Search sevaks"
+            style={{ minHeight: 46 }}
+          />
+          <div className="no-scrollbar" style={{ display: 'flex', gap: 7, overflowX: 'auto', paddingBottom: 2 }}>
+            {FILTER_CHIPS.map((c) => (
+              <Chip key={c.label} active={roleFilter === c.key} label={c.label} onClick={() => setRoleFilter(c.key)} mobile />
+            ))}
           </div>
-          {row.isTeacher && (
-            <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 10, lineHeight: 1.5 }}>
-              Teacher status is managed at <code>/admin/levels</code> and isn&apos;t editable here.
-            </p>
+          <span style={{ fontSize: 12, color: 'var(--muted)' }}>{visibleRows.length} shown</span>
+        </div>
+
+        <div className="col" style={{ gap: 10, marginTop: 14 }}>
+          {visibleRows.length === 0 ? (
+            <div style={{ padding: '36px 22px', textAlign: 'center', color: 'var(--muted)', fontSize: 13, background: 'var(--surface)', border: '1px dashed var(--line2)', borderRadius: 'var(--radius)' }}>
+              No sevaks match. Adjust the filter or search.
+            </div>
+          ) : (
+            visibleRows.map((row) => {
+              const mine = isSelf(row);
+              return (
+                <div
+                  key={row.key}
+                  data-testid="sevak-card"
+                  onClick={() => openDrawer(row, 'view')}
+                  style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radius)', padding: 14, cursor: 'pointer' }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--ink)', wordBreak: 'break-word' }}>{row.name || '(no name)'}</span>
+                    {mine && <YouTag />}
+                  </div>
+                  <div style={{ fontSize: 12.5, color: 'var(--body-text)', fontFamily: 'var(--mono)', marginTop: 3, wordBreak: 'break-all' }}>
+                    {row.contact || '(no contact)'}
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
+                    {row.roles.map((r) => <RoleChip key={r} role={r} />)}
+                    {row.isTeacher && <TeacherBadge levels={row.teacherLevels} />}
+                    {row.roles.length === 0 && !row.isTeacher && <span style={{ fontSize: 11, color: 'var(--muted)' }}>No roles</span>}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--line)' }}>
+                    <span style={{ fontSize: 12, color: 'var(--muted)' }}>
+                      {SOURCE_LABEL[row.source]} · {lastSignInLabel(row.lastSignIn)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openDrawer(row, 'edit');
+                      }}
+                      style={{ ...editRolesBtn, minHeight: 40 }}
+                    >
+                      Edit roles
+                    </button>
+                  </div>
+                </div>
+              );
+            })
           )}
         </div>
-      ) : (
-        // ── READ-ONLY VIEW: no grant/revoke exposed; a single Edit button ──
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12, alignItems: 'center' }}>
-          <button
-            type="button"
-            onClick={enterEdit}
-            aria-label={`Edit roles for ${row.name}`}
-            aria-expanded={editing}
-            aria-controls={editFormId}
-            style={{ ...secondaryBtn, minHeight: btnMinHeight }}
-          >
-            Edit roles
-          </button>
-          {row.isTeacher && (
-            <Link href="/admin/levels" style={{ ...textLinkBtn, minHeight: btnMinHeight }}>
-              Manage as teacher →
-            </Link>
+      </div>
+
+      {/* ── Roles reference (collapsible) ────────────────────────────────── */}
+      <div style={{ marginTop: 24 }}>
+        <button
+          type="button"
+          onClick={() => setRefOpen((v) => !v)}
+          aria-expanded={refOpen}
+          aria-controls={refPanelId}
+          style={{ background: 'transparent', border: 'none', padding: 0, fontSize: 13, fontWeight: 600, color: 'var(--accentDeep)', cursor: 'pointer', fontFamily: 'var(--body)' }}
+        >
+          {refOpen ? 'Roles reference ↑' : 'Roles reference ↓'}
+        </button>
+        <div id={refPanelId} hidden={!refOpen}>
+          {refOpen && (
+            <div className="card" style={{ padding: 22, marginTop: 12 }}>
+              <RolesReferencePanel />
+            </div>
           )}
-          {/* FIX #5: aria-expanded + aria-controls on the disclosure toggle */}
-          <button
-            type="button"
-            onClick={() => setExpanded((v) => !v)}
-            aria-expanded={expanded}
-            aria-controls={panelId}
-            style={{ ...textLinkBtn, minHeight: btnMinHeight }}
-          >
-            {expanded ? 'Hide access ↑' : 'What can they access? ↓'}
-          </button>
         </div>
+      </div>
+
+      {/* ── Detail / edit drawer ─────────────────────────────────────────── */}
+      {openRow && (
+        <>
+          <div className="ur-backdrop" onClick={closeDrawer} />
+          <div className="ur-drawer" role="dialog" aria-modal="true" data-testid="sevak-drawer">
+            <div style={{ padding: '18px 24px 30px' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 6 }}>
+                    {SOURCE_LABEL[openRow.source]} · {lastSignInLabel(openRow.lastSignIn) === 'Never' ? 'never signed in' : `last seen ${lastSignInLabel(openRow.lastSignIn)}`}
+                  </div>
+                  <h2 style={{ fontSize: 21, fontWeight: 600, margin: 0, lineHeight: 1.2, letterSpacing: '-0.01em', wordBreak: 'break-word' }}>
+                    {openRow.name || '(no name)'}
+                    {isSelf(openRow) && <span style={{ marginLeft: 8 }}><YouTag /></span>}
+                  </h2>
+                  <div style={{ fontSize: 13, color: 'var(--body-text)', fontFamily: 'var(--mono)', marginTop: 4, wordBreak: 'break-all' }}>
+                    {openRow.contact || '(no contact)'}
+                  </div>
+                </div>
+                <button type="button" onClick={closeDrawer} aria-label="Close" style={iconBtn}>
+                  <SetuIcon.x aria-hidden="true" />
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 14 }}>
+                {openRow.roles.map((r) => <RoleChip key={r} role={r} />)}
+                {openRow.isTeacher && <TeacherBadge levels={openRow.teacherLevels} />}
+                {openRow.roles.length === 0 && !openRow.isTeacher && <span style={{ fontSize: 11, color: 'var(--muted)' }}>No granted roles</span>}
+              </div>
+
+              {drawerMode === 'view' ? (
+                <>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 20, paddingTop: 20, borderTop: '1px solid var(--line)' }}>
+                    <button
+                      type="button"
+                      onClick={() => openDrawer(openRow, 'edit')}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'var(--accentSoft)', border: '1px solid var(--accent)', color: 'var(--accentDeep)', padding: '9px 15px', borderRadius: 'var(--radiusSm)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--body)' }}
+                    >
+                      Edit roles
+                    </button>
+                    {openRow.isTeacher && (
+                      <Link href="/admin/levels" style={{ display: 'inline-flex', alignItems: 'center', background: 'transparent', border: '1px solid var(--line)', color: 'var(--body-text)', padding: '9px 14px', borderRadius: 'var(--radiusSm)', fontSize: 13, fontWeight: 500, textDecoration: 'none' }}>
+                        Manage as teacher →
+                      </Link>
+                    )}
+                  </div>
+
+                  <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--muted)', marginTop: 24 }}>
+                    What can they access?
+                  </div>
+                  <AccessSections row={openRow} />
+                </>
+              ) : (
+                <div style={{ marginTop: 20, paddingTop: 20, borderTop: '1px solid var(--line)' }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 12 }}>
+                    Edit grantable roles
+                  </div>
+                  <div className="col" style={{ gap: 10 }}>
+                    {GRANTABLE_ROLES.map((role) => (
+                      <label
+                        key={role}
+                        style={{ display: 'flex', gap: 11, alignItems: 'flex-start', padding: 12, border: '1px solid var(--line)', borderRadius: 11, cursor: saving ? 'default' : 'pointer' }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={draft[role]}
+                          disabled={saving}
+                          onChange={(e) => setDraft((d) => ({ ...d, [role]: e.target.checked }))}
+                          style={{ width: 18, height: 18, marginTop: 1, accentColor: 'var(--accent)', flex: '0 0 auto' }}
+                        />
+                        <span>
+                          <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink)' }}>{ROLE_REFERENCE[role].label}</span>
+                          <span style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginTop: 2, lineHeight: 1.5 }}>{ROLE_REFERENCE[role].summary}</span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+                    <button type="button" className="btn btn--p" onClick={saveDraft} disabled={saving} style={{ minHeight: 42 }}>
+                      {saving ? 'Saving…' : 'Save changes'}
+                    </button>
+                    <button type="button" onClick={() => setDrawerMode('view')} disabled={saving} style={{ ...secondaryBtn, minHeight: 42 }}>
+                      Cancel
+                    </button>
+                  </div>
+                  <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 12, lineHeight: 1.5 }}>
+                    Changes apply at the person&apos;s next sign-in.
+                    {openRow.isTeacher && (
+                      <> Teacher status is managed at <code>/admin/levels</code> and isn&apos;t editable here.</>
+                    )}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
       )}
 
-      {/* FIX #5: matching id on the disclosure panel */}
-      <div id={panelId} hidden={editing || !expanded}>
-        {!editing && expanded && (
-          <div
-            style={{
-              marginTop: 12,
-              paddingTop: 12,
-              borderTop: '1px solid var(--line)',
-            }}
-          >
-            {accessRoles.length === 0 ? (
-              <p style={{ fontSize: 12, color: 'var(--muted)' }}>
-                No special access — derived family-role access only.
-              </p>
-            ) : (
-              accessRoles.map((r) => (
-                <div key={r} style={{ marginBottom: 10 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700 }}>{ROLE_REFERENCE[r].label}</div>
-                  <ul
-                    style={{
-                      margin: '4px 0 0',
-                      paddingLeft: 18,
-                      fontSize: 12,
-                      color: 'var(--body-text)',
-                      lineHeight: 1.5,
-                    }}
-                  >
-                    {ROLE_REFERENCE[r].grants.map((g, i) => (
-                      <li key={i}>{g}</li>
-                    ))}
-                  </ul>
-                </div>
-              ))
-            )}
-          </div>
-        )}
-      </div>
+      {/* ── Add dialog ───────────────────────────────────────────────────── */}
+      {addOpen && (
+        <AddDialog
+          onClose={() => setAddOpen(false)}
+          onGranted={() => {
+            refresh();
+            setAddOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }
 
-// Snapshot a row's current grantable roles into the checkbox draft shape.
-// noUncheckedIndexedAccess-safe: every GRANTABLE key is assigned explicitly.
-function snapshotRoles(row: SevakRow): Record<GrantableRole, boolean> {
-  return {
-    admin: row.roles.includes('admin'),
-    'welcome-team': row.roles.includes('welcome-team'),
-  };
+// ── Access sections (drawer view mode) ──────────────────────────────────────
+function AccessSections({ row }: { row: SevakRow }) {
+  const accessRoles = [...row.roles, ...(row.isTeacher ? (['teacher'] as const) : [])];
+  if (accessRoles.length === 0) {
+    return (
+      <p style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 10, lineHeight: 1.5 }}>
+        No special access — derived family-role access only.
+      </p>
+    );
+  }
+  return (
+    <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {accessRoles.map((r) => (
+        <div key={r}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>{ROLE_REFERENCE[r].label}</div>
+          <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2, lineHeight: 1.5 }}>{ROLE_REFERENCE[r].summary}</div>
+          <ul style={{ margin: '8px 0 0', paddingLeft: 18, fontSize: 12.5, color: 'var(--body-text)', lineHeight: 1.6 }}>
+            {ROLE_REFERENCE[r].grants.map((g, i) => <li key={i}>{g}</li>)}
+          </ul>
+        </div>
+      ))}
+    </div>
+  );
 }
 
-// ─── Add-sevak form ────────────────────────────────────────────────────────
-
-function AddSevakForm({ onGranted }: { onGranted: () => void }) {
+// ── Add dialog ──────────────────────────────────────────────────────────────
+function AddDialog({ onClose, onGranted }: { onClose: () => void; onGranted: () => void }) {
   const [contact, setContact] = useState('');
   const [role, setRole] = useState<GrantableRole>('welcome-team');
   const [pending, startTransition] = useTransition();
-  // FIX #5: stable ids for label→input association.
   const contactId = useId();
   const roleId = useId();
+  const titleId = useId();
 
   function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const trimmed = contact.trim();
-    if (!trimmed) {
-      toast.error('Enter a registered portal email');
-      return;
-    }
-    if (!trimmed.includes('@')) {
+    if (!trimmed || !trimmed.includes('@')) {
       toast.error('Enter a valid registered portal email');
       return;
     }
@@ -532,412 +567,177 @@ function AddSevakForm({ onGranted }: { onGranted: () => void }) {
   }
 
   return (
-    <form onSubmit={onSubmit}>
-      <div className="field" style={{ marginBottom: 12 }}>
-        {/* FIX #5: htmlFor tied to input id */}
-        <label htmlFor={contactId}>Registered portal email</label>
-        <input
-          id={contactId}
-          type="email"
-          className="input"
-          value={contact}
-          onChange={(e) => setContact(e.target.value)}
-          placeholder="person@example.com"
-          autoComplete="email"
-          disabled={pending}
-          required
-        />
-      </div>
-      <div className="field" style={{ marginBottom: 14 }}>
-        {/* Segmented control instead of a native <select>: there are only two
-            grantable roles, and a native select's popup mis-anchors inside the
-            position:fixed mobile sheet. This renders identically on desktop and
-            mobile with no detached popup. */}
-        <label id={roleId}>Role</label>
-        <div
-          role="radiogroup"
-          aria-labelledby={roleId}
-          style={{ display: 'flex', gap: 8, marginTop: 6 }}
-        >
-          {([
-            ['welcome-team', 'Welcome team'],
-            ['admin', 'Admin'],
-          ] as const).map(([value, label]) => {
-            const active = role === value;
-            return (
-              <button
-                key={value}
-                type="button"
-                role="radio"
-                aria-checked={active}
-                onClick={() => setRole(value)}
-                disabled={pending}
-                className="focus-ring"
-                style={{
-                  flex: 1,
-                  minHeight: 44,
-                  borderRadius: 'var(--radius)',
-                  border: `1px solid ${active ? 'var(--accent)' : 'var(--line)'}`,
-                  background: active ? 'var(--accentSoft)' : 'var(--surface)',
-                  color: active ? 'var(--accentDeep)' : 'var(--body-text)',
-                  fontWeight: 600,
-                  fontSize: 14,
-                  fontFamily: 'var(--body)',
-                  cursor: pending ? 'default' : 'pointer',
-                }}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-      <button type="submit" className="btn btn--p btn--block" disabled={pending}>
-        {pending ? 'Granting…' : 'Grant role →'}
-      </button>
-      <p style={{ marginTop: 12, fontSize: 12, color: 'var(--muted)', lineHeight: 1.55 }}>
-        Use the email they already registered with in the portal. New sevaks must register before a
-        role can be granted.
-      </p>
-    </form>
-  );
-}
-
-function DesktopDialog({
-  title,
-  onClose,
-  children,
-}: {
-  title: string;
-  onClose: () => void;
-  children: React.ReactNode;
-}) {
-  const titleId = useId();
-  return (
-    <div
-      className="csp"
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 60,
-        background: 'rgba(15, 23, 42, .42)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 24,
-      }}
-      onClick={onClose}
-    >
+    <div className="csp" onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(15,26,34,.42)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
         onClick={(e) => e.stopPropagation()}
-        style={{
-          width: 'min(100%, 520px)',
-          maxHeight: 'calc(100dvh - 48px)',
-          overflowY: 'auto',
-          background: 'var(--surface)',
-          border: '1px solid var(--line)',
-          borderRadius: 'var(--radius)',
-          padding: 22,
-          boxShadow: '0 24px 80px rgba(15, 23, 42, .22)',
-        }}
+        style={{ width: 'min(100%, 512px)', maxHeight: 'calc(100dvh - 40px)', overflowY: 'auto', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radius)', padding: 24, boxShadow: '0 24px 80px rgba(15,26,34,.22)' }}
       >
-        <div className="between" style={{ marginBottom: 18, gap: 12 }}>
-          <h2 id={titleId} style={{ fontSize: 18, fontWeight: 600 }}>
-            {title}
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              minHeight: 40,
-              minWidth: 40,
-              border: '1px solid var(--line)',
-              borderRadius: 'var(--radiusSm)',
-              background: 'var(--surface)',
-              color: 'var(--muted)',
-            }}
-          >
+        <div className="between" style={{ marginBottom: 18 }}>
+          <h2 id={titleId} style={{ fontSize: 18, fontWeight: 600 }}>Add sevak role</h2>
+          <button type="button" onClick={onClose} aria-label="Close" style={iconBtn}>
             <SetuIcon.x aria-hidden="true" />
           </button>
         </div>
-        {children}
-      </div>
-    </div>
-  );
-}
-
-// ─── Desktop collapsible section ──────────────────────────────────────────
-
-function DesktopDisclosure({
-  heading,
-  children,
-  style,
-}: {
-  heading: string;
-  children: React.ReactNode;
-  style?: React.CSSProperties;
-}) {
-  const [open, setOpen] = useState(false);
-  const panelId = useId();
-  return (
-    <div style={style}>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        aria-controls={panelId}
-        style={{
-          background: 'transparent',
-          border: 'none',
-          padding: 0,
-          fontSize: 13,
-          fontWeight: 600,
-          color: 'var(--accent)',
-          cursor: 'pointer',
-          fontFamily: 'var(--body)',
-          letterSpacing: '.01em',
-        }}
-      >
-        {heading}
-      </button>
-      <div id={panelId} hidden={!open}>
-        {open && (
-          <div
-            className="card"
-            style={{ padding: 22, marginTop: 12 }}
-          >
-            {children}
+        <form onSubmit={onSubmit}>
+          <div className="field" style={{ marginBottom: 14 }}>
+            <label htmlFor={contactId}>Registered portal email</label>
+            <input id={contactId} type="email" className="input" value={contact} onChange={(e) => setContact(e.target.value)} placeholder="person@example.com" autoComplete="email" disabled={pending} required />
           </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ─── Mobile layout ─────────────────────────────────────────────────────────
-
-function MobileSevaks({
-  rows,
-  roleFilter,
-  onRoleFilter,
-  query,
-  onQuery,
-  onChanged,
-}: {
-  rows: SevakRow[];
-  roleFilter: GrantableRole | 'teacher' | null;
-  onRoleFilter: (r: GrantableRole | 'teacher' | null) => void;
-  query: string;
-  onQuery: (q: string) => void;
-  onChanged: () => void;
-}) {
-  const [sheet, setSheet] = useState<null | 'add' | 'reference'>(null);
-
-  return (
-    <div className="col" style={{ gap: 14 }}>
-      <div style={{ display: 'flex', gap: 8 }}>
-        <button
-          type="button"
-          className="btn btn--p"
-          style={{ flex: 1, minHeight: 44 }}
-          onClick={() => setSheet('add')}
-        >
-          <SetuIcon.plus aria-hidden="true" />
-          Add sevak role
-        </button>
-        <button
-          type="button"
-          className="btn btn--g"
-          style={{ minHeight: 44, padding: '0 16px' }}
-          onClick={() => setSheet('reference')}
-        >
-          Roles
-        </button>
-      </div>
-
-      <input
-        className="input"
-        value={query}
-        onChange={(e) => onQuery(e.target.value)}
-        placeholder="Search name or contact…"
-        aria-label="Search sevaks"
-        style={{ minHeight: 44 }}
-      />
-
-      <div className="no-scrollbar" style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2 }}>
-        {FILTER_CHIPS.map((c) => {
-          const active = roleFilter === c.key;
-          return (
-            <button
-              key={c.label}
-              type="button"
-              onClick={() => onRoleFilter(c.key)}
-              style={{
-                background: active ? 'var(--accent)' : 'transparent',
-                color: active ? '#fff' : 'var(--body-text)',
-                border: `1px solid ${active ? 'var(--accent)' : 'var(--line)'}`,
-                padding: '0 16px',
-                minHeight: 44,
-                borderRadius: 999,
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-                flex: '0 0 auto',
-                fontFamily: 'var(--body)',
-              }}
-            >
-              {c.label}
-            </button>
-          );
-        })}
-      </div>
-
-      {rows.length === 0 ? (
-        <EmptyState />
-      ) : (
-        <div className="col" style={{ gap: 10 }}>
-          {rows.map((s) => (
-            <SevakCard key={s.key} row={s} onChanged={onChanged} mobile />
-          ))}
-        </div>
-      )}
-
-      {sheet !== null && (
-        <MobileSheet
-          title={sheet === 'add' ? 'Add sevak role' : 'Roles reference'}
-          onClose={() => setSheet(null)}
-        >
-          {sheet === 'add' ? (
-            <AddSevakForm
-              onGranted={() => {
-                onChanged();
-                setSheet(null);
-              }}
-            />
-          ) : (
-            <RolesReferencePanel />
-          )}
-        </MobileSheet>
-      )}
-    </div>
-  );
-}
-
-function MobileSheet({
-  title,
-  onClose,
-  children,
-}: {
-  title: string;
-  onClose: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <div
-      className="csp"
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 60,
-        background: 'rgba(0,0,0,.4)',
-        display: 'flex',
-        alignItems: 'flex-end',
-      }}
-      onClick={onClose}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          width: '100%',
-          maxHeight: '85dvh',
-          overflowY: 'auto',
-          // FIX #1: was var(--bg, #fff) which resolves to page-grey inside .csp.
-          // var(--surface) is the correct card/sheet white in the Setu palette.
-          background: 'var(--surface)',
-          borderTopLeftRadius: 18,
-          borderTopRightRadius: 18,
-          padding: '18px 18px 28px',
-        }}
-      >
-        <div className="between" style={{ marginBottom: 14 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 600 }}>{title}</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              fontSize: 22,
-              lineHeight: 1,
-              color: 'var(--muted)',
-              cursor: 'pointer',
-              minHeight: 44,
-              minWidth: 44,
-            }}
-            aria-label="Close"
-          >
-            ×
+          <div className="field" style={{ marginBottom: 18 }}>
+            <label id={roleId}>Role</label>
+            <div role="radiogroup" aria-labelledby={roleId} style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+              {([['welcome-team', 'Welcome team'], ['admin', 'Admin']] as const).map(([value, label]) => {
+                const active = role === value;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => setRole(value)}
+                    disabled={pending}
+                    className="focus-ring"
+                    style={{ flex: 1, minHeight: 46, borderRadius: 'var(--radiusSm)', border: `1px solid ${active ? 'var(--accent)' : 'var(--line)'}`, background: active ? 'var(--accentSoft)' : 'var(--surface)', color: active ? 'var(--accentDeep)' : 'var(--body-text)', fontWeight: 600, fontSize: 14, fontFamily: 'var(--body)', cursor: pending ? 'default' : 'pointer' }}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <button type="submit" className="btn btn--p btn--block" disabled={pending} style={{ minHeight: 48 }}>
+            {pending ? 'Granting…' : 'Grant role →'}
           </button>
-        </div>
-        {children}
+          <p style={{ marginTop: 12, fontSize: 12, color: 'var(--muted)', lineHeight: 1.55 }}>
+            Use the email they already registered with in the portal. New sevaks must register before a role can be granted.
+          </p>
+        </form>
       </div>
     </div>
   );
 }
 
-// ─── Shared styles ─────────────────────────────────────────────────────────
+// ── Small presentational leaves ─────────────────────────────────────────────
+function Chip({ active, label, onClick, mobile = false }: { active: boolean; label: string; onClick: () => void; mobile?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        background: active ? 'var(--accent)' : 'transparent',
+        color: active ? '#fff' : 'var(--body-text)',
+        border: `1px solid ${active ? 'var(--accent)' : 'var(--line)'}`,
+        padding: mobile ? '0 16px' : '7px 15px',
+        minHeight: mobile ? 44 : 36,
+        borderRadius: 999,
+        fontSize: mobile ? 13 : 12,
+        fontWeight: 600,
+        cursor: 'pointer',
+        whiteSpace: 'nowrap',
+        flex: mobile ? '0 0 auto' : undefined,
+        fontFamily: 'var(--body)',
+      }}
+    >
+      {label}
+    </button>
+  );
+}
 
-const grantBtn: React.CSSProperties = {
-  background: 'var(--accent)',
-  border: '1px solid var(--accent)',
-  color: '#fff',
-  padding: '8px 14px',
-  minHeight: 36, // overridden per-card via btnMinHeight
+function Th({ children, center = false, right = false, width }: { children?: React.ReactNode; center?: boolean; right?: boolean; width?: number }) {
+  return (
+    <th
+      style={{
+        position: 'sticky',
+        top: 0,
+        background: 'var(--surface2)',
+        textAlign: center ? 'center' : right ? 'right' : 'left',
+        padding: '13px 16px',
+        borderBottom: '1px solid var(--line)',
+        fontSize: 11,
+        fontWeight: 600,
+        letterSpacing: '.08em',
+        textTransform: 'uppercase',
+        color: 'var(--muted)',
+        zIndex: 2,
+        ...(width ? { width } : {}),
+      }}
+    >
+      {children}
+    </th>
+  );
+}
+
+function Td({ children, center = false, right = false }: { children?: React.ReactNode; center?: boolean; right?: boolean }) {
+  return <td style={{ padding: '13px 16px', textAlign: center ? 'center' : right ? 'right' : 'left', verticalAlign: 'middle' }}>{children}</td>;
+}
+
+function CheckCell({ on, bg, fg }: { on: boolean; bg: string; fg: string }) {
+  if (!on) return <Dash />;
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 26, borderRadius: '50%', background: bg, color: fg }}>
+      <SetuIcon.check aria-hidden="true" />
+    </span>
+  );
+}
+
+function Dash() {
+  return <span style={{ color: 'var(--line2)' }}>–</span>;
+}
+
+function SourcePill({ source }: { source: SevakRow['source'] }) {
+  return (
+    <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--body-text)', background: 'var(--surface2)', border: '1px solid var(--line)', borderRadius: 6, padding: '2px 8px', whiteSpace: 'nowrap' }}>
+      {SOURCE_LABEL[source]}
+    </span>
+  );
+}
+
+function YouTag() {
+  return (
+    <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--muted)', border: '1px solid var(--line)', borderRadius: 5, padding: '1px 6px' }}>
+      You
+    </span>
+  );
+}
+
+const editRolesBtn: React.CSSProperties = {
+  background: 'var(--surface)',
+  border: '1px solid var(--line)',
+  color: 'var(--body-text)',
+  padding: '6px 12px',
   borderRadius: 'var(--radiusSm)',
   fontSize: 12,
   fontWeight: 600,
   cursor: 'pointer',
   fontFamily: 'var(--body)',
+  whiteSpace: 'nowrap',
 };
 
-// Neutral outlined button — used for "Edit roles" (read-only view) and
-// "Cancel" (edit mode). Lower emphasis than the accent-filled primary so the
-// destructive-feeling action is never the visually loudest control.
 const secondaryBtn: React.CSSProperties = {
   background: 'var(--surface)',
   border: '1px solid var(--line)',
   color: 'var(--body-text)',
-  padding: '8px 14px',
-  minHeight: 36, // overridden per-card via btnMinHeight
+  padding: '10px 16px',
   borderRadius: 'var(--radiusSm)',
-  fontSize: 12,
+  fontSize: 13,
   fontWeight: 600,
   cursor: 'pointer',
   fontFamily: 'var(--body)',
 };
 
-// FIX #3: secondary actions use a text-link style — no border, muted colour,
-// lower visual weight than the primary grant/revoke pair.
-const textLinkBtn: React.CSSProperties = {
-  background: 'transparent',
-  border: 'none',
-  color: 'var(--muted)',
-  padding: '6px 4px',
-  minHeight: 36,
-  borderRadius: 'var(--radiusSm)',
-  fontSize: 12,
-  fontWeight: 500,
-  cursor: 'pointer',
-  fontFamily: 'var(--body)',
-  textDecoration: 'none',
+const iconBtn: React.CSSProperties = {
+  flex: '0 0 auto',
   display: 'inline-flex',
   alignItems: 'center',
+  justifyContent: 'center',
+  width: 36,
+  height: 36,
+  border: '1px solid var(--line)',
+  borderRadius: 'var(--radiusSm)',
+  background: 'var(--surface)',
+  color: 'var(--muted)',
+  cursor: 'pointer',
 };

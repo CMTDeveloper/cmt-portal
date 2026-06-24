@@ -167,8 +167,11 @@ beforeEach(() => {
   // listUsers → one non-family admin (Chitra) + one legacy claim on Asha's contact.
   mockListUsers.mockResolvedValue({
     users: [
-      { uid: 'uid-chitra@example.com', email: 'chitra@example.com', customClaims: { role: 'admin', email: 'chitra@example.com' } },
-      { uid: 'uid-asha@example.com', email: 'asha@example.com', customClaims: { role: 'admin', email: 'asha@example.com' } },
+      { uid: 'uid-chitra@example.com', email: 'chitra@example.com', customClaims: { role: 'admin', email: 'chitra@example.com' }, metadata: { lastSignInTime: '2026-06-21T09:00:00.000Z' } },
+      // Asha's canonical family uid IS uid-asha@example.com here (mocked sha256
+      // is `uid-${contact}`), so her family row resolves last-sign-in from this
+      // auth user's metadata — covering the family-contact-derived path.
+      { uid: 'uid-asha@example.com', email: 'asha@example.com', customClaims: { role: 'admin', email: 'asha@example.com' }, metadata: { lastSignInTime: '2026-06-20T10:00:00.000Z' } },
     ],
     pageToken: undefined,
   });
@@ -220,6 +223,17 @@ describe('listSevaks — merged + deduped', () => {
 
     // the legacy claim on asha@example.com did NOT add a separate uid-asha row
     expect(byKey.has('uid-asha@example.com')).toBe(false);
+  });
+
+  it('resolves last sign-in from the auth metadata (family-contact + auth-claim paths), null when never', async () => {
+    const byKey = new Map((await listSevaks()).map((s) => [s.key, s]));
+    // Asha is a FAMILY member — her last sign-in resolves from the auth user at
+    // her canonical contact uid (the new uidOf-based lookup).
+    expect(byKey.get('CMT-FAM1-01')!.lastSignIn).toBe('2026-06-20T10:00:00.000Z');
+    // Chitra is a standalone auth-claim sevak — resolved directly by her uid.
+    expect(byKey.get('uid-chitra@example.com')!.lastSignIn).toBe('2026-06-21T09:00:00.000Z');
+    // Devi is a standalone teacher with no auth user → never signed in.
+    expect(byKey.get('TCH-DEVI')!.lastSignIn).toBeNull();
   });
 
   it('sorts rows by name', async () => {

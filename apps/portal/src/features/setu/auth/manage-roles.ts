@@ -332,10 +332,17 @@ export async function listSevaks(): Promise<SevakRow[]> {
   }
 
   // 3. Auth claims — admins/welcome-team on the legacy non-family path.
+  // This pass also enumerates EVERY auth user (family OTP users included), so we
+  // capture each one's last sign-in here — any row then resolves its person's
+  // most recent sign-in by their canonical uid with no extra read.
+  const lastSignInByUid = new Map<string, string>();
   let token: string | undefined;
   do {
     const page = await auth.listUsers(1000, token);
     for (const u of page.users) {
+      if (u.metadata?.lastSignInTime) {
+        lastSignInByUid.set(u.uid, new Date(u.metadata.lastSignInTime).toISOString());
+      }
       const claims = (u.customClaims as ClaimsShape | undefined) ?? null;
       const claimRoles: GrantableRole[] = [];
       if (hasCapability(claims, 'admin')) claimRoles.push('admin');
@@ -386,18 +393,25 @@ export async function listSevaks(): Promise<SevakRow[]> {
   } while (token);
 
   const ROLE_ORDER: GrantableRole[] = ['admin', 'welcome-team'];
-  const out: SevakRow[] = [...rows.values()].map((r) => ({
-    key: r.key,
-    mid: r.mid,
-    fid: r.fid,
-    uid: r.uid,
-    name: r.name || r.contact || r.key,
-    contact: r.contact,
-    roles: ROLE_ORDER.filter((role) => r.roles.has(role)),
-    isTeacher: r.isTeacher,
-    teacherLevels: r.teacherLevels,
-    source: r.source,
-  }));
+  const out: SevakRow[] = [...rows.values()].map((r) => {
+    // The person's auth uid: a standalone auth-claim sevak carries it directly;
+    // a family member's is the canonical sha256(normalizedContact) — the same
+    // uid OTP sign-in lands on — so a contact resolves their last sign-in.
+    const candidateUid = r.uid ?? (r.contact ? uidOf(detectType(r.contact), r.contact) : null);
+    return {
+      key: r.key,
+      mid: r.mid,
+      fid: r.fid,
+      uid: r.uid,
+      name: r.name || r.contact || r.key,
+      contact: r.contact,
+      roles: ROLE_ORDER.filter((role) => r.roles.has(role)),
+      isTeacher: r.isTeacher,
+      teacherLevels: r.teacherLevels,
+      source: r.source,
+      lastSignIn: candidateUid ? (lastSignInByUid.get(candidateUid) ?? null) : null,
+    };
+  });
 
   out.sort((a, b) => a.name.localeCompare(b.name));
   return out;

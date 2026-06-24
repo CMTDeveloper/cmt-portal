@@ -19,6 +19,7 @@ export const SevakRowSchema = z.object({
   isTeacher: z.boolean(),
   teacherLevels: z.array(z.string()),
   source: z.enum(['family', 'staff']),
+  lastSignIn: z.string().nullable(), // ISO of the person's most recent auth sign-in; null = never
 });
 export type SevakRow = z.infer<typeof SevakRowSchema>;
 
