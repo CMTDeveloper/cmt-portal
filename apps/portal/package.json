@@ -33,6 +33,7 @@
     "seed:donation-periods": "tsx --env-file=.env.local scripts/seed-donation-periods.ts",
     "seed:bala-vihar-levels": "tsx --env-file=.env.local scripts/seed-bala-vihar-levels.ts",
     "seed:bala-vihar-calendar": "tsx --env-file=.env.local scripts/seed-bala-vihar-calendar.ts",
+    "seed:year-switcher-fixture": "tsx --env-file=.env.local scripts/seed-year-switcher-fixture.ts",
     "backfill:legacy-sid": "tsx --env-file=.env.local scripts/backfill-legacy-sid.ts",
     "backfill:bv-enrollments": "tsx --env-file=.env.local scripts/backfill-bv-enrollments.ts",
     "backfill:birth-months": "tsx --env-file=.env.local scripts/backfill-birth-months.ts",
