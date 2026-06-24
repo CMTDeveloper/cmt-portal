@@ -33,6 +33,13 @@ admins read **past years** read-only, and close the latent bug where copied
    dated, SHA-keyed `apps/portal/docs/MOBILE_API_CHANGELOG.md` entry** (the mobile
    repo's `contract-sync` cron consumes it). Admin-only switcher/copy/Activate
    routes are `/api/admin/*` — web-only, no mirror.
+5. **`?year=` allowed set = derived from data** — the selectable years come from
+   the existing offering `termLabel`s (only years that actually have data); an
+   out-of-set/absent param falls back to the live year.
+6. **Past-year writes are hard-rejected** at the write route via a shared
+   `assertLiveYear` guard (not merely hidden in the UI).
+7. **Seva copy is selective + date-deferrable** — see §4 (per-item pick, +364d
+   suggested date, or "decide date later" → unscheduled draft).
 
 ## The model
 
@@ -89,9 +96,16 @@ all of them (start fresh). Nothing is automatic.
 - **Class calendar** — the existing Phase-1 **Copy calendar** (`cloneCalendarYear`).
 - **Prasad config** — new: clone `prasadConfig/{oid}` (cap per Sunday) to the
   next-year oids (pid == offering oid).
-- **Seva opportunities** — new: clone each `seva_opportunities` doc into the new
-  `sevaYear`, **date shifted +364 days** (same weekday — admin re-dates the
-  one-off events as needed). Idempotent on a deterministic target id.
+- **Seva opportunities** — new, **selective** (seva is mostly decided fresh each
+  year, so this is a "pull a few recurring items forward" tool, not a bulk copy):
+  the admin picks which of last year's `seva_opportunities` to bring into the new
+  `sevaYear`. Each copied item defaults its `date` to **+364 days** (same weekday)
+  as a suggestion the admin can keep or change; or the admin marks **"decide date
+  later"**, which copies the item as an **unscheduled draft** — hidden from
+  families until the admin sets a real date and opens it. (Plan resolves the
+  draft representation — an additive `unscheduled`/`draft` state vs a nullable
+  `date` — with the schema-read-safety + mobile-contract audit; the family seva
+  read + `GET /api/setu/seva/opportunities` must keep excluding drafts.)
 - **Teacher pre-fill** — new, **opt-in**: copy each level's `teacherRefs` into the
   matching next-year level (today `startNewYear` deliberately resets them to
   empty). Never silently re-assigns.
@@ -156,12 +170,11 @@ covers `dashboard.schoolYear` + the calendar scoping.
 
 ## Open questions for the plan
 
-- The exact `?year=` allowed set + validation (derive from offering `termLabel`s
-  vs a fixed N-year window around live).
 - Whether the switcher is one shared shell control vs rendered per-surface, and
   exactly where the "Preparing/Past" strip renders.
-- Seva-copy date handling — confirm **+364 days** (same weekday) vs carry +1
-  calendar year vs blank-for-admin-to-set.
-- Past-year write-rejection — a shared `assertLiveYear` guard vs per-route checks.
+- The seva-copy **draft representation** for "decide date later" — an additive
+  `unscheduled`/`draft` state vs a nullable `date` — chosen with the
+  schema-read-safety + mobile-contract audit (family reads + `GET /api/setu/seva/
+  opportunities` must exclude drafts).
 - Whether the plan should internally sequence into sub-slices (foundation → copies
   → history) even though it's one spec/cycle.
