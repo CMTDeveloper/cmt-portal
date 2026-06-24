@@ -112,6 +112,19 @@ describe('SevakManager — edit-then-save workflow', () => {
     expect(within(dialog).getByLabelText('Registered portal email')).toBeTruthy();
   });
 
+  it('shows a grant error INLINE in the Add dialog, never as a corner toast', async () => {
+    mockGrant.mockRejectedValue(new Error('registered-user-required'));
+    const user = userEvent.setup();
+    renderMgr([PLAIN_ADMIN]);
+    await user.click(within(desktop()).getByRole('button', { name: 'Add sevak role' }));
+    const dialog = screen.getByRole('dialog', { name: 'Add sevak role' });
+    await user.type(within(dialog).getByLabelText('Registered portal email'), '222@gmail.com');
+    await user.click(within(dialog).getByRole('button', { name: /Grant role/ }));
+    const alert = await within(dialog).findByRole('alert');
+    expect(alert.textContent).toContain('This email is not registered in the portal');
+    expect(toastMock.error).not.toHaveBeenCalled();
+  });
+
   it('a row click opens a read-only drawer — no checkboxes, just an Edit roles button', async () => {
     const user = userEvent.setup();
     renderMgr([PLAIN_ADMIN]);
@@ -174,15 +187,17 @@ describe('SevakManager — edit-then-save workflow', () => {
     expect(within(drawer()).getByRole('button', { name: 'Edit roles' })).toBeTruthy();
   });
 
-  it('surfaces the last-admin 409 as an error toast and reloads state', async () => {
+  it('surfaces the last-admin 409 as an INLINE error (not a corner toast) and reloads state', async () => {
     mockRevoke.mockRejectedValue(new Error('last-admin'));
     renderMgr([PLAIN_ADMIN]);
     const { user, d } = await openEdit('Staff Person');
     await user.click(d.getByRole('checkbox', { name: /^Admin/ }));
     await user.click(d.getByRole('button', { name: 'Save changes' }));
     expect(mockRevoke).toHaveBeenCalledWith({ contact: 'staff@example.com', role: 'admin' });
-    await within(drawer()).findByRole('button', { name: 'Save changes' });
-    expect(toastMock.error).toHaveBeenCalledWith('Cannot revoke the last admin — grant another admin first.');
+    // The error shows inline in the drawer (role=alert), never as a toast.
+    const alert = await within(drawer()).findByRole('alert');
+    expect(alert.textContent).toContain('Cannot revoke the last admin — grant another admin first.');
+    expect(toastMock.error).not.toHaveBeenCalled();
     expect(mockList).toHaveBeenCalled();
   });
 });

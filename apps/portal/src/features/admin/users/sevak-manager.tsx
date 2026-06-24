@@ -19,8 +19,8 @@ export interface SelfIdentity {
 }
 
 // Maps API error codes (thrown by the client wrappers) to operator-friendly
-// toast copy. Falls back to the raw code for anything unmapped.
-function toastError(code: string, fallback: string) {
+// copy, shown inline next to the action (not as a disembodied corner toast).
+function errorMessage(code: string, fallback: string): string {
   const map: Record<string, string> = {
     'last-admin': 'Cannot revoke the last admin — grant another admin first.',
     'self-lockout': 'You cannot revoke your own admin role.',
@@ -29,7 +29,37 @@ function toastError(code: string, fallback: string) {
     'registered-user-required':
       'This email is not registered in the portal. Ask the sevak to register first.',
   };
-  toast.error(map[code] ?? fallback);
+  return map[code] ?? fallback;
+}
+
+/** Inline error banner — styled in Setu tokens, sits with the action it explains. */
+function InlineError({ children, style, id }: { children: React.ReactNode; style?: React.CSSProperties; id?: string }) {
+  return (
+    <div
+      {...(id ? { id } : {})}
+      role="alert"
+      style={{
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: 8,
+        background: 'var(--setu-err-soft, #fbeaea)',
+        color: 'var(--err)',
+        border: '1px solid var(--err)',
+        borderRadius: 'var(--radiusSm)',
+        padding: '9px 12px',
+        fontSize: 13,
+        lineHeight: 1.45,
+        ...style,
+      }}
+    >
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" style={{ flexShrink: 0, marginTop: 1 }}>
+        <circle cx="12" cy="12" r="9" />
+        <line x1="12" y1="8" x2="12" y2="13" />
+        <line x1="12" y1="16.5" x2="12" y2="16.6" />
+      </svg>
+      <span>{children}</span>
+    </div>
+  );
 }
 
 const GRANT_NOTE = 'Applies at their next sign-in.';
@@ -85,6 +115,7 @@ export function SevakManager({ initialSevaks, self }: SevakManagerProps) {
   const [drawerMode, setDrawerMode] = useState<'view' | 'edit'>('view');
   const [draft, setDraft] = useState<Record<GrantableRole, boolean>>({ admin: false, 'welcome-team': false });
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [, startRefresh] = useTransition();
 
   const refPanelId = useId();
@@ -149,10 +180,12 @@ export function SevakManager({ initialSevaks, self }: SevakManagerProps) {
     setDrawerKey(row.key);
     setDrawerMode(mode);
     setDraft(snapshotRoles(row));
+    setSaveError(null);
   }
   function closeDrawer() {
     setDrawerKey(null);
     setDrawerMode('view');
+    setSaveError(null);
   }
 
   async function saveDraft() {
@@ -168,6 +201,7 @@ export function SevakManager({ initialSevaks, self }: SevakManagerProps) {
       return;
     }
     setSaving(true);
+    setSaveError(null);
     try {
       // Grants then revokes, sequential — a mid-flight failure leaves a clear
       // partial state and surfaces the specific guard code (last-admin / self-lockout).
@@ -177,7 +211,8 @@ export function SevakManager({ initialSevaks, self }: SevakManagerProps) {
       setDrawerMode('view');
       refresh();
     } catch (err) {
-      toastError(err instanceof Error ? err.message : 'unknown', 'Saving roles failed');
+      // Inline (next to the Save button) rather than a disconnected corner toast.
+      setSaveError(errorMessage(err instanceof Error ? err.message : 'unknown', 'Saving roles failed'));
       refresh();
     } finally {
       setSaving(false);
@@ -477,11 +512,20 @@ export function SevakManager({ initialSevaks, self }: SevakManagerProps) {
                       </label>
                     ))}
                   </div>
+                  {saveError && <InlineError style={{ marginTop: 14 }}>{saveError}</InlineError>}
                   <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
                     <button type="button" className="btn btn--p" onClick={saveDraft} disabled={saving} style={{ minHeight: 42 }}>
                       {saving ? 'Saving…' : 'Save changes'}
                     </button>
-                    <button type="button" onClick={() => setDrawerMode('view')} disabled={saving} style={{ ...secondaryBtn, minHeight: 42 }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSaveError(null);
+                        setDrawerMode('view');
+                      }}
+                      disabled={saving}
+                      style={{ ...secondaryBtn, minHeight: 42 }}
+                    >
                       Cancel
                     </button>
                   </div>
@@ -541,19 +585,22 @@ function AccessSections({ row }: { row: SevakRow }) {
 function AddDialog({ onClose, onGranted }: { onClose: () => void; onGranted: () => void }) {
   const [contact, setContact] = useState('');
   const [role, setRole] = useState<GrantableRole>('welcome-team');
+  const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const contactId = useId();
   const roleId = useId();
   const titleId = useId();
+  const errorId = useId();
 
   function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const trimmed = contact.trim();
     if (!trimmed || !trimmed.includes('@')) {
-      toast.error('Enter a valid registered portal email');
+      setError('Enter a valid registered portal email.');
       return;
     }
     const email = trimmed.toLowerCase();
+    setError(null);
     startTransition(async () => {
       try {
         await grantRoleClient({ contact: email, role });
@@ -561,7 +608,8 @@ function AddDialog({ onClose, onGranted }: { onClose: () => void; onGranted: () 
         setContact('');
         onGranted();
       } catch (err) {
-        toastError(err instanceof Error ? err.message : 'unknown', 'Grant failed');
+        // Inline, under the field that caused it — not a corner toast.
+        setError(errorMessage(err instanceof Error ? err.message : 'unknown', 'Grant failed.'));
       }
     });
   }
@@ -584,7 +632,22 @@ function AddDialog({ onClose, onGranted }: { onClose: () => void; onGranted: () 
         <form onSubmit={onSubmit}>
           <div className="field" style={{ marginBottom: 14 }}>
             <label htmlFor={contactId}>Registered portal email</label>
-            <input id={contactId} type="email" className="input" value={contact} onChange={(e) => setContact(e.target.value)} placeholder="person@example.com" autoComplete="email" disabled={pending} required />
+            <input
+              id={contactId}
+              type="email"
+              className="input"
+              value={contact}
+              onChange={(e) => {
+                setContact(e.target.value);
+                if (error) setError(null);
+              }}
+              placeholder="person@example.com"
+              autoComplete="email"
+              aria-invalid={!!error}
+              aria-describedby={error ? errorId : undefined}
+              disabled={pending}
+              required
+            />
           </div>
           <div className="field" style={{ marginBottom: 18 }}>
             <label id={roleId}>Role</label>
@@ -608,6 +671,7 @@ function AddDialog({ onClose, onGranted }: { onClose: () => void; onGranted: () 
               })}
             </div>
           </div>
+          {error && <InlineError id={errorId} style={{ marginBottom: 14 }}>{error}</InlineError>}
           <button type="submit" className="btn btn--p btn--block" disabled={pending} style={{ minHeight: 48 }}>
             {pending ? 'Granting…' : 'Grant role →'}
           </button>
