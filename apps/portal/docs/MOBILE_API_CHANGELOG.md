@@ -22,16 +22,16 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
-## `PENDING-SCHOOLYEAR` · 2026-06-24 · dashboard exposes the live `schoolYear`
+## `93f5e12` · 2026-06-24 · dashboard exposes the live `schoolYear`
 - **GET `/api/setu/dashboard`** — the 200 JSON gains a top-level **`schoolYear: string`** (e.g. `'2025-26'`). This is the **LIVE / operational** school year families and teachers are currently in (the mobile counterpart of the web school-year badge). It is **distinct from `balaVihar.termLabel`**, which is the *family's enrollment period* — `balaVihar.termLabel` is unchanged. **Additive** — no existing field changed.
   - **Mobile:** add `schoolYear` to the dashboard response schema/type in `src/api/schemas/*`, and render the live-year label on the home screen (the mobile counterpart of the web school-year badge). No request-shape change.
 
-## `PENDING` · 2026-06-24 · seva opportunity status gains `draft`
+## `bd38f92` · 2026-06-24 · seva opportunity status gains `draft`
 - **`SevaOpportunityStatus`** (`@cmt/shared-domain`) gains an additive **`'draft'`** value — now `['open','closed','draft']`. A `'draft'` opp is an admin-only, unscheduled rollover copy (a "decide the date later" placeholder) that families must NEVER see. **Additive only**; existing `'open'`/`'closed'` values and all existing docs are unchanged.
 - **GET `/api/setu/seva/opportunities`** (family view) — **continues to EXCLUDE drafts**: the family browse list is built from `status:'open'` only, so a `'draft'` opp is never returned. **No response-shape change** — the status enum simply has a new member that the family endpoint won't emit.
   - **Mobile:** add `'draft'` to the seva opportunity status enum/type in the seva schema (so a doc/read carrying `status:'draft'` still validates); ensure the seva list/browse UI filters to `status:'open'` (drafts are admin-only and never appear in the family feed). No request-shape change. The new admin copy endpoint (`POST /api/admin/school-year/copy-seva`) is web/admin-only — no mobile mirror.
 
-## `6ea9ecd` · 2026-06-24 · calendar scoped to the live school year
+## `79cf98c` · 2026-06-24 · calendar scoped to the live school year
 - **GET `/api/setu/calendar`** — the returned `entries` are now filtered to the **live school year's window** (Aug 1 → Jul 31 of the operational year). Both prior-year and next-year **preparing** Sundays (cloned for the upcoming year as `enabled:true` before an admin Activates it) are now **excluded**. **Response shape is UNCHANGED** — same `{ location, programKey, entries, weekly }`, same entry fields; only the *set* of `entries` is narrower (live-year-only).
   - **Mobile:** no schema change. The calendar / upcoming list will no longer include other-school-year dates, so update any fixtures/expectations to the live-year set (a test asserting a future-year or prior-year date in `entries` will now fail). `GET /api/setu/dashboard`'s `upcoming` is filtered the same way (also no shape change).
 
