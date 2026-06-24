@@ -6,15 +6,21 @@ import { type LevelRow, type PeriodOption } from '@/features/admin/levels/levels
 import { LevelsManagement } from '@/features/admin/levels/levels-management';
 import { listPrograms } from '@/features/setu/programs/get-programs';
 import type { ProgramRow } from '@/features/admin/programs/programs-table';
+import { getLiveSchoolYearCached } from '@/features/setu/rollover/live-school-year';
+import { listKnownSchoolYears, resolveViewYear } from '@/features/setu/rollover/view-year';
 
 export const metadata = { title: 'Level management' };
 
 type TS = ReturnType<typeof Timestamp.now>;
 
-export default async function LevelsPage() {
+export default async function LevelsPage({ searchParams }: { searchParams: Promise<{ year?: string }> }) {
   await connection();
 
   const db = portalFirestore();
+  const liveYear = await getLiveSchoolYearCached();
+  const years = await listKnownSchoolYears(db, liveYear);
+  const view = resolveViewYear(years, liveYear, (await searchParams).year ?? null);
+
   const [levelsSnap, periodsSnap, programDocs] = await Promise.all([
     db.collection('levels').orderBy('location', 'asc').orderBy('order', 'asc').get(),
     db.collection('donationPeriods').where('enabled', '==', true).get(),
@@ -42,7 +48,7 @@ export default async function LevelsPage() {
       updatedAt: (data.updatedAt as TS).toDate().toISOString(),
       updatedBy: data.updatedBy as string,
     };
-  });
+  }).filter((l) => l.periodLabel === view.year);
 
   const periods: PeriodOption[] = periodsSnap.docs
     .map((d) => {
