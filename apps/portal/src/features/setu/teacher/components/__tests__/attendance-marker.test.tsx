@@ -8,8 +8,8 @@ vi.mock('@cmt/ui', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 import { AttendanceMarker } from '../attendance-marker';
 import type { SetuAttendanceStatus } from '@cmt/shared-domain';
 
-// Door-seeded model: F-02 is unmarked (status null), F-03 checked in at the
-// door (seeded present). So the default render is 1 present, 1 unmarked.
+// Binary model: F-02 is unmarked (status null), F-03 checked in at the door
+// (seeded present). So the default render is 1 present, 1 unmarked.
 const ROWS = [
   { mid: 'F-02', fid: 'F', firstName: 'Aarav', lastName: 'Shah', schoolGrade: 'Grade 1', hasSafetyInfo: false, status: null as SetuAttendanceStatus | null, source: 'default' as const, checkedInAtDoor: false },
   { mid: 'F-03', fid: 'F', firstName: 'Diya', lastName: 'Patel', schoolGrade: 'Grade 1', hasSafetyInfo: true, status: 'present' as SetuAttendanceStatus | null, source: 'door' as const, checkedInAtDoor: true },
@@ -21,63 +21,74 @@ function props(over: Record<string, unknown> = {}) {
   return { levelId: 'L', levelName: 'Level 1', ageLabel: 'Gr 1', date: '2026-01-04', today: '2026-01-18', rows: ROWS, total: 2, ...over };
 }
 
-beforeEach(() => { global.fetch = vi.fn(async () => new Response(JSON.stringify({ saved: 1, skipped: [] }), { status: 200 })) as never; });
+function row(name: string): HTMLElement {
+  return screen.getByRole('button', { name: new RegExp(name, 'i') });
+}
 
-it('seeds from row.status — an unmarked row has no active status button', () => {
+beforeEach(() => { global.fetch = vi.fn(async () => new Response(JSON.stringify({ saved: 2, skipped: [] }), { status: 200 })) as never; });
+
+it('seeds Present from a door check-in / prior mark; unmarked rows start un-pressed', () => {
   render(<AttendanceMarker {...props()} />);
-  expect(screen.getByText('Aarav Shah')).toBeDefined();
-  // Footer reflects 1 present (door-seeded Diya), not the roster size.
+  // Diya (door-seeded) is present; Aarav (unmarked) is not.
+  expect(row('Diya Patel').getAttribute('aria-pressed')).toBe('true');
+  expect(row('Aarav Shah').getAttribute('aria-pressed')).toBe('false');
+  // Footer reflects 1 present, not the roster size.
   expect(screen.getByText(/1 present/i)).toBeDefined();
-  // Aarav (unmarked) → none of his three status buttons are pressed.
-  const aarav = screen.getByText('Aarav Shah').closest('[data-testid="att-row"]') as HTMLElement;
-  const pressed = within(aarav).getAllByRole('button').filter((b) => b.getAttribute('aria-pressed') === 'true');
-  expect(pressed).toHaveLength(0);
 });
 
-it('shows a door badge for the door-checked-in student', () => {
+it('collapses a prior Late mark to Present (Late is retired)', () => {
+  const lateRows = [{ ...ROWS[0]!, status: 'late' as SetuAttendanceStatus | null, source: 'portal' as const }, ROWS[1]!];
+  render(<AttendanceMarker {...props({ rows: lateRows })} />);
+  expect(row('Aarav Shah').getAttribute('aria-pressed')).toBe('true');
+});
+
+it('shows an "arrived" badge for the door-checked-in student', () => {
   render(<AttendanceMarker {...props()} />);
-  const diya = screen.getByText('Diya Patel').closest('[data-testid="att-row"]') as HTMLElement;
-  expect(within(diya).getByText(/door/i)).toBeDefined();
+  expect(within(row('Diya Patel')).getByText(/arrived/i)).toBeDefined();
 });
 
-it('tapping a status marks it; tapping the active status again unselects it', async () => {
+it('tapping a row toggles Present on and off', async () => {
   const user = userEvent.setup();
   render(<AttendanceMarker {...props()} />);
-  const aarav = screen.getByText('Aarav Shah').closest('[data-testid="att-row"]') as HTMLElement;
-  const presentBtn = within(aarav).getByRole('button', { name: /present/i });
-  // Mark present.
-  await user.click(presentBtn);
-  expect(presentBtn.getAttribute('aria-pressed')).toBe('true');
-  // Tap the active status again → unselect (back to unmarked, none pressed).
-  await user.click(presentBtn);
-  const pressed = within(aarav).getAllByRole('button').filter((b) => b.getAttribute('aria-pressed') === 'true');
-  expect(pressed).toHaveLength(0);
+  const aarav = row('Aarav Shah');
+  expect(aarav.getAttribute('aria-pressed')).toBe('false');
+  await user.click(aarav);
+  expect(screen.getByRole('button', { name: /Aarav Shah/i }).getAttribute('aria-pressed')).toBe('true');
+  await user.click(screen.getByRole('button', { name: /Aarav Shah/i }));
+  expect(screen.getByRole('button', { name: /Aarav Shah/i }).getAttribute('aria-pressed')).toBe('false');
 });
 
-it('Save POST body excludes unmarked students (marked-only)', async () => {
+it('Save writes Present for tapped students and Absent for every unmarked one (binary)', async () => {
   const user = userEvent.setup();
   render(<AttendanceMarker {...props()} />);
-  // Aarav starts unmarked → must NOT appear in the body. Diya is door-seeded present.
+  // Default: Diya present (door), Aarav unmarked. Save → Diya present, Aarav ABSENT.
   await user.click(screen.getByRole('button', { name: /save attendance/i }));
   expect(global.fetch).toHaveBeenCalledWith('/api/setu/teacher/attendance', expect.objectContaining({ method: 'POST' }));
   const calls = (global.fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls;
   const body = JSON.parse((calls[0]![1] as { body: string }).body);
-  expect(body).toMatchObject({ levelId: 'L', date: '2026-01-04', marks: { 'F-03': 'present' } });
-  expect(body.marks['F-02']).toBeUndefined();
+  expect(body).toMatchObject({ levelId: 'L', date: '2026-01-04', marks: { 'F-02': 'absent', 'F-03': 'present' } });
 });
 
-it('disables Save when nothing is marked', () => {
-  const allUnmarked = [
-    { ...ROWS[0]! },
-    { ...ROWS[1]!, status: null as SetuAttendanceStatus | null, source: 'default' as const, checkedInAtDoor: false },
-  ];
+it('Save writes the FULL roster even while a filter/search hides rows', async () => {
+  const user = userEvent.setup();
+  render(<AttendanceMarker {...props()} />);
+  // The Unmarked filter hides Diya (door-present), leaving only Aarav visible…
+  await user.click(screen.getByRole('button', { name: /^Unmarked 1$/i }));
+  expect(screen.queryAllByTestId('att-row')).toHaveLength(1);
+  // …but Save must still record BOTH students (filtering is display-only).
+  await user.click(screen.getByRole('button', { name: /save attendance/i }));
+  const calls = (global.fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+  const body = JSON.parse((calls[0]![1] as { body: string }).body);
+  expect(body.marks).toEqual({ 'F-02': 'absent', 'F-03': 'present' });
+});
+
+it('keeps Save enabled even when no one is marked (records everyone absent)', () => {
+  const allUnmarked = [{ ...ROWS[0]! }, { ...ROWS[1]!, status: null as SetuAttendanceStatus | null, source: 'default' as const, checkedInAtDoor: false }];
   render(<AttendanceMarker {...props({ rows: allUnmarked })} />);
-  const save = screen.getByRole('button', { name: /save attendance/i });
-  expect((save as HTMLButtonElement).disabled).toBe(true);
+  expect((screen.getByRole('button', { name: /save attendance/i }) as HTMLButtonElement).disabled).toBe(false);
 });
 
 it('renders an upcoming card and no roster/save for a future date', () => {
-  // date (2026-06-07) is after today (2026-06-06) → class hasn't happened.
   render(<AttendanceMarker {...props({ date: '2026-06-07', today: '2026-06-06' })} />);
   expect(screen.getByText(/this class is upcoming/i)).toBeDefined();
   expect(screen.queryAllByTestId('att-row')).toHaveLength(0);
@@ -85,79 +96,85 @@ it('renders an upcoming card and no roster/save for a future date', () => {
 });
 
 it('disables the next arrow when the next Sunday is in the future', () => {
-  // date 2026-06-07, today 2026-06-08 → addDays(date,7)=2026-06-14 > today.
   render(<AttendanceMarker {...props({ date: '2026-06-07', today: '2026-06-08' })} />);
   const next = screen.getByLabelText('Next Sunday');
   expect(next.getAttribute('aria-disabled')).toBe('true');
-  expect(next.tagName).not.toBe('A'); // not a link
+  expect(next.tagName).not.toBe('A');
 });
 
-it('shows the door-aware banner (marked Present) when there are door check-ins but no portal marks', () => {
-  // Default fixture: F-03 is checkedInAtDoor:true, no row is source:'portal'.
+it('shows the door-aware banner when there are door check-ins but no portal marks', () => {
   render(<AttendanceMarker {...props()} />);
-  // The door case must NOT read as "no check-ins yet" — real attendance came in
-  // via the self-check-in door, seeded Present.
   expect(screen.queryByText(/no check-ins yet/i)).toBeNull();
-  expect(screen.getByText(/checked in at the door/i)).toBeDefined();
+  expect(screen.getByText(/checked in on arrival/i)).toBeDefined();
 });
 
 it('shows the "no check-ins yet" banner when there are no portal marks and no door check-ins', () => {
-  const noDoorRows = [
-    { ...ROWS[0]! },
-    { ...ROWS[1]!, status: null as SetuAttendanceStatus | null, source: 'default' as const, checkedInAtDoor: false },
-  ];
+  const noDoorRows = [{ ...ROWS[0]! }, { ...ROWS[1]!, status: null as SetuAttendanceStatus | null, source: 'default' as const, checkedInAtDoor: false }];
   render(<AttendanceMarker {...props({ rows: noDoorRows })} />);
   expect(screen.getByText(/no check-ins yet/i)).toBeDefined();
 });
 
-it('hides every banner once a row has a portal source', () => {
-  const savedRows = [
-    { ...ROWS[0]!, source: 'portal' as const, status: 'absent' as SetuAttendanceStatus | null },
-    ROWS[1]!,
-  ];
+it('hides the banner once a row has a portal source', () => {
+  const savedRows = [{ ...ROWS[0]!, source: 'portal' as const, status: 'absent' as SetuAttendanceStatus | null }, ROWS[1]!];
   render(<AttendanceMarker {...props({ rows: savedRows })} />);
   expect(screen.queryByText(/no check-ins yet/i)).toBeNull();
-  expect(screen.queryByText(/checked in at the door/i)).toBeNull();
+  expect(screen.queryByText(/checked in on arrival/i)).toBeNull();
 });
 
-it('renders the stat strip with the door check-in count reflecting checkedInAtDoor rows', () => {
-  // One of the two fixture rows (F-03) is checkedInAtDoor:true → Checked in = 1.
-  render(<AttendanceMarker {...props()} />);
-  const strip = screen.getByRole('group', { name: /attendance summary/i });
-  const checkedIn = within(strip).getByText('Checked in').closest('div') as HTMLElement;
-  expect(within(checkedIn).getByText('1')).toBeDefined();
-  // Enrolled mirrors `total`.
-  const enrolled = within(strip).getByText('Enrolled').closest('div') as HTMLElement;
-  expect(within(enrolled).getByText('2')).toBeDefined();
-});
-
-it('stat strip Present reflects marks (door-seeded), not the roster size', () => {
-  render(<AttendanceMarker {...props()} />);
-  const strip = screen.getByRole('group', { name: /attendance summary/i });
-  const present = within(strip).getByText('Present').closest('div') as HTMLElement;
-  const absent = within(strip).getByText('Absent').closest('div') as HTMLElement;
-  // Opens with 1 present (Diya, door-seeded) — not 2 (the roster size).
-  expect(within(present).getByText('1')).toBeDefined();
-  expect(within(absent).getByText('0')).toBeDefined();
-});
-
-it('stat strip Present/Absent counts update live as the teacher marks students', async () => {
+it('stat strip shows Enrolled, Arrived (door) and a live Present count', async () => {
   const user = userEvent.setup();
   render(<AttendanceMarker {...props()} />);
   const strip = screen.getByRole('group', { name: /attendance summary/i });
+  const enrolled = within(strip).getByText('Enrolled').closest('div') as HTMLElement;
+  expect(within(enrolled).getByText('2')).toBeDefined();
+  const arrived = within(strip).getByText('Arrived').closest('div') as HTMLElement;
+  expect(within(arrived).getByText('1')).toBeDefined();
   const present = within(strip).getByText('Present').closest('div') as HTMLElement;
-  const absent = within(strip).getByText('Absent').closest('div') as HTMLElement;
   expect(within(present).getByText('1')).toBeDefined();
-  expect(within(absent).getByText('0')).toBeDefined();
-  // Mark Aarav absent → Present stays 1, Absent 0→1.
-  const aarav = screen.getByText('Aarav Shah').closest('[data-testid="att-row"]') as HTMLElement;
-  await user.click(within(aarav).getByRole('button', { name: /absent/i }));
-  expect(within(present).getByText('1')).toBeDefined();
-  expect(within(absent).getByText('1')).toBeDefined();
+  // Tap Aarav present → Present 1 → 2.
+  await user.click(row('Aarav Shah'));
+  const strip2 = screen.getByRole('group', { name: /attendance summary/i });
+  const presentCell = within(strip2).getByText('Present').closest('div') as HTMLElement;
+  expect(within(presentCell).getByText('2')).toBeDefined();
 });
 
-it('footer shows the unmarked count when students are not marked', () => {
+it('footer spells out that unmarked students save as absent', () => {
   render(<AttendanceMarker {...props()} />);
-  // 1 present (Diya), 1 unmarked (Aarav).
-  expect(screen.getByText(/1 not marked/i)).toBeDefined();
+  expect(screen.getByText(/1 unmarked → saved as absent/i)).toBeDefined();
+});
+
+it('search filters the roster by name', async () => {
+  const user = userEvent.setup();
+  render(<AttendanceMarker {...props()} />);
+  expect(screen.queryAllByTestId('att-row')).toHaveLength(2);
+  await user.type(screen.getByLabelText(/search students/i), 'diya');
+  expect(screen.queryAllByTestId('att-row')).toHaveLength(1);
+  expect(screen.getByText('Diya Patel')).toBeDefined();
+  expect(screen.queryByText('Aarav Shah')).toBeNull();
+});
+
+it('the Unmarked filter hides students already marked present', async () => {
+  const user = userEvent.setup();
+  render(<AttendanceMarker {...props()} />);
+  // Diya is door-present; the Unmarked filter should drop her, leaving Aarav.
+  await user.click(screen.getByRole('button', { name: /^Unmarked 1$/i }));
+  expect(screen.queryAllByTestId('att-row')).toHaveLength(1);
+  expect(screen.getByText('Aarav Shah')).toBeDefined();
+  expect(screen.queryByText('Diya Patel')).toBeNull();
+});
+
+it('"Mark all present" marks everyone, then toggles to "Clear all"', async () => {
+  const user = userEvent.setup();
+  render(<AttendanceMarker {...props()} />);
+  await user.click(screen.getByRole('button', { name: /mark all present/i }));
+  expect(row('Aarav Shah').getAttribute('aria-pressed')).toBe('true');
+  expect(row('Diya Patel').getAttribute('aria-pressed')).toBe('true');
+  // Now everyone's present → the shortcut becomes "Clear all".
+  await user.click(screen.getByRole('button', { name: /clear all/i }));
+  expect(row('Aarav Shah').getAttribute('aria-pressed')).toBe('false');
+});
+
+it('renders the "Next unmarked" jump while students remain unmarked', () => {
+  render(<AttendanceMarker {...props()} />);
+  expect(screen.getByRole('button', { name: /next unmarked/i })).toBeDefined();
 });
