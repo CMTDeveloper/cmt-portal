@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { SetuAvatar, SetuIcon } from '@cmt/ui';
+import { displayMid } from '@cmt/shared-domain/setu';
 import { CspRoot, AllergyCallout, SectionLabel, DetailGroup } from '@/features/family/components/atoms';
 import { mockFamily } from '@/features/family/data/mock';
 import { flags } from '@/lib/flags';
@@ -105,7 +106,7 @@ export default async function MemberDetailPage({ params }: Props) {
                   <SetuAvatar name={name} size={64}/>
                   <div>
                     <h1 style={{ fontSize: 24, fontWeight: 400, lineHeight: 1.1 }}>{name}</h1>
-                    <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>{typeLabel}</div>
+                    <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>{typeLabel} · <span style={{ fontFamily: 'var(--mono)' }}>Member ID {displayMid(member)}</span></div>
                   </div>
                 </div>
 
@@ -159,7 +160,7 @@ export default async function MemberDetailPage({ params }: Props) {
                 <SetuAvatar name={name} size={72}/>
                 <div>
                   <h1 style={{ fontSize: 38, fontWeight: 400, lineHeight: 1.1 }}>{name}</h1>
-                  <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 6 }}>{typeLabel}</div>
+                  <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 6 }}>{typeLabel} · <span style={{ fontFamily: 'var(--mono)' }}>Member ID {displayMid(member)}</span></div>
                 </div>
               </div>
               <div className="row" style={{ gap: 10, alignSelf: 'flex-start' }}>
@@ -232,7 +233,7 @@ export default async function MemberDetailPage({ params }: Props) {
                 <SetuAvatar name={name} size={64}/>
                 <div>
                   <h1 style={{ fontSize: 24, fontWeight: 400, lineHeight: 1.1 }}>{name}</h1>
-                  <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>{mockMember.type}</div>
+                  <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>{mockMember.type} · <span style={{ fontFamily: 'var(--mono)' }}>Member ID {displayMid(mockMember)}</span></div>
                 </div>
               </div>
 
@@ -272,7 +273,7 @@ export default async function MemberDetailPage({ params }: Props) {
               <SetuAvatar name={name} size={72}/>
               <div>
                 <h1 style={{ fontSize: 38, fontWeight: 400, lineHeight: 1.1 }}>{name}</h1>
-                <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 6 }}>{mockMember.type}</div>
+                <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 6 }}>{mockMember.type} · <span style={{ fontFamily: 'var(--mono)' }}>Member ID {displayMid(mockMember)}</span></div>
               </div>
             </div>
             <button className="btn btn--s" style={{ alignSelf: 'flex-start' }}><SetuIcon.edit/> Edit member</button>

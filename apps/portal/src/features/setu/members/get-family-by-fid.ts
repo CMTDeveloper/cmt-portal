@@ -25,6 +25,7 @@ export async function getFamilyByFid(fid: string): Promise<FamilyAndMembers | nu
 
   const family: FamilyDoc = {
     fid: familyData.fid,
+    publicFid: familyData.publicFid ?? null,
     legacyFid: familyData.legacyFid ?? null,
     name: familyData.name,
     location: familyData.location,
@@ -37,6 +38,7 @@ export async function getFamilyByFid(fid: string): Promise<FamilyAndMembers | nu
     const d = doc.data();
     return {
       mid: d.mid,
+      publicMid: d.publicMid ?? null,
       uid: d.uid ?? null,
       firstName: d.firstName,
       lastName: d.lastName,

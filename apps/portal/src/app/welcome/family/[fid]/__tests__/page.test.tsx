@@ -166,6 +166,21 @@ describe('WelcomeFamilyDetailPage — with data', () => {
     expect(screen.getAllByText(/FAM001/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/4421/).length).toBeGreaterThan(0);
   });
+
+  it('shows the 4-digit publicFid (via displayFid) instead of the raw fid when assigned', async () => {
+    mockGetFamilyForWelcome.mockResolvedValue({
+      family: { ...SAMPLE_FAMILY, publicFid: '1042' },
+      members: SAMPLE_MEMBERS,
+    });
+
+    const page = await WelcomeFamilyDetailPage({ params: Promise.resolve({ fid: 'FAM001' }) });
+    render(page as React.ReactElement);
+
+    // The prominent Family ID is the 4-digit publicFid…
+    expect(screen.getAllByText(/1042/).length).toBeGreaterThan(0);
+    // …and the internal CMT- fid is no longer rendered as the displayed id.
+    expect(screen.queryByText(/FAM001/)).toBeNull();
+  });
 });
 
 describe('WelcomeFamilyDetailPage — seva hours', () => {

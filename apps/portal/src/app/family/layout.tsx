@@ -15,6 +15,7 @@ import {
   isMemberComplete,
   type WithRole,
 } from '@cmt/shared-domain';
+import { displayFid } from '@cmt/shared-domain/setu';
 import { flags } from '@/lib/flags';
 
 // Route the gate redirects an incomplete family to. It lives at a TOP-LEVEL
@@ -66,7 +67,7 @@ async function SidebarWithIdentity() {
   if (data) {
     const currentMember = data.members.find((m) => m.mid === data.currentMid);
     if (currentMember) displayName = `${currentMember.firstName} ${currentMember.lastName}`;
-    subtitle = `${data.family.name}${data.family.legacyFid ? ` · FID ${data.family.fid} · Legacy ${data.family.legacyFid}` : ` · FID ${data.family.fid}`}`;
+    subtitle = `${data.family.name}${data.family.legacyFid ? ` · FID ${displayFid(data.family)} · Legacy ${data.family.legacyFid}` : ` · FID ${displayFid(data.family)}`}`;
   }
   return <DesktopSidebarLive displayName={displayName} subtitle={subtitle} showSignOut isAdmin={sevak.isAdmin} showTeacher={sevak.showTeacher} yearBadge={<SchoolYearBadge />}/>;
 }

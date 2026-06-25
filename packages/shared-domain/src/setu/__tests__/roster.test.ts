@@ -27,12 +27,15 @@ describe('roster schemas', () => {
     expect(RosterQuerySchema.safeParse({ year: '2025' }).success).toBe(false);
   });
 
-  it('RosterFamilyRowSchema requires a known payment value', () => {
+  it('RosterFamilyRowSchema requires a known payment value and carries a nullable publicFid', () => {
     const row = {
-      fid: 'CMT-X', legacyFid: '123', name: 'Patel', location: 'Brampton',
+      fid: 'CMT-X', publicFid: '1042', legacyFid: '123', name: 'Patel', location: 'Brampton',
       memberCount: 4, payment: 'paid', programs: ['Bala Vihar'],
     };
     expect(RosterFamilyRowSchema.parse(row).payment).toBe('paid');
+    expect(RosterFamilyRowSchema.parse(row).publicFid).toBe('1042');
+    // publicFid is nullable (not yet assigned during migration)
+    expect(RosterFamilyRowSchema.parse({ ...row, publicFid: null }).publicFid).toBeNull();
     expect(RosterFamilyRowSchema.safeParse({ ...row, payment: 'maybe' }).success).toBe(false);
     expect(ROSTER_PAYMENTS).toContain('outstanding');
   });

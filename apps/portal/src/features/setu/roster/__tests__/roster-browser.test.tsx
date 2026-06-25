@@ -27,27 +27,30 @@ beforeEach(() => {
 // assertions still verify exactly the plan's three behaviours: mount→browse
 // list, type→search results, nextCursor→Load more.
 describe('RosterBrowser', () => {
-  it('renders the browse list on mount', async () => {
+  it('renders the browse list on mount, showing the 4-digit publicFid (via displayFid)', async () => {
     fetchRosterClient.mockResolvedValue({
-      families: [{ fid: 'CMT-X', legacyFid: '1', name: 'Patel', location: 'Brampton', memberCount: 4, payment: 'paid', programs: ['Bala Vihar'] }],
+      families: [{ fid: 'CMT-X', publicFid: '1042', legacyFid: '1', name: 'Patel', location: 'Brampton', memberCount: 4, payment: 'paid', programs: ['Bala Vihar'] }],
       nextCursor: null, total: 1,
     });
     render(<RosterBrowser />);
     expect((await screen.findAllByText(/Patel Family/)).length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText(/1 famil/i).length).toBeGreaterThanOrEqual(1);
+    // The displayed Family ID is the 4-digit publicFid, not the internal CMT- fid.
+    expect(screen.getAllByText(/FID 1042/).length).toBeGreaterThanOrEqual(1);
   });
 
   it('switches to search results when the search box has text', async () => {
     fetchRosterClient.mockResolvedValue({ families: [], nextCursor: null, total: 0 });
-    searchFamiliesClient.mockResolvedValue([{ fid: 'CMT-S', legacyFid: null, name: 'Sharma', location: 'Markham', memberCount: 2 }]);
+    searchFamiliesClient.mockResolvedValue([{ fid: 'CMT-S', publicFid: '2050', legacyFid: null, name: 'Sharma', location: 'Markham', memberCount: 2 }]);
     render(<RosterBrowser />);
     await userEvent.type(screen.getAllByTestId('roster-search-input')[0]!, 'sharma');
     await waitFor(() => expect(screen.getAllByText(/Sharma Family/).length).toBeGreaterThanOrEqual(1));
+    expect(screen.getAllByText(/FID 2050/).length).toBeGreaterThanOrEqual(1);
   });
 
   it('shows a "Load more" button when nextCursor is present', async () => {
     fetchRosterClient.mockResolvedValue({
-      families: [{ fid: 'CMT-X', legacyFid: null, name: 'Patel', location: 'Brampton', memberCount: 1, payment: 'unknown', programs: [] }],
+      families: [{ fid: 'CMT-X', publicFid: null, legacyFid: null, name: 'Patel', location: 'Brampton', memberCount: 1, payment: 'unknown', programs: [] }],
       nextCursor: 'CMT-X', total: 10,
     });
     render(<RosterBrowser />);

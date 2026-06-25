@@ -4,7 +4,7 @@ import type { RosterFamilyRow, RosterListResponse, RosterQuery } from '@cmt/shar
 import { deriveFamilyPayment } from './payment';
 
 type RawFamily = {
-  legacyFid?: unknown; name?: unknown; location?: unknown;
+  publicFid?: unknown; legacyFid?: unknown; name?: unknown; location?: unknown;
 };
 
 function nameOf(fid: string, d: RawFamily): string {
@@ -15,6 +15,9 @@ function locationOf(d: RawFamily): string {
 }
 function legacyOf(d: RawFamily): string | null {
   return typeof d.legacyFid === 'string' ? d.legacyFid : null;
+}
+function publicFidOf(d: RawFamily): string | null {
+  return typeof d.publicFid === 'string' ? d.publicFid : null;
 }
 
 const PROGRAM_FAMILY_CHUNK = 300;
@@ -36,6 +39,7 @@ async function toRow(fid: string, d: RawFamily): Promise<RosterFamilyRow> {
   ]);
   return {
     fid,
+    publicFid: publicFidOf(d),
     legacyFid: legacyOf(d),
     name: nameOf(fid, d),
     location: locationOf(d),

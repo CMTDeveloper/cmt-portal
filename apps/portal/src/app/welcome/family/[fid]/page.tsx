@@ -7,6 +7,7 @@ import { getFamilyForWelcome } from '@/features/setu/search/get-family-for-welco
 import { getFamilySevaProgress, type FamilySevaProgress } from '@/features/setu/seva/get-family-seva-progress';
 import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
 import { isWelcomeTeam, type WithRole } from '@cmt/shared-domain';
+import { displayFid } from '@cmt/shared-domain/setu';
 import type { FamilyDoc, MemberDoc } from '@cmt/shared-domain/setu';
 import { cookies } from 'next/headers';
 
@@ -90,7 +91,7 @@ export async function WelcomeFamilyDetailBody({
             <SetuIcon.back/> Back to search
           </Link>
           <p style={{ fontSize: 11, letterSpacing: '.16em', textTransform: 'uppercase', color: 'var(--muted)' }}>
-            FID {family.fid}{family.legacyFid ? ` · Legacy ${family.legacyFid}` : ''}
+            FID {displayFid(family)}{family.legacyFid ? ` · Legacy ${family.legacyFid}` : ''}
           </p>
           <h1 style={{ fontSize: 38, fontWeight: 400, marginTop: 6 }}>The {family.name} Family</h1>
         </header>
@@ -119,7 +120,7 @@ function FamilyDetailBody({ family, members, adults, children, sevaProgress }: F
         <div style={{ fontSize: 20, fontWeight: 600, marginBottom: 6 }}>{family.name}</div>
         <div style={{ fontSize: 12, color: 'var(--muted)', fontFamily: 'var(--mono)', display: 'flex', flexDirection: 'column', gap: 2 }}>
           <span>Location: {family.location}</span>
-          <span>FID: {family.fid}</span>
+          <span>FID: {displayFid(family)}</span>
           {family.legacyFid && <span>Legacy FID: {family.legacyFid}</span>}
           <span>Members: {members.length}</span>
           <span>Since: {family.createdAt.getFullYear()}</span>

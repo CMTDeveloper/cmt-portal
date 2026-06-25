@@ -3,6 +3,7 @@
 
 export type FamilySearchHit = {
   fid: string;
+  publicFid: string | null;
   legacyFid: string | null;
   name: string;
   location: string;

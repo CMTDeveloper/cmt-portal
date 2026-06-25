@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { SetuAvatar, SetuIcon } from '@cmt/ui';
+import { displayMid } from '@cmt/shared-domain/setu';
 import { AllergyCallout, SectionLabel } from '@/features/family/components/atoms';
 import { JourneyStrip } from '@/features/setu/rollover/components/journey-strip';
 import type { JourneyRow } from '@/features/setu/rollover/get-child-journey';
@@ -423,6 +424,8 @@ export function ChildProfileView({ profile, editHref, journey }: ChildProfileVie
                 <span>Born {profile.birthMonthYear}</span>
               </>
             )}
+            <Dot />
+            <span style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>Member ID {displayMid(profile)}</span>
           </div>
         </div>
       </header>

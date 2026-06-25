@@ -32,7 +32,7 @@ function makeProgram(over: Partial<ChildProfileProgram> = {}): ChildProfileProgr
 
 function makeProfile(over: Partial<ChildProfile> = {}): ChildProfile {
   return {
-    mid: 'CMT-FAM1-03', fid: 'CMT-FAM1', firstName: 'Anaya', lastName: 'Patel',
+    mid: 'CMT-FAM1-03', publicMid: '50001', fid: 'CMT-FAM1', firstName: 'Anaya', lastName: 'Patel',
     type: 'Child', schoolGrade: 'Grade 5', birthMonthYear: '2015-03', foodAllergies: null,
     programs: [
       makeProgram({ eid: 'e1', label: 'Bala Vihar', programKey: 'bala-vihar', attendance: teacherAtt }),
@@ -47,12 +47,21 @@ function makeProfile(over: Partial<ChildProfile> = {}): ChildProfile {
 }
 
 describe('ChildProfileView', () => {
-  it('renders identity: name and Child · Grade 5 sub-line (no internal MID shown)', () => {
+  it('renders identity: name, Child · Grade 5 sub-line, and the 5-digit Member ID', () => {
     render(<ChildProfileView profile={makeProfile()} />);
     expect(screen.getByText('Anaya Patel')).toBeTruthy();
     expect(screen.getByText(/Child · Grade 5/)).toBeTruthy();
-    // The internal Member ID is no longer surfaced to families (issue #4).
-    expect(screen.queryByText(/MID /)).toBeNull();
+    // The canonical user-facing Member ID (publicMid) IS surfaced now (issue #4) —
+    // labelled "Member ID", the 5-digit publicMid, never the internal CMT- join key.
+    expect(screen.getByText(/Member ID/i)).toBeTruthy();
+    expect(screen.getByText(/50001/)).toBeTruthy();
+    expect(screen.queryByText(/CMT-FAM1-03/)).toBeNull();
+  });
+
+  it('falls back to the legacy mid when no publicMid is assigned', () => {
+    render(<ChildProfileView profile={makeProfile({ publicMid: null })} />);
+    expect(screen.getByText(/Member ID/i)).toBeTruthy();
+    expect(screen.getByText(/CMT-FAM1-03/)).toBeTruthy();
   });
 
   it('shows quick stats with program count and overall %', () => {

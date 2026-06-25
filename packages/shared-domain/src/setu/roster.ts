@@ -6,6 +6,7 @@ export type RosterPayment = (typeof ROSTER_PAYMENTS)[number];
 
 export const RosterFamilyRowSchema = z.object({
   fid: z.string(),
+  publicFid: z.string().nullable(),
   legacyFid: z.string().nullable(),
   name: z.string(),
   location: z.string(),

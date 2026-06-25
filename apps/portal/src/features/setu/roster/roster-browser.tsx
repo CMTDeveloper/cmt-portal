@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { SetuLogo, SetuIcon } from '@cmt/ui';
-import { LOCATIONS } from '@cmt/shared-domain/setu';
+import { LOCATIONS, displayFid } from '@cmt/shared-domain/setu';
 import type { Location, RosterFamilyRow, RosterPayment } from '@cmt/shared-domain/setu';
 import { CspRoot } from '@/features/family/components/atoms';
 import { searchFamiliesClient } from '@/features/setu/search/search-families-client';
@@ -88,7 +88,7 @@ function RosterFamilyCard({ row }: { row: RosterFamilyRow }) {
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 15, fontWeight: 600 }}>{row.name} Family</div>
           <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2, fontFamily: 'var(--mono)' }}>
-            FID {row.fid}{row.legacyFid ? ` · Legacy ${row.legacyFid}` : ''} · {row.location}
+            FID {displayFid(row)}{row.legacyFid ? ` · Legacy ${row.legacyFid}` : ''} · {row.location}
           </div>
           {row.programs.length > 0 && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
@@ -125,7 +125,7 @@ function SearchHitCard({ hit }: { hit: FamilySearchHit }) {
         <div>
           <div style={{ fontSize: 15, fontWeight: 600 }}>{hit.name} Family</div>
           <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2, fontFamily: 'var(--mono)' }}>
-            FID {hit.fid}{hit.legacyFid ? ` · Legacy ${hit.legacyFid}` : ''} · {hit.location}
+            FID {displayFid(hit)}{hit.legacyFid ? ` · Legacy ${hit.legacyFid}` : ''} · {hit.location}
           </div>
         </div>
         <div style={{ textAlign: 'right' }}>

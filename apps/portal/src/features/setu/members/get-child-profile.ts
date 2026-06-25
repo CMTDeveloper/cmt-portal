@@ -33,6 +33,8 @@ export interface ChildProfileProgram {
 
 export interface ChildProfile {
   mid: string;
+  /** Canonical user-facing 5-digit Member ID; null until assigned (legacy mid is the fallback). */
+  publicMid: string | null;
   fid: string;
   firstName: string;
   lastName: string;
@@ -127,7 +129,7 @@ export async function getChildProfile(mid: string): Promise<ChildProfile | null>
   const overallAttendedPct = sumTotal > 0 ? Math.round((sumAttended / sumTotal) * 100) : 0;
 
   return {
-    mid, fid,
+    mid, publicMid: member.publicMid ?? null, fid,
     firstName: member.firstName, lastName: member.lastName, type: member.type,
     schoolGrade: member.schoolGrade ?? null, birthMonthYear: member.birthMonthYear ?? null,
     foodAllergies: member.foodAllergies ?? null,

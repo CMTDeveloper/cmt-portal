@@ -22,6 +22,7 @@ type RawFamilyData = Record<string, unknown>;
 function toHit(fid: string, data: RawFamilyData): Omit<FamilySearchHit, 'memberCount'> {
   return {
     fid,
+    publicFid: typeof data.publicFid === 'string' ? data.publicFid : null,
     legacyFid: typeof data.legacyFid === 'string' ? data.legacyFid : null,
     name: typeof data.name === 'string' && data.name ? data.name : fid,
     location:
