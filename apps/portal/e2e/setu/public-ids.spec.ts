@@ -157,9 +157,11 @@ test.describe('public FID/MID in the family UI (deployed UAT) — UNRUN', () => 
 
     await page.goto(`/family/members/${child.mid}`);
     // The detail header renders `Member ID {displayMid(member)}` → the 5-digit
-    // publicMid. Match the literal seeded value for this member.
+    // publicMid. Match the literal seeded value for this member. The page renders
+    // mobile + desktop trees, so filter to the visible copy (a bare .first() can
+    // resolve to the hidden mobile node).
     await expect(
-      page.getByText(new RegExp(`Member ID\\s+${child.publicMid}`)).first(),
+      page.getByText(new RegExp(`Member ID\\s+${child.publicMid}`)).filter({ visible: true }).first(),
     ).toBeVisible();
   });
 });
@@ -173,16 +175,19 @@ test.describe('roster search by public FID (deployed UAT) — UNRUN', () => {
 
   test("searching the roster for '1042' finds the family", async ({ page }) => {
     await page.goto('/welcome/roster');
-    const input = page.getByTestId('roster-search-input');
-    await expect(input).toBeVisible();
+    // The page renders mobile + desktop trees, so the testid matches several nodes —
+    // target the visible one. Hydrating the 877-family browse is slow, so give the
+    // input a generous window to become interactive.
+    const input = page.getByTestId('roster-search-input').filter({ visible: true }).first();
+    await expect(input).toBeVisible({ timeout: 30_000 });
     await input.fill(EXPECTED_PUBLIC_FID);
 
     // Search-as-filter is debounced (~300ms) then renders SearchHitCards that show
-    // `FID 1042` and link to /welcome/family/{fid}. Assert a hit appears.
-    const results = page.getByTestId('roster-results');
+    // `FID 1042` and link to /welcome/family/{fid}. Assert a visible hit appears.
+    const results = page.getByTestId('roster-results').filter({ visible: true }).first();
     await expect(
-      results.getByText(new RegExp(`FID\\s+${EXPECTED_PUBLIC_FID}`)).first(),
-    ).toBeVisible();
+      results.getByText(new RegExp(`FID\\s+${EXPECTED_PUBLIC_FID}`)).filter({ visible: true }).first(),
+    ).toBeVisible({ timeout: 15_000 });
     await expect(results.getByText(/No matching families found/i)).toHaveCount(0);
   });
 });

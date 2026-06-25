@@ -216,7 +216,14 @@ async function main(): Promise<void> {
     if (md.type === 'Adult') {
       gate['volunteeringSkills'] = ['General Volunteer Support (happy to help where needed)'];
     } else if (md.type === 'Child') {
-      const month = md.birthMonthYear ? Number(md.birthMonthYear.slice(5, 7)) : NaN;
+      // The gate's required CHILD field is `birthMonthYear` — SET it (not just
+      // derive birthMonth from it). A family reused from an older seed may have a
+      // null birthMonthYear, which would redirect /family to /complete-profile and
+      // strand every UI walkthrough on this fixture. Default matches the create
+      // path's '2017-03'; derive birthMonth (for prasad) from whichever we use.
+      const bmy = md.birthMonthYear ?? '2017-03';
+      gate['birthMonthYear'] = bmy;
+      const month = Number(bmy.slice(5, 7));
       if (Number.isInteger(month) && month >= 1 && month <= 12) gate['birthMonth'] = month;
     }
     // Deterministic 5-digit publicMid (issue #4) — additive, idempotent (the
