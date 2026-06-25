@@ -4,10 +4,15 @@ import { assignPublicIds, type Allocators } from '../assign-public-ids';
 
 // ── Minimal in-memory Firestore for the families/{fid}/members/{mid} shape ────
 // Supports exactly what assignPublicIds touches:
-//   db.collection('families').orderBy(field,'asc').get()
-//   db.collection('families').where('fid','==',x).orderBy(field,'asc').get()
+//   db.collection('families').orderBy(field,'asc').get()         (full-run mode)
+//   db.collection('families').doc(fid).get()                     (single-family mode)
 //   famDoc.ref.collection('members').orderBy(field,'asc').get()
 //   doc.ref.update(patch)  (mutates the backing store in place)
+//
+// NOTE: single-family mode does a direct doc-get (no where()+orderBy), so it
+// needs no `families(fid, createdAt)` composite index. The fake deliberately
+// does NOT expose `.where()` on the families collection — if the code ever
+// regressed to the unindexed query shape this fake would throw, surfacing it.
 
 interface MemberDoc {
   data: Record<string, unknown>;
@@ -69,21 +74,28 @@ function makeFakeDb(families: FamilyDoc[]): Firestore {
     };
   }
 
-  function buildFamilyQuery(filter?: { field: string; value: unknown }) {
+  // The families collection deliberately exposes only `orderBy(...).get()`
+  // (full-run mode) and `doc(fid).get()` (single-family mode). It intentionally
+  // does NOT expose `.where()` — single-family mode must not use the unindexed
+  // where()+orderBy query shape, and a regression to it would throw here.
+  function familiesCollection() {
     return {
-      where: (field: string, _op: string, value: unknown) =>
-        buildFamilyQuery({ field, value }),
       orderBy: (field: string) => ({
+        get: async () => ({
+          docs: makeQueryDocs(
+            families.map((f) => ({ id: f.fid, data: f.data, ref: familyRef(f) })),
+            field,
+          ),
+        }),
+      }),
+      doc: (id: string) => ({
         get: async () => {
-          let list = families;
-          if (filter) {
-            list = families.filter((f) => f.data[filter.field] === filter.value);
-          }
+          const fam = families.find((f) => f.fid === id);
           return {
-            docs: makeQueryDocs(
-              list.map((f) => ({ id: f.fid, data: f.data, ref: familyRef(f) })),
-              field,
-            ),
+            exists: Boolean(fam),
+            id,
+            data: () => fam?.data ?? {},
+            ref: fam ? familyRef(fam) : undefined,
           };
         },
       }),
@@ -93,7 +105,7 @@ function makeFakeDb(families: FamilyDoc[]): Firestore {
   return {
     collection: (name: string) => {
       if (name !== 'families') throw new Error(`unexpected collection ${name}`);
-      return buildFamilyQuery();
+      return familiesCollection();
     },
   } as unknown as Firestore;
 }
@@ -255,8 +267,8 @@ describe('assignPublicIds', () => {
     expect(families[1]!.data.publicFid).toBeUndefined();
   });
 
-  it('--fid X restricts to a single family', async () => {
-    const families = makeFixture();
+  it('--fid X restricts to a single family (doc-get; other families untouched)', async () => {
+    const families = makeFixture(); // ≥2 families: CMT-AAAA, CMT-BBBB
     const db = makeFakeDb(families);
     const { allocators } = makeAllocators();
 
@@ -266,8 +278,34 @@ describe('assignPublicIds', () => {
       fid: 'CMT-BBBB',
     });
 
+    // Only the targeted family + its members are stamped …
     expect(result.familiesScanned).toBe(1);
-    expect(families[0]!.data.publicFid).toBeUndefined();
+    expect(result.familiesAssigned).toBe(1);
+    expect(result.membersAssigned).toBe(1);
     expect(families[1]!.data.publicFid).toBe('1001');
+    expect(families[1]!.members.get('m3')!.data.publicMid).toBe('50001');
+
+    // … and the OTHER family (and its members) are left completely untouched.
+    expect(families[0]!.data.publicFid).toBeUndefined();
+    expect(families[0]!.members.get('m1')!.data.publicMid).toBeUndefined();
+    expect(families[0]!.members.get('m2')!.data.publicMid).toBeUndefined();
+  });
+
+  it('--fid X for an unknown family assigns nothing', async () => {
+    const families = makeFixture();
+    const db = makeFakeDb(families);
+    const { allocators } = makeAllocators();
+
+    const result = await assignPublicIds(db, allocators, {
+      dryRun: false,
+      limit: null,
+      fid: 'CMT-NOPE',
+    });
+
+    expect(result.familiesScanned).toBe(0);
+    expect(result.familiesAssigned).toBe(0);
+    expect(result.membersAssigned).toBe(0);
+    expect(families[0]!.data.publicFid).toBeUndefined();
+    expect(families[1]!.data.publicFid).toBeUndefined();
   });
 });

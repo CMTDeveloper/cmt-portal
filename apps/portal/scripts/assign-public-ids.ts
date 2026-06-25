@@ -75,17 +75,21 @@ export async function assignPublicIds(
   let membersScanned = 0;
   let membersAssigned = 0;
 
-  let famQuery = db.collection('families').orderBy('createdAt', 'asc');
+  // Single-family mode is a direct document get — the family doc id IS the fid
+  // (every writer uses `db.collection('families').doc(fid)`), so there is no
+  // index requirement (an equality `where('fid')` + `orderBy('createdAt')` would
+  // otherwise need a `families(fid, createdAt)` composite index that we don't
+  // ship). Full-run mode keeps the deterministic oldest-first ordering.
+  let familyDocs;
   if (fid) {
-    // Single-family mode: restrict to the one doc (still ordered for determinism).
-    famQuery = db
-      .collection('families')
-      .where('fid', '==', fid)
-      .orderBy('createdAt', 'asc');
+    const snap = await db.collection('families').doc(fid).get();
+    familyDocs = snap.exists ? [snap] : [];
+  } else {
+    const snap = await db.collection('families').orderBy('createdAt', 'asc').get();
+    familyDocs = snap.docs;
   }
-  const familySnap = await famQuery.get();
 
-  for (const famDoc of familySnap.docs) {
+  for (const famDoc of familyDocs) {
     if (limit !== null && familiesScanned >= limit) break;
     familiesScanned++;
     const data = famDoc.data() as { publicFid?: string };
