@@ -22,6 +22,7 @@
     "migrate:legacy-families": "tsx --env-file=.env.local scripts/migrate-legacy-families.ts",
     "migrate:programs": "tsx --env-file=.env.local scripts/migrate-to-programs.ts",
     "migrate:calendar-ids": "tsx --env-file=.env.local scripts/migrate-calendar-entry-ids.ts",
+    "migrate:public-ids": "tsx --env-file=.env.local scripts/assign-public-ids.ts",
     "list:uat-families": "tsx --env-file=.env.local scripts/list-uat-families.ts",
     "inspect:brampton-level": "tsx --env-file=.env.local scripts/inspect-brampton-level.ts",
     "clear:otp-rate-limit": "tsx --env-file=.env.local scripts/clear-otp-rate-limit.ts",
