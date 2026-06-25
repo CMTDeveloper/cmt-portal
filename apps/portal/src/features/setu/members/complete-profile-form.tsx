@@ -5,6 +5,7 @@ import { toast, SetuLogo } from '@cmt/ui';
 import {
   whatsMissingForMember,
   isMemberComplete,
+  GRADE_LADDER,
   NO_ALLERGIES,
   type MemberRequiredField,
 } from '@cmt/shared-domain';
@@ -37,6 +38,28 @@ const MONTHS: readonly { value: number; label: string }[] = [
   { value: 11, label: 'November' },
   { value: 12, label: 'December' },
 ];
+
+// School-grade is a PREDEFINED list (issue #18) so the grade→level mapping stays
+// clean — never free text. We store the canonical GRADE_LADDER token (matching
+// the admin grade editor + legacy bare numbers); 'Shishu' covers children younger
+// than JK, who belong to the age-based Shishu level rather than a school grade.
+const GRADE_OPTIONS: readonly { value: string; label: string }[] = [
+  { value: 'Shishu', label: 'Shishu (younger than JK)' },
+  ...GRADE_LADDER.map((g) => ({ value: g, label: /^\d/.test(g) ? `Grade ${g}` : g })),
+];
+
+// Loose email/phone validators so the form's notion of "complete" agrees with
+// the write route (z.string().email() / z.string().min(7)). Without these, a
+// short/garbled value satisfies the shared nonEmptyString completeness check, the
+// Save button thinks the member is done, and the PATCH 400s on the server —
+// stranding the user on the completion screen with no redirect.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+function isValidEmail(s: string): boolean {
+  return EMAIL_RE.test(s.trim());
+}
+function isValidPhone(s: string): boolean {
+  return s.replace(/\D/g, '').length >= 7;
+}
 
 // Per-member draft of just the fields the completion screen can edit. We seed
 // each from the member's current value so a partially-complete member only has
@@ -109,12 +132,53 @@ const FIELD_LABEL: Record<MemberRequiredField, string> = {
   birthMonthYear: 'Birth month & year',
 };
 
+// Fields that have NO input on this screen (they're set at registration / by a
+// sevak). If one is missing the card explains it rather than rendering a dead end.
+const UNFILLABLE_FIELDS: readonly MemberRequiredField[] = ['firstName', 'lastName', 'type'];
+
+/**
+ * A single member's outstanding problems for the SUBMIT gate: the required
+ * fields still missing, plus a per-field message map (required-but-empty OR
+ * present-but-malformed for email/phone). Empty `messages` + empty `missing`
+ * ⇒ this member is ready to save.
+ */
+function validateMember(m: MemberDoc, d: MemberDraft): {
+  missing: MemberRequiredField[];
+  messages: Partial<Record<MemberRequiredField, string>>;
+} {
+  const shape = draftToMemberShape(m, d);
+  const missing = whatsMissingForMember(shape);
+  const messages: Partial<Record<MemberRequiredField, string>> = {};
+  for (const f of missing) {
+    if (UNFILLABLE_FIELDS.includes(f)) continue; // explained separately, no input
+    messages[f] = `${FIELD_LABEL[f]} is required.`;
+  }
+  // Format checks on fields that ARE filled (so they don't double up as "required").
+  if (d.email.trim() && !isValidEmail(d.email)) messages.email = 'Enter a valid email address.';
+  if (d.phone.trim() && !isValidPhone(d.phone)) messages.phone = 'Enter a valid phone number.';
+  return { missing, messages };
+}
+
+/** Whether a member can be saved: nothing required is missing AND nothing malformed. */
+function memberReady(m: MemberDoc, d: MemberDraft): boolean {
+  const { missing, messages } = validateMember(m, d);
+  return missing.length === 0 && Object.keys(messages).length === 0;
+}
+
 /**
  * Self-contained profile-completion form. Loads the current family, and for the
  * members the signed-in person is responsible for (a manager → every incomplete
- * member; a plain member → only their own record), renders ONLY the missing
- * required fields. On Save, PATCHes each member; when nothing is missing
- * anymore it returns to /family.
+ * member; a plain member → only their own record), renders the fields that were
+ * missing AT LOAD. On Save, PATCHes each member; when nothing is missing anymore
+ * it returns to /family.
+ *
+ * Which fields render is FROZEN to the server's missing set captured at load — it
+ * never shrinks as the user types. Gating field visibility on the live, draft-
+ * derived missing set (the prior behaviour) unmounted each input the instant its
+ * value satisfied the shared `nonEmptyString` check — i.e. after the FIRST
+ * character of an email/phone/grade — so a field literally vanished mid-typing and
+ * left a 1-char fragment behind (issue #18). Freezing the set keeps every input
+ * mounted until the member is saved.
  *
  * Completeness is judged by the shared @cmt/shared-domain helpers so this screen
  * agrees exactly with the gate that sent the user here and with the write route.
@@ -124,7 +188,9 @@ export function CompleteProfileForm() {
   const [loading, setLoading] = useState(true);
   const [drafts, setDrafts] = useState<Record<string, MemberDraft>>({});
   const [saving, setSaving] = useState(false);
-  const [fieldErrors, setFieldErrors] = useState<Record<string, Record<string, string>>>({});
+  // Inline validation only surfaces AFTER a blocked Save attempt, then clears
+  // live as each field becomes valid (so the user sees progress, not nagging).
+  const [showErrors, setShowErrors] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -161,36 +227,36 @@ export function CompleteProfileForm() {
     };
   }, []);
 
-  // The members this person must complete + what each still needs, recomputed
-  // live as the drafts change so completed fields disappear from the form.
-  const targets = useMemo(() => {
+  // The members this person must complete. Scope: manager → all incomplete
+  // members; plain member → own record only. Computed from `data` ALONE (NOT the
+  // drafts) so the card list — and the set of fields each card renders — is
+  // frozen to the server's missing set and never shrinks while the user types.
+  const cards = useMemo(() => {
     if (!data) return [] as { member: MemberDoc; missing: MemberRequiredField[] }[];
-    // Scope: manager → all incomplete members; plain member → own record only.
     const scoped = data.isManager
       ? data.members
       : data.members.filter((m) => m.mid === data.currentMid);
     return scoped
-      .map((member) => {
-        const draft = drafts[member.mid];
-        // Until a draft is seeded, fall back to the member's stored values.
-        const shape = draft ? draftToMemberShape(member, draft) : member;
-        return { member, missing: whatsMissingForMember(shape) };
-      })
+      .map((member) => ({ member, missing: whatsMissingForMember(member) }))
       .filter((t) => t.missing.length > 0);
-  }, [data, drafts]);
+  }, [data]);
 
-  // Whether everything in scope is now complete (drives the redirect + button).
-  const allComplete = useMemo(() => {
+  // The members in scope (for the submit gate + PATCH loop).
+  const scopedMembers = useMemo(() => {
+    if (!data) return [] as MemberDoc[];
+    return data.isManager ? data.members : data.members.filter((m) => m.mid === data.currentMid);
+  }, [data]);
+
+  // Whether everything in scope is now saveable (drives the "all set" note). The
+  // Save button itself is ALWAYS enabled (except while saving) so a click on an
+  // incomplete form gives feedback instead of doing nothing.
+  const allReady = useMemo(() => {
     if (!data) return false;
-    const scoped = data.isManager
-      ? data.members
-      : data.members.filter((m) => m.mid === data.currentMid);
-    return scoped.every((member) => {
+    return scopedMembers.every((member) => {
       const draft = drafts[member.mid];
-      const shape = draft ? draftToMemberShape(member, draft) : member;
-      return isMemberComplete(shape);
+      return draft ? memberReady(member, draft) : isMemberComplete(member);
     });
-  }, [data, drafts]);
+  }, [data, scopedMembers, drafts]);
 
   function update(mid: string, patch: Partial<MemberDraft>) {
     setDrafts((prev) => {
@@ -202,28 +268,37 @@ export function CompleteProfileForm() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!data) return;
+    if (!data || saving) return;
+
+    // Validate every scoped member first. If anything is missing or malformed,
+    // surface inline errors (issue #18 #4 — a disabled button gave NO feedback)
+    // and stop before any write.
+    if (!allReady) {
+      setShowErrors(true);
+      const blockedByUnfillable = scopedMembers.some((m) => {
+        const d = drafts[m.mid];
+        return d ? validateMember(m, d).missing.some((f) => UNFILLABLE_FIELDS.includes(f)) : false;
+      });
+      toast.error(
+        blockedByUnfillable
+          ? 'Some details can only be set by a sevak — see the highlighted note.'
+          : 'Please fill the highlighted fields to continue.',
+      );
+      return;
+    }
+
     setSaving(true);
-    setFieldErrors({});
 
-    // PATCH every member still in scope (manager → all; member → self). We send
-    // the member's current type so the write route's effectiveType picks the
-    // right required matrix; we only send the completion-screen fields.
-    const scoped = data.isManager
-      ? data.members
-      : data.members.filter((m) => m.mid === data.currentMid);
-
-    const errors: Record<string, Record<string, string>> = {};
+    // PATCH every member still in scope whose SERVER record is incomplete. We
+    // send the member's current type so the write route's effectiveType picks the
+    // right required matrix; we only send the completion-screen fields. (Checking
+    // the DRAFT here would be a bug: the user has JUST completed the draft, so it
+    // always looks complete and the PATCH would be skipped, persisting nothing.)
     let anyFailed = false;
-
     try {
-      for (const member of scoped) {
+      for (const member of scopedMembers) {
         const draft = drafts[member.mid];
         if (!draft) continue;
-        // Skip members whose SERVER record is already complete — only the members
-        // the gate flagged need a write. (Checking the DRAFT here was a bug: the
-        // user has JUST completed the draft, so it always looked complete and the
-        // PATCH was skipped, persisting nothing and looping the gate.)
         if (isMemberComplete(member)) continue;
 
         const monthNum = draft.birthMonth ? Number(draft.birthMonth) : null;
@@ -246,8 +321,7 @@ export function CompleteProfileForm() {
         const result = await patchMemberClient(member.mid, body);
         if (!result.ok) {
           anyFailed = true;
-          if (result.fields) errors[member.mid] = result.fields;
-          else toast.error(memberWriteErrorMessage({ error: result.error }));
+          toast.error(memberWriteErrorMessage({ error: result.error }));
         }
       }
     } catch {
@@ -259,22 +333,18 @@ export function CompleteProfileForm() {
     }
 
     if (anyFailed) {
-      setFieldErrors(errors);
       setSaving(false);
       return;
     }
 
-    // Every still-incomplete member in scope was just PATCHed to completion — the
-    // Save button only enables once every scoped member is complete by draft, and
-    // a 200 from the write route means that member now satisfies the matrix — so
-    // the family is now complete. Leave via a HARD navigation rather than refetch
-    // + router.push: the refetch races the `use cache` revalidation, and a soft
-    // push into the /family gate can read the pre-save (stale) family and bounce
-    // back to /complete-profile on the SAME route, preserving this component with
-    // saving=true → a permanent "Saving…". A full document load re-runs the gate
-    // server-side on fresh data. We intentionally leave saving=true: assign() is
-    // async, but the page is unloading imminently and we don't want the button to
-    // flicker back to "Save and continue" in the meantime.
+    // Every still-incomplete member in scope was just PATCHed to completion. Leave
+    // via a HARD navigation rather than refetch + router.push: the refetch races
+    // the `use cache` revalidation, and a soft push into the /family gate can read
+    // the pre-save (stale) family and bounce back to /complete-profile on the SAME
+    // route, preserving this component with saving=true → a permanent "Saving…". A
+    // full document load re-runs the gate server-side on fresh data. We
+    // intentionally leave saving=true: assign() is async, but the page is
+    // unloading imminently and we don't want the button to flicker meanwhile.
     navigateTo('/family');
   }
 
@@ -313,10 +383,18 @@ export function CompleteProfileForm() {
     </div>
   );
 
-  const memberCards = targets.map(({ member, missing }) => {
+  const memberCards = cards.map(({ member, missing }) => {
     const draft = drafts[member.mid];
     if (!draft) return null;
-    const errs = fieldErrors[member.mid] ?? {};
+    // Per-field inline messages, recomputed live and shown only after a blocked
+    // Save — so a message clears the moment the user fixes the field.
+    const { messages } = validateMember(member, draft);
+    const ready = memberReady(member, draft);
+    const liveRemaining = whatsMissingForMember(draftToMemberShape(member, draft)).filter(
+      (f) => !UNFILLABLE_FIELDS.includes(f),
+    );
+    const fieldErr = (f: MemberRequiredField) => (showErrors ? messages[f] : undefined);
+    // Which fields to render is frozen to the server's missing set at load.
     const show = (f: MemberRequiredField) => missing.includes(f);
     return (
       <div
@@ -325,21 +403,30 @@ export function CompleteProfileForm() {
         className="card"
         style={{ padding: 18, marginBottom: 16 }}
       >
-        <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>
+        {/* Whose profile this card is for — emphasised so it's unmistakable amid
+            the fields (issue #18 #1): large, bold, accent-coloured, with an eyebrow. */}
+        <p style={{ fontSize: 10.5, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 2 }}>
+          {data.isManager ? 'Member' : 'Your profile'}
+        </p>
+        <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--accentDeep)', letterSpacing: '-0.01em', marginBottom: 4 }}>
           {member.firstName} {member.lastName}
         </div>
         <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 14 }}>
-          {member.type} · still needs {missing.map((f) => FIELD_LABEL[f]).join(', ')}
+          {member.type}
+          {' · '}
+          {ready
+            ? 'all set ✓'
+            : liveRemaining.length > 0
+              ? `still needs ${liveRemaining.map((f) => FIELD_LABEL[f]).join(', ')}`
+              : 'almost there — check the highlighted fields'}
         </div>
 
         {/* firstName / lastName / type have NO input on this screen (they're set
             at registration). If one is somehow missing, the card would otherwise
-            render an empty shell with a permanently-disabled Save and no way
-            forward — explain it instead of stranding the user. */}
+            render an empty shell with no way forward — explain it instead of
+            stranding the user. */}
         {(() => {
-          const unfillable = missing.filter(
-            (f) => f === 'firstName' || f === 'lastName' || f === 'type',
-          );
+          const unfillable = missing.filter((f) => UNFILLABLE_FIELDS.includes(f));
           if (unfillable.length === 0) return null;
           return (
             <p
@@ -366,7 +453,7 @@ export function CompleteProfileForm() {
               <option value="Male">Male</option>
               <option value="Female">Female</option>
             </select>
-            <FieldError message={errs.gender} />
+            <FieldError message={fieldErr('gender')} />
           </div>
         )}
 
@@ -392,7 +479,7 @@ export function CompleteProfileForm() {
                 placeholder="e.g. Peanuts"
               />
             )}
-            <FieldError message={errs.foodAllergies} />
+            <FieldError message={fieldErr('foodAllergies')} />
           </div>
         )}
 
@@ -408,7 +495,7 @@ export function CompleteProfileForm() {
                   value={draft.email}
                   onChange={(e) => update(member.mid, { email: e.target.value })}
                 />
-                <FieldError message={errs.email} />
+                <FieldError message={fieldErr('email')} />
               </div>
             )}
             {show('phone') && (
@@ -421,7 +508,7 @@ export function CompleteProfileForm() {
                   value={draft.phone}
                   onChange={(e) => update(member.mid, { phone: e.target.value })}
                 />
-                <FieldError message={errs.phone} />
+                <FieldError message={fieldErr('phone')} />
               </div>
             )}
           </div>
@@ -437,21 +524,25 @@ export function CompleteProfileForm() {
             {draft.volunteeringSkills.length === 0 && (
               <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6 }}>Select at least one.</p>
             )}
-            <FieldError message={errs.volunteeringSkills} />
+            <FieldError message={fieldErr('volunteeringSkills')} />
           </div>
         )}
 
         {show('schoolGrade') && (
           <div className="field" style={{ marginBottom: 14 }}>
             <label>School grade <span className="req">·</span></label>
-            <input
+            <select
               className="input"
               aria-label={`School grade for ${member.firstName}`}
               value={draft.schoolGrade}
               onChange={(e) => update(member.mid, { schoolGrade: e.target.value })}
-              placeholder="e.g. Grade 3"
-            />
-            <FieldError message={errs.schoolGrade} />
+            >
+              <option value="" disabled>Select grade…</option>
+              {GRADE_OPTIONS.map((g) => (
+                <option key={g.value} value={g.value}>{g.label}</option>
+              ))}
+            </select>
+            <FieldError message={fieldErr('schoolGrade')} />
           </div>
         )}
 
@@ -482,27 +573,25 @@ export function CompleteProfileForm() {
                 ))}
               </select>
             </div>
-            <FieldError message={errs.birthMonthYear} />
+            <FieldError message={fieldErr('birthMonthYear')} />
           </div>
         )}
       </div>
     );
   });
 
-  // As the user fills fields, satisfied fields (and eventually whole member
-  // cards) drop out of `targets` — so once everything is filled `targets` is
-  // empty. That's the moment we MOST need the Save button (to PATCH the drafts),
-  // so the button is ALWAYS rendered here; it just toggles enabled on
-  // `allComplete`. Gating its existence on `targets.length > 0` (as before) made
-  // it vanish exactly when it became clickable, leaving no way to save.
-  const allSetNote = targets.length === 0 ? (
+  // Positive confirmation once everything in scope is saveable.
+  const allSetNote = allReady ? (
     <div className="card" style={{ padding: 18, marginBottom: 16 }}>
       <p style={{ fontSize: 14 }}>Everything looks complete — save to continue to your dashboard.</p>
     </div>
   ) : null;
 
+  // The button stays ALWAYS clickable (except while saving): clicking it while
+  // incomplete surfaces inline errors + a toast (issue #18 #4), rather than
+  // silently doing nothing — the prior `disabled={!allComplete}` gave no feedback.
   const submitBtn = (
-    <button type="submit" className="btn btn--p btn--block" disabled={saving || !allComplete} data-testid="complete-profile-save">
+    <button type="submit" className="btn btn--p btn--block" disabled={saving} data-testid="complete-profile-save">
       {saving ? 'Saving…' : 'Save and continue'}
     </button>
   );
