@@ -22,7 +22,7 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
-## `PENDING` · 2026-06-25 · dashboard / family / member-detail gain public ids (FID 4-digit, MID 5-digit)
+## `773f15c` · 2026-06-25 · dashboard / family / member-detail gain public ids (FID 4-digit, MID 5-digit)
 - **Family responses** (`GET /api/setu/dashboard` → `family`, `GET /api/setu/family` → `family`) gain an additive **`publicFid: string | null`** (4-digit, e.g. `'1042'`) — the family's canonical user-facing Family ID; `null` until the FID/MID renumber migration assigns one. The existing `fid` (`CMT-…`) is **unchanged** and remains the join key.
 - **Member responses** (`GET /api/setu/dashboard` → each `members[]`, `GET /api/setu/members/[mid]/profile` → `profile`) gain an additive **`publicMid: string | null`** (5-digit, e.g. `'50001'`). The existing `mid` (`${fid}-NN`) is **unchanged** and remains the join key / route param.
 - **Additive only** — no existing field changed; both raw `fid`/`mid` AND the new `publicFid`/`publicMid` are returned (the route does NOT collapse to a single `displayFid`, so the mobile client mirrors the web's own `publicX ?? legacyX` fallback).
