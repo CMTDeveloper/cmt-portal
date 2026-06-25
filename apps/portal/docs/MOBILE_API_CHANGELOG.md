@@ -22,7 +22,7 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
-## `0309362` · 2026-06-24 · family search hit gains `publicFid`
+## `921bb37` · 2026-06-24 · family search hit gains `publicFid`
 - **GET `/api/setu/family/search`** (welcome-team) — each object in the `hits` array gains an additive **`publicFid: string | null`** field: the family's canonical 4-digit user-facing Family ID (`null` until assigned during the FID/MID renumber migration; the internal `fid` remains the join key and is unchanged). **Additive** — no existing field changed; `fid`, `legacyFid`, `name`, `location`, `memberCount` are all unchanged. Part of issue #4 (surface the 4-digit FID at family level, 5-digit MID on member detail).
   - **Mobile:** add the nullable `publicFid` to the `FamilySearchHit` schema/type in `src/api/schemas/*`. If/when the app renders a family identifier, prefer `publicFid ?? fid` (a `displayFid` equivalent) so it shows the 4-digit id when present and falls back to the legacy `fid` during migration. No request-shape change. (Member-level `publicMid` is shown only on the member detail screen on web — not added to any list/search response here.)
 
