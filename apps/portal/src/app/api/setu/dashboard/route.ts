@@ -27,11 +27,24 @@ export async function GET(req: Request) {
   return NextResponse.json(
     {
       schoolYear,
-      family: { fid: fam.family.fid, name: fam.family.name, location: fam.family.location },
+      // publicFid (4-digit) is exposed at family level alongside the join-key
+      // `fid` (issue #4). It's additive + nullable — null until the renumber
+      // migration assigns one; the mobile client does its own `publicFid ?? fid`
+      // fallback and never uses publicFid as a join key / route param.
+      family: {
+        fid: fam.family.fid,
+        publicFid: fam.family.publicFid ?? null,
+        name: fam.family.name,
+        location: fam.family.location,
+      },
       currentMid: fam.currentMid,
       isManager: fam.isManager,
       members: fam.members.map((m) => ({
         mid: m.mid,
+        // publicMid (5-digit) rides alongside the join-key `mid` (same additive +
+        // nullable + non-join-key rules as publicFid). The mobile client shows it
+        // on the member-detail screen.
+        publicMid: m.publicMid ?? null,
         firstName: m.firstName,
         lastName: m.lastName,
         type: m.type,

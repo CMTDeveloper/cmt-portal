@@ -19,10 +19,10 @@ vi.mock('@/features/setu/rollover/live-school-year', () => ({
 
 import { GET } from '../route';
 
-const family = { fid: 'CMT-AB12CD34', name: 'Patel', location: 'Brampton', legacyFid: null };
+const family = { fid: 'CMT-AB12CD34', publicFid: '1042', name: 'Patel', location: 'Brampton', legacyFid: null };
 const members = [
-  { mid: 'CMT-AB12CD34-01', firstName: 'Raj', lastName: 'Patel', type: 'Adult' },
-  { mid: 'CMT-AB12CD34-02', firstName: 'Anya', lastName: 'Patel', type: 'Child' },
+  { mid: 'CMT-AB12CD34-01', publicMid: '50001', firstName: 'Raj', lastName: 'Patel', type: 'Adult' },
+  { mid: 'CMT-AB12CD34-02', publicMid: '50002', firstName: 'Anya', lastName: 'Patel', type: 'Child' },
 ];
 
 const dashboardData = {
@@ -77,9 +77,15 @@ describe('GET /api/setu/dashboard', () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.family.fid).toBe('CMT-AB12CD34');
+    // Public 4-digit FID is exposed at family level alongside the join-key `fid` (issue #4).
+    expect(body.family.publicFid).toBe('1042');
     expect(body.currentMid).toBe('CMT-AB12CD34-02');
     expect(body.isManager).toBe(false);
     expect(body.members).toHaveLength(2);
+    // Each member carries its 5-digit publicMid alongside the join-key `mid`.
+    expect(body.members[0].publicMid).toBe('50001');
+    expect(body.members[1].publicMid).toBe('50002');
+    expect(body.members[0].mid).toBe('CMT-AB12CD34-01');
     expect(body.balaVihar.suggestedAmount).toBe(500);
     expect(body.balaVihar.givenForPeriod).toBe(200);
     expect(body.balaVihar.donationPct).toBe(40);
@@ -92,6 +98,22 @@ describe('GET /api/setu/dashboard', () => {
     // Top-level live school year (mobile counterpart of the web SchoolYearBadge),
     // distinct from balaVihar.termLabel (the family's enrollment period).
     expect(body.schoolYear).toBe('2025-26');
+  });
+
+  it('serializes publicFid/publicMid as null when not yet assigned (fallback case)', async () => {
+    // Pre-migration families/members have no publicFid/publicMid — the route must
+    // still emit the key as `null` (additive, never undefined / absent) so the
+    // mobile client can do its own `publicX ?? legacyX` fallback.
+    mockGetFamilyByFid.mockResolvedValue({
+      family: { fid: 'CMT-AB12CD34', publicFid: null, name: 'Patel', location: 'Brampton', legacyFid: null },
+      members: [{ mid: 'CMT-AB12CD34-01', publicMid: null, firstName: 'Raj', lastName: 'Patel', type: 'Adult' }],
+    });
+    const res = await GET(makeRequest({ role: 'family-manager', fid: 'CMT-AB12CD34', mid: 'CMT-AB12CD34-01' }));
+    const body = await res.json();
+    expect(body.family.publicFid).toBeNull();
+    expect('publicFid' in body.family).toBe(true);
+    expect(body.members[0].publicMid).toBeNull();
+    expect('publicMid' in body.members[0]).toBe(true);
   });
 
   it('does NOT leak UI-only fields (pill colors, donateUrl)', async () => {

@@ -13,6 +13,7 @@ import { GET } from '../route';
 
 const familyDoc = {
   fid: 'FAM001ABCD12',
+  publicFid: '1042',
   legacyFid: null,
   name: 'Patel',
   location: 'Brampton',
@@ -23,6 +24,7 @@ const familyDoc = {
 
 const memberDoc = {
   mid: 'FAM001ABCD12-01',
+  publicMid: '50001',
   uid: 'uid-raj',
   firstName: 'Raj',
   lastName: 'Patel',
@@ -75,8 +77,12 @@ describe('GET /api/setu/family', () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.family.fid).toBe('FAM001ABCD12');
+    // Public 4-digit FID is exposed at family level alongside the join-key `fid` (issue #4).
+    expect(body.family.publicFid).toBe('1042');
     expect(body.members).toHaveLength(1);
     expect(body.members[0].mid).toBe('FAM001ABCD12-01');
+    // Member carries its 5-digit publicMid alongside the join-key `mid`.
+    expect(body.members[0].publicMid).toBe('50001');
     expect(body.currentMid).toBe('FAM001ABCD12-01');
     expect(body.isManager).toBe(true);
   });

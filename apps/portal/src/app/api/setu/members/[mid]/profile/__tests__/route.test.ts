@@ -30,11 +30,14 @@ describe('GET /api/setu/members/[mid]/profile', () => {
   });
 
   it('200 with body { profile } for a family reading its own child', async () => {
-    const profile = { mid: 'CMT-FAM1-03', fid: 'CMT-FAM1' };
+    // publicMid (5-digit) rides on the profile alongside the join-key `mid` (issue #4).
+    const profile = { mid: 'CMT-FAM1-03', publicMid: '50003', fid: 'CMT-FAM1' };
     vi.mocked(getChildProfile).mockResolvedValue(profile as never);
     const res = await GET(req('family-member', 'CMT-FAM1'), ctx);
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ profile });
+    const body = await res.json();
+    expect(body).toEqual({ profile });
+    expect(body.profile.publicMid).toBe('50003');
   });
 
   it('404 (no leak) when a family reads another family child', async () => {
