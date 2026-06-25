@@ -33,6 +33,19 @@ const PASSWORD = process.env['E2E_FAMILY_PASSWORD'];
 const PHONE = process.env['E2E_FAMILY_PHONE'] ?? '+15195550100';
 const LEGACY_FID = 'E2E-ATT-1';
 const CHILD_SID = 'E2E-SID-1';
+// Issue #4 — deterministic public ids on the fixture so the public-FID/MID E2E
+// (e2e/setu/public-ids.spec.ts) can assert REAL values without running the live
+// `migrate:public-ids` backfill. These are additive + idempotent: the backfill
+// (scripts/assign-public-ids.ts) skips any doc that already carries its public
+// id, so seeding them here never collides with the runtime counters. The
+// 4-digit / 5-digit shapes mirror the production allocator (1001+, 50001+);
+// '1042' / '50001'+'50002' are reserved-for-fixtures values outside the early
+// counter range so they won't clash with a real backfilled family.
+const PUBLIC_FID = '1042';
+// Stable per-member publicMid. The fixture has exactly two members (manager +
+// one child); index 0 → 50001, index 1 → 50002. Assigned by joinedAt order so a
+// re-seed maps the same member to the same id every time.
+const PUBLIC_MIDS = ['50001', '50002'] as const;
 const BV_OID = 'bv-brampton-2025-26';
 const NODON_OID = 'om-chanting-all-2026-summer-om-chanting';
 const CHECKIN_DATES = ['2025-10-05', '2026-01-11', '2026-03-08'];
@@ -166,12 +179,24 @@ async function main(): Promise<void> {
     console.log(`created family ${fid} (manager mid ${managerMid})`);
   }
 
-  // Tag family + members + contactKeys _test:true (mirrors createTestFamily), and
-  // set legacyFid so the dashboard reads attendance from family-check-ins/{legacyFid}.
-  await db.collection('families').doc(fid).set({ legacyFid: LEGACY_FID, _test: true }, { merge: true });
+  // Tag family + members + contactKeys _test:true (mirrors createTestFamily), set
+  // legacyFid so the dashboard reads attendance from family-check-ins/{legacyFid},
+  // and pin the deterministic publicFid (issue #4) so the public-ids E2E asserts
+  // a real 4-digit value without the live backfill.
+  await db.collection('families').doc(fid).set({ legacyFid: LEGACY_FID, publicFid: PUBLIC_FID, _test: true }, { merge: true });
   const membersSnap = await db.collection('families').doc(fid).collection('members').get();
+  // Deterministic publicMid assignment (issue #4): sort by joinedAt asc (then mid
+  // as a stable tiebreaker) so a re-seed maps the same member to the same id —
+  // index 0 → 50001 (the manager, joined first), index 1 → 50002 (the child).
+  const orderedMembers = [...membersSnap.docs].sort((a, b) => {
+    const aj = toDate((a.data() as { joinedAt?: unknown }).joinedAt).getTime();
+    const bj = toDate((b.data() as { joinedAt?: unknown }).joinedAt).getTime();
+    if (aj !== bj) return aj - bj;
+    return a.id.localeCompare(b.id);
+  });
   let childMid: string | null = null;
-  for (const m of membersSnap.docs) {
+  let memberIndex = 0;
+  for (const m of orderedMembers) {
     const md = m.data() as { mid?: string; type?: string; birthMonthYear?: string | null };
     if (md.type === 'Child' && md.mid) childMid = md.mid;
     // The child needs legacySid = CHILD_SID so the door check-ins
@@ -194,10 +219,18 @@ async function main(): Promise<void> {
       const month = md.birthMonthYear ? Number(md.birthMonthYear.slice(5, 7)) : NaN;
       if (Number.isInteger(month) && month >= 1 && month <= 12) gate['birthMonth'] = month;
     }
+    // Deterministic 5-digit publicMid (issue #4) — additive, idempotent (the
+    // backfill skips a member that already carries one). PUBLIC_MIDS has two
+    // entries for the two fixture members; guard the index defensively in case a
+    // future fixture grows the family.
+    const publicMid = PUBLIC_MIDS[memberIndex];
+    if (publicMid) gate['publicMid'] = publicMid;
+    memberIndex += 1;
     await m.ref.set({ _test: true, ...extra, ...gate }, { merge: true });
   }
   await db.collection('contactKeys').doc(hashContactKey('email', EMAIL)).set({ _test: true }, { merge: true });
   await db.collection('contactKeys').doc(hashContactKey('phone', PHONE)).set({ _test: true }, { merge: true });
+  console.log(`set publicFid=${PUBLIC_FID} on family ${fid}; publicMids=${PUBLIC_MIDS.join(',')} (joinedAt order)`);
 
   // 2) Firebase Auth user WITH PASSWORD at the contact-derived uid (the uid the
   //    session resolves to — see build-session-claims). Create or update.
