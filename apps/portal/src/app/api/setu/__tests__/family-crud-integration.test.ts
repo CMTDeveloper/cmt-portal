@@ -71,6 +71,19 @@ vi.mock('@/features/setu/registration/hash-contact-key', () => ({
   hashContactKey: (_type: string, value: string) => `hash:${value}`,
 }));
 
+// ── public-id allocator ───────────────────────────────────────────────────────
+// The members POST handler allocates a publicMid before its own transaction, and
+// the allocator runs ITS OWN db.runTransaction. Left unmocked, that extra
+// transaction would run through the shared mockRunTransaction below and corrupt
+// the per-test txn sequence (e.g. the two-concurrent-POSTs race assertion). Mock
+// it to deterministic ids so it never touches runTransaction.
+vi.mock('@/features/setu/ids/public-id-allocator', () => ({
+  allocateFamilyPublicId: vi.fn(async () => '1001'),
+  allocateMemberPublicIds: vi.fn(async (count: number) =>
+    Array.from({ length: count }, (_, i) => String(50001 + i)),
+  ),
+}));
+
 // ── Route handlers ────────────────────────────────────────────────────────────
 import { GET as familyGET } from '../family/route';
 import { POST as membersPOST } from '../members/route';
