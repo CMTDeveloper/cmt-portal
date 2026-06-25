@@ -1,4 +1,9 @@
-import 'server-only';
+// NOTE: deliberately NO `import 'server-only'`. This allocator is reached by the
+// UAT CLIs (the public-id backfill + every seed, via registerFamily / lazy-migrate),
+// which run under plain tsx where `server-only` is unresolvable. It is server-side
+// by virtue of importing the Firebase Admin SDK below — the same guard the rest of
+// `@cmt/firebase-shared/admin/*` relies on — and is never imported by a client
+// component.
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 
 const FAMILY_COUNTER = 'familyPublicId';
