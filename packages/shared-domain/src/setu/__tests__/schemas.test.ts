@@ -47,6 +47,16 @@ describe('FamilyDocSchema', () => {
   it('rejects empty managers array (must have at least one)', () => {
     expect(FamilyDocSchema.safeParse({ ...validFamily, managers: [] }).success).toBe(false);
   });
+
+  it('FamilyDoc accepts an optional publicFid and defaults absent to undefined', () => {
+    const base = {
+      fid: 'CMT-A1B2C3D4', legacyFid: null, name: 'Iyer', location: 'Brampton' as const,
+      createdAt: new Date(), managers: ['CMT-A1B2C3D4-01'], searchKeys: ['iyer', 'cmt-a1b2c3d4'],
+    };
+    expect(FamilyDocSchema.parse({ ...base, publicFid: '1042' }).publicFid).toBe('1042');
+    expect(FamilyDocSchema.parse(base).publicFid).toBeUndefined();      // existing docs: read still passes
+    expect(FamilyDocSchema.parse({ ...base, publicFid: null }).publicFid).toBeNull();
+  });
 });
 
 // ── MemberDoc ─────────────────────────────────────────────────────────────────
@@ -163,6 +173,24 @@ describe('MemberDocSchema', () => {
 
   it('rejects an unknown portalAccess value', () => {
     expect(MemberDocSchema.safeParse({ ...validAdult, portalAccess: 'revoked' }).success).toBe(false);
+  });
+
+  it('MemberDoc accepts an optional publicMid', () => {
+    // NOTE: brief's fixture used `emergencyContacts: [null, null]`, but MemberDocSchema
+    // requires a non-null first emergency contact (z.tuple([EmergencyContactSchema, …])).
+    // Fixed to a schema-valid value so the publicMid assertions are reachable; the
+    // publicMid assertions themselves are verbatim from the brief.
+    const m = {
+      mid: 'CMT-A1B2C3D4-01', uid: null, firstName: 'A', lastName: 'B', type: 'Adult' as const,
+      gender: 'Male' as const, manager: true, joinedAt: new Date(), email: null, phone: null,
+      schoolGrade: null, birthMonthYear: null, volunteeringSkills: [], foodAllergies: null,
+      emergencyContacts: [
+        { relation: 'Self', phone: '+14165550100', email: 'a@example.com' },
+        null,
+      ] as [{ relation: string; phone: string; email: string }, null],
+    };
+    expect(MemberDocSchema.parse({ ...m, publicMid: '50001' }).publicMid).toBe('50001');
+    expect(MemberDocSchema.parse(m).publicMid).toBeUndefined();
   });
 });
 

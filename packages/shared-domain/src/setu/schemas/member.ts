@@ -40,6 +40,10 @@ export const MemberDocSchema = z.object({
   // family-check-ins collection (which keys students by sid). Null for members
   // with no legacy student row (new portal kids, adults).
   legacySid: z.string().nullable().optional(),
+  // 5-digit sequential Member ID (issue #4), e.g. '50001'. The canonical,
+  // user-facing member identifier (replaces the legacy SID for humans); the
+  // `${fid}-NN` `mid` above stays the internal doc-id / join key. Optional: read-validated.
+  publicMid: z.string().nullable().optional(),
   volunteeringSkills: z.array(z.string()),
   foodAllergies: z.string().nullable(),
   emergencyContacts: z.tuple([EmergencyContactSchema, EmergencyContactSchema.nullable()]),

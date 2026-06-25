@@ -8,6 +8,10 @@ export const FamilyDocSchema = z.object({
   createdAt: z.date(),
   managers: z.array(z.string()).min(1),
   searchKeys: z.array(z.string()),
+  // 4-digit sequential Family ID (issue #4), e.g. '1042'. Additive + user-facing;
+  // the CMT- `fid` above remains the internal doc-id / join key. Optional because
+  // doc schemas validate on read and pre-migration docs lack it.
+  publicFid: z.string().nullable().optional(),
 });
 
 export type FamilyDoc = z.infer<typeof FamilyDocSchema>;
