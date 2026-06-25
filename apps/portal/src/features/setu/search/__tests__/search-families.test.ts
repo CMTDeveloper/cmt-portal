@@ -112,8 +112,8 @@ function makeDbWithQueryRouting(opts: {
         })),
       };
     }),
-    collectionGroup: vi.fn((col: string) => {
-      // col === 'members' — used for publicMid lookups
+    collectionGroup: vi.fn((_col: string) => {
+      // _col === 'members' — used for publicMid lookups
       return {
         where: vi.fn(() => ({
           limit: vi.fn(() => ({
