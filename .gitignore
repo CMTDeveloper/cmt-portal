@@ -56,3 +56,8 @@ apps/portal/e2e/.auth/
 
 # Local RTDB snapshot (real family PII — never commit; capture via snapshot:rtdb)
 apps/portal/.rtdb-snapshot/
+
+# Claude Code — share project config (.claude/settings.json, hooks/, skills/), ignore personal/local state
+.claude/settings.local.json
+.claude/worktrees/
+.claude/*.lock
