@@ -28,6 +28,24 @@ vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
   FieldValue: { serverTimestamp: vi.fn(() => 'SERVER_TIMESTAMP') },
 }));
 
+// Mock the public-id allocator so its OWN Firestore transactions don't run through
+// the shared mockRunTransaction (that would pollute call counts and consume the
+// duplicate-detection tests' mockResolvedValueOnce queues). The allocator has its
+// own unit tests (Task 3); here we only verify that registerFamily threads the
+// allocated ids onto the family + member docs. Default: family → '1001', members
+// → contiguous from 50001 so the issue-#4 assertion stays deterministic.
+const { mockAllocateFamilyPublicId, mockAllocateMemberPublicIds } = vi.hoisted(() => ({
+  mockAllocateFamilyPublicId: vi.fn(async () => '1001'),
+  mockAllocateMemberPublicIds: vi.fn(async (count: number) =>
+    Array.from({ length: count }, (_, i) => String(50001 + i)),
+  ),
+}));
+
+vi.mock('@/features/setu/ids/public-id-allocator', () => ({
+  allocateFamilyPublicId: mockAllocateFamilyPublicId,
+  allocateMemberPublicIds: mockAllocateMemberPublicIds,
+}));
+
 import { registerFamily, deriveBirthMonth } from '../register-family';
 import type { RegisterFamilyInput } from '../register-family';
 
@@ -215,6 +233,47 @@ describe('registerFamily — persists the full member matrix (no hardcoded []/nu
     const priya = memberDocByFirstName(txnSet, 'Priya');
     expect(priya?.volunteeringSkills).toEqual(['Decor']);
     expect(priya?.birthMonth).toBeNull(); // no birthMonthYear → null
+  });
+});
+
+describe('registerFamily — assigns publicFid/publicMid (issue #4)', () => {
+  // NOTE: the brief's assertion read back docs via a `fakeDb.collection(...).get()`,
+  // but THIS harness has no fake-firestore — it uses vi.fn mocks and captures
+  // `txn.set` payloads (see the rest of this file). So we adapt the assertion to
+  // the harness's actual read API: inspect the captured set() payloads. The
+  // public-id-allocator is mocked above (family → '1001', members → 50001+i), so
+  // mockRunTransaction only has to serve registerFamily's own transaction.
+  it('assigns publicFid to the family and a publicMid to every member', async () => {
+    const txnSet = vi.fn();
+    mockRunTransaction.mockImplementation(async (fn: (txn: unknown) => Promise<unknown>) => {
+      const txn = { get: vi.fn().mockResolvedValue({ exists: false }), set: txnSet };
+      return fn(txn);
+    });
+
+    const res = await registerFamily({
+      ...baseInput,
+      email: 'a@b.com',
+      phone: '+14165550000',
+      familyName: 'Iyer',
+      location: 'Brampton',
+      manager: { firstName: 'Asha', lastName: 'Iyer', gender: 'Female' },
+      additionalMembers: [
+        { firstName: 'Dev', lastName: 'Iyer', type: 'Child', gender: 'Male' },
+        { firstName: 'Mira', lastName: 'Iyer', type: 'Child', gender: 'Female' },
+      ],
+    });
+
+    const payloads = txnSet.mock.calls.map((c) => c[1] as Record<string, unknown>);
+    const fam = payloads.find((d) => d?.fid === res.fid && d?.name === 'Iyer');
+    expect(fam?.publicFid).toBe('1001');
+
+    const members = payloads.filter(
+      (d) => typeof d?.mid === 'string' && (d?.manager === true || d?.manager === false),
+    );
+    expect(members.map((m) => m.publicMid).sort()).toEqual(['50001', '50002', '50003']);
+    // Manager (mid -01) holds the first allocated public mid.
+    const manager = members.find((m) => m.manager === true);
+    expect(manager?.publicMid).toBe('50001');
   });
 });
 

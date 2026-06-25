@@ -1,6 +1,7 @@
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
 import { hashContactKey } from './hash-contact-key';
 import { generateFid } from './generate-fid';
+import { allocateFamilyPublicId, allocateMemberPublicIds } from '@/features/setu/ids/public-id-allocator';
 
 export type Location = 'Brampton' | 'Mississauga' | 'Scarborough' | 'Markham';
 export type Gender = 'Male' | 'Female' | 'PreferNotToSay';
@@ -66,6 +67,16 @@ export async function registerFamily(input: RegisterFamilyInput): Promise<Regist
   const fid = generateFid();
   const managerMid = `${fid}-01`;
   const now = FieldValue.serverTimestamp();
+
+  // Allocate the user-facing 4-digit publicFid + a contiguous block of 5-digit
+  // publicMids (one per member: manager + each additional). These MUST run BEFORE
+  // db.runTransaction opens — the allocator runs its own Firestore transaction and
+  // Firestore forbids nested transactions. publicMids[0] is always the MANAGER's;
+  // additional members map by a clean 0-based loop index (manager=[0], first
+  // additional=[1], …) — see the loop below.
+  const publicFid = await allocateFamilyPublicId();
+  const publicMids = await allocateMemberPublicIds(1 + input.additionalMembers.length);
+  const managerPublicMid = publicMids[0]!;
 
   // The manager always owns its own email + phone contactKeys. An additional
   // adult MAY reuse the manager's contact (owner decision #3, 2026-06-22) — that
@@ -133,6 +144,7 @@ export async function registerFamily(input: RegisterFamilyInput): Promise<Regist
     const familyRef = db.collection('families').doc(fid);
     txn.set(familyRef, {
       fid,
+      publicFid,
       legacyFid: null,
       name: input.familyName,
       location: input.location,
@@ -145,6 +157,7 @@ export async function registerFamily(input: RegisterFamilyInput): Promise<Regist
     const managerRef = db.collection('families').doc(fid).collection('members').doc(managerMid);
     txn.set(managerRef, {
       mid: managerMid,
+      publicMid: managerPublicMid,
       uid: null,
       firstName: input.manager.firstName,
       lastName: input.manager.lastName,
@@ -164,11 +177,17 @@ export async function registerFamily(input: RegisterFamilyInput): Promise<Regist
 
     // Create additional members
     let seq = 2;
-    for (const member of input.additionalMembers) {
+    // memberIndex is a CLEAN 0-based loop index used ONLY for the publicMid map —
+    // do NOT reuse `seq` here: it is consumed via post-increment (`zeroPad(seq++)`)
+    // above, so reading it after would be off-by-one. publicMids[0] is the manager,
+    // so the first additional member gets publicMids[1], the second publicMids[2], …
+    input.additionalMembers.forEach((member, memberIndex) => {
       const mid = `${fid}-${zeroPad(seq++)}`;
+      const memberPublicMid = publicMids[memberIndex + 1]!;
       const memberRef = db.collection('families').doc(fid).collection('members').doc(mid);
       txn.set(memberRef, {
         mid,
+        publicMid: memberPublicMid,
         uid: null,
         firstName: member.firstName,
         lastName: member.lastName,
@@ -211,7 +230,7 @@ export async function registerFamily(input: RegisterFamilyInput): Promise<Regist
           });
         }
       }
-    }
+    });
 
     // Create contactKey docs for the manager (email + phone)
     txn.set(db.collection('contactKeys').doc(emailHash), {
