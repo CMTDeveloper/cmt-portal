@@ -33,6 +33,16 @@ vi.mock('@/features/setu/registration/hash-contact-key', () => ({
   hashContactKey: (_type: string, value: string) => `hash:${value}`,
 }));
 
+// ── public-id allocator (issue #4) ────────────────────────────────────────────
+// Accept POST creates a new co-manager member doc → it allocates a publicMid. Mock
+// the allocator so its OWN db.runTransaction doesn't run through this test's shared
+// mockRunTransaction (which would make `toHaveBeenCalledOnce` see 2 calls).
+vi.mock('@/features/setu/ids/public-id-allocator', () => ({
+  allocateMemberPublicIds: vi.fn(async (count: number) =>
+    Array.from({ length: count }, (_, i) => String(50001 + i)),
+  ),
+}));
+
 // ── getInviteByToken — used by GET /api/setu/invite/[token] ──────────────────
 const mockGetInviteByToken = vi.hoisted(() => vi.fn());
 vi.mock('@/features/setu/invite/get-invite', () => ({

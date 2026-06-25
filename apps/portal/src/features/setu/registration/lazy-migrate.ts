@@ -1,6 +1,7 @@
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
 import { hashContactKey } from './hash-contact-key';
 import { generateFid } from './generate-fid';
+import { allocateFamilyPublicId, allocateMemberPublicIds } from '@/features/setu/ids/public-id-allocator';
 import {
   fetchLegacyFamilyForMigration,
   type LegacyFamilyForMigration,
@@ -44,6 +45,17 @@ export async function lazyMigrateLegacyFamily(legacyFid: string): Promise<LazyMi
 
   const db = portalFirestore();
 
+  // Allocate the user-facing 4-digit publicFid + a contiguous block of 5-digit
+  // publicMids — one per member doc this migration will create, in the SAME order
+  // the txn writes them: adults first (or, when there are no adult rows, a single
+  // synthesized manager), then children. These MUST run BEFORE db.runTransaction
+  // opens — the allocator runs its own Firestore transaction and Firestore forbids
+  // nested transactions. A `publicMidCursor` consumes the block in lockstep with
+  // `seq` so each member doc gets the next id (members are 1:1 with the block).
+  const memberCount = (legacy.adults.length || 1) + legacy.children.length;
+  const publicFid = await allocateFamilyPublicId();
+  const publicMids = await allocateMemberPublicIds(memberCount);
+
   const result = await db.runTransaction(async (txn) => {
     const existingSnap = await txn.get(
       db.collection('families').where('legacyFid', '==', legacyFid).limit(1),
@@ -59,6 +71,9 @@ export async function lazyMigrateLegacyFamily(legacyFid: string): Promise<LazyMi
     const fid = generateFid();
     const now = FieldValue.serverTimestamp();
     let seq = 1;
+    // Consumes the pre-allocated publicMids block (sized memberCount) in the exact
+    // order members are written below; each member doc gets the next id.
+    let publicMidCursor = 0;
     const managerIds: string[] = [];
     const memberMids: string[] = [];
 
@@ -73,6 +88,7 @@ export async function lazyMigrateLegacyFamily(legacyFid: string): Promise<LazyMi
 
       txn.set(db.collection('families').doc(fid).collection('members').doc(mid), {
         mid,
+        publicMid: publicMids[publicMidCursor++]!,
         uid: null,
         firstName: adult.firstName || legacy.primaryFirstName,
         lastName: adult.lastName || legacy.primaryLastName,
@@ -104,6 +120,7 @@ export async function lazyMigrateLegacyFamily(legacyFid: string): Promise<LazyMi
 
       txn.set(db.collection('families').doc(fid).collection('members').doc(mid), {
         mid,
+        publicMid: publicMids[publicMidCursor++]!,
         uid: null,
         firstName: legacy.primaryFirstName,
         lastName: legacy.primaryLastName,
@@ -127,6 +144,7 @@ export async function lazyMigrateLegacyFamily(legacyFid: string): Promise<LazyMi
       memberMids.push(mid);
       txn.set(db.collection('families').doc(fid).collection('members').doc(mid), {
         mid,
+        publicMid: publicMids[publicMidCursor++]!,
         uid: null,
         firstName: child.firstName,
         lastName: child.lastName,
@@ -148,6 +166,7 @@ export async function lazyMigrateLegacyFamily(legacyFid: string): Promise<LazyMi
 
     txn.set(db.collection('families').doc(fid), {
       fid,
+      publicFid,
       legacyFid,
       name: legacy.familyName,
       location: legacy.location,

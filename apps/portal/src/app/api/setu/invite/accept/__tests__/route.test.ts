@@ -22,6 +22,13 @@ vi.mock('@cmt/firebase-shared/admin/session', () => ({
   createPortalSessionCookie: vi.fn(),
   exchangeCustomTokenForIdToken: vi.fn(),
 }));
+// Public-id allocator mock (issue #4). Accepting an invite CREATES a new co-manager
+// member doc, so it allocates exactly one publicMid; mock it deterministically.
+vi.mock('@/features/setu/ids/public-id-allocator', () => ({
+  allocateMemberPublicIds: vi.fn(async (count: number) =>
+    Array.from({ length: count }, (_, i) => String(50001 + i)),
+  ),
+}));
 
 import { POST } from '../route';
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
@@ -236,6 +243,21 @@ describe('POST /api/setu/invite/accept', () => {
     // Verify set was called (for member + contactKey + invite update)
     expect(mockSet).toHaveBeenCalled();
     expect(vi.mocked(revalidateTag)).toHaveBeenCalledWith('family-FAM001ABCD12', 'max');
+  });
+
+  it('assigns a publicMid to the new co-manager member doc (issue #4)', async () => {
+    mockGetSession.mockReturnValueOnce(validSession);
+    mockRunTransaction.mockImplementationOnce(async (fn: (txn: unknown) => unknown) => {
+      const txn = { get: mockGet, set: mockSet, update: mockUpdate };
+      return fn(txn);
+    });
+    const res = await POST(makeRequest({ token: 'tok-abc123' }));
+    expect(res.status).toBe(200);
+    // The new member doc is the only set() payload carrying a firstName field.
+    const memberWrite = mockSet.mock.calls.find(
+      ([, data]) => data && typeof data === 'object' && 'firstName' in data,
+    );
+    expect(memberWrite?.[1]).toMatchObject({ publicMid: '50001' });
   });
 
   it('happy path: sets __session cookie with refreshed claims after invite accept', async () => {

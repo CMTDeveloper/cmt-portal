@@ -4,6 +4,7 @@ import { revalidateTag } from 'next/cache';
 import { flags } from '@/lib/flags';
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
 import { hashContactKey } from '@/features/setu/registration/hash-contact-key';
+import { allocateMemberPublicIds } from '@/features/setu/ids/public-id-allocator';
 import { whatsMissingForMember, type MemberRequiredField } from '@cmt/shared-domain';
 
 
@@ -161,6 +162,11 @@ export async function POST(req: Request) {
   const emailHash = data.email ? hashContactKey('email', data.email) : null;
   const phoneHash = data.phone ? hashContactKey('phone', data.phone) : null;
 
+  // Allocate the new member's user-facing 5-digit publicMid BEFORE the txn opens —
+  // the allocator runs its own Firestore transaction and Firestore forbids nested
+  // transactions. One member is added per request, so we allocate exactly one.
+  const newPublicMid = (await allocateMemberPublicIds(1))[0]!;
+
   let mid: string;
   try {
     mid = await db.runTransaction(async (txn) => {
@@ -201,6 +207,7 @@ export async function POST(req: Request) {
     const memberRef = db.collection('families').doc(fid).collection('members').doc(newMid);
     txn.set(memberRef, {
       mid: newMid,
+      publicMid: newPublicMid,
       uid: null,
       firstName: data.firstName,
       lastName: data.lastName,

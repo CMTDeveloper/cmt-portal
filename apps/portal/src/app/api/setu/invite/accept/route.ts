@@ -10,6 +10,7 @@ import {
 } from '@cmt/firebase-shared/admin/session';
 import { getSessionContactFromHeaders } from '@/features/setu/auth/get-current-session-email';
 import { hashContactKey } from '@/features/setu/registration/hash-contact-key';
+import { allocateMemberPublicIds } from '@/features/setu/ids/public-id-allocator';
 
 
 const bodySchema = z.object({
@@ -43,6 +44,12 @@ export async function POST(req: Request) {
 
   const { token } = parsed.data;
   const db = portalFirestore();
+
+  // Accepting an invite CREATES a new co-manager member doc below, so allocate its
+  // user-facing 5-digit publicMid BEFORE the txn opens — the allocator runs its own
+  // Firestore transaction and Firestore forbids nested transactions. Exactly one
+  // member is created per accept.
+  const newPublicMid = (await allocateMemberPublicIds(1))[0]!;
 
   let result: { mid: string; fid: string };
   try {
@@ -123,6 +130,7 @@ export async function POST(req: Request) {
         .doc(newMid);
       txn.set(memberRef, {
         mid: newMid,
+        publicMid: newPublicMid,
         uid: session.uid,
         // Placeholder by absence — empty firstName/lastName triggers the
         // "Complete your profile" CTA on the dashboard (family/page.tsx

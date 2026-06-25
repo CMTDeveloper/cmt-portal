@@ -7,6 +7,20 @@ vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
 vi.mock('@/features/setu/registration/generate-fid', () => ({ generateFid: () => 'CMT-NEW1' }));
 vi.mock('@/features/setu/registration/hash-contact-key', () => ({ hashContactKey: (t: string, v: string) => `hash:${t}:${v}` }));
 
+// Public-id allocator mock (issue #4). Deterministic: family → '1001', members →
+// contiguous from 50001. The allocator has its own unit tests (Task 3); here we
+// only verify upsertPendingFamilyChild threads the allocated ids onto the docs.
+const { mockAllocateFamilyPublicId, mockAllocateMemberPublicIds } = vi.hoisted(() => ({
+  mockAllocateFamilyPublicId: vi.fn(async () => '1001'),
+  mockAllocateMemberPublicIds: vi.fn(async (count: number) =>
+    Array.from({ length: count }, (_, i) => String(50001 + i)),
+  ),
+}));
+vi.mock('@/features/setu/ids/public-id-allocator', () => ({
+  allocateFamilyPublicId: mockAllocateFamilyPublicId,
+  allocateMemberPublicIds: mockAllocateMemberPublicIds,
+}));
+
 import { upsertPendingFamilyChild } from '../pending-family';
 
 // A db whose collection().doc().collection() chain is inert (txn.get/set are mocked).
@@ -51,5 +65,36 @@ describe('upsertPendingFamilyChild', () => {
     const r = await upsertPendingFamilyChild(db, { ...P, parentEmail: null, parentPhone: '416-555-0100' });
     expect(r.createdFamily).toBe(true);
     expect(txnSet).toHaveBeenCalledTimes(4); // family, manager, child, phone contactKey
+  });
+
+  // ── publicFid / publicMid (issue #4) ──────────────────────────────────────
+  it('new family: assigns publicFid to the family + a publicMid to the manager and child', async () => {
+    txnGet.mockResolvedValueOnce({ exists: false }); // email contactKey lookup → create new family
+    await upsertPendingFamilyChild(db, P);
+
+    const payloads = txnSet.mock.calls.map((c) => c[1] as Record<string, unknown>);
+    const familyDoc = payloads.find((d) => 'managers' in d);
+    expect(familyDoc?.publicFid).toBe('1001');
+
+    const memberDocs = payloads.filter(
+      (d) => typeof d.mid === 'string' && typeof d.manager === 'boolean',
+    );
+    expect(memberDocs).toHaveLength(2); // manager + child
+    expect(memberDocs.map((d) => d.publicMid).sort()).toEqual(['50001', '50002']);
+    const child = memberDocs.find((d) => d.type === 'Child');
+    expect(typeof child?.publicMid).toBe('string');
+  });
+
+  it('appends to existing family: child gets a publicMid (no publicFid — no new family)', async () => {
+    txnGet
+      .mockResolvedValueOnce({ exists: true, data: () => ({ fid: 'CMT-EXIST' }) })
+      .mockResolvedValueOnce({ size: 2 }); // members size → -03
+    await upsertPendingFamilyChild(db, P);
+
+    const payloads = txnSet.mock.calls.map((c) => c[1] as Record<string, unknown>);
+    expect(payloads).toHaveLength(1); // only the child member
+    const child = payloads[0]!;
+    expect(child.type).toBe('Child');
+    expect(child.publicMid).toBe('50001');
   });
 });

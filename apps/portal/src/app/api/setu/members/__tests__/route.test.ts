@@ -9,6 +9,13 @@ vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
 vi.mock('@/features/setu/registration/hash-contact-key', () => ({
   hashContactKey: vi.fn((type: string, value: string) => `hash:${type}:${value}`),
 }));
+// Public-id allocator mock (issue #4). The POST add-member path allocates exactly
+// one publicMid for the new member; mock it deterministically to '50001'.
+vi.mock('@/features/setu/ids/public-id-allocator', () => ({
+  allocateMemberPublicIds: vi.fn(async (count: number) =>
+    Array.from({ length: count }, (_, i) => String(50001 + i)),
+  ),
+}));
 
 import { POST } from '../route';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
@@ -208,6 +215,15 @@ describe('POST /api/setu/members', () => {
     expect(body.issues.length).toBeGreaterThan(0);
     expect(body.issues[0]).toHaveProperty('path');
     expect(body.issues[0]).toHaveProperty('message');
+  });
+
+  it('assigns a publicMid to the newly added member (issue #4)', async () => {
+    const res = await POST(makeRequest(validBody, managerHeaders()));
+    expect(res.status).toBe(201);
+    const memberWrite = mockSet.mock.calls.find(
+      ([, data]) => data && typeof data === 'object' && 'firstName' in data,
+    );
+    expect(memberWrite?.[1]).toMatchObject({ publicMid: '50001' });
   });
 
   it('derives birthMonth from birthMonthYear on write', async () => {

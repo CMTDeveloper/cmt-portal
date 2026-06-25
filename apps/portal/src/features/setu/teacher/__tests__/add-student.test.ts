@@ -26,6 +26,16 @@ vi.mock('@cmt/firebase-shared/admin/firestore', () => {
 vi.mock('@/features/setu/registration/generate-fid', () => ({ generateFid: () => 'CMT-NEW1' }));
 vi.mock('@/features/setu/registration/hash-contact-key', () => ({ hashContactKey: (t: string, v: string) => `hash:${t}:${v}` }));
 vi.mock('../guests', () => ({ markGuest: mockMarkGuest }));
+// Mock the public-id allocator (issue #4) so its OWN Firestore transactions don't
+// run through this test's shared mockRunTxn — that would pollute the txn.get queue
+// and txn.set call counts the assertions below depend on. The allocator has its own
+// unit tests (Task 3); upsertPendingFamilyChild just threads the ids onto the docs.
+vi.mock('@/features/setu/ids/public-id-allocator', () => ({
+  allocateFamilyPublicId: vi.fn(async () => '1001'),
+  allocateMemberPublicIds: vi.fn(async (count: number) =>
+    Array.from({ length: count }, (_, i) => String(50001 + i)),
+  ),
+}));
 
 import { addStudentOnPrompt } from '../add-student';
 

@@ -39,6 +39,22 @@ vi.mock('../legacy-parser', () => ({
   fetchLegacyFamilyForMigration: mockFetchLegacy,
 }));
 
+// ── Public-id allocator mock (issue #4) ─────────────────────────────────────────
+// Mock so the allocator's OWN Firestore transactions don't run through the shared
+// mockRunTransaction. The allocator has its own unit tests (Task 3); here we only
+// verify lazyMigrateLegacyFamily threads the allocated ids onto the family + each
+// member doc. Deterministic: family → '1001', members → contiguous from 50001.
+const { mockAllocateFamilyPublicId, mockAllocateMemberPublicIds } = vi.hoisted(() => ({
+  mockAllocateFamilyPublicId: vi.fn(async () => '1001'),
+  mockAllocateMemberPublicIds: vi.fn(async (count: number) =>
+    Array.from({ length: count }, (_, i) => String(50001 + i)),
+  ),
+}));
+vi.mock('@/features/setu/ids/public-id-allocator', () => ({
+  allocateFamilyPublicId: mockAllocateFamilyPublicId,
+  allocateMemberPublicIds: mockAllocateMemberPublicIds,
+}));
+
 import { lazyMigrateLegacyFamily } from '../lazy-migrate';
 
 const legacyShahFamily = {
@@ -283,6 +299,40 @@ describe('lazyMigrateLegacyFamily — missing legacy family', () => {
   it('throws when the legacyFid is not in the roster', async () => {
     mockFetchLegacy.mockResolvedValue(null);
     await expect(lazyMigrateLegacyFamily('99999')).rejects.toThrow(/not found/i);
+  });
+});
+
+describe('lazyMigrateLegacyFamily — assigns publicFid/publicMid (issue #4)', () => {
+  it('assigns publicFid to the family and a publicMid to every created member', async () => {
+    mockFetchLegacy.mockResolvedValue(legacyShahFamily);
+
+    const txnSetCalls: [unknown, Record<string, unknown>][] = [];
+    mockRunTransaction.mockImplementation(async (fn: (txn: unknown) => Promise<unknown>) => {
+      const txn = {
+        get: vi.fn().mockResolvedValue({ empty: true, docs: [] }),
+        set: vi.fn().mockImplementation((ref: unknown, data: Record<string, unknown>) => {
+          txnSetCalls.push([ref, data]);
+        }),
+      };
+      return fn(txn);
+    });
+
+    await lazyMigrateLegacyFamily('42');
+
+    const familyDoc = txnSetCalls.find(([, data]) => 'managers' in data);
+    expect(familyDoc?.[1].publicFid).toBe('1001');
+
+    // legacyShahFamily: 2 adults + 1 child → 3 members, each carries a publicMid.
+    // Member docs have a `manager` boolean; contactKey docs (also have `mid`+`type`)
+    // do not — so gate on `manager` to exclude them.
+    const memberDocs = txnSetCalls.filter(
+      ([, data]) => typeof data.mid === 'string' && typeof data.manager === 'boolean',
+    );
+    expect(memberDocs).toHaveLength(3);
+    expect(memberDocs.map(([, d]) => d.publicMid).sort()).toEqual(['50001', '50002', '50003']);
+    for (const [, d] of memberDocs) {
+      expect(typeof d.publicMid).toBe('string');
+    }
   });
 });
 
