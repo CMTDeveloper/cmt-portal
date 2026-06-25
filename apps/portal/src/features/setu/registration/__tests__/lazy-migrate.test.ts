@@ -1,9 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // ── Hoist mocks so they are available in vi.mock factories ────────────────────
-const { mockRunTransaction, mockFetchLegacy } = vi.hoisted(() => ({
+// `mockPreTxnQueryGet` backs the PRE-transaction existence read added by fix I-1
+// (`db.collection('families').where('legacyFid','==',fid).limit(1).get()`). It
+// defaults to an empty result (family not yet migrated). The idempotency test
+// overrides it to a non-empty snapshot so we can assert NO allocation happens.
+const { mockRunTransaction, mockFetchLegacy, mockPreTxnQueryGet } = vi.hoisted(() => ({
   mockRunTransaction: vi.fn(),
   mockFetchLegacy: vi.fn(),
+  mockPreTxnQueryGet: vi.fn(async () => ({ empty: true, docs: [] as unknown[] })),
 }));
 
 // ── Firestore mock ─────────────────────────────────────────────────────────────
@@ -20,7 +25,9 @@ vi.mock('@cmt/firebase-shared/admin/firestore', () => {
     return {
       doc: vi.fn().mockImplementation(() => makeDocRef()),
       where: vi.fn().mockReturnValue({
-        limit: vi.fn().mockReturnValue({}),
+        // `.limit(1)` returns a query that supports BOTH `.get()` (pre-txn read)
+        // and being passed to `txn.get()` (in-txn race-safe guard).
+        limit: vi.fn().mockReturnValue({ get: mockPreTxnQueryGet }),
       }),
     };
   }
@@ -98,6 +105,9 @@ const legacyShahFamily = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Restore the default pre-txn existence read (cleared by clearAllMocks):
+  // family not yet migrated, so allocation + the txn proceed normally.
+  mockPreTxnQueryGet.mockResolvedValue({ empty: true, docs: [] });
 });
 
 describe('lazyMigrateLegacyFamily — happy path', () => {
@@ -272,7 +282,10 @@ describe('lazyMigrateLegacyFamily — portalAccess gating', () => {
 });
 
 describe('lazyMigrateLegacyFamily — idempotency', () => {
-  it('returns migrated=false and existing fid when Setu family already exists', async () => {
+  it('returns migrated=false and existing fid when the in-txn race-safe guard hits', async () => {
+    // TOCTOU path: pre-txn read missed (empty, default), but a concurrent
+    // first-migration wrote the family before this txn's guard read. The in-txn
+    // check must still short-circuit without writing.
     mockFetchLegacy.mockResolvedValue(legacyShahFamily);
 
     const txnSet = vi.fn();
@@ -292,6 +305,27 @@ describe('lazyMigrateLegacyFamily — idempotency', () => {
     expect(result.migrated).toBe(false);
     expect(result.fid).toBe('CMT-EXISTING');
     expect(txnSet).not.toHaveBeenCalled();
+  });
+
+  // ── Fix I-1: no-op re-entry must NOT advance the bounded public-id counters ──
+  it('short-circuits via the pre-txn read for an already-migrated family WITHOUT allocating public ids or opening a txn', async () => {
+    mockFetchLegacy.mockResolvedValue(legacyShahFamily);
+
+    // Pre-txn existence read finds the already-migrated family.
+    mockPreTxnQueryGet.mockResolvedValue({
+      empty: false,
+      docs: [{ data: () => ({ fid: 'CMT-EXISTING', legacyFid: '42' }) }],
+    });
+
+    const result = await lazyMigrateLegacyFamily('42');
+
+    expect(result).toEqual({ migrated: false, fid: 'CMT-EXISTING', legacyFid: '42' });
+
+    // The whole point of fix I-1: a no-op re-entry burns NO bounded public ids
+    // and never opens the write transaction.
+    expect(mockAllocateFamilyPublicId).not.toHaveBeenCalled();
+    expect(mockAllocateMemberPublicIds).not.toHaveBeenCalled();
+    expect(mockRunTransaction).not.toHaveBeenCalled();
   });
 });
 

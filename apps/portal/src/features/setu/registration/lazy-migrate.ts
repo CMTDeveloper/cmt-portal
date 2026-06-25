@@ -45,6 +45,27 @@ export async function lazyMigrateLegacyFamily(legacyFid: string): Promise<LazyMi
 
   const db = portalFirestore();
 
+  // Pre-transaction existence read. The common re-entry path is an
+  // already-migrated family whose contact resolves via the legacy roster but
+  // lacks a Setu contactKey (repeat sign-ins). For those we must allocate
+  // NOTHING — the FID space is bounded (~9000 values, 1001–9999) and the
+  // member-id counter is likewise finite, so burning a publicFid + an N-sized
+  // publicMid block on every no-op re-entry would permanently erode the
+  // memorable, roughly-sequential-from-1001 numbering while writing no docs.
+  // This mirrors the in-txn guard's identity check below EXACTLY
+  // (families where legacyFid == legacyFid, limit 1) so the two never disagree.
+  const preExistingSnap = await db
+    .collection('families')
+    .where('legacyFid', '==', legacyFid)
+    .limit(1)
+    .get();
+  if (!preExistingSnap.empty) {
+    const preExistingDoc = preExistingSnap.docs[0];
+    if (!preExistingDoc) throw new Error('Unexpected empty docs array after non-empty check');
+    const preExistingData = preExistingDoc.data() as { fid: string };
+    return { migrated: false, fid: preExistingData.fid, legacyFid };
+  }
+
   // Allocate the user-facing 4-digit publicFid + a contiguous block of 5-digit
   // publicMids — one per member doc this migration will create, in the SAME order
   // the txn writes them: adults first (or, when there are no adult rows, a single
@@ -52,11 +73,16 @@ export async function lazyMigrateLegacyFamily(legacyFid: string): Promise<LazyMi
   // opens — the allocator runs its own Firestore transaction and Firestore forbids
   // nested transactions. A `publicMidCursor` consumes the block in lockstep with
   // `seq` so each member doc gets the next id (members are 1:1 with the block).
+  // Allocation happens AFTER the pre-txn existence read so a no-op re-entry
+  // burns no ids.
   const memberCount = (legacy.adults.length || 1) + legacy.children.length;
   const publicFid = await allocateFamilyPublicId();
   const publicMids = await allocateMemberPublicIds(memberCount);
 
   const result = await db.runTransaction(async (txn) => {
+    // Race-safe guard kept intact: between the pre-txn read above and this
+    // transaction another concurrent first-migration could have written the
+    // family doc (a rare TOCTOU). The in-txn re-check prevents a double-write.
     const existingSnap = await txn.get(
       db.collection('families').where('legacyFid', '==', legacyFid).limit(1),
     );
