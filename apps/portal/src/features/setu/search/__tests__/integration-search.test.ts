@@ -41,6 +41,9 @@ const docGetQueues = new Map<string, DocSnap[]>();
 const queryGetQueues = new Map<string, QuerySnap[]>();
 // Members subcollection snap queue (keyed just as 'members')
 const membersGetQueue: QuerySnap[] = [];
+// collectionGroup('members').where('publicMid', ...) results queue.
+// Each entry yields member docs whose ref.parent.parent is the family doc {fid}.
+const publicMidGroupQueue: Array<Array<{ fid: string; mid: string; data: Record<string, unknown> }>> = [];
 
 function pushDocGet(collection: string, snap: DocSnap) {
   if (!docGetQueues.has(collection)) docGetQueues.set(collection, []);
@@ -82,6 +85,31 @@ vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
       where: vi.fn().mockReturnThis(),
       limit: vi.fn().mockReturnThis(),
       get: vi.fn().mockImplementation(() => Promise.resolve(shiftQueryGet(colName))),
+    })),
+    // collectionGroup('members').where('publicMid', '==', q).limit(5).get()
+    collectionGroup: vi.fn().mockImplementation((_group: string) => ({
+      where: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      get: vi.fn().mockImplementation(() => {
+        const rows = publicMidGroupQueue.shift() ?? [];
+        return Promise.resolve({
+          docs: rows.map((m) => ({
+            id: m.mid,
+            data: () => m.data,
+            ref: {
+              parent: {
+                // members subcollection → parent is the family doc {fid}
+                parent: {
+                  id: m.fid,
+                  get: vi.fn().mockImplementation(() =>
+                    Promise.resolve({ exists: true, data: () => ({ fid: m.fid, ...m.data }) }),
+                  ),
+                },
+              },
+            },
+          })),
+        });
+      }),
     })),
   })),
   FieldValue: {
@@ -162,6 +190,7 @@ beforeEach(() => {
   docGetQueues.clear();
   queryGetQueues.clear();
   membersGetQueue.length = 0;
+  publicMidGroupQueue.length = 0;
   flagsMock.setuAuth = true;
 });
 
@@ -231,6 +260,61 @@ describe('Scenario 3: legacy fid search', () => {
     membersGetQueue.push(membersSnap(4));
 
     const res = await GET(makeGET('4421'));
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as { hits: Array<{ fid: string }> };
+    expect(body.hits.some((h) => h.fid === FID_A)).toBe(true);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Scenario 3b: publicFid lookup — "1042" → where(publicFid) query
+// Query order in non-contact branch: legacyFid, searchKeys, publicFid
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('Scenario 3b: publicFid search', () => {
+  it('returns family A when publicFid matches "1042"', async () => {
+    const familyWithPublicFid = { ...FAMILY_A_DATA, publicFid: '1042' };
+    // Direct doc("1042").get() → no match
+    pushDocGet('families', notFound());
+    // legacyFid == "1042" → empty
+    pushQueryGet('families', emptyQuery());
+    // searchKeys → empty
+    pushQueryGet('families', emptyQuery());
+    // publicFid == "1042" → family A
+    pushQueryGet('families', querySnap([familyWithPublicFid]));
+    // member count
+    membersGetQueue.push(membersSnap(2));
+
+    const res = await GET(makeGET('1042'));
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as { hits: Array<{ fid: string }> };
+    expect(body.hits.some((h) => h.fid === FID_A)).toBe(true);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Scenario 3c: publicMid lookup — "50007" → collectionGroup(members).where(publicMid)
+//              → ref.parent.parent (family) fetched
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('Scenario 3c: publicMid search', () => {
+  it('returns family A when a member publicMid matches "50007"', async () => {
+    // Direct doc("50007").get() → no match
+    pushDocGet('families', notFound());
+    // legacyFid → empty
+    pushQueryGet('families', emptyQuery());
+    // searchKeys → empty
+    pushQueryGet('families', emptyQuery());
+    // publicFid → empty
+    pushQueryGet('families', emptyQuery());
+    // collectionGroup members publicMid → one member under FID_A
+    publicMidGroupQueue.push([{ fid: FID_A, mid: `${FID_A}-02`, data: { publicMid: '50007' } }]);
+    // member count for the resolved family
+    membersGetQueue.push(membersSnap(2));
+
+    const res = await GET(makeGET('50007'));
 
     expect(res.status).toBe(200);
     const body = await res.json() as { hits: Array<{ fid: string }> };

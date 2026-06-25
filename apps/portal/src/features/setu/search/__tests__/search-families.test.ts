@@ -36,6 +36,11 @@ function makeDbWithQueryRouting(opts: {
   fidDoc?: { id: string; data: MockDocData };
   legacyFidDocs?: Array<{ id: string; data: MockDocData }>;
   searchKeysDocs?: Array<{ id: string; data: MockDocData }>;
+  publicFidDocs?: Array<{ id: string; data: MockDocData }>;
+  // members keyed by parent fid → list of member docs that match publicMid
+  publicMidMembers?: Array<{ fid: string; mid: string; data: MockDocData }>;
+  // family docs available for collectionGroup parent lookups (fid → data)
+  familyDocsByFid?: Record<string, MockDocData>;
   contactKeyDoc?: MockDocData;
   contactKeyFamilyDoc?: MockDocData;
   memberCounts?: Record<string, number>;
@@ -52,6 +57,35 @@ function makeDbWithQueryRouting(opts: {
     };
   }
 
+  function resolveFamilyDoc(id: string): MockDocData {
+    if (opts.fidDoc && opts.fidDoc.id === id) {
+      return opts.fidDoc.data;
+    }
+    if (
+      opts.contactKeyDoc &&
+      opts.contactKeyFamilyDoc &&
+      (opts.contactKeyDoc as { fid?: string }).fid === id
+    ) {
+      return opts.contactKeyFamilyDoc;
+    }
+    if (opts.familyDocsByFid && id in opts.familyDocsByFid) {
+      return opts.familyDocsByFid[id]!;
+    }
+    return null;
+  }
+
+  function makeFamilyDocRef(id: string) {
+    return {
+      id,
+      get: vi.fn().mockResolvedValue(makeDocSnap(resolveFamilyDoc(id))),
+      collection: vi.fn(() => ({
+        limit: vi.fn(() => ({
+          get: vi.fn().mockResolvedValue(makeMembersSubcollection(id)),
+        })),
+      })),
+    };
+  }
+
   const db = {
     collection: vi.fn((col: string) => {
       if (col === 'contactKeys') {
@@ -64,34 +98,37 @@ function makeDbWithQueryRouting(opts: {
 
       // col === 'families'
       return {
-        doc: vi.fn((id: string) => {
-          let docData: MockDocData = null;
-          if (opts.fidDoc && opts.fidDoc.id === id) {
-            docData = opts.fidDoc.data;
-          } else if (
-            opts.contactKeyDoc &&
-            opts.contactKeyFamilyDoc &&
-            (opts.contactKeyDoc as { fid?: string }).fid === id
-          ) {
-            docData = opts.contactKeyFamilyDoc;
-          }
-
-          return {
-            get: vi.fn().mockResolvedValue(makeDocSnap(docData)),
-            collection: vi.fn(() => ({
-              limit: vi.fn(() => ({
-                get: vi.fn().mockResolvedValue(makeMembersSubcollection(id)),
-              })),
-            })),
-          };
-        }),
+        doc: vi.fn((id: string) => makeFamilyDocRef(id)),
         where: vi.fn((field: string) => ({
           limit: vi.fn(() => ({
             get: vi.fn().mockResolvedValue(
               field === 'legacyFid'
                 ? makeQuerySnap(opts.legacyFidDocs ?? [])
-                : makeQuerySnap(opts.searchKeysDocs ?? []),
+                : field === 'publicFid'
+                  ? makeQuerySnap(opts.publicFidDocs ?? [])
+                  : makeQuerySnap(opts.searchKeysDocs ?? []),
             ),
+          })),
+        })),
+      };
+    }),
+    collectionGroup: vi.fn((col: string) => {
+      // col === 'members' — used for publicMid lookups
+      return {
+        where: vi.fn(() => ({
+          limit: vi.fn(() => ({
+            get: vi.fn().mockResolvedValue({
+              docs: (opts.publicMidMembers ?? []).map((m) => ({
+                id: m.mid,
+                data: () => m.data,
+                ref: {
+                  parent: {
+                    // members subcollection → parent is the family doc
+                    parent: makeFamilyDocRef(m.fid),
+                  },
+                },
+              })),
+            }),
           })),
         })),
       };
@@ -257,6 +294,59 @@ describe('searchFamilies — name prefix lookup', () => {
 
     const result = await searchFamilies('patel');
     expect(result.some((h) => h.fid === 'FAM-010')).toBe(true);
+  });
+});
+
+describe('searchFamilies — publicFid lookup', () => {
+  it('finds a family by its 4-digit publicFid', async () => {
+    const familyDoc = {
+      fid: 'CMT-X',
+      legacyFid: null,
+      name: 'Rao Family',
+      location: 'Brampton',
+      publicFid: '1042',
+      createdAt: { toDate: () => new Date() },
+      managers: ['CMT-X-01'],
+      searchKeys: ['rao family', 'CMT-X'],
+    };
+
+    mockFirestore.mockReturnValue(
+      makeDbWithQueryRouting({
+        publicFidDocs: [{ id: 'CMT-X', data: familyDoc }],
+        memberCounts: { 'CMT-X': 2 },
+      }) as never,
+    );
+
+    const hits = await searchFamilies('1042');
+    expect(hits.map((h) => h.fid)).toContain('CMT-X');
+  });
+});
+
+describe('searchFamilies — publicMid lookup', () => {
+  it('finds a family by a member 5-digit publicMid', async () => {
+    const familyDoc = {
+      fid: 'CMT-X',
+      legacyFid: null,
+      name: 'Rao Family',
+      location: 'Brampton',
+      publicFid: '1042',
+      createdAt: { toDate: () => new Date() },
+      managers: ['CMT-X-01'],
+      searchKeys: ['rao family', 'CMT-X'],
+    };
+
+    mockFirestore.mockReturnValue(
+      makeDbWithQueryRouting({
+        publicMidMembers: [
+          { fid: 'CMT-X', mid: 'CMT-X-02', data: { mid: 'CMT-X-02', publicMid: '50007' } },
+        ],
+        familyDocsByFid: { 'CMT-X': familyDoc },
+        memberCounts: { 'CMT-X': 2 },
+      }) as never,
+    );
+
+    const hits = await searchFamilies('50007');
+    expect(hits.map((h) => h.fid)).toContain('CMT-X');
   });
 });
 

@@ -57,11 +57,13 @@ export async function searchFamilies(q: string): Promise<FamilySearchHit[]> {
       }
     }
   } else {
-    // Run direct fid, legacyFid, and searchKeys lookups in parallel
-    const [fidSnap, legacySnap, nameSnap] = await Promise.all([
+    // Run direct fid, legacyFid, searchKeys, publicFid, and publicMid lookups in parallel
+    const [fidSnap, legacySnap, nameSnap, publicFidSnap, publicMidSnap] = await Promise.all([
       familiesCol.doc(trimmed).get(),
       familiesCol.where('legacyFid', '==', trimmed).limit(1).get(),
       familiesCol.where('searchKeys', 'array-contains', trimmed.toLowerCase()).limit(20).get(),
+      familiesCol.where('publicFid', '==', trimmed).limit(5).get(),
+      db.collectionGroup('members').where('publicMid', '==', trimmed).limit(5).get(),
     ]);
 
     if (fidSnap.exists) {
@@ -77,6 +79,23 @@ export async function searchFamilies(q: string): Promise<FamilySearchHit[]> {
     for (const doc of nameSnap.docs) {
       if (!rawHits.has(doc.id)) {
         rawHits.set(doc.id, doc.data() as RawFamilyData);
+      }
+    }
+
+    for (const doc of publicFidSnap.docs) {
+      if (!rawHits.has(doc.id)) {
+        rawHits.set(doc.id, doc.data() as RawFamilyData);
+      }
+    }
+
+    for (const memberDoc of publicMidSnap.docs) {
+      // families/{fid}/members/{mid} → families/{fid}
+      const familyRef = memberDoc.ref.parent.parent;
+      if (familyRef && !rawHits.has(familyRef.id)) {
+        const famSnap = await familyRef.get();
+        if (famSnap.exists) {
+          rawHits.set(familyRef.id, famSnap.data() as RawFamilyData);
+        }
       }
     }
   }
