@@ -55,7 +55,9 @@
 - Plus the standalone app's own Firestore composite indexes (invisible to our file; protected by the never-`--force` rule).
 
 **PORTAL-OWNED — safe to create/write (additive; distinct names):**
-`families` (+ subcollections `members`, `enrollments`, `invites`), `contactKeys`, `offerings`, `donationPeriods`, `levels`, `programs`, `donations`, `classCalendarEntries`, `attendanceEvents`, `attendance`, `check_in_events`, `checkIns`, `guest_check_ins`, `seva_opportunities`, `seva_signups`, `achievements`, `verification_codes`, `otp_rate_limit`, `weeklySchedules`, `family_notifications`.
+`families` (+ subcollections `members`, `enrollments`, `invites`), `contactKeys`, `offerings`, `donationPeriods`, `levels`, `programs`, `donations`, `classCalendarEntries`, `attendanceEvents`, `attendance`, `check_in_events`, `checkIns`, `guest_check_ins`, `seva_opportunities`, `seva_signups`, `achievements`, `verification_codes`, `otp_rate_limit`, `weeklySchedules`, `family_notifications`, `counters` (issue #4 — `counters/familyPublicId` + `counters/memberPublicId`, monotonic public-id allocators; self-create on first allocation, no seed).
+
+> **Issue #4 additive fields** (no new collection beyond `counters`): `families.publicFid` (4-digit, from 1001) + `members.publicMid` (5-digit, from 50001) — both nullable; legacy `fid`/`mid` doc IDs are unchanged and remain the join keys.
 
 > **Pre-cutover audit:** before the first prod write, run a one-off read against 715b8 to confirm **none** of the portal-owned collection names already exist there (they shouldn't — different naming from the door app). If any unexpectedly exists, STOP and investigate a possible collision before writing.
 
@@ -92,6 +94,7 @@ firebase deploy --only firestore:indexes --project chinmaya-setu-715b8
   - `enrollments (pid ASC, status ASC)` collectionGroup — teacher roster.
   - `enrollments (oid ASC, status ASC)` collectionGroup — **school-year rollover** discovery.
   - `families (searchKeys CONTAINS, location ASC)` — welcome-team search.
+  - `members (publicMid ASC)` collectionGroup **field-override** — issue #4 roster/search lookup by the 5-digit Member ID (`collectionGroup('members').where('publicMid','==')`). (`families.where('publicFid','==')` needs no entry — single-field top-level equality is auto-indexed.)
   - `offerings`, `donations`, `levels`, `attendanceEvents`, `classCalendarEntries`, `invites`, `seva_opportunities` composite indexes (all in `firestore.indexes.json`).
 
 > UAT (`chinmaya-setu-uat`) is portal-only, so `--force` there is safe. **715b8 is never `--force`.**
@@ -125,13 +128,18 @@ Order matters — later steps depend on earlier ones:
    pnpm --filter @cmt/portal exec tsx --env-file=.env.local scripts/backfill-bv-enrollments.ts --dry-run --limit 30 --allow-prod
    pnpm --filter @cmt/portal exec tsx --env-file=.env.local scripts/backfill-bv-enrollments.ts --allow-prod
    ```
-5. **Grant admin / welcome-team** to the right people (so the admin surfaces are reachable).
+5. **Backfill public IDs (issue #4)** — assign a 4-digit `publicFid` to every existing family + a 5-digit `publicMid` to every member. Depends only on the family migration (step 2); independent of enrollments. Idempotent (skips already-stamped docs); oldest-first so the oldest family gets 1001. Deploy the `members.publicMid` index (§5) first. Dry-run + CSV first.
+   ```bash
+   pnpm --filter @cmt/portal migrate:public-ids --dry-run --csv-out /tmp/public-ids.csv --allow-prod   # preview the allocation
+   pnpm --filter @cmt/portal migrate:public-ids --allow-prod   # publicFid 1001+, publicMid 50001+ (UAT run: 877 families / 2668 members)
+   ```
+6. **Grant admin / welcome-team** to the right people (so the admin surfaces are reachable).
    > ⚠️ `grant-admin.ts` now requires the target to be a **registered portal user** — they must sign in at least once (OTP) *before* the grant, otherwise it exits with `registered-user-required`. (`grant-welcome-team.ts` still auto-provisions a missing auth user.)
    ```bash
    pnpm --filter @cmt/portal exec tsx --env-file=.env.local scripts/grant-admin.ts <email-or-phone> --allow-prod
    pnpm --filter @cmt/portal exec tsx --env-file=.env.local scripts/grant-welcome-team.ts <email-or-phone> --allow-prod
    ```
-6. **(Annual, later) School-year rollover** — only when promoting to 2026-27. See §7.
+7. **(Annual, later) School-year rollover** — only when promoting to 2026-27. See §7.
 
 > After each step, spot-check with `inspect-setu-family.ts` / `inspect-legacy-roster.ts` / `list-uat-families.ts` (rename mentally to "list families") and `check-uat-migrations.ts`.
 
@@ -214,6 +222,7 @@ Prefer `git push` (empty commit) to trigger a rebuild that picks up changed `NEX
 | `backfill:legacy-sid` ⚠️ | Add `legacySid` to members (links to roster rows). | After family migration. |
 | `backfill:bv-enrollments` ⚠️ | Enroll current BV kids into 2025-26 offering (`pid:oid`). | `--dry-run` first. |
 | `backfill:portal-access` ⚠️ | Gate roster-migrated non-manager adults: set `members.portalAccess:'pending'` on non-primary **adults** of **migrated** (`legacyFid`) families. Registration-added members, personas, managers, children skipped. Idempotent. | `--dry-run` first. UAT-default (hard-refuses non-UAT without `--allow-prod`); for 715b8 run after family migration — behavior change, locks those members out until manager approval. |
+| `migrate:public-ids` ⚠️ | Issue #4 — assign 4-digit `publicFid` to every family + 5-digit `publicMid` to every member, from `counters/familyPublicId`/`counters/memberPublicId`. Idempotent (skips already-stamped docs); oldest-first → 1001 / 50001. `--dry-run` / `--limit N` / `--fid X` / `--csv-out path`. | UAT-default (refuses non-UAT without `--allow-prod`); for 715b8 run after family migration. Deploy the `members.publicMid` index (§5) first. UAT run 2026-06-25: 877 families / 2668 members. |
 | `school-year:start` ⚠️ | Clone levels+offerings to next year (rollover Step 1). | `--dry-run` first. §7. |
 | `school-year:promote` ⚠️ | Advance grades + re-level + close/create enrollments (Step 2). | `--dry-run`, fix needs-grade, then commit. §7. |
 | `grant:admin` ⚠️ | Grant admin role (custom claims) to a contact. | Needs re-login to take effect. |
