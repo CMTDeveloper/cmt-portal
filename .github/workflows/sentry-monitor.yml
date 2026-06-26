@@ -1,0 +1,124 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Sentry monitor — autonomous detection → fix → resolve, in the cloud.
+#
+# Hourly, this job: detects new Sentry ERROR issues, triages out noise, diagnoses
+# from the source-mapped stack, and for small/safe defects on NON-protected
+# surfaces: writes a red→green repro test, fixes, runs a code-reviewer subagent,
+# pushes to main (the pre-push hook runs the FULL gate incl. build), and resolves
+# the Sentry issue. Risky issues (protected paths, non-reproducible, ambiguous)
+# are escalated to a GitHub issue instead of touching code. Policy lives in
+# scripts/sentry-monitor/cloud-monitor-prompt.md.
+#
+# ACCEPTED COSTS (chosen deliberately — see scripts/sentry-monitor/CLOUD_SETUP.md):
+#   • The build (in the pre-push gate) runs with REAL prod secrets pulled from AWS
+#     SSM, and — with no local RTDB snapshot here — reads the legacy PROD RTDB
+#     (715b8) live at build time (billed). This is the price of building in cloud.
+#   • Claude runs on your SUBSCRIPTION token (CLAUDE_CODE_OAUTH_TOKEN), drawing on
+#     your Pro/Max usage limits (shared with your interactive usage).
+#
+# ENABLE: set repo variable SENTRY_MONITOR_ENABLED=true (after completing setup).
+#   Until then the job is skipped on every tick — ship-disabled, zero cost.
+# DISABLE: set it to anything else (or delete it).
+# DRY RUN: trigger manually (Actions → this workflow → Run workflow → dry_run=true).
+# ─────────────────────────────────────────────────────────────────────────────
+name: Sentry monitor (autonomous fix)
+
+on:
+  schedule:
+    - cron: '17 * * * *' # hourly at :17 (avoid top-of-hour scheduler congestion)
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run — detect/triage only, no fixes, pushes, issues, or resolves'
+        type: boolean
+        default: false
+
+# Never run two passes at once; never interrupt a fix mid-push.
+concurrency:
+  group: sentry-monitor
+  cancel-in-progress: false
+
+permissions:
+  contents: write # push fixes to main
+  issues: write # file escalation issues
+  id-token: write # AWS OIDC (fetch build secrets from SSM)
+
+jobs:
+  monitor:
+    # Ship-disabled. Flip on with: gh variable set SENTRY_MONITOR_ENABLED --body true
+    if: ${{ vars.SENTRY_MONITOR_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30 # hard cost ceiling per run
+    steps:
+      - name: Checkout (full history — the dedup check greps git log)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true # so the pass's `git push` uses GITHUB_TOKEN
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Configure AWS credentials (OIDC — no stored AWS keys)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Load build env from SSM → apps/portal/.env.local
+        # One SecureString param holds the full dotenv the build needs (same shape
+        # as your local apps/portal/.env.local). We defensively strip three keys:
+        #   • RTDB_SNAPSHOT_DIR — there's no PII snapshot here; unset ⇒ live reads.
+        #   • SENTRY_ORG/PROJECT/AUTH_TOKEN — keep them OUT of the build so
+        #     withSentryConfig does NOT upload source maps for this throwaway build
+        #     (Vercel already uploads maps for the real deploy of this commit).
+        run: |
+          set -euo pipefail
+          aws ssm get-parameter \
+            --name /cmt-portal/sentry-monitor/portal-env-local \
+            --with-decryption --query Parameter.Value --output text \
+            | grep -vE '^(RTDB_SNAPSHOT_DIR|SENTRY_ORG|SENTRY_PROJECT|SENTRY_AUTH_TOKEN)=' \
+            > apps/portal/.env.local
+          echo "Wrote apps/portal/.env.local ($(wc -l < apps/portal/.env.local) lines)"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install toolchain (Claude Code + unified Sentry CLI)
+        run: |
+          set -euo pipefail
+          npm install -g @anthropic-ai/claude-code
+          curl https://cli.sentry.dev/install -fsS | bash -s -- --version 0.38.0
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Authenticate Sentry CLI (stored login — token NOT exported to the build)
+        # Storing via `auth login --token` keeps SENTRY_AUTH_TOKEN out of the build
+        # env, so the gate's `next build` won't try to upload source maps.
+        env:
+          SENTRY_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+        run: sentry auth login --token "$SENTRY_TOKEN" >/dev/null
+
+      - name: Configure git identity
+        run: |
+          git config user.name "CMT Developer"
+          git config user.email "developer@chinmayatoronto.org"
+
+      - name: Run Sentry monitor pass
+        env:
+          # Subscription billing: plain `claude -p` reads this. Do NOT set
+          # ANTHROPIC_API_KEY (it would outrank the OAuth token) and never use --bare.
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          GH_TOKEN: ${{ github.token }} # gh CLI (file escalation issues)
+          MONITOR_DRY_RUN: ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && '1' || '0' }}
+        run: |
+          claude -p "$(cat scripts/sentry-monitor/cloud-monitor-prompt.md)" \
+            --model opus \
+            --dangerously-skip-permissions

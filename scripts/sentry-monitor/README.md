@@ -1,9 +1,21 @@
-# Sentry issue monitor (durable, launchd)
+# Sentry issue monitor
 
 An unattended pass that watches this project's **Sentry error issues** and turns the
 small/safe ones into shipped fixes — **end to end, detection → resolution** — while
 escalating the risky ones to a GitHub issue instead of touching code. It is the Sentry
-sibling of `scripts/github-monitor/` and reuses the same hardened wrapper mechanics.
+sibling of `scripts/github-monitor/` and reuses the same hardened guardrails.
+
+## Two deployment modes
+
+| Mode | Runs when | Files | Setup |
+|---|---|---|---|
+| **Cloud** (GitHub Actions) — *active choice* | hourly, 24/7 (laptop-independent) | `../../.github/workflows/sentry-monitor.yml` + `cloud-monitor-prompt.md` | **[CLOUD_SETUP.md](CLOUD_SETUP.md)** |
+| **Local** (launchd) | only when your Mac is awake + logged in | `run-monitor.sh` + `monitor-prompt.md` + `org.chinmayatoronto.cmt-sentry-monitor.plist` | the launchctl section below |
+
+Both share the same policy (detect → triage → diagnose → red→green-tested fix → gate → push →
+resolve; protected paths escalated, never auto-edited). The **cloud** variant is stateless (git
+history + GitHub issues + Sentry's unresolved set are its memory); the **local** variant uses a
+`state.tsv`. The rest of this file documents the **local** mode. For cloud, see CLOUD_SETUP.md.
 
 Intended flow: a real error fires in production → within ~30 min the monitor triages it →
 it either ships a fix to `main` (guarded by a red→green repro test + `code-reviewer` +
