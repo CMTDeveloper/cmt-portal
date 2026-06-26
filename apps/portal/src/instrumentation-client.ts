@@ -3,11 +3,12 @@
 // the portal renders family PII and we don't want to record DOM sessions or add
 // a floating widget by default. Opt in later if needed.
 import * as Sentry from '@sentry/nextjs';
+import { SENTRY_DSN } from './sentry.dsn';
 
 const isDev = process.env.NODE_ENV === 'development';
 
 Sentry.init({
-  dsn: 'https://09a8c83d124c0972291055debfeeafb0@o4511632222846976.ingest.us.sentry.io/4511632231956480',
+  dsn: SENTRY_DSN,
 
   // Send structured logs to Sentry.
   enableLogs: true,

@@ -3,11 +3,12 @@
 // native v8 profiler (@sentry/profiling-node), so profiling lives here.
 import * as Sentry from '@sentry/nextjs';
 import { nodeProfilingIntegration } from '@sentry/profiling-node';
+import { SENTRY_DSN } from './sentry.dsn';
 
 const isDev = process.env.NODE_ENV === 'development';
 
 Sentry.init({
-  dsn: 'https://09a8c83d124c0972291055debfeeafb0@o4511632222846976.ingest.us.sentry.io/4511632231956480',
+  dsn: SENTRY_DSN,
 
   integrations: [nodeProfilingIntegration()],
 

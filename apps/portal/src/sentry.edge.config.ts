@@ -2,11 +2,12 @@
 // instrumentation.ts when NEXT_RUNTIME === 'edge'. The native profiler is
 // Node-only, so there is no profiling here.
 import * as Sentry from '@sentry/nextjs';
+import { SENTRY_DSN } from './sentry.dsn';
 
 const isDev = process.env.NODE_ENV === 'development';
 
 Sentry.init({
-  dsn: 'https://09a8c83d124c0972291055debfeeafb0@o4511632222846976.ingest.us.sentry.io/4511632231956480',
+  dsn: SENTRY_DSN,
 
   // Send structured logs to Sentry.
   enableLogs: true,
