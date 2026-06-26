@@ -44,6 +44,11 @@ export const PUBLIC_ROUTES = [
   // (always {ok:true}), like family-lookup, so middleware must not 401 it.
   '/api/setu/join-request/send',
 
+  // TEMPORARY — Sentry onboarding verify route. Public so middleware doesn't
+  // 401 it before the handler can capture a test error. Remove this entry when
+  // the api/debug/sentry-test route is deleted after verification.
+  '/api/debug/sentry-test',
+
   // Kiosk (public) — feature-flagged in the app layer
   '/check-in',
   '/check-in/guest',
