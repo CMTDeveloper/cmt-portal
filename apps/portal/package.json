@@ -49,6 +49,8 @@
     "@cmt/firebase-shared": "workspace:*",
     "@cmt/shared-domain": "workspace:*",
     "@cmt/ui": "workspace:*",
+    "@sentry/nextjs": "^10.62.0",
+    "@sentry/profiling-node": "^10.62.0",
     "marked": "^18.0.5",
     "next": "^16.2.0",
     "react": "^19.2.0",

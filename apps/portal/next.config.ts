@@ -1,8 +1,13 @@
 import path from 'node:path';
 import type { NextConfig } from 'next';
+import { withSentryConfig } from '@sentry/nextjs';
 
 const config: NextConfig = {
   reactStrictMode: true,
+  // @sentry/profiling-node ships a native v8 addon (.node). Keep it external so
+  // Next.js requires it at runtime from node_modules instead of trying to
+  // bundle the binary into the serverless function (which fails on Vercel).
+  serverExternalPackages: ['@sentry/profiling-node'],
   // Next.js 16 Cache Components: explicit opt-in cache model. Any Server
   // Component data access is dynamic by default; wrap reads in 'use cache'
   // (with cacheLife + cacheTag) to make them cacheable. revalidateTag()
@@ -34,4 +39,16 @@ const config: NextConfig = {
   },
 };
 
-export default config;
+export default withSentryConfig(config, {
+  // Org/project/token drive build-time source-map upload. They are read from
+  // env (set SENTRY_ORG, SENTRY_PROJECT, SENTRY_AUTH_TOKEN in Vercel). When
+  // absent — e.g. local pre-push build — upload is skipped and the build still
+  // succeeds. Conditional spreads keep this valid under exactOptionalPropertyTypes.
+  silent: !process.env.CI,
+  widenClientFileUpload: true,
+  ...(process.env.SENTRY_ORG ? { org: process.env.SENTRY_ORG } : {}),
+  ...(process.env.SENTRY_PROJECT ? { project: process.env.SENTRY_PROJECT } : {}),
+  ...(process.env.SENTRY_AUTH_TOKEN
+    ? { authToken: process.env.SENTRY_AUTH_TOKEN }
+    : {}),
+});
