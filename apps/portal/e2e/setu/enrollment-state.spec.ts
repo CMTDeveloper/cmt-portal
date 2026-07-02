@@ -19,16 +19,20 @@ import { visibleText, hasFamilyCreds } from '../_helpers';
  *
  * WHAT EACH PHASE ASSERTS:
  *   - Phase 1 (Registered ground state): GET /api/setu/dashboard →
- *     balaVihar.bvState === 'registered' && isEnrolled === true; and /family
- *     renders the confirm nudge (desktop), plus — at a mobile viewport (the
- *     Registered pill + the family-facing "Give donation" CTA are the mobile
- *     layout only) — the `Registered` pill, the verbatim nudge, and a visible
- *     `Give donation` link pointing at `/family/donate?eid=…`.
+ *     balaVihar.bvState === 'registered' && isEnrolled === true; and /family on
+ *     DESKTOP renders both the verbatim confirm nudge AND the three-state
+ *     `Registered` pill (issue #23 I2 made the desktop pill + metric
+ *     bvState-driven, matching mobile — desktop no longer hardcodes "Enrolled").
+ *     At a mobile viewport (where the family-facing "Give donation" CTA lives)
+ *     it also shows the `Registered` pill, the nudge, and a visible `Give
+ *     donation` link pointing at `/family/donate?eid=…`.
  *   - Phase 2 (Enrolled after a completed donation): the spec SELF-MUTATES the
  *     fixture by re-running the seed with `--confirm-bv` (writes one _test
  *     completed donation for the active 2026-27 eid), then asserts bvState ===
- *     'enrolled' (API) and the mobile pill flips to `Enrolled` with the nudge
- *     ABSENT.
+ *     'enrolled' (API); that DESKTOP leaves the Registered state (`/^Registered$/`
+ *     count 0 — the robust form, since `/^Enrolled$/` also matches the
+ *     om-chanting card's hardcoded pill) with the nudge gone; and that the mobile
+ *     pill flips to `Enrolled` with the nudge ABSENT.
  *
  * SELF-RESETTING: Phase 2's beforeAll shells out `seed:e2e-family --confirm-bv`;
  * afterAll re-runs the PLAIN seed (which deletes that _test donation) to restore
@@ -79,9 +83,14 @@ test.describe.serial('enrollment engagement state — Registered vs Enrolled (is
     expect(balaVihar.bvState).toBe('registered');
   });
 
-  test('UI (desktop): /family shows the confirm nudge copy', async ({ page }) => {
+  test('UI (desktop): /family shows the confirm nudge and the Registered pill', async ({ page }) => {
     await page.goto('/family');
     await expect(visibleText(page, NUDGE).first()).toBeVisible();
+    // Issue #23 I2: desktop now renders the three-state pill + metric (it used to
+    // hardcode "Enrolled"). `/^Registered$/` is unambiguous — only the BV pill
+    // and BV metric ever read "Registered" (the om-chanting card hardcodes
+    // "Enrolled"), so a visible match proves the desktop Registered state ships.
+    await expect(visibleText(page, /^Registered$/).first()).toBeVisible();
   });
 
   test.describe('UI (mobile viewport)', () => {
@@ -89,8 +98,8 @@ test.describe.serial('enrollment engagement state — Registered vs Enrolled (is
 
     test('shows the Registered pill, the nudge, and a Give donation CTA to /family/donate?eid=', async ({ page }) => {
       await page.goto('/family');
-      // The Registered pill lives in the mobile BV card only (desktop hardcodes
-      // an "Enrolled" pill whenever a BV enrollment exists).
+      // The Registered pill renders in both layouts now; at this mobile viewport
+      // the visible one is the mobile BV card's.
       await expect(visibleText(page, /^Registered$/).first()).toBeVisible();
       await expect(visibleText(page, NUDGE).first()).toBeVisible();
       const give = page.getByRole('link', { name: /Give donation/i }).filter({ visible: true }).first();
@@ -111,6 +120,19 @@ test.describe.serial('enrollment engagement state — Registered vs Enrolled (is
       const { balaVihar } = (await res.json()) as DashboardBv;
       expect(balaVihar.isEnrolled).toBe(true);
       expect(balaVihar.bvState).toBe('enrolled');
+    });
+
+    test('UI (desktop): the BV pill leaves the Registered state and the nudge is gone', async ({ page }) => {
+      await page.goto('/family');
+      // Robust form (issue #23 I2): assert the desktop surface no longer reads
+      // "Registered" rather than positively matching `/^Enrolled$/`, which the
+      // om-chanting card's hardcoded pill also satisfies. Only the BV pill/metric
+      // ever render "Registered", so DOM-wide count 0 proves both flipped away
+      // from it; together with the co-located API assertion (bvState ===
+      // 'enrolled'), the desktop pill + metric now read "Enrolled". The confirm
+      // nudge is gone on desktop too.
+      await expect(page.getByText(/^Registered$/)).toHaveCount(0);
+      await expect(page.getByText(NUDGE)).toHaveCount(0);
     });
 
     test.describe('UI (mobile viewport)', () => {

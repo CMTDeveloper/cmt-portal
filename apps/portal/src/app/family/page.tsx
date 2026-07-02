@@ -322,7 +322,7 @@ export default async function FamilyDashboardPage() {
             sub={donationStatusSub}
             tone={donationStatusTone}
           />
-          <MetricCard label="Bala Vihar" value={isEnrolled ? 'Enrolled' : 'Not yet'} sub={enrollPeriodLabel ?? 'no active period'}/>
+          <MetricCard label="Bala Vihar" value={model.bvState === 'enrolled' ? 'Enrolled' : model.bvState === 'registered' ? 'Registered' : 'Not yet'} sub={enrollPeriodLabel ?? 'no active period'}/>
           <MetricCard label="Family"     value={String(memberCount)} sub={`${memberCount} member${memberCount !== 1 ? 's' : ''}`}/>
         </div>
 
@@ -331,7 +331,11 @@ export default async function FamilyDashboardPage() {
             <div className="card" style={{ padding: 24 }}>
               <div className="between" style={{ marginBottom: 18 }}>
                 <h3 style={{ fontSize: 14, fontWeight: 600 }}><em className="sa">Bala Vihar</em>{enrollPeriodLabel ? ` · ${enrollPeriodLabel}` : ''}</h3>
-                {isEnrolled && <span className="pill" style={{ background: 'var(--accentSoft)', color: 'var(--accentDeep)' }}>Enrolled</span>}
+                {/* Issue #23 (I2): the three-state model pill (Enrolled / Registered /
+                    Not enrolled), rendered unconditionally to match the mobile BV card
+                    (page.tsx:180). Previously desktop hardcoded a green "Enrolled" pill
+                    whenever a BV enrollment existed, contradicting the confirm nudge. */}
+                <span className="pill" style={{ background: enrolledPill.bg, color: enrolledPill.fg }}>{enrolledPill.text}</span>
               </div>
               {isEnrolled ? (
                 <>

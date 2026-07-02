@@ -220,8 +220,13 @@ function EnrollmentCard({ year }: { year?: string }) {
               { key: 'programLabel', label: 'Program' },
               { key: 'families', label: 'Families', numeric: true },
               { key: 'members', label: 'Members', numeric: true },
+              // Issue #23: the engagement split — only the bala-vihar row carries
+              // confirmed/registered; other programs show an em-dash (not
+              // applicable), so a blank cell never reads as an ambiguous "0".
+              { key: 'confirmed', label: 'Confirmed', numeric: true, render: (r) => (typeof r['confirmed'] === 'number' ? (r['confirmed'] as number).toLocaleString() : '—') },
+              { key: 'registered', label: 'Registered', numeric: true, render: (r) => (typeof r['registered'] === 'number' ? (r['registered'] as number).toLocaleString() : '—') },
             ]}
-            rows={data.byProgram.map((p) => ({ __key: p.programKey, programLabel: p.programLabel, families: p.families, members: p.members }))}
+            rows={data.byProgram.map((p) => ({ __key: p.programKey, programLabel: p.programLabel, families: p.families, members: p.members, confirmed: p.confirmed, registered: p.registered }))}
           />
           <SummaryTable
             caption="By level"

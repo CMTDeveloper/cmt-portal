@@ -14,7 +14,9 @@ import { ReportsHub } from '../reports-hub';
 
 const enrollment: EnrollmentReport = {
   byProgram: [
-    { programKey: 'bala-vihar', programLabel: 'Bala Vihar', families: 12, members: 18 },
+    // issue #23: only the bala-vihar group carries the confirmed/registered split
+    // (confirmed + registered === families); other programs omit them.
+    { programKey: 'bala-vihar', programLabel: 'Bala Vihar', families: 13, members: 18, confirmed: 7, registered: 6 },
     { programKey: 'tabla', programLabel: 'Tabla', families: 4, members: 5 },
   ],
   byLevel: [
@@ -76,6 +78,18 @@ describe('ReportsHub', () => {
     // Program row + total chips load from the mocked report.
     expect((await screen.findAllByText('Bala Vihar')).length).toBeGreaterThanOrEqual(1);
     expect((await screen.findAllByText(/16/)).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('renders the confirmed/registered split — numbers on the BV row, em-dash on others', async () => {
+    render(<ReportsHub isAdmin={false} />);
+    // Wait for the enrollment report to resolve (the split lives in the same
+    // "By program" table as the "Bala Vihar" label).
+    await screen.findAllByText('Bala Vihar');
+    // BV program row carries the split. Dual mobile+desktop branch ⇒ each ≥1.
+    expect((await screen.findAllByText('7')).length).toBeGreaterThanOrEqual(1); // confirmed
+    expect((await screen.findAllByText('6')).length).toBeGreaterThanOrEqual(1); // registered
+    // The non-BV (Tabla) program row omits the split ⇒ the em-dash empty cells.
+    expect((await screen.findAllByText('—')).length).toBeGreaterThanOrEqual(1);
   });
 
   it('renders the attendance card with a from/to range and rolled-up rows', async () => {

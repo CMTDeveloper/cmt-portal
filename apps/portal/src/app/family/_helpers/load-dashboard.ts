@@ -81,26 +81,37 @@ export async function loadFamilyDashboard(
     // narrow read, only when an active BV enrollment exists.
     (async (): Promise<number> => {
       if (!bv) return 0;
-      const byMid = new Map(members.map((m): [string, MemberDoc] => [m.mid, m]));
-      const children = bv.enrolledMids.map((mid) => ({
-        mid,
-        legacySid: byMid.get(mid)?.legacySid ?? null,
-      }));
-      // Offering boundaries store Toronto-aware timestamps (endDate is 23:59:59
-      // America/Toronto, i.e. early-morning UTC the *next* day). Derive the
-      // window YMDs in the Toronto calendar so they match the door check-in
-      // records — a UTC `.slice(0,10)` would push end-of-day one day late.
-      const summary = await getFamilyBalaViharAttendance({
-        fid: family.fid,
-        legacyFid: family.legacyFid,
-        oid: bv.oid,
-        windowStart: bv.offering ? isoToTorontoDateInput(bv.offering.startDate.toISOString()) : null,
-        windowEnd: bv.offering?.endDate
-          ? isoToTorontoDateInput(bv.offering.endDate.toISOString())
-          : null,
-        children,
-      });
-      return summary.present + summary.late;
+      try {
+        const byMid = new Map(members.map((m): [string, MemberDoc] => [m.mid, m]));
+        const children = bv.enrolledMids.map((mid) => ({
+          mid,
+          legacySid: byMid.get(mid)?.legacySid ?? null,
+        }));
+        // Offering boundaries store Toronto-aware timestamps (endDate is 23:59:59
+        // America/Toronto, i.e. early-morning UTC the *next* day). Derive the
+        // window YMDs in the Toronto calendar so they match the door check-in
+        // records — a UTC `.slice(0,10)` would push end-of-day one day late.
+        const summary = await getFamilyBalaViharAttendance({
+          fid: family.fid,
+          legacyFid: family.legacyFid,
+          oid: bv.oid,
+          windowStart: bv.offering ? isoToTorontoDateInput(bv.offering.startDate.toISOString()) : null,
+          windowEnd: bv.offering?.endDate
+            ? isoToTorontoDateInput(bv.offering.endDate.toISOString())
+            : null,
+          children,
+        });
+        return summary.present + summary.late;
+      } catch (err) {
+        // Issue #23 (I1): this read is purely cosmetic — it only decides whether
+        // the BV pill reads "Enrolled" vs "Registered". A transient Firestore
+        // error (or a `(fid,date)` index not deployed in some environment) must
+        // NOT 500 the entire family home + GET /api/setu/dashboard over a pill,
+        // so degrade to 0 (⇒ Registered), mirroring the guarded roster read in
+        // features/setu/roster/family-engagement.ts.
+        console.warn('[load-dashboard] BV attendance read failed — treating attended-count as 0', err);
+        return 0;
+      }
     })(),
   ]);
 
