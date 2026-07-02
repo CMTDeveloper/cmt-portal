@@ -51,6 +51,12 @@ export async function GET(req: Request) {
       })),
       balaVihar: {
         isEnrolled: model.isEnrolled,
+        // Three-state engagement flag (issue #23): 'enrolled' = engaged this year
+        // (attended a BV class or completed a donation / legacy-paid), 'registered'
+        // = active BV enrollment but no engagement yet, 'none' = no active BV
+        // enrollment. `isEnrolled` is NOT re-derived from this — it keeps its
+        // doc-exists semantics.
+        bvState: model.bvState,
         kidsEnrolled: model.kidsEnrolled,
         termLabel: model.enrollPeriodLabel,
         suggestedAmount: model.suggestedAmount,

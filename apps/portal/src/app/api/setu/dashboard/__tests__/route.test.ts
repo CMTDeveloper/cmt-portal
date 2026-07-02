@@ -28,6 +28,8 @@ const members = [
 const dashboardData = {
   model: {
     isEnrolled: true,
+    // Active BV enrollment with no engagement yet → 'registered' (issue #23).
+    bvState: 'registered',
     kidsEnrolled: 1,
     enrollPeriodLabel: '2025-26',
     suggestedAmount: 500,
@@ -89,6 +91,9 @@ describe('GET /api/setu/dashboard', () => {
     expect(body.balaVihar.suggestedAmount).toBe(500);
     expect(body.balaVihar.givenForPeriod).toBe(200);
     expect(body.balaVihar.donationPct).toBe(40);
+    // Three-state engagement flag (issue #23) rides alongside isEnrolled.
+    expect(body.balaVihar.isEnrolled).toBe(true);
+    expect(body.balaVihar.bvState).toBe('registered');
     // Attendance is no longer a family-level / dashboard concept (#3).
     expect(body.balaVihar.attendance).toBeUndefined();
     expect(body.otherPrograms[0].programKey).toBe('tabla');
@@ -122,6 +127,46 @@ describe('GET /api/setu/dashboard', () => {
     expect(JSON.stringify(body)).not.toContain('var(--');
     expect(body.donateUrl).toBeUndefined();
     expect(body.balaVihar.enrolledPill).toBeUndefined();
+  });
+
+  // Issue #23: the three-state engagement flag is surfaced straight from the
+  // model (the loader derives it from attendance + donations). The route just
+  // passes model.bvState through, so each state is exercised by varying the
+  // mocked loadFamilyDashboard model.
+  describe('balaVihar.bvState (issue #23 engagement states)', () => {
+    it("emits 'registered' for an active BV enrollment with no engagement", async () => {
+      mockLoad.mockResolvedValue({
+        ...dashboardData,
+        model: { ...dashboardData.model, isEnrolled: true, bvState: 'registered' },
+      });
+      const res = await GET(makeRequest({ role: 'family-manager', fid: 'CMT-AB12CD34', mid: 'CMT-AB12CD34-01' }));
+      const body = await res.json();
+      expect(body.balaVihar.bvState).toBe('registered');
+      // isEnrolled keeps its doc-exists semantics — NOT re-derived from bvState.
+      expect(body.balaVihar.isEnrolled).toBe(true);
+    });
+
+    it("emits 'enrolled' once the family has engaged (attendance or completed donation)", async () => {
+      mockLoad.mockResolvedValue({
+        ...dashboardData,
+        model: { ...dashboardData.model, isEnrolled: true, bvState: 'enrolled' },
+      });
+      const res = await GET(makeRequest({ role: 'family-manager', fid: 'CMT-AB12CD34', mid: 'CMT-AB12CD34-01' }));
+      const body = await res.json();
+      expect(body.balaVihar.bvState).toBe('enrolled');
+      expect(body.balaVihar.isEnrolled).toBe(true);
+    });
+
+    it("emits 'none' when there is no active BV enrollment", async () => {
+      mockLoad.mockResolvedValue({
+        ...dashboardData,
+        model: { ...dashboardData.model, isEnrolled: false, bvState: 'none' },
+      });
+      const res = await GET(makeRequest({ role: 'family-manager', fid: 'CMT-AB12CD34', mid: 'CMT-AB12CD34-01' }));
+      const body = await res.json();
+      expect(body.balaVihar.bvState).toBe('none');
+      expect(body.balaVihar.isEnrolled).toBe(false);
+    });
   });
 
   it('returns 404 when feature flag is off', async () => {

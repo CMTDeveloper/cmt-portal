@@ -22,6 +22,10 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
+## `PENDING` · 2026-07-02 · dashboard `balaVihar` gains three-state `bvState` (issue #23)
+- **GET `/api/setu/dashboard`** — `balaVihar` gains an additive **`bvState: 'enrolled' | 'registered' | 'none'`**. `'enrolled'` = the family has ENGAGED this year (attended ≥1 BV class in the enrollment's window OR any completed donation for that enrollment, OR legacy-roster paid for legacy offerings). `'registered'` = an active BV enrollment exists (self-enroll, promotion, or backfill) but no engagement yet. `'none'` = no active BV enrollment. **`isEnrolled` is UNCHANGED** (still "active BV enrollment doc exists") — do not re-derive it from `bvState`.
+  - **Mobile:** add `bvState` to the dashboard schema; drive the BV pill from it (green "Enrolled" / amber "Registered" / grey "Not enrolled"). For `'registered'`, show the nudge copy "Attend your first class or complete your donation to confirm enrollment." + a donate CTA. No request-shape change; no other field changed.
+
 ## `773f15c` · 2026-06-25 · dashboard / family / member-detail gain public ids (FID 4-digit, MID 5-digit)
 - **Family responses** (`GET /api/setu/dashboard` → `family`, `GET /api/setu/family` → `family`) gain an additive **`publicFid: string | null`** (4-digit, e.g. `'1042'`) — the family's canonical user-facing Family ID; `null` until the FID/MID renumber migration assigns one. The existing `fid` (`CMT-…`) is **unchanged** and remains the join key.
 - **Member responses** (`GET /api/setu/dashboard` → each `members[]`, `GET /api/setu/members/[mid]/profile` → `profile`) gain an additive **`publicMid: string | null`** (5-digit, e.g. `'50001'`). The existing `mid` (`${fid}-NN`) is **unchanged** and remains the join key / route param.
