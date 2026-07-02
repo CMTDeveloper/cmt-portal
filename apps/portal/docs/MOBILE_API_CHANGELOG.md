@@ -22,7 +22,7 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
-## `PENDING` · 2026-07-02 · dashboard `balaVihar` gains three-state `bvState` (issue #23)
+## `2e87f19` · 2026-07-02 · dashboard `balaVihar` gains three-state `bvState` (issue #23)
 - **GET `/api/setu/dashboard`** — `balaVihar` gains an additive **`bvState: 'enrolled' | 'registered' | 'none'`**. `'enrolled'` = the family has ENGAGED this year (attended ≥1 BV class in the enrollment's window OR any completed donation for that enrollment, OR legacy-roster paid for legacy offerings). `'registered'` = an active BV enrollment exists (self-enroll, promotion, or backfill) but no engagement yet. `'none'` = no active BV enrollment. **`isEnrolled` is UNCHANGED** (still "active BV enrollment doc exists") — do not re-derive it from `bvState`.
   - **Mobile:** add `bvState` to the dashboard schema; drive the BV pill from it (green "Enrolled" / amber "Registered" / grey "Not enrolled"). For `'registered'`, show the nudge copy "Attend your first class or complete your donation to confirm enrollment." + a donate CTA. No request-shape change; no other field changed.
 
