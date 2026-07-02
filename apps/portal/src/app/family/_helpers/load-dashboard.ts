@@ -7,11 +7,13 @@ import { getLiveSchoolYearCached } from '@/features/setu/rollover/live-school-ye
 import { listPrograms } from '@/features/setu/programs/get-programs';
 import { getFamilySevaProgress, type FamilySevaProgress } from '@/features/setu/seva/get-family-seva-progress';
 import { getFamilyAssignment, type FamilyPrasadView } from '@/features/setu/prasad/family-assignment';
+import { getFamilyBalaViharAttendance } from '@/features/setu/attendance/get-family-attendance';
 import {
   buildFamilyDashboardModel,
   isLegacyBvPeriod,
   type FamilyDashboardModel,
 } from './dashboard-model';
+import { selectBalaViharEnrollment } from './select-bv-enrollment';
 
 export interface FamilyDashboardData {
   model: FamilyDashboardModel;
@@ -27,19 +29,23 @@ export interface FamilyDashboardData {
  * Shared by the /family server page AND GET /api/setu/dashboard so the web and
  * mobile dashboards never drift.
  *
- * Family-level attendance is intentionally NOT loaded here — attendance is a
- * child-at-program concept and lives on each child's profile, not on the family
- * home (the `_members` param is kept only for call-site/API stability).
+ * Family-level attendance is loaded here only as a COUNT — the number of
+ * Sundays a BV-enrolled child attended inside the active offering's window —
+ * which the model needs to derive `bvState` (issue #23: "Enrolled" means
+ * engaged, not merely registered). The per-date attendance heatmap is still a
+ * child-at-program concept and lives on each child's profile, not the family
+ * home; that's why `members` is needed (to map enrolled mids → legacy sids).
  *
  * All reads that don't depend on each other run concurrently to keep the
- * /family navigation snappy. The only data dependency is `legacyPaymentStatus`,
- * which needs `enrollments` to decide whether the (RTDB) read is even worth
- * doing — so it's awaited in a second, narrow step, not serialized behind the
+ * /family navigation snappy. The two reads that need `enrollments` first —
+ * `legacyPaymentStatus` (only for the 2025-26 cutover offering) and the BV
+ * attended-count (only when an active BV enrollment exists) — run together in a
+ * single second `Promise.all`, not serialized behind each other or behind the
  * unrelated calendar/seva/prasad reads.
  */
 export async function loadFamilyDashboard(
   family: FamilyDoc,
-  _members: MemberDoc[],
+  members: MemberDoc[],
 ): Promise<FamilyDashboardData> {
   // The live school year scopes the calendar read so cloned next-year Sundays
   // stay hidden until Activate; it's a cached read so resolving it before the
@@ -61,21 +67,43 @@ export async function loadFamilyDashboard(
   ]);
   const programsById = new Map<string, ProgramDoc>(allPrograms.map((p) => [p.programKey, p]));
 
-  // Legacy roster status only matters for the 2025-26 cutover BV offering;
-  // skip the extra RTDB read otherwise (same predicate the model uses). This
-  // depends on `enrollments`, so it can't join the fan-out above.
-  const legacyPaymentStatus = isLegacyBvPeriod(enrollments)
-    ? await getLegacyPaymentStatus(family.legacyFid)
-    : null;
+  // Both of these need `enrollments` (so they can't join the fan-out above),
+  // but they're independent of EACH OTHER — run them concurrently in one narrow
+  // second step rather than serializing.
+  const bv = selectBalaViharEnrollment(enrollments);
+  const [legacyPaymentStatus, bvAttendedCount] = await Promise.all([
+    // Legacy roster status only matters for the 2025-26 cutover BV offering;
+    // skip the extra RTDB read otherwise (same predicate the model uses).
+    isLegacyBvPeriod(enrollments) ? getLegacyPaymentStatus(family.legacyFid) : Promise.resolve(null),
+    // Issue #23: "Enrolled" now means engaged. Count attended Sundays inside the
+    // active BV enrollment's window so the model can derive bvState. One extra
+    // narrow read, only when an active BV enrollment exists.
+    (async (): Promise<number> => {
+      if (!bv) return 0;
+      const byMid = new Map(members.map((m): [string, MemberDoc] => [m.mid, m]));
+      const children = bv.enrolledMids.map((mid) => ({
+        mid,
+        legacySid: byMid.get(mid)?.legacySid ?? null,
+      }));
+      const toYmd = (d: Date) => d.toISOString().slice(0, 10);
+      const summary = await getFamilyBalaViharAttendance({
+        fid: family.fid,
+        legacyFid: family.legacyFid,
+        oid: bv.oid,
+        windowStart: bv.offering ? toYmd(bv.offering.startDate) : null,
+        windowEnd: bv.offering?.endDate ? toYmd(bv.offering.endDate) : null,
+        children,
+      });
+      return summary.present + summary.late;
+    })(),
+  ]);
 
   const model = buildFamilyDashboardModel({
     enrollments,
     donations,
     programsById,
     legacyPaymentStatus,
-    // Task 3 supplies the real present+late BV attendance count; 0 keeps the
-    // model at its 'registered' floor until then (issue #23).
-    bvAttendedCount: 0,
+    bvAttendedCount,
   });
 
   return { model, upcoming, seva, prasad };
