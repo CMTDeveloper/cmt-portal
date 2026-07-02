@@ -3,15 +3,23 @@
  *
  * Provisions one persistent _test family (manager 'E2E Tester' + one child),
  * a Firebase Auth password (so /api/setu/auth/password-sign-in works without
- * OTP), an active Bala Vihar enrollment + an active no-donation (om-chanting)
- * enrollment, and a few family-check-ins inside the BV window so the dashboard
- * attendance assertion is deterministic.
+ * OTP), a PROMOTED Bala Vihar enrollment (the 2026-27 offering is the sole
+ * ACTIVE bala-vihar, enrolledVia:'promotion' — exactly what the school-year
+ * rollover produced; the prior-year 2025-26 BV enrollment is CANCELLED), an
+ * active no-donation (om-chanting) enrollment, and a few family-check-ins in the
+ * 2025-26 window (which — being window/oid-scoped — do NOT engage the 2026-27
+ * enrollment).
+ *
+ * Because the active BV (2026-27) has no engagement by default, the dashboard's
+ * ground state is "Registered" (issue #23). Pass `--confirm-bv` to additionally
+ * write one `_test` COMPLETED donation for the 2026-27 eid, flipping the family
+ * to "Enrolled"; a plain re-run deletes that donation and restores "Registered".
  *
  * Does NOT call enrollFamily/getProgram/getFamilyByFid (they use Next 'use cache'
  * and throw outside a render context). Writes enrollment docs directly and reads
  * offering/program docs directly; only the PURE shared-domain helpers are used.
  *
- * Run: pnpm --filter @cmt/portal seed:e2e-family
+ * Run: pnpm --filter @cmt/portal seed:e2e-family [--confirm-bv]
  */
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
 import { portalAuth } from '@cmt/firebase-shared/admin/auth';
@@ -46,8 +54,20 @@ const PUBLIC_FID = '1042';
 // one child); index 0 → 50001, index 1 → 50002. Assigned by joinedAt order so a
 // re-seed maps the same member to the same id every time.
 const PUBLIC_MIDS = ['50001', '50002'] as const;
+// Prior-year BV offering — the enrollment the rollover CANCELLED on promotion.
+// Still referenced by the attendance + prasad fixtures below (their 2025-26 dates
+// are intentionally out-of-window for the active 2026-27 enrollment, so they
+// never engage it — see the CHECKIN_DATES note).
 const BV_OID = 'bv-brampton-2025-26';
+// Active promoted BV offering — the sole ACTIVE bala-vihar enrollment (issue #23
+// fixture). `selectBalaViharEnrollment` resolves to this, so the dashboard's
+// Registered/Enrolled state is decided by THIS enrollment's engagement.
+const BV_OID_2026 = 'bv-brampton-2026-27';
 const NODON_OID = 'om-chanting-all-2026-summer-om-chanting';
+// All 2025-26 dates ON PURPOSE (issue #23): the active BV is now the 2026-27
+// enrollment, and getFamilyBalaViharAttendance scopes door marks to that
+// offering's window + filters portal marks to its oid — so these 2025-26 marks
+// do NOT confirm the 2026-27 enrollment, keeping the ground state "Registered".
 const CHECKIN_DATES = ['2025-10-05', '2026-01-11', '2026-03-08'];
 
 type Db = ReturnType<typeof portalFirestore>;
@@ -60,7 +80,14 @@ function toDate(v: unknown): Date {
   return new Date(v as string);
 }
 
-async function ensureEnrollment(db: Db, fid: string, oid: string, managerMid: string): Promise<void> {
+async function ensureEnrollment(
+  db: Db,
+  fid: string,
+  oid: string,
+  managerMid: string,
+  opts: { enrolledVia?: 'family-initiated' | 'promotion'; normalizeActive?: boolean } = {},
+): Promise<void> {
+  const enrolledVia = opts.enrolledVia ?? 'family-initiated';
   const offeringSnap = await db.collection('offerings').doc(oid).get();
   if (!offeringSnap.exists) {
     console.log(`  offering ${oid} not found in UAT — skipping enrollment`);
@@ -109,7 +136,11 @@ async function ensureEnrollment(db: Db, fid: string, oid: string, managerMid: st
   const eid = `${fid}-${oid}`;
   const ref = db.collection('families').doc(fid).collection('enrollments').doc(eid);
   const existing = await ref.get();
-  if (existing.exists && (existing.data() as { status?: string }).status === 'active') {
+  // Issue #23 fixture: the promoted 2026-27 BV enrollment must always converge to
+  // ACTIVE + enrolledVia:'promotion', so skip the cheap already-active
+  // early-return when normalizeActive is set — a re-seed (or a rollover that
+  // wrote it a different way) is then normalized every run.
+  if (!opts.normalizeActive && existing.exists && (existing.data() as { status?: string }).status === 'active') {
     console.log(`  enrollment ${eid} already active — ok`);
     return;
   }
@@ -124,7 +155,7 @@ async function ensureEnrollment(db: Db, fid: string, oid: string, managerMid: st
       termLabel: offering.termLabel,
       location: offering.location,
       enrolledAt: FieldValue.serverTimestamp(),
-      enrolledVia: 'family-initiated',
+      enrolledVia,
       enrolledByMid: managerMid,
       enrolledMids,
       suggestedAmountSnapshot: resolveSuggestedAmount(offering, now),
@@ -141,7 +172,10 @@ async function ensureEnrollment(db: Db, fid: string, oid: string, managerMid: st
 
 async function main(): Promise<void> {
   const projectId = process.env['PORTAL_FIREBASE_PROJECT_ID'];
-  console.log(`\n=== seed-e2e-family — project: ${projectId} ===\n`);
+  // --confirm-bv writes a completed donation for the active (2026-27) BV eid so
+  // the fixture flips from Registered → Enrolled; a plain run deletes it (below).
+  const confirmBv = process.argv.includes('--confirm-bv');
+  console.log(`\n=== seed-e2e-family — project: ${projectId} (confirmBv=${confirmBv}) ===\n`);
   if (projectId !== 'chinmaya-setu-uat') {
     console.error('REFUSING: PORTAL_FIREBASE_PROJECT_ID is not chinmaya-setu-uat.');
     process.exit(1);
@@ -261,28 +295,89 @@ async function main(): Promise<void> {
   await addMemberRole({ mid: managerMid, fid, role: 'admin', grantedVia: EMAIL });
   console.log(`granted admin via roleAssignments/${managerMid}`);
 
-  // 3) Enrollments — BV + no-donation, written directly (NOT via enrollFamily).
+  // 3) Enrollments — written directly (NOT via enrollFamily). The issue #23
+  //    fixture models a PROMOTED family:
+  //    - the 2026-27 BV offering is the sole ACTIVE bala-vihar enrollment
+  //      (enrolledVia:'promotion', normalizeActive so a re-seed reconverges it),
+  //    - the prior-year 2025-26 BV enrollment is CANCELLED (by 3b below), exactly
+  //      what the real school-year rollover produced for a promoted family,
+  //    - om-chanting stays active (a second, non-BV enrollment — the N≥2 case).
+  //    ensureEnrollment mirrors ONE enrollment doc shape for all three, so the
+  //    2026-27 write carries the same enrolledMids/snapshot fields as 2025-26.
   console.log('ensuring enrollments:');
-  await ensureEnrollment(db, fid, BV_OID, managerMid);
+  await ensureEnrollment(db, fid, BV_OID, managerMid); // 2025-26 — cancelled in 3b
+  await ensureEnrollment(db, fid, BV_OID_2026, managerMid, { enrolledVia: 'promotion', normalizeActive: true });
   await ensureEnrollment(db, fid, NODON_OID, managerMid);
 
-  // 3b) Single-BV invariant. The dashboard's bespoke BV section
-  // (selectBalaViharEnrollment) resolves to ONE active bala-vihar enrollment and
-  // scopes attendance to its offering window. If the school-year rollover has
-  // since created a 2026-27 BV enrollment for this fixture, two active BV
-  // enrollments coexist and attendance can resolve to the not-yet-started
-  // 2026-27 window → empty state → flaky dashboard E2E. Cancel any active BV
-  // enrollment other than BV_OID so the started (2025-26) window always wins.
+  // 3b) Single active-BV invariant, pinned to the 2026-27 promoted enrollment.
+  // selectBalaViharEnrollment resolves the FIRST active bala-vihar enrollment, so
+  // there must be exactly one. Cancel any active BV whose oid !== BV_OID_2026 —
+  // this cancels the 2025-26 enrollment (matching the rollover) and keeps the
+  // fixture deterministic across re-seeds. Attendance for the active 2026-27
+  // enrollment is therefore empty by default → dashboard ground state "Registered".
   const enrSnap = await db.collection('families').doc(fid).collection('enrollments').get();
   for (const d of enrSnap.docs) {
     const e = d.data() as { oid?: string; programKey?: string; status?: string };
-    if (e.programKey === 'bala-vihar' && e.oid !== BV_OID && e.status === 'active') {
+    if (e.programKey === 'bala-vihar' && e.oid !== BV_OID_2026 && e.status === 'active') {
       await d.ref.set(
-        { status: 'cancelled', cancelledAt: FieldValue.serverTimestamp(), cancelledReason: 'e2e-seed: single-BV fixture' },
+        { status: 'cancelled', cancelledAt: FieldValue.serverTimestamp(), cancelledReason: 'e2e-seed: promoted-family fixture (2026-27 is the sole active BV)' },
         { merge: true },
       );
-      console.log(`  cancelled conflicting active BV enrollment ${e.oid} (keeps ${BV_OID} as the sole active BV)`);
+      console.log(`  cancelled prior-year active BV enrollment ${e.oid} (keeps ${BV_OID_2026} as the sole active BV)`);
     }
+  }
+
+  // 3c) Engagement donation (issue #23). The active BV is the 2026-27 promoted
+  //     enrollment, whose engagement decides Registered vs Enrolled:
+  //     - EVERY run first deletes any _test COMPLETED donation for its eid, so a
+  //       plain re-seed deterministically restores the "Registered" ground state
+  //       (even after a prior --confirm-bv run).
+  //     - --confirm-bv then writes ONE _test completed donation tied to that eid;
+  //       isEnrollmentConfirmed sees it and bvState flips to "Enrolled".
+  //     Shape mirrors createDonation() (features/setu/donations/create-donation.ts)
+  //     so getDonations reads it exactly like a real portal donation. The did is
+  //     deterministic → --confirm-bv is idempotent (no duplicate donations).
+  const eid2026 = `${fid}-${BV_OID_2026}`;
+  // Query by fid only (single-field, index-safe — reuses no composite index) and
+  // filter eid + _test in memory before deleting.
+  const donSnap = await db.collection('donations').where('fid', '==', fid).get();
+  let removed = 0;
+  for (const d of donSnap.docs) {
+    const dd = d.data() as { eid?: string; _test?: boolean };
+    if (dd._test === true && dd.eid === eid2026) {
+      await d.ref.delete();
+      removed += 1;
+    }
+  }
+  console.log(`removed ${removed} _test donation(s) for eid=${eid2026} (restores Registered ground state)`);
+
+  if (confirmBv) {
+    const did = `${eid2026}-e2e-confirm`;
+    await db.collection('donations').doc(did).set(
+      {
+        did,
+        fid,
+        donorMid: managerMid,
+        donorName: 'E2E Tester',
+        donorEmail: EMAIL,
+        type: 'enrollment',
+        programKey: 'bala-vihar',
+        programLabel: 'Bala Vihar',
+        pid: BV_OID_2026,
+        eid: eid2026,
+        label: 'Bala Vihar Donation — 2026-27',
+        amountCAD: 25,
+        coverFee: false,
+        feeCAD: 0,
+        clientReferenceId: did,
+        status: 'completed',
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+        _test: true,
+      },
+      { merge: true },
+    );
+    console.log(`--confirm-bv: wrote completed donation ${did} (amountCAD=25) → bvState 'enrolled'`);
   }
 
   // 4) family-check-ins inside the BV window (family-level attendance source).
