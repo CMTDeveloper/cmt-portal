@@ -183,10 +183,17 @@ export default async function FamilyDashboardPage() {
                 <Stat label="Kids enrolled" value={String(kidsEnrolled)}/>
               </div>
               <div style={{ fontSize: 11, color: 'var(--muted)' }}>
-                {isEnrolled
+                {model.bvState === 'enrolled'
                   ? 'Open a child’s profile to see their Sunday attendance.'
-                  : 'Enroll your children to join Sunday Bala Vihar classes.'}
+                  : model.bvState === 'registered'
+                    ? 'Attend your first class or complete your donation to confirm enrollment.'
+                    : 'Enroll your children to join Sunday Bala Vihar classes.'}
               </div>
+              {model.confirmNudge && (
+                <Link href={donateUrl} className="btn btn--p btn--block" style={{ marginTop: 12, display: 'block', textAlign: 'center', textDecoration: 'none' }}>
+                  Give donation
+                </Link>
+              )}
               {!isEnrolled && (
                 <Link href="/family/enroll" className="btn btn--s btn--block" style={{ marginTop: 12, display: 'block', textAlign: 'center', textDecoration: 'none' }}>Enroll now</Link>
               )}
@@ -289,9 +296,16 @@ export default async function FamilyDashboardPage() {
             <p style={{ fontSize: 12, color: 'var(--muted)' }}>{todayLabel}</p>
             <h1 style={{ fontSize: 32, fontWeight: 600, marginTop: 4, letterSpacing: '-0.02em' }}>{firstName ? `Hari OM, ${firstName}.` : 'Hari OM!'}</h1>
           </div>
-          <div className="row" style={{ gap: 10 }}>
-            <Link href="/family/programs" className="btn btn--s" style={{ textDecoration: 'none' }}>Programs</Link>
-            {showGive && <Link href={donateUrl} className="btn btn--p">Give donation</Link>}
+          <div className="col" style={{ alignItems: 'flex-end', gap: 6 }}>
+            <div className="row" style={{ gap: 10 }}>
+              <Link href="/family/programs" className="btn btn--s" style={{ textDecoration: 'none' }}>Programs</Link>
+              {showGive && <Link href={donateUrl} className="btn btn--p">Give donation</Link>}
+            </div>
+            {model.confirmNudge && (
+              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6, textAlign: 'right', maxWidth: 260 }}>
+                Attend your first class or complete your donation to confirm enrollment.
+              </div>
+            )}
           </div>
         </header>
 
