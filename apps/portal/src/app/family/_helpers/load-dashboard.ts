@@ -8,6 +8,7 @@ import { listPrograms } from '@/features/setu/programs/get-programs';
 import { getFamilySevaProgress, type FamilySevaProgress } from '@/features/setu/seva/get-family-seva-progress';
 import { getFamilyAssignment, type FamilyPrasadView } from '@/features/setu/prasad/family-assignment';
 import { getFamilyBalaViharAttendance } from '@/features/setu/attendance/get-family-attendance';
+import { isoToTorontoDateInput } from '@/lib/toronto-date';
 import {
   buildFamilyDashboardModel,
   isLegacyBvPeriod,
@@ -85,13 +86,18 @@ export async function loadFamilyDashboard(
         mid,
         legacySid: byMid.get(mid)?.legacySid ?? null,
       }));
-      const toYmd = (d: Date) => d.toISOString().slice(0, 10);
+      // Offering boundaries store Toronto-aware timestamps (endDate is 23:59:59
+      // America/Toronto, i.e. early-morning UTC the *next* day). Derive the
+      // window YMDs in the Toronto calendar so they match the door check-in
+      // records — a UTC `.slice(0,10)` would push end-of-day one day late.
       const summary = await getFamilyBalaViharAttendance({
         fid: family.fid,
         legacyFid: family.legacyFid,
         oid: bv.oid,
-        windowStart: bv.offering ? toYmd(bv.offering.startDate) : null,
-        windowEnd: bv.offering?.endDate ? toYmd(bv.offering.endDate) : null,
+        windowStart: bv.offering ? isoToTorontoDateInput(bv.offering.startDate.toISOString()) : null,
+        windowEnd: bv.offering?.endDate
+          ? isoToTorontoDateInput(bv.offering.endDate.toISOString())
+          : null,
         children,
       });
       return summary.present + summary.late;

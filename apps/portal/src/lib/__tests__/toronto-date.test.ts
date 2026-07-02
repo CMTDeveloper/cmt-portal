@@ -77,6 +77,13 @@ describe('isoToTorontoDateInput', () => {
     expect(isoToTorontoDateInput('2027-01-26T04:59:59.000Z')).toBe('2027-01-25');
   });
 
+  it('winter BV-window end-of-day (EST): 2027-01-11T04:59:59.000Z → 2027-01-10', () => {
+    // 04:59:59 UTC = 23:59:59 Toronto EST (-05:00) on Jan 10 — the offering
+    // endDate boundary the family dashboard's BV attendance window relies on
+    // (issue #23): a UTC .slice(0,10) would wrongly yield 2027-01-11.
+    expect(isoToTorontoDateInput('2027-01-11T04:59:59.000Z')).toBe('2027-01-10');
+  });
+
   it('start-of-day Toronto EDT: 2026-09-15T04:00:00.000Z → 2026-09-15', () => {
     // 04:00:00 UTC = 00:00:00 Toronto EDT (-04:00) on Sep 15
     expect(isoToTorontoDateInput('2026-09-15T04:00:00.000Z')).toBe('2026-09-15');
