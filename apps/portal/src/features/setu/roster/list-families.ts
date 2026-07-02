@@ -1,7 +1,7 @@
 import 'server-only';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import type { RosterFamilyRow, RosterListResponse, RosterQuery } from '@cmt/shared-domain/setu';
-import { deriveFamilyPayment } from './payment';
+import { deriveFamilyRosterSignals } from './family-engagement';
 
 type RawFamily = {
   publicFid?: unknown; legacyFid?: unknown; name?: unknown; location?: unknown;
@@ -32,10 +32,19 @@ async function activeProgramLabels(fid: string): Promise<string[]> {
 
 async function toRow(fid: string, d: RawFamily): Promise<RosterFamilyRow> {
   const db = portalFirestore();
-  const [memberSnap, payment, programs] = await Promise.all([
-    db.collection('families').doc(fid).collection('members').limit(100).get(),
-    deriveFamilyPayment(fid),
+  // Members are read first because the BV attendance join (inside
+  // deriveFamilyRosterSignals) needs each enrolled child's legacySid.
+  const memberSnap = await db.collection('families').doc(fid).collection('members').limit(100).get();
+  const members = memberSnap.docs.map((m) => {
+    const md = m.data() as { mid?: unknown; legacySid?: unknown };
+    return {
+      mid: typeof md.mid === 'string' ? md.mid : m.id,
+      legacySid: typeof md.legacySid === 'string' ? md.legacySid : null,
+    };
+  });
+  const [programs, signals] = await Promise.all([
     activeProgramLabels(fid),
+    deriveFamilyRosterSignals(fid, { legacyFid: legacyOf(d), members }),
   ]);
   return {
     fid,
@@ -43,9 +52,10 @@ async function toRow(fid: string, d: RawFamily): Promise<RosterFamilyRow> {
     legacyFid: legacyOf(d),
     name: nameOf(fid, d),
     location: locationOf(d),
-    memberCount: memberSnap.docs.length,
-    payment,
+    memberCount: members.length,
+    payment: signals.payment,
     programs,
+    bvEngagement: signals.bvEngagement,
   };
 }
 

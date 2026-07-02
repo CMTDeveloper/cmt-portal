@@ -50,6 +50,31 @@ function PaymentChip({ payment }: { payment: RosterPayment }) {
   );
 }
 
+// ── Bala Vihar engagement chip (issue #23) ────────────────────────────────────
+// Same chip shape as PaymentChip; green (--ok) = Confirmed, amber (--warn) =
+// Registered. Nothing renders when bvEngagement is null/absent (no active BV).
+const ENGAGEMENT_STYLE = {
+  confirmed: { bg: 'var(--accentSoft)', fg: 'var(--ok)', label: 'Confirmed' },
+  registered: { bg: 'var(--accentSoft)', fg: 'var(--warn)', label: 'Registered' },
+} as const;
+
+function EngagementChip({ engagement }: { engagement: RosterFamilyRow['bvEngagement'] }) {
+  if (engagement !== 'confirmed' && engagement !== 'registered') return null;
+  const s = ENGAGEMENT_STYLE[engagement];
+  return (
+    <span
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 5,
+        fontSize: 11, fontWeight: 600, padding: '2px 9px', borderRadius: 99,
+        background: s.bg, color: s.fg, whiteSpace: 'nowrap',
+      }}
+    >
+      <span aria-hidden style={{ width: 6, height: 6, borderRadius: 99, background: 'currentColor' }} />
+      {s.label}
+    </span>
+  );
+}
+
 // ── Filter chip ─────────────────────────────────────────────────────────────
 function FilterChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
@@ -107,7 +132,10 @@ function RosterFamilyCard({ row }: { row: RosterFamilyRow }) {
           )}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flex: '0 0 auto' }}>
-          <PaymentChip payment={row.payment} />
+          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 6 }}>
+            <EngagementChip engagement={row.bvEngagement} />
+            <PaymentChip payment={row.payment} />
+          </div>
           <div style={{ fontSize: 12, color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
             {row.memberCount} member{row.memberCount !== 1 ? 's' : ''}
             <SetuIcon.chevron color="var(--muted)" />

@@ -4,7 +4,14 @@ vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
   portalFirestore: vi.fn(),
 }));
 
-vi.mock('../payment', () => ({ deriveFamilyPayment: vi.fn().mockResolvedValue('unknown') }));
+// toRow derives payment + bvEngagement via deriveFamilyRosterSignals; the
+// engagement logic is exercised in family-engagement.test.ts, so here we mock it
+// to keep these tests focused on ordering/pagination/filtering. A per-fid
+// override map lets a test assert bvEngagement flows through onto the row.
+const signalsByFid = new Map<string, { payment: string; bvEngagement: unknown }>();
+vi.mock('../family-engagement', () => ({
+  deriveFamilyRosterSignals: vi.fn(async (fid: string) => signalsByFid.get(fid) ?? { payment: 'unknown', bvEngagement: null }),
+}));
 
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { listRosterFamilies } from '../list-families';
@@ -216,6 +223,7 @@ const fam = (over: Partial<FamilySeed> & { fid: string; name: string }): FamilyS
 
 beforeEach(() => {
   vi.clearAllMocks();
+  signalsByFid.clear();
 });
 
 describe('listRosterFamilies', () => {
@@ -365,6 +373,25 @@ describe('listRosterFamilies', () => {
     // unscoped: lists every family (even the one with no enrollment), name-ordered
     expect(res.families.map((f) => f.fid).sort()).toEqual(['CMT-24', 'CMT-25', 'CMT-NONE']);
     expect(res.total).toBe(3);
+  });
+
+  it('threads bvEngagement from deriveFamilyRosterSignals onto each row (issue #23)', async () => {
+    const families = [
+      fam({ fid: 'CMT-CONF', name: 'Confirmed' }),
+      fam({ fid: 'CMT-REG', name: 'Registered' }),
+      fam({ fid: 'CMT-NIL', name: 'NoBv' }),
+    ];
+    signalsByFid.set('CMT-CONF', { payment: 'paid', bvEngagement: 'confirmed' });
+    signalsByFid.set('CMT-REG', { payment: 'outstanding', bvEngagement: 'registered' });
+    signalsByFid.set('CMT-NIL', { payment: 'unknown', bvEngagement: null });
+    mockFirestore.mockReturnValue(makeDb(families) as never);
+
+    const res = await listRosterFamilies({ limit: 50, format: 'json' });
+    const byFid = (fid: string) => res.families.find((f) => f.fid === fid)!;
+    expect(byFid('CMT-CONF').bvEngagement).toBe('confirmed');
+    expect(byFid('CMT-CONF').payment).toBe('paid');
+    expect(byFid('CMT-REG').bvEngagement).toBe('registered');
+    expect(byFid('CMT-NIL').bvEngagement).toBeNull();
   });
 
   it('returns total only on the first page (no cursor)', async () => {

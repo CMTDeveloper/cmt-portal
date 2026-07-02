@@ -29,6 +29,14 @@ describe('report schemas', () => {
       byLevel: [{ levelId: 'l1', levelName: 'Level 1', programKey: 'bala-vihar', members: 7 }],
       totalActiveEnrollments: 10, totalMembers: 14,
     }).byProgram).toHaveLength(1);
+    // issue #23: bala-vihar byProgram groups carry optional confirmed/registered
+    // counts (confirmed + registered === families); other groups omit them.
+    const bvSplit = EnrollmentReportSchema.parse({
+      byProgram: [{ programKey: 'bala-vihar', programLabel: 'Bala Vihar', families: 10, members: 14, confirmed: 6, registered: 4 }],
+      byLevel: [], totalActiveEnrollments: 10, totalMembers: 14,
+    }).byProgram[0]!;
+    expect(bvSplit.confirmed).toBe(6);
+    expect(bvSplit.registered).toBe(4);
     expect(AttendanceReportSchema.parse({
       byLevel: [{ levelId: 'l1', levelName: 'Level 1', programKey: 'bala-vihar', present: 5, absent: 1, late: 1, total: 7, rate: 0.71 }],
       byProgram: [{ programKey: 'bala-vihar', programLabel: 'Bala Vihar', present: 5, absent: 1, late: 1, total: 7, rate: 0.71 }],

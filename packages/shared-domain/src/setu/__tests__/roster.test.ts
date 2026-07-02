@@ -40,6 +40,22 @@ describe('roster schemas', () => {
     expect(ROSTER_PAYMENTS).toContain('outstanding');
   });
 
+  it('RosterFamilyRowSchema carries an optional, nullable bvEngagement (issue #23)', () => {
+    const base = {
+      fid: 'CMT-X', publicFid: '1042', legacyFid: '123', name: 'Patel', location: 'Brampton',
+      memberCount: 4, payment: 'paid', programs: ['Bala Vihar'],
+    };
+    // confirmed / registered round-trip
+    expect(RosterFamilyRowSchema.parse({ ...base, bvEngagement: 'confirmed' }).bvEngagement).toBe('confirmed');
+    expect(RosterFamilyRowSchema.parse({ ...base, bvEngagement: 'registered' }).bvEngagement).toBe('registered');
+    // null = no active BV enrollment
+    expect(RosterFamilyRowSchema.parse({ ...base, bvEngagement: null }).bvEngagement).toBeNull();
+    // absent is allowed (optional) and stays undefined
+    expect(RosterFamilyRowSchema.parse(base).bvEngagement).toBeUndefined();
+    // an unknown engagement value is rejected
+    expect(RosterFamilyRowSchema.safeParse({ ...base, bvEngagement: 'maybe' }).success).toBe(false);
+  });
+
   it('RosterListResponseSchema round-trips families + nullable cursor', () => {
     const resp = { families: [], nextCursor: null, total: 0 };
     expect(RosterListResponseSchema.parse(resp).nextCursor).toBeNull();

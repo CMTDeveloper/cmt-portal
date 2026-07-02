@@ -13,6 +13,13 @@ export const RosterFamilyRowSchema = z.object({
   memberCount: z.number().int().nonnegative(),
   payment: z.enum(ROSTER_PAYMENTS),
   programs: z.array(z.string()), // active program labels, for display + CSV
+  // issue #23 — Bala Vihar engagement for the roster chip:
+  //   'confirmed'  = active BV enrollment AND engaged (attended ≥1 class, a
+  //                  completed donation for its eid, or legacy-paid),
+  //   'registered' = active BV enrollment but not yet engaged,
+  //   null/absent  = no active BV enrollment.
+  // Nullable + optional (read-validation discipline — never required).
+  bvEngagement: z.enum(['confirmed', 'registered']).nullable().optional(),
 });
 export type RosterFamilyRow = z.infer<typeof RosterFamilyRowSchema>;
 

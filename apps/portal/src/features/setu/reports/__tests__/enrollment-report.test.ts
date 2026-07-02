@@ -1,20 +1,76 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('@cmt/firebase-shared/admin/firestore', () => ({ portalFirestore: vi.fn() }));
+// Legacy roster read is a cached RTDB call — mock it so the report stays pure.
+const { getLegacyPaymentStatus } = vi.hoisted(() => ({ getLegacyPaymentStatus: vi.fn() }));
+vi.mock('@/features/setu/donations/legacy-payment', () => ({ getLegacyPaymentStatus }));
+
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { buildEnrollmentReport } from '../enrollment-report';
 const mockFs = vi.mocked(portalFirestore);
 
 type SeedDoc = Record<string, unknown> & { id?: string };
 
-// helper builds a db with collectionGroup('enrollments') + collection('levels')
-function makeDb(enrollments: SeedDoc[], levels: SeedDoc[]) {
-  const q = (docs: SeedDoc[]) => ({ get: async () => ({ docs: docs.map((d, i) => ({ id: d.id ?? String(i), data: () => d })) }) });
+interface Extra {
+  families?: Array<{ id: string; legacyFid?: string | null }>;
+  donations?: Array<{ fid: string; status: string; eid: string | null; amountCAD: number }>;
+  attendance?: Array<{ pid: string; mid: string; status: string }>;
+  offerings?: Record<string, { paymentSource?: string }>;
+}
+
+// Chainable fake supporting: collectionGroup('enrollments'|'donations'),
+// collection('levels'|'families'|'attendanceEvents'|'offerings'), getAll(...refs).
+function makeDb(enrollments: SeedDoc[], levels: SeedDoc[], extra: Extra = {}) {
+  const families = extra.families ?? [];
+  const donations = extra.donations ?? [];
+  const attendance = extra.attendance ?? [];
+  const offerings = extra.offerings ?? {};
+
+  const snap = (docs: SeedDoc[]) => ({ docs: docs.map((d, i) => ({ id: d.id ?? String(i), data: () => d })) });
+  const cgDonationDocs = donations.map((d, i) => ({
+    id: `d${i}`,
+    ref: { parent: { parent: { id: d.fid } } },
+    data: () => d,
+  }));
+
   return {
-    collectionGroup: (g: string) => { if (g !== 'enrollments') throw new Error(g); return q(enrollments); },
-    collection: (c: string) => { if (c !== 'levels') throw new Error(c); return q(levels); },
+    collectionGroup: (g: string) => {
+      if (g === 'enrollments') return { get: async () => snap(enrollments) };
+      if (g === 'donations') return { get: async () => ({ docs: cgDonationDocs }) };
+      throw new Error(`unexpected group ${g}`);
+    },
+    collection: (c: string) => {
+      if (c === 'levels') return { get: async () => snap(levels) };
+      if (c === 'families') {
+        return { get: async () => ({ docs: families.map((f) => ({ id: f.id, data: () => ({ legacyFid: f.legacyFid ?? null }) })) }) };
+      }
+      if (c === 'attendanceEvents') {
+        return {
+          where: (_field: string, _op: string, value: unknown) => {
+            const oids = value as string[];
+            const rows = attendance.filter((a) => oids.includes(a.pid));
+            return { get: async () => ({ docs: rows.map((a, i) => ({ id: `a${i}`, data: () => a })) }) };
+          },
+        };
+      }
+      if (c === 'offerings') {
+        return { doc: (oid: string) => ({ __kind: 'offeringDoc' as const, oid }) };
+      }
+      throw new Error(`unexpected collection ${c}`);
+    },
+    getAll: async (...refs: Array<{ oid: string }>) =>
+      refs.map((r) => ({
+        id: r.oid,
+        exists: offerings[r.oid] !== undefined,
+        data: () => offerings[r.oid],
+      })),
   };
 }
-beforeEach(() => mockFs.mockReset());
+
+beforeEach(() => {
+  mockFs.mockReset();
+  getLegacyPaymentStatus.mockReset();
+  getLegacyPaymentStatus.mockResolvedValue('unknown');
+});
 
 describe('buildEnrollmentReport', () => {
   it('counts families + members per program (N=2 programs), members per level, ignores cancelled', async () => {
@@ -67,5 +123,58 @@ describe('buildEnrollmentReport', () => {
 
     const r = await buildEnrollmentReport({ format: 'json' });
     expect(r.totalActiveEnrollments).toBe(2); // both years counted
+  });
+
+  it('splits the bala-vihar group into confirmed vs registered (confirmed + registered === families)', async () => {
+    // F1 confirmed via a completed donation for its eid; F2 confirmed via teacher
+    // attendance (present) on its offering; F3 registered (active BV, no signal);
+    // Tabla group (F4) never gets a confirmed/registered split.
+    mockFs.mockReturnValue(makeDb(
+      [
+        { fid: 'F1', eid: 'F1-bv', oid: 'off-bv', programKey: 'bala-vihar', programLabel: 'Bala Vihar', status: 'active', enrolledMids: ['F1-1'], levelSnapshots: {} },
+        { fid: 'F2', eid: 'F2-bv', oid: 'off-bv', programKey: 'bala-vihar', programLabel: 'Bala Vihar', status: 'active', enrolledMids: ['F2-1'], levelSnapshots: {} },
+        { fid: 'F3', eid: 'F3-bv', oid: 'off-bv', programKey: 'bala-vihar', programLabel: 'Bala Vihar', status: 'active', enrolledMids: ['F3-1'], levelSnapshots: {} },
+        { fid: 'F4', eid: 'F4-tb', oid: 'off-tb', programKey: 'tabla', programLabel: 'Tabla', status: 'active', enrolledMids: ['F4-1'], levelSnapshots: {} },
+      ],
+      [],
+      {
+        families: [{ id: 'F1' }, { id: 'F2' }, { id: 'F3' }, { id: 'F4' }],
+        donations: [{ fid: 'F1', status: 'completed', eid: 'F1-bv', amountCAD: 100 }],
+        attendance: [{ pid: 'off-bv', mid: 'F2-1', status: 'present' }],
+        offerings: { 'off-bv': { paymentSource: 'portal' }, 'off-tb': { paymentSource: 'portal' } },
+      },
+    ) as never);
+
+    const r = await buildEnrollmentReport({ format: 'json' });
+    const bv = r.byProgram.find((p) => p.programKey === 'bala-vihar')!;
+    expect(bv.families).toBe(3);
+    expect(bv.confirmed).toBe(2);   // F1 (donation) + F2 (attendance)
+    expect(bv.registered).toBe(1);  // F3
+    expect(bv.confirmed! + bv.registered!).toBe(bv.families);
+    // Non-BV group has no split.
+    const tabla = r.byProgram.find((p) => p.programKey === 'tabla')!;
+    expect(tabla.confirmed).toBeUndefined();
+    expect(tabla.registered).toBeUndefined();
+  });
+
+  it('counts legacy-paid families as confirmed for a legacy-sourced BV offering', async () => {
+    mockFs.mockReturnValue(makeDb(
+      [
+        { fid: 'F1', eid: 'F1-bv', oid: 'off-legacy', programKey: 'bala-vihar', programLabel: 'Bala Vihar', status: 'active', enrolledMids: ['F1-1'], levelSnapshots: {} },
+        { fid: 'F2', eid: 'F2-bv', oid: 'off-legacy', programKey: 'bala-vihar', programLabel: 'Bala Vihar', status: 'active', enrolledMids: ['F2-1'], levelSnapshots: {} },
+      ],
+      [],
+      {
+        families: [{ id: 'F1', legacyFid: '700' }, { id: 'F2', legacyFid: '701' }],
+        offerings: { 'off-legacy': { paymentSource: 'legacy' } },
+      },
+    ) as never);
+    // Only F1's legacy roster row is paid.
+    getLegacyPaymentStatus.mockImplementation(async (lf: string) => (lf === '700' ? 'paid' : 'unpaid'));
+
+    const r = await buildEnrollmentReport({ format: 'json' });
+    const bv = r.byProgram.find((p) => p.programKey === 'bala-vihar')!;
+    expect(bv.confirmed).toBe(1);   // F1 legacy-paid
+    expect(bv.registered).toBe(1);  // F2 not paid
   });
 });

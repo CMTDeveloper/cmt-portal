@@ -48,6 +48,23 @@ describe('RosterBrowser', () => {
     expect(screen.getAllByText(/FID 2050/).length).toBeGreaterThanOrEqual(1);
   });
 
+  it('renders the Confirmed/Registered engagement chip (issue #23), and nothing for null', async () => {
+    fetchRosterClient.mockResolvedValue({
+      families: [
+        { fid: 'CMT-C', publicFid: '1', legacyFid: null, name: 'ConfFam', location: 'Brampton', memberCount: 2, payment: 'paid', programs: ['Bala Vihar'], bvEngagement: 'confirmed' },
+        { fid: 'CMT-R', publicFid: '2', legacyFid: null, name: 'RegFam', location: 'Brampton', memberCount: 1, payment: 'outstanding', programs: ['Bala Vihar'], bvEngagement: 'registered' },
+        { fid: 'CMT-N', publicFid: '3', legacyFid: null, name: 'NilFam', location: 'Brampton', memberCount: 1, payment: 'unknown', programs: [], bvEngagement: null },
+      ],
+      nextCursor: null, total: 3,
+    });
+    render(<RosterBrowser />);
+    expect((await screen.findAllByText('Confirmed')).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Registered').length).toBeGreaterThanOrEqual(1);
+    // three families, three payment chips, but only two engagement chips → the
+    // null-engagement family shows no Confirmed/Registered chip.
+    expect(screen.queryAllByText('Confirmed').length).toBe(screen.queryAllByText(/ConfFam Family/).length);
+  });
+
   it('shows a "Load more" button when nextCursor is present', async () => {
     fetchRosterClient.mockResolvedValue({
       families: [{ fid: 'CMT-X', publicFid: null, legacyFid: null, name: 'Patel', location: 'Brampton', memberCount: 1, payment: 'unknown', programs: [] }],

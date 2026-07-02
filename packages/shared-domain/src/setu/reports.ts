@@ -27,6 +27,11 @@ export const EnrollmentReportSchema = z.object({
   byProgram: z.array(z.object({
     programKey: z.string(), programLabel: z.string(),
     families: z.number().int().nonnegative(), members: z.number().int().nonnegative(),
+    // issue #23 — present only on the bala-vihar group: how many of its
+    // `families` are engagement-confirmed vs merely registered. Optional so
+    // non-BV groups omit them; when present, confirmed + registered === families.
+    confirmed: z.number().int().nonnegative().optional(),
+    registered: z.number().int().nonnegative().optional(),
   })),
   byLevel: z.array(z.object({
     levelId: z.string(), levelName: z.string(), programKey: z.string(),
