@@ -1,7 +1,8 @@
 import { execSync } from 'node:child_process';
 import { resolve } from 'node:path';
-import { test, expect } from '@playwright/test';
+import { test, expect, request as apiRequest } from '@playwright/test';
 import { visibleText, hasFamilyCreds } from '../_helpers';
+import { signInFamilyAndSaveStorage } from '../auth-helpers';
 
 /**
  * E2E for the derived Registered vs Enrolled engagement states on the family
@@ -37,9 +38,21 @@ import { visibleText, hasFamilyCreds } from '../_helpers';
  * SELF-RESETTING: Phase 2's beforeAll shells out `seed:e2e-family --confirm-bv`;
  * afterAll re-runs the PLAIN seed (which deletes that _test donation) to restore
  * the Registered ground state, so the suite is idempotent. The seed reuses the
- * same fid + uid (stable) and does NOT revoke sessions (Admin-SDK updateUser with
- * an unchanged password sets no tokensValidAfterTime), so the storageState
- * session survives the reseed — no re-sign-in needed.
+ * same fid + uid (stable).
+ *
+ * RE-AUTH AFTER RESEED (issue #23): the seed calls `auth.updateUser(uid, {
+ * password })` on EVERY run, which bumps the Firebase user's
+ * `tokensValidAfterTime` and invalidates the session established by
+ * auth.setup — so the storageState session is DEAD after a mid-suite reseed
+ * (a 401 `no-session` on the first Phase-2 request, before this fix). The
+ * Phase-2 beforeAll therefore re-signs-in via the same password-sign-in route
+ * auth.setup uses (`signInFamilyAndSaveStorage`) and overwrites the shared
+ * storageState file; Playwright re-reads that file when it creates each
+ * per-test fixture, so BOTH the API `request` and the browser `page` fixtures
+ * of the Phase-2 tests load the fresh session. This adds exactly ONE extra
+ * sign-in per run (well under the 5-per-15-min password-sign-in limiter). The
+ * afterAll reseed also invalidates the session, but nothing runs after it in
+ * this serial spec, so it deliberately skips the re-auth.
  *
  * execSync-to-seed is an established house pattern (e2e/setu/registration/
  * {join-request,profile-completion}.spec.ts re-seed their own fixtures the same
@@ -69,6 +82,22 @@ function reseedE2eFamily(flags: string[] = []): void {
     stdio: 'inherit',
     timeout: 120_000,
   });
+}
+
+/** Re-establish the E2E family session after a mid-suite reseed (the seed's
+ *  `auth.updateUser(uid, { password })` invalidates the existing __session).
+ *  Mirrors auth.setup: sign in via password-sign-in and overwrite the shared
+ *  storageState file so the next-created `request`/`page` fixtures load it.
+ *  Uses a fresh APIRequestContext because the per-test `request` fixture is not
+ *  available in a `beforeAll` hook. */
+async function reauthE2eFamily(): Promise<void> {
+  const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3001';
+  const ctx = await apiRequest.newContext({ baseURL });
+  try {
+    await signInFamilyAndSaveStorage(ctx);
+  } finally {
+    await ctx.dispose();
+  }
 }
 
 test.describe.serial('enrollment engagement state — Registered vs Enrolled (issue #23)', () => {
@@ -110,8 +139,11 @@ test.describe.serial('enrollment engagement state — Registered vs Enrolled (is
 
   // ── Phase 2: Enrolled after a completed donation (self-mutates the fixture) ──
   test.describe('after a completed donation (--confirm-bv)', () => {
-    test.beforeAll(() => {
+    test.beforeAll(async () => {
       reseedE2eFamily(['--confirm-bv']);
+      // The reseed bumped tokensValidAfterTime → the storageState session is now
+      // dead. Re-sign-in so the Phase-2 request/page fixtures carry a live one.
+      await reauthE2eFamily();
     });
 
     test('API: dashboard reports bvState=enrolled', async ({ request }) => {
