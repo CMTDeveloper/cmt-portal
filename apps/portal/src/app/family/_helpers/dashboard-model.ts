@@ -4,6 +4,18 @@ import type { DonationDoc, ProgramDoc } from '@cmt/shared-domain';
 import type { EnrollmentWithOffering } from '@/features/setu/enrollment/get-enrollments';
 import { selectBalaViharEnrollment } from './select-bv-enrollment';
 import { deriveProgramCards, type ProgramCard } from './derive-program-cards';
+import { isEnrollmentConfirmed } from './enrollment-confirmation';
+
+/**
+ * Amber "not-yet-confirmed" chip for the Registered pill. Reuses the same
+ * warn-soft / warn token pair as the prasad "Proposed" status chip
+ * (features/setu/prasad/admin-prasad-screen.tsx) and the attendance "Late" chip
+ * (app/welcome/levels/[levelId]/page.tsx). `--setu-warn-soft` (#fbe6c6) is a
+ * root token; `--warn` (#a06410) is the .csp-scoped alias the existing pill's
+ * `--accentDeep` fg shares. No new tokens invented (issue #23).
+ */
+const REGISTERED_BG = 'var(--setu-warn-soft)';
+const REGISTERED_FG = 'var(--warn, #a06410)';
 
 /**
  * True when the active Bala Vihar enrollment's offering is legacy-sourced (the
@@ -37,11 +49,27 @@ export interface DashboardModelInput {
    * `isLegacyBvPeriod(enrollments)` is true; null otherwise. Compared `=== 'paid'`.
    */
   legacyPaymentStatus: string | null;
+  /**
+   * present+late BV attendance marks inside the active BV offering's window
+   * (computed by the loader via getFamilyBalaViharAttendance); 0 when none.
+   */
+  bvAttendedCount: number;
 }
 
 export interface FamilyDashboardModel {
-  /** True when the family has an active Bala Vihar enrollment. */
+  /** True when the family has an active Bala Vihar enrollment (doc exists). */
   isEnrolled: boolean;
+  /**
+   * Three-state engagement (issue #23): 'enrolled' = active BV doc AND confirmed
+   * (attended ≥1 class, a completed donation for its eid, or legacy-paid);
+   * 'registered' = active BV doc but not yet engaged; 'none' = no active BV.
+   */
+  bvState: 'enrolled' | 'registered' | 'none';
+  /**
+   * True ⟺ bvState === 'registered' — drives the confirm nudge line and the
+   * registered donate CTA on both layouts.
+   */
+  confirmNudge: boolean;
   /** Members actually enrolled in BV (enrolledMids), NOT all Child members. */
   kidsEnrolled: number;
   enrollPeriodLabel: string | null;
@@ -97,6 +125,15 @@ export function buildFamilyDashboardModel(input: DashboardModelInput): FamilyDas
   const teacherManagedPayment = activeBvPaymentSource(enrollments) === 'teacher-managed';
   const legacyPaid = isLegacyPeriod && legacyPaymentStatus === 'paid';
 
+  // Issue #23: an active BV doc alone is only 'registered'. 'enrolled' requires
+  // real engagement — attendance, a completed donation for its eid, or legacy-paid.
+  const bvConfirmed =
+    bv !== null &&
+    isEnrollmentConfirmed(bv, { attendedCount: input.bvAttendedCount, donations, legacyPaid });
+  const bvState: 'enrolled' | 'registered' | 'none' =
+    bv === null ? 'none' : bvConfirmed ? 'enrolled' : 'registered';
+  const confirmNudge = bvState === 'registered';
+
   const otherProgramCards = deriveProgramCards(enrollments, programsById).filter(
     (c) => c.programKey !== 'bala-vihar',
   );
@@ -126,12 +163,17 @@ export function buildFamilyDashboardModel(input: DashboardModelInput): FamilyDas
         : donationComplete
           ? 'Thank you for your donation'
           : 'Bala Vihar donation pending';
-  const enrolledPill = isEnrolled
-    ? { text: 'Enrolled', bg: 'var(--accentSoft)', fg: 'var(--accentDeep)' }
-    : { text: 'Not enrolled', bg: 'var(--surface2)', fg: 'var(--muted)' };
+  const enrolledPill =
+    bvState === 'enrolled'
+      ? { text: 'Enrolled', bg: 'var(--accentSoft)', fg: 'var(--accentDeep)' }
+      : bvState === 'registered'
+        ? { text: 'Registered', bg: REGISTERED_BG, fg: REGISTERED_FG }
+        : { text: 'Not enrolled', bg: 'var(--surface2)', fg: 'var(--muted)' };
 
   return {
     isEnrolled,
+    bvState,
+    confirmNudge,
     kidsEnrolled,
     enrollPeriodLabel,
     suggestedAmount,

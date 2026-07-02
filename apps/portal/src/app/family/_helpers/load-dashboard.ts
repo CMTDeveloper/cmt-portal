@@ -73,6 +73,9 @@ export async function loadFamilyDashboard(
     donations,
     programsById,
     legacyPaymentStatus,
+    // Task 3 supplies the real present+late BV attendance count; 0 keeps the
+    // model at its 'registered' floor until then (issue #23).
+    bvAttendedCount: 0,
   });
 
   return { model, upcoming, seva, prasad };

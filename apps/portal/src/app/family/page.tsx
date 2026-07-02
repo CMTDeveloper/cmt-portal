@@ -66,6 +66,7 @@ export default async function FamilyDashboardPage() {
     donations: [],
     programsById: new Map(),
     legacyPaymentStatus: null,
+    bvAttendedCount: 0,
   });
   // Seva-hours progress (Slice D). Default renders nothing (no seva year set);
   // the real value is read below once the family is loaded.

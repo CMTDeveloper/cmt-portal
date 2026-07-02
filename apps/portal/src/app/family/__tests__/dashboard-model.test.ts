@@ -152,6 +152,7 @@ function input(overrides: Partial<DashboardModelInput> = {}): DashboardModelInpu
     donations: [],
     programsById: PROGRAMS,
     legacyPaymentStatus: null,
+    bvAttendedCount: 0, // no attendance unless a test seeds it (issue #23)
     ...overrides,
   };
 }
@@ -275,5 +276,63 @@ describe('buildFamilyDashboardModel — legacy payment bridge', () => {
   it('a portal-managed BV offering is not teacher-managed', () => {
     const m = buildFamilyDashboardModel(input({ enrollments: [BV_ENROLLMENT], legacyPaymentStatus: null }));
     expect(m.teacherManaged).toBe(false);
+  });
+});
+
+describe('bvState (issue #23 engagement rule)', () => {
+  // "Enrolled" now means *engaged*: an active BV enrollment doc is only enough
+  // for 'registered'. Confirmation requires attendance, a completed donation for
+  // its eid, or legacy-paid. Reuses the file's existing fixture builders.
+  const bvDonation = makeDonation({
+    eid: 'CMT-AAAA-bv-brampton-2025-26',
+    programKey: 'bala-vihar',
+    programLabel: 'Bala Vihar',
+    amountCAD: 200,
+    label: 'BV',
+  });
+  const legacyBv = makeEnrollment({ offering: { ...BV_OFFERING, paymentSource: 'legacy' } });
+
+  it('active BV + attendance → enrolled', () => {
+    const m = buildFamilyDashboardModel(input({ bvAttendedCount: 1 }));
+    expect(m.bvState).toBe('enrolled');
+    expect(m.enrolledPill.text).toBe('Enrolled');
+    expect(m.confirmNudge).toBe(false);
+  });
+
+  it('active BV + completed donation for its eid → enrolled', () => {
+    const m = buildFamilyDashboardModel(input({ donations: [bvDonation], bvAttendedCount: 0 }));
+    expect(m.bvState).toBe('enrolled');
+    expect(m.confirmNudge).toBe(false);
+  });
+
+  it('active BV + neither → registered, amber pill, nudge on', () => {
+    const m = buildFamilyDashboardModel(input({ bvAttendedCount: 0 }));
+    expect(m.bvState).toBe('registered');
+    expect(m.enrolledPill.text).toBe('Registered');
+    // Amber "not-yet-confirmed" chip — same warn-soft/warn pair as the prasad
+    // "Proposed" and attendance "Late" chips.
+    expect(m.enrolledPill.bg).toBe('var(--setu-warn-soft)');
+    expect(m.enrolledPill.fg).toBe('var(--warn, #a06410)');
+    expect(m.confirmNudge).toBe(true);
+    expect(m.isEnrolled).toBe(true); // doc-exists semantics unchanged
+  });
+
+  it('no active BV enrollment → none', () => {
+    const m = buildFamilyDashboardModel(input({ enrollments: [TABLA_ENROLLMENT], bvAttendedCount: 0 }));
+    expect(m.bvState).toBe('none');
+    expect(m.enrolledPill.text).toBe('Not enrolled');
+    expect(m.confirmNudge).toBe(false);
+  });
+
+  it('legacyPaid confirms a legacy-period enrollment', () => {
+    const m = buildFamilyDashboardModel(
+      input({ enrollments: [legacyBv], legacyPaymentStatus: 'paid', bvAttendedCount: 0 }),
+    );
+    expect(m.bvState).toBe('enrolled');
+  });
+
+  it('N=2: a completed TABLA donation does not confirm BV', () => {
+    const m = buildFamilyDashboardModel(input({ donations: [makeDonation()], bvAttendedCount: 0 }));
+    expect(m.bvState).toBe('registered');
   });
 });
