@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { DisclaimerAcceptanceSchema } from './disclaimers';
 
 export const FamilyDocSchema = z.object({
   fid: z.string().min(1),
@@ -12,6 +13,9 @@ export const FamilyDocSchema = z.object({
   // the CMT- `fid` above remains the internal doc-id / join key. Optional because
   // doc schemas validate on read and pre-migration docs lack it.
   publicFid: z.string().nullable().optional(),
+  // Slice 2: version-tracked disclaimer acceptance (per-family; the manager
+  // accepts). Optional + nullable — absence reads as "never accepted".
+  disclaimersAccepted: DisclaimerAcceptanceSchema.nullable().optional(),
 });
 
 export type FamilyDoc = z.infer<typeof FamilyDocSchema>;
