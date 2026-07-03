@@ -26,6 +26,11 @@ export const flags = {
   // config is untouched — this only gates the family-facing surfaces.
   setuSeva: process.env.NEXT_PUBLIC_FEATURE_SETU_SEVA === 'true',
   setuPrasad: process.env.NEXT_PUBLIC_FEATURE_SETU_PRASAD === 'true',
+  // Slice 2 (2026-07-03): family disclaimers accept-all gate. OFF by default —
+  // ships dark; flip on at launch. Gates the /family DisclaimerGate, the
+  // /disclaimers route, and the dashboard disclaimersPending field. The
+  // /admin/disclaimers editor is admin-only and available regardless of this flag.
+  setuDisclaimers: process.env.NEXT_PUBLIC_FEATURE_SETU_DISCLAIMERS === 'true',
 } as const;
 
 export type FeatureFlags = typeof flags;
