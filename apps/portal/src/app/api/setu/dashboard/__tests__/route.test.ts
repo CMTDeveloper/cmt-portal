@@ -30,7 +30,7 @@ const dashboardData = {
     isEnrolled: true,
     // Active BV enrollment with no engagement yet → 'registered' (issue #23).
     bvState: 'registered',
-    kidsEnrolled: 1,
+    kidsEnrolled: 2,
     enrollPeriodLabel: '2025-26',
     suggestedAmount: 500,
     givenForPeriod: 200,
@@ -38,10 +38,20 @@ const dashboardData = {
     isLegacyPeriod: false,
     legacyPaid: false,
     otherProgramCards: [{ eid: 'e2', programKey: 'tabla', label: 'Tabla', termLabel: '2025-26', status: 'active', showAttendance: false, showDonation: true }],
+    // Extensibility seam (Slice 1): the donation lives in the balaVihar section,
+    // NOT as an action item, so actionItems is ALWAYS empty today. Slice 2 will
+    // populate it (e.g. a disclaimers item).
+    actionItems: [],
   },
   upcoming: [{ entryId: 'x', date: '2026-01-11', kind: 'class', classType: 'regular', specialEvents: null }],
   seva: { currentSevaYear: '2025-26', hoursPerYear: 20, hoursEarned: 4 },
   prasad: { paid: 'p-1', pid: 'pid', date: '2026-03-01', youngestName: 'Anya', birthMonth: 3, reason: "Anya's birthday month", status: 'proposed', movable: true },
+  // Per-child BV rows (Task 5) — N=2 children, each with level + teachers + attendance.
+  bvChildren: [
+    { mid: 'CMT-AB12CD34-02', firstName: 'Anya', levelName: 'Bala Vihar 3', teacherNames: ['Meera Iyer'], attendance: { present: 6, total: 8 } },
+    { mid: 'CMT-AB12CD34-03', firstName: 'Kiran', levelName: 'Bala Vihar 1', teacherNames: ['Ravi Nair', 'Sita Rao'], attendance: { present: 4, total: 8 } },
+  ],
+  familyCounts: { children: 2, adults: 2 },
 };
 
 // Header-based session (cookie AND Bearer/mobile callers).
@@ -96,6 +106,22 @@ describe('GET /api/setu/dashboard', () => {
     expect(body.balaVihar.bvState).toBe('registered');
     // Attendance is no longer a family-level / dashboard concept (#3).
     expect(body.balaVihar.attendance).toBeUndefined();
+    // Family header counts (Task 5) — child/adult split for the Family block.
+    expect(body.family.counts).toEqual({ children: 2, adults: 2 });
+    // Per-child BV rows (Task 5) — one per enrolled child, plain-serializable.
+    expect(body.balaVihar.children).toHaveLength(2);
+    expect(body.balaVihar.children[0]).toMatchObject({
+      mid: 'CMT-AB12CD34-02',
+      firstName: 'Anya',
+      levelName: 'Bala Vihar 3',
+      teacherNames: ['Meera Iyer'],
+      attendance: { present: 6, total: 8 },
+    });
+    expect(body.balaVihar.children[1].teacherNames).toEqual(['Ravi Nair', 'Sita Rao']);
+    // actionItems is the forward-compatible seam — ALWAYS empty in Slice 1 (the
+    // BV donation is surfaced via balaVihar donation fields, NOT as an action
+    // item; owner decision 2026-07-03 / df319d2). Slice 2 populates it.
+    expect(body.actionItems).toEqual([]);
     expect(body.otherPrograms[0].programKey).toBe('tabla');
     expect(body.upcoming[0].date).toBe('2026-01-11');
     expect(body.seva.hoursEarned).toBe(4);

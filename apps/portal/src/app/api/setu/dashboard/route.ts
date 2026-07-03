@@ -21,7 +21,10 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'no-session' }, { status: 401 });
   }
 
-  const { model, upcoming, seva, prasad } = await loadFamilyDashboard(fam.family, fam.members);
+  const { model, upcoming, seva, prasad, bvChildren, familyCounts } = await loadFamilyDashboard(
+    fam.family,
+    fam.members,
+  );
   const schoolYear = await getLiveSchoolYearCached();
 
   return NextResponse.json(
@@ -36,6 +39,8 @@ export async function GET(req: Request) {
         publicFid: fam.family.publicFid ?? null,
         name: fam.family.name,
         location: fam.family.location,
+        // Child/adult split for the mobile Family block (Task 5). Additive.
+        counts: familyCounts,
       },
       currentMid: fam.currentMid,
       isManager: fam.isManager,
@@ -66,8 +71,18 @@ export async function GET(req: Request) {
         donationHeading: model.donation.heading,
         isLegacyPeriod: model.isLegacyPeriod,
         legacyPaid: model.legacyPaid,
+        // One row per BV-enrolled child (Task 5): level name, assigned teacher
+        // name(s), and Sunday attendance ratio. Already plain-serializable
+        // ({ mid, firstName, levelName: string|null, teacherNames: string[],
+        // attendance: { present, total } }). Empty when no active BV enrollment.
+        children: bvChildren,
       },
       otherPrograms: model.otherProgramCards,
+      // Forward-compatible action seam. ALWAYS empty in Slice 1 — the Bala Vihar
+      // donation is surfaced via the balaVihar donation fields, NOT as an action
+      // item (owner decision 2026-07-03 / df319d2). Slice 2 populates it (e.g. a
+      // disclaimers item). The client builds its own navigation from `kind`.
+      actionItems: model.actionItems,
       upcoming,
       seva,
       prasad,
