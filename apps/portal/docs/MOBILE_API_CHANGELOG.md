@@ -22,7 +22,7 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
-## `<SHA>` · 2026-07-03 — Disclaimers (Slice 2)
+## `f960ee5` · 2026-07-03 — Disclaimers (Slice 2)
 
 **New — `GET /api/setu/disclaimers`** → `{ version:number, schoolYear:string, sections:{id,title,body}[], accepted:boolean }`. The signed-in family's disclaimer state. Any family role.
 
