@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { SetuIcon } from '@cmt/ui';
+import { flags } from '@/lib/flags';
 import { signOut } from './sign-out-button';
 
 type Tab = 'home' | 'family' | 'programs' | 'giving' | 'more';
@@ -15,16 +16,29 @@ const TABS: { id: Tab; label: string; icon: keyof typeof SetuIcon; href: string 
   // Giving tab intentionally omitted — see MORE_ITEMS note below.
 ];
 
+// Calendar links out to a yearly PDF when NEXT_PUBLIC_FAMILY_CALENDAR_URL is
+// configured; otherwise it keeps the in-portal route. Literal process.env access
+// so the value inlines into the client bundle.
+const FAMILY_CALENDAR_URL = process.env.NEXT_PUBLIC_FAMILY_CALENDAR_URL;
+
 // Secondary destinations that live in the "More" sheet rather than the bar.
+// Built per-render so Seva can be filtered out when flags.setuSeva is off
+// (Slice 1 Part C) and the Calendar entry can swap to the external PDF.
 // Giving + Receipts ("My donations") are intentionally omitted: general
 // donations are handled via a separate CMT process/site, not Stripe-in-portal
 // (CMT decision 2026-06-04). The Bala Vihar donation flow stays reachable from
 // the dashboard / enroll.
-const MORE_ITEMS: { label: string; icon: keyof typeof SetuIcon; href: string }[] = [
-  { label: 'Seva', icon: 'heart', href: '/family/seva' },
-  { label: 'Calendar', icon: 'calendar', href: '/family/calendar' },
-  { label: 'Sign-in security', icon: 'shield', href: '/family/settings/security' },
-];
+function moreItems(): { label: string; icon: keyof typeof SetuIcon; href: string; external?: boolean }[] {
+  const items: { label: string; icon: keyof typeof SetuIcon; href: string; external?: boolean }[] = [];
+  if (flags.setuSeva) items.push({ label: 'Seva', icon: 'heart', href: '/family/seva' });
+  items.push(
+    FAMILY_CALENDAR_URL
+      ? { label: 'Calendar', icon: 'calendar', href: FAMILY_CALENDAR_URL, external: true }
+      : { label: 'Calendar', icon: 'calendar', href: '/family/calendar' },
+  );
+  items.push({ label: 'Sign-in security', icon: 'shield', href: '/family/settings/security' });
+  return items;
+}
 
 // Full-screen sub-flows render their own header/footer chrome (back button,
 // sticky action button). Showing the tab bar there would overlap their footer,
@@ -54,6 +68,7 @@ function activeTab(pathname: string): Tab {
 export function MobileBottomNav({ isAdmin = false, showTeacher = false }: { isAdmin?: boolean; showTeacher?: boolean }) {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
+  const MORE_ITEMS = moreItems();
   if (shouldHide(pathname)) return null;
   const active = activeTab(pathname);
 
@@ -81,20 +96,27 @@ export function MobileBottomNav({ isAdmin = false, showTeacher = false }: { isAd
             <div className="col" style={{ gap: 2 }}>
               {MORE_ITEMS.map((m) => {
                 const Icon = SetuIcon[m.icon];
-                const on = pathname.startsWith(m.href);
-                return (
-                  <Link
+                const on = !m.external && pathname.startsWith(m.href);
+                const style: React.CSSProperties = {
+                  display: 'flex', alignItems: 'center', gap: 14, padding: '14px 14px',
+                  borderRadius: 'var(--radiusSm)', textDecoration: 'none',
+                  color: on ? 'var(--accentDeep)' : 'var(--body-text)',
+                  background: on ? 'var(--accentSoft)' : 'transparent',
+                  fontSize: 15, fontWeight: 600,
+                };
+                return m.external ? (
+                  <a
                     key={m.href}
                     href={m.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     onClick={() => setMoreOpen(false)}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 14, padding: '14px 14px',
-                      borderRadius: 'var(--radiusSm)', textDecoration: 'none',
-                      color: on ? 'var(--accentDeep)' : 'var(--body-text)',
-                      background: on ? 'var(--accentSoft)' : 'transparent',
-                      fontSize: 15, fontWeight: 600,
-                    }}
+                    style={style}
                   >
+                    <Icon /> {m.label}
+                  </a>
+                ) : (
+                  <Link key={m.href} href={m.href} onClick={() => setMoreOpen(false)} style={style}>
                     <Icon /> {m.label}
                   </Link>
                 );

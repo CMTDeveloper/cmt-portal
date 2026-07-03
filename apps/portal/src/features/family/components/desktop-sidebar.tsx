@@ -3,6 +3,7 @@
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { SetuLogo, SetuAvatar, SetuIcon } from '@cmt/ui';
+import { flags } from '@/lib/flags';
 import { signOut } from './sign-out-button';
 
 type SidebarTab = 'home' | 'family' | 'bv' | 'programs' | 'calendar' | 'giving' | 'receipts' | 'security' | 'levels' | 'seva' | 'reports' | 'prasad';
@@ -29,17 +30,31 @@ interface DesktopSidebarProps {
   yearBadge?: React.ReactNode;
 }
 
-const FAMILY_NAV_ITEMS: [SidebarTab, string, keyof typeof SetuIcon, string][] = [
-  ['home',     'Home',           'home',    '/family'],
-  ['family',   'My family',      'people',  '/family/members'],
-  ['programs', 'Programs',       'grid',    '/family/programs'],
-  ['seva',     'Seva',           'heart',   '/family/seva'],
-  ['calendar', 'Calendar',       'calendar','/family/calendar'],
+// Calendar links out to a yearly PDF when NEXT_PUBLIC_FAMILY_CALENDAR_URL is
+// configured; otherwise it keeps the in-portal /family/calendar route. Literal
+// process.env access so the value inlines into the client bundle.
+const FAMILY_CALENDAR_URL = process.env.NEXT_PUBLIC_FAMILY_CALENDAR_URL;
+
+// Built per-render so Seva can be filtered out when flags.setuSeva is off
+// (Slice 1 Part C) and the Calendar href can swap to the external PDF. Only the
+// FAMILY nav is gated here — WELCOME_NAV_ITEMS keeps its Seva/Prasad entries.
+function familyNavItems(): [SidebarTab, string, keyof typeof SetuIcon, string, boolean?][] {
+  const items: [SidebarTab, string, keyof typeof SetuIcon, string, boolean?][] = [
+    ['home', 'Home', 'home', '/family'],
+    ['family', 'My family', 'people', '/family/members'],
+    ['programs', 'Programs', 'grid', '/family/programs'],
+  ];
+  if (flags.setuSeva) items.push(['seva', 'Seva', 'heart', '/family/seva']);
+  // Calendar links out to the yearly PDF when configured (owner decision B8);
+  // otherwise it keeps the in-portal route. External is signalled by an absolute
+  // http(s) href, which the render step below opens in a new tab.
+  items.push(['calendar', 'Calendar', 'calendar', FAMILY_CALENDAR_URL ?? '/family/calendar']);
   // Giving + Receipts intentionally omitted: general donations are handled via a
   // separate CMT process/site, not Stripe-in-portal (CMT decision 2026-06-04).
   // The Bala Vihar donation flow stays reachable from the dashboard / enroll.
-  ['security', 'Sign-in security','shield', '/family/settings/security'],
-];
+  items.push(['security', 'Sign-in security', 'shield', '/family/settings/security']);
+  return items;
+}
 
 const WELCOME_NAV_ITEMS: [SidebarTab, string, keyof typeof SetuIcon, string, boolean?][] = [
   ['home', 'Roster',            'search',  '/welcome/roster'],
@@ -74,7 +89,7 @@ function deriveActiveFromPathname(pathname: string): SidebarTab {
 // Suspense fallbacks (which Next.js 16 cacheComponents prerenders statically).
 // For pathname-driven self-highlighting, use DesktopSidebarLive instead.
 export function DesktopSidebar({ active, role = 'family', displayName, subtitle, showSignOut, isAdmin, showTeacher = false, yearBadge }: DesktopSidebarProps) {
-  const navItems = role === 'welcome-team' ? WELCOME_NAV_ITEMS : FAMILY_NAV_ITEMS;
+  const navItems = role === 'welcome-team' ? WELCOME_NAV_ITEMS : familyNavItems();
   const trimmed = (displayName ?? '').trim();
   const name = trimmed || (role === 'welcome-team' ? 'Welcome team' : 'Family member');
   // Show the "Admin" shortcut whenever the signed-in user is an admin — in BOTH
@@ -94,6 +109,7 @@ export function DesktopSidebar({ active, role = 'family', displayName, subtitle,
         {navItems.map(([id, label, iconKey, href, disabled]) => {
           const Icon = SetuIcon[iconKey];
           const a = id === active && !disabled;
+          const isExternal = /^https?:\/\//.test(href);
           return disabled ? (
             <div key={id} style={{
               display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px',
@@ -103,6 +119,14 @@ export function DesktopSidebar({ active, role = 'family', displayName, subtitle,
               <Icon/> {label}
               <span style={{ marginLeft: 'auto', fontSize: 10, letterSpacing: '.06em', textTransform: 'uppercase' }}>Soon</span>
             </div>
+          ) : isExternal ? (
+            <a key={id} href={href} target="_blank" rel="noopener noreferrer" style={{
+              display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px',
+              borderRadius: 'var(--radiusSm)', background: 'transparent', color: 'var(--body-text)',
+              fontWeight: 500, textDecoration: 'none',
+            }}>
+              <Icon/> {label}
+            </a>
           ) : (
             <Link key={id} href={href} style={{
               display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px',

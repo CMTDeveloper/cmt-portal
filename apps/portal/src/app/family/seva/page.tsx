@@ -4,11 +4,15 @@ import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 import { getFamilySevaView } from '@/features/setu/seva/get-family-seva-view';
 import { CspRoot } from '@/features/family/components/atoms';
 import { SevaBrowser } from '@/features/setu/seva/seva-browser';
+import { flags } from '@/lib/flags';
 
 export const metadata = { title: 'Seva' };
 
 export default async function FamilySevaPage() {
   await connection();
+  // Slice 1 (Part C): Seva is hidden from families until re-enabled. When the
+  // flag is off, bounce back to the dashboard rather than 500 on a data read.
+  if (!flags.setuSeva) redirect('/family');
   const data = await getCurrentFamily();
   if (!data) redirect('/sign-in?from=/family/seva');
   const view = await getFamilySevaView(data.family.fid);

@@ -120,3 +120,26 @@ describe('Giving + Receipts hidden from family navigation', () => {
     expect(screen.queryByRole('link', { name: /receipts/i })).toBeNull();
   });
 });
+
+// Slice 1 (Part C): Seva is hidden from FAMILIES until re-enabled. The real
+// `flags` is imported here and NEXT_PUBLIC_FEATURE_SETU_SEVA is unset in the
+// vitest env, so flags.setuSeva === false and no mocking is needed. The
+// welcome-team nav keeps its own Seva entry (staff still use it).
+describe('Seva hidden from family navigation when setuSeva is off (default)', () => {
+  it('hides the Seva nav item from the family desktop sidebar', () => {
+    render(<DesktopSidebar role="family" />);
+    expect(screen.queryByText('Seva')).toBeNull();
+  });
+
+  it('hides the Seva entry from the mobile "More" sheet', () => {
+    render(<MobileBottomNav />);
+    fireEvent.click(screen.getByRole('button', { name: /more/i }));
+    expect(screen.queryByText('Seva')).toBeNull();
+  });
+
+  it('keeps the Seva nav item in the welcome-team sidebar (staff still use it)', () => {
+    render(<DesktopSidebar role="welcome-team" />);
+    const link = screen.getByRole('link', { name: /^seva$/i });
+    expect(link.getAttribute('href')).toBe('/welcome/seva');
+  });
+});

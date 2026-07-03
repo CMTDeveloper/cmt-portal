@@ -4,6 +4,7 @@ import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 import { getFamilyAssignment } from '@/features/setu/prasad/family-assignment';
 import { FamilyPrasadCard } from '@/features/setu/prasad/family-prasad-card';
 import { CspRoot } from '@/features/family/components/atoms';
+import { flags } from '@/lib/flags';
 
 export const metadata = { title: 'Prasad seva' };
 
@@ -16,6 +17,9 @@ const HOW_IT_WORKS = [
 
 export default async function FamilyPrasadPage() {
   await connection();
+  // Slice 1 (Part C): Prasad is hidden from families until re-enabled. When the
+  // flag is off, bounce back to the dashboard rather than 500 on a data read.
+  if (!flags.setuPrasad) redirect('/family');
   const data = await getCurrentFamily();
   if (!data) redirect('/sign-in?from=/family/prasad');
 
