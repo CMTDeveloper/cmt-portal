@@ -10,16 +10,25 @@
  * 2025-26 window (which — being window/oid-scoped — do NOT engage the 2026-27
  * enrollment).
  *
- * Because the active BV (2026-27) has no engagement by default, the dashboard's
- * ground state is "Registered" (issue #23). Pass `--confirm-bv` to additionally
- * write one `_test` COMPLETED donation for the 2026-27 eid, flipping the family
- * to "Enrolled"; a plain re-run deletes that donation and restores "Registered".
+ * Because the active BV (2026-27) is enrolledVia:'promotion' with no engagement
+ * by default, the dashboard's ground state is "Registered" (issue #23). Pass
+ * `--confirm-bv` to additionally write one `_test` COMPLETED donation for the
+ * 2026-27 eid, flipping the family to "Enrolled"; a plain re-run deletes that
+ * donation and restores "Registered".
+ *
+ * `--enrolled-via <family-initiated|promotion>` (default 'promotion') sets how the
+ * active 2026-27 BV enrollment was created. Slice 1 (Part A) reads a
+ * 'family-initiated' active BV as "Enrolled" immediately — a deliberate enroll is
+ * affirmative intent — even with $0 donated (donation still shows "Pending"),
+ * whereas 'promotion' stays "Registered" until engaged. The active BV also carries
+ * a synthetic per-child levelSnapshot ({ levelName:'Level 2', levelId:null }) so
+ * the dashboard's "Children" line has a level name.
  *
  * Does NOT call enrollFamily/getProgram/getFamilyByFid (they use Next 'use cache'
  * and throw outside a render context). Writes enrollment docs directly and reads
  * offering/program docs directly; only the PURE shared-domain helpers are used.
  *
- * Run: pnpm --filter @cmt/portal seed:e2e-family [--confirm-bv]
+ * Run: pnpm --filter @cmt/portal seed:e2e-family [--confirm-bv] [--enrolled-via <family-initiated|promotion>]
  */
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
 import { portalAuth } from '@cmt/firebase-shared/admin/auth';
@@ -80,12 +89,20 @@ function toDate(v: unknown): Date {
   return new Date(v as string);
 }
 
+type LevelSnapshotSeed = { schoolGrade: string | null; levelId: string | null; levelName: string | null };
+
 async function ensureEnrollment(
   db: Db,
   fid: string,
   oid: string,
   managerMid: string,
-  opts: { enrolledVia?: 'family-initiated' | 'promotion'; normalizeActive?: boolean } = {},
+  opts: {
+    enrolledVia?: 'family-initiated' | 'promotion';
+    normalizeActive?: boolean;
+    /** Per-mid grade/level snapshot written on the enrollment so the dashboard's
+     *  "Children" / Class-Assignments line has data (see EnrollmentDoc.levelSnapshots). */
+    levelSnapshots?: Record<string, LevelSnapshotSeed>;
+  } = {},
 ): Promise<void> {
   const enrolledVia = opts.enrolledVia ?? 'family-initiated';
   const offeringSnap = await db.collection('offerings').doc(oid).get();
@@ -163,11 +180,40 @@ async function ensureEnrollment(
       status: 'active',
       cancelledAt: null,
       cancelledReason: null,
+      ...(opts.levelSnapshots ? { levelSnapshots: opts.levelSnapshots } : {}),
       _test: true,
     },
     { merge: true },
   );
-  console.log(`  enrolled in ${oid} (programKey=${programKey}, enrolledMids=${enrolledMids.length})`);
+  console.log(
+    `  enrolled in ${oid} (programKey=${programKey}, enrolledMids=${enrolledMids.length}, enrolledVia=${enrolledVia}${
+      opts.levelSnapshots ? `, levelSnapshots=${Object.keys(opts.levelSnapshots).length}` : ''
+    })`,
+  );
+}
+
+/**
+ * Parse `--enrolled-via <family-initiated|promotion>` (also accepts the
+ * `--enrolled-via=<mode>` form) from argv. Defaults to `'promotion'` when absent
+ * or invalid, so the existing issue #23 ground state (a promoted active BV that
+ * reads "Registered" until engaged) is unchanged. Slice 1 flips a
+ * `family-initiated` active BV to "Enrolled" on its own (a deliberate enroll is
+ * affirmative intent — see isEnrollmentConfirmed), even with $0 donated.
+ */
+function parseEnrolledVia(argv: string[]): 'family-initiated' | 'promotion' {
+  let raw: string | undefined;
+  const idx = argv.indexOf('--enrolled-via');
+  if (idx !== -1 && idx + 1 < argv.length) {
+    raw = argv[idx + 1];
+  } else {
+    const eq = argv.find((a) => a.startsWith('--enrolled-via='));
+    if (eq) raw = eq.slice('--enrolled-via='.length);
+  }
+  if (raw === 'family-initiated' || raw === 'promotion') return raw;
+  if (raw !== undefined) {
+    console.warn(`  WARN: unrecognized --enrolled-via '${raw}' — defaulting to 'promotion'`);
+  }
+  return 'promotion';
 }
 
 async function main(): Promise<void> {
@@ -175,7 +221,11 @@ async function main(): Promise<void> {
   // --confirm-bv writes a completed donation for the active (2026-27) BV eid so
   // the fixture flips from Registered → Enrolled; a plain run deletes it (below).
   const confirmBv = process.argv.includes('--confirm-bv');
-  console.log(`\n=== seed-e2e-family — project: ${projectId} (confirmBv=${confirmBv}) ===\n`);
+  // --enrolled-via decides how the active 2026-27 BV enrollment was created:
+  //   'promotion'        → rollover carry-forward; reads "Registered" until engaged (issue #23 ground state, DEFAULT).
+  //   'family-initiated' → the family clicked Enroll; reads "Enrolled" immediately, $0 or not (Slice 1 Part A).
+  const enrolledVia = parseEnrolledVia(process.argv);
+  console.log(`\n=== seed-e2e-family — project: ${projectId} (confirmBv=${confirmBv}, enrolledVia=${enrolledVia}) ===\n`);
   if (projectId !== 'chinmaya-setu-uat') {
     console.error('REFUSING: PORTAL_FIREBASE_PROJECT_ID is not chinmaya-setu-uat.');
     process.exit(1);
@@ -229,10 +279,14 @@ async function main(): Promise<void> {
     return a.id.localeCompare(b.id);
   });
   let childMid: string | null = null;
+  let childSchoolGrade: string | null = null;
   let memberIndex = 0;
   for (const m of orderedMembers) {
-    const md = m.data() as { mid?: string; type?: string; birthMonthYear?: string | null };
-    if (md.type === 'Child' && md.mid) childMid = md.mid;
+    const md = m.data() as { mid?: string; type?: string; birthMonthYear?: string | null; schoolGrade?: string | null };
+    if (md.type === 'Child' && md.mid) {
+      childMid = md.mid;
+      childSchoolGrade = md.schoolGrade ?? null;
+    }
     // The child needs legacySid = CHILD_SID so the door check-ins
     // (family-check-ins/{legacyFid}, students[].sid = CHILD_SID) link to this
     // member — getFamilyBalaViharAttendance matches door marks by legacySid, so
@@ -296,9 +350,10 @@ async function main(): Promise<void> {
   console.log(`granted admin via roleAssignments/${managerMid}`);
 
   // 3) Enrollments — written directly (NOT via enrollFamily). The issue #23
-  //    fixture models a PROMOTED family:
+  //    fixture models a PROMOTED family (by default):
   //    - the 2026-27 BV offering is the sole ACTIVE bala-vihar enrollment
-  //      (enrolledVia:'promotion', normalizeActive so a re-seed reconverges it),
+  //      (enrolledVia from --enrolled-via, default 'promotion'; normalizeActive so
+  //      a re-seed reconverges it),
   //    - the prior-year 2025-26 BV enrollment is CANCELLED (by 3b below), exactly
   //      what the real school-year rollover produced for a promoted family,
   //    - om-chanting stays active (a second, non-BV enrollment — the N≥2 case).
@@ -306,7 +361,19 @@ async function main(): Promise<void> {
   //    2026-27 write carries the same enrolledMids/snapshot fields as 2025-26.
   console.log('ensuring enrollments:');
   await ensureEnrollment(db, fid, BV_OID, managerMid); // 2025-26 — cancelled in 3b
-  await ensureEnrollment(db, fid, BV_OID_2026, managerMid, { enrolledVia: 'promotion', normalizeActive: true });
+  // Active 2026-27 BV: enrolledVia comes from --enrolled-via (default 'promotion'
+  // = the #23 Registered ground state; 'family-initiated' = Slice 1's Enrolled-
+  // on-click). A synthetic levelSnapshot on the enrolled child gives the
+  // dashboard's "Children" line a level name ("Level 2"); levelId:null skips the
+  // teacher-name resolver (Task 4), so only the level name renders — fine for the
+  // fixture. Re-runs overwrite to the same values (idempotent).
+  await ensureEnrollment(db, fid, BV_OID_2026, managerMid, {
+    enrolledVia,
+    normalizeActive: true,
+    ...(childMid
+      ? { levelSnapshots: { [childMid]: { schoolGrade: childSchoolGrade, levelId: null, levelName: 'Level 2' } } }
+      : {}),
+  });
   await ensureEnrollment(db, fid, NODON_OID, managerMid);
 
   // 3b) Single active-BV invariant, pinned to the 2026-27 promoted enrollment.
