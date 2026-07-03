@@ -12,6 +12,14 @@ describe('canAccessRoute — disclaimers', () => {
     expect(canAccessRoute(manager, '/api/setu/disclaimers', 'GET')).toBe(true);
     expect(canAccessRoute(member, '/api/setu/disclaimers', 'GET')).toBe(true);
   });
+  it('excludes welcome-team from the setu disclaimers API (behavior delta vs the old catch-all)', () => {
+    // Inserting the rule BEFORE the /api/setu/ catch-all changes welcome-team
+    // from allowed (old catch-all: manager||welcome||admin) to denied
+    // (isSetuFamily-only). Pin that intended exclusion (repo directive: tests in
+    // the same commit as new branching logic).
+    expect(canAccessRoute(welcome, '/api/setu/disclaimers', 'GET')).toBe(false);
+    expect(canAccessRoute(welcome, '/api/setu/disclaimers/accept', 'POST')).toBe(false);
+  });
   it('POST /api/setu/disclaimers/accept is manager-only', () => {
     expect(canAccessRoute(manager, '/api/setu/disclaimers/accept', 'POST')).toBe(true);
     expect(canAccessRoute(member, '/api/setu/disclaimers/accept', 'POST')).toBe(false);
