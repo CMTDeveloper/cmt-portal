@@ -1,0 +1,94 @@
+import { test, expect, request as pwRequest } from '@playwright/test';
+import { hasFamilyCreds } from '../_helpers';
+import { signInFamilyAndSaveStorage } from '../auth-helpers';
+
+/**
+ * E2E for the Slice 2 family-disclaimers gate, verified against deployed UAT
+ * (https://cmt-setu.vercel.app, backed by chinmaya-setu-uat Firestore). Auth is
+ * the shared E2E family's password sign-in (never OTP) via the `setu` project
+ * storageState — the SAME account is both family-manager AND admin (the seed
+ * grants admin), so this one session drives BOTH the admin content editor
+ * (PUT /api/admin/disclaimers) and the family accept flow.
+ *
+ * WHAT IT ASSERTS:
+ *   1. Publishing a new admin content version bumps `version`, which makes the
+ *      shared fixture's prior acceptance STALE (drives it "pending" through the
+ *      REAL API — no shelling out to the seed mid-run).
+ *   2. Visiting /family then bounces to /disclaimers (the layout DisclaimerGate).
+ *   3. The accept screen's continue button is disabled until every section's
+ *      checkbox is checked, then enabled.
+ *   4. Accepting hard-navigates to /family and the gate no longer fires on a
+ *      re-visit.
+ *
+ * PRECONDITION (owner gate): NEXT_PUBLIC_FEATURE_SETU_DISCLAIMERS=true must be set
+ * in the UAT Vercel env, and the shared fixture seeded `--disclaimers accepted`
+ * (its default) — otherwise every sibling setu spec's /family navigation would
+ * bounce to /disclaimers. This file is WRITE-ONLY in Task 11; it runs at the
+ * owner gate AFTER the batch push + Vercel deploy + flag flip.
+ *
+ * Serial: shared fixture. The whole file drives the ONE E2E family manager (also
+ * admin). We flip the fixture to "pending" up front and restore "accepted" in
+ * afterAll so no sibling spec is left gated.
+ */
+test.describe.configure({ mode: 'serial' });
+
+// Same base-URL mechanism the Slice 1 setu specs use (there is no E2E_BASE_URL
+// export): PLAYWRIGHT_BASE_URL when targeting deployed UAT, else the local
+// dev:e2e server. Used only for the beforeAll/afterAll `request.newContext`
+// re-auth; the per-test `page`/`request` fixtures get baseURL from the config.
+const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3001';
+
+test.beforeAll(async () => {
+  // Skip the whole file when creds are absent (CI without .env.local), matching
+  // the codebase convention that setu specs self-skip without a family session.
+  if (!hasFamilyCreds) return;
+  // Fresh session (the shared storageState may be stale from a sibling reseed).
+  const ctx = await pwRequest.newContext({ baseURL: BASE_URL });
+  await signInFamilyAndSaveStorage(ctx);
+  await ctx.dispose();
+});
+
+test('manager is gated to /disclaimers, accepts, and reaches the dashboard', async ({ page, request }) => {
+  test.skip(!hasFamilyCreds, 'E2E_FAMILY_EMAIL / E2E_FAMILY_PASSWORD required (run seed:e2e-family first)');
+
+  // 1) Make the fixture "pending" by publishing a new admin version (bumps the
+  //    content version → the fixture's prior acceptance is now stale).
+  const editRes = await request.get('/api/admin/disclaimers');
+  expect(editRes.ok()).toBeTruthy();
+  const { sections } = await editRes.json();
+  const bumped = sections.map((s: { id: string; title: string; body: string }, i: number) =>
+    i === 0 ? { ...s, body: `${s.body} (rev ${Date.now()})` } : s,
+  );
+  const pubRes = await request.put('/api/admin/disclaimers', { data: { sections: bumped } });
+  expect(pubRes.ok()).toBeTruthy();
+
+  // 2) Visiting /family now bounces to /disclaimers (hard nav re-runs the gate).
+  await page.goto('/family');
+  await expect(page).toHaveURL(/\/disclaimers$/);
+
+  // 3) The accept screen shows the sections; the button is disabled until all
+  //    boxes are checked.
+  const acceptBtn = page.getByTestId('disclaimers-accept');
+  await expect(acceptBtn).toBeDisabled();
+  for (const s of bumped) {
+    await page.getByTestId(`disclaimer-check-${s.id}`).click();
+  }
+  await expect(acceptBtn).toBeEnabled();
+
+  // 4) Accept → hard nav to /family, and no more gate on re-visit.
+  await acceptBtn.click();
+  await expect(page).toHaveURL(/\/family$/);
+  await page.goto('/family');
+  await expect(page).toHaveURL(/\/family$/);
+});
+
+test.afterAll(async () => {
+  if (!hasFamilyCreds) return;
+  // Restore an accepted ground state so sibling specs aren't gated: sign in and
+  // POST accept for the CURRENT version (the test above already accepted, but
+  // this is a belt-and-braces restore in case it failed mid-way).
+  const ctx = await pwRequest.newContext({ baseURL: BASE_URL });
+  await signInFamilyAndSaveStorage(ctx);
+  await ctx.post('/api/setu/disclaimers/accept');
+  await ctx.dispose();
+});

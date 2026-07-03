@@ -28,7 +28,13 @@
  * and throw outside a render context). Writes enrollment docs directly and reads
  * offering/program docs directly; only the PURE shared-domain helpers are used.
  *
- * Run: pnpm --filter @cmt/portal seed:e2e-family [--confirm-bv] [--enrolled-via <family-initiated|promotion>]
+ * `--disclaimers <accepted|pending>` (default 'accepted') sets the Slice 2
+ * disclaimer-acceptance ground state on the shared fixture. 'accepted' writes an
+ * acceptance for the CURRENT (schoolYear, version) so the shared family is NOT
+ * gated in sibling setu specs once NEXT_PUBLIC_FEATURE_SETU_DISCLAIMERS=true in
+ * UAT; 'pending' clears it so the disclaimers spec can exercise the gate.
+ *
+ * Run: pnpm --filter @cmt/portal seed:e2e-family [--confirm-bv] [--enrolled-via <family-initiated|promotion>] [--disclaimers <accepted|pending>]
  */
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
 import { portalAuth } from '@cmt/firebase-shared/admin/auth';
@@ -44,6 +50,8 @@ import { registerFamily } from '@/features/setu/registration/register-family';
 import { hashContactKey } from '@/features/setu/registration/hash-contact-key';
 import { findSetuFamilyByContact } from '@/features/setu/auth/find-family-by-contact';
 import { addMemberRole } from '@/features/setu/auth/member-roles';
+import { getDisclaimersConfig } from '@/features/setu/disclaimers/config';
+import { getSchoolYearConfig } from '@/features/setu/rollover/school-year-config';
 
 const EMAIL = process.env['E2E_FAMILY_EMAIL'];
 const PASSWORD = process.env['E2E_FAMILY_PASSWORD'];
@@ -225,7 +233,16 @@ async function main(): Promise<void> {
   //   'promotion'        → rollover carry-forward; reads "Registered" until engaged (issue #23 ground state, DEFAULT).
   //   'family-initiated' → the family clicked Enroll; reads "Enrolled" immediately, $0 or not (Slice 1 Part A).
   const enrolledVia = parseEnrolledVia(process.argv);
-  console.log(`\n=== seed-e2e-family — project: ${projectId} (confirmBv=${confirmBv}, enrolledVia=${enrolledVia}) ===\n`);
+  // --disclaimers <accepted|pending> (default 'accepted'). 'accepted' writes an
+  // acceptance for the CURRENT (schoolYear, version) so the shared fixture is
+  // NOT gated in other specs once the flag is on; 'pending' clears it so the
+  // disclaimers spec can exercise the gate. Absence/invalid → 'accepted'.
+  const disclaimersArg = (() => {
+    const i = process.argv.indexOf('--disclaimers');
+    const raw = i !== -1 ? process.argv[i + 1] : process.argv.find((a) => a.startsWith('--disclaimers='))?.slice('--disclaimers='.length);
+    return raw === 'pending' ? 'pending' : 'accepted';
+  })();
+  console.log(`\n=== seed-e2e-family — project: ${projectId} (confirmBv=${confirmBv}, enrolledVia=${enrolledVia}, disclaimers=${disclaimersArg}) ===\n`);
   if (projectId !== 'chinmaya-setu-uat') {
     console.error('REFUSING: PORTAL_FIREBASE_PROJECT_ID is not chinmaya-setu-uat.');
     process.exit(1);
@@ -537,6 +554,29 @@ async function main(): Promise<void> {
     { merge: true },
   );
   console.log(`wrote prasadConfig/${BV_OID} + prasadAssignments/${prasadPaid} (date=2026-06-14)`);
+
+  // Disclaimers (Slice 2) ground state on the shared fixture.
+  if (disclaimersArg === 'pending') {
+    await db.collection('families').doc(fid).set(
+      { disclaimersAccepted: FieldValue.delete() },
+      { merge: true },
+    );
+    console.log('disclaimers: cleared acceptance (pending ground state)');
+  } else {
+    const [cfg, sy] = await Promise.all([getDisclaimersConfig(db), getSchoolYearConfig(db)]);
+    await db.collection('families').doc(fid).set(
+      {
+        disclaimersAccepted: {
+          schoolYear: sy.currentYear,
+          version: cfg.version,
+          acceptedByMid: managerMid,
+          acceptedAt: FieldValue.serverTimestamp(),
+        },
+      },
+      { merge: true },
+    );
+    console.log(`disclaimers: accepted (schoolYear=${sy.currentYear}, version=${cfg.version})`);
+  }
 
   console.log(`\n=== done. fid=${fid} uid=${uid} ===\n`);
 }
