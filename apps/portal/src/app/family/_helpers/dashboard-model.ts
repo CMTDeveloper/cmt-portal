@@ -176,13 +176,11 @@ export function buildFamilyDashboardModel(input: DashboardModelInput): FamilyDas
         ? { text: 'Registered', bg: REGISTERED_BG, fg: REGISTERED_FG }
         : { text: 'Not enrolled', bg: 'var(--surface2)', fg: 'var(--muted)' };
 
-  // Derived action items (Slice 1). Donation is the only item today; it appears
-  // only when the family is enrolled, the donation is portal-managed (showGive),
-  // and it isn't already complete. Disclaimers (Slice 2) will append here.
+  // Slice 1 (owner decision 2026-07-03): the Bala Vihar donation is surfaced by
+  // the BV section's "Complete donation" button, NOT as an Action Item — so it is
+  // never double-prompted. actionItems stays the extensibility seam; Slice 2
+  // populates it with the disclaimers-to-accept item.
   const actionItems: ActionItem[] = [];
-  if (showGive && !donationComplete) {
-    actionItems.push({ kind: 'donation', title: 'Complete your Bala Vihar donation', ctaLabel: 'Donate' });
-  }
 
   return {
     isEnrolled,

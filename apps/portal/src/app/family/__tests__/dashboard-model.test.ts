@@ -344,17 +344,20 @@ describe('bvState (issue #23 engagement rule)', () => {
   });
 });
 
-describe('actionItems', () => {
-  it('surfaces a donation action item when enrolled + portal-managed + unpaid', () => {
+describe('actionItems — donation is NOT an action item in Slice 1 (lives in the BV section)', () => {
+  // Owner decision 2026-07-03: the BV donation is surfaced ONLY by the Bala Vihar
+  // section's "Complete donation" button, never as an Action Item — so an
+  // enrolled-unpaid family is not double-prompted. actionItems stays an empty
+  // extensibility seam (Slice 2 adds the disclaimers item). These cases guard
+  // that no donation item leaks back in.
+  it('enrolled + portal-managed + unpaid → NO donation action item (BV section owns it)', () => {
     const model = buildFamilyDashboardModel({
       enrollments: [BV_ENROLLMENT], donations: [], programsById: new Map(),
       legacyPaymentStatus: null, bvAttendedCount: 0,
     });
-    expect(model.actionItems).toEqual([
-      { kind: 'donation', title: 'Complete your Bala Vihar donation', ctaLabel: 'Donate' },
-    ]);
+    expect(model.actionItems).toEqual([]);
   });
-  it('has NO donation action item once the donation is complete', () => {
+  it('has no action item once the donation is complete', () => {
     const paid = makeDonation({ eid: BV_ENROLLMENT.eid, status: 'completed', amountCAD: 1000 });
     const model = buildFamilyDashboardModel({
       enrollments: [BV_ENROLLMENT], donations: [paid], programsById: new Map(),
@@ -362,7 +365,7 @@ describe('actionItems', () => {
     });
     expect(model.actionItems).toEqual([]);
   });
-  it('has NO donation action item when not enrolled', () => {
+  it('has no action item when not enrolled', () => {
     const model = buildFamilyDashboardModel({
       enrollments: [], donations: [], programsById: new Map(),
       legacyPaymentStatus: null, bvAttendedCount: 0,
