@@ -22,8 +22,7 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
-## `<SHA>` · 2026-07-03 · dashboard gains per-child BV rows, family counts, action-item seam; `bvState` semantics widen (Slice 1)
-<!-- TODO: replace `<SHA>` with the actual Task-9 commit short hash (or the final Slice-1 merge/squash commit) post-commit. -->
+## `4195d05` · 2026-07-03 · dashboard gains per-child BV rows, family counts, action-item seam; `bvState` semantics widen (Slice 1)
 - **GET `/api/setu/dashboard`** — additive fields (the dashboard now drives a 3-block layout: Family · Action items · Bala Vihar):
   - `family.counts: { children: number; adults: number }` — the family's child/adult split (derived from `members[].type`), for the Family block header.
   - `balaVihar.children: Array<{ mid: string; firstName: string; levelName: string | null; teacherNames: string[]; attendance: { present: number; total: number } }>` — **one row per BV-enrolled child**: their level name (null if unassigned), assigned teacher name(s) (empty array if none/unresolved), and Sunday attendance ratio (present+late over total in-window). Empty array when there's no active BV enrollment. Already plain-serializable — no Date/Map.
