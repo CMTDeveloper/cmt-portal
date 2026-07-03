@@ -16,6 +16,8 @@ import {
   type WithRole,
 } from '@cmt/shared-domain';
 import { displayFid } from '@cmt/shared-domain/setu';
+import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
+import { getDisclaimerStateForFamily } from '@/features/setu/disclaimers/acceptance';
 import { flags } from '@/lib/flags';
 
 // Route the gate redirects an incomplete family to. It lives at a TOP-LEVEL
@@ -52,6 +54,26 @@ export async function ProfileCompletionGate() {
       })();
 
   if (incomplete) redirect(COMPLETE_PROFILE_PATH);
+  return null;
+}
+
+// Disclaimer-acceptance gate (Slice 2). Runs on every /family/* render AFTER the
+// profile gate. Per-family: only the MANAGER accepts. Redirects to the top-level
+// /disclaimers screen (OUTSIDE this layout, like /complete-profile) when the
+// family's acceptance isn't current (stale version or new school year). Flag-gated
+// OFF by default. Guards on profile-completeness so the profile gate always runs
+// first regardless of Suspense resolution order.
+export async function DisclaimerGate() {
+  if (!flags.setuDisclaimers) return null;
+
+  const data = await getCurrentFamily();
+  if (!data) return null; // unauthenticated — middleware handles it
+  if (!data.isManager) return null; // per-family: members aren't gated
+  // Defer to ProfileCompletionGate if the profile is still incomplete.
+  if (incompleteMembers(data.members).length > 0) return null;
+
+  const state = await getDisclaimerStateForFamily(portalFirestore(), data.family);
+  if (!state.accepted) redirect('/disclaimers');
   return null;
 }
 
@@ -109,6 +131,13 @@ export default function FamilyLayout({ children }: { children: React.ReactNode }
           cacheComponents. Renders nothing — it either redirects or no-ops. */}
       <Suspense fallback={null}>
         <ProfileCompletionGate />
+      </Suspense>
+
+      {/* Disclaimer-acceptance gate (Slice 2). Its own Suspense boundary; renders
+          AFTER the profile gate. Renders nothing — it either redirects to
+          /disclaimers (a not-yet-accepted manager) or no-ops. */}
+      <Suspense fallback={null}>
+        <DisclaimerGate />
       </Suspense>
 
       {/* Mobile: pass-through. Each page renders its own mobile chrome.
