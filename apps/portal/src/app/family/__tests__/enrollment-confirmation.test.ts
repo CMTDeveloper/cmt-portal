@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { isEnrollmentConfirmed } from '../_helpers/enrollment-confirmation';
 import type { DonationDoc } from '@cmt/shared-domain';
 
-const bv = { eid: 'FAM1-bv-brampton-2026-27' };
+const bv = { eid: 'FAM1-bv-brampton-2026-27', enrolledVia: 'promotion' as const };
 
 // House-style fixture (mirrors makeDonation in dashboard-model.test.ts): a
 // partial object cast to DonationDoc. Defaults to a completed BV donation.
@@ -49,5 +49,20 @@ describe('isEnrollmentConfirmed', () => {
   it('a donation with eid null (general giving) does NOT confirm', () => {
     const general = { ...donation({}), eid: null } as DonationDoc;
     expect(isEnrollmentConfirmed(bv, { attendedCount: 0, donations: [general], legacyPaid: false })).toBe(false);
+  });
+  it('a family-initiated enrollment confirms with no engagement (clicked Enroll, $0 paid)', () => {
+    const clicked = { eid: bv.eid, enrolledVia: 'family-initiated' as const };
+    expect(isEnrollmentConfirmed(clicked, { attendedCount: 0, donations: [], legacyPaid: false })).toBe(true);
+  });
+  it('a first-attendance enrollment confirms with no engagement (teacher auto-enrolled a kid)', () => {
+    const auto = { eid: bv.eid, enrolledVia: 'first-attendance' as const };
+    expect(isEnrollmentConfirmed(auto, { attendedCount: 0, donations: [], legacyPaid: false })).toBe(true);
+  });
+  it('a promotion enrollment with zero engagement stays NOT confirmed (Registered)', () => {
+    expect(isEnrollmentConfirmed(bv, { attendedCount: 0, donations: [], legacyPaid: false })).toBe(false);
+  });
+  it('a welcome-team enrollment with zero engagement stays NOT confirmed (Registered)', () => {
+    const wt = { eid: bv.eid, enrolledVia: 'welcome-team' as const };
+    expect(isEnrollmentConfirmed(wt, { attendedCount: 0, donations: [], legacyPaid: false })).toBe(false);
   });
 });

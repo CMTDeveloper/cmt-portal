@@ -291,6 +291,11 @@ describe('bvState (issue #23 engagement rule)', () => {
     label: 'BV',
   });
   const legacyBv = makeEnrollment({ offering: { ...BV_OFFERING, paymentSource: 'legacy' } });
+  // Slice 1 (2026-07-06): a 'family-initiated'/'first-attendance' enrollment now
+  // confirms on its own, so a still-Registered fixture must be a rollover
+  // carry-forward ('promotion') with zero engagement. Overrides the makeEnrollment
+  // default of 'family-initiated'.
+  const promotedBv = makeEnrollment({ enrolledVia: 'promotion' });
 
   it('active BV + attendance → enrolled', () => {
     const m = buildFamilyDashboardModel(input({ bvAttendedCount: 1 }));
@@ -306,7 +311,7 @@ describe('bvState (issue #23 engagement rule)', () => {
   });
 
   it('active BV + neither → registered, amber pill, nudge on', () => {
-    const m = buildFamilyDashboardModel(input({ bvAttendedCount: 0 }));
+    const m = buildFamilyDashboardModel(input({ enrollments: [TABLA_ENROLLMENT, promotedBv], bvAttendedCount: 0 }));
     expect(m.bvState).toBe('registered');
     expect(m.enrolledPill.text).toBe('Registered');
     // Amber "not-yet-confirmed" chip — same warn-soft/warn pair as the prasad
@@ -332,7 +337,9 @@ describe('bvState (issue #23 engagement rule)', () => {
   });
 
   it('N=2: a completed TABLA donation does not confirm BV', () => {
-    const m = buildFamilyDashboardModel(input({ donations: [makeDonation()], bvAttendedCount: 0 }));
+    const m = buildFamilyDashboardModel(
+      input({ enrollments: [TABLA_ENROLLMENT, promotedBv], donations: [makeDonation()], bvAttendedCount: 0 }),
+    );
     expect(m.bvState).toBe('registered');
   });
 });

@@ -4,19 +4,38 @@ import { paymentSourceOf } from '@cmt/shared-domain';
 import type { DonationDoc, EnrollmentReport, PaymentSource, ReportQuery } from '@cmt/shared-domain';
 import { getLegacyPaymentStatus } from '@/features/setu/donations/legacy-payment';
 import { isEnrollmentConfirmed } from '@/app/family/_helpers/enrollment-confirmation';
+import type { EnrollmentWithOffering } from '@/features/setu/enrollment/get-enrollments';
 
 const BV_PROGRAM_KEY = 'bala-vihar';
 const OFFERING_CHUNK = 300;
 const IN_CHUNK = 30; // Firestore `where in` supports up to 30 values.
 
+type EnrolledVia = EnrollmentWithOffering['enrolledVia'];
+const ENROLLED_VIA_VALUES: readonly EnrolledVia[] = [
+  'family-initiated',
+  'first-attendance',
+  'welcome-team',
+  'promotion',
+];
+// Slice 1 (2026-07-06): the confirmed/registered split now also honours a
+// deliberate 'family-initiated'/'first-attendance' enrollment, so the report
+// must thread the real enrolledVia through to isEnrollmentConfirmed. A corrupt
+// doc missing the field falls back to 'promotion' (engagement-required — the
+// conservative pre-Slice-1 behaviour), never auto-confirming on a bad read.
+function normalizeEnrolledVia(v: unknown): EnrolledVia {
+  return typeof v === 'string' && (ENROLLED_VIA_VALUES as readonly string[]).includes(v)
+    ? (v as EnrolledVia)
+    : 'promotion';
+}
+
 type RawEnr = {
   fid?: unknown; programKey?: unknown; programLabel?: unknown; status?: unknown;
   enrolledMids?: unknown; levelSnapshots?: unknown; termLabel?: unknown;
-  eid?: unknown; oid?: unknown;
+  eid?: unknown; oid?: unknown; enrolledVia?: unknown;
 };
 
 /** An active Bala Vihar enrollment, distilled for the confirmed/registered split. */
-interface BvEnr { fid: string; eid: string; oid: string; enrolledMids: string[] }
+interface BvEnr { fid: string; eid: string; oid: string; enrolledMids: string[]; enrolledVia: EnrolledVia }
 
 export async function buildEnrollmentReport(params: ReportQuery): Promise<EnrollmentReport> {
   const db = portalFirestore();
@@ -60,7 +79,13 @@ export async function buildEnrollmentReport(params: ReportQuery): Promise<Enroll
     if (fid) byProgramFamilies.get(programKey)!.add(fid);
     for (const mid of mids) { byProgramMembers.get(programKey)!.add(mid); allMembers.add(mid); }
     if (fid && programKey === BV_PROGRAM_KEY) {
-      bvEnrollments.push({ fid, eid: String(e.eid ?? ''), oid: String(e.oid ?? ''), enrolledMids: mids });
+      bvEnrollments.push({
+        fid,
+        eid: String(e.eid ?? ''),
+        oid: String(e.oid ?? ''),
+        enrolledMids: mids,
+        enrolledVia: normalizeEnrolledVia(e.enrolledVia),
+      });
     }
     const snaps = (e.levelSnapshots && typeof e.levelSnapshots === 'object') ? (e.levelSnapshots as Record<string, { levelId?: unknown }>) : {};
     for (const [mid, snap] of Object.entries(snaps)) {
@@ -183,7 +208,7 @@ async function deriveBvConfirmedFids(
         ? legacyStatusByLegacyFid.get(legacyFid) === 'paid'
         : false;
     const donations = donationsByFid.get(enr.fid) ?? [];
-    if (isEnrollmentConfirmed({ eid: enr.eid }, { attendedCount, donations, legacyPaid })) {
+    if (isEnrollmentConfirmed({ eid: enr.eid, enrolledVia: enr.enrolledVia }, { attendedCount, donations, legacyPaid })) {
       confirmedFids.add(enr.fid);
     }
   }
