@@ -1,4 +1,4 @@
-import type { MemberDoc } from '@cmt/shared-domain/setu';
+import { whatsMissingForMember, type MemberDoc } from '@cmt/shared-domain/setu';
 
 /** The roster-card view of a member used by the My Family page. */
 export type DisplayMember = {
@@ -15,6 +15,8 @@ export type DisplayMember = {
   role: string | null;
   isCurrent: boolean;
   nameMissing: boolean;
+  /** Count of still-missing required fields for this member (0 ⇒ complete). */
+  missingCount: number;
 };
 
 /** Pure mapper from a stored member to its roster-card display shape. */
@@ -39,5 +41,6 @@ export function memberToDisplay(m: MemberDoc, currentMid: string | null): Displa
     role: m.volunteeringSkills.length > 0 ? m.volunteeringSkills.join(', ') : null,
     isCurrent,
     nameMissing,
+    missingCount: whatsMissingForMember(m).length,
   };
 }

@@ -41,3 +41,20 @@ describe('memberToDisplay — Make-manager eligibility (issue #12 follow-up)', (
     expect(memberToDisplay(makeMember({ type: 'Adult', manager: false }), null).isManager).toBe(false);
   });
 });
+
+describe('memberToDisplay — missingCount (Slice 1 Part D)', () => {
+  it('is 0 for a fully-complete adult', () => {
+    const m = makeMember({ type: 'Adult', foodAllergies: 'None', volunteeringSkills: ['Cooking'] });
+    expect(memberToDisplay(m, 'FAM1-01').missingCount).toBe(0);
+  });
+
+  it('is 0 for a fully-complete child', () => {
+    const m = makeMember({ type: 'Child', foodAllergies: 'None', schoolGrade: 'Grade 3', birthMonthYear: '2017-05' });
+    expect(memberToDisplay(m, 'FAM1-01').missingCount).toBe(0);
+  });
+
+  it('counts a child missing schoolGrade + birthMonthYear as 2', () => {
+    const m = makeMember({ type: 'Child', foodAllergies: 'None', schoolGrade: null, birthMonthYear: null });
+    expect(memberToDisplay(m, 'FAM1-01').missingCount).toBe(2);
+  });
+});
