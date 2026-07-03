@@ -22,6 +22,16 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
+## `<SHA>` · 2026-07-03 — Disclaimers (Slice 2)
+
+**New — `GET /api/setu/disclaimers`** → `{ version:number, schoolYear:string, sections:{id,title,body}[], accepted:boolean }`. The signed-in family's disclaimer state. Any family role.
+
+**New — `POST /api/setu/disclaimers/accept`** (no body) → `{ ok:true, version:number }`. Records acceptance of the CURRENT version + school year. **Manager-only** (a family-member gets 401/`unauthorized`). Server-authoritative version.
+
+**Changed — `GET /api/setu/dashboard`** gains additive top-level **`disclaimersPending: boolean`** — true when this (manager) family must accept before using the portal; false for a family-member, when the feature flag is off, or on a read error.
+
+**Mobile action:** on launch, a manager session should check `disclaimersPending` (or `GET /api/setu/disclaimers`); if pending, show the accept screen (render `sections`, one required checkbox each) and `POST …/accept` before proceeding. Acceptance is per-family (manager); a stale version or new `schoolYear` re-prompts. Flag `NEXT_PUBLIC_FEATURE_SETU_DISCLAIMERS` gates the web gate — until it's on in an environment, `disclaimersPending` is always false there.
+
 ## `4195d05` · 2026-07-03 · dashboard gains per-child BV rows, family counts, action-item seam; `bvState` semantics widen (Slice 1)
 - **GET `/api/setu/dashboard`** — additive fields (the dashboard now drives a 3-block layout: Family · Action items · Bala Vihar):
   - `family.counts: { children: number; adults: number }` — the family's child/adult split (derived from `members[].type`), for the Family block header.

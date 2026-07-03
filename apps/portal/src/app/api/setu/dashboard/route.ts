@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server';
+import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { flags } from '@/lib/flags';
 import { getSessionFamily } from '@/features/setu/members/get-session-family';
 import { loadFamilyDashboard } from '@/app/family/_helpers/load-dashboard';
 import { getLiveSchoolYearCached } from '@/features/setu/rollover/live-school-year';
+import { getDisclaimerStateForFamily } from '@/features/setu/disclaimers/acceptance';
 
 /**
  * GET /api/setu/dashboard — the family home aggregate for mobile (and any
@@ -26,6 +28,18 @@ export async function GET(req: Request) {
     fam.members,
   );
   const schoolYear = await getLiveSchoolYearCached();
+
+  // Slice 2: mobile gate signal. Only meaningful for a manager (per-family
+  // acceptance). Fail-soft — a config hiccup must never 500 the mobile home.
+  let disclaimersPending = false;
+  if (flags.setuDisclaimers && fam.isManager) {
+    try {
+      const st = await getDisclaimerStateForFamily(portalFirestore(), fam.family);
+      disclaimersPending = !st.accepted;
+    } catch {
+      disclaimersPending = false;
+    }
+  }
 
   return NextResponse.json(
     {
@@ -83,6 +97,11 @@ export async function GET(req: Request) {
       // item (owner decision 2026-07-03 / df319d2). Slice 2 populates it (e.g. a
       // disclaimers item). The client builds its own navigation from `kind`.
       actionItems: model.actionItems,
+      // Slice 2: true when this (manager) family must accept the current
+      // disclaimers before using the portal. Web enforces this via a redirect
+      // gate; mobile decides its own gating. Always false when the flag is off,
+      // for a family-member, or on a read error.
+      disclaimersPending,
       upcoming,
       seva,
       prasad,

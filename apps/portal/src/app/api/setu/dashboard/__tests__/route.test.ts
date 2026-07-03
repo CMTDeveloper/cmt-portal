@@ -1,10 +1,24 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('@/lib/flags', () => ({ flags: { setuAuth: true } }));
+vi.mock('@/lib/flags', () => ({ flags: { setuAuth: true, setuDisclaimers: true } }));
 
 const mockGetFamilyByFid = vi.hoisted(() => vi.fn());
 vi.mock('@/features/setu/members/get-family-by-fid', () => ({
   getFamilyByFid: mockGetFamilyByFid,
+}));
+
+// Slice 2: the dashboard route computes the additive `disclaimersPending` gate
+// signal from this helper (manager + flag on + not-yet-accepted). Default the
+// mock to an UNACCEPTED state so a manager reads `disclaimersPending: true`.
+const mockGetDisclaimerState = vi.hoisted(() => vi.fn());
+vi.mock('@/features/setu/disclaimers/acceptance', () => ({
+  getDisclaimerStateForFamily: mockGetDisclaimerState,
+}));
+
+// portalFirestore() is only handed to the (mocked) disclaimers helper — stub it
+// so the route never touches a real Firestore client in unit tests.
+vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
+  portalFirestore: vi.fn(() => ({})),
 }));
 
 const mockLoad = vi.hoisted(() => vi.fn());
@@ -71,6 +85,8 @@ beforeEach(() => {
   mockGetFamilyByFid.mockResolvedValue({ family, members });
   mockLoad.mockResolvedValue(dashboardData);
   mockGetLiveSchoolYear.mockResolvedValue('2025-26');
+  // Default: current disclaimers NOT accepted by this family.
+  mockGetDisclaimerState.mockResolvedValue({ accepted: false, version: 1, schoolYear: '2026-27', sections: [] });
 });
 
 describe('GET /api/setu/dashboard', () => {
@@ -192,6 +208,41 @@ describe('GET /api/setu/dashboard', () => {
       const body = await res.json();
       expect(body.balaVihar.bvState).toBe('none');
       expect(body.balaVihar.isEnrolled).toBe(false);
+    });
+  });
+
+  // Slice 2: additive top-level `disclaimersPending` gate signal for mobile.
+  // Only meaningful for a manager (per-family acceptance) and only when the
+  // feature flag is on; computed fail-soft (any read error ⇒ false).
+  describe('disclaimersPending (Slice 2 gate signal)', () => {
+    it('includes disclaimersPending (true for an unaccepted manager)', async () => {
+      mockGetDisclaimerState.mockResolvedValue({ accepted: false, version: 1, schoolYear: '2026-27', sections: [] });
+      const res = await GET(makeRequest({ role: 'family-manager', fid: 'CMT-AB12CD34', mid: 'CMT-AB12CD34-01' }));
+      const body = await res.json();
+      expect(body).toHaveProperty('disclaimersPending', true);
+    });
+
+    it('is false for a family-member (per-family acceptance is a manager concern)', async () => {
+      const res = await GET(makeRequest({ role: 'family-member', fid: 'CMT-AB12CD34', mid: 'CMT-AB12CD34-02' }));
+      const body = await res.json();
+      expect(body.disclaimersPending).toBe(false);
+      // The gate helper is never consulted for a non-manager.
+      expect(mockGetDisclaimerState).not.toHaveBeenCalled();
+    });
+
+    it('is false once the family has accepted the current disclaimers', async () => {
+      mockGetDisclaimerState.mockResolvedValue({ accepted: true, version: 1, schoolYear: '2026-27', sections: [] });
+      const res = await GET(makeRequest({ role: 'family-manager', fid: 'CMT-AB12CD34', mid: 'CMT-AB12CD34-01' }));
+      const body = await res.json();
+      expect(body.disclaimersPending).toBe(false);
+    });
+
+    it('fails soft to false when the disclaimers read throws', async () => {
+      mockGetDisclaimerState.mockRejectedValue(new Error('firestore blip'));
+      const res = await GET(makeRequest({ role: 'family-manager', fid: 'CMT-AB12CD34', mid: 'CMT-AB12CD34-01' }));
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.disclaimersPending).toBe(false);
     });
   });
 
