@@ -37,6 +37,11 @@ function activeBvPaymentSource(enrollments: EnrollmentWithOffering[]): PaymentSo
   );
 }
 
+/** A single actionable item on the dashboard's "Action Items" panel. Additive:
+ *  Slice 2 will add a `{ kind: 'disclaimers'; … }` variant. Kept UI-path-free so
+ *  the mobile API can serialize it and the client builds its own navigation. */
+export type ActionItem = { kind: 'donation'; title: string; ctaLabel: string };
+
 export interface DashboardModelInput {
   /** All of the family's enrollments, joined with offerings (any sort order). */
   enrollments: EnrollmentWithOffering[];
@@ -93,6 +98,7 @@ export interface FamilyDashboardModel {
     heading: string;
   };
   enrolledPill: { text: string; bg: string; fg: string };
+  actionItems: ActionItem[];
 }
 
 /**
@@ -170,6 +176,14 @@ export function buildFamilyDashboardModel(input: DashboardModelInput): FamilyDas
         ? { text: 'Registered', bg: REGISTERED_BG, fg: REGISTERED_FG }
         : { text: 'Not enrolled', bg: 'var(--surface2)', fg: 'var(--muted)' };
 
+  // Derived action items (Slice 1). Donation is the only item today; it appears
+  // only when the family is enrolled, the donation is portal-managed (showGive),
+  // and it isn't already complete. Disclaimers (Slice 2) will append here.
+  const actionItems: ActionItem[] = [];
+  if (showGive && !donationComplete) {
+    actionItems.push({ kind: 'donation', title: 'Complete your Bala Vihar donation', ctaLabel: 'Donate' });
+  }
+
   return {
     isEnrolled,
     bvState,
@@ -192,5 +206,6 @@ export function buildFamilyDashboardModel(input: DashboardModelInput): FamilyDas
       heading: donationHeading,
     },
     enrolledPill,
+    actionItems,
   };
 }

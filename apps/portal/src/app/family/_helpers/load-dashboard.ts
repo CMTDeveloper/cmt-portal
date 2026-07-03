@@ -8,6 +8,8 @@ import { listPrograms } from '@/features/setu/programs/get-programs';
 import { getFamilySevaProgress, type FamilySevaProgress } from '@/features/setu/seva/get-family-seva-progress';
 import { getFamilyAssignment, type FamilyPrasadView } from '@/features/setu/prasad/family-assignment';
 import { getFamilyBalaViharAttendance } from '@/features/setu/attendance/get-family-attendance';
+import { getPerChildBalaViharAttendance } from '@/features/setu/attendance/get-per-child-attendance';
+import { getBvTeacherNames } from '@/features/setu/attendance/get-bv-teacher-names';
 import { isoToTorontoDateInput } from '@/lib/toronto-date';
 import {
   buildFamilyDashboardModel,
@@ -16,11 +18,21 @@ import {
 } from './dashboard-model';
 import { selectBalaViharEnrollment } from './select-bv-enrollment';
 
+export interface BvChildView {
+  mid: string;
+  firstName: string;
+  levelName: string | null;
+  teacherNames: string[];
+  attendance: { present: number; total: number };
+}
+
 export interface FamilyDashboardData {
   model: FamilyDashboardModel;
   upcoming: CalendarEntry[];
   seva: FamilySevaProgress;
   prasad: FamilyPrasadView | null;
+  bvChildren: BvChildView[];
+  familyCounts: { children: number; adults: number };
 }
 
 /**
@@ -68,52 +80,113 @@ export async function loadFamilyDashboard(
   ]);
   const programsById = new Map<string, ProgramDoc>(allPrograms.map((p) => [p.programKey, p]));
 
+  // Cheap header counts derived from the already-loaded members — no extra read.
+  const familyCounts = {
+    children: members.filter((m) => m.type === 'Child').length,
+    adults: members.filter((m) => m.type === 'Adult').length,
+  };
+
   // Both of these need `enrollments` (so they can't join the fan-out above),
   // but they're independent of EACH OTHER — run them concurrently in one narrow
   // second step rather than serializing.
   const bv = selectBalaViharEnrollment(enrollments);
-  const [legacyPaymentStatus, bvAttendedCount] = await Promise.all([
-    // Legacy roster status only matters for the 2025-26 cutover BV offering;
-    // skip the extra RTDB read otherwise (same predicate the model uses).
-    isLegacyBvPeriod(enrollments) ? getLegacyPaymentStatus(family.legacyFid) : Promise.resolve(null),
-    // Issue #23: "Enrolled" now means engaged. Count attended Sundays inside the
-    // active BV enrollment's window so the model can derive bvState. One extra
-    // narrow read, only when an active BV enrollment exists.
-    (async (): Promise<number> => {
-      if (!bv) return 0;
-      try {
-        const byMid = new Map(members.map((m): [string, MemberDoc] => [m.mid, m]));
-        const children = bv.enrolledMids.map((mid) => ({
-          mid,
-          legacySid: byMid.get(mid)?.legacySid ?? null,
-        }));
-        // Offering boundaries store Toronto-aware timestamps (endDate is 23:59:59
-        // America/Toronto, i.e. early-morning UTC the *next* day). Derive the
-        // window YMDs in the Toronto calendar so they match the door check-in
-        // records — a UTC `.slice(0,10)` would push end-of-day one day late.
-        const summary = await getFamilyBalaViharAttendance({
-          fid: family.fid,
-          legacyFid: family.legacyFid,
-          oid: bv.oid,
-          windowStart: bv.offering ? isoToTorontoDateInput(bv.offering.startDate.toISOString()) : null,
-          windowEnd: bv.offering?.endDate
-            ? isoToTorontoDateInput(bv.offering.endDate.toISOString())
-            : null,
-          children,
-        });
-        return summary.present + summary.late;
-      } catch (err) {
-        // Issue #23 (I1): this read is purely cosmetic — it only decides whether
-        // the BV pill reads "Enrolled" vs "Registered". A transient Firestore
-        // error (or a `(fid,date)` index not deployed in some environment) must
-        // NOT 500 the entire family home + GET /api/setu/dashboard over a pill,
-        // so degrade to 0 (⇒ Registered), mirroring the guarded roster read in
-        // features/setu/roster/family-engagement.ts.
-        console.warn('[load-dashboard] BV attendance read failed — treating attended-count as 0', err);
-        return 0;
-      }
-    })(),
-  ]);
+  const [legacyPaymentStatus, bvAttendedCount, perChildAttendance, teacherNamesByLevel] =
+    await Promise.all([
+      // Legacy roster status only matters for the 2025-26 cutover BV offering;
+      // skip the extra RTDB read otherwise (same predicate the model uses).
+      isLegacyBvPeriod(enrollments)
+        ? getLegacyPaymentStatus(family.legacyFid)
+        : Promise.resolve(null),
+      // Issue #23: "Enrolled" now means engaged. Count attended Sundays inside the
+      // active BV enrollment's window so the model can derive bvState. One extra
+      // narrow read, only when an active BV enrollment exists.
+      (async (): Promise<number> => {
+        if (!bv) return 0;
+        try {
+          const byMid = new Map(members.map((m): [string, MemberDoc] => [m.mid, m]));
+          const children = bv.enrolledMids.map((mid) => ({
+            mid,
+            legacySid: byMid.get(mid)?.legacySid ?? null,
+          }));
+          // Offering boundaries store Toronto-aware timestamps (endDate is 23:59:59
+          // America/Toronto, i.e. early-morning UTC the *next* day). Derive the
+          // window YMDs in the Toronto calendar so they match the door check-in
+          // records — a UTC `.slice(0,10)` would push end-of-day one day late.
+          const summary = await getFamilyBalaViharAttendance({
+            fid: family.fid,
+            legacyFid: family.legacyFid,
+            oid: bv.oid,
+            windowStart: bv.offering
+              ? isoToTorontoDateInput(bv.offering.startDate.toISOString())
+              : null,
+            windowEnd: bv.offering?.endDate
+              ? isoToTorontoDateInput(bv.offering.endDate.toISOString())
+              : null,
+            children,
+          });
+          return summary.present + summary.late;
+        } catch (err) {
+          // Issue #23 (I1): this read is purely cosmetic — it only decides whether
+          // the BV pill reads "Enrolled" vs "Registered". A transient Firestore
+          // error (or a `(fid,date)` index not deployed in some environment) must
+          // NOT 500 the entire family home + GET /api/setu/dashboard over a pill,
+          // so degrade to 0 (⇒ Registered), mirroring the guarded roster read in
+          // features/setu/roster/family-engagement.ts.
+          console.warn(
+            '[load-dashboard] BV attendance read failed — treating attended-count as 0',
+            err,
+          );
+          return 0;
+        }
+      })(),
+      // Per-child attendance ratios for the BV section. Fail-soft to an empty map.
+      (async (): Promise<Map<string, { present: number; total: number }>> => {
+        if (!bv) return new Map();
+        try {
+          const byMid = new Map(members.map((m): [string, MemberDoc] => [m.mid, m]));
+          const children = bv.enrolledMids.map((mid) => ({
+            mid,
+            legacySid: byMid.get(mid)?.legacySid ?? null,
+          }));
+          return await getPerChildBalaViharAttendance({
+            fid: family.fid,
+            legacyFid: family.legacyFid,
+            oid: bv.oid,
+            windowStart: bv.offering
+              ? isoToTorontoDateInput(bv.offering.startDate.toISOString())
+              : null,
+            windowEnd: bv.offering?.endDate
+              ? isoToTorontoDateInput(bv.offering.endDate.toISOString())
+              : null,
+            children,
+          });
+        } catch (err) {
+          console.warn(
+            '[load-dashboard] per-child BV attendance read failed — treating as empty',
+            err,
+          );
+          return new Map();
+        }
+      })(),
+      // Teacher names per BV level (Task 4). Fail-soft to an empty map ⇒ the UI
+      // shows level name with no teacher line. Reads only the levels this
+      // family's enrolled children are actually in.
+      (async (): Promise<Map<string, string[]>> => {
+        if (!bv) return new Map();
+        try {
+          const levelIds = bv.enrolledMids
+            .map((mid) => bv.levelSnapshots?.[mid]?.levelId ?? null)
+            .filter((id): id is string => !!id);
+          return await getBvTeacherNames(levelIds);
+        } catch (err) {
+          console.warn(
+            '[load-dashboard] BV teacher-name read failed — omitting teacher names',
+            err,
+          );
+          return new Map();
+        }
+      })(),
+    ]);
 
   const model = buildFamilyDashboardModel({
     enrollments,
@@ -123,5 +196,22 @@ export async function loadFamilyDashboard(
     bvAttendedCount,
   });
 
-  return { model, upcoming, seva, prasad };
+  // One view row per BV-enrolled child: joins the member's first name + the
+  // enrollment's level snapshot + the teacher-name and per-child attendance maps
+  // resolved above. Empty when there's no active BV enrollment.
+  const byMidMember = new Map(members.map((m): [string, MemberDoc] => [m.mid, m]));
+  const bvChildren: BvChildView[] = bv
+    ? bv.enrolledMids.map((mid) => {
+        const snap = bv.levelSnapshots?.[mid] ?? null;
+        return {
+          mid,
+          firstName: byMidMember.get(mid)?.firstName ?? '',
+          levelName: snap?.levelName ?? null,
+          teacherNames: snap?.levelId ? (teacherNamesByLevel.get(snap.levelId) ?? []) : [],
+          attendance: perChildAttendance.get(mid) ?? { present: 0, total: 0 },
+        };
+      })
+    : [];
+
+  return { model, upcoming, seva, prasad, bvChildren, familyCounts };
 }

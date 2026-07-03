@@ -343,3 +343,30 @@ describe('bvState (issue #23 engagement rule)', () => {
     expect(m.bvState).toBe('registered');
   });
 });
+
+describe('actionItems', () => {
+  it('surfaces a donation action item when enrolled + portal-managed + unpaid', () => {
+    const model = buildFamilyDashboardModel({
+      enrollments: [BV_ENROLLMENT], donations: [], programsById: new Map(),
+      legacyPaymentStatus: null, bvAttendedCount: 0,
+    });
+    expect(model.actionItems).toEqual([
+      { kind: 'donation', title: 'Complete your Bala Vihar donation', ctaLabel: 'Donate' },
+    ]);
+  });
+  it('has NO donation action item once the donation is complete', () => {
+    const paid = makeDonation({ eid: BV_ENROLLMENT.eid, status: 'completed', amountCAD: 1000 });
+    const model = buildFamilyDashboardModel({
+      enrollments: [BV_ENROLLMENT], donations: [paid], programsById: new Map(),
+      legacyPaymentStatus: null, bvAttendedCount: 0,
+    });
+    expect(model.actionItems).toEqual([]);
+  });
+  it('has NO donation action item when not enrolled', () => {
+    const model = buildFamilyDashboardModel({
+      enrollments: [], donations: [], programsById: new Map(),
+      legacyPaymentStatus: null, bvAttendedCount: 0,
+    });
+    expect(model.actionItems).toEqual([]);
+  });
+});
