@@ -1,0 +1,30 @@
+import { describe, it, expect } from 'vitest';
+import { canAccessRoute } from '../auth/can-access-route';
+import type { SessionClaims } from '../auth/session';
+
+const manager = { role: 'family-manager', fid: 'CMT-1', mid: 'm1' } as unknown as SessionClaims;
+const member = { role: 'family-member', fid: 'CMT-1', mid: 'm2' } as unknown as SessionClaims;
+const admin = { role: 'admin', uid: 'u-admin' } as unknown as SessionClaims;
+const welcome = { role: 'welcome-team', uid: 'u-w' } as unknown as SessionClaims;
+
+describe('canAccessRoute — disclaimers', () => {
+  it('GET /api/setu/disclaimers is any setu family', () => {
+    expect(canAccessRoute(manager, '/api/setu/disclaimers', 'GET')).toBe(true);
+    expect(canAccessRoute(member, '/api/setu/disclaimers', 'GET')).toBe(true);
+  });
+  it('POST /api/setu/disclaimers/accept is manager-only', () => {
+    expect(canAccessRoute(manager, '/api/setu/disclaimers/accept', 'POST')).toBe(true);
+    expect(canAccessRoute(member, '/api/setu/disclaimers/accept', 'POST')).toBe(false);
+  });
+  it('the /disclaimers page is any setu family', () => {
+    expect(canAccessRoute(manager, '/disclaimers', 'GET')).toBe(true);
+    expect(canAccessRoute(member, '/disclaimers', 'GET')).toBe(true);
+    expect(canAccessRoute(welcome, '/disclaimers', 'GET')).toBe(false);
+  });
+  it('admin disclaimers editor + API are admin-only', () => {
+    expect(canAccessRoute(admin, '/admin/disclaimers', 'GET')).toBe(true);
+    expect(canAccessRoute(admin, '/api/admin/disclaimers', 'PUT')).toBe(true);
+    expect(canAccessRoute(manager, '/admin/disclaimers', 'GET')).toBe(false);
+    expect(canAccessRoute(welcome, '/api/admin/disclaimers', 'PUT')).toBe(false);
+  });
+});

@@ -171,6 +171,7 @@ function deny(req: NextRequest, reason: 'no-session' | 'unauthorized') {
   const isSetuRoute =
     pathname === '/family' || pathname.startsWith('/family/') ||
     pathname === '/complete-profile' || pathname.startsWith('/complete-profile/') ||
+    pathname === '/disclaimers' || pathname.startsWith('/disclaimers/') ||
     pathname === '/welcome' || pathname.startsWith('/welcome/') ||
     pathname === '/admin' || pathname.startsWith('/admin/') ||
     pathname === '/docs' || pathname.startsWith('/docs/') ||

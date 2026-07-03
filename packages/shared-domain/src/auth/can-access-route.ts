@@ -69,6 +69,12 @@ export function canAccessRoute(
     return isSetuFamily(claims);
   }
 
+  // Disclaimers accept screen — a top-level route (NOT under /family, to avoid the
+  // gate redirect loop) that the /family gate sends a not-yet-accepted manager to.
+  if (pathname === '/disclaimers' || pathname.startsWith('/disclaimers/')) {
+    return isSetuFamily(claims);
+  }
+
   // Welcome-team portal pages
   if (pathname === '/welcome' || pathname.startsWith('/welcome/')) {
     return isWelcomeTeam(claims);
@@ -238,6 +244,13 @@ export function canAccessRoute(
   // Setu API — prasad: any family role may view their assignment/options;
   // the move POST is manager-only. Must precede the manager-only catch-all.
   if (pathname === '/api/setu/prasad' || pathname.startsWith('/api/setu/prasad/')) {
+    if (!isSetuFamily(claims)) return false;
+    if (method === 'POST') return isSetuManager(claims);
+    return true;
+  }
+
+  // Disclaimers: GET state = any setu family; POST accept = manager-only.
+  if (pathname === '/api/setu/disclaimers' || pathname.startsWith('/api/setu/disclaimers/')) {
     if (!isSetuFamily(claims)) return false;
     if (method === 'POST') return isSetuManager(claims);
     return true;
