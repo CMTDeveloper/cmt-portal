@@ -21,19 +21,23 @@ import { signInFamilyAndSaveStorage } from '../auth-helpers';
  * WHAT EACH PHASE ASSERTS:
  *   - Phase 1 (Registered ground state): GET /api/setu/dashboard →
  *     balaVihar.bvState === 'registered' && isEnrolled === true; and /family on
- *     DESKTOP renders both the verbatim confirm nudge AND the three-state
- *     `Registered` pill (issue #23 I2 made the desktop pill + metric
- *     bvState-driven, matching mobile — desktop no longer hardcodes "Enrolled").
- *     At a mobile viewport (where the family-facing "Give donation" CTA lives)
- *     it also shows the `Registered` pill, the nudge, and a visible `Give
- *     donation` link pointing at `/family/donate?eid=…`.
+ *     DESKTOP renders the three-state `Registered` pill (issue #23 I2 made the
+ *     desktop pill + metric bvState-driven, matching mobile — desktop no longer
+ *     hardcodes "Enrolled"). The Slice 1 rebuild dropped the verbatim confirm
+ *     nudge; the Registered state is now conveyed by the amber `Registered` pill
+ *     + a `Pending` donation status + a "Complete donation" button. At a mobile
+ *     viewport (where the family-facing donate CTA lives) it also shows the
+ *     `Registered` pill and a visible `Complete donation` link pointing at
+ *     `/family/donate?eid=…`.
  *   - Phase 2 (Enrolled after a completed donation): the spec SELF-MUTATES the
  *     fixture by re-running the seed with `--confirm-bv` (writes one _test
  *     completed donation for the active 2026-27 eid), then asserts bvState ===
  *     'enrolled' (API); that DESKTOP leaves the Registered state (`/^Registered$/`
  *     count 0 — the robust form, since `/^Enrolled$/` also matches the
- *     om-chanting card's hardcoded pill) with the nudge gone; and that the mobile
- *     pill flips to `Enrolled` with the nudge ABSENT.
+ *     om-chanting card's hardcoded pill); and that the mobile pill flips to
+ *     `Enrolled`. The Slice 1 rebuild renders no confirm nudge in either state,
+ *     so the `NUDGE` toHaveCount(0) checks are steady absence assertions (they
+ *     hold in both phases) rather than a before/after flip.
  *
  * SELF-RESETTING: Phase 2's beforeAll shells out `seed:e2e-family --confirm-bv`;
  * afterAll re-runs the PLAIN seed (which deletes that _test donation) to restore
@@ -112,9 +116,8 @@ test.describe.serial('enrollment engagement state — Registered vs Enrolled (is
     expect(balaVihar.bvState).toBe('registered');
   });
 
-  test('UI (desktop): /family shows the confirm nudge and the Registered pill', async ({ page }) => {
+  test('UI (desktop): /family shows the Registered pill', async ({ page }) => {
     await page.goto('/family');
-    await expect(visibleText(page, NUDGE).first()).toBeVisible();
     // Issue #23 I2: desktop now renders the three-state pill + metric (it used to
     // hardcode "Enrolled"). `/^Registered$/` is unambiguous — only the BV pill
     // and BV metric ever read "Registered" (the om-chanting card hardcodes
@@ -125,13 +128,12 @@ test.describe.serial('enrollment engagement state — Registered vs Enrolled (is
   test.describe('UI (mobile viewport)', () => {
     test.use({ viewport: MOBILE_VIEWPORT });
 
-    test('shows the Registered pill, the nudge, and a Give donation CTA to /family/donate?eid=', async ({ page }) => {
+    test('shows the Registered pill and a Complete donation CTA to /family/donate?eid=', async ({ page }) => {
       await page.goto('/family');
       // The Registered pill renders in both layouts now; at this mobile viewport
       // the visible one is the mobile BV card's.
       await expect(visibleText(page, /^Registered$/).first()).toBeVisible();
-      await expect(visibleText(page, NUDGE).first()).toBeVisible();
-      const give = page.getByRole('link', { name: /Give donation/i }).filter({ visible: true }).first();
+      const give = page.getByRole('link', { name: /Complete donation/i }).filter({ visible: true }).first();
       await expect(give).toBeVisible();
       await expect(give).toHaveAttribute('href', /\/family\/donate\?eid=/);
     });
