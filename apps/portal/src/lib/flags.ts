@@ -20,6 +20,12 @@ export const flags = {
   // check-in app owns attendance; the portal only READS family-check-ins. Kept
   // behind a flag so we can re-enable the portal teacher flow later.
   setuTeacher: process.env.NEXT_PUBLIC_FEATURE_SETU_TEACHER === 'true',
+  // Slice 1 (2026-07-06): Seva + Prasad are hidden from FAMILIES entirely
+  // (dashboard card, left-nav item, and the /family/seva|prasad routes) until the
+  // owner decides to re-surface them. OFF by default. Admin/welcome Seva+Prasad
+  // config is untouched — this only gates the family-facing surfaces.
+  setuSeva: process.env.NEXT_PUBLIC_FEATURE_SETU_SEVA === 'true',
+  setuPrasad: process.env.NEXT_PUBLIC_FEATURE_SETU_PRASAD === 'true',
 } as const;
 
 export type FeatureFlags = typeof flags;

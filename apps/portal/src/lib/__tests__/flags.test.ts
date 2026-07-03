@@ -1,6 +1,19 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { flags } from '../flags';
 
 describe('flags', () => {
+  it('setuSeva and setuPrasad default OFF when their env vars are unset', () => {
+    // In the vitest env NEXT_PUBLIC_FEATURE_SETU_SEVA / _PRASAD are unset ⇒ false.
+    expect(flags.setuSeva).toBe(false);
+    expect(flags.setuPrasad).toBe(false);
+  });
+  it('exposes them as booleans', () => {
+    expect(typeof flags.setuSeva).toBe('boolean');
+    expect(typeof flags.setuPrasad).toBe('boolean');
+  });
+});
+
+describe('flags (check-in sub-flags)', () => {
   beforeEach(() => {
     vi.resetModules();
     delete process.env.NEXT_PUBLIC_FEATURE_CHECK_IN;
