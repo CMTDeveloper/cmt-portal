@@ -32,6 +32,13 @@ export async function getFamilyByFid(fid: string): Promise<FamilyAndMembers | nu
     createdAt: familyData.createdAt?.toDate() ?? new Date(),
     managers: familyData.managers ?? [],
     searchKeys: familyData.searchKeys ?? [],
+    disclaimersAccepted: familyData.disclaimersAccepted
+      ? {
+          schoolYear: familyData.disclaimersAccepted.schoolYear,
+          version: familyData.disclaimersAccepted.version,
+          acceptedByMid: familyData.disclaimersAccepted.acceptedByMid,
+        }
+      : null,
   };
 
   const members: MemberDoc[] = membersSnap.docs.map((doc) => {
