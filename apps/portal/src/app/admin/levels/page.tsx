@@ -4,6 +4,8 @@ import { portalFirestore, Timestamp } from '@cmt/firebase-shared/admin/firestore
 import { SetuIcon } from '@cmt/ui';
 import { type LevelRow, type PeriodOption } from '@/features/admin/levels/levels-table';
 import { LevelsManagement } from '@/features/admin/levels/levels-management';
+import type { LevelTeacher } from '@/features/admin/levels/levels-table';
+import { getTeacherNamesByMid } from '@/features/setu/attendance/get-bv-teacher-names';
 import { listPrograms } from '@/features/setu/programs/get-programs';
 import type { ProgramRow } from '@/features/admin/programs/programs-table';
 import { getLiveSchoolYearCached } from '@/features/setu/rollover/live-school-year';
@@ -67,6 +69,16 @@ export default async function LevelsPage({ searchParams }: { searchParams: Promi
     updatedAt: p.updatedAt.toISOString(),
   }));
 
+  // Resolve teacher display names in bulk (one collectionGroup read), then pair
+  // each level's teacherRefs (mids) with a name BY MID — never zipped by index,
+  // since unresolved mids are skipped by the resolver. Fall back to the mid when
+  // a name can't be resolved so the pill is never blank.
+  const byMid = await getTeacherNamesByMid(levels.flatMap((l) => l.teacherRefs));
+  const teachersByLevel: Record<string, LevelTeacher[]> = {};
+  for (const l of levels) {
+    teachersByLevel[l.levelId] = l.teacherRefs.map((mid) => ({ mid, name: byMid.get(mid) ?? mid }));
+  }
+
   return (
     <>
       <header style={{ marginBottom: 24 }}>
@@ -83,7 +95,7 @@ export default async function LevelsPage({ searchParams }: { searchParams: Promi
         </p>
       </header>
 
-      <LevelsManagement initialLevels={levels} periods={periods} programs={programs} readOnly={view.status === 'past'} />
+      <LevelsManagement initialLevels={levels} periods={periods} programs={programs} teachersByLevel={teachersByLevel} readOnly={view.status === 'past'} />
     </>
   );
 }

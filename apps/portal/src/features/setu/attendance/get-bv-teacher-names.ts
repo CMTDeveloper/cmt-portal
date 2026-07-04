@@ -8,14 +8,40 @@ function chunk<T>(xs: T[], n: number): T[][] {
 }
 
 /**
+ * Bulk-resolve a set of member mids to their "First Last" display names via a
+ * single `collectionGroup('members').where('mid','in', …)` read (chunked at 30 —
+ * Firestore's `in` cap), never a per-family fan-out. The `members.mid`
+ * collection-group index is already UAT-deployed. Members that don't resolve are
+ * simply absent from the returned map, so callers pairing mid→name must key by
+ * mid (never zip by index). Read-only.
+ */
+export async function getTeacherNamesByMid(mids: string[]): Promise<Map<string, string>> {
+  const db = portalFirestore();
+  const unique = [...new Set(mids.filter((m) => m && m.trim().length > 0))];
+  const nameByMid = new Map<string, string>();
+  if (unique.length === 0) return nameByMid;
+
+  for (const batch of chunk(unique, 30)) {
+    if (batch.length === 0) continue;
+    const snap = await db.collectionGroup('members').where('mid', 'in', batch).get();
+    for (const doc of snap.docs) {
+      const m = doc.data() as { mid: string; firstName?: string; lastName?: string };
+      nameByMid.set(m.mid, `${m.firstName ?? ''} ${m.lastName ?? ''}`.trim());
+    }
+  }
+  return nameByMid;
+}
+
+/**
  * Resolve each Bala Vihar level's assigned teacher display names for the family
  * dashboard's "Class Assignments" line. `teacherRefs` on a level are mids; the
- * teachers are members of (possibly other) families, so names come from a bulk
- * `collectionGroup('members').where('mid','in', …)` read — never a per-family
- * fan-out. The `members.mid` collection-group index is already UAT-deployed.
+ * teachers are members of (possibly other) families, so names come from the bulk
+ * {@link getTeacherNamesByMid} read.
  *
  * Returns a Map keyed by levelId → display names in teacherRefs order. Missing
- * members are skipped; unknown/blank levelIds are absent from the map. Read-only.
+ * members are skipped (so names[i] may misalign with teacherRefs[i] — pair by
+ * mid via {@link getTeacherNamesByMid} when the mid matters); unknown/blank
+ * levelIds are absent from the map. Read-only.
  */
 export async function getBvTeacherNames(levelIds: string[]): Promise<Map<string, string[]>> {
   const db = portalFirestore();
@@ -35,15 +61,7 @@ export async function getBvTeacherNames(levelIds: string[]): Promise<Map<string,
   }
 
   // 2) bulk member lookup → mid → "First Last"
-  const nameByMid = new Map<string, string>();
-  for (const batch of chunk([...allMids], 30)) {
-    if (batch.length === 0) continue;
-    const snap = await db.collectionGroup('members').where('mid', 'in', batch).get();
-    for (const doc of snap.docs) {
-      const m = doc.data() as { mid: string; firstName?: string; lastName?: string };
-      nameByMid.set(m.mid, `${m.firstName ?? ''} ${m.lastName ?? ''}`.trim());
-    }
-  }
+  const nameByMid = await getTeacherNamesByMid([...allMids]);
 
   // 3) levelId → teacher names in teacherRefs order (skip unresolved / blank names)
   const out = new Map<string, string[]>();

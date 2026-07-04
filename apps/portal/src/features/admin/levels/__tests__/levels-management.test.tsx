@@ -1,12 +1,20 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 
 const toastMock = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), warning: vi.fn() }));
 vi.mock('@cmt/ui', () => ({ toast: toastMock }));
 
+// The inline pills call these client wrappers; mock the -client module (never
+// the server fn) per repo rule. No calls fire on render — declared for safety.
+const clientMock = vi.hoisted(() => ({
+  searchTeachersClient: vi.fn(),
+  addLevelTeacherClient: vi.fn(),
+  removeLevelTeacherClient: vi.fn(),
+}));
+vi.mock('../assign-teacher-client', () => clientMock);
+
 import { LevelsManagement } from '../levels-management';
-import type { LevelRow, PeriodOption } from '../levels-table';
+import type { LevelRow, LevelTeacher, PeriodOption } from '../levels-table';
 import type { ProgramRow } from '../../programs/programs-table';
 
 const NOW = new Date().toISOString();
@@ -61,16 +69,32 @@ const LEVELS: LevelRow[] = [
   },
 ];
 
+const TEACHERS_BY_LEVEL: Record<string, LevelTeacher[]> = {
+  [LEVELS[0]!.levelId]: [
+    { mid: 'CMT-AAAA1111-01', name: 'Meera Rao' },
+    { mid: 'CMT-BBBB2222-01', name: 'Anil Kumar' },
+  ],
+};
+
 describe('LevelsManagement', () => {
-  it('separates levels and teacher assignments into tabs', async () => {
-    const user = userEvent.setup();
-    render(<LevelsManagement initialLevels={LEVELS} periods={PERIODS} programs={PROGRAMS} />);
+  it('renders the levels table directly with no "Teacher assignments" tab', () => {
+    render(
+      <LevelsManagement
+        initialLevels={LEVELS}
+        periods={PERIODS}
+        programs={PROGRAMS}
+        teachersByLevel={TEACHERS_BY_LEVEL}
+      />,
+    );
 
+    // The tab strip is gone entirely.
+    expect(screen.queryByRole('tab', { name: 'Teacher assignments' })).toBeNull();
+    expect(screen.queryByRole('tab', { name: 'Levels' })).toBeNull();
+    // The level and its inline pills render directly (N=2 teachers).
     expect(screen.getAllByText('Level 1')[0]).toBeTruthy();
-    await user.click(screen.getByRole('tab', { name: 'Teacher assignments' }));
-
-    expect(screen.getByRole('tabpanel', { name: 'Teacher assignments' })).toBeTruthy();
-    expect(screen.getByPlaceholderText('teacher@example.com')).toBeTruthy();
+    expect(screen.getAllByText('Meera Rao')[0]).toBeTruthy();
+    expect(screen.getAllByText('Anil Kumar')[0]).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: /assign teacher/i })[0]).toBeTruthy();
   });
 
   it('disables the "New level" control when readOnly (viewing a past year)', () => {

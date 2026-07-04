@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { toast } from '@cmt/ui';
 import { GRADE_BAND_OPTIONS } from '@cmt/shared-domain';
 import type {
@@ -11,6 +11,12 @@ import type {
   Location,
 } from '@cmt/shared-domain';
 import type { ProgramRow } from '@/features/admin/programs/programs-table';
+import {
+  searchTeachersClient,
+  addLevelTeacherClient,
+  removeLevelTeacherClient,
+  type TeacherHit,
+} from './assign-teacher-client';
 
 // Serialised shape from GET /api/admin/levels (Timestamps → ISO strings).
 export type LevelRow = Omit<LevelDoc, 'createdAt' | 'updatedAt'> & {
@@ -24,12 +30,29 @@ export interface PeriodOption {
   location: Location;
 }
 
+/** A resolved teacher shown as a pill: mid paired with its display name. */
+export interface LevelTeacher {
+  mid: string;
+  name: string;
+}
+
+/** Emitted when a per-level teacher pill is added or removed, so the parent can
+ * keep its own `levels[].teacherRefs` in sync. */
+export interface TeacherAssignmentChange {
+  levelId: string;
+  mid: string;
+  op: 'add' | 'remove';
+}
+
 interface LevelsTableProps {
   initialLevels: LevelRow[];
   periods: PeriodOption[];
   /** Optional list of programs to show a program selector (E3). When absent the selector is hidden. */
   programs?: ProgramRow[];
+  /** levelId → resolved {mid,name} teachers, paired by mid (never zipped by index). */
+  teachersByLevel?: Record<string, LevelTeacher[]>;
   onLevelsChange?: (levels: LevelRow[]) => void;
+  onAssignmentSaved?: (change: TeacherAssignmentChange) => void;
   /** When true (viewing a past school year), mutate controls are disabled. */
   readOnly?: boolean;
 }
@@ -298,13 +321,25 @@ const fieldStyle: React.CSSProperties = { display: 'block', width: '100%', margi
 
 // ─── Main table ────────────────────────────────────────────────────────────────
 
-export function LevelsTable({ initialLevels, periods, programs, onLevelsChange, readOnly = false }: LevelsTableProps) {
+export function LevelsTable({
+  initialLevels,
+  periods,
+  programs,
+  teachersByLevel,
+  onLevelsChange,
+  onAssignmentSaved,
+  readOnly = false,
+}: LevelsTableProps) {
   const [levels, setLevels] = useState<LevelRow[]>(initialLevels);
   const [showDisabled, setShowDisabled] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<LevelRow | null>(null);
   // Program filter: default to 'bala-vihar' if programs prop provided
   const [selectedProgramKey, setSelectedProgramKey] = useState('bala-vihar');
+  // Per-level teacher pills, mirrored in state for optimistic add/remove.
+  const [teachers, setTeachers] = useState<Record<string, LevelTeacher[]>>(teachersByLevel ?? {});
+  // Which level's "Assign teacher" popover is open (levelId), or null.
+  const [assigning, setAssigning] = useState<string | null>(null);
 
   // Filter programs that use levels (for the selector)
   const levelPrograms = programs?.filter((p) => p.capabilities.usesLevels) ?? [];
@@ -346,6 +381,88 @@ export function LevelsTable({ initialLevels, periods, programs, onLevelsChange, 
       toast.error('Network error');
     }
   }
+
+  async function handleAddTeacher(levelId: string, hit: TeacherHit) {
+    if ((teachers[levelId] ?? []).some((t) => t.mid === hit.mid)) {
+      toast.error(`${hit.name} is already assigned to this level.`);
+      return;
+    }
+    try {
+      await addLevelTeacherClient(levelId, hit.mid);
+      setTeachers((prev) => ({
+        ...prev,
+        [levelId]: [...(prev[levelId] ?? []), { mid: hit.mid, name: hit.name }],
+      }));
+      onAssignmentSaved?.({ levelId, mid: hit.mid, op: 'add' });
+      setAssigning(null);
+      toast.success(`Assigned ${hit.name}. Takes effect on their next sign-in.`);
+    } catch {
+      toast.error('Could not assign teacher — please try again.');
+    }
+  }
+
+  async function handleRemoveTeacher(levelId: string, mid: string) {
+    try {
+      await removeLevelTeacherClient(levelId, mid);
+      setTeachers((prev) => ({
+        ...prev,
+        [levelId]: (prev[levelId] ?? []).filter((t) => t.mid !== mid),
+      }));
+      onAssignmentSaved?.({ levelId, mid, op: 'remove' });
+      toast.success('Teacher removed. Takes effect on their next sign-in.');
+    } catch {
+      toast.error('Could not remove teacher — please try again.');
+    }
+  }
+
+  // Plain render helper (NOT a nested component) — inlined into both the desktop
+  // table cell and the mobile card so pills + the Assign popover render the same
+  // in each. Calling it as `teacherCell(l)` keeps element identity stable.
+  const teacherCell = (l: LevelRow) => {
+    const list = teachers[l.levelId] ?? [];
+    return (
+      <div style={{ position: 'relative' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+          {list.map((t) => (
+            <span
+              key={t.mid}
+              className="pill"
+              style={{ fontSize: 11, fontWeight: 600, background: 'var(--surface2)', color: 'var(--ink)', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 9px', borderRadius: 999 }}
+            >
+              {t.name}
+              {!readOnly && (
+                <button
+                  type="button"
+                  aria-label={`Remove ${t.name}`}
+                  onClick={() => void handleRemoveTeacher(l.levelId, t.mid)}
+                  style={{ border: 0, background: 'transparent', cursor: 'pointer', color: 'var(--muted)', fontSize: 13, lineHeight: 1, padding: 0 }}
+                >
+                  ×
+                </button>
+              )}
+            </span>
+          ))}
+          {list.length === 0 && readOnly && <span style={{ fontSize: 12, color: 'var(--muted)' }}>—</span>}
+          {!readOnly && (
+            <button
+              type="button"
+              onClick={() => setAssigning((cur) => (cur === l.levelId ? null : l.levelId))}
+              style={{ ...actionBtnStyle, padding: '3px 10px' }}
+            >
+              + Assign teacher
+            </button>
+          )}
+        </div>
+        {!readOnly && assigning === l.levelId && (
+          <AssignTeacherPopover
+            existingMids={list.map((t) => t.mid)}
+            onPick={(hit) => void handleAddTeacher(l.levelId, hit)}
+            onClose={() => setAssigning(null)}
+          />
+        )}
+      </div>
+    );
+  };
 
   return (
     <>
@@ -403,7 +520,7 @@ export function LevelsTable({ initialLevels, periods, programs, onLevelsChange, 
                   <span style={cardKeyStyle}>Curriculum</span>
                   <span style={{ color: 'var(--body-text)' }}>{l.curriculum}</span>
                   <span style={cardKeyStyle}>Teachers</span>
-                  <span style={{ color: 'var(--body-text)' }}>{l.teacherRefs.length}</span>
+                  <div style={{ color: 'var(--body-text)' }}>{teacherCell(l)}</div>
                 </div>
                 <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
                   <button onClick={() => { setEditing(l); setModalOpen(true); }} disabled={readOnly} style={{ ...actionBtnStyle, flex: 1, textAlign: 'center', padding: '9px 12px', opacity: readOnly ? 0.5 : 1 }}>Edit</button>
@@ -432,7 +549,7 @@ export function LevelsTable({ initialLevels, periods, programs, onLevelsChange, 
                     <td style={{ ...tdStyle, color: 'var(--body-text)' }}>{l.levelKind}</td>
                     <td style={{ ...tdStyle, color: 'var(--body-text)' }}>{l.gradeBand.length ? l.gradeBand.join(', ') : '—'}</td>
                     <td style={{ ...tdStyle, color: 'var(--body-text)' }}>{l.curriculum}</td>
-                    <td style={{ ...tdStyle, color: 'var(--body-text)' }}>{l.teacherRefs.length}</td>
+                    <td style={tdStyle}>{teacherCell(l)}</td>
                     <td style={tdStyle}>
                       <span style={{ display: 'inline-block', padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 600, background: l.enabled ? 'var(--accentSoft)' : 'var(--surface2)', color: l.enabled ? 'var(--accentDeep)' : 'var(--muted)' }}>
                         {l.enabled ? 'Enabled' : 'Disabled'}
@@ -458,3 +575,94 @@ export function LevelsTable({ initialLevels, periods, programs, onLevelsChange, 
 const tdStyle: React.CSSProperties = { padding: '12px 12px', verticalAlign: 'middle' };
 const actionBtnStyle: React.CSSProperties = { padding: '5px 12px', borderRadius: 'var(--radiusSm)', fontSize: 12, fontWeight: 500, background: 'var(--bg)', border: '1px solid var(--line2)', cursor: 'pointer', color: 'var(--body-text)', fontFamily: 'var(--body)' };
 const cardKeyStyle: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.06em', whiteSpace: 'nowrap', paddingTop: 1 };
+
+// ─── Assign-teacher popover ──────────────────────────────────────────────────
+// Module-scope so its identity is stable across LevelsTable re-renders (a nested
+// component would remount every render and drop the search input's focus).
+
+interface AssignTeacherPopoverProps {
+  /** mids already assigned to this level — shown disabled so you can't add twice. */
+  existingMids: string[];
+  onPick: (hit: TeacherHit) => void;
+  onClose: () => void;
+}
+
+function AssignTeacherPopover({ existingMids, onPick, onClose }: AssignTeacherPopoverProps) {
+  const [q, setQ] = useState('');
+  const [results, setResults] = useState<TeacherHit[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [searched, setSearched] = useState(false);
+
+  useEffect(() => {
+    const trimmed = q.trim();
+    if (trimmed.length < 2) {
+      setResults([]);
+      setSearched(false);
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    const t = setTimeout(() => {
+      searchTeachersClient(trimmed)
+        .then((hits) => {
+          if (cancelled) return;
+          setResults(hits);
+          setSearched(true);
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setResults([]);
+          setSearched(true);
+          toast.error('Teacher search failed — please try again.');
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [q]);
+
+  return (
+    <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 6, zIndex: 20, width: 280, maxWidth: '80vw', background: 'var(--surface)', border: '1px solid var(--line2)', borderRadius: 'var(--radiusSm)', boxShadow: '0 6px 24px rgba(0,0,0,.15)', padding: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+        <input
+          autoFocus
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search name or email"
+          aria-label="Search teacher"
+          style={{ flex: 1, minWidth: 0, padding: '6px 8px', borderRadius: 'var(--radiusSm)', border: '1px solid var(--line2)', background: 'var(--bg)', fontSize: 13, fontFamily: 'var(--body)', color: 'var(--ink)' }}
+        />
+        <button type="button" aria-label="Close teacher search" onClick={onClose} style={{ border: 0, background: 'transparent', cursor: 'pointer', color: 'var(--muted)', fontSize: 16, lineHeight: 1, padding: 2 }}>×</button>
+      </div>
+      {loading && <div style={{ fontSize: 12, color: 'var(--muted)', padding: '4px 2px' }}>Searching…</div>}
+      {!loading && searched && results.length === 0 && (
+        <div style={{ fontSize: 12, color: 'var(--muted)', padding: '4px 2px' }}>No matches.</div>
+      )}
+      {results.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', maxHeight: 220, overflowY: 'auto' }}>
+          {results.map((hit) => {
+            const already = existingMids.includes(hit.mid);
+            return (
+              <button
+                key={hit.mid}
+                type="button"
+                disabled={already}
+                onClick={() => onPick(hit)}
+                style={{ textAlign: 'left', padding: '7px 8px', border: 0, borderRadius: 'var(--radiusSm)', background: 'transparent', cursor: already ? 'default' : 'pointer', fontFamily: 'var(--body)', opacity: already ? 0.5 : 1 }}
+              >
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>{hit.name}</span>
+                {hit.email && <span style={{ fontSize: 12, color: 'var(--muted)' }}> — {hit.email}</span>}
+                {already && <span style={{ fontSize: 11, color: 'var(--muted)' }}> · assigned</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}

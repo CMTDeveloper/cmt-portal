@@ -30,10 +30,27 @@ vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
   }),
 }));
 
-import { getBvTeacherNames } from '../get-bv-teacher-names';
+import { getBvTeacherNames, getTeacherNamesByMid } from '../get-bv-teacher-names';
 
 beforeEach(() => {
   vi.clearAllMocks();
+});
+
+describe('getTeacherNamesByMid', () => {
+  it('resolves mids to display names, keyed by mid', async () => {
+    const out = await getTeacherNamesByMid(['T1', 'T2']);
+    expect(out.get('T1')).toBe('Meera Rao');
+    expect(out.get('T2')).toBe('Anil Kumar');
+  });
+  it('omits unresolved mids from the map', async () => {
+    const out = await getTeacherNamesByMid(['T1', 'NOPE']);
+    expect(out.get('T1')).toBe('Meera Rao');
+    expect(out.has('NOPE')).toBe(false);
+  });
+  it('returns an empty map for an empty / blank mid list', async () => {
+    const out = await getTeacherNamesByMid(['', '  ']);
+    expect(out.size).toBe(0);
+  });
 });
 
 describe('getBvTeacherNames', () => {
