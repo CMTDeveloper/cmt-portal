@@ -22,7 +22,7 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
-## 2026-07-03 — `20a7406` — Attendance is Present/Absent only (Late retired)
+## 2026-07-03 — `de017f6` — Attendance is Present/Absent only (Late retired)
 `POST /api/setu/teacher/attendance` (`marks`) and `POST /api/setu/teacher/guests` (`status`) now accept only `present` | `absent`. Sending `late` → 400 `bad-request`. Reads are unchanged (historical `late` events still returned). **Mobile:** drop `late` from the attendance marker UI and never send it; render any historical `late` in read views as needed.
 
 ## `f960ee5` · 2026-07-03 — Disclaimers (Slice 2)
