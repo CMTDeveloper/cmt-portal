@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { toast } from '@cmt/ui';
+import { CHILD_GRADE_OPTIONS } from '@cmt/shared-domain';
 
 interface VisitorRow {
   name: string;
@@ -272,14 +273,17 @@ export function VisitorsPanel({ levelId, levelName, date }: VisitorsPanelProps) 
 
           <div style={{ minWidth: 0 }}>
             <span style={label}>Grade</span>
-            <input
+            <select
               value={grade}
               onChange={(e) => setGrade(e.target.value)}
-              placeholder="Grade (optional)"
               aria-label="Grade"
-              autoComplete="off"
               style={field}
-            />
+            >
+              <option value="">Grade (optional)</option>
+              {CHILD_GRADE_OPTIONS.map((g) => (
+                <option key={g.value} value={g.value}>{g.label}</option>
+              ))}
+            </select>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>

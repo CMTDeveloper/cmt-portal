@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { VisitorsPanel } from '../visitors-panel';
 
@@ -49,6 +49,19 @@ describe('VisitorsPanel', () => {
       expect(post).toBeTruthy();
       expect(JSON.parse(post![1]!.body as string)).toMatchObject({ levelId: 'L', date: '2026-01-04', firstName: 'Walk' });
     });
+  });
+
+  it('renders Grade as a select whose options include the canonical grades', async () => {
+    mockGetView();
+    render(<VisitorsPanel levelId="L" levelName="Level 1" date="2026-01-04" />);
+    await screen.findByText('Arjun X');
+
+    const gradeSelect = screen.getByRole('combobox', { name: /grade/i });
+    expect(gradeSelect.tagName).toBe('SELECT');
+    expect(within(gradeSelect).getByRole('option', { name: 'Grade 1' })).toBeInTheDocument();
+    expect(within(gradeSelect).getByRole('option', { name: 'SK' })).toBeInTheDocument();
+    // blank first option keeps the field optional
+    expect(within(gradeSelect).getByRole('option', { name: /grade \(optional\)/i })).toBeInTheDocument();
   });
 
   it('blocks an empty-name quick-add', async () => {
