@@ -476,6 +476,27 @@ describe('canAccessRoute — /api/admin/teacher-assignments — admin + welcome-
   });
 });
 
+describe('canAccessRoute — /api/admin/teachers/search — admin + welcome-team', () => {
+  it('allows admin', () => {
+    expect(canAccessRoute(admin, '/api/admin/teachers/search', 'GET')).toBe(true);
+  });
+  it('allows welcome-team (front-desk assigns teachers)', () => {
+    expect(canAccessRoute(welcomeTeam, '/api/admin/teachers/search', 'GET')).toBe(true);
+  });
+  it('denies family-manager and family-member', () => {
+    expect(canAccessRoute(manager, '/api/admin/teachers/search', 'GET')).toBe(false);
+    expect(canAccessRoute(member, '/api/admin/teachers/search', 'GET')).toBe(false);
+  });
+  it('denies a plain teacher (assignable ≠ assigner)', () => {
+    expect(canAccessRoute(teacher, '/api/admin/teachers/search', 'GET')).toBe(false);
+  });
+  it('keeps the distinct /api/admin/teacher-assignments prefix intact (welcome-team still allowed there)', () => {
+    // teacher-assignments must NOT be swallowed by the teachers/ rule and stays
+    // admin + welcome-team via its own earlier rule.
+    expect(canAccessRoute(welcomeTeam, '/api/admin/teacher-assignments', 'POST')).toBe(true);
+  });
+});
+
 describe('canAccessRoute — /api/admin/calendar — admin + welcome-team', () => {
   it('allows admin', () => {
     expect(canAccessRoute(admin, '/api/admin/calendar', 'POST')).toBe(true);

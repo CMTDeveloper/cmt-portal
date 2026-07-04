@@ -39,6 +39,12 @@ export function canAccessRoute(
   if (pathname === '/api/admin/calendar' || pathname.startsWith('/api/admin/calendar/')) {
     return isAdmin(claims) || isWelcomeTeam(claims);
   }
+  // Teacher name-search — front-desk (welcome-team) may assign teachers too.
+  // Distinct prefix from /api/admin/teacher-assignments (handled above). Must be
+  // checked before the generic admin-only /api/admin/ rule.
+  if (pathname === '/api/admin/teachers/search' || pathname.startsWith('/api/admin/teachers/')) {
+    return isAdmin(claims) || isWelcomeTeam(claims);
+  }
   if (pathname.startsWith('/api/admin/')) return isAdmin(claims);
 
   // Setu teacher portal — pages + APIs gated on the teacher capability
