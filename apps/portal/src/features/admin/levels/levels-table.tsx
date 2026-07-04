@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { toast } from '@cmt/ui';
+import { GRADE_BAND_OPTIONS } from '@cmt/shared-domain';
 import type {
   LevelDoc,
   CreateLevelInput,
@@ -44,13 +45,6 @@ function bandNeedsGrades(kind: LevelKind): boolean {
   return kind === 'level' || kind === 'pre-level';
 }
 
-function parseBand(input: string): string[] {
-  return input
-    .split(',')
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
-}
-
 // ─── Modal ───────────────────────────────────────────────────────────────────
 
 interface ModalProps {
@@ -68,8 +62,7 @@ function LevelModal({ editing, periods, programKey: propProgramKey, onClose, onS
   const [pid, setPid] = useState(editing?.pid ?? periods[0]?.pid ?? '');
   const [levelName, setLevelName] = useState(editing?.levelName ?? '');
   const [levelKind, setLevelKind] = useState<LevelKind>(editing?.levelKind ?? 'level');
-  const [gradeBand, setGradeBand] = useState((editing?.gradeBand ?? []).join(', '));
-  const [ageLabel, setAgeLabel] = useState(editing?.ageLabel ?? '');
+  const [gradeBand, setGradeBand] = useState<string[]>(editing?.gradeBand ?? []);
   const [curriculum, setCurriculum] = useState(editing?.curriculum ?? '');
   const [teacherEmail, setTeacherEmail] = useState('');
   const [enabled, setEnabled] = useState(editing?.enabled ?? true);
@@ -81,12 +74,11 @@ function LevelModal({ editing, periods, programKey: propProgramKey, onClose, onS
     const e: Record<string, string> = {};
     if (!isEdit && !pid) e.pid = 'Select a period';
     if (!levelName.trim()) e.levelName = 'Required';
-    if (!ageLabel.trim()) e.ageLabel = 'Required';
     if (!curriculum.trim()) e.curriculum = 'Required';
     if (!isEdit && teacherEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(teacherEmail.trim())) {
       e.teacherEmail = 'Enter a valid email';
     }
-    if (bandNeedsGrades(levelKind) && parseBand(gradeBand).length === 0) {
+    if (bandNeedsGrades(levelKind) && gradeBand.length === 0) {
       e.gradeBand = 'Levels and pre-levels need at least one grade';
     }
     setErrors(e);
@@ -96,7 +88,7 @@ function LevelModal({ editing, periods, programKey: propProgramKey, onClose, onS
   function handleSubmit(ev: React.FormEvent) {
     ev.preventDefault();
     if (!validate()) return;
-    const band = bandNeedsGrades(levelKind) ? parseBand(gradeBand) : [];
+    const band = bandNeedsGrades(levelKind) ? gradeBand : [];
 
     startTransition(async () => {
       try {
@@ -106,7 +98,6 @@ function LevelModal({ editing, periods, programKey: propProgramKey, onClose, onS
           if (levelName !== editing.levelName) body.levelName = levelName;
           if (levelKind !== editing.levelKind) body.levelKind = levelKind;
           if (JSON.stringify(band) !== JSON.stringify(editing.gradeBand)) body.gradeBand = band;
-          if (ageLabel !== editing.ageLabel) body.ageLabel = ageLabel;
           if (curriculum !== editing.curriculum) body.curriculum = curriculum;
           if (enabled !== editing.enabled) body.enabled = enabled;
           res = await fetch(`/api/admin/levels/${editing.levelId}`, {
@@ -123,7 +114,6 @@ function LevelModal({ editing, periods, programKey: propProgramKey, onClose, onS
             levelName,
             levelKind,
             gradeBand: band,
-            ageLabel,
             curriculum,
             enabled,
           };
@@ -163,7 +153,6 @@ function LevelModal({ editing, periods, programKey: propProgramKey, onClose, onS
           levelKind,
           order: json.order ?? editing?.order ?? 0,
           gradeBand: band,
-          ageLabel,
           curriculum,
           pid,
           periodLabel: period?.periodLabel ?? editing?.periodLabel ?? '',
@@ -226,24 +215,31 @@ function LevelModal({ editing, periods, programKey: propProgramKey, onClose, onS
               </select>
             </label>
 
-            <label style={labelStyle}>
-              Grades {bandNeedsGrades(levelKind) ? '(comma-separated)' : '(not used for this kind)'}
-              <input
-                value={gradeBand}
-                onChange={(e) => setGradeBand(e.target.value)}
-                placeholder={levelKind === 'pre-level' ? 'JK, SK' : '2, 3'}
-                disabled={!bandNeedsGrades(levelKind)}
-                style={{ ...fieldStyle, opacity: bandNeedsGrades(levelKind) ? 1 : 0.5 }}
-              />
+            <div style={labelStyle}>
+              Grades {bandNeedsGrades(levelKind) ? '' : '(not used for this kind)'}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8, opacity: bandNeedsGrades(levelKind) ? 1 : 0.5 }}>
+                {GRADE_BAND_OPTIONS.map((g) => {
+                  const checked = gradeBand.includes(g.value);
+                  return (
+                    <label key={g.value} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 400, textTransform: 'none', letterSpacing: 0, cursor: bandNeedsGrades(levelKind) ? 'pointer' : 'default', padding: '4px 10px', borderRadius: 999, border: `1px solid ${checked ? 'var(--accent)' : 'var(--line2)'}`, background: checked ? 'var(--accentSoft)' : 'var(--bg)', color: checked ? 'var(--accentDeep)' : 'var(--body-text)' }}>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={!bandNeedsGrades(levelKind)}
+                        onChange={() =>
+                          setGradeBand((prev) => (prev.includes(g.value) ? prev.filter((v) => v !== g.value) : [...prev, g.value]))
+                        }
+                        style={{ accentColor: 'var(--accent)' }}
+                      />
+                      {g.label}
+                    </label>
+                  );
+                })}
+              </div>
               {errors.gradeBand && <FieldError msg={errors.gradeBand} />}
-            </label>
+            </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <label style={labelStyle}>
-                Age / grade label
-                <input value={ageLabel} onChange={(e) => setAgeLabel(e.target.value)} placeholder="Grade 2 & 3" style={fieldStyle} />
-                {errors.ageLabel && <FieldError msg={errors.ageLabel} />}
-              </label>
               <label style={labelStyle}>
                 Curriculum
                 <input value={curriculum} onChange={(e) => setCurriculum(e.target.value)} placeholder="Hanuman" style={fieldStyle} />

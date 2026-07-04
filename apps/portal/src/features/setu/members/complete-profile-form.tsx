@@ -5,7 +5,7 @@ import { toast, SetuLogo } from '@cmt/ui';
 import {
   whatsMissingForMember,
   isMemberComplete,
-  GRADE_LADDER,
+  CHILD_GRADE_OPTIONS,
   NO_ALLERGIES,
   type MemberRequiredField,
 } from '@cmt/shared-domain';
@@ -37,15 +37,6 @@ const MONTHS: readonly { value: number; label: string }[] = [
   { value: 10, label: 'October' },
   { value: 11, label: 'November' },
   { value: 12, label: 'December' },
-];
-
-// School-grade is a PREDEFINED list (issue #18) so the grade→level mapping stays
-// clean — never free text. We store the canonical GRADE_LADDER token (matching
-// the admin grade editor + legacy bare numbers); 'Shishu' covers children younger
-// than JK, who belong to the age-based Shishu level rather than a school grade.
-const GRADE_OPTIONS: readonly { value: string; label: string }[] = [
-  { value: 'Shishu', label: 'Shishu (younger than JK)' },
-  ...GRADE_LADDER.map((g) => ({ value: g, label: /^\d/.test(g) ? `Grade ${g}` : g })),
 ];
 
 // Loose email/phone validators so the form's notion of "complete" agrees with
@@ -538,7 +529,7 @@ export function CompleteProfileForm() {
               onChange={(e) => update(member.mid, { schoolGrade: e.target.value })}
             >
               <option value="" disabled>Select grade…</option>
-              {GRADE_OPTIONS.map((g) => (
+              {CHILD_GRADE_OPTIONS.map((g) => (
                 <option key={g.value} value={g.value}>{g.label}</option>
               ))}
             </select>

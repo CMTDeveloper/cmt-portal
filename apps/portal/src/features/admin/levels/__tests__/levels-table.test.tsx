@@ -55,8 +55,7 @@ describe('LevelsTable', () => {
 
     await user.click(screen.getByText('+ New level'));
     await user.type(screen.getByPlaceholderText('Level 2'), 'Level 1');
-    await user.type(screen.getByPlaceholderText('2, 3'), '1');
-    await user.type(screen.getByPlaceholderText('Grade 2 & 3'), 'Grade 1');
+    await user.click(screen.getByRole('checkbox', { name: 'Grade 1' }));
     await user.type(screen.getByPlaceholderText('Hanuman'), 'Krishna Krishna');
     await user.type(screen.getByPlaceholderText('teacher@example.com'), 'asha@example.com');
     await user.click(screen.getByText('Create level'));
@@ -83,7 +82,6 @@ describe('LevelsTable', () => {
     render(<LevelsTable initialLevels={[]} periods={PERIODS} />);
     await user.click(screen.getByText('+ New level'));
     await user.type(screen.getByPlaceholderText('Level 2'), 'Level 1');
-    await user.type(screen.getByPlaceholderText('Grade 2 & 3'), 'Grade 1');
     await user.type(screen.getByPlaceholderText('Hanuman'), 'X');
     await user.click(screen.getByText('Create level'));
     expect(screen.getByText(/need at least one grade/i)).toBeTruthy();

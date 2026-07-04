@@ -104,8 +104,7 @@ describe('LevelsTable — program filter', () => {
 
     await user.click(screen.getByText('+ New level'));
     await user.type(screen.getByPlaceholderText('Level 2'), 'Level 1');
-    await user.type(screen.getByPlaceholderText('2, 3'), '1');
-    await user.type(screen.getByPlaceholderText('Grade 2 & 3'), 'Grade 1');
+    await user.click(screen.getByRole('checkbox', { name: 'Grade 1' }));
     await user.type(screen.getByPlaceholderText('Hanuman'), 'Basics');
     await user.click(screen.getByText('Create level'));
 
