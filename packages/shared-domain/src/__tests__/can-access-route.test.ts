@@ -476,6 +476,31 @@ describe('canAccessRoute — /api/admin/teacher-assignments — admin + welcome-
   });
 });
 
+describe('canAccessRoute — /api/admin/levels/[id]/teachers — admin + welcome-team', () => {
+  const path = '/api/admin/levels/brampton-level-2-bv-brampton-2025-26/teachers';
+  it('allows admin (POST + DELETE)', () => {
+    expect(canAccessRoute(admin, path, 'POST')).toBe(true);
+    expect(canAccessRoute(admin, path, 'DELETE')).toBe(true);
+  });
+  it('allows welcome-team (front-desk assigns teachers per level)', () => {
+    expect(canAccessRoute(welcomeTeam, path, 'POST')).toBe(true);
+    expect(canAccessRoute(welcomeTeam, path, 'DELETE')).toBe(true);
+  });
+  it('denies family-manager and family-member', () => {
+    expect(canAccessRoute(manager, path, 'POST')).toBe(false);
+    expect(canAccessRoute(member, path, 'POST')).toBe(false);
+  });
+  it('denies a plain teacher (assignable ≠ assigner)', () => {
+    expect(canAccessRoute(teacher, path, 'POST')).toBe(false);
+  });
+  it('keeps level CRUD admin-only — welcome-team denied on /api/admin/levels + /api/admin/levels/[id]', () => {
+    // The /teachers sub-path rule must NOT open up level create/edit.
+    expect(canAccessRoute(welcomeTeam, '/api/admin/levels', 'POST')).toBe(false);
+    expect(canAccessRoute(welcomeTeam, '/api/admin/levels/brampton-level-2-bv-brampton-2025-26', 'PATCH')).toBe(false);
+    expect(canAccessRoute(admin, '/api/admin/levels/brampton-level-2-bv-brampton-2025-26', 'PATCH')).toBe(true);
+  });
+});
+
 describe('canAccessRoute — /api/admin/teachers/search — admin + welcome-team', () => {
   it('allows admin', () => {
     expect(canAccessRoute(admin, '/api/admin/teachers/search', 'GET')).toBe(true);

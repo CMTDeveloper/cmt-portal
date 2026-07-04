@@ -45,6 +45,11 @@ export function canAccessRoute(
   if (pathname === '/api/admin/teachers/search' || pathname.startsWith('/api/admin/teachers/')) {
     return isAdmin(claims) || isWelcomeTeam(claims);
   }
+  // Per-level teacher add/remove — admin + welcome-team (front-desk). Only the
+  // `/teachers` sub-path opens up; level CRUD stays admin-only via the catch-all.
+  if (/^\/api\/admin\/levels\/[^/]+\/teachers\/?$/.test(pathname)) {
+    return isAdmin(claims) || isWelcomeTeam(claims);
+  }
   if (pathname.startsWith('/api/admin/')) return isAdmin(claims);
 
   // Setu teacher portal — pages + APIs gated on the teacher capability
