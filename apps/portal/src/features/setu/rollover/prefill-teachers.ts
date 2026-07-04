@@ -1,4 +1,5 @@
 import { FieldValue } from '@cmt/firebase-shared/admin/firestore';
+import { assignTeacher, getTeacherLevelIds } from '@/features/setu/teacher/assignments';
 import { balaViharSourceOidsForYear, targetOidOf } from './school-year';
 
 type Db = FirebaseFirestore.Firestore;
@@ -59,8 +60,21 @@ export async function prefillTeachers(
 
     filled.push(targetId);
     if (!args.dryRun) {
+      // Sync BOTH sources of truth. assignTeacher writes each ref's
+      // `teacherAssignments/{ref}.levelIds` (drives the `teacher` capability +
+      // the admin "levels & teachers" pills) AND arrayUnions the ref onto
+      // `levels/{targetId}.teacherRefs` (drives getMyLevels). A plain
+      // `targetRef.set({ teacherRefs })` updated only the level, leaving the
+      // assignment doc stale after rollover → an empty teacher list. Union
+      // per ref so we never drop the ref's OTHER (e.g. source-year) levels.
+      for (const ref of refs) {
+        const next = [...new Set([...(await getTeacherLevelIds(ref)), targetId])];
+        await assignTeacher({ ref, levelIds: next, byUid: args.actorMid });
+      }
+      // assignTeacher doesn't stamp the level's own audit fields; keep the
+      // `updatedAt/updatedBy` the admin levels screen renders for this carry.
       await targetRef.set(
-        { teacherRefs: refs, updatedAt: FieldValue.serverTimestamp(), updatedBy: args.actorMid },
+        { updatedAt: FieldValue.serverTimestamp(), updatedBy: args.actorMid },
         { merge: true },
       );
     }
