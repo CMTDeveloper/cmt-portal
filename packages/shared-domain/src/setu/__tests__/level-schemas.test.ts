@@ -4,6 +4,7 @@ import {
   UpdateLevelSchema,
   LevelDocSchema,
   levelSlug,
+  levelGradeSummary,
   memberMatchesLevel,
   normalizeGrade,
   LEVEL_KINDS,
@@ -164,6 +165,35 @@ describe('levelSlug', () => {
     expect(levelSlug('Pre-Level A')).toBe('pre-level-a');
     expect(levelSlug('Shishu Vihar')).toBe('shishu-vihar');
     expect(levelSlug('Parents')).toBe('parents');
+  });
+});
+
+// ── levelGradeSummary ────────────────────────────────────────────────────────────
+
+describe('levelGradeSummary — reproduces the table AGE/GRADE column', () => {
+  it('shishu → fixed age range', () => {
+    expect(levelGradeSummary({ levelKind: 'shishu', gradeBand: [] })).toBe('1.5 to 4 years');
+  });
+  it('parents → All Adults', () => {
+    expect(levelGradeSummary({ levelKind: 'parents', gradeBand: [] })).toBe('All Adults');
+  });
+  it('pre-level [JK,SK] → "JK / SK"', () => {
+    expect(levelGradeSummary({ levelKind: 'pre-level', gradeBand: ['JK', 'SK'] })).toBe('JK / SK');
+  });
+  it('level single grade → "Gr 1"', () => {
+    expect(levelGradeSummary({ levelKind: 'level', gradeBand: ['1'] })).toBe('Gr 1');
+  });
+  it('level contiguous pair → "Gr 2 & 3"', () => {
+    expect(levelGradeSummary({ levelKind: 'level', gradeBand: ['2', '3'] })).toBe('Gr 2 & 3');
+  });
+  it('level contiguous run of 3+ → "Gr 9 to 12"', () => {
+    expect(levelGradeSummary({ levelKind: 'level', gradeBand: ['9', '10', '11', '12'] })).toBe('Gr 9 to 12');
+  });
+  it('level non-contiguous → comma list "Gr 2, 5"', () => {
+    expect(levelGradeSummary({ levelKind: 'level', gradeBand: ['2', '5'] })).toBe('Gr 2, 5');
+  });
+  it('level with an empty band → "Grade" (defensive, never happens for a valid level)', () => {
+    expect(levelGradeSummary({ levelKind: 'level', gradeBand: [] })).toBe('Grade');
   });
 });
 

@@ -19,6 +19,7 @@ export * from './schemas/disclaimers';
 export * from './roster';
 export * from './reports';
 export * from './grade-ladder';
+export * from './grades';
 export * from './set-grade';
 export * from './prasad';
 export * from './prasad-engine';

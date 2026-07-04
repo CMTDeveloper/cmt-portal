@@ -25,7 +25,7 @@ export const LevelDocSchema = z.object({
   levelKind: z.enum(LEVEL_KINDS),
   order: z.number().int().min(0),
   gradeBand: z.array(z.string()), // school grades this level covers; [] for shishu/parents
-  ageLabel: z.string().min(1),
+  ageLabel: z.string().min(1).optional(),
   curriculum: z.string().min(1),
   pid: z.string().min(1),
   periodLabel: z.string().min(1),
@@ -54,7 +54,7 @@ export const CreateLevelSchema = z
     levelKind: z.enum(LEVEL_KINDS),
     order: z.number().int().min(0).optional(),
     gradeBand: z.array(z.string()).default([]),
-    ageLabel: z.string().min(1),
+    ageLabel: z.string().min(1).optional(),
     curriculum: z.string().min(1),
     enabled: z.boolean().default(true),
     teacherEmail: z.string().trim().email().optional(),
@@ -105,6 +105,34 @@ export function normalizeGrade(grade: string): string {
   const num = /^(\d{1,2})$/.exec(cleaned);
   if (num) return num[1]!;
   return cleaned.replace(/\s+/g, ' ');
+}
+
+// Ladder order for grade-band summaries (JK, SK, 1..12) — inlined to avoid a
+// cycle with grade-ladder.ts (which imports from this file).
+const GRADE_ORDER = ['JK', 'SK', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'];
+
+/**
+ * Human display label for a level, derived from kind + gradeBand — reproduces the
+ * owner's Bala Vihar AGE/GRADE column and replaces the removed free-text ageLabel.
+ *   shishu → "1.5 to 4 years"   parents → "All Adults"
+ *   pre-level → "JK / SK"       level → "Gr 1" | "Gr 2 & 3" | "Gr 9 to 12" | "Gr 2, 5"
+ */
+export function levelGradeSummary(level: Pick<LevelDoc, 'levelKind' | 'gradeBand'>): string {
+  if (level.levelKind === 'shishu') return '1.5 to 4 years';
+  if (level.levelKind === 'parents') return 'All Adults';
+
+  const band = level.gradeBand;
+  if (level.levelKind === 'pre-level') return band.join(' / ') || 'JK / SK';
+
+  // level kind → "Gr …"
+  if (band.length === 0) return 'Grade';
+  const ordered = [...band].sort((a, b) => GRADE_ORDER.indexOf(a) - GRADE_ORDER.indexOf(b));
+  // Contiguous run in ladder order → range; a pair → "&"; else comma list.
+  const idxs = ordered.map((g) => GRADE_ORDER.indexOf(g));
+  const contiguous = idxs.every((v, i) => i === 0 || v === idxs[i - 1]! + 1) && idxs.every((v) => v >= 0);
+  if (contiguous && ordered.length >= 3) return `Gr ${ordered[0]} to ${ordered[ordered.length - 1]}`;
+  if (contiguous && ordered.length === 2) return `Gr ${ordered[0]} & ${ordered[1]}`;
+  return `Gr ${ordered.join(', ')}`;
 }
 
 /** Whole months between a 'YYYY-MM' birth month and a reference date. */
