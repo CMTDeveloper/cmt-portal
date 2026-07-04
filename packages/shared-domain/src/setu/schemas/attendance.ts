@@ -7,6 +7,12 @@ import { z } from 'zod';
 export const SETU_ATTENDANCE_STATUSES = ['present', 'absent', 'late'] as const;
 export type SetuAttendanceStatus = (typeof SETU_ATTENDANCE_STATUSES)[number];
 
+// Statuses a teacher can WRITE going forward — binary Present/Absent (Late is
+// retired). AttendanceEventDoc.status stays the wider SETU_ATTENDANCE_STATUSES
+// so historical 'late' events remain valid on read.
+export const SETU_ATTENDANCE_WRITE_STATUSES = ['present', 'absent'] as const;
+export type SetuAttendanceWriteStatus = (typeof SETU_ATTENDANCE_WRITE_STATUSES)[number];
+
 export type RosterStatus = SetuAttendanceStatus | 'unaccounted';
 
 const YMD = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD');
@@ -37,7 +43,7 @@ export type AttendanceEventDoc = z.infer<typeof AttendanceEventDocSchema>;
 export const SaveAttendanceSchema = z.object({
   levelId: z.string().min(1),
   date: YMD,
-  marks: z.record(z.string().min(1), z.enum(SETU_ATTENDANCE_STATUSES)),
+  marks: z.record(z.string().min(1), z.enum(SETU_ATTENDANCE_WRITE_STATUSES)),
 });
 
 export type SaveAttendanceInput = z.infer<typeof SaveAttendanceSchema>;
@@ -47,7 +53,7 @@ export const MarkGuestSchema = z.object({
   levelId: z.string().min(1),
   date: YMD,
   mid: z.string().min(1),
-  status: z.enum(SETU_ATTENDANCE_STATUSES).default('present'),
+  status: z.enum(SETU_ATTENDANCE_WRITE_STATUSES).default('present'),
 });
 
 export type MarkGuestInput = z.infer<typeof MarkGuestSchema>;

@@ -5,6 +5,7 @@ import {
   MarkGuestSchema,
   AddStudentSchema,
   attendanceAid,
+  SETU_ATTENDANCE_WRITE_STATUSES,
 } from '../schemas/attendance';
 
 describe('attendanceAid', () => {
@@ -50,7 +51,7 @@ describe('SaveAttendanceSchema', () => {
       SaveAttendanceSchema.safeParse({
         levelId: 'lvl',
         date: '2025-09-07',
-        marks: { 'CMT-A-02': 'present', 'CMT-A-03': 'absent', 'CMT-B-02': 'late' },
+        marks: { 'CMT-A-02': 'present', 'CMT-A-03': 'absent', 'CMT-B-02': 'present' },
       }).success,
     ).toBe(true);
   });
@@ -74,7 +75,7 @@ describe('MarkGuestSchema', () => {
     if (r.success) expect(r.data.status).toBe('present');
   });
   it('accepts an explicit status', () => {
-    expect(MarkGuestSchema.safeParse({ levelId: 'lvl', date: '2025-09-07', mid: 'CMT-Z-09', status: 'late' }).success).toBe(true);
+    expect(MarkGuestSchema.safeParse({ levelId: 'lvl', date: '2025-09-07', mid: 'CMT-Z-09', status: 'absent' }).success).toBe(true);
   });
   it('rejects a missing mid', () => {
     expect(MarkGuestSchema.safeParse({ levelId: 'lvl', date: '2025-09-07' }).success).toBe(false);
@@ -97,5 +98,25 @@ describe('AddStudentSchema', () => {
   });
   it('rejects a missing firstName', () => {
     expect(AddStudentSchema.safeParse({ ...base, firstName: '' }).success).toBe(false);
+  });
+});
+
+describe('attendance write statuses are binary', () => {
+  it('SETU_ATTENDANCE_WRITE_STATUSES is present/absent only', () => {
+    expect([...SETU_ATTENDANCE_WRITE_STATUSES]).toEqual(['present', 'absent']);
+  });
+  it('SaveAttendanceSchema rejects late marks', () => {
+    const r = SaveAttendanceSchema.safeParse({ levelId: 'l', date: '2026-01-04', marks: { m1: 'late' } });
+    expect(r.success).toBe(false);
+  });
+  it('SaveAttendanceSchema accepts present/absent', () => {
+    expect(SaveAttendanceSchema.safeParse({ levelId: 'l', date: '2026-01-04', marks: { m1: 'present', m2: 'absent' } }).success).toBe(true);
+  });
+  it('MarkGuestSchema rejects late', () => {
+    expect(MarkGuestSchema.safeParse({ levelId: 'l', date: '2026-01-04', mid: 'm', status: 'late' }).success).toBe(false);
+  });
+  it('AttendanceEventDocSchema still READS a historical late event', () => {
+    const doc = { aid: 'a', levelId: 'l', mid: 'm', fid: 'f', pid: 'p', date: '2025-11-02', status: 'late', isGuest: false, markedByUid: 'u', markedByMid: null, markedAt: new Date(), updatedAt: new Date() };
+    expect(AttendanceEventDocSchema.safeParse(doc).success).toBe(true);
   });
 });
