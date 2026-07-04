@@ -6,6 +6,7 @@ import {
   assertWritableYear,
   PastYearWriteError,
 } from '@/features/setu/rollover/assert-writable-year';
+import { findNameConflict, normalizeLevelName } from '@/features/setu/teacher/level-name-conflict';
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ levelId: string }> }) {
   const session = readSessionFromHeaders(req);
@@ -44,6 +45,24 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ levelI
       return NextResponse.json({ error: 'past-year', year: e.year, liveYear: e.liveYear }, { status: 409 });
     }
     throw e;
+  }
+
+  // A rename that changes the normalized name must not collide with a sibling in
+  // the same (location, period). The doc id is frozen at create, so renaming to a
+  // sibling's name would otherwise produce two levels showing the same name.
+  if (
+    data.levelName !== undefined &&
+    normalizeLevelName(data.levelName) !== normalizeLevelName(existing.levelName)
+  ) {
+    const conflict = await findNameConflict(db, {
+      location: existing.location ?? '',
+      pid: existing.pid,
+      normalizedName: normalizeLevelName(data.levelName),
+      exceptLevelId: levelId,
+    });
+    if (conflict) {
+      return NextResponse.json({ error: 'level-conflict', levelId: conflict }, { status: 409 });
+    }
   }
 
   const effectiveKind = data.levelKind ?? existing.levelKind;

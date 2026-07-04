@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mockGet = vi.fn();
+const mockWhereGet = vi.fn();
 const mockCreate = vi.fn();
 const mockPeriodGet = vi.fn();
 const mockCollection = vi.fn();
@@ -77,10 +78,12 @@ beforeEach(() => {
     return {
       orderBy: () => orderByChain,
       get: mockGet,
+      where: () => ({ get: mockWhereGet }),
       doc: vi.fn(() => ({ create: mockCreate, get: mockGet })),
     };
   });
   mockGet.mockResolvedValue({ docs: [] });
+  mockWhereGet.mockResolvedValue({ docs: [] });
   mockCreate.mockResolvedValue(undefined);
   mockPeriodGet.mockResolvedValue({ exists: true, data: () => ({ periodLabel: '2025-26' }) });
   mockGetSchoolYearConfig.mockResolvedValue({ currentYear: '2025-26' });
@@ -261,5 +264,54 @@ describe('POST /api/admin/levels', () => {
     const res = await POST(makeRequest('POST', validBody, 'uid-admin'));
     expect(res.status).toBe(201);
     expect(mockCreate).toHaveBeenCalled();
+  });
+
+  it('returns 409 level-conflict when a name normalizes-equal within the same location+pid', async () => {
+    // An existing Brampton "Level 2" in this pid; POST "  LEVEL   2 " (same
+    // normalized name, different case/spacing) → conflict on the existing id.
+    mockWhereGet.mockResolvedValue({
+      docs: [
+        {
+          id: 'brampton-level-2-bv-brampton-2025-26',
+          data: () => ({ location: 'Brampton', levelName: 'Level 2' }),
+        },
+      ],
+    });
+    const { POST } = await import('../route');
+    const res = await POST(makeRequest('POST', { ...validBody, levelName: '  LEVEL   2 ' }, 'uid-admin'));
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({
+      error: 'level-conflict',
+      levelId: 'brampton-level-2-bv-brampton-2025-26',
+    });
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it('allows the same name at a DIFFERENT location (201)', async () => {
+    // A Brampton "Level 2" exists; creating a Scarborough "Level 2" is fine.
+    mockWhereGet.mockResolvedValue({
+      docs: [
+        {
+          id: 'brampton-level-2-bv-brampton-2025-26',
+          data: () => ({ location: 'Brampton', levelName: 'Level 2' }),
+        },
+      ],
+    });
+    const { POST } = await import('../route');
+    const res = await POST(
+      makeRequest('POST', { ...validBody, location: 'Scarborough', levelName: 'Level 2' }, 'uid-admin'),
+    );
+    expect(res.status).toBe(201);
+    expect(mockCreate).toHaveBeenCalled();
+  });
+
+  it('omits ageLabel from the create write when absent (never writes undefined)', async () => {
+    const noAge: Record<string, unknown> = { ...validBody };
+    delete noAge.ageLabel;
+    const { POST } = await import('../route');
+    const res = await POST(makeRequest('POST', noAge, 'uid-admin'));
+    expect(res.status).toBe(201);
+    const doc = mockCreate.mock.calls[0]![0] as Record<string, unknown>;
+    expect('ageLabel' in doc).toBe(false);
   });
 });

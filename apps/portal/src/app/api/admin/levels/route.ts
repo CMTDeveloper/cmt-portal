@@ -3,6 +3,7 @@ import { portalFirestore, FieldValue, Timestamp } from '@cmt/firebase-shared/adm
 import { CreateLevelSchema, isAdmin } from '@cmt/shared-domain';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
 import { levelIdFor } from '@/features/setu/teacher/levels';
+import { findNameConflict, normalizeLevelName } from '@/features/setu/teacher/level-name-conflict';
 import { assignTeacher, getTeacherLevelIds } from '@/features/setu/teacher/assignments';
 import {
   assertWritableYear,
@@ -101,6 +102,18 @@ export async function POST(req: Request) {
     throw e;
   }
 
+  // Enforce normalized-name uniqueness within (location, period). The frozen
+  // doc id only guards an exact-id clash; two levels can still share a display
+  // name after a rename. Single-field pid read — no composite index.
+  const conflict = await findNameConflict(db, {
+    location: data.location,
+    pid: data.pid,
+    normalizedName: normalizeLevelName(data.levelName),
+  });
+  if (conflict) {
+    return NextResponse.json({ error: 'level-conflict', levelId: conflict }, { status: 409 });
+  }
+
   const order =
     data.order ??
     (await nextLevelOrder(db, {
@@ -134,7 +147,9 @@ export async function POST(req: Request) {
       levelKind: data.levelKind,
       order,
       gradeBand: data.gradeBand,
-      ageLabel: data.ageLabel,
+      // ageLabel is optional; never write `undefined` (Firestore rejects it and
+      // exactOptionalPropertyTypes forbids the assignment).
+      ...(data.ageLabel ? { ageLabel: data.ageLabel } : {}),
       curriculum: data.curriculum,
       pid: data.pid,
       periodLabel,

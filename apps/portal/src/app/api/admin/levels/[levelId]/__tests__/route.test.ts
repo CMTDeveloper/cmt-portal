@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mockGet = vi.fn();
+const mockWhereGet = vi.fn();
 const mockUpdate = vi.fn();
 const mockDoc = vi.fn();
 const mockCollection = vi.fn();
@@ -28,6 +29,9 @@ function makeRequest(method: string, body?: unknown, uid?: string, role = 'admin
 
 const EXISTING = {
   levelId: 'brampton-level-2-bv-brampton-2025-26',
+  levelName: 'Level 2',
+  location: 'Brampton',
+  pid: 'bv-brampton-2025-26',
   levelKind: 'level',
   gradeBand: ['Gr 2', 'Gr 3'],
   periodLabel: '2025-26',
@@ -40,8 +44,9 @@ const params = (levelId = 'brampton-level-2-bv-brampton-2025-26') => ({
 beforeEach(() => {
   vi.clearAllMocks();
   mockDoc.mockReturnValue({ get: mockGet, update: mockUpdate });
-  mockCollection.mockReturnValue({ doc: mockDoc });
+  mockCollection.mockReturnValue({ doc: mockDoc, where: () => ({ get: mockWhereGet }) });
   mockGet.mockResolvedValue({ exists: true, data: () => EXISTING });
+  mockWhereGet.mockResolvedValue({ docs: [] });
   mockUpdate.mockResolvedValue(undefined);
   mockGetSchoolYearConfig.mockResolvedValue({ currentYear: '2025-26' });
 });
@@ -107,5 +112,40 @@ describe('PATCH /api/admin/levels/[levelId]', () => {
     const res = await PATCH(makeRequest('PATCH', { enabled: false }, 'uid-admin'), params());
     expect(res.status).toBe(200);
     expect(mockUpdate).toHaveBeenCalled();
+  });
+
+  it('returns 409 level-conflict when a rename collides with a sibling name in the same location+pid', async () => {
+    // The pid holds this level (Level 2) plus a sibling "Level 3"; renaming
+    // Level 2 → "Level 3" would produce two levels showing the same name.
+    mockWhereGet.mockResolvedValue({
+      docs: [
+        { id: EXISTING.levelId, data: () => ({ location: 'Brampton', levelName: 'Level 2' }) },
+        {
+          id: 'brampton-level-3-bv-brampton-2025-26',
+          data: () => ({ location: 'Brampton', levelName: 'Level 3' }),
+        },
+      ],
+    });
+    const { PATCH } = await import('../route');
+    const res = await PATCH(makeRequest('PATCH', { levelName: 'Level 3' }, 'uid-admin'), params());
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({
+      error: 'level-conflict',
+      levelId: 'brampton-level-3-bv-brampton-2025-26',
+    });
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it('renames to a fresh unique name (200) — self is skipped via exceptLevelId', async () => {
+    // The where read returns only self; renaming to a brand-new name must not
+    // self-conflict.
+    mockWhereGet.mockResolvedValue({
+      docs: [{ id: EXISTING.levelId, data: () => ({ location: 'Brampton', levelName: 'Level 2' }) }],
+    });
+    const { PATCH } = await import('../route');
+    const res = await PATCH(makeRequest('PATCH', { levelName: 'Level 9' }, 'uid-admin'), params());
+    expect(res.status).toBe(200);
+    const update = mockUpdate.mock.calls[0]![0] as Record<string, unknown>;
+    expect(update.levelName).toBe('Level 9');
   });
 });
