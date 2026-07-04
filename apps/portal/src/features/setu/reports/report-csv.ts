@@ -18,9 +18,9 @@ export function enrollmentReportToCsv(r: EnrollmentReport): string {
 }
 
 export function attendanceReportToCsv(r: AttendanceReport): string {
-  return table(['scope', 'key', 'label', 'present', 'absent', 'late', 'total', 'rate'], [
-    ...r.byLevel.map((l) => ['level', l.levelId, l.levelName, l.present, l.absent, l.late, l.total, l.rate.toFixed(3)]),
-    ...r.byProgram.map((p) => ['program', p.programKey, p.programLabel, p.present, p.absent, p.late, p.total, p.rate.toFixed(3)]),
+  return table(['scope', 'key', 'label', 'present', 'absent', 'total', 'rate'], [
+    ...r.byLevel.map((l) => ['level', l.levelId, l.levelName, l.present, l.absent, l.total, l.rate.toFixed(3)]),
+    ...r.byProgram.map((p) => ['program', p.programKey, p.programLabel, p.present, p.absent, p.total, p.rate.toFixed(3)]),
   ]);
 }
 

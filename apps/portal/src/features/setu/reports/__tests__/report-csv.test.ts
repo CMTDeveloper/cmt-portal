@@ -47,16 +47,16 @@ describe('attendanceReportToCsv', () => {
       to: '2026-06-09',
       totalEvents: 0,
     };
-    expect(attendanceReportToCsv(r)).toBe('scope,key,label,present,absent,late,total,rate');
+    expect(attendanceReportToCsv(r)).toBe('scope,key,label,present,absent,total,rate');
   });
 
   it('emits one row per byLevel and byProgram entry in column order', () => {
     const r: AttendanceReport = {
       byLevel: [
-        { levelId: 'g3', levelName: 'Grade 3', programKey: 'bala-vihar', present: 9, absent: 1, late: 2, total: 12, rate: 0.9167 },
+        { levelId: 'g3', levelName: 'Grade 3', programKey: 'bala-vihar', present: 9, absent: 1, total: 12, rate: 0.9167 },
       ],
       byProgram: [
-        { programKey: 'bala-vihar', programLabel: 'Bala Vihar', present: 9, absent: 1, late: 2, total: 12, rate: 0.9167 },
+        { programKey: 'bala-vihar', programLabel: 'Bala Vihar', present: 9, absent: 1, total: 12, rate: 0.9167 },
       ],
       from: '2026-01-01',
       to: '2026-06-09',
@@ -64,15 +64,15 @@ describe('attendanceReportToCsv', () => {
     };
     const lines = attendanceReportToCsv(r).split('\n');
     expect(lines).toHaveLength(3); // header + 2
-    expect(lines[0]).toBe('scope,key,label,present,absent,late,total,rate');
-    expect(lines[1]).toBe('level,g3,Grade 3,9,1,2,12,0.917');
-    expect(lines[2]).toBe('program,bala-vihar,Bala Vihar,9,1,2,12,0.917');
+    expect(lines[0]).toBe('scope,key,label,present,absent,total,rate');
+    expect(lines[1]).toBe('level,g3,Grade 3,9,1,12,0.917');
+    expect(lines[2]).toBe('program,bala-vihar,Bala Vihar,9,1,12,0.917');
   });
 
   it('escapes RFC-4180 values with a comma and double-quote', () => {
     const r: AttendanceReport = {
       byLevel: [
-        { levelId: 'g3', levelName: 'Grade 3, "G3"', programKey: 'bala-vihar', present: 1, absent: 0, late: 0, total: 1, rate: 1 },
+        { levelId: 'g3', levelName: 'Grade 3, "G3"', programKey: 'bala-vihar', present: 1, absent: 0, total: 1, rate: 1 },
       ],
       byProgram: [],
       from: '2026-01-01',

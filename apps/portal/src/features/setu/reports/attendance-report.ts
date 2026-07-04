@@ -2,8 +2,8 @@ import 'server-only';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import type { AttendanceReport, ReportQuery } from '@cmt/shared-domain';
 
-type Tally = { present: number; absent: number; late: number };
-const zero = (): Tally => ({ present: 0, absent: 0, late: 0 });
+type Tally = { present: number; absent: number };
+const zero = (): Tally => ({ present: 0, absent: 0 });
 
 // Attendance is sourced from levels (which carry programKey but no display
 // label), so derive a readable label from the slug: "bala-vihar" → "Bala Vihar".
@@ -17,8 +17,8 @@ function titleCaseProgram(programKey: string): string {
     .join(' ');
 }
 function rate(t: Tally): { total: number; rate: number } {
-  const total = t.present + t.absent + t.late;
-  return { total, rate: total === 0 ? 0 : (t.present + t.late) / total };
+  const total = t.present + t.absent;
+  return { total, rate: total === 0 ? 0 : t.present / total };
 }
 
 export async function buildAttendanceReport(params: ReportQuery & { from: string; to: string }): Promise<AttendanceReport> {
@@ -42,7 +42,10 @@ export async function buildAttendanceReport(params: ReportQuery & { from: string
   for (const d of evSnap.docs) {
     const e = d.data() as { levelId?: unknown; status?: unknown };
     const levelId = String(e.levelId ?? '');
-    const status = e.status === 'present' || e.status === 'absent' || e.status === 'late' ? e.status : null;
+    // Historical `late` marks (pre-Slice-3) fold INTO present — reports are now
+    // binary Present/Absent. New attendance data no longer records `late`.
+    const raw = e.status;
+    const status = raw === 'present' || raw === 'late' ? 'present' : raw === 'absent' ? 'absent' : null;
     if (!levelId || !status) continue;
     const programKey = levelMeta.get(levelId)?.programKey ?? '';
     if (params.program && programKey !== params.program) continue;

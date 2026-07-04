@@ -45,9 +45,8 @@ export type EnrollmentReport = z.infer<typeof EnrollmentReportSchema>;
 const AttendanceRowSchema = z.object({
   present: z.number().int().nonnegative(),
   absent: z.number().int().nonnegative(),
-  late: z.number().int().nonnegative(),
   total: z.number().int().nonnegative(),
-  rate: z.number().min(0).max(1), // (present + late) / total
+  rate: z.number().min(0).max(1), // present / total
 });
 export const AttendanceReportSchema = z.object({
   byLevel: z.array(AttendanceRowSchema.extend({ levelId: z.string(), levelName: z.string(), programKey: z.string() })),

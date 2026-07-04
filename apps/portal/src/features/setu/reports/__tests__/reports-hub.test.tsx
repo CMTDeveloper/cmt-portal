@@ -29,11 +29,11 @@ const enrollment: EnrollmentReport = {
 
 const attendance: AttendanceReport = {
   byLevel: [
-    { levelId: 'l1', levelName: 'Level 1', programKey: 'bala-vihar', present: 8, absent: 1, late: 1, total: 10, rate: 0.9 },
-    { levelId: 'l2', levelName: 'Level 2', programKey: 'bala-vihar', present: 5, absent: 2, late: 0, total: 7, rate: 0.714 },
+    { levelId: 'l1', levelName: 'Level 1', programKey: 'bala-vihar', present: 9, absent: 1, total: 10, rate: 0.9 },
+    { levelId: 'l2', levelName: 'Level 2', programKey: 'bala-vihar', present: 5, absent: 2, total: 7, rate: 0.714 },
   ],
   byProgram: [
-    { programKey: 'bala-vihar', programLabel: 'bala-vihar', present: 13, absent: 3, late: 1, total: 17, rate: 0.823 },
+    { programKey: 'bala-vihar', programLabel: 'bala-vihar', present: 14, absent: 3, total: 17, rate: 0.823 },
   ],
   from: '2025-06-09',
   to: '2026-06-09',

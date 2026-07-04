@@ -299,7 +299,6 @@ function AttendanceCard({ year }: { year?: string }) {
   const attCols: Col[] = [
     { key: 'present', label: 'Present', numeric: true },
     { key: 'absent', label: 'Absent', numeric: true },
-    { key: 'late', label: 'Late', numeric: true },
     { key: 'total', label: 'Total', numeric: true },
     { key: 'rate', label: 'Rate', numeric: true, render: (r) => <RateCell rate={r['rate'] as number} /> },
   ];
@@ -309,7 +308,7 @@ function AttendanceCard({ year }: { year?: string }) {
       testId="report-card-attendance"
       icon={<SetuIcon.check />}
       title="Attendance"
-      subtitle="Present / absent / late rollup over a date range."
+      subtitle="Present / absent rollup over a date range."
       headerAside={
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <DateInput id="att-from" label="From" value={from} onChange={setFrom} />
@@ -328,12 +327,12 @@ function AttendanceCard({ year }: { year?: string }) {
           <SummaryTable
             caption="By level"
             cols={[{ key: 'levelName', label: 'Level' }, ...attCols]}
-            rows={data.byLevel.map((l) => ({ __key: l.levelId, levelName: l.levelName, present: l.present, absent: l.absent, late: l.late, total: l.total, rate: l.rate }))}
+            rows={data.byLevel.map((l) => ({ __key: l.levelId, levelName: l.levelName, present: l.present, absent: l.absent, total: l.total, rate: l.rate }))}
           />
           <SummaryTable
             caption="By program"
             cols={[{ key: 'programLabel', label: 'Program' }, ...attCols]}
-            rows={data.byProgram.map((p) => ({ __key: p.programKey, programLabel: p.programLabel, present: p.present, absent: p.absent, late: p.late, total: p.total, rate: p.rate }))}
+            rows={data.byProgram.map((p) => ({ __key: p.programKey, programLabel: p.programLabel, present: p.present, absent: p.absent, total: p.total, rate: p.rate }))}
           />
           <ReportExportButton kind="attendance" filename="attendance-summary" params={{ from, to }} {...(year ? { year } : {})} />
         </>

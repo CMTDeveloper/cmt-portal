@@ -20,11 +20,13 @@ function makeDb(events: SeedDoc[], levels: SeedDoc[]) {
 beforeEach(() => mockFs.mockReset());
 
 describe('buildAttendanceReport', () => {
-  it('rolls up present/absent/late per level + per program (N=2 levels, N=2 statuses) with correct rate', async () => {
+  it('folds historical late into present, drops the late column (N=2 levels, 2 present + 1 absent + 1 late)', async () => {
     mockFs.mockReturnValue(makeDb([
       { levelId: 'l1', pid: 'p1', status: 'present', date: '2026-03-01' },
-      { levelId: 'l1', pid: 'p1', status: 'late', date: '2026-03-08' },
+      { levelId: 'l1', pid: 'p1', status: 'present', date: '2026-03-08' },
       { levelId: 'l1', pid: 'p1', status: 'absent', date: '2026-03-15' },
+      // Historical `late` mark (pre-Slice-3) — folds INTO present now.
+      { levelId: 'l1', pid: 'p1', status: 'late', date: '2026-03-22' },
       { levelId: 'l2', pid: 'p1', status: 'present', date: '2026-03-01' },
     ], [
       { levelId: 'l1', levelName: 'Level 1', programKey: 'bala-vihar' },
@@ -33,11 +35,16 @@ describe('buildAttendanceReport', () => {
 
     const r = await buildAttendanceReport({ format: 'json', from: '2026-01-01', to: '2026-12-31' });
     const l1 = r.byLevel.find((x) => x.levelId === 'l1')!;
-    expect([l1.present, l1.absent, l1.late, l1.total]).toEqual([1, 1, 1, 3]);
-    expect(l1.rate).toBeCloseTo(2 / 3); // (present+late)/total
+    expect(l1.present).toBe(3); // 2 present + 1 folded late
+    expect(l1.absent).toBe(1);
+    expect(l1.total).toBe(4);
+    expect(l1.rate).toBeCloseTo(0.75); // present / total
+    expect(l1).not.toHaveProperty('late'); // no separate late column
     const bv = r.byProgram.find((x) => x.programKey === 'bala-vihar')!;
-    expect(bv.total).toBe(4);
-    expect(r.totalEvents).toBe(4);
+    expect(bv.total).toBe(5);
+    expect(bv.present).toBe(4);
+    expect(bv).not.toHaveProperty('late');
+    expect(r.totalEvents).toBe(5);
   });
 
   it('total=0 yields rate 0 (no divide-by-zero)', async () => {
