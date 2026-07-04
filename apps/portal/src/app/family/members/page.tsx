@@ -81,11 +81,11 @@ export default async function FamilyRosterPage() {
                         <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
                           {m.nameMissing && m.isCurrent ? 'Tap to add your name →' : m.type}
                         </div>
-                        {m.missingCount > 0 && (
-                          <div style={{ marginTop: 4, fontSize: 11, color: 'var(--warn, #a06410)', fontWeight: 600 }}>
-                            {m.missingCount} field{m.missingCount !== 1 ? 's' : ''} to complete
-                          </div>
-                        )}
+                        <div style={{ marginTop: 4, display: 'inline-flex', alignItems: 'center', fontSize: 11, fontWeight: 600, padding: '1px 8px', borderRadius: 99, background: m.missingCount > 0 ? 'var(--setu-warn-soft)' : 'var(--setu-ok-soft)', color: m.missingCount > 0 ? 'var(--warn, #a06410)' : 'var(--ok)' }}>
+                          {m.missingCount > 0
+                            ? `${m.missingCount} field${m.missingCount !== 1 ? 's' : ''} to complete`
+                            : '✓ Complete'}
+                        </div>
                         {m.warn && <div style={{ marginTop: 6, fontSize: 11, color: 'var(--err)', display: 'flex', alignItems: 'center', gap: 4 }}><SetuIcon.warn/> {m.warn}</div>}
                       </div>
                       <SetuIcon.chevron color="var(--muted)"/>
@@ -128,10 +128,14 @@ export default async function FamilyRosterPage() {
                   <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{m.type}</div>
                 </div>
                 <div className="row" style={{ gap: 8 }}>
-                  {m.missingCount > 0 && (
-                    <Link href={`/family/members/${m.mid}/edit`} className="pill" style={{ background: 'var(--setu-warn-soft)', color: 'var(--warn, #a06410)', textDecoration: 'none', fontSize: 11 }}>
+                  {m.missingCount > 0 ? (
+                    <Link href={`/family/members/${m.mid}/edit`} className="pill" style={{ background: 'var(--setu-warn-soft)', color: 'var(--warn, #a06410)', textDecoration: 'none', fontSize: 11, fontWeight: 600 }}>
                       Complete info ({m.missingCount})
                     </Link>
+                  ) : (
+                    <span className="pill" style={{ background: 'var(--setu-ok-soft)', color: 'var(--ok)', fontSize: 11, fontWeight: 600 }} title="All required profile info is on file">
+                      ✓ Complete
+                    </span>
                   )}
                   {canManage && !m.isManager && m.isAdult && (
                     <PromoteManagerButton mid={m.mid} name={m.name} variant="desktop"/>
