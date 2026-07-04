@@ -19,14 +19,25 @@ beforeEach(() => {
 });
 
 describe('AttendanceMarker', () => {
-  it('renders one row per student with four status radio buttons', () => {
+  it('renders exactly two status columns (Present, Absent) and no Late/Uninformed radios', () => {
     render(<AttendanceMarker roster={roster} />);
     expect(screen.getByText(/alice/i)).toBeInTheDocument();
     expect(screen.getByText(/bob/i)).toBeInTheDocument();
+
+    // Header: one Student column + exactly two status columns.
+    const statusHeaders = screen
+      .getAllByRole('columnheader')
+      .filter((h) => /present|absent|late|uninformed/i.test(h.textContent ?? ''));
+    expect(statusHeaders.map((h) => h.textContent?.trim().toLowerCase())).toEqual([
+      'present',
+      'absent',
+    ]);
+
+    // Per-student radios: only present/absent, never late/uninformed.
     expect(screen.getAllByRole('radio', { name: /present/i })).toHaveLength(2);
     expect(screen.getAllByRole('radio', { name: /absent/i })).toHaveLength(2);
-    expect(screen.getAllByRole('radio', { name: /late/i })).toHaveLength(2);
-    expect(screen.getAllByRole('radio', { name: /uninformed/i })).toHaveLength(2);
+    expect(screen.queryAllByRole('radio', { name: /late/i })).toHaveLength(0);
+    expect(screen.queryAllByRole('radio', { name: /uninformed/i })).toHaveLength(0);
   });
 
   it('defaults all students to present', () => {

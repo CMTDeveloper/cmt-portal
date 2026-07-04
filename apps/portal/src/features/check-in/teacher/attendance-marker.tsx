@@ -1,11 +1,13 @@
 'use client';
 import { useState, useTransition, type FormEvent } from 'react';
 import { Button } from '@cmt/ui';
-import {
-  ATTENDANCE_STATUSES,
-  type AttendanceStatus,
-  type ClassRoster,
-} from '@cmt/shared-domain/check-in';
+import { type AttendanceStatus, type ClassRoster } from '@cmt/shared-domain/check-in';
+
+// UI-only: this legacy marker now offers Present/Absent only. The shared
+// ATTENDANCE_STATUSES enum (still present/absent/late/uninformed) is unchanged —
+// historical late/uninformed records and the /check-in/teacher/uninformed page
+// continue to read and display the wider set.
+const WRITE_STATUSES = ['present', 'absent'] as const;
 
 interface Props {
   roster: ClassRoster;
@@ -57,7 +59,7 @@ export function AttendanceMarker({ roster, defaultDate }: Props) {
         <thead>
           <tr className="border-b text-left">
             <th className="p-2">Student</th>
-            {ATTENDANCE_STATUSES.map((s) => (
+            {WRITE_STATUSES.map((s) => (
               <th key={s} className="p-2 text-center capitalize">
                 {s}
               </th>
@@ -70,7 +72,7 @@ export function AttendanceMarker({ roster, defaultDate }: Props) {
               <td className="p-2">
                 {student.firstName} {student.lastName}
               </td>
-              {ATTENDANCE_STATUSES.map((s) => (
+              {WRITE_STATUSES.map((s) => (
                 <td key={s} className="p-2 text-center">
                   <input
                     type="radio"
