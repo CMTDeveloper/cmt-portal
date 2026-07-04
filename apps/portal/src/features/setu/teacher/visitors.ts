@@ -1,5 +1,5 @@
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
-import { normalizeGrade, type LevelDoc, type LevelKind } from '@cmt/shared-domain';
+import { levelGradeSummary, normalizeGrade, type LevelDoc, type LevelKind } from '@cmt/shared-domain';
 import { hashContactKey } from '@/features/setu/registration/hash-contact-key';
 import { readDoorGuestCheckIns } from '@/features/setu/attendance/check-in-attendance';
 import { listGuestsDetailed, markGuest, type DetailedGuest } from './guests';
@@ -86,7 +86,7 @@ export async function getLevelVisitorsView(levelId: string, date: string): Promi
   return {
     levelId,
     levelName: level.levelName,
-    ageLabel: level.ageLabel,
+    ageLabel: levelGradeSummary(level),
     location: level.location,
     date,
     doorVisitors,

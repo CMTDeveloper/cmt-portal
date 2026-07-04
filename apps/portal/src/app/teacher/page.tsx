@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers';
 import Link from 'next/link';
 import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
+import { levelGradeSummary } from '@cmt/shared-domain';
 import { getMyLevels } from '@/features/setu/teacher/levels';
 
 export const metadata = { title: 'My classes — CMT Teacher' };
@@ -42,7 +43,7 @@ export default async function TeacherDashboardPage() {
                 <div>
                   <div style={{ fontSize: 17, fontWeight: 600 }}>{l.levelName}</div>
                   <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 2 }}>
-                    {l.location} · {l.ageLabel} · {l.curriculum}
+                    {l.location} · {levelGradeSummary(l)} · {l.curriculum}
                   </div>
                 </div>
                 <span style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 600, whiteSpace: 'nowrap' }}>

@@ -32,6 +32,8 @@ describe('buildRoster', () => {
     expect(r.members.every((m) => m.status === 'unaccounted')).toBe(true);
     expect(r.total).toBe(2);
     expect(r.markedCount).toBe(0);
+    // ageLabel is DERIVED from levelKind+gradeBand, not the stored field
+    expect(r.ageLabel).toBe('Gr 2 & 3');
     // legacy bridge fields thread through: family legacyFid + member legacySid
     const a02 = r.members.find((m) => m.mid === 'CMT-A-02')!;
     expect(a02.legacyFid).toBe('legacy-A');

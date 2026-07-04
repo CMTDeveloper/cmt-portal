@@ -2,7 +2,7 @@ import { connection } from 'next/server';
 import Link from 'next/link';
 import { getLevels } from '@/features/setu/teacher/levels';
 import { findUnassignedStudents, type UnassignedStudent } from '@/features/setu/teacher/welcome-read';
-import type { Location } from '@cmt/shared-domain';
+import { levelGradeSummary, type Location } from '@cmt/shared-domain';
 
 export const metadata = { title: 'Levels & rosters — CMT Welcome' };
 
@@ -42,7 +42,7 @@ export default async function WelcomeLevelsPage() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
                     <div>
                       <div style={{ fontSize: 16, fontWeight: 600 }}>{l.levelName}</div>
-                      <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 2 }}>{l.ageLabel} · {l.curriculum} · {l.teacherRefs.length} teacher{l.teacherRefs.length !== 1 ? 's' : ''}</div>
+                      <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 2 }}>{levelGradeSummary(l)} · {l.curriculum} · {l.teacherRefs.length} teacher{l.teacherRefs.length !== 1 ? 's' : ''}</div>
                     </div>
                     <span style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 600 }}>View →</span>
                   </div>

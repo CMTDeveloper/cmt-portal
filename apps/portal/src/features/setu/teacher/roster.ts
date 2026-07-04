@@ -1,5 +1,5 @@
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
-import { memberMatchesLevel, type LevelDoc, type RosterStatus, type SetuAttendanceStatus } from '@cmt/shared-domain';
+import { levelGradeSummary, memberMatchesLevel, type LevelDoc, type RosterStatus, type SetuAttendanceStatus } from '@cmt/shared-domain';
 
 export interface RosterMemberInput {
   mid: string;
@@ -57,7 +57,7 @@ export interface RosterResult {
  * Sorted by last name then first. `now` drives shishu age matching.
  */
 export function buildRoster(
-  level: Pick<LevelDoc, 'levelId' | 'levelName' | 'ageLabel' | 'location' | 'pid' | 'levelKind' | 'gradeBand'>,
+  level: Pick<LevelDoc, 'levelId' | 'levelName' | 'location' | 'pid' | 'levelKind' | 'gradeBand'>,
   families: RosterFamily[],
   events: RosterEventInput[],
   date: string,
@@ -95,7 +95,7 @@ export function buildRoster(
   return {
     levelId: level.levelId,
     levelName: level.levelName,
-    ageLabel: level.ageLabel,
+    ageLabel: levelGradeSummary(level),
     location: level.location ?? '',
     pid: level.pid,
     date,
