@@ -105,9 +105,12 @@ test.describe('Admin — Level management', () => {
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
 
-    // Slice 3 retired the free-text age field for the grade band: NO age control,
-    // but the grade-band checkboxes are present.
-    await expect(dialog.getByLabel(/age/i)).toHaveCount(0);
+    // Slice 3 retired the free-text age *input* for the grade band: NO age textbox,
+    // but the grade-band checkboxes are present. (Scope to role=textbox — the Kind
+    // <select> legitimately still carries a "Shishu (age 1.5–4)" option, and a
+    // label-wrapped select folds its option text into getByLabel, so a bare
+    // getByLabel(/age/i) false-matches that combobox.)
+    await expect(dialog.getByRole('textbox', { name: /age/i })).toHaveCount(0);
     await expect(dialog.getByRole('checkbox', { name: 'Grade 2', exact: true })).toBeVisible();
 
     const periodSelect = dialog.locator('select').first();
