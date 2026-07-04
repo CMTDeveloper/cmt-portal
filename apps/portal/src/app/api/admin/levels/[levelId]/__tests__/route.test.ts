@@ -148,4 +148,18 @@ describe('PATCH /api/admin/levels/[levelId]', () => {
     const update = mockUpdate.mock.calls[0]![0] as Record<string, unknown>;
     expect(update.levelName).toBe('Level 9');
   });
+
+  it('does not 500 when renaming a phantom level doc that has no levelName', async () => {
+    // Field-less phantom {teacherRefs:[]} docs exist in UAT (no levelName). A PATCH
+    // carrying a levelName must not throw on normalizeLevelName(undefined) — the
+    // `existing.levelName ?? ''` guard mirrors the adjacent `existing.location ?? ''`.
+    mockGet.mockResolvedValue({
+      exists: true,
+      data: () => ({ levelId: EXISTING.levelId, pid: EXISTING.pid, location: 'Brampton', periodLabel: '2025-26', teacherRefs: [] }),
+    });
+    const { PATCH } = await import('../route');
+    const res = await PATCH(makeRequest('PATCH', { levelName: 'Recovered Name' }, 'uid-admin'), params());
+    expect(res.status).not.toBe(500);
+    expect(res.status).toBe(200);
+  });
 });

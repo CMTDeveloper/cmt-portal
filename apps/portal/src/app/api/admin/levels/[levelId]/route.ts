@@ -52,7 +52,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ levelI
   // sibling's name would otherwise produce two levels showing the same name.
   if (
     data.levelName !== undefined &&
-    normalizeLevelName(data.levelName) !== normalizeLevelName(existing.levelName)
+    normalizeLevelName(data.levelName) !== normalizeLevelName(existing.levelName ?? '')
   ) {
     const conflict = await findNameConflict(db, {
       location: existing.location ?? '',
