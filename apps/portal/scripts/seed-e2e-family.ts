@@ -87,6 +87,23 @@ const NODON_OID = 'om-chanting-all-2026-summer-om-chanting';
 // do NOT confirm the 2026-27 enrollment, keeping the ground state "Registered".
 const CHECKIN_DATES = ['2025-10-05', '2026-01-11', '2026-03-08'];
 
+// ── Dedicated teacher-attendance fixture (Slice 3, Task 13) ──────────────────
+// A fully-isolated _test roster so the binary-attendance E2E has ≥2 tap-to-
+// present rows WITHOUT touching the shared family's tuned invariants (its single
+// active-BV / "Registered" ground state — adding a bala-vihar enrollment to the
+// shared family would break selectBalaViharEnrollment). A BESPOKE pid means only
+// THIS family's enrollment joins the level (deriveRoster queries
+// `where('pid','==',level.pid)`), so the level's roster is exactly these two
+// children — no dependency on the separate `seed:test-accounts` roster. All ids
+// are bespoke + every doc is `_test:true`. Uses only existing indexes
+// (enrollments(pid,status) + attendanceEvents(levelId,date)).
+const ATT_LEVEL_ID = 'e2e-att-level';
+const ATT_PID = 'e2e-att-period';
+const ATT_FID = 'CMT-E2E-ATT';
+const ATT_MANAGER_MID = `${ATT_FID}-01`;
+const ATT_CHILD_1_MID = `${ATT_FID}-02`;
+const ATT_CHILD_2_MID = `${ATT_FID}-03`;
+
 type Db = ReturnType<typeof portalFirestore>;
 
 function toDate(v: unknown): Date {
@@ -577,6 +594,126 @@ async function main(): Promise<void> {
     );
     console.log(`disclaimers: accepted (schoolYear=${sy.currentYear}, version=${cfg.version})`);
   }
+
+  // 6) Dedicated teacher-attendance fixture (Task 13). Idempotent + additive +
+  //    isolated from the shared family. Provides a level with exactly two enrolled,
+  //    grade-matched children so `e2e/setu/teacher/attendance-binary.spec.ts` has
+  //    ≥2 tap-to-present rows. The E2E signs in as the SHARED family's admin, who
+  //    reaches this level via role inheritance (isTeacher(admin) → true;
+  //    canTeachLevel(admin) → 'ok'), so access never depends on teacherRefs.
+  console.log('ensuring teacher-attendance fixture:');
+  // 6a) The level (BV · Brampton · grades 3–4). `periodLabel` is a bespoke
+  //     non-school-year string so this level stays OFF the live-year /admin/levels
+  //     list — but it is a COMPLETE doc: the levels page maps every level's
+  //     `createdAt.toDate()` BEFORE the year filter, so the timestamps MUST exist
+  //     or that page 500s. `teacherRefs` pins the shared manager for realism only.
+  await db.collection('levels').doc(ATT_LEVEL_ID).set(
+    {
+      levelId: ATT_LEVEL_ID,
+      programKey: 'bala-vihar',
+      location: 'Brampton',
+      levelName: 'E2E Attendance Level',
+      levelKind: 'level',
+      order: 99,
+      gradeBand: ['3', '4'],
+      curriculum: 'E2E',
+      pid: ATT_PID,
+      periodLabel: 'E2E',
+      teacherRefs: [managerMid],
+      enabled: true,
+      createdAt: FieldValue.serverTimestamp(),
+      createdBy: 'seed',
+      updatedAt: FieldValue.serverTimestamp(),
+      updatedBy: 'seed',
+      _test: true,
+    },
+    { merge: true },
+  );
+  // 6b) The family: 1 adult manager + 2 children. Only the children are enrolled
+  //     AND grade-match the 'level' kind, so the derived roster is exactly 2 rows.
+  await db.collection('families').doc(ATT_FID).set(
+    {
+      fid: ATT_FID,
+      name: 'E2E Attendance Family',
+      location: 'Brampton',
+      legacyFid: null,
+      managers: [ATT_MANAGER_MID],
+      searchKeys: ['e2e attendance family', ATT_FID],
+      _test: true,
+    },
+    { merge: true },
+  );
+  const attMembers: Array<{
+    mid: string;
+    firstName: string;
+    lastName: string;
+    type: 'Adult' | 'Child';
+    schoolGrade: string | null;
+    birthMonthYear: string;
+    manager: boolean;
+  }> = [
+    { mid: ATT_MANAGER_MID, firstName: 'Att', lastName: 'Manager', type: 'Adult', schoolGrade: null, birthMonthYear: '1985-04', manager: true },
+    { mid: ATT_CHILD_1_MID, firstName: 'Att', lastName: 'Threegrade', type: 'Child', schoolGrade: 'Grade 3', birthMonthYear: '2017-05', manager: false },
+    { mid: ATT_CHILD_2_MID, firstName: 'Att', lastName: 'Fourgrade', type: 'Child', schoolGrade: 'Grade 4', birthMonthYear: '2016-05', manager: false },
+  ];
+  for (const m of attMembers) {
+    await db.collection('families').doc(ATT_FID).collection('members').doc(m.mid).set(
+      {
+        mid: m.mid,
+        fid: ATT_FID,
+        firstName: m.firstName,
+        lastName: m.lastName,
+        type: m.type,
+        gender: 'Male',
+        schoolGrade: m.schoolGrade,
+        birthMonthYear: m.birthMonthYear,
+        foodAllergies: NO_ALLERGIES,
+        volunteeringSkills: m.type === 'Adult' ? ['General Volunteer Support (happy to help where needed)'] : [],
+        manager: m.manager,
+        legacySid: null,
+        joinedAt: FieldValue.serverTimestamp(),
+        _test: true,
+      },
+      { merge: true },
+    );
+  }
+  // 6c) Active enrollment carrying the bespoke pid (the deriveRoster join key)
+  //     with both children enrolled. `pid`/`location`/`programKey` all line up
+  //     with the level so the roster resolves.
+  const attEid = `${ATT_FID}-${ATT_PID}`;
+  await db.collection('families').doc(ATT_FID).collection('enrollments').doc(attEid).set(
+    {
+      eid: attEid,
+      fid: ATT_FID,
+      oid: ATT_PID,
+      pid: ATT_PID,
+      programKey: 'bala-vihar',
+      programLabel: 'Bala Vihar',
+      termLabel: 'E2E',
+      location: 'Brampton',
+      enrolledAt: FieldValue.serverTimestamp(),
+      enrolledVia: 'promotion',
+      enrolledByMid: ATT_MANAGER_MID,
+      enrolledMids: [ATT_CHILD_1_MID, ATT_CHILD_2_MID],
+      suggestedAmountSnapshot: 0,
+      suggestedAmountOverride: null,
+      status: 'active',
+      cancelledAt: null,
+      cancelledReason: null,
+      _test: true,
+    },
+    { merge: true },
+  );
+  // 6d) Reset any attendanceEvents the binary-attendance E2E wrote on a prior run
+  //     (single-field `levelId` equality — auto-indexed, no composite) so the
+  //     ground state is "unmarked" after every reseed. The spec is idempotent on
+  //     its own (it ensures-present rather than blindly toggling), so re-running it
+  //     without a reseed still passes — this just restores a clean slate.
+  const attEvents = await db.collection('attendanceEvents').where('levelId', '==', ATT_LEVEL_ID).get();
+  for (const d of attEvents.docs) await d.ref.delete();
+  console.log(
+    `  level ${ATT_LEVEL_ID} + family ${ATT_FID} (2 children, pid=${ATT_PID}); cleared ${attEvents.size} prior attendanceEvents`,
+  );
 
   console.log(`\n=== done. fid=${fid} uid=${uid} ===\n`);
 }
