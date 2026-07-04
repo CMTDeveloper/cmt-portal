@@ -4,10 +4,11 @@
 > admin + teacher refinements to the Bala Vihar level / teacher / attendance
 > surfaces. One spec, one plan, five independently-testable workstreams (A–E).
 
-**Status:** Draft — awaiting owner review. The owner was away during the
-clarifying questions, so the three open decisions below are set to the
-**recommended** option. Every one is reversible and called out inline so the
-owner can flip it at spec review.
+**Status:** Draft — awaiting owner review. Decision 2 (grade set) is **resolved**
+by the owner's level/grade table (2026-07-03). Decisions 1 (attendance) and 3
+(collision) are set to the **recommended** option (owner was away during those
+clarifying questions); both are reversible and called out inline so the owner can
+flip them at spec review.
 
 **Prerequisite discipline:** the two *bug* workstreams (A's collision fix, E's
 rollover fix) MUST begin with a read-only reproduction against deployed UAT
@@ -23,9 +24,32 @@ and adjusts if the real cause differs.
 Polish the admin level-management + teacher-assignment + attendance surfaces so
 they match how CMT actually runs Bala Vihar:
 
-1. **Levels** — school grades picked from a **dropdown** (3K / JK / SK / 1–12),
-   not free text; drop the redundant free-text "Age / grade label" field; fix a
+1. **Levels** — school grades picked from a **dropdown sourced from the canonical
+   Bala Vihar grade set** (Shishu + JK/SK + Grades 1–12), not free text; drop the
+   redundant free-text "Age / grade label" field (it's fully derivable); fix a
    level-name collision bug.
+
+**Canonical structure (owner-supplied, 2026-07-03 — the West/Brampton Bala Vihar
+level table; the existing `seed-bala-vihar-levels.ts` Brampton block already
+matches it exactly):**
+
+| Level | Age / Grade |
+|-------|-------------|
+| Shishu Vihar | 1.5 to 4 years |
+| Pre-Level 1 | JK / SK |
+| Level 1 | Gr 1 |
+| Level 2 | Gr 2 & 3 |
+| Level 3 | Gr 4 & 5 |
+| Level 4 | Gr 6 & 7 |
+| Level 5 | Gr 8 & 9 |
+| Level 6 | Gr 10 |
+| Level 7 | Gr 11 & 12 |
+| Parents | All Adults |
+
+Grade *bands* are per-location (Scarborough/East groups grades differently), so
+the level→band mapping stays admin-configured — but the **grade tokens** an admin
+picks from, and every child/guest grade dropdown, come from **one** canonical set
+derived from this table: `Shishu, JK, SK, Grade 1 … Grade 12`. **No `3K`.**
 2. **Teacher assignment** — assign teachers **per level, inline**, searching by
    **name** (email shown to disambiguate), with assigned teachers rendered as
    removable **name pills**; delete the separate "Teacher assignments" tab.
@@ -74,22 +98,20 @@ teacher attendance."* `late` still lives in:
 *Alternatives (reversible):* (b) leave reports + legacy untouched, treat as
 done; (c) both teacher UIs binary but keep `late` in schema + reports.
 
-### Decision 2 — "3K" → **New grade token, UI-only (not in the promotion ladder)**
+### Decision 2 — Grade set → **RESOLVED by the owner's level/grade table: no `3K`; use the existing canonical grades as the single source**
 
-Today the canonical sets are `GRADE_LADDER = [JK, SK, 1…12]` (drives promotion)
-and the profile form's `GRADE_OPTIONS = [Shishu, JK, SK, 1…12]`. No `3K` exists.
+The owner supplied the authoritative West/Brampton level table (above). It
+confirms the youngest tier is **Shishu Vihar (1.5–4 years, age-based)** — there
+is **no `3K`**. The grade tokens are exactly today's `GRADE_LADDER = [JK, SK,
+1…12]`, plus **Shishu** as the age-based bucket a child sits in below JK.
 
-**Recommended:** introduce `3K` (age-3 preschool) as a new grade token available
-in **three pickers**: the level grade-band multi-select, the guest-add grade
-select, and the child school-grade select (so a level's `3K` band actually
-matches a `3K` child). `3K` is **deliberately excluded from `GRADE_LADDER`**, so
-school-year promotion is unchanged — a `3K` child is `needs-grade` at rollover
-and gets a grade set manually, exactly like today's Shishu bucket. No
-rollover/promotion code changes.
-
-*Alternatives (reversible):* (b) `3K` is just shorthand for the existing
-"Shishu" option — no new token; (c) add `3K` to `GRADE_LADDER` too (heavier —
-touches promotion + grade editor).
+**Resolved (no longer an open question):**
+- **No new token.** The earlier "3K" was imprecise shorthand; the real youngest
+  bucket is Shishu.
+- **One canonical source** promoted into `@cmt/shared-domain` drives **every**
+  grade dropdown (level grade-band, guest-add, child profile). See "Shared
+  building blocks."
+- `GRADE_LADDER` and promotion are **untouched**.
 
 ### Decision 3 — Level-name collision → **Enforce normalized-name uniqueness within (location, period)**
 
@@ -144,31 +166,39 @@ same name at different locations is wrongly rejected. Repro decides.
 
 ## Shared building blocks (built once, used across workstreams)
 
-### `SCHOOL_GRADE_PICKER` (new, `@cmt/shared-domain/setu/grades`)
+### Canonical grade options (promote to `@cmt/shared-domain/setu/grades`)
+
+The single source for **every** grade dropdown, derived from the existing
+`GRADE_LADDER` (no new tokens). Pure data. The child profile form's current
+component-local `GRADE_OPTIONS` is deleted and replaced by importing these.
 
 ```ts
-// Canonical, ordered grade options for ALL grade pickers (level band, guest-add,
-// child profile). Pure data. '3K' is a real, matchable grade token but is NOT a
-// GRADE_LADDER rung (promotion leaves it as needs-grade — see Decision 2).
-export const SCHOOL_GRADE_PICKER: readonly { value: string; label: string }[] = [
-  { value: '3K', label: '3K (age 3)' },
-  { value: 'JK', label: 'JK' },
-  { value: 'SK', label: 'SK' },
-  ...['1','2','3','4','5','6','7','8','9','10','11','12'].map((g) => ({ value: g, label: `Grade ${g}` })),
-];
-export const SCHOOL_GRADE_VALUES = SCHOOL_GRADE_PICKER.map((g) => g.value); // ['3K','JK',…,'12']
-```
+import { GRADE_LADDER } from './grade-ladder'; // ['JK','SK','1',…,'12']
 
-The child profile form's existing `GRADE_OPTIONS` keeps its `Shishu (younger than
-JK)` age-bucket entry and appends the picker (or is rebuilt from it + Shishu) so
-`3K` becomes selectable there too.
+// Individual grade tokens an admin ticks to build a level's gradeBand
+// (pre-level/level kinds). Labels follow the table: "JK", "SK", "Grade 1"…
+export const GRADE_BAND_OPTIONS: readonly { value: string; label: string }[] =
+  GRADE_LADDER.map((g) => ({ value: g, label: /^\d/.test(g) ? `Grade ${g}` : g }));
+
+// Grades a CHILD can be in — the band tokens plus the age-based Shishu bucket
+// (younger than JK). Used by the child profile + guest-add pickers.
+export const CHILD_GRADE_OPTIONS: readonly { value: string; label: string }[] = [
+  { value: 'Shishu', label: 'Shishu (younger than JK)' },
+  ...GRADE_BAND_OPTIONS,
+];
+```
 
 ### `levelGradeSummary(level)` (new, `@cmt/shared-domain/setu/schemas/level`)
 
+Reproduces the table's **AGE/GRADE column** exactly from `levelKind` + `gradeBand`
+— which is why the free-text `ageLabel` field can be removed (the column is fully
+derivable). Pure; contiguous grades collapse to a range.
+
 ```ts
-// Human display label for a level, derived from its kind + gradeBand — replaces
-// the removed free-text ageLabel. Pure.
-//   level/pre-level → "JK, SK" | "Grades 2, 3"     shishu → "Shishu"     parents → "Parents"
+// shishu   → "1.5 to 4 years"
+// pre-level → "JK / SK"            (from gradeBand)
+// level    → "Gr 1" | "Gr 2 & 3" | "Gr 9 to 12"   (single / pair / range from gradeBand, ladder order)
+// parents  → "All Adults"
 export function levelGradeSummary(level: Pick<LevelDoc,'levelKind'|'gradeBand'>): string { … }
 ```
 
@@ -191,13 +221,16 @@ the two sources of truth — `teacherAssignments/{ref}.levelIds` and
 ## Workstream A — Level grade dropdown + remove age label + collision fix
 
 **Files:**
-- `packages/shared-domain/src/setu/grades.ts` (new — `SCHOOL_GRADE_PICKER`).
+- `packages/shared-domain/src/setu/grades.ts` (new — `GRADE_BAND_OPTIONS`,
+  `CHILD_GRADE_OPTIONS`).
 - `packages/shared-domain/src/setu/schemas/level.ts` — add `levelGradeSummary()`;
   make `ageLabel` **optional** in `LevelDocSchema` / `CreateLevelSchema` /
   `UpdateLevelSchema` (tolerant read; new docs may omit it).
 - `apps/portal/src/features/admin/levels/levels-table.tsx` — grade **multi-select**
-  (checkbox chips of `SCHOOL_GRADE_PICKER`, gated to `level`/`pre-level` kinds);
+  (checkbox chips of `GRADE_BAND_OPTIONS`, gated to `level`/`pre-level` kinds);
   **remove** the "Age / grade label" input; table/card show `levelGradeSummary`.
+- `apps/portal/src/features/setu/members/complete-profile-form.tsx` — delete the
+  component-local `GRADE_OPTIONS`; import `CHILD_GRADE_OPTIONS` (single source).
 - `apps/portal/src/app/api/admin/levels/route.ts` (POST) + `[levelId]/route.ts`
   (PATCH) — normalized-name uniqueness check within (location, pid); stop
   requiring `ageLabel`.
@@ -207,8 +240,8 @@ the two sources of truth — `teacherAssignments/{ref}.levelIds` and
 **Behavior:**
 - Grade band is chosen from the dropdown (multi-select for level/pre-level; the
   band is `[]` for shishu/parents as today). Stored `gradeBand` values are the
-  picker `value`s (`3K`,`JK`,`SK`,`1`…`12`) — these already normalize-match child
-  `schoolGrade` via `memberMatchesLevel` / `normalizeGrade`.
+  `GRADE_BAND_OPTIONS` values (`JK`,`SK`,`1`…`12`) — these already normalize-match
+  child `schoolGrade` via `memberMatchesLevel` / `normalizeGrade`.
 - `ageLabel` is no longer collected. Existing docs keep it (harmless). Display is
   derived. `CreateLevelSchema.ageLabel` becomes optional; the POST writes it only
   if present.
@@ -295,7 +328,7 @@ binary, save, reload → persisted.
 
 **Files:**
 - `apps/portal/src/features/setu/teacher/components/visitors-panel.tsx` — replace
-  the free-text "Grade" `<input>` with a `<select>` of `SCHOOL_GRADE_PICKER` plus
+  the free-text "Grade" `<input>` with a `<select>` of `CHILD_GRADE_OPTIONS` plus
   a blank "—" (grade stays optional). `AddVisitorSchema.schoolGrade` is already
   `nullable` — unchanged.
 
