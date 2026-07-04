@@ -80,6 +80,8 @@ export interface FamilyDashboardModel {
   enrollPeriodLabel: string | null;
   suggestedAmount: number | null;
   givenForPeriod: number;
+  /** Active BV enrollment id (null when not enrolled) — drives the direct-to-Stripe donate button. */
+  eid: string | null;
   donateUrl: string;
   isLegacyPeriod: boolean;
   legacyPaid: boolean;
@@ -190,6 +192,7 @@ export function buildFamilyDashboardModel(input: DashboardModelInput): FamilyDas
     enrollPeriodLabel,
     suggestedAmount,
     givenForPeriod,
+    eid: bv?.eid ?? null,
     donateUrl,
     isLegacyPeriod,
     legacyPaid,

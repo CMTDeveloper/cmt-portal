@@ -165,6 +165,7 @@ describe('buildFamilyDashboardModel — BV section pins to Bala Vihar', () => {
     expect(m.isEnrolled).toBe(true);
     expect(m.enrollPeriodLabel).toBe('2025-26'); // BV's term, NOT Tabla's 2026-27
     expect(m.suggestedAmount).toBe(200); // BV's amount, NOT Tabla's 300
+    expect(m.eid).toBe('CMT-AAAA-bv-brampton-2025-26'); // BV's eid drives the direct-Stripe button, NOT Tabla's
   });
 
   it('renders one card per non-BV active enrollment (Tabla), excluding BV', () => {
@@ -218,6 +219,7 @@ describe('buildFamilyDashboardModel — no BV enrollment', () => {
     expect(m.isEnrolled).toBe(false);
     expect(m.enrollPeriodLabel).toBeNull();
     expect(m.suggestedAmount).toBeNull();
+    expect(m.eid).toBeNull(); // no BV enrollment → no donate button rendered
     expect(m.donation.heading).toBe('Bala Vihar donation');
     // General giving moved off-portal (2026-06-04): a non-BV-enrolled family has
     // no in-portal Give button.

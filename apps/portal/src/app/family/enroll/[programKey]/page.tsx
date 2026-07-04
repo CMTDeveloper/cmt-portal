@@ -6,6 +6,7 @@ import { CspRoot, SectionLabel } from '@/features/family/components/atoms';
 import { EnrollCta } from '@/features/family/components/enroll-cta';
 import { EnrollPanel } from '@/features/family/components/enroll-panel';
 import { EligibleMembersList } from '@/features/family/components/eligible-members-list';
+import { CompleteDonationButton } from '@/features/family/components/complete-donation-button';
 import { resolveSuggestedAmount, paymentSourceOf, memberEligibleForProgram, BALA_VIHAR } from '@cmt/shared-domain';
 import type { OfferingDoc, PaymentSource } from '@cmt/shared-domain';
 import { getProgram } from '@/features/setu/programs/get-programs';
@@ -304,9 +305,7 @@ export default async function ProgramEnrollPage({ params }: Props) {
                     Back to dashboard
                   </Link>
                 ) : onlineDonationsEnabled ? (
-                  <Link href={`/family/donate?eid=${activeEnrollment.eid}`} className="btn btn--p btn--block" style={{ display: 'block', textAlign: 'center', textDecoration: 'none' }}>
-                    Continue to donation →
-                  </Link>
+                  <CompleteDonationButton eid={activeEnrollment.eid} amountCAD={activeEnrollment.effectiveSuggestedAmount} label="Continue to donation →" block />
                 ) : (
                   <div style={{ padding: '12px 16px', background: 'var(--accentSoft)', color: 'var(--accentDeep)', borderRadius: 'var(--radiusSm)', fontSize: 14, fontWeight: 600, textAlign: 'center' }}>
                     {enrolledStateText(usesDonation, selectedPaymentSource)}
@@ -440,9 +439,7 @@ export default async function ProgramEnrollPage({ params }: Props) {
 
                   {alreadyEnrolled ? (
                     onlineDonationsEnabled ? (
-                      <Link href={`/family/donate?eid=${activeEnrollment.eid}`} className="btn btn--p btn--block" style={{ display: 'block', textAlign: 'center', textDecoration: 'none' }}>
-                        Continue to donation →
-                      </Link>
+                      <CompleteDonationButton eid={activeEnrollment.eid} amountCAD={activeEnrollment.effectiveSuggestedAmount} label="Continue to donation →" block />
                     ) : (
                       <div style={{ padding: '12px 16px', background: 'var(--accentSoft)', color: 'var(--accentDeep)', borderRadius: 'var(--radiusSm)', fontSize: 14, fontWeight: 600, textAlign: 'center' }}>
                         {enrolledStateText(usesDonation, selectedPaymentSource)}

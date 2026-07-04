@@ -6,6 +6,7 @@ import { flags } from '@/lib/flags';
 import { mockFamily } from '@/features/family/data/mock';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 import { PendingJoinRequestsPanel } from '@/features/family/components/pending-join-requests-panel';
+import { CompleteDonationButton } from '@/features/family/components/complete-donation-button';
 import { loadFamilyDashboard, type BvChildView } from './_helpers/load-dashboard';
 import {
   buildFamilyDashboardModel,
@@ -73,10 +74,10 @@ export default async function FamilyDashboardPage() {
         <Stat label="Registration" value={model.bvState === 'enrolled' ? 'Enrolled' : model.bvState === 'registered' ? 'Registered' : 'Not enrolled'} />
         <Stat label="Donation" value={donationStatus} />
       </div>
-      {model.donation.showGive && !donationComplete && (
-        <Link href={model.donateUrl} className="btn btn--p" style={{ textDecoration: 'none', display: 'inline-block', marginBottom: 18 }}>
-          Complete donation
-        </Link>
+      {model.donation.showGive && !donationComplete && model.eid && (
+        <div style={{ marginBottom: 18 }}>
+          <CompleteDonationButton eid={model.eid} amountCAD={model.suggestedAmount ?? 0} label="Complete donation" />
+        </div>
       )}
       {bvChildren.length > 0 && (
         <div className="col" style={{ gap: 10 }}>

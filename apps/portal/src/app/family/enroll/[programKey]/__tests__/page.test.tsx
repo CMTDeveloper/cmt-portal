@@ -231,10 +231,10 @@ describe('ProgramEnrollPage (bala-vihar) — donation flag gating (T1)', () => {
     render(page);
 
     expect(screen.getAllByText(/donation coming soon/i).length).toBeGreaterThan(0);
-    expect(screen.queryByRole('link', { name: /continue to donation/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /continue to donation/i })).toBeNull();
   });
 
-  it('donations enabled + enrolled: shows Continue to donation link', async () => {
+  it('donations enabled + enrolled: shows Continue to donation button (direct to Stripe)', async () => {
     vi.stubEnv('NEXT_PUBLIC_FEATURE_SETU_DONATIONS', 'true');
     mockGetEnrollments.mockResolvedValue([ACTIVE_ENROLLMENT_WITH_SNAPSHOT]);
     mockGetOpenOfferingsForFamily.mockResolvedValue([ACTIVE_PERIOD]);
@@ -242,7 +242,8 @@ describe('ProgramEnrollPage (bala-vihar) — donation flag gating (T1)', () => {
     const page = await ProgramEnrollPage({ params: makeParams() });
     render(page);
 
-    expect(screen.getAllByRole('link', { name: /continue to donation/i }).length).toBeGreaterThan(0);
+    // Slice: the CTA is now a button that goes straight to Stripe (no /family/donate page).
+    expect(screen.getAllByRole('button', { name: /continue to donation/i }).length).toBeGreaterThan(0);
     expect(screen.queryByText(/donation coming soon/i)).toBeNull();
   });
 
@@ -254,7 +255,7 @@ describe('ProgramEnrollPage (bala-vihar) — donation flag gating (T1)', () => {
     const page = await ProgramEnrollPage({ params: makeParams() });
     render(page);
 
-    expect(screen.queryByRole('link', { name: /continue to donation/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /continue to donation/i })).toBeNull();
     expect(screen.getAllByText(/payment is managed by the teacher/i).length).toBeGreaterThan(0);
   });
 
