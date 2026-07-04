@@ -7,16 +7,6 @@ import { deriveProgramCards, type ProgramCard } from './derive-program-cards';
 import { isEnrollmentConfirmed } from './enrollment-confirmation';
 
 /**
- * Amber "not-yet-confirmed" chip for the Registered pill. Reuses the same
- * warn-soft / warn token pair as the prasad "Proposed" status chip
- * (features/setu/prasad/admin-prasad-screen.tsx) and the attendance "Late" chip
- * (app/welcome/levels/[levelId]/page.tsx). `--setu-warn-soft` (#fbe6c6) is a
- * root token; `--warn` (#a06410) is the .csp-scoped alias the existing pill's
- * `--accentDeep` fg shares. No new tokens invented (issue #23).
- */
-const REGISTERED_BG = 'var(--setu-warn-soft)';
-const REGISTERED_FG = 'var(--warn, #a06410)';
-
 /**
  * True when the active Bala Vihar enrollment's offering is legacy-sourced (the
  * 2025-26 cutover year, whose payment status lives in the prod RTDB roster).
@@ -171,12 +161,15 @@ export function buildFamilyDashboardModel(input: DashboardModelInput): FamilyDas
         : donationComplete
           ? 'Thank you for your donation'
           : 'Bala Vihar donation pending';
+  // Vaibhav feedback (2026-07-04): families should read one word — "Enrolled" —
+  // for any active BV enrollment. The issue #23 engagement split lives on in
+  // `bvState`/`confirmNudge` (the mobile API + the "Complete donation" nudge still
+  // consume them), but the web pill no longer surfaces the interim amber
+  // "Registered" state; enrolled and registered both render the accent "Enrolled".
   const enrolledPill =
-    bvState === 'enrolled'
-      ? { text: 'Enrolled', bg: 'var(--accentSoft)', fg: 'var(--accentDeep)' }
-      : bvState === 'registered'
-        ? { text: 'Registered', bg: REGISTERED_BG, fg: REGISTERED_FG }
-        : { text: 'Not enrolled', bg: 'var(--surface2)', fg: 'var(--muted)' };
+    bvState === 'none'
+      ? { text: 'Not enrolled', bg: 'var(--surface2)', fg: 'var(--muted)' }
+      : { text: 'Enrolled', bg: 'var(--accentSoft)', fg: 'var(--accentDeep)' };
 
   // Slice 1 (owner decision 2026-07-03): the Bala Vihar donation is surfaced by
   // the BV section's "Complete donation" button, NOT as an Action Item — so it is

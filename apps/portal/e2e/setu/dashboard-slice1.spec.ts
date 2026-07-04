@@ -97,7 +97,7 @@ test.describe.serial('Slice 1 dashboard', () => {
       await reauthE2eFamily();
     });
 
-    test('reads Enrolled with the donation Pending and a Complete donation link in the BV section', async ({ page }) => {
+    test('reads Enrolled with the donation Pending and a Complete donation button in the BV section', async ({ page }) => {
       await page.goto('/family');
 
       // The BV bespoke section (the "Enrolled" pill / metric only ever reads
@@ -109,14 +109,14 @@ test.describe.serial('Slice 1 dashboard', () => {
       // Exact-match so the "Pending join requests" panel can't false-match.
       await expect(visibleText(page, /^Pending$/).first()).toBeVisible();
 
-      // The donation CTA lives ONLY in the BV section now (never an Action Item),
-      // and points at /family/donate?eid=<the active BV eid>.
+      // The donation CTA lives ONLY in the BV section now (never an Action Item).
+      // It is a BUTTON that POSTs to checkout and redirects straight to Stripe
+      // (2026-07-04) — no longer a link to /family/donate.
       const complete = page
-        .getByRole('link', { name: /complete donation/i })
+        .getByRole('button', { name: /complete donation/i })
         .filter({ visible: true })
         .first();
       await expect(complete).toBeVisible();
-      await expect(complete).toHaveAttribute('href', /\/family\/donate\?eid=/);
     });
 
     test('does NOT render a Seva or Prasad section, nor an email/phone contacts nudge', async ({ page }) => {
@@ -143,18 +143,20 @@ test.describe.serial('Slice 1 dashboard', () => {
     });
   });
 
-  // ── Phase B: promotion-only → still Registered ──────────────────────────────
-  test.describe('promotion-only → still Registered', () => {
+  // ── Phase B: promotion-only → registered state, but the web reads "Enrolled" ─
+  test.describe('promotion-only → registered state renders as Enrolled', () => {
     test.beforeAll(async () => {
-      // Rollover carry-forward with no engagement → issue #23 "Registered".
+      // Rollover carry-forward with no engagement → issue #23 'registered' bvState.
       reseedE2eFamily(['--enrolled-via', 'promotion']);
       await reauthE2eFamily();
     });
 
-    test('a promotion enrollment with no engagement reads Registered', async ({ page }) => {
+    test('a promotion enrollment with no engagement reads Enrolled on the web (registered only in the API)', async ({ page }) => {
       await page.goto('/family');
-      // Only the BV pill + BV metric ever read "Registered" (exact-match form).
-      await expect(visibleText(page, /^Registered$/).first()).toBeVisible();
+      // Vaibhav 2026-07-04: the web no longer surfaces "Registered"; the BV pill +
+      // stat read "Enrolled" even in the promotion-only (registered) state.
+      await expect(visibleText(page, /^Enrolled$/).first()).toBeVisible();
+      await expect(page.getByText(/^Registered$/)).toHaveCount(0);
     });
   });
 });

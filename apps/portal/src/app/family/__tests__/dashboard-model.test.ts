@@ -312,16 +312,18 @@ describe('bvState (issue #23 engagement rule)', () => {
     expect(m.confirmNudge).toBe(false);
   });
 
-  it('active BV + neither → registered, amber pill, nudge on', () => {
+  it('active BV + neither → registered state, but the web pill reads Enrolled', () => {
     const m = buildFamilyDashboardModel(input({ enrollments: [TABLA_ENROLLMENT, promotedBv], bvAttendedCount: 0 }));
+    // The engagement state itself is unchanged (still 'registered' for the mobile
+    // API + the donation nudge)…
     expect(m.bvState).toBe('registered');
-    expect(m.enrolledPill.text).toBe('Registered');
-    // Amber "not-yet-confirmed" chip — same warn-soft/warn pair as the prasad
-    // "Proposed" and attendance "Late" chips.
-    expect(m.enrolledPill.bg).toBe('var(--setu-warn-soft)');
-    expect(m.enrolledPill.fg).toBe('var(--warn, #a06410)');
     expect(m.confirmNudge).toBe(true);
     expect(m.isEnrolled).toBe(true); // doc-exists semantics unchanged
+    // …but per Vaibhav (2026-07-04) the web pill collapses registered→"Enrolled"
+    // in the accent style — the interim amber "Registered" pill is gone.
+    expect(m.enrolledPill.text).toBe('Enrolled');
+    expect(m.enrolledPill.bg).toBe('var(--accentSoft)');
+    expect(m.enrolledPill.fg).toBe('var(--accentDeep)');
   });
 
   it('no active BV enrollment → none', () => {

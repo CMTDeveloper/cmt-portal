@@ -1,7 +1,7 @@
 import { connection } from 'next/server';
 import Link from 'next/link';
 import { SetuLogo, SetuAvatar } from '@cmt/ui';
-import { CspRoot, Stat, MetricCard } from '@/features/family/components/atoms';
+import { CspRoot, Stat } from '@/features/family/components/atoms';
 import { flags } from '@/lib/flags';
 import { mockFamily } from '@/features/family/data/mock';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
@@ -62,7 +62,6 @@ export default async function FamilyDashboardPage() {
 
   const donationPaid = model.legacyPaid || donationComplete;
   const donationStatus = model.teacherManaged ? 'Off-portal' : donationPaid ? 'Paid' : isEnrolled ? 'Pending' : 'Not enrolled';
-  const donationStatusTone: 'ok' | 'warn' | 'err' = model.teacherManaged ? 'warn' : donationPaid ? 'ok' : 'err';
 
   const hasActions = actionItems.length > 0 || isManager;
 
@@ -71,7 +70,7 @@ export default async function FamilyDashboardPage() {
     <>
       <div className="row" style={{ gap: 18, flexWrap: 'wrap', marginBottom: 16 }}>
         <Stat label="Academic year" value={enrollPeriodLabel ?? '—'} />
-        <Stat label="Registration" value={model.bvState === 'enrolled' ? 'Enrolled' : model.bvState === 'registered' ? 'Registered' : 'Not enrolled'} />
+        <Stat label="Enrollment" value={model.bvState === 'none' ? 'Not enrolled' : 'Enrolled'} />
         <Stat label="Donation" value={donationStatus} />
       </div>
       {model.donation.showGive && !donationComplete && model.eid && (
@@ -175,15 +174,16 @@ export default async function FamilyDashboardPage() {
           </div>
         </header>
 
-        {/* Block 1 — Family */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 14, marginBottom: 18 }}>
-          <MetricCard label="Children" value={String(familyCounts.children)} sub={`${familyCounts.adults} adult${familyCounts.adults !== 1 ? 's' : ''}`} />
-          <MetricCard label="Bala Vihar" value={model.bvState === 'enrolled' ? 'Enrolled' : model.bvState === 'registered' ? 'Registered' : 'Not yet'} sub={enrollPeriodLabel ?? 'no active period'} />
-          <MetricCard label="Donation" value={donationStatus} sub={enrollPeriodLabel ?? 'Bala Vihar'} tone={donationStatusTone} />
-        </div>
+        {/* Block 1 — Family (the three metric boxes were removed per Vaibhav's
+            2026-07-04 feedback; the child/adult counts moved under this card). */}
         <div className="card" style={{ padding: 24, marginBottom: 18 }}>
           <div className="between">
-            <h3 style={{ fontSize: 14, fontWeight: 600 }}>Family · {memberCount} member{memberCount !== 1 ? 's' : ''}</h3>
+            <div>
+              <h3 style={{ fontSize: 14, fontWeight: 600 }}>Family · {memberCount} member{memberCount !== 1 ? 's' : ''}</h3>
+              <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
+                {familyCounts.children} {familyCounts.children === 1 ? 'child' : 'children'} · {familyCounts.adults} {familyCounts.adults === 1 ? 'adult' : 'adults'}
+              </p>
+            </div>
             <Link href="/family/members" className="btn btn--s" style={{ textDecoration: 'none' }}>Manage family</Link>
           </div>
         </div>

@@ -20,15 +20,12 @@ import { signInFamilyAndSaveStorage } from '../auth-helpers';
  *
  * WHAT EACH PHASE ASSERTS:
  *   - Phase 1 (Registered ground state): GET /api/setu/dashboard →
- *     balaVihar.bvState === 'registered' && isEnrolled === true; and /family on
- *     DESKTOP renders the three-state `Registered` pill (issue #23 I2 made the
- *     desktop pill + metric bvState-driven, matching mobile — desktop no longer
- *     hardcodes "Enrolled"). The Slice 1 rebuild dropped the verbatim confirm
- *     nudge; the Registered state is now conveyed by the amber `Registered` pill
- *     + a `Pending` donation status + a "Complete donation" button. At a mobile
- *     viewport (where the family-facing donate CTA lives) it also shows the
- *     `Registered` pill and a visible `Complete donation` link pointing at
- *     `/family/donate?eid=…`.
+ *     balaVihar.bvState === 'registered' && isEnrolled === true (the engagement
+ *     split still lives in the API). Per Vaibhav (2026-07-04) the WEB no longer
+ *     surfaces the interim "Registered" word — /family reads "Enrolled" for any
+ *     active enrollment on both desktop and mobile. The registered state is now
+ *     conveyed only by a `Pending` donation status + a "Complete donation" button
+ *     that POSTs to checkout and redirects straight to Stripe (no /family/donate).
  *   - Phase 2 (Enrolled after a completed donation): the spec SELF-MUTATES the
  *     fixture by re-running the seed with `--confirm-bv` (writes one _test
  *     completed donation for the active 2026-27 eid), then asserts bvState ===
@@ -116,26 +113,26 @@ test.describe.serial('enrollment engagement state — Registered vs Enrolled (is
     expect(balaVihar.bvState).toBe('registered');
   });
 
-  test('UI (desktop): /family shows the Registered pill', async ({ page }) => {
+  test('UI (desktop): /family reads Enrolled even in the registered ground state', async ({ page }) => {
     await page.goto('/family');
-    // Issue #23 I2: desktop now renders the three-state pill + metric (it used to
-    // hardcode "Enrolled"). `/^Registered$/` is unambiguous — only the BV pill
-    // and BV metric ever read "Registered" (the om-chanting card hardcodes
-    // "Enrolled"), so a visible match proves the desktop Registered state ships.
-    await expect(visibleText(page, /^Registered$/).first()).toBeVisible();
+    // Vaibhav 2026-07-04: the web collapses registered→"Enrolled". Even with API
+    // bvState=registered, the desktop BV pill + stat read "Enrolled", and
+    // "Registered" no longer appears anywhere in the DOM.
+    await expect(visibleText(page, /^Enrolled$/).first()).toBeVisible();
+    await expect(page.getByText(/^Registered$/)).toHaveCount(0);
   });
 
   test.describe('UI (mobile viewport)', () => {
     test.use({ viewport: MOBILE_VIEWPORT });
 
-    test('shows the Registered pill and a Complete donation CTA to /family/donate?eid=', async ({ page }) => {
+    test('shows the Enrolled pill and a Complete donation button (straight to Stripe)', async ({ page }) => {
       await page.goto('/family');
-      // The Registered pill renders in both layouts now; at this mobile viewport
-      // the visible one is the mobile BV card's.
-      await expect(visibleText(page, /^Registered$/).first()).toBeVisible();
-      const give = page.getByRole('link', { name: /Complete donation/i }).filter({ visible: true }).first();
+      // Mobile BV card pill now reads "Enrolled" (registered→Enrolled on the web).
+      await expect(visibleText(page, /^Enrolled$/).first()).toBeVisible();
+      // The donate CTA is now a BUTTON that POSTs to checkout and redirects to
+      // Stripe (2026-07-04) — no longer a link to /family/donate.
+      const give = page.getByRole('button', { name: /Complete donation/i }).filter({ visible: true }).first();
       await expect(give).toBeVisible();
-      await expect(give).toHaveAttribute('href', /\/family\/donate\?eid=/);
     });
   });
 
