@@ -25,3 +25,18 @@ describe('DesktopSidebar — Admin shortcut', () => {
     expect(screen.getByRole('link', { name: 'Admin' }).getAttribute('href')).toBe('/admin');
   });
 });
+
+describe('DesktopSidebar — teacher role', () => {
+  it('renders the teacher nav (My classes → /teacher, My family → /family)', () => {
+    render(<DesktopSidebar role="teacher" active="home" subtitle="Teacher" showSignOut />);
+    expect(screen.getByRole('link', { name: 'My classes' }).getAttribute('href')).toBe('/teacher');
+    expect(screen.getByRole('link', { name: 'My family' }).getAttribute('href')).toBe('/family');
+    // Does NOT show the family-only Programs/Sign-in-security items.
+    expect(screen.queryByRole('link', { name: 'Programs' })).toBeNull();
+  });
+
+  it('shows the Admin cross-link for an admin-teacher', () => {
+    render(<DesktopSidebar role="teacher" isAdmin subtitle="Teacher" showSignOut />);
+    expect(screen.getByRole('link', { name: 'Admin' }).getAttribute('href')).toBe('/admin');
+  });
+});

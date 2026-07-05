@@ -10,7 +10,7 @@ type SidebarTab = 'home' | 'family' | 'bv' | 'programs' | 'calendar' | 'giving' 
 
 interface DesktopSidebarProps {
   active?: SidebarTab;
-  role?: 'family' | 'welcome-team';
+  role?: 'family' | 'welcome-team' | 'teacher';
   displayName?: string | undefined;
   subtitle?: string | undefined;
   showSignOut?: boolean;
@@ -56,6 +56,13 @@ function familyNavItems(): [SidebarTab, string, keyof typeof SetuIcon, string, b
   return items;
 }
 
+// The teacher area is a focused attendance surface: "My classes" (the levels
+// they teach) + a cross-link back to their own family.
+const TEACHER_NAV_ITEMS: [SidebarTab, string, keyof typeof SetuIcon, string, boolean?][] = [
+  ['home',   'My classes', 'home',   '/teacher'],
+  ['family', 'My family',  'people', '/family'],
+];
+
 const WELCOME_NAV_ITEMS: [SidebarTab, string, keyof typeof SetuIcon, string, boolean?][] = [
   ['home', 'Roster',            'search',  '/welcome/roster'],
   ['reports', 'Reports',        'info',    '/welcome/reports'],
@@ -67,6 +74,8 @@ const WELCOME_NAV_ITEMS: [SidebarTab, string, keyof typeof SetuIcon, string, boo
 ];
 
 function deriveActiveFromPathname(pathname: string): SidebarTab {
+  // Teacher area: every /teacher/* route is the "My classes" (home) tab.
+  if (pathname.startsWith('/teacher')) return 'home';
   if (pathname.startsWith('/family/members')) return 'family';
   if (pathname.startsWith('/family/calendar')) return 'calendar';
   // All program enrollment (incl. Bala Vihar) routes through Programs now.
@@ -89,9 +98,11 @@ function deriveActiveFromPathname(pathname: string): SidebarTab {
 // Suspense fallbacks (which Next.js 16 cacheComponents prerenders statically).
 // For pathname-driven self-highlighting, use DesktopSidebarLive instead.
 export function DesktopSidebar({ active, role = 'family', displayName, subtitle, showSignOut, isAdmin, showTeacher = false, yearBadge }: DesktopSidebarProps) {
-  const navItems = role === 'welcome-team' ? WELCOME_NAV_ITEMS : familyNavItems();
+  const navItems =
+    role === 'welcome-team' ? WELCOME_NAV_ITEMS : role === 'teacher' ? TEACHER_NAV_ITEMS : familyNavItems();
   const trimmed = (displayName ?? '').trim();
-  const name = trimmed || (role === 'welcome-team' ? 'Welcome team' : 'Family member');
+  const name =
+    trimmed || (role === 'welcome-team' ? 'Welcome team' : role === 'teacher' ? 'Teacher' : 'Family member');
   // Show the "Admin" shortcut whenever the signed-in user is an admin — in BOTH
   // the family and welcome-team sidebars. /welcome pages (search, seva) are
   // shared admin surfaces an admin reaches from the admin nav; without this link
