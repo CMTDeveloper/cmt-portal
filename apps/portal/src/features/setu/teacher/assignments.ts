@@ -1,4 +1,5 @@
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
+import { findMissingLevelIds } from './levels';
 
 /**
  * teacherAssignments/{ref} — ref is a member `mid` (parent-teachers) or a
@@ -35,19 +36,36 @@ export async function isTeacherAssigned(ref: string): Promise<boolean> {
  * Set the exact set of levels a teacher covers. Idempotent: syncs the
  * denormalized `teacherRefs` on each affected level (arrayUnion for newly
  * added, arrayRemove for removed) in one atomic batch alongside the
- * assignment doc. Returns the levels added/removed for the caller to log.
+ * assignment doc. Returns the levels added/removed (+ any `skipped`) to log.
+ *
+ * PHANTOM-LEVEL GUARD: a merge-set of `teacherRefs` onto a level id that has no
+ * doc CREATES a stub `{ teacherRefs }`-only "level" — no `gradeBand`/`levelName`,
+ * so it is invisible to rosters (this is exactly how the 2026-27 classes ended
+ * up empty). So we never write to a level that does not exist: requested ids
+ * whose doc is absent are dropped from the assignment and reported in `skipped`,
+ * and no teacherRefs write is issued for them. (The per-level teachers route
+ * guards this at its own boundary too; centralizing it here protects EVERY
+ * caller — rollover prefill, the create-level flow, and any future one.)
  */
 export async function assignTeacher(args: {
   ref: string;
   levelIds: string[];
   byUid: string;
-}): Promise<{ added: string[]; removed: string[] }> {
+}): Promise<{ added: string[]; removed: string[]; skipped: string[] }> {
   const db = portalFirestore();
-  const next = [...new Set(args.levelIds)];
+  const requested = [...new Set(args.levelIds)];
   const prev = await getTeacherLevelIds(args.ref);
 
+  // Existence check over everything we might write to (requested + prior).
+  const universe = [...new Set([...requested, ...prev])];
+  const missing = new Set(universe.length ? await findMissingLevelIds(universe) : []);
+
+  const next = requested.filter((l) => !missing.has(l));
   const added = next.filter((l) => !prev.includes(l));
-  const removed = prev.filter((l) => !next.includes(l));
+  // Only arrayRemove from levels that still exist — a merge-set arrayRemove on a
+  // missing level would ALSO mint a `{ teacherRefs: [] }` phantom.
+  const removed = prev.filter((l) => !next.includes(l) && !missing.has(l));
+  const skipped = requested.filter((l) => missing.has(l));
 
   const batch = db.batch();
   batch.set(
@@ -76,5 +94,5 @@ export async function assignTeacher(args: {
   }
   await batch.commit();
 
-  return { added, removed };
+  return { added, removed, skipped };
 }

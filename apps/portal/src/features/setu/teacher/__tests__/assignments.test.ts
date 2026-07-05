@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockGet, mockBatchSet, mockBatchCommit, docRefs } = vi.hoisted(() => ({
+const { mockGet, mockGetAll, mockBatchSet, mockBatchCommit, docRefs } = vi.hoisted(() => ({
   mockGet: vi.fn(),
+  mockGetAll: vi.fn(),
   mockBatchSet: vi.fn(),
   mockBatchCommit: vi.fn(),
   docRefs: {} as Record<string, unknown>,
@@ -17,6 +18,8 @@ vi.mock('@cmt/firebase-shared/admin/firestore', () => {
   return {
     portalFirestore: () => ({
       collection,
+      // findMissingLevelIds (assignTeacher's phantom guard) reads existence here.
+      getAll: mockGetAll,
       batch: () => ({ set: mockBatchSet, commit: mockBatchCommit }),
     }),
     FieldValue: {
@@ -32,6 +35,11 @@ import { getTeacherLevelIds, isTeacherAssigned, assignTeacher } from '../assignm
 beforeEach(() => {
   vi.clearAllMocks();
   mockBatchCommit.mockResolvedValue(undefined);
+  // Default: every level referenced in a getAll() exists (drives findMissingLevelIds
+  // → nothing skipped). Keyed by ref.__id so tests can mark specific ids missing.
+  mockGetAll.mockImplementation((...refs: Array<{ __id: string }>) =>
+    Promise.resolve(refs.map((r) => ({ exists: r.__id !== 'ghost' }))),
+  );
 });
 
 describe('getTeacherLevelIds', () => {
@@ -65,7 +73,7 @@ describe('assignTeacher', () => {
     mockGet.mockResolvedValue({ exists: false }); // no prior assignment
     const res = await assignTeacher({ ref: 'CMT-X-01', levelIds: ['l1', 'l2'], byUid: 'uid-admin' });
 
-    expect(res).toEqual({ added: ['l1', 'l2'], removed: [] });
+    expect(res).toEqual({ added: ['l1', 'l2'], removed: [], skipped: [] });
     // assignment doc set
     expect(mockBatchSet).toHaveBeenCalledWith(
       expect.objectContaining({ __id: 'CMT-X-01' }),
@@ -98,7 +106,7 @@ describe('assignTeacher', () => {
     });
     const res = await assignTeacher({ ref: 'CMT-X-01', levelIds: ['l2', 'l3'], byUid: 'uid-w' });
 
-    expect(res).toEqual({ added: ['l3'], removed: ['l1'] });
+    expect(res).toEqual({ added: ['l3'], removed: ['l1'], skipped: [] });
     expect(mockBatchSet).toHaveBeenCalledWith(
       expect.objectContaining({ __id: 'l3' }),
       { teacherRefs: { __arrayUnion: 'CMT-X-01' } },
@@ -117,6 +125,29 @@ describe('assignTeacher', () => {
       data: () => ({ ref: 'CMT-X-01', levelIds: ['l1'] }),
     });
     const res = await assignTeacher({ ref: 'CMT-X-01', levelIds: [], byUid: 'uid-admin' });
-    expect(res).toEqual({ added: [], removed: ['l1'] });
+    expect(res).toEqual({ added: [], removed: ['l1'], skipped: [] });
+  });
+
+  it('skips a non-existent level — never mints a phantom teacherRefs-only doc', async () => {
+    mockGet.mockResolvedValue({ exists: false }); // no prior assignment
+    // 'ghost' has no level doc (default getAll marks it missing).
+    const res = await assignTeacher({ ref: 'CMT-X-01', levelIds: ['l1', 'ghost'], byUid: 'uid-admin' });
+
+    expect(res).toEqual({ added: ['l1'], removed: [], skipped: ['ghost'] });
+    // The assignment doc records only the existing level.
+    expect(mockBatchSet).toHaveBeenCalledWith(
+      expect.objectContaining({ __id: 'CMT-X-01' }),
+      expect.objectContaining({ levelIds: ['l1'] }),
+      { merge: true },
+    );
+    // l1 gets its teacherRefs union…
+    expect(mockBatchSet).toHaveBeenCalledWith(
+      expect.objectContaining({ __id: 'l1' }),
+      { teacherRefs: { __arrayUnion: 'CMT-X-01' } },
+      { merge: true },
+    );
+    // …but 'ghost' NEVER receives any write (no phantom created).
+    const ghostWrites = mockBatchSet.mock.calls.filter((c) => (c[0] as { __id: string }).__id === 'ghost');
+    expect(ghostWrites).toHaveLength(0);
   });
 });

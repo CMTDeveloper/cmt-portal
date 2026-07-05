@@ -129,7 +129,11 @@ function makeFakeDb() {
     };
   };
 
-  const db = { collection, batch } as unknown as FirebaseFirestore.Firestore;
+  // assignTeacher's phantom guard (findMissingLevelIds) reads existence via
+  // getAll(...docRefs); each docRef already exposes get().
+  const getAll = async (...refs: Array<{ get: () => Promise<unknown> }>) =>
+    Promise.all(refs.map((r) => r.get()));
+  const db = { collection, batch, getAll } as unknown as FirebaseFirestore.Firestore;
   const seed = (c: string, id: string, data: DocData) => {
     storeFor(c).set(id, { ...data, __id: id });
   };
