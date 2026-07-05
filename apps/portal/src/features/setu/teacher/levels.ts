@@ -1,5 +1,6 @@
 import { portalFirestore, Timestamp } from '@cmt/firebase-shared/admin/firestore';
 import { type LevelDoc, levelSlug, toSafeSlug } from '@cmt/shared-domain';
+import { getLiveSchoolYearCached } from '@/features/setu/rollover/live-school-year';
 
 /** Deterministic level doc id: `{location}-{levelSlug}-{pid}`. */
 export function levelIdFor(location: string, levelName: string, pid: string): string {
@@ -27,12 +28,20 @@ export async function getLevels(): Promise<LevelDoc[]> {
 }
 
 /**
- * The enabled levels a teacher (mid or tid) is assigned to — drives the
- * "my levels" teacher dashboard. Requires the
+ * The enabled levels a teacher (mid or tid) is assigned to for the LIVE school
+ * year — drives the "my levels" teacher dashboard, the mobile teacher-levels API,
+ * and teacher student-detail access. Requires the
  * `levels (teacherRefs ARRAY_CONTAINS, enabled)` composite index.
+ *
+ * The live-year filter is IN-MEMORY (a teacher is on a handful of levels), so it
+ * needs no extra composite index: a teacher carried across a rollover is assigned
+ * to BOTH last year's and this year's level (e.g. two "Level 1" docs), and must
+ * only see the current year's class — otherwise the dashboard shows a duplicate,
+ * empty prior-year card next to the populated live one.
  */
 export async function getMyLevels(ref: string | null): Promise<LevelDoc[]> {
   if (!ref) return [];
+  const liveYear = await getLiveSchoolYearCached();
   const snap = await portalFirestore()
     .collection('levels')
     .where('teacherRefs', 'array-contains', ref)
@@ -40,6 +49,7 @@ export async function getMyLevels(ref: string | null): Promise<LevelDoc[]> {
     .get();
   return snap.docs
     .map((d) => docToLevel(d.data()))
+    .filter((l) => l.periodLabel === liveYear)
     .sort((a, b) => (a.location ?? '').localeCompare(b.location ?? '') || a.order - b.order);
 }
 
