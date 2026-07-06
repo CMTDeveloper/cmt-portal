@@ -27,6 +27,12 @@
  *   pnpm --filter @cmt/portal seed:bala-vihar-levels -- --year 2026-27 --location Brampton \
  *     --delete-ids brampton-level-1-krishna-bv-brampton-2026-27
  *   pnpm --filter @cmt/portal seed:bala-vihar-levels -- --dry-run
+ *   pnpm --filter @cmt/portal seed:bala-vihar-levels -- --year 2026-27 --verify   # read-only: DB == sheet defs?
+ *
+ * PROD PARITY: the LOCATIONS defs below ARE the single source of truth (CMT's
+ * sheet, transcribed + committed). Running `--year 2026-27 --allow-prod` on prod
+ * writes byte-identical data to what's in UAT; `--year 2026-27 --verify` then
+ * proves it (exit 0 = match, 1 = mismatch). No re-reading the xlsx at cutover.
  */
 
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
@@ -37,6 +43,7 @@ interface ParsedArgs {
   dryRun: boolean;
   allowProd: boolean;
   resetTeachers: boolean;
+  verify: boolean;
   year: string;
   location: string | undefined;
   deleteIds: string[];
@@ -51,6 +58,7 @@ function parseArgs(argv: string[]): ParsedArgs {
     dryRun: argv.includes('--dry-run'),
     allowProd: argv.includes('--allow-prod'),
     resetTeachers: argv.includes('--reset-teachers'),
+    verify: argv.includes('--verify'),
     year: valueOf('--year') ?? '2025-26',
     location: valueOf('--location'),
     deleteIds: (valueOf('--delete-ids') ?? '')
@@ -58,6 +66,59 @@ function parseArgs(argv: string[]): ParsedArgs {
       .map((s) => s.trim())
       .filter(Boolean),
   };
+}
+
+/**
+ * Read-only reconciliation: does the target DB match the canonical LOCATIONS defs
+ * (the CMT sheet, transcribed once + committed)? Compares the sheet-derived fields
+ * — levelKind, gradeBand (order-insensitive), curriculum, enabled — NOT teacherRefs
+ * (operational, preserved). Reports MISSING / MISMATCH / extra levels. Returns true
+ * iff every expected level is present and matches. Safe on prod (no writes) — the
+ * proof that `--year 2026-27 --allow-prod` populated prod with the same data as UAT.
+ */
+async function verifyLevels(
+  db: ReturnType<typeof getFirestore>,
+  locations: LocationSeed[],
+  year: string,
+): Promise<boolean> {
+  let ok = true;
+  for (const loc of locations) {
+    const pid = `bv-${toSafeSlug(loc.location)}-${year}`;
+    console.log(`\n▸ ${loc.location} (${pid})`);
+    const dbSnap = await db.collection('levels').where('pid', '==', pid).get();
+    const dbById = new Map(dbSnap.docs.map((d) => [d.id, d.data()]));
+    const expectedIds = new Set<string>();
+
+    for (const lvl of loc.levels) {
+      const levelId = `${toSafeSlug(loc.location)}-${levelSlug(lvl.levelName)}-${pid}`;
+      expectedIds.add(levelId);
+      const doc = dbById.get(levelId);
+      if (!doc) {
+        console.log(`  ✘ MISSING  ${lvl.levelName} (${levelId})`);
+        ok = false;
+        continue;
+      }
+      const diffs: string[] = [];
+      if (doc.levelKind !== lvl.levelKind) diffs.push(`kind ${JSON.stringify(doc.levelKind)}≠${JSON.stringify(lvl.levelKind)}`);
+      if (doc.curriculum !== lvl.curriculum) diffs.push(`curriculum ${JSON.stringify(doc.curriculum)}≠${JSON.stringify(lvl.curriculum)}`);
+      const dbBand = JSON.stringify([...((doc.gradeBand as string[] | undefined) ?? [])].sort());
+      const exBand = JSON.stringify([...lvl.gradeBand].sort());
+      if (dbBand !== exBand) diffs.push(`band ${JSON.stringify(doc.gradeBand)}≠${JSON.stringify(lvl.gradeBand)}`);
+      if (doc.enabled !== true) diffs.push(`enabled=${JSON.stringify(doc.enabled)}`);
+      if (diffs.length) {
+        console.log(`  ✘ MISMATCH ${lvl.levelName}: ${diffs.join('; ')}`);
+        ok = false;
+      } else {
+        console.log(`  ✔ ${lvl.levelName} [${lvl.gradeBand.join(',') || lvl.levelKind}] ${lvl.curriculum}`);
+      }
+    }
+    // Levels present in the DB but NOT in the sheet defs (e.g. the intentionally
+    // kept Brampton "Parents"). Informational — never a failure.
+    for (const [id, data] of dbById) {
+      if (!expectedIds.has(id)) console.log(`  · extra (not in sheet defs): ${id} name=${JSON.stringify(data.levelName)}`);
+    }
+  }
+  return ok;
 }
 
 interface LevelSeed {
@@ -129,7 +190,8 @@ async function main() {
     process.exit(1);
   }
   const isProd = projectId === 'chinmaya-setu-715b8';
-  if (isProd && !args.allowProd) {
+  // --verify is read-only, so it never needs --allow-prod (reconciling prod is safe).
+  if (isProd && !args.allowProd && !args.verify) {
     console.error(`Refusing to write to prod (${projectId}) without --allow-prod.`);
     process.exit(1);
   }
@@ -142,12 +204,21 @@ async function main() {
     process.exit(1);
   }
 
+  const db = getFirestore(getPortalApp());
+
+  // Read-only reconciliation: prove a target DB matches the committed sheet defs.
+  if (args.verify) {
+    console.log(`Verify: ${projectId} | year ${args.year} | locations: ${locations.map((l) => l.location).join(', ')}`);
+    const okAll = await verifyLevels(db, locations, args.year);
+    console.log(okAll ? '\n✔ All expected levels match the sheet defs.' : '\n✘ Mismatches found (see above).');
+    process.exit(okAll ? 0 : 1);
+  }
+
   console.log(
     `Target project: ${projectId} | year ${args.year} | locations: ${locations.map((l) => l.location).join(', ')}` +
       `${args.resetTeachers ? ' | RESET teacherRefs' : ' | preserve teacherRefs'}${args.dryRun ? ' [DRY RUN]' : ''}`,
   );
 
-  const db = getFirestore(getPortalApp());
   const systemUid = 'seed-script';
   const now = Timestamp.now();
 
