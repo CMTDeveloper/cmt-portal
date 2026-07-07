@@ -23,24 +23,67 @@ beforeEach(() => {
   mockPush.mockReset();
   toastMock.success.mockReset();
   toastMock.error.mockReset();
+  // jsdom forbids assigning window.location.href (it would navigate); replace it
+  // with a writable stub so the Stripe redirect is settable + readable.
+  Object.defineProperty(window, 'location', { configurable: true, writable: true, value: { href: '' } });
 });
 
 describe('EnrollCta', () => {
-  it('donations enabled: navigates to donateUrl and does not re-enable button', async () => {
+  it('donations enabled: enrolls then goes STRAIGHT to Stripe at the suggested amount', async () => {
     const user = userEvent.setup();
-    vi.spyOn(global, 'fetch').mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => ({ eid: 'CMT-AAAA-bv-brampton-fall-2026', donateUrl: '/family/donate?eid=CMT-AAAA-bv-brampton-fall-2026' }),
-    } as Response);
+    const fetchSpy = vi.spyOn(global, 'fetch')
+      // 1) enroll → returns eid + suggestedAmount
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ eid: 'CMT-AAAA-bv-brampton-fall-2026', suggestedAmount: 500, donateUrl: '/family/donate?eid=CMT-AAAA-bv-brampton-fall-2026' }),
+      } as Response)
+      // 2) checkout → returns the Stripe URL
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ url: 'https://checkout.stripe.com/c/pay/cs_test_1' }),
+      } as Response);
 
     render(<EnrollCta oid={OID} donationsEnabled={true}/>);
     await user.click(screen.getByRole('button', { name: /enroll/i }));
 
+    // Two POSTs: enroll, then checkout with the enrollment's suggested amount.
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
+    const [checkoutUrl, checkoutInit] = fetchSpy.mock.calls[1]!;
+    expect(checkoutUrl).toBe('/api/setu/donations/checkout');
+    expect(JSON.parse(String(checkoutInit?.body))).toEqual({
+      type: 'enrollment',
+      eid: 'CMT-AAAA-bv-brampton-fall-2026',
+      amountCAD: 500,
+      coverFee: false,
+    });
+    // Redirects to Stripe (not the /family/donate page).
+    await waitFor(() => expect(window.location.href).toBe('https://checkout.stripe.com/c/pay/cs_test_1'));
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(screen.getByRole('button')).toBeDisabled(); // pending not cleared on success
+  });
+
+  it('donations enabled but checkout unavailable: falls back to the donate page', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ eid: 'CMT-AAAA-bv-brampton-fall-2026', suggestedAmount: 500, donateUrl: '/family/donate?eid=CMT-AAAA-bv-brampton-fall-2026' }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+        json: async () => ({ error: 'checkout-not-configured' }),
+      } as Response);
+
+    render(<EnrollCta oid={OID} donationsEnabled={true}/>);
+    await user.click(screen.getByRole('button', { name: /enroll/i }));
+
+    // The family isn't stranded — they land on the donate page (its picker handles it).
     await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/family/donate?eid=CMT-AAAA-bv-brampton-fall-2026'));
-    expect(toastMock.success).toHaveBeenCalledWith('Enrolled! Continuing to donation.');
-    // Button stays disabled (pending not cleared on success)
-    expect(screen.getByRole('button')).toBeDisabled();
+    expect(window.location.href).toBe('');
   });
 
   it('uses-donation program with collection off: shows "donation coming soon"', async () => {

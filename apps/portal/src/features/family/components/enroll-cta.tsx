@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from '@cmt/ui';
 import type { PaymentSource } from '@cmt/shared-domain';
+import { startEnrollmentCheckout, type EnrollmentCheckoutResult } from './start-checkout-client';
 
 interface EnrollCtaProps {
   /** The offering id (oid) to enroll the family in. */
@@ -52,7 +53,7 @@ export function EnrollCta({ oid, donationsEnabled, usesDonation = false, payment
         return;
       }
 
-      const json = await res.json() as { eid?: string; donateUrl?: string; error?: string };
+      const json = await res.json() as { eid?: string; suggestedAmount?: number; donateUrl?: string; error?: string };
 
       if (!res.ok) {
         const err = json.error;
@@ -75,8 +76,35 @@ export function EnrollCta({ oid, donationsEnabled, usesDonation = false, payment
       }
 
       if (donationsEnabled) {
-        toast.success('Enrolled! Continuing to donation.');
-        // Do NOT clear pending on success — navigation unmounts the component.
+        // Go STRAIGHT to Stripe at the enrollment-resolved amount — skip the
+        // /family/donate amount-picker page (owner decision 2026-07-04; this was
+        // the last donate surface still landing on that page). Do NOT clear
+        // pending on success — navigation unmounts the component.
+        const eid = json.eid;
+        const amount = json.suggestedAmount ?? 0;
+        if (eid && amount >= 1) {
+          toast.success('Enrolled! Taking you to payment…');
+          let checkout: EnrollmentCheckoutResult;
+          try {
+            checkout = await startEnrollmentCheckout(eid, amount);
+          } catch {
+            checkout = { ok: false, reason: 'error' };
+          }
+          if (checkout.ok) {
+            window.location.href = checkout.url;
+            return;
+          }
+          if (checkout.reason === 'unauthorized') {
+            router.push(`/sign-in?from=${encodeURIComponent(safeFrom('/family'))}`);
+            return;
+          }
+          // Any other checkout issue → fall back to the donate page so the family
+          // can still pay (its picker handles below-suggested / not-configured).
+          router.push(json.donateUrl ?? `/family/donate?eid=${eid}`);
+          return;
+        }
+        // Free / $0-suggested (or missing eid) → the donate page owns that flow.
+        toast.success('Enrolled!');
         router.push(json.donateUrl ?? '/family/donate');
       } else {
         toast.success('Your family is enrolled!');
