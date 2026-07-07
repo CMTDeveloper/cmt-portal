@@ -14,6 +14,10 @@ describe('PUBLIC_ROUTES', () => {
     expect(PUBLIC_ROUTES).not.toContain('/family');
     expect(PUBLIC_ROUTES).not.toContain('/family/');
   });
+  it('includes the volunteering-skills options GET (the pre-auth register form reads it)', () => {
+    expect(PUBLIC_ROUTES).toContain('/api/setu/volunteering-skills');
+    expect(isPublicRoute('/api/setu/volunteering-skills')).toBe(true);
+  });
   it('includes the token-link review pages (invite + join-request)', () => {
     // Both are public shells whose client handles auth and redirects to
     // /sign-in on 401/403. The join-request page (the emailed "Review request"

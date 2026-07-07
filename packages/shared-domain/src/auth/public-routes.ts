@@ -36,6 +36,13 @@ export const PUBLIC_ROUTES = [
   // input validation, so middleware must not 401 them before they're reached)
   '/api/setu/family-lookup',
   '/api/setu/register',
+  // The register wizard's "How can you help?" picker fetches the admin-managed
+  // volunteering-skill OPTIONS here, but the registering user has no session yet.
+  // The options are org-wide, non-sensitive config (a list of volunteer
+  // categories), and the GET handler is read-only, so it's public — without this
+  // the picker 401s pre-auth and shows "No volunteering options have been set up
+  // yet." (Also read by the authed member add/edit forms; still works for them.)
+  '/api/setu/volunteering-skills',
 
   // Join-request: the "request to join your family manager" send endpoint is
   // public — the requester is mid-registration with no session yet. The rest of

@@ -570,18 +570,22 @@ describe('canAccessRoute — /api/setu/programs — family + welcome-team', () =
   });
 });
 
-describe('canAccessRoute — /api/setu/volunteering-skills — any setu family (read-only)', () => {
+describe('canAccessRoute — /api/setu/volunteering-skills — PUBLIC (read-only options)', () => {
+  // The option list is now PUBLIC (in PUBLIC_ROUTES): the pre-auth registration
+  // wizard reads it, and canAccessRoute short-circuits public routes to `true`
+  // for every role. The options are org-wide, non-sensitive config; writes stay
+  // admin-only via /api/admin/volunteering-skills (below).
   it('allows family-manager GET', () => {
     expect(canAccessRoute(manager, '/api/setu/volunteering-skills', 'GET')).toBe(true);
   });
   it('allows family-member GET (self-edit needs the option list)', () => {
     expect(canAccessRoute(member, '/api/setu/volunteering-skills', 'GET')).toBe(true);
   });
-  it('denies welcome-team (managed via /api/admin/volunteering-skills)', () => {
-    expect(canAccessRoute(welcomeTeam, '/api/setu/volunteering-skills', 'GET')).toBe(false);
+  it('allows welcome-team GET (public option list)', () => {
+    expect(canAccessRoute(welcomeTeam, '/api/setu/volunteering-skills', 'GET')).toBe(true);
   });
-  it('denies legacy family role (no fid)', () => {
-    expect(canAccessRoute(family, '/api/setu/volunteering-skills', 'GET')).toBe(false);
+  it('allows a legacy family role GET (public option list)', () => {
+    expect(canAccessRoute(family, '/api/setu/volunteering-skills', 'GET')).toBe(true);
   });
 });
 
