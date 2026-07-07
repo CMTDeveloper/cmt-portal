@@ -120,6 +120,15 @@ export async function PATCH(req: Request, ctx: RouteContext) {
 
   const data = parsed.data;
 
+  // A child's birth month/year can't be in the future ('YYYY-MM' sorts lexically).
+  if (typeof data.birthMonthYear === 'string' && /^\d{4}-\d{2}$/.test(data.birthMonthYear.trim())) {
+    const now = new Date();
+    const nowYm = `${now.getUTCFullYear()}-${(now.getUTCMonth() + 1).toString().padStart(2, '0')}`;
+    if (data.birthMonthYear.trim() > nowYm) {
+      return NextResponse.json({ error: 'birthdate-future' }, { status: 400 });
+    }
+  }
+
   // Only managers can change manager flag
   if ('manager' in data && !isManager) {
     return NextResponse.json({ error: 'manager-flag-requires-manager-role' }, { status: 403 });

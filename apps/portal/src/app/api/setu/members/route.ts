@@ -84,6 +84,17 @@ function deriveBirthMonth(birthMonthYear: string | null | undefined): number | n
   return month >= 1 && month <= 12 ? month : null;
 }
 
+// A child can't be born in the future. `birthMonthYear` is 'YYYY-MM', which sorts
+// lexically, so a plain string compare against the current month is enough.
+function isFutureBirthMonthYear(birthMonthYear: string | null | undefined): boolean {
+  if (typeof birthMonthYear !== 'string') return false;
+  const ym = birthMonthYear.trim();
+  if (!/^\d{4}-\d{2}$/.test(ym)) return false;
+  const now = new Date();
+  const nowYm = `${now.getUTCFullYear()}-${(now.getUTCMonth() + 1).toString().padStart(2, '0')}`;
+  return ym > nowYm;
+}
+
 /**
  * Picks the first unsatisfied required field (in REQUIRED_FIELD_ORDER) out of a
  * set of missing fields and returns its 400 error code, or null if none of the
@@ -150,6 +161,11 @@ export async function POST(req: Request) {
   const missingError = requiredFieldError(missing);
   if (missingError) {
     return NextResponse.json({ error: missingError }, { status: 400 });
+  }
+
+  // A child's birth month/year can't be in the future.
+  if (isFutureBirthMonthYear(data.birthMonthYear)) {
+    return NextResponse.json({ error: 'birthdate-future' }, { status: 400 });
   }
 
   // birthMonth (1-12) is derived from birthMonthYear ('YYYY-MM') on every write

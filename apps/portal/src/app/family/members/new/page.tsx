@@ -58,7 +58,11 @@ export default function AddMemberPage() {
   const birthMonthYear = monthNum && birthYear ? `${birthYear}-${String(monthNum).padStart(2, '0')}` : '';
 
   const currentYear = new Date().getFullYear();
+  const currentMonth = new Date().getMonth() + 1; // 1-12
   const birthYears = Array.from({ length: 26 }, (_, i) => String(currentYear - i));
+  // A child can't be born in the future: when the current year is selected, only
+  // offer months up to the current month.
+  const availableMonths = birthYear === String(currentYear) ? MONTHS.filter((m) => m.value <= currentMonth) : MONTHS;
 
   // The effective foodAllergies value: the "No known allergies" toggle wins and
   // writes the NO_ALLERGIES sentinel ('None') so the required field is satisfied
@@ -261,7 +265,7 @@ export default function AddMemberPage() {
             <div className="row" style={{ gap: 8 }}>
               <select className="input" aria-label="Birth month" value={birthMonth} onChange={(e) => setBirthMonth(e.target.value)} style={{ flex: 1 }}>
                 <option value="">Month</option>
-                {MONTHS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+                {availableMonths.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
               </select>
               <select className="input" aria-label="Birth year" value={birthYear} onChange={(e) => setBirthYear(e.target.value)} style={{ flex: 1 }}>
                 <option value="">Year</option>

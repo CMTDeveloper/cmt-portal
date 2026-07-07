@@ -148,6 +148,14 @@ describe('POST /api/setu/members', () => {
     expect(vi.mocked(revalidateTag)).toHaveBeenCalledWith('family-FAM001ABCD12', 'max');
   });
 
+  it('rejects a Child whose birth month/year is in the future', async () => {
+    // Two years ahead stays in the future as the calendar advances.
+    const futureYm = `${new Date().getUTCFullYear() + 2}-01`;
+    const res = await POST(makeRequest({ ...validBody, birthMonthYear: futureYm }, managerHeaders()));
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toBe('birthdate-future');
+  });
+
   it('returns 404 when feature flag is off', async () => {
     vi.resetModules();
     vi.doMock('@/lib/flags', () => ({ flags: { setuAuth: false } }));
