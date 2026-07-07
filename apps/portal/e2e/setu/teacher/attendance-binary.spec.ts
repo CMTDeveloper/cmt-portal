@@ -28,7 +28,7 @@ const DATE = '2026-06-07';
 test.describe('Teacher — binary attendance', () => {
   test.skip(!hasFamilyCreds, 'E2E_FAMILY_EMAIL / E2E_FAMILY_PASSWORD required');
 
-  test('tap-to-present rows (no Late/Uninformed); mark two present → save → persists on reload', async ({ page }) => {
+  test('tap-to-present rows (no Late/Uninformed); mark two present → auto-saves → persists on reload', async ({ page }) => {
     await page.goto(`/teacher/levels/${ATT_LEVEL_ID}/attendance?date=${DATE}`);
     // Flag guard: /teacher/* redirects to /family when the surface is disabled.
     await expect(
@@ -47,26 +47,31 @@ test.describe('Teacher — binary attendance', () => {
     await expect(page.getByText(/uninformed/i)).toHaveCount(0);
     await expect(page.getByRole('button', { name: /^late$/i })).toHaveCount(0);
 
-    // Mark BOTH present. Idempotent (ensure-present, never blind-toggle) so a
-    // re-run without a reseed — where the rows already read present — still passes.
-    for (let i = 0; i < 2; i++) {
-      const row = rows.nth(i);
-      if ((await row.getAttribute('aria-pressed')) !== 'true') {
-        await row.click();
-      }
-      await expect(row).toHaveAttribute('aria-pressed', 'true');
-    }
+    // There is NO manual Save button — attendance auto-saves as the teacher taps.
+    await expect(page.getByRole('button', { name: /save attendance/i })).toHaveCount(0);
 
-    // Save — the POST writes present/absent only (binary).
-    const [saveResp] = await Promise.all([
-      page.waitForResponse(
-        (r) => r.url().includes('/api/setu/teacher/attendance') && r.request().method() === 'POST',
-      ),
-      page.getByRole('button', { name: /save attendance/i }).click(),
-    ]);
+    const setPresent = async (idx: number, want: boolean) => {
+      const r = rows.nth(idx);
+      if (((await r.getAttribute('aria-pressed')) === 'true') !== want) await r.click();
+      await expect(r).toHaveAttribute('aria-pressed', want ? 'true' : 'false');
+    };
+
+    // One unconditional tap guarantees a state change (so the debounced autosave
+    // definitely fires regardless of the fixture's prior state), then drive BOTH
+    // rows to present. The autosave POSTs on its own ~¾s after the last tap.
+    await rows.nth(0).click();
+    await setPresent(0, true);
+    await setPresent(1, true);
+
+    const saveResp = await page.waitForResponse(
+      (r) => r.url().includes('/api/setu/teacher/attendance') && r.request().method() === 'POST',
+      { timeout: 15_000 },
+    );
     expect(saveResp.status(), await saveResp.text()).toBe(200);
+    // Binary: an event per enrolled student (present/absent) — both here.
     expect(((await saveResp.json()) as { saved: number }).saved).toBeGreaterThanOrEqual(2);
-    await expect(page.getByText(/attendance saved/i).first()).toBeVisible({ timeout: 10_000 });
+    // Status confirms it saved — no button was clicked.
+    await expect(page.getByText(/saved/i).first()).toBeVisible({ timeout: 10_000 });
 
     // Reload the same date → the two marks persisted (both rows seed Present).
     await page.reload();

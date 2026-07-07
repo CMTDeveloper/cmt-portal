@@ -1,8 +1,7 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { toast } from '@cmt/ui';
 import type { SetuAttendanceStatus } from '@cmt/shared-domain';
 import type { AttendanceViewRow } from '@/features/setu/teacher/level-attendance-view';
 
@@ -53,6 +52,13 @@ function avatarPalette(first: string, last: string): readonly [string, string] {
 }
 
 const CONTENT_MAX = 540;
+
+// Debounce window for the tap-driven autosave: coalesce a burst of taps into one
+// write ~¾s after the teacher pauses. Short enough that little is lost if the app
+// is killed; the pagehide beacon is the backstop.
+const AUTOSAVE_MS = 700;
+
+type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
 const navArrow: React.CSSProperties = {
   display: 'inline-flex',
@@ -125,7 +131,18 @@ export function AttendanceMarker({ levelId, levelName, ageLabel, date, today, ro
   });
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<'all' | 'unmarked'>('all');
-  const [pending, startTransition] = useTransition();
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+
+  // Autosave plumbing: presentRef always mirrors the latest map so the debounced
+  // timer / pagehide beacon persist current state (not a stale closure). unsaved
+  // tracks whether there's a change the server hasn't confirmed yet.
+  const presentRef = useRef(present);
+  useEffect(() => { presentRef.current = present; }, [present]);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const unsavedRef = useRef(false);
+  // Clear a pending debounce on unmount so a late timer never fires saveNow on a
+  // dead component (e.g. after date navigation).
+  useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
 
   const presentCount = rows.reduce((n, r) => n + (present[r.mid] ? 1 : 0), 0);
   const unmarkedCount = total - presentCount;
@@ -155,8 +172,44 @@ export function AttendanceMarker({ levelId, levelName, ageLabel, date, today, ro
     [rows, filter, present, q],
   );
 
+  // Build the FULL binary map from the latest present ref — tapped → present,
+  // everyone else → absent. Search/filter is display-only; the record written is
+  // always the whole roster (so "not tapped = absent" holds).
+  function buildMarks(): Record<string, SetuAttendanceStatus> {
+    const marks: Record<string, SetuAttendanceStatus> = {};
+    for (const r of rows) marks[r.mid] = presentRef.current[r.mid] ? 'present' : 'absent';
+    return marks;
+  }
+
+  async function saveNow() {
+    if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
+    setSaveStatus('saving');
+    try {
+      const res = await fetch('/api/setu/teacher/attendance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ levelId, date, marks: buildMarks() }),
+      });
+      if (!res.ok) { setSaveStatus('error'); return; }
+      unsavedRef.current = false;
+      setSaveStatus('saved');
+    } catch {
+      setSaveStatus('error');
+    }
+  }
+
+  // No manual Save button: every tap schedules a debounced autosave. Untapped
+  // students persist as Absent on each save, so the record is always complete.
+  function scheduleSave() {
+    unsavedRef.current = true;
+    setSaveStatus('saving');
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => { void saveNow(); }, AUTOSAVE_MS);
+  }
+
   function toggle(mid: string) {
     setPresent((prev) => ({ ...prev, [mid]: !prev[mid] }));
+    scheduleSave();
   }
 
   function markAllToggle() {
@@ -165,6 +218,7 @@ export function AttendanceMarker({ levelId, levelName, ageLabel, date, today, ro
       for (const r of rows) next[r.mid] = !allPresent; // all → clear, else → all present
       return next;
     });
+    scheduleSave();
   }
 
   function jumpNext() {
@@ -176,28 +230,27 @@ export function AttendanceMarker({ levelId, levelName, ageLabel, date, today, ro
     target.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 
-  function save() {
-    // Binary save: EVERY enrolled student gets an event — Present (tapped) or
-    // Absent (not). "Unmarked → Absent" is the recorded outcome for this date.
-    const marks: Record<string, SetuAttendanceStatus> = {};
-    for (const r of rows) marks[r.mid] = present[r.mid] ? 'present' : 'absent';
-    startTransition(async () => {
-      try {
-        const res = await fetch('/api/setu/teacher/attendance', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ levelId, date, marks }),
-        });
-        if (!res.ok) {
-          toast.error('Save failed');
-          return;
-        }
-        toast.success('Attendance saved');
-      } catch {
-        toast.error('Network error — please try again.');
-      }
-    });
-  }
+  // Best-effort flush when the teacher backgrounds/closes the page mid-edit:
+  // a pending debounce would otherwise be lost. sendBeacon survives unload and
+  // carries the __session cookie (same-origin), so the write authenticates.
+  useEffect(() => {
+    const flush = () => {
+      if (!unsavedRef.current) return;
+      if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
+      const marks: Record<string, SetuAttendanceStatus> = {};
+      for (const r of rows) marks[r.mid] = presentRef.current[r.mid] ? 'present' : 'absent';
+      const body = JSON.stringify({ levelId, date, marks });
+      navigator.sendBeacon?.('/api/setu/teacher/attendance', new Blob([body], { type: 'application/json' }));
+      unsavedRef.current = false;
+    };
+    const onVisibility = () => { if (document.visibilityState === 'hidden') flush(); };
+    window.addEventListener('pagehide', flush);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('pagehide', flush);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [levelId, date, rows]);
 
   const filterBtn = (active: boolean): React.CSSProperties => ({
     border: 'none',
@@ -346,8 +399,8 @@ export function AttendanceMarker({ levelId, levelName, ageLabel, date, today, ro
               <span aria-hidden style={{ flexShrink: 0, width: 7, height: 7, borderRadius: '50%', background: 'var(--accent)', marginTop: 5 }} />
               <span>
                 {doorCount > 0
-                  ? `${doorCount} checked in on arrival via the family app — already marked present. Tap the rest as they arrive, then Save.`
-                  : 'No check-ins yet — tap each student present as they arrive, then Save. Anyone left unmarked saves as absent.'}
+                  ? `${doorCount} checked in on arrival via the family app — already marked present. Tap the rest as they arrive — it saves automatically.`
+                  : 'Tap each student present as they arrive — it saves automatically. Anyone left unmarked is recorded absent.'}
               </span>
             </div>
           )}
@@ -551,18 +604,56 @@ export function AttendanceMarker({ levelId, levelName, ageLabel, date, today, ro
             <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, lineHeight: 1.25 }}>
               <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--ink)' }}>{presentCount} present</span>
               <span style={{ fontSize: 12, color: 'var(--muted)' }}>
-                {unmarkedCount > 0 ? `${unmarkedCount} unmarked → saved as absent` : 'All marked present'}
+                {saveStatus === 'idle'
+                  ? 'Tap present as they arrive'
+                  : unmarkedCount > 0
+                    ? `${unmarkedCount} absent`
+                    : 'All present'}
               </span>
             </div>
-            <button
-              type="button"
-              onClick={save}
-              disabled={pending || rows.length === 0}
-              className="btn btn--p"
-              style={{ fontSize: 15, padding: '12px 22px', minHeight: 48, opacity: pending ? 0.65 : 1, whiteSpace: 'nowrap' }}
-            >
-              {pending ? 'Saving…' : 'Save attendance'}
-            </button>
+            {/* No manual Save — attendance auto-saves as the teacher taps. The
+                status shows Saving/Saved; on failure a Retry button appears so a
+                write is never silently lost. */}
+            {saveStatus === 'error' ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--err)', whiteSpace: 'nowrap' }}>Not saved</span>
+                <button
+                  type="button"
+                  onClick={() => void saveNow()}
+                  className="btn btn--p"
+                  style={{ fontSize: 14, padding: '10px 18px', minHeight: 44, whiteSpace: 'nowrap' }}
+                >
+                  Retry
+                </button>
+              </div>
+            ) : (
+              <span
+                role="status"
+                aria-live="polite"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 7,
+                  fontSize: 14,
+                  fontWeight: 600,
+                  minHeight: 44,
+                  paddingInline: 4,
+                  whiteSpace: 'nowrap',
+                  color: saveStatus === 'saved' ? 'var(--ok)' : 'var(--muted)',
+                }}
+              >
+                {saveStatus === 'saving' ? (
+                  <>
+                    <span aria-hidden style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--muted)' }} />
+                    Saving…
+                  </>
+                ) : saveStatus === 'saved' ? (
+                  <>✓ Saved</>
+                ) : (
+                  <span style={{ fontWeight: 500 }}>Auto-saves</span>
+                )}
+              </span>
+            )}
           </div>
         </div>
       )}

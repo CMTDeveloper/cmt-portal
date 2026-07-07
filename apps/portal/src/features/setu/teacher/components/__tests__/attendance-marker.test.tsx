@@ -1,5 +1,5 @@
 import { it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 vi.mock('next/link', () => ({ default: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a> }));
@@ -23,6 +23,13 @@ function props(over: Record<string, unknown> = {}) {
 
 function row(name: string): HTMLElement {
   return screen.getByRole('button', { name: new RegExp(name, 'i') });
+}
+
+/** The JSON body of the most recent POST /api/setu/teacher/attendance call. */
+function lastFetchBody(): { levelId: string; date: string; marks: Record<string, string> } {
+  const calls = (global.fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+  const init = calls[calls.length - 1]![1] as { body: string };
+  return JSON.parse(init.body);
 }
 
 beforeEach(() => { global.fetch = vi.fn(async () => new Response(JSON.stringify({ saved: 2, skipped: [] }), { status: 200 })) as never; });
@@ -58,41 +65,54 @@ it('tapping a row toggles Present on and off', async () => {
   expect(screen.getByRole('button', { name: /Aarav Shah/i }).getAttribute('aria-pressed')).toBe('false');
 });
 
-it('Save writes Present for tapped students and Absent for every unmarked one (binary)', async () => {
+it('auto-saves present for the tapped student and absent for the rest (no Save button)', async () => {
   const user = userEvent.setup();
-  render(<AttendanceMarker {...props()} />);
-  // Default: Diya present (door), Aarav unmarked. Save → Diya present, Aarav ABSENT.
-  await user.click(screen.getByRole('button', { name: /save attendance/i }));
-  expect(global.fetch).toHaveBeenCalledWith('/api/setu/teacher/attendance', expect.objectContaining({ method: 'POST' }));
-  const calls = (global.fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls;
-  const body = JSON.parse((calls[0]![1] as { body: string }).body);
-  expect(body).toMatchObject({ levelId: 'L', date: '2026-01-04', marks: { 'F-02': 'absent', 'F-03': 'present' } });
-});
-
-it('Save writes the FULL roster even while a filter/search hides rows', async () => {
-  const user = userEvent.setup();
-  render(<AttendanceMarker {...props()} />);
-  // The Unmarked filter hides Diya (door-present), leaving only Aarav visible…
-  await user.click(screen.getByRole('button', { name: /^Unmarked 1$/i }));
-  expect(screen.queryAllByTestId('att-row')).toHaveLength(1);
-  // …but Save must still record BOTH students (filtering is display-only).
-  await user.click(screen.getByRole('button', { name: /save attendance/i }));
-  const calls = (global.fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls;
-  const body = JSON.parse((calls[0]![1] as { body: string }).body);
-  expect(body.marks).toEqual({ 'F-02': 'absent', 'F-03': 'present' });
-});
-
-it('keeps Save enabled even when no one is marked (records everyone absent)', () => {
   const allUnmarked = [{ ...ROWS[0]! }, { ...ROWS[1]!, status: null as SetuAttendanceStatus | null, source: 'default' as const, checkedInAtDoor: false }];
   render(<AttendanceMarker {...props({ rows: allUnmarked })} />);
-  expect((screen.getByRole('button', { name: /save attendance/i }) as HTMLButtonElement).disabled).toBe(false);
+  // No manual Save — tapping schedules a debounced autosave of the WHOLE roster.
+  expect(screen.queryByRole('button', { name: /save attendance/i })).toBeNull();
+  await user.click(row('Aarav Shah')); // Aarav present; Diya stays unmarked → absent
+  await waitFor(
+    () => expect(global.fetch).toHaveBeenCalledWith('/api/setu/teacher/attendance', expect.objectContaining({ method: 'POST' })),
+    { timeout: 1500 },
+  );
+  expect(lastFetchBody()).toMatchObject({ levelId: 'L', date: '2026-01-04', marks: { 'F-02': 'present', 'F-03': 'absent' } });
 });
 
-it('renders an upcoming card and no roster/save for a future date', () => {
+it('auto-saves the FULL roster even while a filter hides rows', async () => {
+  const user = userEvent.setup();
+  render(<AttendanceMarker {...props()} />); // Diya door-present, Aarav unmarked
+  await user.click(screen.getByRole('button', { name: /^Unmarked 1$/i })); // hides Diya
+  expect(screen.queryAllByTestId('att-row')).toHaveLength(1);
+  await user.click(row('Aarav Shah')); // tap the only visible student
+  await waitFor(() => expect(global.fetch).toHaveBeenCalled(), { timeout: 1500 });
+  // The save still records BOTH students (filtering is display-only).
+  expect(lastFetchBody().marks).toEqual({ 'F-02': 'present', 'F-03': 'present' });
+});
+
+it('shows "Saved" after a tap auto-saves', async () => {
+  const user = userEvent.setup();
+  render(<AttendanceMarker {...props()} />);
+  await user.click(row('Aarav Shah'));
+  await waitFor(() => expect(screen.getByRole('status').textContent ?? '').toMatch(/saved/i), { timeout: 1500 });
+});
+
+it('surfaces a Retry when the auto-save fails, then recovers on retry', async () => {
+  const user = userEvent.setup();
+  (global.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce(new Response('nope', { status: 500 }));
+  render(<AttendanceMarker {...props()} />);
+  await user.click(row('Aarav Shah'));
+  const retry = await screen.findByRole('button', { name: /retry/i }, { timeout: 1500 });
+  await user.click(retry); // next call uses the default 200 mock
+  await waitFor(() => expect(screen.getByRole('status').textContent ?? '').toMatch(/saved/i), { timeout: 1500 });
+});
+
+it('renders an upcoming card and no roster/save bar for a future date', () => {
   render(<AttendanceMarker {...props({ date: '2026-06-07', today: '2026-06-06' })} />);
   expect(screen.getByText(/this class is upcoming/i)).toBeDefined();
   expect(screen.queryAllByTestId('att-row')).toHaveLength(0);
-  expect(screen.queryByRole('button', { name: /save attendance/i })).toBeNull();
+  // No bottom autosave bar for a future (not-yet-takeable) class.
+  expect(screen.queryByRole('status')).toBeNull();
 });
 
 it('disables the next arrow when the next Sunday is in the future', () => {
@@ -104,14 +124,14 @@ it('disables the next arrow when the next Sunday is in the future', () => {
 
 it('shows the door-aware banner when there are door check-ins but no portal marks', () => {
   render(<AttendanceMarker {...props()} />);
-  expect(screen.queryByText(/no check-ins yet/i)).toBeNull();
+  expect(screen.queryByText(/recorded absent/i)).toBeNull(); // not the no-door banner
   expect(screen.getByText(/checked in on arrival/i)).toBeDefined();
 });
 
-it('shows the "no check-ins yet" banner when there are no portal marks and no door check-ins', () => {
+it('shows the no-door banner (tap present, auto-saves, rest absent) when there are no marks or check-ins', () => {
   const noDoorRows = [{ ...ROWS[0]! }, { ...ROWS[1]!, status: null as SetuAttendanceStatus | null, source: 'default' as const, checkedInAtDoor: false }];
   render(<AttendanceMarker {...props({ rows: noDoorRows })} />);
-  expect(screen.getByText(/no check-ins yet/i)).toBeDefined();
+  expect(screen.getByText(/recorded absent/i)).toBeDefined();
 });
 
 it('hides the banner once a row has a portal source', () => {
@@ -138,9 +158,9 @@ it('stat strip shows Enrolled, Arrived (door) and a live Present count', async (
   expect(within(presentCell).getByText('2')).toBeDefined();
 });
 
-it('footer spells out that unmarked students save as absent', () => {
+it('footer shows the auto-save hint before any change', () => {
   render(<AttendanceMarker {...props()} />);
-  expect(screen.getByText(/1 unmarked → saved as absent/i)).toBeDefined();
+  expect(screen.getByText(/tap present as they arrive/i)).toBeDefined();
 });
 
 it('search filters the roster by name', async () => {
