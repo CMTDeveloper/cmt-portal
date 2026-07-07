@@ -130,6 +130,13 @@ export function AttendanceMarker({ levelId, levelName, ageLabel, date, today, ro
   const presentCount = rows.reduce((n, r) => n + (present[r.mid] ? 1 : 0), 0);
   const unmarkedCount = total - presentCount;
   const doorCount = rows.filter((r) => r.checkedInAtDoor).length;
+  // The per-student grade is redundant when the whole class is one grade — the
+  // header already shows it (e.g. "Gr 1"). Only surface it on multi-grade levels
+  // (e.g. Level 2 = Gr 2 & 3), where it distinguishes students.
+  const showGrade = useMemo(
+    () => new Set(rows.map((r) => r.schoolGrade).filter(Boolean)).size > 1,
+    [rows],
+  );
   const allPresent = total > 0 && presentCount === total;
   const progress = total > 0 ? Math.round((presentCount / total) * 100) : 0;
 
@@ -463,14 +470,16 @@ export function AttendanceMarker({ levelId, levelName, ageLabel, date, today, ro
                     <span style={{ fontSize: 15.5, fontWeight: 600, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {r.firstName} {r.lastName}
                     </span>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
-                      {r.schoolGrade && <span style={{ fontSize: 12, color: 'var(--muted)' }}>{r.schoolGrade}</span>}
-                      {r.checkedInAtDoor && (
-                        <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--info-deep)', background: 'var(--info-soft)', padding: '2px 7px', borderRadius: 999 }}>
-                          arrived
-                        </span>
-                      )}
-                    </span>
+                    {((showGrade && r.schoolGrade) || r.checkedInAtDoor) && (
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+                        {showGrade && r.schoolGrade && <span style={{ fontSize: 12, color: 'var(--muted)' }}>Gr {r.schoolGrade}</span>}
+                        {r.checkedInAtDoor && (
+                          <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--info-deep)', background: 'var(--info-soft)', padding: '2px 7px', borderRadius: 999 }}>
+                            arrived
+                          </span>
+                        )}
+                      </span>
+                    )}
                   </span>
                   {isP ? (
                     <span aria-hidden style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--ok)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 700, flexShrink: 0 }}>
