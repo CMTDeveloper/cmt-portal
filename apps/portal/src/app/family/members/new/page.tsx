@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { SetuIcon } from '@cmt/ui';
-import { NO_ALLERGIES, whatsMissingForMember, type MemberRequiredField } from '@cmt/shared-domain';
+import { CHILD_GRADE_OPTIONS, NO_ALLERGIES, whatsMissingForMember, type MemberRequiredField } from '@cmt/shared-domain';
 import { CspRoot, SectionLabel } from '@/features/family/components/atoms';
 import { VolunteeringSkillsPicker } from '@/features/setu/members/volunteering-skills-picker';
 
@@ -250,7 +250,10 @@ export default function AddMemberPage() {
         <div className="row" style={{ gap: 8, marginBottom: 14 }}>
           <div className="field" style={{ flex: 1 }}>
             <label>School grade <span className="req">·</span></label>
-            <input className="input" aria-label="School grade" value={schoolGrade} onChange={(e) => setSchoolGrade(e.target.value)} placeholder="e.g. Grade 3"/>
+            <select className="input" aria-label="School grade" value={schoolGrade} onChange={(e) => setSchoolGrade(e.target.value)}>
+              <option value="" disabled>Select grade…</option>
+              {CHILD_GRADE_OPTIONS.map((g) => <option key={g.value} value={g.value}>{g.label}</option>)}
+            </select>
             {reqError('schoolGrade', 'School grade is required')}
           </div>
           <div className="field" style={{ flex: 1 }}>

@@ -168,7 +168,7 @@ describe('AddMemberPage — required validation blocks submit', () => {
     await user.type(firstByLabel(/^first name/i), 'Dev');
     await user.type(firstByLabel(/^last name/i), 'Rao');
     await user.selectOptions(findGenderSelect(), 'Male');
-    await user.type(firstByLabel(/^school grade/i), 'Grade 2');
+    await user.selectOptions(firstByLabel(/^school grade/i), '2'); // grade dropdown: value '2' = "Grade 2"
     await user.selectOptions(firstByLabel(/^birth month/i), '9'); // September
     await user.selectOptions(firstByLabel(/^birth year/i), '2018');
     await user.click(screen.getAllByTestId('no-allergies')[0]!);
@@ -185,6 +185,7 @@ describe('AddMemberPage — required validation blocks submit', () => {
     const body = JSON.parse(fetchMock.mock.calls[0]![1].body as string) as Record<string, unknown>;
     expect(body.type).toBe('Child');
     expect(body.gender).toBe('Male');
+    expect(body.schoolGrade).toBe('2'); // canonical grade token from the dropdown
     expect(body.birthMonthYear).toBe('2018-09');
     expect(body.birthMonth).toBe(9);
     expect(body.foodAllergies).toBe('None');
