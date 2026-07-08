@@ -5,6 +5,7 @@ import { flags } from '@/lib/flags';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { assertNotLastManager, LastManagerError } from '@/features/setu/members';
 import { hashContactKey } from '@/features/setu/registration/hash-contact-key';
+import { syncActiveEnrollmentMemberships } from '@/features/setu/enrollment/sync-enrollment-members';
 import { whatsMissingForMember, type MemberRequiredField } from '@cmt/shared-domain';
 
 
@@ -342,6 +343,16 @@ export async function PATCH(req: Request, ctx: RouteContext) {
     throw err;
   }
 
+  // A member edit/removal can change eligibility (a child edited to Adult, or a
+  // child deleted), so reconcile the family's active-enrollment rosters
+  // (enrolledMids). Best-effort — the member write already committed; a sync
+  // hiccup must not 500 the request. The next member change re-reconciles.
+  try {
+    await syncActiveEnrollmentMemberships(fid);
+  } catch (err) {
+    console.error('[members:mutate] enrollment membership sync failed for', fid, err);
+  }
+
   revalidateTag(`family-${fid}`, 'max');
   return NextResponse.json({ ok: true }, { status: 200 });
 }
@@ -420,6 +431,16 @@ export async function DELETE(_req: Request, ctx: RouteContext) {
       return NextResponse.json({ error: 'last-manager' }, { status: 409 });
     }
     throw err;
+  }
+
+  // A member edit/removal can change eligibility (a child edited to Adult, or a
+  // child deleted), so reconcile the family's active-enrollment rosters
+  // (enrolledMids). Best-effort — the member write already committed; a sync
+  // hiccup must not 500 the request. The next member change re-reconciles.
+  try {
+    await syncActiveEnrollmentMemberships(fid);
+  } catch (err) {
+    console.error('[members:mutate] enrollment membership sync failed for', fid, err);
   }
 
   revalidateTag(`family-${fid}`, 'max');

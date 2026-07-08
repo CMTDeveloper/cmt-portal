@@ -5,6 +5,7 @@ import { flags } from '@/lib/flags';
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
 import { hashContactKey } from '@/features/setu/registration/hash-contact-key';
 import { allocateMemberPublicIds } from '@/features/setu/ids/public-id-allocator';
+import { syncActiveEnrollmentMemberships } from '@/features/setu/enrollment/sync-enrollment-members';
 import { whatsMissingForMember, type MemberRequiredField } from '@cmt/shared-domain';
 
 
@@ -280,6 +281,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'family-not-found' }, { status: 404 });
     }
     throw err;
+  }
+
+  // Keep the family's active-enrollment rosters in sync: a child added AFTER the
+  // family enrolled must join the enrollment (enrolledMids), else the dashboard/
+  // roster/attendance silently omit them (the N=2 bug). Best-effort — the member
+  // is already saved, so a sync hiccup must not 500 the add; the next member
+  // change (or the retro-sweep) reconciles.
+  try {
+    await syncActiveEnrollmentMemberships(fid);
+  } catch (err) {
+    console.error('[members:POST] enrollment membership sync failed for', fid, err);
   }
 
   revalidateTag(`family-${fid}`, 'max');

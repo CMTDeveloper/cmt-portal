@@ -16,10 +16,17 @@ vi.mock('@/features/setu/ids/public-id-allocator', () => ({
     Array.from({ length: count }, (_, i) => String(50001 + i)),
   ),
 }));
+// After a successful add, the route reconciles active-enrollment rosters so a
+// newly-added child joins the enrollment (the N=2 dashboard bug). Stub it here;
+// its own logic is covered in sync-enrollment-members.test.ts.
+vi.mock('@/features/setu/enrollment/sync-enrollment-members', () => ({
+  syncActiveEnrollmentMemberships: vi.fn(async () => ({ updated: [] })),
+}));
 
 import { POST } from '../route';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { revalidateTag } from 'next/cache';
+import { syncActiveEnrollmentMemberships } from '@/features/setu/enrollment/sync-enrollment-members';
 
 const mockRunTransaction = vi.fn();
 const mockGet = vi.fn();
@@ -146,6 +153,13 @@ describe('POST /api/setu/members', () => {
     expect(body.mid).toBeDefined();
     expect(body.mid).toMatch(/^FAM001ABCD12-/);
     expect(vi.mocked(revalidateTag)).toHaveBeenCalledWith('family-FAM001ABCD12', 'max');
+  });
+
+  it('reconciles active-enrollment memberships after a successful add', async () => {
+    const res = await POST(makeRequest(validBody, managerHeaders()));
+    expect(res.status).toBe(201);
+    // The newly added child must be swept into the family's active enrollment(s).
+    expect(vi.mocked(syncActiveEnrollmentMemberships)).toHaveBeenCalledWith('FAM001ABCD12');
   });
 
   it('rejects a Child whose birth month/year is in the future', async () => {
