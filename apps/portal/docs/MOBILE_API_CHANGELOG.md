@@ -22,7 +22,7 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
-## 2026-07-08 — `549615a` — Member add/edit/delete now reconciles active-enrollment membership
+## 2026-07-08 — `02b8eeb` — Member add/edit/delete now reconciles active-enrollment membership
 `POST /api/setu/members`, `PATCH /api/setu/members/[mid]`, and `DELETE /api/setu/members/[mid]` now, after the write, reconcile every ACTIVE enrollment's `enrolledMids` to the family's currently-eligible members. A child added AFTER the family enrolled is automatically swept into the active enrollment (previously it was silently omitted from the dashboard/roster — the N=2 bug); a deleted/ineligible member is dropped. **No request/response SHAPE change** — same bodies (`{ mid }` / `{ ok: true }`), same error codes, no new fields. **Mobile action:** after ANY member add/edit/delete, REFETCH enrollments / the dashboard (`GET /api/setu/dashboard` or `GET /api/setu/family`) — a member mutation can now change the family's `enrolledMids` (and thus the enrolled-children list) as a side effect, so a locally-cached enrollment/dashboard is stale until refetched.
 
 ## 2026-07-03 — `de017f6` — Attendance is Present/Absent only (Late retired)
