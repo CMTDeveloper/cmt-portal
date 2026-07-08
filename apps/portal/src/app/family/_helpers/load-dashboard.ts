@@ -10,6 +10,7 @@ import { getFamilyAssignment, type FamilyPrasadView } from '@/features/setu/pras
 import { getFamilyBalaViharAttendance } from '@/features/setu/attendance/get-family-attendance';
 import { getPerChildBalaViharAttendance } from '@/features/setu/attendance/get-per-child-attendance';
 import { getBvTeacherNames } from '@/features/setu/attendance/get-bv-teacher-names';
+import { matchChildLevel, fetchEnabledLevelsForPid, type LevelForMatch } from '@/features/setu/enrollment/derive-child-level';
 import { isoToTorontoDateInput } from '@/lib/toronto-date';
 import {
   buildFamilyDashboardModel,
@@ -90,7 +91,7 @@ export async function loadFamilyDashboard(
   // but they're independent of EACH OTHER — run them concurrently in one narrow
   // second step rather than serializing.
   const bv = selectBalaViharEnrollment(enrollments);
-  const [legacyPaymentStatus, bvAttendedCount, perChildAttendance, teacherNamesByLevel] =
+  const [legacyPaymentStatus, bvAttendedCount, perChildAttendance, teacherNamesByLevel, bvLevels] =
     await Promise.all([
       // Legacy roster status only matters for the 2025-26 cutover BV offering;
       // skip the extra RTDB read otherwise (same predicate the model uses).
@@ -186,6 +187,23 @@ export async function loadFamilyDashboard(
           return new Map();
         }
       })(),
+      // Live level-derivation source. `enrollFamily` never writes `levelSnapshots`
+      // (only the annual rollover does), so a self-enrolled child would read
+      // "Level pending" forever. Fetch the offering's levels ONLY when at least
+      // one enrolled child lacks a stored snapshot, then match by grade below.
+      (async (): Promise<LevelForMatch[]> => {
+        if (!bv) return [];
+        const anyMissing = bv.enrolledMids.some((mid) => !bv.levelSnapshots?.[mid]?.levelName);
+        if (!anyMissing) return [];
+        try {
+          // Levels are keyed by pid, which equals the offering id (enrollFamily
+          // writes `pid: oid`); use the required `oid` as the lookup key.
+          return await fetchEnabledLevelsForPid(bv.oid);
+        } catch (err) {
+          console.warn('[load-dashboard] BV level fetch (live derivation) failed', err);
+          return [];
+        }
+      })(),
     ]);
 
   const model = buildFamilyDashboardModel({
@@ -196,18 +214,64 @@ export async function loadFamilyDashboard(
     bvAttendedCount,
   });
 
-  // One view row per BV-enrolled child: joins the member's first name + the
-  // enrollment's level snapshot + the teacher-name and per-child attendance maps
-  // resolved above. Empty when there's no active BV enrollment.
   const byMidMember = new Map(members.map((m): [string, MemberDoc] => [m.mid, m]));
+
+  // Resolve each enrolled BV child's level: a stored snapshot (captured at the
+  // annual rollover) WINS; otherwise derive it live from the child's current
+  // grade against the offering's levels, so a self-enrolled child (no snapshot —
+  // enrollFamily writes none) shows their real level instead of "Level pending".
+  // null = genuinely no matching enabled level.
+  const now = new Date();
+  const childLevel = new Map<string, { levelId: string | null; levelName: string | null }>();
+  if (bv) {
+    for (const mid of bv.enrolledMids) {
+      const snap = bv.levelSnapshots?.[mid] ?? null;
+      if (snap?.levelName) {
+        childLevel.set(mid, { levelId: snap.levelId ?? null, levelName: snap.levelName });
+        continue;
+      }
+      const m = byMidMember.get(mid);
+      const derived = m
+        ? matchChildLevel(
+            { type: m.type, schoolGrade: m.schoolGrade ?? null, birthMonthYear: m.birthMonthYear ?? null },
+            bvLevels,
+            now,
+          )
+        : null;
+      childLevel.set(mid, { levelId: derived?.levelId ?? null, levelName: derived?.levelName ?? null });
+    }
+
+    // teacherNamesByLevel was fetched from SNAPSHOT level ids only; a DERIVED
+    // level id won't be in it. Fill those in with one extra read — but only for
+    // uncovered ids, so rollover families (all snapshots) skip this entirely.
+    const uncovered = [
+      ...new Set(
+        [...childLevel.values()]
+          .map((v) => v.levelId)
+          .filter((id): id is string => !!id && !teacherNamesByLevel.has(id)),
+      ),
+    ];
+    if (uncovered.length > 0) {
+      try {
+        const extra = await getBvTeacherNames(uncovered);
+        for (const [k, v] of extra) teacherNamesByLevel.set(k, v);
+      } catch (err) {
+        console.warn('[load-dashboard] derived-level teacher-name read failed — omitting', err);
+      }
+    }
+  }
+
+  // One view row per BV-enrolled child: joins the member's first name + the
+  // resolved level (snapshot-or-derived) + the teacher-name and per-child
+  // attendance maps. Empty when there's no active BV enrollment.
   const bvChildren: BvChildView[] = bv
     ? bv.enrolledMids.map((mid) => {
-        const snap = bv.levelSnapshots?.[mid] ?? null;
+        const lvl = childLevel.get(mid) ?? { levelId: null, levelName: null };
         return {
           mid,
           firstName: byMidMember.get(mid)?.firstName ?? '',
-          levelName: snap?.levelName ?? null,
-          teacherNames: snap?.levelId ? (teacherNamesByLevel.get(snap.levelId) ?? []) : [],
+          levelName: lvl.levelName,
+          teacherNames: lvl.levelId ? (teacherNamesByLevel.get(lvl.levelId) ?? []) : [],
           attendance: perChildAttendance.get(mid) ?? { present: 0, total: 0 },
         };
       })

@@ -101,5 +101,11 @@ test.describe.serial('Enrollment auto-sync — child added after enrollment', ()
     // route revalidates the family cache tag, so the fresh load sees them.)
     await page.goto('/family');
     await expect(visibleText(page, ADDED_FIRST).first()).toBeVisible();
+
+    // …and the child's level is DERIVED LIVE from their grade — a self-enrolled
+    // child has no rollover levelSnapshot, so without the fallback it would read
+    // "Level pending". Grade 2 → Brampton Level 2 (band 2 & 3). The seed's
+    // baseline child (Grade 4) maps to Level 3, so "Level 2" is uniquely ours.
+    await expect(visibleText(page, /^Level 2$/).first()).toBeVisible();
   });
 });
