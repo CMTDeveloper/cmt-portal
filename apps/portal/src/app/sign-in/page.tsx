@@ -49,7 +49,7 @@ function SignInPrototype() {
                   </button>
                   <button className="btn btn--g btn--block" style={{ fontSize: 13 }}>Use phone number instead</button>
                   <div style={{ marginTop: 24, padding: 14, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radiusSm)', fontSize: 12, color: 'var(--body-text)', lineHeight: 1.5 }}>
-                    <strong>New to Setu?</strong> Use the same form — if we don't find an account we'll walk you through registering your family.
+                    <strong>New to Chinmaya Setu?</strong> Use the same form - if we don't find an account we'll walk you through registering your family.
                   </div>
                 </>
               )}
@@ -99,7 +99,7 @@ function SignInPrototype() {
                   </button>
                   <button className="btn btn--g btn--block" style={{ fontSize: 13 }}>Use phone number instead</button>
                   <div style={{ marginTop: 28, padding: 16, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radiusSm)', fontSize: 13, color: 'var(--body-text)', lineHeight: 1.5 }}>
-                    <strong>New to Setu?</strong> Use the same form — if we don't find an account we'll walk you through registering your family.
+                    <strong>New to Chinmaya Setu?</strong> Use the same form - if we don't find an account we'll walk you through registering your family.
                   </div>
                 </>
               )}
@@ -143,7 +143,7 @@ function RightPane({ welcomeFlow, adminFlow = false }: { welcomeFlow: boolean; a
     ? "Admin access is granted by an existing admin. Ask one to add your email if you don't see it."
     : welcomeFlow
       ? "Don't have welcome-team access? Ask the admin to grant your email."
-      : "New to Setu? The same form handles registration — just enter your email and we'll guide you from there.";
+      : "New to Chinmaya Setu? The same form handles registration - just enter your email and we'll guide you from there.";
 
   return (
     <div style={{ flex: '1 1 0', background: 'var(--accent)', position: 'relative', overflow: 'hidden', display: 'flex', alignItems: 'flex-end', padding: 48 }}>
@@ -510,7 +510,7 @@ function SignInReal() {
         {!sevakFlow && (
           <>
             <div style={{ marginTop: 24, padding: 14, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radiusSm)', fontSize: 12, color: 'var(--body-text)', lineHeight: 1.5 }}>
-              <strong>New to Setu?</strong> Register your family to create your account.
+              <strong>New to Chinmaya Setu?</strong> Register your family to create your account.
             </div>
             <Link href="/register" className="btn btn--g btn--block" style={{ marginTop: 10, fontSize: 13, display: 'flex' }}>Register your family →</Link>
           </>
@@ -622,7 +622,7 @@ function SignInReal() {
                   {!sevakFlow && (
                     <>
                       <div style={{ marginTop: 24, padding: 14, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radiusSm)', fontSize: 12, color: 'var(--body-text)', lineHeight: 1.5 }}>
-                        <strong>New to Setu?</strong> Use the same form — if we don't find an account we'll walk you through registering your family.
+                        <strong>New to Chinmaya Setu?</strong> Use the same form - if we don't find an account we'll walk you through registering your family.
                       </div>
                       <Link href="/register" className="btn btn--g btn--block" style={{ marginTop: 10, fontSize: 13, display: 'flex' }}>Register your family →</Link>
                     </>
@@ -659,7 +659,7 @@ function SignInReal() {
                     <div style={{ marginTop: 18, padding: 14, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radiusSm)' }}>
                       <p style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Didn&apos;t get a code?</p>
                       <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5, marginBottom: 10 }}>
-                        Codes only go to emails that already belong to a family on Setu. If this is your first time, register your family below.
+                        Codes only go to emails that already belong to a family on Chinmaya Setu. If this is your first time, register your family below.
                       </p>
                       <Link href="/register" className="btn btn--s btn--block" style={{ display: 'flex', fontSize: 13 }}>
                         Register a new family →
@@ -738,7 +738,7 @@ function SignInReal() {
                   {!sevakFlow && (
                     <>
                       <div style={{ marginTop: 28, padding: 16, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radiusSm)', fontSize: 13, color: 'var(--body-text)', lineHeight: 1.5 }}>
-                        <strong>New to Setu?</strong> Use the same form — if we don't find an account we'll walk you through registering your family.
+                        <strong>New to Chinmaya Setu?</strong> Use the same form - if we don't find an account we'll walk you through registering your family.
                       </div>
                       <Link href="/register" className="btn btn--g btn--block" style={{ marginTop: 10, fontSize: 13, display: 'flex' }}>Register your family →</Link>
                     </>
@@ -775,7 +775,7 @@ function SignInReal() {
                     <div style={{ marginTop: 20, padding: 16, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radiusSm)' }}>
                       <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Didn&apos;t get a code?</p>
                       <p style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.55, marginBottom: 12 }}>
-                        Codes only go to emails that already belong to a family on Setu. If this is your first time, register your family below.
+                        Codes only go to emails that already belong to a family on Chinmaya Setu. If this is your first time, register your family below.
                       </p>
                       <Link href="/register" className="btn btn--s btn--block" style={{ display: 'flex' }}>
                         Register a new family →

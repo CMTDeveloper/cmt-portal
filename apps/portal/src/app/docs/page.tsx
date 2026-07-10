@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { DOC_CATEGORIES, visibleGuides, type DocGuide } from '@/features/docs/registry';
 import { getDocsViewer } from '@/features/docs/viewer';
 
-export const metadata = { title: 'Guides · CMT Setu' };
+export const metadata = { title: 'Guides · Chinmaya Setu' };
 
 const AUDIENCE_LABELS: Record<DocGuide['audience'][number], string> = {
   admin: 'Admin',

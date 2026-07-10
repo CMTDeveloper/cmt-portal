@@ -26,9 +26,10 @@ export function SetuLogo({ size = 18, mono = false }: LogoProps) {
           fontSize: size,
           fontWeight: 600,
           letterSpacing: '0.01em',
+          whiteSpace: 'nowrap',
         }}
       >
-        Setu
+        Chinmaya Setu
       </span>
     </span>
   );

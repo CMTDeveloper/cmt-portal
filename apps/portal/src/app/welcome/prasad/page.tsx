@@ -12,7 +12,7 @@ import {
 } from '@/features/setu/prasad/upcoming';
 
 export const metadata: Metadata = {
-  title: 'Prasad · Setu',
+  title: 'Prasad · Chinmaya Setu',
 };
 
 export default function WelcomePrasadPage() {

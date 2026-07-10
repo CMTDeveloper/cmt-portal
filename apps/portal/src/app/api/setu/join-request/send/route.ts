@@ -79,7 +79,7 @@ export async function POST(req: Request) {
           tasks.push(
             sender.sendSMS({
               phone: m.phone,
-              message: `Hari OM! ${result.requesterContact} asked to join your ${result.familyName} family on CMT Setu. Review: ${reviewUrl}`,
+              message: `Hari OM! ${result.requesterContact} asked to join your ${result.familyName} family on Chinmaya Setu. Review: ${reviewUrl}`,
             }),
           );
         }

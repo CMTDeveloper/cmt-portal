@@ -40,8 +40,13 @@ function RegisterPrototype() {
       <StepHeader step={1} of={2} label="Your contact"/>
       <h1 style={{ fontSize: 26, fontWeight: 400, marginTop: 18, marginBottom: 8 }}>Let's find your family.</h1>
       <p style={{ fontSize: 14, color: 'var(--body-text)', marginBottom: 22, lineHeight: 1.5 }}>
-        If someone in your household is already on Setu we'll connect you to them. Otherwise we'll start a new family record.
+        If someone in your household is already on Chinmaya Setu we'll connect you to them. Otherwise we'll start a new family record.
       </p>
+
+      <div style={{ padding: '12px 14px', background: 'var(--accentSoft)', border: '1px solid var(--line2)', borderRadius: 'var(--radiusSm)', marginBottom: 20, fontSize: 13, lineHeight: 1.5, color: 'var(--body-text)' }}>
+        <strong style={{ display: 'block', marginBottom: 4 }}>Add everyone in your household.</strong>
+        Enter every email and phone your household uses, including your spouse&apos;s or co-parent&apos;s. This is how we connect you to an existing family record instead of creating a duplicate.
+      </div>
 
       <div className="field" style={{ marginBottom: 14 }}>
         <label>Email address <span className="req">·</span></label>
@@ -312,8 +317,13 @@ function RegisterReal() {
       <StepHeader step={1} of={2} label="Your contact"/>
       <h1 style={{ fontSize: 26, fontWeight: 400, marginTop: 18, marginBottom: 8 }}>Let's find your family.</h1>
       <p style={{ fontSize: 14, color: 'var(--body-text)', marginBottom: 22, lineHeight: 1.5 }}>
-        If someone in your household is already on Setu we'll connect you to them. Otherwise we'll start a new family record.
+        If someone in your household is already on Chinmaya Setu we'll connect you to them. Otherwise we'll start a new family record.
       </p>
+
+      <div style={{ padding: '12px 14px', background: 'var(--accentSoft)', border: '1px solid var(--line2)', borderRadius: 'var(--radiusSm)', marginBottom: 20, fontSize: 13, lineHeight: 1.5, color: 'var(--body-text)' }}>
+        <strong style={{ display: 'block', marginBottom: 4 }}>Add everyone in your household.</strong>
+        Enter every email and phone your household uses, including your spouse&apos;s or co-parent&apos;s. Add extras with the buttons below so we can connect you to an existing family record instead of creating a duplicate.
+      </div>
 
       <div className="field" style={{ marginBottom: 14 }}>
         <label>Email address <span className="req">·</span></label>
@@ -428,7 +438,7 @@ function RegisterReal() {
             Sign in to access my family →
           </Link>
           <a
-            href="mailto:info@chinmayatoronto.org?subject=Setu%20account%20issue"
+            href="mailto:info@chinmayatoronto.org?subject=Chinmaya%20Setu%20account%20issue"
             className="btn btn--g btn--block"
             style={{ fontSize: 13, display: 'flex' }}
           >
@@ -469,7 +479,7 @@ function RegisterReal() {
                 {requesting ? 'Sending…' : 'Send a request to your manager →'}
               </button>
               <a
-                href="mailto:info@chinmayatoronto.org?subject=Setu%20account%20issue"
+                href="mailto:info@chinmayatoronto.org?subject=Chinmaya%20Setu%20account%20issue"
                 className="btn btn--g btn--block"
                 style={{ fontSize: 13, display: 'flex' }}
               >

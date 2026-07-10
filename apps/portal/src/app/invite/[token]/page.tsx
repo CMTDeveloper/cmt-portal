@@ -128,7 +128,7 @@ async function InviteBody({
         You've been invited
       </div>
       <h1 style={{ fontSize: 32, fontWeight: 400, lineHeight: 1.15, marginBottom: 14 }}>
-        <em style={{ fontStyle: 'italic', color: 'var(--accent)' }}>{inviterName}</em> is inviting you to join the {familyName} family on Setu.
+        <em style={{ fontStyle: 'italic', color: 'var(--accent)' }}>{inviterName}</em> is inviting you to join the {familyName} family on Chinmaya Setu.
       </h1>
       <p style={{ fontSize: 14, color: 'var(--body-text)', lineHeight: 1.6, marginBottom: 26 }}>
         {inviterName} has added you as a co-manager ({relation}). Once you accept, you'll be able to manage{' '}
@@ -199,7 +199,7 @@ function RightPane() {
       <div style={{ position: 'relative', color: '#fff' }}>
         <p style={{ fontSize: 11, letterSpacing: '.2em', textTransform: 'uppercase', opacity: .7, marginBottom: 8 }}>Family invite</p>
         <p style={{ fontFamily: 'var(--display)', fontSize: 26, fontStyle: 'italic', lineHeight: 1.35, fontWeight: 400 }}>
-          "Joining your family on Setu means one shared view of enrollment, attendance, and giving — for the whole household."
+          "Joining your family on Chinmaya Setu means one shared view of enrollment, attendance, and giving - for the whole household."
         </p>
         <p style={{ marginTop: 16, fontSize: 13, opacity: .75, lineHeight: 1.55 }}>
           Co-managers can enroll children, record attendance, and manage donations together.

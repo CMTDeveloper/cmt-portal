@@ -23,14 +23,14 @@ export function setuInviteEmail({ inviterName, familyName, relation, acceptUrl }
   const acceptUrlHtml = escapeHtml(acceptUrl);
 
   return {
-    subject: `${inviterName} invited you to join the ${familyName} family on Setu`,
-    text: `Hari OM!\n\n${inviterName} has invited you to join the ${familyName} family on the Chinmaya Mission Toronto Setu portal as a ${relation}.\n\nAccept the invitation here:\n${acceptUrl}\n\nThis invitation will expire in 14 days.\n\nIf you did not expect this invitation, you can safely ignore this email.\n\nHari OM,\nChinmaya Mission Toronto`,
+    subject: `${inviterName} invited you to join the ${familyName} family on Chinmaya Setu`,
+    text: `Hari OM!\n\n${inviterName} has invited you to join the ${familyName} family on the Chinmaya Setu portal as a ${relation}.\n\nAccept the invitation here:\n${acceptUrl}\n\nThis invitation will expire in 14 days.\n\nIf you did not expect this invitation, you can safely ignore this email.\n\nHari OM,\nChinmaya Mission Toronto`,
     html: `<!doctype html>
 <html><body style="font-family: system-ui, sans-serif; color: #214a54; max-width: 600px; margin: 0 auto; padding: 24px">
   <h1 style="color: #214a54">Chinmaya Mission Toronto</h1>
   <p>Hari OM!</p>
   <div style="background: #f5f4f0; border-left: 4px solid #214a54; padding: 16px; margin: 20px 0">
-    <p style="margin: 0"><strong>${inviterNameHtml}</strong> has invited you to join the <strong>${familyNameHtml}</strong> family on the CMT Setu portal as a <strong>${relationHtml}</strong>.</p>
+    <p style="margin: 0"><strong>${inviterNameHtml}</strong> has invited you to join the <strong>${familyNameHtml}</strong> family on the Chinmaya Setu portal as a <strong>${relationHtml}</strong>.</p>
   </div>
   <p>Click the button below to accept the invitation:</p>
   <p>

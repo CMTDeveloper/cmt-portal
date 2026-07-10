@@ -7,7 +7,7 @@ import { listKnownSchoolYears, resolveViewYear } from '@/features/setu/rollover/
 import { RosterBrowser } from '@/features/setu/roster/roster-browser';
 
 export const metadata: Metadata = {
-  title: 'Roster · Setu',
+  title: 'Roster · Chinmaya Setu',
 };
 
 export default function WelcomeRosterPage({

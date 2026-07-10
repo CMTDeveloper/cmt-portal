@@ -10,7 +10,7 @@ import { listKnownSchoolYears, resolveViewYear } from '@/features/setu/rollover/
 import { ReportsHub } from '@/features/setu/reports/reports-hub';
 
 export const metadata: Metadata = {
-  title: 'Reports · Setu',
+  title: 'Reports · Chinmaya Setu',
 };
 
 export default function WelcomeReportsPage({

@@ -67,13 +67,13 @@ export async function POST(req: Request) {
     const canonicalEmail = normalizeContactForKey('email', value);
     await resolveSender().sendEmail({
       to: canonicalEmail,
-      subject: 'Confirm your contact for CMT Setu',
+      subject: 'Confirm your contact for Chinmaya Setu',
       text: `Enter this code to add this email to your family profile: ${code} (expires in 10 minutes).`,
     });
   } else {
     await resolveSender().sendSMS({
       phone: normalizeContactForKey('phone', value),
-      message: `CMT Setu code to add this phone: ${code} (10 min)`,
+      message: `Chinmaya Setu code to add this phone: ${code} (10 min)`,
     });
   }
 

@@ -8,7 +8,7 @@ import { getDocsViewer } from '@/features/docs/viewer';
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const guide = findGuide(slug);
-  return { title: guide ? `${guide.title} · CMT Setu guides` : 'Guides · CMT Setu' };
+  return { title: guide ? `${guide.title} · Chinmaya Setu guides` : 'Guides · Chinmaya Setu' };
 }
 
 export default async function DocGuidePage({ params }: { params: Promise<{ slug: string }> }) {
