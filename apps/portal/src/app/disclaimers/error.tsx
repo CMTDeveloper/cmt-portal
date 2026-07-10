@@ -9,5 +9,5 @@ export default function DisclaimersError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
-  return <ErrorFallback error={error} reset={reset} feature="Family agreement" />;
+  return <ErrorFallback error={error} reset={reset} feature="Acknowledgements" />;
 }

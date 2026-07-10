@@ -18,7 +18,7 @@ const GROUPS: Array<{
     tiles: [
       { href: '/welcome', title: 'Family search', icon: 'search', tone: 'primary', sub: 'Look up any family by name, FID, legacy FID, email, or phone. Read-only family detail.' },
       { href: '/admin/users', title: 'Users & roles', icon: 'people', tone: 'primary', sub: 'Grant + revoke admin & welcome-team roles for CMT sevaks. View teacher assignments.' },
-      { href: '/admin/disclaimers', title: 'Disclaimers', icon: 'info', tone: 'primary', sub: 'Edit the family agreement sections families accept at sign-in. Publishing asks all families to re-accept.' },
+      { href: '/admin/disclaimers', title: 'Disclaimers', icon: 'info', tone: 'primary', sub: 'Edit the acknowledgement sections families accept at sign-in. Publishing asks all families to re-accept.' },
     ],
   },
   {

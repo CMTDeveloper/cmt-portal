@@ -41,7 +41,7 @@ export function DisclaimerAcceptForm({ sections }: { sections: DisclaimerSection
         Before you continue
       </p>
       <h1 style={{ fontSize: 26, fontWeight: 600, marginTop: 8, letterSpacing: '-0.02em' }}>
-        Our family agreement
+        Acknowledgements
       </h1>
       <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 8, lineHeight: 1.5, marginBottom: 22 }}>
         Please read and acknowledge each section to continue to your family dashboard.

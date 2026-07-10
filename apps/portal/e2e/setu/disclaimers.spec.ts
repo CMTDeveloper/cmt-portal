@@ -38,6 +38,11 @@ test.describe.configure({ mode: 'serial' });
 // re-auth; the per-test `page`/`request` fixtures get baseURL from the config.
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3001';
 
+// A deep copy of the PRE-mutation `sections` array captured in the test, so the
+// afterAll can PUT the original content back and stop this spec permanently
+// appending `(rev <ms>)` to section 0's body in the shared UAT config doc.
+let originalSections: unknown[] | null = null;
+
 test.beforeAll(async () => {
   // Skip the whole file when creds are absent (CI without .env.local), matching
   // the codebase convention that setu specs self-skip without a family session.
@@ -56,6 +61,8 @@ test('manager is gated to /disclaimers, accepts, and reaches the dashboard', asy
   const editRes = await request.get('/api/admin/disclaimers');
   expect(editRes.ok()).toBeTruthy();
   const { sections } = await editRes.json();
+  // Snapshot the ORIGINAL content BEFORE mutating so afterAll can restore it.
+  originalSections = JSON.parse(JSON.stringify(sections));
   const bumped = sections.map((s: { id: string; title: string; body: string }, i: number) =>
     i === 0 ? { ...s, body: `${s.body} (rev ${Date.now()})` } : s,
   );
@@ -89,6 +96,16 @@ test.afterAll(async () => {
   // this is a belt-and-braces restore in case it failed mid-way).
   const ctx = await pwRequest.newContext({ baseURL: BASE_URL });
   await signInFamilyAndSaveStorage(ctx);
+  // Restore the ORIGINAL content so we don't permanently pollute the shared UAT
+  // config doc with the `(rev <ms>)` body bump. Wrapped so a cleanup failure
+  // never fails the suite.
+  if (originalSections) {
+    try {
+      await ctx.put('/api/admin/disclaimers', { data: { sections: originalSections } });
+    } catch {
+      // best-effort restore; ignore
+    }
+  }
   await ctx.post('/api/setu/disclaimers/accept');
   await ctx.dispose();
 });

@@ -9,7 +9,7 @@ import { DisclaimerAcceptForm } from '@/features/setu/disclaimers/components/dis
 import { CspRoot } from '@/features/family/components/atoms';
 import { LoadingOm } from '@/components/chrome/loading-om';
 
-export const metadata = { title: 'Family agreement' };
+export const metadata = { title: 'Acknowledgements' };
 
 // The gate's data access (cookies via getCurrentFamily, Firestore via
 // getDisclaimerStateForFamily) is uncached + dynamic. This is a TOP-LEVEL route
