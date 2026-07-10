@@ -103,19 +103,16 @@ function renderPaidBlockMobile(termLabel: string) {
   );
 }
 
-function renderDonationBlock(suggestedAmount: number, location: string | null, termLabel: string) {
+function renderDonationBlock(suggestedAmount: number) {
+  // Suggested donation only — no "rate", no "not required / any amount welcome"
+  // copy (owner 2026-07-10). The section label above already reads
+  // "Donation · suggested donation".
   return (
     <div style={{ padding: 18, background: 'var(--accentSoft)', border: '1px solid var(--line2)', borderRadius: 'var(--radius)' }}>
-      <div style={{ fontSize: 11, color: 'var(--accentDeep)', letterSpacing: '.1em', textTransform: 'uppercase', fontWeight: 600, marginBottom: 8 }}>
-        {location ? `${location} ` : ''}{termLabel} rate
-      </div>
       <div className="row" style={{ alignItems: 'baseline', gap: 6 }}>
         <span style={{ fontFamily: 'var(--display)', fontSize: 40 }}>${suggestedAmount}</span>
         <span style={{ fontSize: 13, color: 'var(--body-text)' }}>per family · suggested</span>
       </div>
-      <p style={{ fontSize: 13, color: 'var(--body-text)', marginTop: 10, lineHeight: 1.5 }}>
-        Suggested, not required. The program runs entirely on family donations. <strong>Any amount welcome</strong> — and giving more keeps it running.
-      </p>
     </div>
   );
 }
@@ -276,7 +273,7 @@ export default async function ProgramEnrollPage({ params }: Props) {
                       <SectionLabel>Donation{paid ? '' : ' · suggested donation'}</SectionLabel>
                       {paid
                         ? renderPaidBlockMobile(activeTerm)
-                        : renderDonationBlock(displaySuggestedAmount ?? 0, family.location, activeTerm)}
+                        : renderDonationBlock(displaySuggestedAmount ?? 0)}
                     </>
                   )}
 
@@ -414,17 +411,11 @@ export default async function ProgramEnrollPage({ params }: Props) {
                         Donation · suggested donation
                       </h3>
                       <div style={{ padding: 18, background: 'var(--accentSoft)', borderRadius: 'var(--radiusSm)', marginBottom: 18 }}>
-                        <div className="row" style={{ alignItems: 'baseline', gap: 4, marginBottom: 6 }}>
+                        <div className="row" style={{ alignItems: 'baseline', gap: 4 }}>
                           <span style={{ fontFamily: 'var(--display)', fontSize: 46, lineHeight: 1 }}>${displaySuggestedAmount ?? 0}</span>
                           <span style={{ fontSize: 13, color: 'var(--body-text)' }}>· per family</span>
                         </div>
-                        <div style={{ fontSize: 11, color: 'var(--muted)' }}>
-                          {family.location ? `${family.location} ` : ''}{activeTerm} rate · locked when you first attend
-                        </div>
                       </div>
-                      <p style={{ fontSize: 13, color: 'var(--body-text)', lineHeight: 1.55, marginBottom: 18 }}>
-                        This is a suggested donation, not a fee. The program runs entirely on family donations. <em className="sa">Sevaks</em> teach without pay. Any amount is welcome.
-                      </p>
                     </>
                   ) : (
                     <>
