@@ -53,8 +53,8 @@ export default async function FamilyRosterPage() {
                 <SetuIcon.back/>
               </Link>
               <span style={{ fontSize: 14, fontWeight: 600 }}>My family</span>
-              <Link href="/family/members/new" className="focus-ring" style={{ background: 'transparent', border: 0, padding: 6, color: 'var(--accent)', display: 'inline-flex' }}>
-                <SetuIcon.plus/>
+              <Link href="/family/members/new" className="btn btn--s" style={{ padding: '6px 12px', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <SetuIcon.plus/> Add
               </Link>
             </div>
             <div style={{ flex: 1, overflowY: 'auto', padding: '18px 18px 90px' }}>

@@ -358,8 +358,8 @@ export default function EditMemberPage() {
       </div>
 
       {type === 'Child' && (
-        <div className="row" style={{ gap: 8, marginBottom: 14 }}>
-          <div className="field" style={{ flex: 1 }}>
+        <>
+          <div className="field" style={{ marginBottom: 14 }}>
             <label>School grade <span className="req">·</span></label>
             <select className="input" aria-label="School grade" value={schoolGrade} onChange={(e) => setSchoolGrade(e.target.value)}>
               <option value="" disabled>Select grade…</option>
@@ -368,7 +368,7 @@ export default function EditMemberPage() {
             <FieldError message={fieldErrors.schoolGrade}/>
             {reqError('schoolGrade', 'School grade is required')}
           </div>
-          <div className="field" style={{ flex: 1 }}>
+          <div className="field" style={{ marginBottom: 14 }}>
             <label>Birth month/year <span className="req">·</span></label>
             <div className="row" style={{ gap: 8 }}>
               <select className="input" aria-label="Birth month" value={birthMonth} onChange={(e) => setBirthMonth(e.target.value)} style={{ flex: 1 }}>
@@ -383,7 +383,7 @@ export default function EditMemberPage() {
             <FieldError message={fieldErrors.birthMonthYear}/>
             {reqError('birthMonthYear', 'Birth month and year are required')}
           </div>
-        </div>
+        </>
       )}
 
       {type === 'Adult' && (
