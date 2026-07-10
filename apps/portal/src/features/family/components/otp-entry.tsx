@@ -19,13 +19,24 @@ export function OtpEntry({ value, onChange, disabled = false, length = 6 }: OtpE
   }
 
   function handleChange(index: number, raw: string) {
-    const digit = raw.replace(/\D/g, '').slice(-1);
+    const cleaned = raw.replace(/\D/g, '');
     const next = digits.slice();
-    next[index] = digit;
-    onChange(next.join('').trimEnd());
-    if (digit && index < length - 1) {
-      focusAt(index + 1);
+    if (cleaned.length <= 1) {
+      next[index] = cleaned;
+      onChange(next.join('').trimEnd());
+      if (cleaned && index < length - 1) {
+        focusAt(index + 1);
+      }
+      return;
     }
+    let cursor = index;
+    for (const ch of cleaned) {
+      if (cursor >= length) break;
+      next[cursor] = ch;
+      cursor += 1;
+    }
+    onChange(next.join('').trimEnd());
+    focusAt(Math.min(cursor, length - 1));
   }
 
   function handleKeyDown(index: number, e: KeyboardEvent<HTMLInputElement>) {
@@ -66,7 +77,6 @@ export function OtpEntry({ value, onChange, disabled = false, length = 6 }: OtpE
           type="text"
           inputMode="numeric"
           pattern="\d*"
-          maxLength={1}
           value={digits[i] ?? ''}
           disabled={disabled}
           aria-label={`Digit ${i + 1}`}

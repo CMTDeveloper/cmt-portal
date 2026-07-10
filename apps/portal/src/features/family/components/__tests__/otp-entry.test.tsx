@@ -1,7 +1,18 @@
+import { useState } from 'react';
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { OtpEntry } from '../otp-entry';
+
+function ControlledOtp({ length = 6 }: { length?: number }) {
+  const [value, setValue] = useState('');
+  return (
+    <>
+      <OtpEntry value={value} onChange={setValue} length={length} />
+      <output data-testid="value">{value}</output>
+    </>
+  );
+}
 
 describe('OtpEntry', () => {
   it('renders 6 digit inputs by default', () => {
@@ -41,6 +52,19 @@ describe('OtpEntry', () => {
     await user.click(inputs[0]!);
     await user.paste('123456');
     expect(onChange).toHaveBeenCalledWith('123456');
+  });
+
+  it('distributes a multi-digit onChange value across all boxes (Android autofill path)', () => {
+    render(<ControlledOtp />);
+    const inputs = screen.getAllByRole('textbox') as HTMLInputElement[];
+    fireEvent.change(inputs[0]!, { target: { value: '123456' } });
+    expect(screen.getByTestId('value').textContent).toBe('123456');
+    expect(inputs[0]?.value).toBe('1');
+    expect(inputs[1]?.value).toBe('2');
+    expect(inputs[2]?.value).toBe('3');
+    expect(inputs[3]?.value).toBe('4');
+    expect(inputs[4]?.value).toBe('5');
+    expect(inputs[5]?.value).toBe('6');
   });
 
   it('strips non-digit characters on paste', async () => {
