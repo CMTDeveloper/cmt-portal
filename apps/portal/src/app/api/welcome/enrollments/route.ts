@@ -54,6 +54,9 @@ export async function POST(req: Request) {
     if (msg === 'program-not-available') {
       return NextResponse.json({ error: 'program-not-available' }, { status: 422 });
     }
+    if (msg === 'no-eligible-members') {
+      return NextResponse.json({ error: 'no-eligible-members' }, { status: 400 });
+    }
     throw err;
   }
 

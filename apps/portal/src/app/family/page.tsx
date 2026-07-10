@@ -1,6 +1,7 @@
 import { connection } from 'next/server';
 import Link from 'next/link';
 import { SetuLogo, SetuAvatar } from '@cmt/ui';
+import { displayFid } from '@cmt/shared-domain';
 import { CspRoot, Stat } from '@/features/family/components/atoms';
 import { flags } from '@/lib/flags';
 import { mockFamily } from '@/features/family/data/mock';
@@ -35,6 +36,7 @@ export default async function FamilyDashboardPage() {
   });
   let bvChildren: BvChildView[] = [];
   let familyCounts = { children: 0, adults: 0 };
+  let familyFid: string | null = null;
 
   if (flags.setuAuth) {
     const data = await getCurrentFamily();
@@ -43,6 +45,7 @@ export default async function FamilyDashboardPage() {
       if (currentMember) managerName = `${currentMember.firstName} ${currentMember.lastName}`;
       isManager = data.isManager;
       memberCount = data.members.length;
+      familyFid = displayFid(data.family);
       displayMembers = data.members.map((m) => ({ name: `${m.firstName} ${m.lastName}`, mid: m.mid }));
       const dash = await loadFamilyDashboard(data.family, data.members);
       model = dash.model;
@@ -98,9 +101,15 @@ export default async function FamilyDashboardPage() {
         </div>
       )}
       {!isEnrolled && (
-        <Link href="/family/enroll" className="btn btn--p" style={{ textDecoration: 'none', display: 'inline-block', marginTop: 8 }}>
-          Enroll now
-        </Link>
+        familyCounts.children === 0 ? (
+          <Link href="/family/members/new" className="btn btn--p" style={{ textDecoration: 'none', display: 'inline-block', marginTop: 8 }}>
+            Add a child to enroll
+          </Link>
+        ) : (
+          <Link href="/family/enroll" className="btn btn--p" style={{ textDecoration: 'none', display: 'inline-block', marginTop: 8 }}>
+            Enroll now
+          </Link>
+        )
       )}
     </>
   );
@@ -128,6 +137,9 @@ export default async function FamilyDashboardPage() {
                 <span style={{ fontSize: 12, fontWeight: 600 }}>Family · {familyCounts.children} {familyCounts.children === 1 ? 'child' : 'children'} · {familyCounts.adults} {familyCounts.adults === 1 ? 'adult' : 'adults'}</span>
                 <Link href="/family/members" className="focus-ring" style={{ background: 'transparent', border: 0, color: 'var(--accent)', fontSize: 12, fontWeight: 600, textDecoration: 'none' }}>Manage family</Link>
               </div>
+              {familyFid && (
+                <div style={{ fontSize: 12, color: 'var(--muted)', fontFamily: 'var(--mono)', marginBottom: 10 }}>Family ID {familyFid}</div>
+              )}
               <div className="row" style={{ flexWrap: 'wrap' }}>
                 {displayMembers.map((m, i) => {
                   const avatar = (<div style={{ border: '2px solid var(--surface)', borderRadius: '50%' }}><SetuAvatar name={m.name} size={36} /></div>);
@@ -183,6 +195,9 @@ export default async function FamilyDashboardPage() {
               <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
                 {familyCounts.children} {familyCounts.children === 1 ? 'child' : 'children'} · {familyCounts.adults} {familyCounts.adults === 1 ? 'adult' : 'adults'}
               </p>
+              {familyFid && (
+                <p style={{ fontSize: 12, color: 'var(--muted)', fontFamily: 'var(--mono)', marginTop: 2 }}>Family ID {familyFid}</p>
+              )}
             </div>
             <Link href="/family/members" className="btn btn--s" style={{ textDecoration: 'none' }}>Manage family</Link>
           </div>

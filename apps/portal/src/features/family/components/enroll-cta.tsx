@@ -65,6 +65,8 @@ export function EnrollCta({ oid, donationsEnabled, usesDonation = false, payment
           toast.error('This term is no longer available — please refresh and try again.');
         } else if (err === 'program-not-available') {
           toast.error('This program is not available right now — please check back soon.');
+        } else if (err === 'no-eligible-members') {
+          toast.error('Add a child to your family before enrolling in Bala Vihar.');
         } else if (err === 'family-not-found' || err === 'missing-fid') {
           console.error('[EnrollCta] unexpected error:', err);
           toast.error('Something went wrong — please sign out and sign in again.');

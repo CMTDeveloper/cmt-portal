@@ -28,7 +28,8 @@ export type EnrollFamilyResult =
  *   'any'/'adult' programs enroll all matching members.
  *
  * Throws with message 'offering-not-found' | 'offering-disabled' | 'offering-expired'
- * | 'family-not-found' | 'program-not-available' for caller to translate to HTTP errors.
+ * | 'family-not-found' | 'program-not-available' | 'no-eligible-members' for caller
+ * to translate to HTTP errors.
  */
 export async function enrollFamily(params: EnrollFamilyParams): Promise<EnrollFamilyResult> {
   const { fid, oid, enrolledVia, enrolledByMid } = params;
@@ -124,6 +125,12 @@ export async function enrollFamily(params: EnrollFamilyParams): Promise<EnrollFa
       if (memberEligibleForProgram({ type: m.type, birthMonthYear: m.birthMonthYear ?? null }, program.eligibility, now)) {
         enrolledMids.push(m.mid);
       }
+    }
+
+    // Enrolling zero members is always meaningless (an adult-only family enrolling
+    // in child-only Bala Vihar). Program-agnostic - never write an empty enrollment.
+    if (enrolledMids.length === 0) {
+      throw new Error('no-eligible-members');
     }
 
     txn.set(enrollmentRef, {

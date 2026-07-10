@@ -174,7 +174,10 @@ function setupEnrollTransaction({
   offeringExpired = false,
   enrollmentExists = false,
   enrollmentStatus = 'active',
-  childMids = [] as string[],
+  // Default to one eligible child so the happy-path create tests below enroll a
+  // real member; enrollFamily now throws 'no-eligible-members' on an empty set,
+  // so a family with zero eligible members can no longer create an enrollment.
+  childMids = [MID] as string[],
   members = undefined as { type: 'Adult' | 'Child'; mid: string }[] | undefined,
 } = {}) {
   const set = vi.fn();
@@ -432,6 +435,20 @@ describe('POST /api/setu/enrollments', () => {
     expect(res.status).toBe(422);
     const body = await res.json() as { error: string };
     expect(body.error).toBe('program-not-available');
+  });
+
+  it('throws no-eligible-members when the family has no eligible members', async () => {
+    // A family whose only member is an Adult enrolling in child-only Bala Vihar
+    // has zero eligible members - enrollFamily must throw, not silently create an
+    // empty enrollment (issue #24a). The route translates it to HTTP 400.
+    setupEnrollTransaction({ members: [{ type: 'Adult', mid: MID }] });
+
+    const res = await enrollmentsPOST(
+      makeRequest('POST', '/api/setu/enrollments', { oid: OID }, managerHeaders()),
+    );
+    expect(res.status).toBe(400);
+    const body = await res.json() as { error: string };
+    expect(body.error).toBe('no-eligible-members');
   });
 
   it('returns 403 for family-member (non-manager)', async () => {

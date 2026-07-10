@@ -213,6 +213,11 @@ export default async function ProgramEnrollPage({ params }: Props) {
   // The OID to use for the EnrollCta — prefer the enrolled offering when already enrolled.
   const ctaOid = enrolledOffering?.oid ?? defaultOffering?.oid ?? '';
 
+  // A Bala Vihar family with zero children cannot enroll (enrollFamily would throw
+  // 'no-eligible-members'). Managers get "add a child" guidance instead of the CTA;
+  // non-managers still see the manager message (handled below by precedence).
+  const bvNoChildren = isBv && displayMembers.length === 0;
+
   // When MULTIPLE offerings are open and the manager can still enroll, the term
   // picker and submit must share client state — render them together via
   // EnrollPanel. Single-offering (BV) keeps the bare CTA path unchanged.
@@ -313,7 +318,13 @@ export default async function ProgramEnrollPage({ params }: Props) {
                   Cancel
                 </Link>
               ) : ctaOid && isManager ? (
-                <EnrollCta oid={ctaOid} donationsEnabled={onlineDonationsEnabled} usesDonation={usesDonation} paymentSource={selectedPaymentSource} />
+                bvNoChildren ? (
+                  <Link href="/family/members/new" className="btn btn--p btn--block" style={{ display: 'block', textAlign: 'center', textDecoration: 'none' }}>
+                    Add a child to enroll
+                  </Link>
+                ) : (
+                  <EnrollCta oid={ctaOid} donationsEnabled={onlineDonationsEnabled} usesDonation={usesDonation} paymentSource={selectedPaymentSource} />
+                )
               ) : ctaOid ? (
                 <button className="btn btn--p btn--block" disabled style={{ cursor: 'not-allowed', opacity: 0.5 }}>
                   Only the family manager can enroll
@@ -449,7 +460,13 @@ export default async function ProgramEnrollPage({ params }: Props) {
                       }
                     />
                   ) : isManager ? (
-                    <EnrollCta oid={ctaOid} donationsEnabled={onlineDonationsEnabled} usesDonation={usesDonation} paymentSource={selectedPaymentSource} />
+                    bvNoChildren ? (
+                      <Link href="/family/members/new" className="btn btn--p btn--block" style={{ display: 'block', textAlign: 'center', textDecoration: 'none' }}>
+                        Add a child to enroll
+                      </Link>
+                    ) : (
+                      <EnrollCta oid={ctaOid} donationsEnabled={onlineDonationsEnabled} usesDonation={usesDonation} paymentSource={selectedPaymentSource} />
+                    )
                   ) : (
                     <button className="btn btn--p btn--block" disabled style={{ cursor: 'not-allowed', opacity: 0.5 }}>
                       Only the family manager can enroll
