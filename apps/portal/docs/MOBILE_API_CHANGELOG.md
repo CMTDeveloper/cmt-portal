@@ -22,7 +22,7 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
-## 2026-07-10 - `<pending>` - Emergency contact moved to the family level (GET/PATCH /api/setu/family)
+## 2026-07-10 - `62588ae` - Emergency contact moved to the family level (GET/PATCH /api/setu/family)
 Emergency contact is now a single OPTIONAL **family-level** record instead of per-member.
 - **GET `/api/setu/family`** -> `family` gains **`familyEmergencyContact: { relation: string; phone: string; email: string } | null`** (null = none on file). Additive; every other field unchanged.
 - **NEW `PATCH /api/setu/family`** (manager-only): body `{ familyEmergencyContact: { relation, phone, email } | null }` (null clears it). `relation` + `phone` are required, `email` optional (defaults `''`). Returns `{ ok: true }`. Errors: non-manager -> 403 `not-manager`, invalid body -> 400 `bad-request`, no session -> 401 `no-session`.
