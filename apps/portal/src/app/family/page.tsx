@@ -171,7 +171,7 @@ function IdTransition({ legacyFid, mobile = false }: { legacyFid: string; mobile
       <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
         <StatusBadge tone="ok">New ID</StatusBadge>
         <span style={{ fontSize: 13, color: 'var(--body-text)', lineHeight: 1.45 }}>
-          Use this ID for all future registrations, payments, and communications.
+          Use this ID for all future registrations and communications.
         </span>
       </div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
