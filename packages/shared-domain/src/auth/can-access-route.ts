@@ -1,6 +1,6 @@
 import type { SessionClaims } from './session';
 import { isPublicRoute } from './public-routes';
-import { isAdmin, isTeacher, isFamily, isSetuFamily, isSetuManager, isWelcomeTeam } from './role';
+import { isAdmin, isTeacher, isFamily, isSetuFamily, isSetuManager, isWelcomeTeam, isKiosk } from './role';
 
 export function canAccessRoute(
   claims: SessionClaims,
@@ -23,6 +23,11 @@ export function canAccessRoute(
   if (pathname.startsWith('/api/check-in/teacher/')) return isTeacher(claims);
   if (pathname.startsWith('/api/check-in/family/')) return isFamily(claims);
   if (pathname.startsWith('/api/check-in/notifications/')) return isAdmin(claims);
+  // Authenticated Setu kiosk check-in (door tablet) - NOT public. The dedicated
+  // least-privilege `kiosk` role authorizes it; admin inherits kiosk. Must have
+  // an explicit rule (this path matches none of the check-in prefixes above and
+  // would otherwise fall through to the final default-deny).
+  if (pathname === '/api/check-in/setu/check-in') return isKiosk(claims) || isAdmin(claims);
 
   // New /admin/* surface (Setu-themed). Pages and APIs both admin-only.
   if (pathname === '/admin' || pathname.startsWith('/admin/')) return isAdmin(claims);

@@ -22,7 +22,7 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
-## 2026-07-11 - <pending> - enrolledVia gains 'kiosk'
+## 2026-07-11 - `7c2a396` - enrolledVia gains 'kiosk'
 `EnrollmentDoc.enrolledVia` (schemas/enrollment.ts) now includes `'kiosk'` for door/kiosk-driven auto-enrollments. Mobile: widen the enrolledVia union to accept `'kiosk'` on any enrollment read; no request-shape change.
 
 ## 2026-07-10 - `b1561cb` - Family home address (GET/PATCH /api/setu/family, POST /api/setu/register)

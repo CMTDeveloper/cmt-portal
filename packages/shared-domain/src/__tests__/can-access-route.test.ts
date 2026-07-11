@@ -8,6 +8,7 @@ const family: SessionClaims = { uid: 'f', role: 'family', familyId: '42' };
 const manager: SessionClaims = { uid: 'm', role: 'family-manager', fid: 'FAM001', mid: 'FAM001-01' };
 const member: SessionClaims = { uid: 'mb', role: 'family-member', fid: 'FAM001', mid: 'FAM001-02' };
 const welcomeTeam: SessionClaims = { uid: 'w', role: 'welcome-team' };
+const kiosk: SessionClaims = { uid: 'k', role: 'kiosk' };
 
 describe('canAccessRoute — public routes', () => {
   it('allows anyone to access /login', () => {
@@ -97,6 +98,33 @@ describe('canAccessRoute — /api/admin/users — admin-only (catch-all)', () =>
     expect(canAccessRoute(manager, '/api/admin/users', 'GET')).toBe(false);
     expect(canAccessRoute(member, '/api/admin/users', 'POST')).toBe(false);
     expect(canAccessRoute(family, '/api/admin/users/roles', 'DELETE')).toBe(false);
+  });
+});
+
+describe('canAccessRoute — /api/check-in/setu/check-in — kiosk role (admin inherits)', () => {
+  // Authenticated kiosk endpoint (NOT public). The dedicated least-privilege
+  // kiosk role authorizes it; admin inherits kiosk. Every other role is denied,
+  // and a no-claims request falls through to the final default-deny.
+  const noClaims = { uid: 'anon' } as unknown as SessionClaims;
+  it('allows the kiosk role (POST)', () => {
+    expect(canAccessRoute(kiosk, '/api/check-in/setu/check-in', 'POST')).toBe(true);
+  });
+  it('allows admin (inherits kiosk)', () => {
+    expect(canAccessRoute(admin, '/api/check-in/setu/check-in', 'POST')).toBe(true);
+  });
+  it('denies welcome-team', () => {
+    expect(canAccessRoute(welcomeTeam, '/api/check-in/setu/check-in', 'POST')).toBe(false);
+  });
+  it('denies family-manager and family-member', () => {
+    expect(canAccessRoute(manager, '/api/check-in/setu/check-in', 'POST')).toBe(false);
+    expect(canAccessRoute(member, '/api/check-in/setu/check-in', 'POST')).toBe(false);
+  });
+  it('denies teacher and legacy family role', () => {
+    expect(canAccessRoute(teacher, '/api/check-in/setu/check-in', 'POST')).toBe(false);
+    expect(canAccessRoute(family, '/api/check-in/setu/check-in', 'POST')).toBe(false);
+  });
+  it('denies a no-claims request (default-deny)', () => {
+    expect(canAccessRoute(noClaims, '/api/check-in/setu/check-in', 'POST')).toBe(false);
   });
 });
 
