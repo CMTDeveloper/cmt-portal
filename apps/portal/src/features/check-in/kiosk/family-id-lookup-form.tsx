@@ -4,7 +4,7 @@ import { Button, Input, Label } from '@cmt/ui';
 import type { Family } from '@cmt/shared-domain/check-in';
 
 interface Props {
-  onFamily: (family: Family) => void;
+  onFamily: (family: Family, source: 'setu' | 'legacy', checkInId: string) => void;
 }
 
 export function FamilyIdLookupForm({ onFamily }: Props) {
@@ -21,17 +21,32 @@ export function FamilyIdLookupForm({ onFamily }: Props) {
     }
     setPending(true);
     try {
-      const res = await fetch(`/api/check-in/families/${value}`);
-      if (res.status === 404) {
-        setError('Family not found for this ID.');
+      // Try the Setu path first (migrated families). Only a 404 - the family is
+      // not in Setu yet - falls through to the legacy roster lookup; any other
+      // Setu failure is a real error, not a "try legacy" signal.
+      const setuRes = await fetch(`/api/check-in/setu/lookup?id=${value}`);
+      if (setuRes.ok) {
+        const family = (await setuRes.json()) as Family;
+        onFamily(family, 'setu', value);
         return;
       }
-      if (!res.ok) {
+      if (setuRes.status !== 404) {
         setError('Something went wrong. Try again.');
         return;
       }
-      const family = (await res.json()) as Family;
-      onFamily(family);
+
+      // Legacy fallback for families not yet migrated into Setu.
+      const legacyRes = await fetch(`/api/check-in/families/${value}`);
+      if (legacyRes.status === 404) {
+        setError('Family not found for this ID.');
+        return;
+      }
+      if (!legacyRes.ok) {
+        setError('Something went wrong. Try again.');
+        return;
+      }
+      const family = (await legacyRes.json()) as Family;
+      onFamily(family, 'legacy', value);
     } finally {
       setPending(false);
     }

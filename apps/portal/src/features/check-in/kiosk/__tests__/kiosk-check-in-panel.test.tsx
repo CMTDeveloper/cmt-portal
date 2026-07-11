@@ -21,14 +21,14 @@ beforeEach(() => {
 
 describe('KioskCheckInPanel', () => {
   it('renders the family name and student rows', () => {
-    render(<KioskCheckInPanel family={family} onDone={() => {}} />);
+    render(<KioskCheckInPanel family={family} source="legacy" checkInId="42" onDone={() => {}} />);
     expect(screen.getAllByText(/acme/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/alice/i)).toBeInTheDocument();
     expect(screen.getByText(/bob/i)).toBeInTheDocument();
   });
 
   it('defaults all students to checked', () => {
-    render(<KioskCheckInPanel family={family} onDone={() => {}} />);
+    render(<KioskCheckInPanel family={family} source="legacy" checkInId="42" onDone={() => {}} />);
     const boxes = screen.getAllByRole('checkbox');
     expect(boxes).toHaveLength(2);
     for (const b of boxes) expect(b).toBeChecked();
@@ -42,7 +42,7 @@ describe('KioskCheckInPanel', () => {
       json: async () => ({ success: true, checkInIds: ['a', 'b'] }),
     } as Response);
 
-    render(<KioskCheckInPanel family={family} onDone={onDone} />);
+    render(<KioskCheckInPanel family={family} source="legacy" checkInId="42" onDone={onDone} />);
     await user.click(screen.getAllByRole('checkbox')[1]!);
     await user.click(screen.getByRole('button', { name: /check in/i }));
 
@@ -63,7 +63,7 @@ describe('KioskCheckInPanel', () => {
       status: 500,
       json: async () => ({ error: 'internal' }),
     } as Response);
-    render(<KioskCheckInPanel family={family} onDone={() => {}} />);
+    render(<KioskCheckInPanel family={family} source="legacy" checkInId="42" onDone={() => {}} />);
     await user.click(screen.getByRole('button', { name: /check in/i }));
     expect(await screen.findByRole('alert')).toBeInTheDocument();
   });

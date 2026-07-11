@@ -14,29 +14,60 @@ describe('FamilyIdLookupForm', () => {
     expect(screen.getByRole('button', { name: /find/i })).toBeInTheDocument();
   });
 
-  it('calls GET /api/check-in/families/:familyId on submit', async () => {
+  it('tries GET /api/check-in/setu/lookup FIRST and passes source "setu"', async () => {
     const user = userEvent.setup();
     const onFamily = vi.fn();
     vi.spyOn(global, 'fetch').mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ fid: '42', name: 'Acme', paymentStatus: 'paid', contacts: [], students: [] }),
+      status: 200,
+      json: async () => ({ fid: '42', name: 'Acme', paymentStatus: 'partial', contacts: [], students: [] }),
     } as Response);
 
     render(<FamilyIdLookupForm onFamily={onFamily} />);
     await user.type(screen.getByLabelText(/family id/i), '42');
     await user.click(screen.getByRole('button', { name: /find/i }));
 
-    expect(global.fetch).toHaveBeenCalledWith('/api/check-in/families/42');
-    expect(onFamily).toHaveBeenCalledWith(expect.objectContaining({ fid: '42' }));
+    expect(global.fetch).toHaveBeenCalledWith('/api/check-in/setu/lookup?id=42');
+    expect(onFamily).toHaveBeenCalledWith(expect.objectContaining({ fid: '42' }), 'setu', '42');
   });
 
-  it('shows error on 404', async () => {
+  it('falls back to the legacy lookup and passes source "legacy" when Setu 404s', async () => {
     const user = userEvent.setup();
-    vi.spyOn(global, 'fetch').mockResolvedValueOnce({
-      ok: false,
-      status: 404,
-      json: async () => ({ error: 'family-not-found' }),
-    } as Response);
+    const onFamily = vi.fn();
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        json: async () => ({ error: 'family-not-found' }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ fid: '42', name: 'Acme', paymentStatus: 'paid', contacts: [], students: [] }),
+      } as Response);
+
+    render(<FamilyIdLookupForm onFamily={onFamily} />);
+    await user.type(screen.getByLabelText(/family id/i), '42');
+    await user.click(screen.getByRole('button', { name: /find/i }));
+
+    expect(global.fetch).toHaveBeenNthCalledWith(1, '/api/check-in/setu/lookup?id=42');
+    expect(global.fetch).toHaveBeenNthCalledWith(2, '/api/check-in/families/42');
+    expect(onFamily).toHaveBeenCalledWith(expect.objectContaining({ fid: '42' }), 'legacy', '42');
+  });
+
+  it('shows error when neither Setu nor legacy has the family', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        json: async () => ({ error: 'family-not-found' }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        json: async () => ({ error: 'family-not-found' }),
+      } as Response);
     render(<FamilyIdLookupForm onFamily={() => {}} />);
     await user.type(screen.getByLabelText(/family id/i), '999');
     await user.click(screen.getByRole('button', { name: /find/i }));
