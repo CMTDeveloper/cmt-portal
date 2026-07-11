@@ -14,7 +14,7 @@ import {
   checkAndRecordOtpRateLimit,
   REGISTER_RATE_LIMIT_MAX,
 } from '@/features/check-in/shared';
-import { whatsMissingForMember, type MemberRequiredField } from '@cmt/shared-domain';
+import { whatsMissingForMember, type MemberRequiredField, FamilyAddressSchema } from '@cmt/shared-domain';
 
 
 // Capture-form gender is Male|Female ONLY (no PreferNotToSay) — the matrix
@@ -38,6 +38,9 @@ const bodySchema = z.object({
   phone: z.string().min(7),
   familyName: z.string().min(1),
   location: z.enum(['Brampton', 'Mississauga', 'Scarborough', 'Markham']),
+  // Required family home address collected at registration. Flows through the
+  // `input` spread of parsed.data into registerFamily.
+  familyAddress: FamilyAddressSchema,
   manager: z.object({
     firstName: z.string().min(1),
     lastName: z.string().min(1),

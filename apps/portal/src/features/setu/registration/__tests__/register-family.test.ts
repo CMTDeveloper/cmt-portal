@@ -147,6 +147,34 @@ describe('registerFamily — happy path', () => {
     expect(contactKeyWrites.find((d) => d.type === 'email' && d.mid === priyaMid)).toBeDefined();
     expect(contactKeyWrites.find((d) => d.type === 'phone' && d.mid === priyaMid)).toBeDefined();
   });
+
+  it('writes familyAddress onto the family doc when supplied', async () => {
+    const txnSet = vi.fn();
+    mockRunTransaction.mockImplementation(async (fn: (txn: unknown) => Promise<unknown>) => {
+      const txn = { get: vi.fn().mockResolvedValue({ exists: false }), set: txnSet };
+      return fn(txn);
+    });
+
+    const address = { street: '123 Main St', unit: '', city: 'Brampton', province: 'ON', postalCode: 'L6T 1A1' };
+    await registerFamily({ ...baseInput, familyAddress: address });
+
+    // The family doc is the FIRST txn.set call.
+    const familyDoc = txnSet.mock.calls[0]?.[1] as { familyAddress?: unknown };
+    expect(familyDoc.familyAddress).toEqual(address);
+  });
+
+  it('omits familyAddress from the family doc when not supplied (never writes undefined)', async () => {
+    const txnSet = vi.fn();
+    mockRunTransaction.mockImplementation(async (fn: (txn: unknown) => Promise<unknown>) => {
+      const txn = { get: vi.fn().mockResolvedValue({ exists: false }), set: txnSet };
+      return fn(txn);
+    });
+
+    await registerFamily(baseInput);
+
+    const familyDoc = txnSet.mock.calls[0]?.[1] as Record<string, unknown>;
+    expect('familyAddress' in familyDoc).toBe(false);
+  });
 });
 
 describe('deriveBirthMonth', () => {

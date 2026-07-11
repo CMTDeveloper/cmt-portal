@@ -22,6 +22,13 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
+## 2026-07-10 - `<pending>` - Family home address (GET/PATCH /api/setu/family, POST /api/setu/register)
+New REQUIRED family-level home address.
+- **GET `/api/setu/family`** -> `family` gains **`familyAddress: { street: string; unit: string; city: string; province: string; postalCode: string } | null`** (null = not yet on file). `province` is a 2-letter Canadian province code (e.g. `ON`); `postalCode` is a Canadian code (`A1A 1A1`). Additive.
+- **PATCH `/api/setu/family`** (manager-only) now ALSO accepts **`familyAddress`** and is a partial update: send either or both of `familyEmergencyContact` and `familyAddress`; keys absent from the body are left untouched. Empty body -> 400; invalid postal code -> 400.
+- **POST `/api/setu/register`** now **REQUIRES** a top-level **`familyAddress: { street, unit?, city, province, postalCode }`** (street/city/province non-empty, valid CA postal). Registering without it -> 400 `bad-request`.
+- **Mobile action:** add a required home-address section to the registration screen and send `familyAddress` in the register POST; read/display `family.familyAddress` and let managers edit it via `PATCH /api/setu/family`. ALSO: existing families are now redirected to the profile-completion screen until a manager provides the address (see below), so surface an "add your home address" prompt for managers when `family.familyAddress` is null.
+
 ## 2026-07-10 - `62588ae` - Emergency contact moved to the family level (GET/PATCH /api/setu/family)
 Emergency contact is now a single OPTIONAL **family-level** record instead of per-member.
 - **GET `/api/setu/family`** -> `family` gains **`familyEmergencyContact: { relation: string; phone: string; email: string } | null`** (null = none on file). Additive; every other field unchanged.

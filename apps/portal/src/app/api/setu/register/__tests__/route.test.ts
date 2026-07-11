@@ -48,6 +48,13 @@ const validBody = {
   phone: '4165551234',
   familyName: 'Patel',
   location: 'Brampton',
+  familyAddress: {
+    street: '123 Main St',
+    unit: '',
+    city: 'Brampton',
+    province: 'ON',
+    postalCode: 'L6T 1A1',
+  },
   manager: {
     firstName: 'Raj',
     lastName: 'Patel',
@@ -137,6 +144,35 @@ describe('POST /api/setu/register', () => {
   it('returns 400 on invalid location', async () => {
     const res = await POST(makeRequest({ ...validBody, location: 'Toronto' }));
     expect(res.status).toBe(400);
+  });
+
+  it('returns 400 when familyAddress is missing (address is required)', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { familyAddress, ...rest } = validBody;
+    const res = await POST(makeRequest(rest));
+    expect(res.status).toBe(400);
+    expect(registerFamily).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 when familyAddress has an invalid postal code', async () => {
+    const res = await POST(makeRequest({
+      ...validBody,
+      familyAddress: { ...validBody.familyAddress, postalCode: '12345' },
+    }));
+    expect(res.status).toBe(400);
+    expect(registerFamily).not.toHaveBeenCalled();
+  });
+
+  it('forwards familyAddress through to registerFamily', async () => {
+    await POST(makeRequest(validBody));
+    expect(registerFamily).toHaveBeenCalledWith(expect.objectContaining({
+      familyAddress: expect.objectContaining({
+        street: '123 Main St',
+        city: 'Brampton',
+        province: 'ON',
+        postalCode: 'L6T 1A1',
+      }),
+    }));
   });
 
   it('returns 400 on missing manager firstName', async () => {

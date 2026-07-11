@@ -4,9 +4,10 @@ import { Suspense, useState, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { toast, SetuLogo, SetuAvatar, SetuIcon, Rosette } from '@cmt/ui';
-import { isMemberComplete, NO_ALLERGIES } from '@cmt/shared-domain';
+import { isMemberComplete, NO_ALLERGIES, CANADIAN_POSTAL_RE } from '@cmt/shared-domain';
 import { CspRoot, StepHeader, AddedMemberRow } from '@/features/family/components/atoms';
 import { VolunteeringSkillsPicker } from '@/features/setu/members/volunteering-skills-picker';
+import { ProvinceSelect } from '@/features/setu/members/province-select';
 import { flags } from '@/lib/flags';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -176,6 +177,12 @@ function RegisterFamilyReal() {
 
   const [familyName, setFamilyName] = useState('');
   const [location, setLocation] = useState<Location | null>(null);
+  // Required family home address. Families are Ontario-based, so default province to ON.
+  const [street, setStreet] = useState('');
+  const [unit, setUnit] = useState('');
+  const [city, setCity] = useState('');
+  const [province, setProvince] = useState('ON');
+  const [postalCode, setPostalCode] = useState('');
   const [managerFirstName, setManagerFirstName] = useState('');
   const [managerLastName, setManagerLastName] = useState('');
   const [managerGender, setManagerGender] = useState<GenderChoice>('');
@@ -281,6 +288,11 @@ function RegisterFamilyReal() {
     const errors: Record<string, string> = {};
     if (!familyName.trim()) errors.familyName = 'Family name is required.';
     if (!location) errors.location = 'Please select a primary location.';
+    // Required home address - block advancing to the OTP phase until it's valid.
+    if (!street.trim()) errors.street = 'Street address is required.';
+    if (!city.trim()) errors.city = 'City is required.';
+    if (!province.trim()) errors.province = 'Please select a province.';
+    if (!CANADIAN_POSTAL_RE.test(postalCode.trim())) errors.postalCode = 'Enter a valid postal code (e.g. A1A 1A1).';
     if (!managerFirstName.trim()) errors.managerFirstName = 'Your first name is required.';
     if (!managerLastName.trim()) errors.managerLastName = 'Your last name is required.';
     // Manager is an Adult — block until the matrix is satisfied (gender pick,
@@ -365,6 +377,13 @@ function RegisterFamilyReal() {
           phone,
           familyName: familyName.trim(),
           location,
+          familyAddress: {
+            street: street.trim(),
+            unit: unit.trim(),
+            city: city.trim(),
+            province: province.trim(),
+            postalCode: postalCode.trim().toUpperCase(),
+          },
           manager: {
             firstName: managerFirstName.trim(),
             lastName: managerLastName.trim(),
@@ -476,6 +495,67 @@ function RegisterFamilyReal() {
           ))}
         </div>
         {fieldErrors.location && <div className="field-error" role="alert">{fieldErrors.location}</div>}
+      </div>
+
+      {/* Home address */}
+      <div className="field" style={{ marginBottom: 14 }}>
+        <label>Home address <span className="req">·</span></label>
+        <div className="col" style={{ gap: 8 }}>
+          <div>
+            <input
+              className="input"
+              type="text"
+              placeholder="Street address"
+              value={street}
+              onChange={e => setStreet(e.target.value)}
+              disabled={submitting}
+              aria-label="Street address"
+              aria-invalid={!!fieldErrors.street}
+            />
+            {fieldErrors.street && <div className="field-error" role="alert">{fieldErrors.street}</div>}
+          </div>
+          <input
+            className="input"
+            type="text"
+            placeholder="Unit / apt (optional)"
+            value={unit}
+            onChange={e => setUnit(e.target.value)}
+            disabled={submitting}
+            aria-label="Unit (optional)"
+          />
+          <div>
+            <input
+              className="input"
+              type="text"
+              placeholder="City"
+              value={city}
+              onChange={e => setCity(e.target.value)}
+              disabled={submitting}
+              aria-label="City"
+              aria-invalid={!!fieldErrors.city}
+            />
+            {fieldErrors.city && <div className="field-error" role="alert">{fieldErrors.city}</div>}
+          </div>
+          <div className="row" style={{ gap: 8 }}>
+            <div style={{ flex: '1 1 140px' }}>
+              <ProvinceSelect value={province} onChange={setProvince} />
+              {fieldErrors.province && <div className="field-error" role="alert">{fieldErrors.province}</div>}
+            </div>
+            <div style={{ flex: '1 1 120px' }}>
+              <input
+                className="input"
+                type="text"
+                placeholder="Postal code"
+                value={postalCode}
+                onChange={e => setPostalCode(e.target.value)}
+                disabled={submitting}
+                aria-label="Postal code"
+                aria-invalid={!!fieldErrors.postalCode}
+              />
+              {fieldErrors.postalCode && <div className="field-error" role="alert">{fieldErrors.postalCode}</div>}
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Manager */}

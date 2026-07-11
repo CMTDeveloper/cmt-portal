@@ -111,18 +111,29 @@ async function fillForm(
 ) {
   // The form renders BOTH a mobile (block md:hidden) and desktop (hidden md:block)
   // tree, so every element is duplicated. Index [0] is the mobile copy; React
-  // state is shared, so filling the mobile copy updates both. Mobile text-input
-  // order: [0]=familyName, [1]=managerFirst, [2]=managerLast, [3]=managerFoodAllergies.
+  // state is shared, so filling the mobile copy updates both. The required home
+  // address adds 4 text inputs between family name and the manager block, so the
+  // mobile text-input order is now: [0]=familyName, [1]=street, [2]=unit,
+  // [3]=city, [4]=postalCode, [5]=managerFirst, [6]=managerLast,
+  // [7]=managerFoodAllergies.
   const textInputs = document.querySelectorAll('input[type="text"]');
   await user.type(textInputs[0] as HTMLElement, opts.family);
   await user.click(screen.getAllByRole('button', { name: opts.location })[0]!);
-  await user.type(textInputs[1] as HTMLElement, opts.first);
-  await user.type(textInputs[2] as HTMLElement, opts.last);
+
+  // Home address is required before the OTP flow can fire. Target by aria-label
+  // (index-stable); province defaults to ON but set it explicitly.
+  await user.type(screen.getAllByLabelText('Street address')[0]!, '12 Main St');
+  await user.type(screen.getAllByLabelText('City')[0]!, 'Brampton');
+  await user.selectOptions(screen.getAllByLabelText('Province')[0]!, 'ON');
+  await user.type(screen.getAllByLabelText('Postal code')[0]!, 'L6P 1A2');
+
+  await user.type(textInputs[5] as HTMLElement, opts.first);
+  await user.type(textInputs[6] as HTMLElement, opts.last);
 
   // Manager now requires gender + foodAllergies + >=1 volunteering skill before
   // submit is allowed. Fill them so the OTP flow can fire.
   await user.click(screen.getAllByRole('button', { name: 'Male' })[0]!);
-  await user.type(textInputs[3] as HTMLElement, 'None known');
+  await user.type(textInputs[7] as HTMLElement, 'None known');
   await user.click(screen.getAllByTestId('skills-add')[0]!);
 }
 
@@ -422,13 +433,21 @@ describe('RegisterFamilyPage — network error', () => {
     const bBtn = screen.getAllByRole('button', { name: 'Markham' });
     await user.click(bBtn[0]!);
 
-    await user.type(textInputs[1] as HTMLElement, 'Ravi');
-    await user.type(textInputs[2] as HTMLElement, 'Iyer');
+    // Home address is required before submit fires the send-code fetch.
+    await user.type(screen.getAllByLabelText('Street address')[0]!, '12 Main St');
+    await user.type(screen.getAllByLabelText('City')[0]!, 'Markham');
+    await user.selectOptions(screen.getAllByLabelText('Province')[0]!, 'ON');
+    await user.type(screen.getAllByLabelText('Postal code')[0]!, 'L3R 1A2');
+
+    // Manager text inputs sit after the 4 address text inputs: [5]=first,
+    // [6]=last, [7]=foodAllergies.
+    await user.type(textInputs[5] as HTMLElement, 'Ravi');
+    await user.type(textInputs[6] as HTMLElement, 'Iyer');
 
     // Manager matrix: gender + foodAllergies + >=1 skill, so submit actually
     // fires the (rejected) send-code fetch.
     await user.click(screen.getAllByRole('button', { name: 'Male' })[0]!);
-    await user.type(textInputs[3] as HTMLElement, 'None known');
+    await user.type(textInputs[7] as HTMLElement, 'None known');
     await user.click(screen.getAllByTestId('skills-add')[0]!);
 
     const submitBtns = screen.getAllByRole('button', { name: /create family/i });

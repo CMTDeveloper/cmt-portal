@@ -5,9 +5,10 @@ import { MobileInviteButton, DesktopInviteButton } from './invite-button';
 import { PromoteManagerButton } from './promote-manager-button';
 import { mockFamily } from '@/features/family/data/mock';
 import { flags } from '@/lib/flags';
-import { displayFid, type FamilyEmergencyContact } from '@cmt/shared-domain';
+import { displayFid, type FamilyEmergencyContact, type FamilyAddress } from '@cmt/shared-domain';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 import { FamilyEmergencyContactCard } from '@/features/setu/members/family-emergency-contact-card';
+import { FamilyAddressCard } from '@/features/setu/members/family-address-card';
 import { memberToDisplay, type DisplayMember } from './member-display';
 
 export default async function FamilyRosterPage() {
@@ -33,6 +34,7 @@ export default async function FamilyRosterPage() {
   // Only a family manager may promote others; the mock view is read-only.
   let canManage = false;
   let familyEmergencyContact: FamilyEmergencyContact | null = null;
+  let familyAddress: FamilyAddress | null = null;
   if (flags.setuAuth) {
     const data = await getCurrentFamily();
     if (data) {
@@ -45,6 +47,7 @@ export default async function FamilyRosterPage() {
       members = data.members.map((m) => memberToDisplay(m, data.currentMid));
       canManage = data.isManager;
       familyEmergencyContact = data.family.familyEmergencyContact ?? null;
+      familyAddress = data.family.familyAddress ?? null;
     }
   }
 
@@ -104,6 +107,7 @@ export default async function FamilyRosterPage() {
               </div>
 
               <FamilyEmergencyContactCard contact={familyEmergencyContact} isManager={canManage}/>
+              <FamilyAddressCard address={familyAddress} isManager={canManage}/>
             </div>
           </div>
         </CspRoot>
@@ -173,8 +177,9 @@ export default async function FamilyRosterPage() {
           ))}
         </div>
 
-        <div style={{ marginTop: 24, maxWidth: 720 }}>
+        <div style={{ marginTop: 24, maxWidth: 720, display: 'grid', gap: 14 }}>
           <FamilyEmergencyContactCard contact={familyEmergencyContact} isManager={canManage}/>
+          <FamilyAddressCard address={familyAddress} isManager={canManage}/>
         </div>
       </div>
     </>

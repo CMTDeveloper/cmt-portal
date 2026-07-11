@@ -36,8 +36,12 @@ function child(over: Partial<MemberDoc> = {}): MemberDoc {
     emergencyContacts: [{ relation: 'Mother', phone: '+14165550000', email: 'x@x.com' }, null], ...over,
   } as MemberDoc;
 }
+// A complete address so the disclaimer gate's profile-completeness deferral
+// (which now also checks the required family home address) doesn't short-circuit.
+const COMPLETE_ADDRESS = { street: '1 King St', unit: '', city: 'Toronto', province: 'ON', postalCode: 'M5H 2N2' };
+
 function family(members: MemberDoc[], over: Partial<FamilyWithMembers> = {}): FamilyWithMembers {
-  return { family: { fid: 'CMT-1', name: 'Rao', disclaimersAccepted: null } as FamilyWithMembers['family'],
+  return { family: { fid: 'CMT-1', name: 'Rao', disclaimersAccepted: null, familyAddress: COMPLETE_ADDRESS } as FamilyWithMembers['family'],
     members, currentMid: members[0]?.mid ?? 'm-adult', isManager: true, ...over };
 }
 
@@ -72,6 +76,19 @@ describe('DisclaimerGate', () => {
     // Child missing schoolGrade ⇒ incomplete; the disclaimer gate no-ops so the
     // profile gate (rendered first) sends the user to /complete-profile first.
     mockGetCurrentFamily.mockResolvedValue(family([adult(), child({ schoolGrade: null })]));
+    expect(await DisclaimerGate()).toBeNull();
+    expect(mockGetState).not.toHaveBeenCalled();
+    expect(mockRedirect).not.toHaveBeenCalled();
+  });
+
+  it('defers to the profile gate when the family home address is missing', async () => {
+    // Members complete but no family address ⇒ profile still incomplete, so the
+    // disclaimer gate no-ops and lets the profile gate collect the address first.
+    mockGetCurrentFamily.mockResolvedValue(
+      family([adult(), child()], {
+        family: { fid: 'CMT-1', name: 'Rao', disclaimersAccepted: null, familyAddress: null } as FamilyWithMembers['family'],
+      }),
+    );
     expect(await DisclaimerGate()).toBeNull();
     expect(mockGetState).not.toHaveBeenCalled();
     expect(mockRedirect).not.toHaveBeenCalled();

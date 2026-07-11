@@ -5,12 +5,15 @@ import { toast, SetuLogo } from '@cmt/ui';
 import {
   whatsMissingForMember,
   isMemberComplete,
+  isFamilyAddressComplete,
+  CANADIAN_POSTAL_RE,
   CHILD_GRADE_OPTIONS,
   NO_ALLERGIES,
   type MemberRequiredField,
 } from '@cmt/shared-domain';
 import type { MemberDoc } from '@cmt/shared-domain/setu';
-import { CspRoot, FieldError } from '@/features/family/components/atoms';
+import { CspRoot, FieldError, SectionLabel } from '@/features/family/components/atoms';
+import { ProvinceSelect } from '@/features/setu/members/province-select';
 import { VolunteeringSkillsPicker } from '@/features/setu/members/volunteering-skills-picker';
 import { getCurrentFamilyClient } from '@/features/setu/members/get-current-family-client';
 import { patchMemberClient } from '@/features/setu/members/patch-member-client';
@@ -179,6 +182,13 @@ export function CompleteProfileForm() {
   const [loading, setLoading] = useState(true);
   const [drafts, setDrafts] = useState<Record<string, MemberDraft>>({});
   const [saving, setSaving] = useState(false);
+  // Manager-only family home-address draft. Seeded from the family's saved
+  // address when the data loads (below), defaulting province to Ontario.
+  const [street, setStreet] = useState('');
+  const [unit, setUnit] = useState('');
+  const [city, setCity] = useState('');
+  const [province, setProvince] = useState('ON');
+  const [postalCode, setPostalCode] = useState('');
   // Inline validation only surfaces AFTER a blocked Save attempt, then clears
   // live as each field becomes valid (so the user sees progress, not nagging).
   const [showErrors, setShowErrors] = useState(false);
@@ -200,7 +210,11 @@ export function CompleteProfileForm() {
         const scoped = result.isManager
           ? result.members
           : result.members.filter((m) => m.mid === result.currentMid);
-        if (scoped.every((m) => isMemberComplete(m))) {
+        // A manager must ALSO have the required family home address before we can
+        // short-circuit to /family — otherwise the gate would bounce them right
+        // back here (a redirect loop) even though every member is complete.
+        const addressDone = !result.isManager || isFamilyAddressComplete(result.family);
+        if (scoped.every((m) => isMemberComplete(m)) && addressDone) {
           navigateTo('/family');
           return;
         }
@@ -208,6 +222,14 @@ export function CompleteProfileForm() {
         const seeded: Record<string, MemberDraft> = {};
         for (const m of result.members) seeded[m.mid] = seedDraft(m);
         setDrafts(seeded);
+        // Seed the manager's home-address draft from the saved value (province
+        // defaults to Ontario when unset, matching the family-address card).
+        const addr = result.family.familyAddress;
+        setStreet(addr?.street ?? '');
+        setUnit(addr?.unit ?? '');
+        setCity(addr?.city ?? '');
+        setProvince(addr?.province ?? 'ON');
+        setPostalCode(addr?.postalCode ?? '');
         setLoading(false);
       })
       .catch(() => {
@@ -238,16 +260,30 @@ export function CompleteProfileForm() {
     return data.isManager ? data.members : data.members.filter((m) => m.mid === data.currentMid);
   }, [data]);
 
+  // Whether the manager's family home address is filled and valid. Non-managers
+  // never edit family-level data, so it's vacuously ready for them.
+  const addressReady = useMemo(() => {
+    if (!data?.isManager) return true;
+    return (
+      street.trim().length > 0 &&
+      city.trim().length > 0 &&
+      province.trim().length > 0 &&
+      CANADIAN_POSTAL_RE.test(postalCode.trim())
+    );
+  }, [data, street, city, province, postalCode]);
+
   // Whether everything in scope is now saveable (drives the "all set" note). The
   // Save button itself is ALWAYS enabled (except while saving) so a click on an
-  // incomplete form gives feedback instead of doing nothing.
+  // incomplete form gives feedback instead of doing nothing. For a manager the
+  // required family home address must also be filled and valid.
   const allReady = useMemo(() => {
     if (!data) return false;
-    return scopedMembers.every((member) => {
+    const membersOk = scopedMembers.every((member) => {
       const draft = drafts[member.mid];
       return draft ? memberReady(member, draft) : isMemberComplete(member);
     });
-  }, [data, scopedMembers, drafts]);
+    return membersOk && addressReady;
+  }, [data, scopedMembers, drafts, addressReady]);
 
   function update(mid: string, patch: Partial<MemberDraft>) {
     setDrafts((prev) => {
@@ -315,6 +351,30 @@ export function CompleteProfileForm() {
           toast.error(memberWriteErrorMessage({ error: result.error }));
         }
       }
+
+      // Manager-only: persist the required family home address. Runs after the
+      // member loop and before navigation so a failed address save keeps the
+      // user on this screen (same anyFailed gate the member loop uses).
+      if (data.isManager && !anyFailed) {
+        const res = await fetch('/api/setu/family', {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({
+            familyAddress: {
+              street: street.trim(),
+              unit: unit.trim(),
+              city: city.trim(),
+              province: province.trim(),
+              postalCode: postalCode.trim().toUpperCase(),
+            },
+          }),
+        });
+        if (!res.ok) {
+          anyFailed = true;
+          toast.error('Could not save your home address. Please try again.');
+        }
+      }
     } catch {
       // A network failure (fetch reject) must never strand the button on
       // "Saving…" forever — re-enable it so the user can retry.
@@ -368,7 +428,7 @@ export function CompleteProfileForm() {
       </h1>
       <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 8, lineHeight: 1.5 }}>
         {data.isManager
-          ? 'We need a little more for each family member so sevaks can welcome everyone on Sunday.'
+          ? 'We need a little more about your family, including your home address, so sevaks can welcome everyone on Sunday.'
           : 'We need a little more on your profile so sevaks can welcome you on Sunday.'}
       </p>
     </div>
@@ -578,6 +638,65 @@ export function CompleteProfileForm() {
     </div>
   ) : null;
 
+  // Manager-only family home address. Required family-level data, so it renders
+  // ONCE (not per member). A missing/invalid address blocks the submit via
+  // allReady. Inline errors surface only after a blocked Save (like the members).
+  const addressSection = data.isManager ? (
+    <div className="card" style={{ padding: 18, marginBottom: 16 }} data-testid="family-address-section">
+      <SectionLabel>Home address</SectionLabel>
+      <div className="field" style={{ marginBottom: 14 }}>
+        <label>Street <span className="req">·</span></label>
+        <input
+          className="input"
+          type="text"
+          aria-label="Street address"
+          value={street}
+          onChange={(e) => setStreet(e.target.value)}
+        />
+        <FieldError message={showErrors && !street.trim() ? 'Street is required.' : undefined} />
+      </div>
+      <div className="field" style={{ marginBottom: 14 }}>
+        <label>Unit <span style={{ color: 'var(--muted)', fontWeight: 400 }}>(optional)</span></label>
+        <input
+          className="input"
+          type="text"
+          aria-label="Unit"
+          value={unit}
+          onChange={(e) => setUnit(e.target.value)}
+        />
+      </div>
+      <div className="field" style={{ marginBottom: 14 }}>
+        <label>City <span className="req">·</span></label>
+        <input
+          className="input"
+          type="text"
+          aria-label="City"
+          value={city}
+          onChange={(e) => setCity(e.target.value)}
+        />
+        <FieldError message={showErrors && !city.trim() ? 'City is required.' : undefined} />
+      </div>
+      <div className="field" style={{ marginBottom: 14 }}>
+        <label>Province <span className="req">·</span></label>
+        <ProvinceSelect value={province} onChange={setProvince} />
+        <FieldError message={showErrors && !province.trim() ? 'Province is required.' : undefined} />
+      </div>
+      <div className="field" style={{ marginBottom: 4 }}>
+        <label>Postal code <span className="req">·</span></label>
+        <input
+          className="input"
+          type="text"
+          aria-label="Postal code"
+          value={postalCode}
+          onChange={(e) => setPostalCode(e.target.value)}
+        />
+        <FieldError
+          message={showErrors && !CANADIAN_POSTAL_RE.test(postalCode.trim()) ? 'Enter a valid postal code (A1A 1A1).' : undefined}
+        />
+      </div>
+    </div>
+  ) : null;
+
   // The button stays ALWAYS clickable (except while saving): clicking it while
   // incomplete surfaces inline errors + a toast (issue #18 #4), rather than
   // silently doing nothing — the prior `disabled={!allComplete}` gave no feedback.
@@ -597,6 +716,7 @@ export function CompleteProfileForm() {
             <div style={{ marginBottom: 18 }}><SetuLogo size={18} /></div>
             {intro}
             {allSetNote}
+            {addressSection}
             {memberCards}
           </div>
           <div className="csp" style={{ position: 'fixed', bottom: 0, left: 0, right: 0, padding: '14px 18px', background: 'var(--surface)', borderTop: '1px solid var(--line)' }}>
@@ -612,6 +732,7 @@ export function CompleteProfileForm() {
             <div style={{ marginBottom: 30 }}><SetuLogo size={22} /></div>
             {intro}
             {allSetNote}
+            {addressSection}
             {memberCards}
             <div style={{ marginTop: 8 }}>{submitBtn}</div>
           </div>

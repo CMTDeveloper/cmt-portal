@@ -13,6 +13,7 @@ import {
   isTeacher,
   incompleteMembers,
   isMemberComplete,
+  isFamilyAddressComplete,
   type WithRole,
 } from '@cmt/shared-domain';
 import { displayFid } from '@cmt/shared-domain/setu';
@@ -46,7 +47,7 @@ export async function ProfileCompletionGate() {
   if (!data) return null; // unauthenticated — middleware already handles redirect
 
   const incomplete = data.isManager
-    ? incompleteMembers(data.members).length > 0
+    ? incompleteMembers(data.members).length > 0 || !isFamilyAddressComplete(data.family)
     : (() => {
         const me = data.members.find((m) => m.mid === data.currentMid);
         // No own record found ⇒ nothing this member can complete; don't trap them.
@@ -69,8 +70,10 @@ export async function DisclaimerGate() {
   const data = await getCurrentFamily();
   if (!data) return null; // unauthenticated — middleware handles it
   if (!data.isManager) return null; // per-family: members aren't gated
-  // Defer to ProfileCompletionGate if the profile is still incomplete.
-  if (incompleteMembers(data.members).length > 0) return null;
+  // Defer to ProfileCompletionGate if the profile is still incomplete (missing
+  // member fields OR the required family home address — both are profile data
+  // collected before disclaimers).
+  if (incompleteMembers(data.members).length > 0 || !isFamilyAddressComplete(data.family)) return null;
 
   const state = await getDisclaimerStateForFamily(portalFirestore(), data.family);
   if (!state.accepted) redirect('/disclaimers');

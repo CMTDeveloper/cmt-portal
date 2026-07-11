@@ -76,9 +76,14 @@ function child(over: Partial<MemberDoc> = {}): MemberDoc {
   } as MemberDoc;
 }
 
+// A complete family address so the manager branch isn't blocked by the new
+// required home-address check. Tests that exercise the missing-address path null
+// it out via the `over` param.
+const COMPLETE_ADDRESS = { street: '1 King St', unit: '', city: 'Toronto', province: 'ON', postalCode: 'M5H 2N2' };
+
 function family(members: MemberDoc[], over: Partial<FamilyWithMembers> = {}): FamilyWithMembers {
   return {
-    family: { fid: 'CMT-1', name: 'Rao Family' } as FamilyWithMembers['family'],
+    family: { fid: 'CMT-1', name: 'Rao Family', familyAddress: COMPLETE_ADDRESS } as FamilyWithMembers['family'],
     members,
     currentMid: members[0]?.mid ?? 'm-adult',
     isManager: true,
@@ -123,6 +128,35 @@ describe('ProfileCompletionGate', () => {
 
   it('does NOT redirect when the family is fully complete', async () => {
     mockGetCurrentFamily.mockResolvedValue(family([adult(), child()]));
+
+    const result = await ProfileCompletionGate();
+    expect(result).toBeNull();
+    expect(mockRedirect).not.toHaveBeenCalled();
+  });
+
+  it('redirects a manager whose members are complete but family address is missing', async () => {
+    // All members complete; the required family home address is absent → the
+    // manager must still complete the profile (collect the address).
+    mockGetCurrentFamily.mockResolvedValue(
+      family([adult(), child()], {
+        family: { fid: 'CMT-1', name: 'Rao Family', familyAddress: null } as FamilyWithMembers['family'],
+      }),
+    );
+
+    await expect(ProfileCompletionGate()).rejects.toThrow(`NEXT_REDIRECT:${COMPLETE}`);
+    expect(mockRedirect).toHaveBeenCalledWith(COMPLETE);
+  });
+
+  it('does NOT block a plain member on a missing family address (member cannot edit family data)', async () => {
+    // The signed-in adult is complete; family address is missing. A plain member
+    // is not responsible for family-level data → no redirect.
+    mockGetCurrentFamily.mockResolvedValue(
+      family([adult(), child()], {
+        isManager: false,
+        currentMid: 'm-adult',
+        family: { fid: 'CMT-1', name: 'Rao Family', familyAddress: null } as FamilyWithMembers['family'],
+      }),
+    );
 
     const result = await ProfileCompletionGate();
     expect(result).toBeNull();

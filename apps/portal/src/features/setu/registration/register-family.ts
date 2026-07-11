@@ -1,4 +1,5 @@
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
+import type { FamilyAddress } from '@cmt/shared-domain';
 import { hashContactKey } from './hash-contact-key';
 import { generateFid } from './generate-fid';
 import { allocateFamilyPublicId, allocateMemberPublicIds } from '@/features/setu/ids/public-id-allocator';
@@ -33,6 +34,9 @@ export interface RegisterFamilyInput {
   phone: string;
   familyName: string;
   location: Location;
+  // Optional here so non-route callers (seeds/tests) keep compiling; the
+  // register ROUTE + form enforce required-ness. Written conditionally below.
+  familyAddress?: FamilyAddress;
   manager: RegisterFamilyManager;
   additionalMembers: AdditionalMember[];
 }
@@ -148,6 +152,9 @@ export async function registerFamily(input: RegisterFamilyInput): Promise<Regist
       legacyFid: null,
       name: input.familyName,
       location: input.location,
+      // Write the required home address only when supplied - never assign
+      // undefined (exactOptionalPropertyTypes). The route always supplies it.
+      ...(input.familyAddress ? { familyAddress: input.familyAddress } : {}),
       createdAt: now,
       managers: [managerMid],
       searchKeys,

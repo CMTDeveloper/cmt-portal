@@ -37,7 +37,11 @@ vi.mock('@/features/setu/members/volunteering-skills-picker', () => ({
 vi.mock('@/features/family/components/atoms', () => ({
   CspRoot: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   FieldError: ({ message }: { message?: string }) => (message ? <p role="alert">{message}</p> : null),
+  SectionLabel: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
+
+// ── global fetch (the manager-only family-address PATCH) ──────────────────────
+const fetchMock = vi.hoisted(() => vi.fn());
 vi.mock('@/components/chrome/loading-om', () => ({ LoadingOm: () => <div>loading</div> }));
 
 import { CompleteProfileForm } from '../complete-profile-form';
@@ -84,9 +88,13 @@ function child(over: Partial<MemberDoc> = {}): MemberDoc {
   });
 }
 
+// A complete family address so the manager address-gate doesn't block the
+// existing member-focused submit tests. Address-specific tests null it out.
+const COMPLETE_ADDRESS = { street: '1 King St', unit: '', city: 'Toronto', province: 'ON', postalCode: 'M5H 2N2' };
+
 function family(members: MemberDoc[], over: Partial<FamilyWithMembers> = {}): FamilyWithMembers {
   return {
-    family: { fid: 'CMT-1', name: 'PC Family' } as FamilyWithMembers['family'],
+    family: { fid: 'CMT-1', name: 'PC Family', familyAddress: COMPLETE_ADDRESS } as FamilyWithMembers['family'],
     members,
     currentMid: 'CMT-1-01',
     isManager: true,
@@ -98,6 +106,8 @@ const save = () => screen.getAllByTestId('complete-profile-save')[0]!;
 
 beforeEach(() => {
   vi.clearAllMocks();
+  fetchMock.mockResolvedValue({ ok: true });
+  vi.stubGlobal('fetch', fetchMock);
 });
 
 describe('CompleteProfileForm — fields stay mounted (issue #18: inputs vanished mid-typing)', () => {
@@ -284,5 +294,89 @@ describe('CompleteProfileForm — submit flow', () => {
     render(<CompleteProfileForm />);
     await waitFor(() => expect(navigateTo).toHaveBeenCalledWith('/family'));
     expect(screen.queryByTestId('member-card-CMT-1-01')).toBeNull();
+  });
+});
+
+describe('CompleteProfileForm — required family home address (manager-only)', () => {
+  // Members complete but no family address: the form must NOT bounce to /family
+  // (that would loop against the widened gate). It renders the address section,
+  // blocks submit until valid, then PATCHes /api/setu/family and navigates.
+  it('makes a manager fill a missing family address before submit, then PATCHes it', async () => {
+    getFamily.mockResolvedValue(
+      family([adult()], {
+        family: { fid: 'CMT-1', name: 'PC Family', familyAddress: null } as FamilyWithMembers['family'],
+      }),
+    );
+    const user = userEvent.setup();
+    render(<CompleteProfileForm />);
+
+    await waitFor(() => expect(screen.getAllByTestId('family-address-section').length).toBeGreaterThan(0));
+    // Complete members + missing address ⇒ stays on the screen (no early nav).
+    expect(navigateTo).not.toHaveBeenCalled();
+
+    // Empty address blocks the submit — no family (or member) write.
+    await user.click(save());
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(navigateTo).not.toHaveBeenCalled();
+    expect(toastMock.error).toHaveBeenCalledWith(expect.stringMatching(/highlighted fields/i));
+
+    // Fill the required parts (province defaults to ON) and save.
+    await user.type(screen.getAllByLabelText('Street address')[0]!, '1 King St');
+    await user.type(screen.getAllByLabelText('City')[0]!, 'Toronto');
+    await user.type(screen.getAllByLabelText('Postal code')[0]!, 'm5h 2n2');
+    await user.click(save());
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith('/api/setu/family', expect.objectContaining({ method: 'PATCH' })),
+    );
+    const body = JSON.parse((fetchMock.mock.calls.at(-1)![1] as RequestInit).body as string);
+    // Postal code is normalized to uppercase on write.
+    expect(body.familyAddress).toMatchObject({ street: '1 King St', city: 'Toronto', province: 'ON', postalCode: 'M5H 2N2' });
+    await waitFor(() => expect(navigateTo).toHaveBeenCalledWith('/family'));
+  });
+
+  it('keeps the manager on the screen (no nav) when the address PATCH fails', async () => {
+    getFamily.mockResolvedValue(
+      family([adult()], {
+        family: { fid: 'CMT-1', name: 'PC Family', familyAddress: null } as FamilyWithMembers['family'],
+      }),
+    );
+    fetchMock.mockResolvedValue({ ok: false });
+    const user = userEvent.setup();
+    render(<CompleteProfileForm />);
+    await waitFor(() => expect(screen.getAllByTestId('family-address-section').length).toBeGreaterThan(0));
+
+    await user.type(screen.getAllByLabelText('Street address')[0]!, '1 King St');
+    await user.type(screen.getAllByLabelText('City')[0]!, 'Toronto');
+    await user.type(screen.getAllByLabelText('Postal code')[0]!, 'M5H 2N2');
+    await user.click(save());
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    await waitFor(() => expect(toastMock.error).toHaveBeenCalledWith(expect.stringMatching(/home address/i)));
+    expect(navigateTo).not.toHaveBeenCalled();
+    expect(save()).toBeEnabled(); // re-enabled for retry
+  });
+
+  it('does NOT render the address section or PATCH the family for a plain member', async () => {
+    getFamily.mockResolvedValue(
+      family([adult({ foodAllergies: null, volunteeringSkills: [] })], {
+        isManager: false,
+        family: { fid: 'CMT-1', name: 'PC Family', familyAddress: null } as FamilyWithMembers['family'],
+      }),
+    );
+    patchMember.mockResolvedValue({ ok: true, status: 200 });
+    const user = userEvent.setup();
+    render(<CompleteProfileForm />);
+    await waitFor(() => expect(screen.getAllByTestId('member-card-CMT-1-01').length).toBeGreaterThan(0));
+
+    expect(screen.queryByTestId('family-address-section')).toBeNull();
+
+    await user.click(screen.getAllByRole('checkbox', { name: /No known allergies/i })[0]!);
+    await user.click(screen.getAllByTestId('skills-add')[0]!);
+    await user.click(save());
+
+    await waitFor(() => expect(patchMember).toHaveBeenCalledTimes(1));
+    expect(fetchMock).not.toHaveBeenCalled(); // family address never written by a member
+    await waitFor(() => expect(navigateTo).toHaveBeenCalledWith('/family'));
   });
 });

@@ -147,6 +147,13 @@ describe('PATCH /api/setu/family', () => {
   const manager = { role: 'family-manager', fid: 'FAM001ABCD12', mid: 'FAM001ABCD12-01' };
   const member = { role: 'family-member', fid: 'FAM001ABCD12', mid: 'FAM001ABCD12-02' };
   const validContact = { relation: 'Mother', phone: '+14165550111', email: 'mom@example.com' };
+  const validAddress = {
+    street: '123 Main St',
+    unit: '',
+    city: 'Brampton',
+    province: 'ON',
+    postalCode: 'L6P 1A2',
+  };
 
   it('returns 401 when no session headers', async () => {
     const res = await PATCH(makePatchRequest(undefined, { familyEmergencyContact: validContact }));
@@ -193,6 +200,32 @@ describe('PATCH /api/setu/family', () => {
   it('returns 400 when familyEmergencyContact key is absent', async () => {
     const res = await PATCH(makePatchRequest(manager, {}));
     expect(res.status).toBe(400);
+    expect(mockSet).not.toHaveBeenCalled();
+  });
+
+  it('writes only familyAddress + revalidates + returns ok for a manager', async () => {
+    const res = await PATCH(makePatchRequest(manager, { familyAddress: validAddress }));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.ok).toBe(true);
+    // A familyAddress-only PATCH must not touch familyEmergencyContact.
+    expect(mockSet).toHaveBeenCalledWith({ familyAddress: validAddress }, { merge: true });
+    expect(revalidateTag).toHaveBeenCalledWith('family-FAM001ABCD12', 'max');
+  });
+
+  it('returns 400 for an empty body (no keys present)', async () => {
+    const res = await PATCH(makePatchRequest(manager, {}));
+    expect(res.status).toBe(400);
+    expect(mockSet).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 for an invalid postal code', async () => {
+    const res = await PATCH(
+      makePatchRequest(manager, { familyAddress: { ...validAddress, postalCode: '12345' } }),
+    );
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe('bad-request');
     expect(mockSet).not.toHaveBeenCalled();
   });
 });
