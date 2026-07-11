@@ -26,52 +26,38 @@ function actionHref(item: ActionItem, model: FamilyDashboardModel): string {
 
 function FamilyIdCallout({ fid, legacyFid, mobile = false }: { fid: string; legacyFid?: string | null; mobile?: boolean }) {
   // Migrated families still recognise their legacy check-in ID; show it quietly
-  // under the new ID with a note that it is going away, so families learn the
-  // new number organically (no mass announcement). Net-new families have no
-  // legacyFid and see only the new ID.
+  // beneath the new ID with a phase-out note, so families learn the new number
+  // organically (no mass announcement). Net-new families have no legacyFid and
+  // see only the new ID. Deliberately boxless: a tinted box nested inside the
+  // Family card read as a box-in-a-box — typography carries the hierarchy here.
   const showLegacy = !!legacyFid && legacyFid !== fid;
   return (
-    <div
-      data-testid="family-id-callout"
-      style={{
-        display: 'inline-flex',
-        flexDirection: 'column',
-        gap: 4,
-        padding: mobile ? '10px 12px' : '12px 16px',
-        background: 'var(--accentSoft)',
-        border: '1px solid var(--line2)',
-        borderRadius: 'var(--radiusSm)',
-      }}
-    >
-      <span style={{ fontSize: 11, color: 'var(--accentDeep)', fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase' }}>
+    <div data-testid="family-id-callout" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--accentDeep)' }}>
         Family ID
       </span>
       <strong
         data-testid="family-id-value"
         style={{
-          fontSize: mobile ? 32 : 36,
-          lineHeight: 1.05,
+          fontSize: mobile ? 34 : 36,
+          lineHeight: 1.02,
+          marginTop: 3,
           color: 'var(--ink)',
           fontFamily: 'var(--mono)',
-          fontWeight: 700,
+          fontWeight: 800,
           fontVariantNumeric: 'tabular-nums',
-          letterSpacing: '.04em',
+          letterSpacing: '.01em',
           whiteSpace: 'nowrap',
         }}
       >
         {fid}
       </strong>
       {showLegacy && (
-        <div
-          data-testid="family-legacy-id"
-          style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid var(--line2)', display: 'flex', flexDirection: 'column', gap: 2 }}
-        >
-          <span style={{ fontSize: 12, color: 'var(--muted)', fontFamily: 'var(--mono)' }}>
-            Old check-in ID {legacyFid}
-          </span>
-          <span style={{ fontSize: 11, color: 'var(--muted)', lineHeight: 1.3, maxWidth: 220 }}>
-            Being phased out - please use your new Family ID above.
-          </span>
+        <div data-testid="family-legacy-id" style={{ marginTop: 8, fontSize: 13, color: 'var(--muted)' }}>
+          Old check-in ID{' '}
+          <span style={{ fontFamily: 'var(--mono)', fontWeight: 700, color: 'var(--ink)' }}>{legacyFid}</span>
+          <span style={{ color: 'var(--line2)', margin: '0 6px' }}>·</span>
+          being retired
         </div>
       )}
     </div>

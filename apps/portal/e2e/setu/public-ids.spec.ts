@@ -161,7 +161,7 @@ test.describe('public FID/MID in the family UI (deployed UAT) — UNRUN', () => 
     // announcement. It renders smaller than the primary new ID.
     const legacyLine = page.getByTestId('family-legacy-id').filter({ visible: true });
     await expect(legacyLine).toContainText(EXPECTED_LEGACY_FID);
-    await expect(legacyLine).toContainText(/phased out/i);
+    await expect(legacyLine).toContainText(/retir/i);
   });
 
   test('a member-detail page shows the 5-digit Member ID', async ({ page, request: req }) => {
