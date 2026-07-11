@@ -12,6 +12,7 @@ Let the portal check-in kiosk recognize a family's **new 4-digit Family ID** (`p
 
 1. **Where it lives:** the **portal's own check-in kiosk** (this repo, `features/check-in/*`) - NOT the standalone `chinmaya-family-check-in` app. The portal already has the Setu families, `publicFid`, and `enrollFamily()`; the standalone legacy app has none of these. This is the planned kiosk-cutover surface.
 2. **Auto-enroll behavior:** create an **active** current-year Bala Vihar enrollment with the suggested donation left **outstanding** (no charge; family is nudged to pay later), enrolling **all eligible children** at once - exactly what `enrollFamily()` already does.
+3. **Kiosk authentication (owner, 2026-07-11):** the check-in endpoint is **authenticated, not public**. A dedicated least-privilege `kiosk` role + a generic kiosk account (email/password) is signed into the tablet once via the existing password sign-in; the session cookie authorizes check-ins. This gives auth, attribution, and revocability, and (because `canAccessRoute` is deny-by-default) keeps the shared public tablet from reaching the roster/admin/PII. Trade-offs: it is a shared credential, and Firebase's hard 14-day session-cookie cap means the tablet re-signs-in at most every 2 weeks.
 
 ## Architecture reality (why this shape)
 
@@ -36,8 +37,9 @@ Setu families (with `publicFid` + enrollments) live in **UAT** today and are **n
 1. **Setu-aware kiosk resolver.** Given the number a sevak/family enters, resolve a **Setu** family: try `publicFid` (`families.where('publicFid','==',id).limit(1)`), then fall back to `legacyFid` (`where('legacyFid','==',id).limit(1)`). Return the Setu family (`CMT-` fid, members/children) when found. (Single-field equality queries - **no new composite index**; `searchFamilies` already runs these shapes.)
 2. **Auto-enroll on kiosk check-in.** When a resolved Setu family has **no active current-year Bala Vihar enrollment**, call `enrollFamily({ fid, oid, enrolledVia: 'kiosk', enrolledByMid: null })`. The BV offering `oid` comes from `getOpenOfferingsForFamily('bala-vihar', family.location)[0]` (`features/setu/enrollment/get-open-offerings.ts:86`). Idempotent (re-check-in of an already-enrolled family is a no-op - `enrollFamily` returns `created:false`). Payment stays a separate donations concern; the enrollment is created unpaid.
 3. **New `enrolledVia` value `'kiosk'`.** Extend the enum at `packages/shared-domain/src/setu/schemas/enrollment.ts:22` (currently `'family-initiated' | 'first-attendance' | 'welcome-team' | 'promotion'`) so kiosk-driven enrollments are attributable in reports.
-4. **Teacher-attendance auto-enroll (verify existing).** The portal already auto-enrolls a non-enrolled child marked present via the guest → `enrollFamilyOnFirstAttendance()` path (`features/setu/enrollment/enroll-on-first-attendance.ts:17`, called from `features/setu/teacher/guests.ts:57`, `enrolledVia: 'first-attendance'`). This is gated behind `NEXT_PUBLIC_FEATURE_SETU_TEACHER` (`middleware.ts:74-83`). Scope here is to **confirm** it covers "any non-enrolled child" and **verify** it in UAT with the flag on - not to rebuild it.
-5. **Deployed-UAT E2E** with a realistic fixture: a migrated family that has a `publicFid` but **no** BV enrollment → check in by the new id → assert an active BV enrollment now exists for its eligible children.
+4. **Dedicated `kiosk` role + generic kiosk account (decision #3).** Add `'kiosk'` to `ROLES` (`packages/shared-domain/src/auth/role.ts:1`) + an `isKiosk` helper + the `Capability` union (`apps/portal/src/lib/auth/role-claims.ts`); seed a generic kiosk account (email/password) via a new UAT-only `seed:kiosk-account` script (mirrors `seed-test-accounts.ts`). The endpoint is gated to `isKiosk || isAdmin`, not public.
+5. **Teacher-attendance auto-enroll (verify existing).** The portal already auto-enrolls a non-enrolled child marked present via the guest → `enrollFamilyOnFirstAttendance()` path (`features/setu/enrollment/enroll-on-first-attendance.ts:17`, called from `features/setu/teacher/guests.ts:57`, `enrolledVia: 'first-attendance'`). This is gated behind `NEXT_PUBLIC_FEATURE_SETU_TEACHER` (`middleware.ts:74-83`). Scope here is to **confirm** it covers "any non-enrolled child" and **verify** it in UAT with the flag on - not to rebuild it.
+6. **Deployed-UAT E2E** with a realistic fixture: a migrated family that has a `publicFid` but **no** BV enrollment → check in by the new id → assert an active BV enrollment now exists for its eligible children.
 
 ### Out of scope / non-goals
 
@@ -55,7 +57,7 @@ A new server helper, e.g. `resolveSetuFamilyByAnyId(id): { family, source: 'publ
 
 ### Kiosk wiring
 
-The kiosk number entry (`features/check-in/kiosk/family-id-lookup-form.tsx`) routes to a Setu resolve path. When a Setu family is found, the check-in flow (a) shows the family/children and (b) on submit, records the check-in **and** performs the auto-enroll step before/after writing the check-in event. Exact endpoint shape (extend `/api/check-in/families/[id]` to be Setu-aware vs. a new `/api/check-in/setu/*` path) is a plan-level decision; both stay behind `flags.checkInKiosk`.
+The kiosk number entry (`features/check-in/kiosk/family-id-lookup-form.tsx`) routes to a Setu resolve path. When a Setu family is found, the check-in flow (a) shows the family/children and (b) on submit, records the check-in **and** performs the auto-enroll step before/after writing the check-in event. The new endpoint lives at `/api/check-in/setu/*`, is `flags.checkInKiosk`-gated, and requires the `kiosk` session (decision #3) - `canAccessRoute` gates it to `isKiosk || isAdmin`; it is NOT added to `public-routes.ts`.
 
 ### Auto-enroll step
 

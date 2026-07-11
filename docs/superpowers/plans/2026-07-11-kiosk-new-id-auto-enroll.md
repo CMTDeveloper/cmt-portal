@@ -4,7 +4,7 @@
 
 **Goal:** Let the portal check-in kiosk resolve a family by the new 4-digit `publicFid` (fallback `legacyFid`) against the Setu DB and auto-enroll unrecognized families/children into the current Bala Vihar year (unpaid, all eligible kids).
 
-**Architecture:** Three new server pieces in a new `features/setu/check-in/` module - a resolver (`resolveKioskFamily`), an auto-enroll helper (`autoEnrollBalaVihar`), and a public Setu-aware kiosk endpoint that records the check-in and calls both - plus the `'kiosk'` `enrolledVia` value and a thin kiosk-UI wire. The teacher-attendance auto-enroll already exists (`enrollFamilyOnFirstAttendance`) and is only verified/flag-enabled.
+**Architecture:** Three new server pieces in a new `features/setu/check-in/` module - a resolver (`resolveKioskFamily`), an auto-enroll helper (`autoEnrollBalaVihar`), and a Setu-aware kiosk endpoint that records the check-in and calls both - plus the `'kiosk'` `enrolledVia` value, a dedicated least-privilege `kiosk` role + generic kiosk account the tablet signs into, and a thin kiosk-UI wire. The teacher-attendance auto-enroll already exists (`enrollFamilyOnFirstAttendance`) and is only verified/flag-enabled.
 
 **Tech Stack:** Next.js 16 App Router, Firebase Admin (Firestore, `portalFirestore()` = `chinmaya-setu-uat`), Zod, Vitest (fake-firestore), Playwright.
 
@@ -15,7 +15,7 @@
 - **Auto-enroll = unpaid, all eligible children.** Reuse `enrollFamily()` verbatim - do not re-implement eligibility or payment. Enrollment is `status:'active'` with an outstanding suggested amount; no charge.
 - **Idempotent.** `enrollFamily` no-ops an already-active enrollment (`created:false`). Auto-enroll must never throw for the expected skip cases (adult-only family → `no-eligible-members`; no open offering).
 - **`publicFid` is not DB-unique.** Resolve with `.limit(1)`, first hit authoritative (sequential allocator makes collisions unlikely).
-- **Public endpoint trust model.** The new endpoint is public + `checkInKiosk`-gated, matching the existing kiosk routes (a kiosk is a trusted physical device, no per-user auth). It only writes for families that already exist in Setu and only creates unpaid enrollments - no financial action. Add it to BOTH `public-routes.ts` and `canAccessRoute`.
+- **Kiosk-account auth (NOT public).** The endpoint requires an authenticated session carrying a dedicated, least-privilege `kiosk` role - it is NOT in `public-routes.ts`. A sevak signs a generic kiosk account (email/password) into a tablet once via the existing password sign-in; the session cookie authorizes check-ins until it expires. `canAccessRoute` gates `/api/check-in/setu/*` to `isKiosk(claims) || isAdmin(claims)`, and `canAccessRoute` is deny-by-default for every other path so the shared tablet cannot reach the roster/admin/PII. Firebase session cookies have a hard 14-day cap, so the tablet re-signs-in at most every 2 weeks.
 - **Contract discipline.** The `enrolledVia` enum change touches a `@cmt/shared-domain` schema used by `/api/setu/enrollments`; append a `MOBILE_API_CHANGELOG.md` entry. Update the cutover runbook §14.
 - **No new Firestore indexes.** Resolver uses single-field equality on `publicFid`/`legacyFid` (auto-indexed); offering/enrollment queries are already indexed.
 - No em dashes in shipped strings/comments (use `-`). Commit author is the repo default; never add an agent co-author.
@@ -28,9 +28,12 @@
 - `apps/portal/src/features/setu/check-in/resolve-kiosk-family.ts` (create) - `resolveKioskFamily(id)`.
 - `apps/portal/src/features/setu/check-in/auto-enroll-bala-vihar.ts` (create) - `autoEnrollBalaVihar(family)`.
 - `apps/portal/src/features/setu/check-in/__tests__/*.test.ts` (create) - unit tests for both helpers.
-- `apps/portal/src/app/api/check-in/setu/check-in/route.ts` (create) - the public Setu kiosk endpoint.
+- `packages/shared-domain/src/auth/role.ts` (modify) - add `'kiosk'` to `ROLES` + an `isKiosk` helper.
+- `apps/portal/src/lib/auth/role-claims.ts` (modify) - add `'kiosk'` to the `Capability` union so the claim validates.
+- `apps/portal/scripts/seed-kiosk-account.ts` (create) - idempotent UAT seed of the generic kiosk account (email/password from env) with the `kiosk` role.
+- `apps/portal/src/app/api/check-in/setu/check-in/route.ts` (create) - the authenticated Setu kiosk endpoint.
 - `apps/portal/src/app/api/check-in/setu/check-in/__tests__/route.test.ts` (create) - route test.
-- `packages/shared-domain/src/auth/public-routes.ts` + `can-access-route.ts` (modify) - allow the new path.
+- `packages/shared-domain/src/auth/can-access-route.ts` (modify) - gate the new path to `isKiosk || isAdmin`.
 - `apps/portal/src/features/check-in/kiosk/family-id-lookup-form.tsx` + kiosk panel (modify) - call the Setu endpoint, show the enrolled confirmation.
 - `apps/portal/docs/MOBILE_API_CHANGELOG.md`, `docs/runbooks/production-cutover-checklist.md` (modify) - contract + runbook.
 - `apps/portal/e2e/setu/kiosk-auto-enroll.spec.ts` (create) - deployed-UAT E2E (owner-gated).
@@ -316,16 +319,71 @@ Expected: `OK`. If it errors, import from the schema module instead: `import { B
 
 ---
 
-### Task 4: Public Setu kiosk endpoint - resolve + record check-in + auto-enroll
+### Task 4: Dedicated `kiosk` role + generic kiosk account
+
+**Files:**
+- Modify: `packages/shared-domain/src/auth/role.ts` (add `'kiosk'` to `ROLES`, add `isKiosk`)
+- Modify: `apps/portal/src/lib/auth/role-claims.ts` (add `'kiosk'` to the `Capability` union)
+- Create: `apps/portal/scripts/seed-kiosk-account.ts` (+ a `pnpm` alias in `apps/portal/package.json`)
+- Test: `packages/shared-domain/src/auth/__tests__/role.test.ts` (extend), `packages/shared-domain/src/__tests__/can-access-route-*.test.ts` (extend)
+
+**Interfaces:**
+- Produces: `ROLES` includes `'kiosk'`; `isKiosk(claims: WithRole): boolean` (admin inherits it, mirroring `isTeacher`); a seeded kiosk auth account (`KIOSK_ACCOUNT_EMAIL` / `KIOSK_ACCOUNT_PASSWORD`) carrying the `kiosk` role.
+
+- [ ] **Step 1: Write the failing test** for `isKiosk`:
+
+```ts
+// role.test.ts additions
+import { isKiosk } from '../role';
+it('isKiosk is true for the kiosk role and for admin', () => {
+  expect(isKiosk({ role: 'kiosk' })).toBe(true);
+  expect(isKiosk({ role: 'admin' })).toBe(true);
+  expect(isKiosk({ role: 'welcome-team' })).toBe(false);
+  expect(isKiosk({ role: 'family-manager' })).toBe(false);
+});
+```
+
+- [ ] **Step 2: Run it - expect FAIL** (`isKiosk` not exported; `'kiosk'` not a valid role).
+
+Run: `pnpm --filter @cmt/shared-domain exec vitest run src/auth/__tests__/role.test.ts`
+
+- [ ] **Step 3: Add the role + helper.** In `role.ts`:
+
+```ts
+export const ROLES = ['admin', 'teacher', 'family', 'family-manager', 'family-member', 'welcome-team', 'kiosk'] as const;
+// ... alongside isTeacher/isWelcomeTeam:
+export function isKiosk(claims: WithRole): boolean {
+  return hasRole(claims, 'kiosk') || hasRole(claims, 'admin');
+}
+```
+
+In `apps/portal/src/lib/auth/role-claims.ts`, add `'kiosk'` to the `Capability` union/enum (grep the file for the existing role list - it must accept the new claim or `addCapability`/`safeParse` will silently strip it; see the "Zod schemas must include new claim fields" rule).
+
+- [ ] **Step 4: Run it - expect PASS.**
+
+- [ ] **Step 5: Write the seed script** `apps/portal/scripts/seed-kiosk-account.ts`, mirroring `apps/portal/scripts/seed-test-accounts.ts`: refuse unless `PORTAL_FIREBASE_PROJECT_ID === 'chinmaya-setu-uat'`; read `KIOSK_ACCOUNT_EMAIL` + `KIOSK_ACCOUNT_PASSWORD` from env; `ensureAuthPassword(email, password)` to create/update the password auth user; `auth.setCustomUserClaims(uid, addCapability(existing, 'kiosk', canonical))`. Add a `pnpm --filter @cmt/portal seed:kiosk-account` alias (`tsx --env-file=.env.local`). Idempotent.
+
+- [ ] **Step 6: Seed the UAT account** (add `KIOSK_ACCOUNT_EMAIL`/`KIOSK_ACCOUNT_PASSWORD` to `apps/portal/.env.local` first, out-of-band):
+
+Run: `pnpm --filter @cmt/portal seed:kiosk-account`
+Expected: creates/updates one auth user with the `kiosk` claim.
+
+- [ ] **Step 7: Runbook §10 + §14.** Record the new `seed:kiosk-account` script (§10), the `kiosk` role + generic account (§3/§14), and the two new env vars. UAT-only.
+
+- [ ] **Step 8: Commit** `git add -A && git commit -m "feat(auth): dedicated least-privilege kiosk role + generic kiosk account"`
+
+---
+
+### Task 5: Authenticated Setu kiosk endpoint - resolve + record check-in + auto-enroll
 
 **Files:**
 - Create: `apps/portal/src/app/api/check-in/setu/check-in/route.ts`
 - Test: `apps/portal/src/app/api/check-in/setu/check-in/__tests__/route.test.ts`
-- Modify: `packages/shared-domain/src/auth/public-routes.ts`, `packages/shared-domain/src/auth/can-access-route.ts`
+- Modify: `packages/shared-domain/src/auth/can-access-route.ts`
 - Modify: `docs/runbooks/production-cutover-checklist.md`
 
 **Interfaces:**
-- Consumes: `resolveKioskFamily` (Task 2), `autoEnrollBalaVihar` (Task 3), `flags.checkInKiosk`.
+- Consumes: `resolveKioskFamily` (Task 2), `autoEnrollBalaVihar` (Task 3), `flags.checkInKiosk`, `isKiosk` (Task 4). Middleware gates access; the handler trusts that gate.
 - Produces: `POST /api/check-in/setu/check-in` body `{ id: string; students: Record<string, boolean> }` →
   `200 { family: { fid; publicFid; legacyFid; name }; enroll: AutoEnrollResult; checkInIds: string[] }`, `404 { error: 'family-not-found' }`, `400 { error: 'bad-request' }`, `404 { error: 'not-found' }` when the flag is off.
 
@@ -425,14 +483,14 @@ export async function POST(req: Request) {
 
 - [ ] **Step 4: Run it - expect PASS.**
 
-- [ ] **Step 5: Open the route in the auth layer.** In `packages/shared-domain/src/auth/public-routes.ts`, add `/api/check-in/setu/check-in` to the `PUBLIC_ROUTES` list beside the existing `/api/check-in/families/:familyId/check-in` entry. In `can-access-route.ts`, add an explicit allow beside the other `/api/check-in/*` public rules:
+- [ ] **Step 5: Gate the route to the kiosk role (NOT public).** Do NOT add it to `public-routes.ts`. In `can-access-route.ts`, beside the other `/api/check-in/*` rules (`:22-25`), add:
 
 ```ts
-// can-access-route.ts - near the other /api/check-in public entries
-if (pathname === '/api/check-in/setu/check-in') return true; // public kiosk (flag-gated in-handler)
+// can-access-route.ts - near the other /api/check-in role rules
+if (pathname === '/api/check-in/setu/check-in') return isKiosk(claims) || isAdmin(claims);
 ```
 
-Add/extend the matching assertions in `packages/shared-domain/src/__tests__/` (mirror an existing public-route test): a no-claims request returns `true` for this path.
+`isKiosk` already inherits admin (Task 4), so the `|| isAdmin` is belt-and-suspenders/readability. Add assertions in `packages/shared-domain/src/__tests__/` (mirror an existing check-in route test): a `kiosk` claim and an `admin` claim return `true`; `welcome-team`, `family-manager`, and a no-claims request return `false`. Because middleware runs `canAccessRoute` before the handler, an unauthenticated request never reaches the handler - the handler only re-checks `flags.checkInKiosk`.
 
 - [ ] **Step 6: Runbook.** Append a §14 entry to `docs/runbooks/production-cutover-checklist.md` (dated 2026-07-11): new public `POST /api/check-in/setu/check-in`, new `'kiosk'` enrolledVia, no new indexes/migration, UAT-only, prod gated by `NEXT_PUBLIC_FEATURE_CHECK_IN_KIOSK`. Update the changelog `<pending>` from Task 1 to the enum commit SHA in this commit.
 
@@ -440,7 +498,7 @@ Add/extend the matching assertions in `packages/shared-domain/src/__tests__/` (m
 
 ---
 
-### Task 5: Wire the kiosk UI to the Setu endpoint
+### Task 6: Wire the kiosk UI to the Setu endpoint
 
 **Files:**
 - Modify: `apps/portal/src/features/check-in/kiosk/family-id-lookup-form.tsx`
@@ -448,7 +506,7 @@ Add/extend the matching assertions in `packages/shared-domain/src/__tests__/` (m
 - Test: extend the nearest kiosk component test, or add `apps/portal/src/features/check-in/kiosk/__tests__/setu-kiosk.test.tsx`
 
 **Interfaces:**
-- Consumes: `POST /api/check-in/setu/check-in` (Task 4).
+- Consumes: `POST /api/check-in/setu/check-in` (Task 5), reached over the tablet's authenticated kiosk session (Task 4).
 
 - [ ] **Step 1: Read the current kiosk flow** end-to-end: `family-id-lookup-form.tsx` (numeric input → `GET /api/check-in/families/{id}`) and the panel that renders children + submits `POST /api/check-in/families/{id}/check-in`. Note the exact props/state so the Setu path mirrors them.
 
@@ -462,7 +520,7 @@ Add/extend the matching assertions in `packages/shared-domain/src/__tests__/` (m
 
 ---
 
-### Task 6: Verify the teacher first-attendance auto-enroll (existing)
+### Task 7: Verify the teacher first-attendance auto-enroll (existing)
 
 **Files:**
 - Read: `apps/portal/src/features/setu/enrollment/enroll-on-first-attendance.ts`, `apps/portal/src/features/setu/teacher/guests.ts`, `apps/portal/src/features/setu/teacher/save-attendance.ts`, `apps/portal/src/middleware.ts:74-83`
@@ -481,14 +539,14 @@ Add/extend the matching assertions in `packages/shared-domain/src/__tests__/` (m
 
 ---
 
-### Task 7: Deployed-UAT E2E (owner-gated - PAUSE before running)
+### Task 8: Deployed-UAT E2E (owner-gated - PAUSE before running)
 
 **Files:**
 - Create: `apps/portal/e2e/setu/kiosk-auto-enroll.spec.ts`
 
 - [ ] **Step 1: PAUSE.** Per owner instruction, stop here and hand back before running any deployed-UAT E2E. Present the diff for review first.
 
-- [ ] **Step 2: Write the spec** (do not run yet). Realistic fixture per the project E2E discipline: seed (or reuse) a migrated UAT family that HAS a `publicFid`, has ≥2 children, and has NO active BV enrollment. With `checkInKiosk` enabled on the deployed UAT target:
+- [ ] **Step 2: Write the spec** (do not run yet). Realistic fixture per the project E2E discipline: seed (or reuse) a migrated UAT family that HAS a `publicFid`, has ≥2 children, and has NO active BV enrollment. Authenticate as the seeded **kiosk account** first (password sign-in, mirroring `e2e/auth-helpers.ts`) so requests carry the `kiosk` session - an unauthenticated request must `401`/redirect (assert that too). With `checkInKiosk` enabled on the deployed UAT target:
   - `POST /api/check-in/setu/check-in` with the family's **publicFid** and both children present → assert `200`, `family.publicFid` matches, `enroll.enrolled === true`, `enroll.created === true`.
   - Re-post the same → assert `enroll.created === false` (idempotent).
   - `POST` with the family's **legacyFid** → resolves the same family.
@@ -503,14 +561,15 @@ Add/extend the matching assertions in `packages/shared-domain/src/__tests__/` (m
 
 **1. Spec coverage.**
 - Setu-aware resolver (publicFid → legacyFid) → Task 2. ✓
-- Auto-enroll on check-in (`enrollFamily`, `'kiosk'`, current BV offering) → Tasks 1, 3, 4. ✓
+- Auto-enroll on check-in (`enrollFamily`, `'kiosk'`, current BV offering) → Tasks 1, 3, 5. ✓
 - New `'kiosk'` enrolledVia → Task 1. ✓
-- Teacher first-attendance auto-enroll (verify existing) → Task 6. ✓
-- Deployed-UAT E2E, realistic fixture → Task 7. ✓
-- Contract + runbook + no-index/no-migration → Tasks 1, 4 (Global Constraints). ✓
-- UAT-only, flag-gated, unpaid/all-kids → Global Constraints, enforced in Tasks 3-4. ✓
-- Open questions resolved: #1 (`.limit(1)`, Task 2); #2 (`check_in_events` keyed by `legacyFid ?? publicFid ?? fid`, Task 4); #3 (traced/closed in Task 6). ✓
+- Kiosk-account auth (dedicated `kiosk` role, generic account, NOT public) → Task 4; endpoint gated in Task 5. ✓
+- Teacher first-attendance auto-enroll (verify existing) → Task 7. ✓
+- Deployed-UAT E2E, realistic fixture → Task 8. ✓
+- Contract + runbook + no-index/no-migration → Tasks 1, 4, 5 (Global Constraints). ✓
+- UAT-only, flag-gated, unpaid/all-kids → Global Constraints, enforced in Tasks 3-5. ✓
+- Open questions resolved: #1 (`.limit(1)`, Task 2); #2 (`check_in_events` keyed by `legacyFid ?? publicFid ?? fid`, Task 5); #3 (traced/closed in Task 7). ✓
 
-**2. Placeholder scan.** No TBD/TODO; every code step shows real code; the only intentional deferral is the changelog `<pending>` SHA, pinned in Task 4 Step 6 (the established pattern).
+**2. Placeholder scan.** No TBD/TODO; every code step shows real code; the only intentional deferral is the changelog `<pending>` SHA, pinned in Task 5 Step 6 (the established pattern). The `role-claims.ts` `Capability` edit (Task 4 Step 3) carries a grep-to-locate instruction because the exact union name is discovered at implementation time - acceptable for wiring into existing auth.
 
-**3. Type consistency.** `ResolvedKioskFamily` (Task 2) feeds `autoEnrollBalaVihar`'s `{ fid, location }` param (Task 3) and the route's response (Task 4); `AutoEnrollResult` shape is identical across Tasks 3-4-7; `enrolledVia:'kiosk'` (Task 1) matches every `enrollFamily` call in Task 3. Consistent.
+**3. Type consistency.** `ResolvedKioskFamily` (Task 2) feeds `autoEnrollBalaVihar`'s `{ fid, location }` param (Task 3) and the route's response (Task 5); `AutoEnrollResult` shape is identical across Tasks 3-5-8; `enrolledVia:'kiosk'` (Task 1) matches every `enrollFamily` call in Task 3; `isKiosk` (Task 4) is consumed by the `canAccessRoute` rule in Task 5. Consistent.
