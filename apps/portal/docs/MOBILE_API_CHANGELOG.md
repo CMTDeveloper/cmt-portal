@@ -22,7 +22,7 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
-## 2026-07-10 - `<pending>` - Family home address (GET/PATCH /api/setu/family, POST /api/setu/register)
+## 2026-07-10 - `b1561cb` - Family home address (GET/PATCH /api/setu/family, POST /api/setu/register)
 New REQUIRED family-level home address.
 - **GET `/api/setu/family`** -> `family` gains **`familyAddress: { street: string; unit: string; city: string; province: string; postalCode: string } | null`** (null = not yet on file). `province` is a 2-letter Canadian province code (e.g. `ON`); `postalCode` is a Canadian code (`A1A 1A1`). Additive.
 - **PATCH `/api/setu/family`** (manager-only) now ALSO accepts **`familyAddress`** and is a partial update: send either or both of `familyEmergencyContact` and `familyAddress`; keys absent from the body are left untouched. Empty body -> 400; invalid postal code -> 400.
