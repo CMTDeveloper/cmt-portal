@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isAdmin, isTeacher, isFamily, isSetuFamily, isSetuManager, isWelcomeTeam, ROLES } from '../auth/role';
+import { isAdmin, isTeacher, isFamily, isSetuFamily, isSetuManager, isWelcomeTeam, isKiosk, ROLES } from '../auth/role';
 
 describe('ROLES', () => {
   it('includes all known roles', () => {
@@ -9,6 +9,7 @@ describe('ROLES', () => {
     expect(ROLES).toContain('family-manager');
     expect(ROLES).toContain('family-member');
     expect(ROLES).toContain('welcome-team');
+    expect(ROLES).toContain('kiosk');
   });
 });
 
@@ -81,6 +82,18 @@ describe('isWelcomeTeam', () => {
   });
   it('returns false for family-manager without welcome-team in extras', () => {
     expect(isWelcomeTeam({ role: 'family-manager' })).toBe(false);
+  });
+});
+
+describe('isKiosk', () => {
+  it('is true for the kiosk role and for admin', () => {
+    expect(isKiosk({ role: 'kiosk' })).toBe(true);
+    expect(isKiosk({ role: 'admin' })).toBe(true);
+    expect(isKiosk({ role: 'welcome-team' })).toBe(false);
+    expect(isKiosk({ role: 'family-manager' })).toBe(false);
+  });
+  it('is true when kiosk is in extraRoles', () => {
+    expect(isKiosk({ role: 'family-manager', extraRoles: ['kiosk'] })).toBe(true);
   });
 });
 

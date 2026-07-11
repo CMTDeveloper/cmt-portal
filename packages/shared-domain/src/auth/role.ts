@@ -1,4 +1,4 @@
-export const ROLES = ['admin', 'teacher', 'family', 'family-manager', 'family-member', 'welcome-team'] as const;
+export const ROLES = ['admin', 'teacher', 'family', 'family-manager', 'family-member', 'welcome-team', 'kiosk'] as const;
 export type Role = (typeof ROLES)[number];
 
 export interface WithRole {
@@ -49,4 +49,12 @@ export function isWelcomeTeam(claims: WithRole): boolean {
   // Admins implicitly get welcome-team capability — they can do anything
   // a welcome-team volunteer can. This avoids needing to grant both.
   return hasRole(claims, 'welcome-team') || hasRole(claims, 'admin');
+}
+
+// Dedicated least-privilege role for the shared kiosk/tablet account used at
+// the door to check families in. Admins inherit it (same pattern as isTeacher/
+// isWelcomeTeam) so a signed-in admin can operate the kiosk without a second
+// grant. Nothing else inherits kiosk - it is intentionally narrow.
+export function isKiosk(claims: WithRole): boolean {
+  return hasRole(claims, 'kiosk') || hasRole(claims, 'admin');
 }

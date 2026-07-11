@@ -15,6 +15,7 @@
     "seed:join-request-family": "tsx --env-file=.env.local scripts/seed-join-request-family.ts",
     "seed:profile-completion-family": "tsx --env-file=.env.local scripts/seed-profile-completion-family.ts",
     "seed:test-accounts": "tsx --env-file=.env.local scripts/seed-test-accounts.ts",
+    "seed:kiosk-account": "tsx --env-file=.env.local scripts/seed-kiosk-account.ts",
     "seed:admin": "tsx --env-file=.env.local scripts/seed-admin.ts",
     "attendance:report": "tsx --env-file=.env.local scripts/attendance-report.ts",
     "grant:admin": "tsx --env-file=.env.local scripts/grant-admin.ts",

@@ -78,6 +78,15 @@ export const ROLE_REFERENCE: Record<Role, RoleReference> = {
       'Not used by the Setu family portal (/family) — superseded by family-manager/family-member',
     ],
   },
+  kiosk: {
+    label: 'Kiosk',
+    summary: 'Dedicated least-privilege account for the shared door tablet. Checks families in only.',
+    grants: [
+      'Check families in at the door via the kiosk check-in API',
+      'Seeded on a single shared tablet account - not granted through this screen',
+      'Cannot read or edit family records, roster, reports, or admin tools',
+    ],
+  },
 };
 
 /** The roles, in a sensible display order, that this reference covers. */
@@ -88,6 +97,7 @@ export const ROLE_REFERENCE_ORDER: Role[] = [
   'family-manager',
   'family-member',
   'family',
+  'kiosk',
 ];
 
 // Compile-time guarantee that ROLE_REFERENCE covers every Role. If a new role

@@ -1,6 +1,6 @@
 /**
  * Pure helpers for safely adding/removing capability roles (admin,
- * welcome-team) on Firebase auth customClaims without clobbering the
+ * welcome-team, kiosk) on Firebase auth customClaims without clobbering the
  * primary role.
  *
  * Multi-role design: a user always has one primary `role` (drives dashboard
@@ -13,7 +13,7 @@
  * welcome-team get pushed to extras when stacked on a family.
  */
 
-export type Capability = 'admin' | 'welcome-team';
+export type Capability = 'admin' | 'welcome-team' | 'kiosk';
 const FAMILY_ROLES = new Set(['family-manager', 'family-member', 'family']);
 
 export interface ClaimsShape {
