@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { SetuIcon } from '@cmt/ui';
 import { CHILD_GRADE_OPTIONS, NO_ALLERGIES, whatsMissingForMember, type MemberRequiredField } from '@cmt/shared-domain';
-import { CspRoot, SectionLabel } from '@/features/family/components/atoms';
+import { CspRoot } from '@/features/family/components/atoms';
 import { VolunteeringSkillsPicker } from '@/features/setu/members/volunteering-skills-picker';
 
 type MemberType = 'Adult' | 'Child';
@@ -46,9 +46,6 @@ export default function AddMemberPage() {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [volunteeringSkills, setVolunteeringSkills] = useState<string[]>([]);
-  const [ec1Relation, setEc1Relation] = useState('');
-  const [ec1Phone, setEc1Phone] = useState('');
-  const [ec1Email, setEc1Email] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showErrors, setShowErrors] = useState(false);
@@ -95,17 +92,6 @@ export default function AddMemberPage() {
     setSaving(true);
     setError(null);
 
-    // Build the emergency contact object only when at least one field is
-    // filled. If only relation is filled, phone/email become empty strings
-    // which the server accepts (schema treats them as optional).
-    const ec1Trim = {
-      relation: ec1Relation.trim(),
-      phone: ec1Phone.trim(),
-      email: ec1Email.trim(),
-    };
-    const ec1Empty = !ec1Trim.relation && !ec1Trim.phone && !ec1Trim.email;
-    const ec1 = ec1Empty ? null : ec1Trim;
-
     const body = {
       firstName,
       lastName,
@@ -118,7 +104,6 @@ export default function AddMemberPage() {
       volunteeringSkills,
       email: email || null,
       phone: phone || null,
-      emergencyContacts: [ec1, null],
     };
 
     const res = await fetch('/api/setu/members', {
@@ -298,25 +283,6 @@ export default function AddMemberPage() {
           </div>
         </>
       )}
-
-      <SectionLabel>Emergency contact (optional)</SectionLabel>
-      <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: -6, marginBottom: 8 }}>
-        Someone we can reach if we can&apos;t reach the member directly. Skip this section if you don&apos;t want to add one.
-      </p>
-      <div style={{ padding: 14, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radius)' }}>
-        <div className="field" style={{ marginBottom: 10 }}>
-          <label>Relation</label>
-          <input className="input" value={ec1Relation} onChange={(e) => setEc1Relation(e.target.value)} placeholder="e.g. Mother, Spouse, Neighbour"/>
-        </div>
-        <div className="field" style={{ marginBottom: 10 }}>
-          <label>Their phone</label>
-          <input className="input" type="tel" value={ec1Phone} onChange={(e) => setEc1Phone(e.target.value)} placeholder="(416) 555-0000"/>
-        </div>
-        <div className="field">
-          <label>Their email</label>
-          <input className="input" type="email" value={ec1Email} onChange={(e) => setEc1Email(e.target.value)} placeholder="contact@example.com"/>
-        </div>
-      </div>
     </>
   );
 

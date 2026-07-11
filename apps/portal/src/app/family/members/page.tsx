@@ -5,7 +5,9 @@ import { MobileInviteButton, DesktopInviteButton } from './invite-button';
 import { PromoteManagerButton } from './promote-manager-button';
 import { mockFamily } from '@/features/family/data/mock';
 import { flags } from '@/lib/flags';
+import { displayFid, type FamilyEmergencyContact } from '@cmt/shared-domain';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
+import { FamilyEmergencyContactCard } from '@/features/setu/members/family-emergency-contact-card';
 import { memberToDisplay, type DisplayMember } from './member-display';
 
 export default async function FamilyRosterPage() {
@@ -30,15 +32,19 @@ export default async function FamilyRosterPage() {
   }));
   // Only a family manager may promote others; the mock view is read-only.
   let canManage = false;
+  let familyEmergencyContact: FamilyEmergencyContact | null = null;
   if (flags.setuAuth) {
     const data = await getCurrentFamily();
     if (data) {
       familyName = data.family.name;
-      familyFid = data.family.fid;
+      // Show the friendly 4-digit publicFid (issue #23), consistent with the
+      // home dashboard; the raw CMT- fid stays the internal join key.
+      familyFid = displayFid(data.family);
       familyLocation = data.family.location;
       familyJoinedYear = data.family.createdAt.getFullYear();
       members = data.members.map((m) => memberToDisplay(m, data.currentMid));
       canManage = data.isManager;
+      familyEmergencyContact = data.family.familyEmergencyContact ?? null;
     }
   }
 
@@ -96,6 +102,8 @@ export default async function FamilyRosterPage() {
                   </div>
                 ))}
               </div>
+
+              <FamilyEmergencyContactCard contact={familyEmergencyContact} isManager={canManage}/>
             </div>
           </div>
         </CspRoot>
@@ -163,6 +171,10 @@ export default async function FamilyRosterPage() {
               </div>
             </div>
           ))}
+        </div>
+
+        <div style={{ marginTop: 24, maxWidth: 720 }}>
+          <FamilyEmergencyContactCard contact={familyEmergencyContact} isManager={canManage}/>
         </div>
       </div>
     </>

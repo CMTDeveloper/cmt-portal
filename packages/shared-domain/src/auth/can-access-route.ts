@@ -96,9 +96,11 @@ export function canAccessRoute(
     return isWelcomeTeam(claims);
   }
 
-  // Setu API — family read (GET only; no mutations on this path currently)
+  // Setu API - family: GET any family role; PATCH (family-level edits) manager-only.
   if (pathname === '/api/setu/family' || pathname.startsWith('/api/setu/family/')) {
-    return isSetuFamily(claims);
+    if (!isSetuFamily(claims)) return false;
+    if (method === 'PATCH') return isSetuManager(claims);
+    return true;
   }
 
   // Setu API — family dashboard aggregate (GET; any family role, mobile home).

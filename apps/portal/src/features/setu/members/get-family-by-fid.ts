@@ -32,6 +32,7 @@ export async function getFamilyByFid(fid: string): Promise<FamilyAndMembers | nu
     createdAt: familyData.createdAt?.toDate() ?? new Date(),
     managers: familyData.managers ?? [],
     searchKeys: familyData.searchKeys ?? [],
+    familyEmergencyContact: familyData.familyEmergencyContact ?? null,
     disclaimersAccepted: familyData.disclaimersAccepted
       ? {
           schoolYear: familyData.disclaimersAccepted.schoolYear,

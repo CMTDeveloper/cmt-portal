@@ -184,6 +184,21 @@ describe('canAccessRoute — /api/setu/family — GET (read)', () => {
   });
 });
 
+describe('canAccessRoute - /api/setu/family - PATCH (family-level edits) manager-only', () => {
+  it('allows family-manager PATCH /api/setu/family', () => {
+    expect(canAccessRoute(manager, '/api/setu/family', 'PATCH')).toBe(true);
+  });
+  it('denies family-member PATCH /api/setu/family', () => {
+    expect(canAccessRoute(member, '/api/setu/family', 'PATCH')).toBe(false);
+  });
+  it('still allows family-member GET /api/setu/family', () => {
+    expect(canAccessRoute(member, '/api/setu/family', 'GET')).toBe(true);
+  });
+  it('denies legacy family role PATCH /api/setu/family', () => {
+    expect(canAccessRoute(family, '/api/setu/family', 'PATCH')).toBe(false);
+  });
+});
+
 describe('canAccessRoute — /api/setu/family/search — welcome-team only', () => {
   it('allows welcome-team GET /api/setu/family/search', () => {
     expect(canAccessRoute(welcomeTeam, '/api/setu/family/search', 'GET')).toBe(true);

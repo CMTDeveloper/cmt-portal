@@ -5,7 +5,7 @@ import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { SetuIcon, toast } from '@cmt/ui';
 import { CHILD_GRADE_OPTIONS, NO_ALLERGIES, whatsMissingForMember, type MemberRequiredField } from '@cmt/shared-domain';
-import { CspRoot, SectionLabel, FieldError } from '@/features/family/components/atoms';
+import { CspRoot, FieldError } from '@/features/family/components/atoms';
 import { VolunteeringSkillsPicker } from '@/features/setu/members/volunteering-skills-picker';
 import { getCurrentFamilyClient } from '@/features/setu/members/get-current-family-client';
 import { memberWriteErrorMessage } from '@/features/setu/members/member-write-error';
@@ -84,12 +84,6 @@ export default function EditMemberPage() {
   const [phone, setPhone] = useState('');
   const [volunteeringSkills, setVolunteeringSkills] = useState<string[]>([]);
   const [isManager, setIsManager] = useState(false);
-  const [ec1Relation, setEc1Relation] = useState('');
-  const [ec1Phone, setEc1Phone] = useState('');
-  const [ec1Email, setEc1Email] = useState('');
-  const [ec2Relation, setEc2Relation] = useState('');
-  const [ec2Phone, setEc2Phone] = useState('');
-  const [ec2Email, setEc2Email] = useState('');
   const [saving, setSaving] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [showErrors, setShowErrors] = useState(false);
@@ -163,13 +157,6 @@ export default function EditMemberPage() {
         setPhone(member.phone ?? '');
         setVolunteeringSkills(member.volunteeringSkills);
         setIsManager(member.manager);
-        const [ec1, ec2] = member.emergencyContacts ?? [null, null];
-        setEc1Relation(ec1?.relation ?? '');
-        setEc1Phone(ec1?.phone ?? '');
-        setEc1Email(ec1?.email ?? '');
-        setEc2Relation(ec2?.relation ?? '');
-        setEc2Phone(ec2?.phone ?? '');
-        setEc2Email(ec2?.email ?? '');
         setLoading(false);
       })
       .catch(() => {
@@ -199,10 +186,6 @@ export default function EditMemberPage() {
       volunteeringSkills,
       email: email || null,
       phone: phone || null,
-      emergencyContacts: [
-        ec1Relation ? { relation: ec1Relation, phone: ec1Phone, email: ec1Email } : null,
-        ec2Relation ? { relation: ec2Relation, phone: ec2Phone, email: ec2Email } : null,
-      ],
     };
 
     if (showManagerToggle) {
@@ -427,39 +410,6 @@ export default function EditMemberPage() {
           </p>
         </div>
       )}
-
-      <SectionLabel>Emergency contact 1 <span className="req">·</span></SectionLabel>
-      <div style={{ padding: 14, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radius)' }}>
-        <div className="field" style={{ marginBottom: 10 }}>
-          <label>Relation</label>
-          <input className="input" value={ec1Relation} onChange={(e) => setEc1Relation(e.target.value)} placeholder="e.g. Mother"/>
-        </div>
-        <div className="field" style={{ marginBottom: 10 }}>
-          <label>Phone</label>
-          <input className="input" type="tel" value={ec1Phone} onChange={(e) => setEc1Phone(e.target.value)}/>
-        </div>
-        <div className="field">
-          <label>Email</label>
-          <input className="input" type="email" value={ec1Email} onChange={(e) => setEc1Email(e.target.value)}/>
-        </div>
-      </div>
-
-      <SectionLabel>Emergency contact 2</SectionLabel>
-      <div style={{ padding: 14, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radius)' }}>
-        <div className="field" style={{ marginBottom: 10 }}>
-          <label>Relation</label>
-          <input className="input" value={ec2Relation} onChange={(e) => setEc2Relation(e.target.value)} placeholder="e.g. Father"/>
-        </div>
-        <div className="field" style={{ marginBottom: 10 }}>
-          <label>Phone</label>
-          <input className="input" type="tel" value={ec2Phone} onChange={(e) => setEc2Phone(e.target.value)}/>
-        </div>
-        <div className="field">
-          <label>Email</label>
-          <input className="input" type="email" value={ec2Email} onChange={(e) => setEc2Email(e.target.value)}/>
-        </div>
-      </div>
-
     </>
   );
 

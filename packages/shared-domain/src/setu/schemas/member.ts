@@ -46,7 +46,9 @@ export const MemberDocSchema = z.object({
   publicMid: z.string().nullable().optional(),
   volunteeringSkills: z.array(z.string()),
   foodAllergies: z.string().nullable(),
-  emergencyContacts: z.tuple([EmergencyContactSchema, EmergencyContactSchema.nullable()]),
+  // Deprecated: emergency contact moved to the family level (families.familyEmergencyContact).
+  // Kept for backward compat + existing docs; both slots nullable since it is no longer collected.
+  emergencyContacts: z.tuple([EmergencyContactSchema.nullable(), EmergencyContactSchema.nullable()]),
 });
 
 export type MemberDoc = z.infer<typeof MemberDocSchema>;

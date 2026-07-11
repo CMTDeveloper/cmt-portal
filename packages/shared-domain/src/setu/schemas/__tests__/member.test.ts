@@ -31,6 +31,14 @@ describe('MemberDocSchema — multi-contact fields', () => {
     expect(parsed.volunteeringSkillsNudgeDismissedAt ?? null).toBeNull();
   });
 
+  it('accepts a null slot 0 in emergencyContacts (field deprecated, no longer collected)', () => {
+    const parsed = MemberDocSchema.parse({
+      ...base,
+      emergencyContacts: [null, null] as [unknown, unknown],
+    });
+    expect(parsed.emergencyContacts).toEqual([null, null]);
+  });
+
   it('preserves provided altEmails/altPhones and a dismissed timestamp', () => {
     const parsed = MemberDocSchema.parse({
       ...base,

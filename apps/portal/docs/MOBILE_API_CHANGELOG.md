@@ -22,6 +22,13 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
+## 2026-07-10 - `<pending>` - Emergency contact moved to the family level (GET/PATCH /api/setu/family)
+Emergency contact is now a single OPTIONAL **family-level** record instead of per-member.
+- **GET `/api/setu/family`** -> `family` gains **`familyEmergencyContact: { relation: string; phone: string; email: string } | null`** (null = none on file). Additive; every other field unchanged.
+- **NEW `PATCH /api/setu/family`** (manager-only): body `{ familyEmergencyContact: { relation, phone, email } | null }` (null clears it). `relation` + `phone` are required, `email` optional (defaults `''`). Returns `{ ok: true }`. Errors: non-manager -> 403 `not-manager`, invalid body -> 400 `bad-request`, no session -> 401 `no-session`.
+- **Deprecated:** per-member `members[].emergencyContacts` is no longer collected by the add/edit member forms; the tuple slots are now both nullable and default to `[null, null]`. The field stays on the member schema for backward compat, but treat `family.familyEmergencyContact` as the source of truth and stop writing per-member emergency contacts.
+- **Mobile action:** read/display `family.familyEmergencyContact`; give managers an editor that PATCHes `/api/setu/family`; remove the per-member emergency-contact fields from the member add/edit screens.
+
 ## 2026-07-10 - `1279eb4` - POST /api/setu/enrollments rejects an ineligible (childless) family with 400 `no-eligible-members`
 `POST /api/setu/enrollments` now returns **400 `{ error: 'no-eligible-members' }`** when the family has zero members eligible for the program (e.g. an adult-only family enrolling in child-only Bala Vihar). Previously it silently created an enrollment with `enrolledMids: []`. This is a NEW error code on an existing route; the success shapes (201/200 `{ eid, suggestedAmount, donateUrl }`) and every other error code are unchanged. **Mobile action:** handle the new 400 `no-eligible-members` on the enroll call and surface an "add a child to your family before enrolling" message (do not treat it as a generic failure); optionally gate the enroll CTA client-side when the family has no eligible members.
 
