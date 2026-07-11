@@ -24,10 +24,10 @@ describe('canAccessRoute — disclaimers', () => {
     expect(canAccessRoute(manager, '/api/setu/disclaimers/accept', 'POST')).toBe(true);
     expect(canAccessRoute(member, '/api/setu/disclaimers/accept', 'POST')).toBe(false);
   });
-  it('the /disclaimers page is any setu family', () => {
-    expect(canAccessRoute(manager, '/disclaimers', 'GET')).toBe(true);
-    expect(canAccessRoute(member, '/disclaimers', 'GET')).toBe(true);
-    expect(canAccessRoute(welcome, '/disclaimers', 'GET')).toBe(false);
+  it('the /acknowledgements page is any setu family', () => {
+    expect(canAccessRoute(manager, '/acknowledgements', 'GET')).toBe(true);
+    expect(canAccessRoute(member, '/acknowledgements', 'GET')).toBe(true);
+    expect(canAccessRoute(welcome, '/acknowledgements', 'GET')).toBe(false);
   });
   it('admin disclaimers editor + API are admin-only', () => {
     expect(canAccessRoute(admin, '/admin/disclaimers', 'GET')).toBe(true);

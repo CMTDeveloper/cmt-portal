@@ -80,9 +80,9 @@ export function canAccessRoute(
     return isSetuFamily(claims);
   }
 
-  // Disclaimers accept screen — a top-level route (NOT under /family, to avoid the
-  // gate redirect loop) that the /family gate sends a not-yet-accepted manager to.
-  if (pathname === '/disclaimers' || pathname.startsWith('/disclaimers/')) {
+  // Acknowledgements accept screen — a top-level route (NOT under /family, to avoid
+  // the gate redirect loop) that the /family gate sends a not-yet-accepted manager to.
+  if (pathname === '/acknowledgements' || pathname.startsWith('/acknowledgements/')) {
     return isSetuFamily(claims);
   }
 

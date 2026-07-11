@@ -54,8 +54,8 @@ describe('DisclaimerGate', () => {
   it('redirects a manager who has not accepted the current version', async () => {
     mockGetCurrentFamily.mockResolvedValue(family([adult(), child()]));
     mockGetState.mockResolvedValue({ accepted: false, version: 3, schoolYear: '2026-27', sections: [] });
-    await expect(DisclaimerGate()).rejects.toThrow('NEXT_REDIRECT:/disclaimers');
-    expect(mockRedirect).toHaveBeenCalledWith('/disclaimers');
+    await expect(DisclaimerGate()).rejects.toThrow('NEXT_REDIRECT:/acknowledgements');
+    expect(mockRedirect).toHaveBeenCalledWith('/acknowledgements');
   });
 
   it('does nothing when the manager has accepted', async () => {

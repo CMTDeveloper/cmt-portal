@@ -11,7 +11,7 @@ const SUPPRESS_PATTERNS: RegExp[] = [
   /^\/register($|\/)/,
   /^\/family($|\/)/,
   /^\/complete-profile($|\/)/,
-  /^\/disclaimers($|\/)/,
+  /^\/acknowledgements($|\/)/,
   /^\/invite($|\/)/,
   /^\/join-request($|\/)/,
   /^\/welcome($|\/)/,

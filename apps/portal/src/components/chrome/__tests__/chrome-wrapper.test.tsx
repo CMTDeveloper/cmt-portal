@@ -31,8 +31,8 @@ describe('ChromeWrapper suppression', () => {
   it.each([
     '/family',
     '/complete-profile',
-    '/disclaimers',
-    '/disclaimers/',
+    '/acknowledgements',
+    '/acknowledgements/',
     '/sign-in',
     '/welcome',
     '/admin',

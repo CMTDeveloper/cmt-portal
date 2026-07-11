@@ -37,6 +37,13 @@ const config: NextConfig = {
     '/docs': ['docs/runbooks/**/*.md', '../../docs/runbooks/**/*.md'],
     '/docs/*': ['docs/runbooks/**/*.md', '../../docs/runbooks/**/*.md'],
   },
+  // The family acknowledgements screen moved from /disclaimers to
+  // /acknowledgements. Keep the old path working for any in-flight session or
+  // stale link (the route is a server-redirect gate target, so inbound links
+  // are near-zero, but the redirect is cheap insurance).
+  async redirects() {
+    return [{ source: '/disclaimers', destination: '/acknowledgements', permanent: true }];
+  },
 };
 
 export default withSentryConfig(config, {

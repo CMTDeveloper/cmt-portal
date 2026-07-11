@@ -14,7 +14,7 @@ import { signInFamilyAndSaveStorage } from '../auth-helpers';
  *   1. Publishing a new admin content version bumps `version`, which makes the
  *      shared fixture's prior acceptance STALE (drives it "pending" through the
  *      REAL API — no shelling out to the seed mid-run).
- *   2. Visiting /family then bounces to /disclaimers (the layout DisclaimerGate).
+ *   2. Visiting /family then bounces to /acknowledgements (the layout DisclaimerGate).
  *   3. The accept screen's continue button is disabled until every section's
  *      checkbox is checked, then enabled.
  *   4. Accepting hard-navigates to /family and the gate no longer fires on a
@@ -23,7 +23,7 @@ import { signInFamilyAndSaveStorage } from '../auth-helpers';
  * PRECONDITION (owner gate): NEXT_PUBLIC_FEATURE_SETU_DISCLAIMERS=true must be set
  * in the UAT Vercel env, and the shared fixture seeded `--disclaimers accepted`
  * (its default) — otherwise every sibling setu spec's /family navigation would
- * bounce to /disclaimers. This file is WRITE-ONLY in Task 11; it runs at the
+ * bounce to /acknowledgements. This file is WRITE-ONLY in Task 11; it runs at the
  * owner gate AFTER the batch push + Vercel deploy + flag flip.
  *
  * Serial: shared fixture. The whole file drives the ONE E2E family manager (also
@@ -53,7 +53,7 @@ test.beforeAll(async () => {
   await ctx.dispose();
 });
 
-test('manager is gated to /disclaimers, accepts, and reaches the dashboard', async ({ page, request }) => {
+test('manager is gated to /acknowledgements, accepts, and reaches the dashboard', async ({ page, request }) => {
   test.skip(!hasFamilyCreds, 'E2E_FAMILY_EMAIL / E2E_FAMILY_PASSWORD required (run seed:e2e-family first)');
 
   // 1) Make the fixture "pending" by publishing a new admin version (bumps the
@@ -69,9 +69,9 @@ test('manager is gated to /disclaimers, accepts, and reaches the dashboard', asy
   const pubRes = await request.put('/api/admin/disclaimers', { data: { sections: bumped } });
   expect(pubRes.ok()).toBeTruthy();
 
-  // 2) Visiting /family now bounces to /disclaimers (hard nav re-runs the gate).
+  // 2) Visiting /family now bounces to /acknowledgements (hard nav re-runs the gate).
   await page.goto('/family');
-  await expect(page).toHaveURL(/\/disclaimers$/);
+  await expect(page).toHaveURL(/\/acknowledgements$/);
 
   // 3) The accept screen shows the sections; the button is disabled until all
   //    boxes are checked.

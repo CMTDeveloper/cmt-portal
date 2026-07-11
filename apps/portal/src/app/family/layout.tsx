@@ -76,7 +76,7 @@ export async function DisclaimerGate() {
   if (incompleteMembers(data.members).length > 0 || !isFamilyAddressComplete(data.family)) return null;
 
   const state = await getDisclaimerStateForFamily(portalFirestore(), data.family);
-  if (!state.accepted) redirect('/disclaimers');
+  if (!state.accepted) redirect('/acknowledgements');
   return null;
 }
 
