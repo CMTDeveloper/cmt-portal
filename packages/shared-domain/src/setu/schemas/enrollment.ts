@@ -19,7 +19,7 @@ export const EnrollmentDocSchema = z.object({
   termLabel: z.string().min(1),
   location: z.enum(LOCATIONS).nullable(),
   enrolledAt: z.date(),
-  enrolledVia: z.enum(['family-initiated', 'first-attendance', 'welcome-team', 'promotion']),
+  enrolledVia: z.enum(['family-initiated', 'first-attendance', 'welcome-team', 'promotion', 'kiosk']),
   enrolledByMid: z.string().nullable(),
   enrolledMids: z.array(z.string()),
   suggestedAmountSnapshot: z.number().int().nonnegative(),

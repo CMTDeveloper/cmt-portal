@@ -14,6 +14,12 @@ describe('EnrollmentDoc', () => {
     expect(EnrollmentDocSchema.safeParse({ ...base, location: null }).success).toBe(true);
   });
 });
+describe('EnrollmentDocSchema.enrolledVia', () => {
+  it("accepts 'kiosk' as an enrolledVia value", () => {
+    const parsed = EnrollmentDocSchema.parse({ ...base, enrolledVia: 'kiosk' });
+    expect(parsed.enrolledVia).toBe('kiosk');
+  });
+});
 describe('PostEnrollmentBodySchema', () => {
   it('requires oid (was pid)', () => {
     expect(PostEnrollmentBodySchema.safeParse({ oid: 'x' }).success).toBe(true);
