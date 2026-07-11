@@ -498,25 +498,67 @@ if (pathname === '/api/check-in/setu/check-in') return isKiosk(claims) || isAdmi
 
 ---
 
-### Task 6: Wire the kiosk UI to the Setu endpoint
+> **Design note (owner decision 2026-07-11):** The kiosk keeps its two-step UX
+> (look up the family by id -> show each child with a present/absent checkbox ->
+> check in). Task 5's endpoint is submit-only, so a family who enters the new
+> 4-digit publicFid cannot yet be SHOWN. Task 6 therefore splits into 6a (a Setu
+> lookup endpoint that returns the family + children) and 6b (wire the kiosk to
+> try Setu-first, keep the existing panel, fall back to the legacy lookup for
+> not-yet-migrated families).
+
+### Task 6a: Setu kiosk lookup endpoint (`GET /api/check-in/setu/lookup`)
+
+**Files:**
+- Create: `apps/portal/src/app/api/check-in/setu/lookup/route.ts`
+- Test: `apps/portal/src/app/api/check-in/setu/lookup/__tests__/route.test.ts`
+- Modify: `packages/shared-domain/src/auth/can-access-route.ts` (widen the Task-5 exact rule to a prefix that also covers `/lookup`)
+- Modify: `packages/shared-domain/src/__tests__/can-access-route.test.ts`
+
+**Interfaces:**
+- Consumes: `resolveKioskFamily(id)` (Task 2), `flags.checkInKiosk`, and an EXISTING Setu members reader (find one that returns a family's child members - e.g. what `/welcome/family/[fid]` or the family dashboard uses; reuse it, do NOT write a new Firestore query).
+- Produces: `GET /api/check-in/setu/lookup?id=<entered>` ->
+  `200 <Family>` (the SAME `Family` shape the legacy `GET /api/check-in/families/{id}` returns, imported from `@cmt/shared-domain/check-in` - `{ fid, name, students: [{ sid, firstName, lastName, level }], ... }`), `404 { error: 'family-not-found' }` (no Setu family), `400 { error: 'bad-request' }` (blank id), `404 { error: 'not-found' }` (flag off). The `students` come from the family's child members; `sid` = the member id (mid), `level` = the child's level/grade label. Return the resolved family's `publicFid` and `legacyFid` too if the `Family` type carries them, so 6b can submit a stable id.
+
+- [ ] **Step 1: Read the real shapes.** Open the legacy `GET /api/check-in/families/[familyId]/route.ts` and the `Family`/student type in `@cmt/shared-domain/check-in` to get the EXACT field names the kiosk panel renders (`students[].sid/firstName/lastName/level`, `family.fid/name`). Open a Setu members reader (e.g. the one behind `/welcome/family/[fid]`) to get the real child-member shape (firstName/lastName, mid, and the level/grade field). The mapper must produce the legacy `Family` shape 1:1 so the existing `KioskCheckInPanel` renders it unchanged.
+
+- [ ] **Step 2: Write the failing route test** (mock `resolveKioskFamily` + the members reader + `flags`). Cases: publicFid resolves -> 200 with `students` mapped from the family's children (assert `sid`, `firstName`, `lastName`, `level`); unknown id -> `404 family-not-found`; blank id -> `400`; flag off -> `404 not-found`. RED = route module not found.
+
+- [ ] **Step 3: Implement** `route.ts` (GET): `if (!flags.checkInKiosk) 404 not-found`; read `id` from `new URL(req.url).searchParams`; `400` if blank; `resolveKioskFamily(id)`; `404 family-not-found` if null; else read the family's child members via the reused reader and map to the `Family` shape; `200` the Family.
+
+- [ ] **Step 4: Run it - expect PASS.**
+
+- [ ] **Step 5: Gate it (NOT public).** In `can-access-route.ts`, replace the Task-5 exact rule `pathname === '/api/check-in/setu/check-in'` with a prefix rule `pathname.startsWith('/api/check-in/setu/') -> isKiosk(claims) || isAdmin(claims)` so both `/check-in` and `/lookup` (and any future Setu kiosk path) are kiosk-role-gated in one place. Do NOT add either path to `public-routes.ts`. Update the can-access-route test: keep the existing `/check-in` assertions and add the same role matrix for `/api/check-in/setu/lookup` (kiosk/admin -> true; welcome-team/family-manager/family-member/teacher/family/no-claims -> false). Confirm the prefix does not shadow or get shadowed by the four existing `/api/check-in/*` prefix rules (none start with `setu`).
+
+- [ ] **Step 6: Full suites + typecheck** (touches shared-domain): `pnpm --filter @cmt/shared-domain test`, `pnpm --filter @cmt/portal exec vitest run` on the new route test, `pnpm typecheck`.
+
+- [ ] **Step 7: Commit** `git add -A && git commit -m "feat(setu): kiosk Setu lookup endpoint (resolve + children for display)"`
+
+---
+
+### Task 6b: Wire the kiosk UI to the Setu path (Setu-first, legacy fallback)
 
 **Files:**
 - Modify: `apps/portal/src/features/check-in/kiosk/family-id-lookup-form.tsx`
-- Modify: `apps/portal/src/features/check-in/kiosk/kiosk-check-in-panel.tsx` (the panel that submits the present/absent map)
-- Test: extend the nearest kiosk component test, or add `apps/portal/src/features/check-in/kiosk/__tests__/setu-kiosk.test.tsx`
+- Modify: `apps/portal/src/features/check-in/kiosk/kiosk-home.tsx` (track which path the family came from + the entered id)
+- Modify: `apps/portal/src/features/check-in/kiosk/kiosk-check-in-panel.tsx` (branch the submit target by source; show the enroll confirmation)
+- Test: `apps/portal/src/features/check-in/kiosk/__tests__/setu-kiosk.test.tsx` (create) or extend the nearest kiosk component test
 
 **Interfaces:**
-- Consumes: `POST /api/check-in/setu/check-in` (Task 5), reached over the tablet's authenticated kiosk session (Task 4).
+- Consumes: `GET /api/check-in/setu/lookup?id=` (6a) and `POST /api/check-in/setu/check-in` (Task 5), both over the tablet's authenticated kiosk session (Task 4). Legacy `GET /api/check-in/families/{id}` + `POST /api/check-in/families/{id}/check-in` stay as the fallback.
 
-- [ ] **Step 1: Read the current kiosk flow** end-to-end: `family-id-lookup-form.tsx` (numeric input → `GET /api/check-in/families/{id}`) and the panel that renders children + submits `POST /api/check-in/families/{id}/check-in`. Note the exact props/state so the Setu path mirrors them.
+- [ ] **Step 1: Thread the source + entered id.** `FamilyIdLookupForm` currently calls `onFamily(family)` after `GET /api/check-in/families/{value}`. Change it to try the Setu lookup FIRST: `GET /api/check-in/setu/lookup?id={value}`; on `200`, call `onFamily(family, 'setu', value)`; on `404`, fall back to the existing legacy `GET /api/check-in/families/{value}` and call `onFamily(family, 'legacy', value)`; keep the existing error handling for other statuses. `value` (the raw entered id) is the id 6b submits for the Setu path - it is guaranteed to re-resolve because the lookup just resolved it (`resolveKioskFamily` matches publicFid/legacyFid, NOT the CMT- doc id, so submit the entered id, not `family.fid`). Update the `Props.onFamily` signature to `(family: Family, source: 'setu' | 'legacy', checkInId: string) => void`.
 
-- [ ] **Step 2: Write a failing component test** asserting that submitting the check-in posts to `/api/check-in/setu/check-in` with `{ id, students }` and, when the response `enroll.enrolled` is true and `created` is true, renders a confirmation like `Enrolled in Bala Vihar`. (Mock `fetch`.)
+- [ ] **Step 2:** `KioskHome` currently holds `family` state. Change it to hold `{ family, source, checkInId } | null` and pass all three to `KioskCheckInPanel`.
 
-- [ ] **Step 3: Implement.** Point the kiosk lookup + submit at the Setu endpoint: on submit, `POST /api/check-in/setu/check-in` with `{ id, students }`. On `enroll.created === true`, show a subtle inline confirmation ("Added to Bala Vihar for this year"). Keep the number input numeric; accept both the 4-digit publicFid and the legacy id (the server resolves either). If the Setu endpoint returns `404 family-not-found`, fall back to the existing legacy lookup so pre-migration families still check in.
+- [ ] **Step 3:** `KioskCheckInPanel` gets new props `source: 'setu' | 'legacy'` and `checkInId: string`. Branch the submit:
+  - `source === 'setu'`: `POST /api/check-in/setu/check-in` with `{ id: checkInId, students: selected }`. Parse the JSON response; if `body.enroll?.created === true`, set a confirmation state and render a subtle inline banner ("Added to Bala Vihar for this year") on the done screen (or inline before `onDone`). Keep the present/absent checkbox UX unchanged.
+  - `source === 'legacy'`: keep the existing `POST /api/check-in/families/{family.fid}/check-in` with `{ students: selected }`.
 
-- [ ] **Step 4: Run the component test - expect PASS**, and run the whole kiosk test file.
+- [ ] **Step 4: Write failing component tests** (mock `fetch`; jsdom): (a) entering an id hits `/api/check-in/setu/lookup?id=...` FIRST and renders the returned children; (b) when the Setu lookup 404s, it falls back to `/api/check-in/families/{id}` and still renders children; (c) submitting on the Setu path posts to `/api/check-in/setu/check-in` with `{ id, students }` and, when the response `enroll.created === true`, renders the "Added to Bala Vihar" confirmation. Do NOT declare components inside components (remount trap); use `<img>` not `next/image` if any image is added.
 
-- [ ] **Step 5: Commit** `git add -A && git commit -m "feat(check-in): kiosk uses the Setu endpoint; new-ID lookup + enroll confirmation"`
+- [ ] **Step 5: Implement to green**, then run the whole kiosk test folder + `pnpm typecheck`.
+
+- [ ] **Step 6: Commit** `git add -A && git commit -m "feat(check-in): kiosk tries Setu lookup first, enroll confirmation, legacy fallback"`
 
 ---
 

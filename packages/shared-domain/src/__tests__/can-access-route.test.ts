@@ -128,6 +128,53 @@ describe('canAccessRoute — /api/check-in/setu/check-in — kiosk role (admin i
   });
 });
 
+describe('canAccessRoute — /api/check-in/setu/lookup — kiosk role (admin inherits)', () => {
+  // The GET lookup (kiosk step 1) shares the same `/api/check-in/setu/` prefix
+  // rule as the submit endpoint, so the exact same role matrix applies. A
+  // no-claims request falls through to the final default-deny.
+  const noClaims = { uid: 'anon' } as unknown as SessionClaims;
+  it('allows the kiosk role (GET)', () => {
+    expect(canAccessRoute(kiosk, '/api/check-in/setu/lookup', 'GET')).toBe(true);
+  });
+  it('allows admin (inherits kiosk)', () => {
+    expect(canAccessRoute(admin, '/api/check-in/setu/lookup', 'GET')).toBe(true);
+  });
+  it('denies welcome-team', () => {
+    expect(canAccessRoute(welcomeTeam, '/api/check-in/setu/lookup', 'GET')).toBe(false);
+  });
+  it('denies family-manager and family-member', () => {
+    expect(canAccessRoute(manager, '/api/check-in/setu/lookup', 'GET')).toBe(false);
+    expect(canAccessRoute(member, '/api/check-in/setu/lookup', 'GET')).toBe(false);
+  });
+  it('denies teacher and legacy family role', () => {
+    expect(canAccessRoute(teacher, '/api/check-in/setu/lookup', 'GET')).toBe(false);
+    expect(canAccessRoute(family, '/api/check-in/setu/lookup', 'GET')).toBe(false);
+  });
+  it('denies a no-claims request (default-deny)', () => {
+    expect(canAccessRoute(noClaims, '/api/check-in/setu/lookup', 'GET')).toBe(false);
+  });
+});
+
+describe('canAccessRoute — /api/check-in/* prefixes do not shadow the setu prefix', () => {
+  // The four legacy /api/check-in/{admin,teacher,family,notifications}/ rules are
+  // checked before the setu prefix; none start with `setu`, so a setu path
+  // reaches the kiosk rule (not one of them) and the kiosk rule never swallows
+  // an admin/teacher/family/notifications path.
+  it('keeps /api/check-in/admin admin-only (kiosk denied there)', () => {
+    expect(canAccessRoute(kiosk, '/api/check-in/admin/users', 'GET')).toBe(false);
+    expect(canAccessRoute(admin, '/api/check-in/admin/users', 'GET')).toBe(true);
+  });
+  it('keeps /api/check-in/teacher teacher-only (kiosk denied there)', () => {
+    expect(canAccessRoute(kiosk, '/api/check-in/teacher/classlist', 'GET')).toBe(false);
+  });
+  it('keeps /api/check-in/family family-only (kiosk denied there)', () => {
+    expect(canAccessRoute(kiosk, '/api/check-in/family/dashboard', 'GET')).toBe(false);
+  });
+  it('keeps /api/check-in/notifications admin-only (kiosk denied there)', () => {
+    expect(canAccessRoute(kiosk, '/api/check-in/notifications/send', 'POST')).toBe(false);
+  });
+});
+
 describe('canAccessRoute — /api/setu/family-lookup is public', () => {
   it('allows unauthenticated (no session) via isPublicRoute', () => {
     // Middleware calls isPublicRoute before canAccessRoute; canAccessRoute is
