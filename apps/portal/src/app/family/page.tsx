@@ -24,6 +24,42 @@ function actionHref(item: ActionItem, model: FamilyDashboardModel): string {
   return model.donateUrl; // fallback — unreachable today (donation is the only kind)
 }
 
+function FamilyIdCallout({ fid, mobile = false }: { fid: string; mobile?: boolean }) {
+  return (
+    <div
+      data-testid="family-id-callout"
+      style={{
+        display: 'inline-flex',
+        flexDirection: 'column',
+        gap: 4,
+        padding: mobile ? '10px 12px' : '12px 16px',
+        background: 'var(--accentSoft)',
+        border: '1px solid var(--line2)',
+        borderRadius: 'var(--radiusSm)',
+      }}
+    >
+      <span style={{ fontSize: 11, color: 'var(--accentDeep)', fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase' }}>
+        Family ID
+      </span>
+      <strong
+        data-testid="family-id-value"
+        style={{
+          fontSize: mobile ? 32 : 36,
+          lineHeight: 1.05,
+          color: 'var(--ink)',
+          fontFamily: 'var(--mono)',
+          fontWeight: 700,
+          fontVariantNumeric: 'tabular-nums',
+          letterSpacing: '.04em',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {fid}
+      </strong>
+    </div>
+  );
+}
+
 export default async function FamilyDashboardPage() {
   await connection();
 
@@ -138,7 +174,9 @@ export default async function FamilyDashboardPage() {
                 <Link href="/family/members" className="focus-ring" style={{ background: 'transparent', border: 0, color: 'var(--accent)', fontSize: 12, fontWeight: 600, textDecoration: 'none' }}>Manage family</Link>
               </div>
               {familyFid && (
-                <div style={{ fontSize: 12, color: 'var(--muted)', fontFamily: 'var(--mono)', marginBottom: 10 }}>Family ID {familyFid}</div>
+                <div style={{ marginBottom: 14 }}>
+                  <FamilyIdCallout fid={familyFid} mobile />
+                </div>
               )}
               <div className="row" style={{ flexWrap: 'wrap' }}>
                 {displayMembers.map((m, i) => {
@@ -196,7 +234,9 @@ export default async function FamilyDashboardPage() {
                 {familyCounts.children} {familyCounts.children === 1 ? 'child' : 'children'} · {familyCounts.adults} {familyCounts.adults === 1 ? 'adult' : 'adults'}
               </p>
               {familyFid && (
-                <p style={{ fontSize: 12, color: 'var(--muted)', fontFamily: 'var(--mono)', marginTop: 2 }}>Family ID {familyFid}</p>
+                <div style={{ marginTop: 14 }}>
+                  <FamilyIdCallout fid={familyFid} />
+                </div>
               )}
             </div>
             <Link href="/family/members" className="btn btn--s" style={{ textDecoration: 'none' }}>Manage family</Link>

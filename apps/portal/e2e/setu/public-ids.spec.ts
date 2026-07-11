@@ -143,6 +143,17 @@ test.describe('public FID/MID in the family UI (deployed UAT) — UNRUN', () => 
     // CMT- internal id is NOT surfaced anywhere on the page.
     await expect(page.getByText(new RegExp(`FID\\s+${EXPECTED_PUBLIC_FID}`)).first()).toBeVisible();
     await expect(page.getByText(/FID\s+CMT-/)).toHaveCount(0);
+
+    const dashboardFid = page.getByTestId('family-id-value').filter({ visible: true });
+    await expect(dashboardFid).toHaveText(EXPECTED_PUBLIC_FID);
+    const fontSize = await dashboardFid.evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize));
+    expect(fontSize).toBeGreaterThanOrEqual(32);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    const mobileDashboardFid = page.getByTestId('family-id-value').filter({ visible: true });
+    await expect(mobileDashboardFid).toHaveText(EXPECTED_PUBLIC_FID);
+    const mobileFontSize = await mobileDashboardFid.evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize));
+    expect(mobileFontSize).toBeGreaterThanOrEqual(32);
   });
 
   test('a member-detail page shows the 5-digit Member ID', async ({ page, request: req }) => {
