@@ -38,6 +38,7 @@ const FIREBASE_API_KEY = process.env.NEXT_PUBLIC_PORTAL_FIREBASE_API_KEY;
 // The deterministic public ids the seed (scripts/seed-e2e-family.ts) pins on the
 // fixture. Keep these in lock-step with PUBLIC_FID / PUBLIC_MIDS over there.
 const EXPECTED_PUBLIC_FID = '1042';
+const EXPECTED_LEGACY_FID = 'E2E-ATT-1'; // seed LEGACY_FID — shown as the "old check-in ID"
 const PUBLIC_MID_RE = /^\d{5}$/; // 5-digit shape; the exact value is 50001/50002
 
 // ── Bearer (mobile-style) auth helpers — mirrors mobile-bearer.spec.ts ──────────
@@ -154,6 +155,13 @@ test.describe('public FID/MID in the family UI (deployed UAT) — UNRUN', () => 
     await expect(mobileDashboardFid).toHaveText(EXPECTED_PUBLIC_FID);
     const mobileFontSize = await mobileDashboardFid.evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize));
     expect(mobileFontSize).toBeGreaterThanOrEqual(32);
+
+    // The legacy check-in ID is shown quietly beneath the new ID with a phase-out
+    // note, so migrated families still recognise their old number without a mass
+    // announcement. It renders smaller than the primary new ID.
+    const legacyLine = page.getByTestId('family-legacy-id').filter({ visible: true });
+    await expect(legacyLine).toContainText(EXPECTED_LEGACY_FID);
+    await expect(legacyLine).toContainText(/phased out/i);
   });
 
   test('a member-detail page shows the 5-digit Member ID', async ({ page, request: req }) => {

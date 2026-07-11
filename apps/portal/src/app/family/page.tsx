@@ -24,7 +24,12 @@ function actionHref(item: ActionItem, model: FamilyDashboardModel): string {
   return model.donateUrl; // fallback — unreachable today (donation is the only kind)
 }
 
-function FamilyIdCallout({ fid, mobile = false }: { fid: string; mobile?: boolean }) {
+function FamilyIdCallout({ fid, legacyFid, mobile = false }: { fid: string; legacyFid?: string | null; mobile?: boolean }) {
+  // Migrated families still recognise their legacy check-in ID; show it quietly
+  // under the new ID with a note that it is going away, so families learn the
+  // new number organically (no mass announcement). Net-new families have no
+  // legacyFid and see only the new ID.
+  const showLegacy = !!legacyFid && legacyFid !== fid;
   return (
     <div
       data-testid="family-id-callout"
@@ -56,6 +61,19 @@ function FamilyIdCallout({ fid, mobile = false }: { fid: string; mobile?: boolea
       >
         {fid}
       </strong>
+      {showLegacy && (
+        <div
+          data-testid="family-legacy-id"
+          style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid var(--line2)', display: 'flex', flexDirection: 'column', gap: 2 }}
+        >
+          <span style={{ fontSize: 12, color: 'var(--muted)', fontFamily: 'var(--mono)' }}>
+            Old check-in ID {legacyFid}
+          </span>
+          <span style={{ fontSize: 11, color: 'var(--muted)', lineHeight: 1.3, maxWidth: 220 }}>
+            Being phased out - please use your new Family ID above.
+          </span>
+        </div>
+      )}
     </div>
   );
 }
@@ -73,6 +91,7 @@ export default async function FamilyDashboardPage() {
   let bvChildren: BvChildView[] = [];
   let familyCounts = { children: 0, adults: 0 };
   let familyFid: string | null = null;
+  let familyLegacyId: string | null = null;
 
   if (flags.setuAuth) {
     const data = await getCurrentFamily();
@@ -82,6 +101,7 @@ export default async function FamilyDashboardPage() {
       isManager = data.isManager;
       memberCount = data.members.length;
       familyFid = displayFid(data.family);
+      familyLegacyId = data.family.legacyFid;
       displayMembers = data.members.map((m) => ({ name: `${m.firstName} ${m.lastName}`, mid: m.mid }));
       const dash = await loadFamilyDashboard(data.family, data.members);
       model = dash.model;
@@ -175,7 +195,7 @@ export default async function FamilyDashboardPage() {
               </div>
               {familyFid && (
                 <div style={{ marginBottom: 14 }}>
-                  <FamilyIdCallout fid={familyFid} mobile />
+                  <FamilyIdCallout fid={familyFid} legacyFid={familyLegacyId} mobile />
                 </div>
               )}
               <div className="row" style={{ flexWrap: 'wrap' }}>
@@ -235,7 +255,7 @@ export default async function FamilyDashboardPage() {
               </p>
               {familyFid && (
                 <div style={{ marginTop: 14 }}>
-                  <FamilyIdCallout fid={familyFid} />
+                  <FamilyIdCallout fid={familyFid} legacyFid={familyLegacyId} />
                 </div>
               )}
             </div>
