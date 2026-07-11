@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useState, useCallback } from 'react';
+import { Suspense, useState, useCallback, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { toast, SetuLogo, SetuAvatar, SetuIcon, Rosette } from '@cmt/ui';
@@ -192,6 +192,18 @@ function RegisterFamilyReal() {
   const [additionalMembers, setAdditionalMembers] = useState<AdditionalMember[]>([]);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
+
+  // When validation fails, bring the first error into view so a submit from the
+  // bottom of the form doesn't silently fail with an error the user can't see.
+  useEffect(() => {
+    if (Object.keys(fieldErrors).length === 0) return;
+    const first = document.querySelector('.field-error');
+    // scrollIntoView is unimplemented in jsdom (test env) — guard so the effect
+    // never throws there.
+    if (first && typeof first.scrollIntoView === 'function') {
+      first.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [fieldErrors]);
   const [showAddMember, setShowAddMember] = useState(false);
 
   // Email-verification gate: before the family is created the manager proves
