@@ -117,6 +117,11 @@ describe('UpdateLevelSchema', () => {
   it('rejects an unknown levelKind', () => {
     expect(UpdateLevelSchema.safeParse({ levelKind: 'senior' }).success).toBe(false);
   });
+
+  it('accepts leadTeacherRef null|string', () => {
+    expect(UpdateLevelSchema.parse({ leadTeacherRef: null }).leadTeacherRef).toBeNull();
+    expect(UpdateLevelSchema.parse({ leadTeacherRef: 'CMT-AAAA1111-01' }).leadTeacherRef).toBe('CMT-AAAA1111-01');
+  });
 });
 
 // ── LevelDocSchema ─────────────────────────────────────────────────────────────
@@ -158,6 +163,12 @@ describe('LevelDocSchema', () => {
 
   it('LevelDoc accepts null location (location-less program)', () => {
     expect(LevelDocSchema.safeParse({ ...validDoc, location: null }).success).toBe(true);
+  });
+
+  it('accepts an omitted, null, or string leadTeacherRef', () => {
+    expect(LevelDocSchema.parse(validDoc).leadTeacherRef).toBeUndefined();
+    expect(LevelDocSchema.parse({ ...validDoc, leadTeacherRef: null }).leadTeacherRef).toBeNull();
+    expect(LevelDocSchema.parse({ ...validDoc, leadTeacherRef: 'CMT-AAAA1111-01' }).leadTeacherRef).toBe('CMT-AAAA1111-01');
   });
 });
 

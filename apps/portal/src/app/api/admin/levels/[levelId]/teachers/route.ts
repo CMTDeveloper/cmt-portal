@@ -80,5 +80,12 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ level
   const { mid } = parsed.data;
   const next = (await getTeacherLevelIds(mid)).filter((l) => l !== levelId);
   const { added, removed } = await assignTeacher({ ref: mid, levelIds: next, byUid: g.byUid! });
+  // Removing the Lead teacher must not leave a dangling lead pointer at a mid that
+  // no longer teaches the level. Clear it in the same request.
+  const db = portalFirestore();
+  const levelSnap = await db.collection('levels').doc(levelId).get();
+  if (levelSnap.data()?.leadTeacherRef === mid) {
+    await db.collection('levels').doc(levelId).update({ leadTeacherRef: null });
+  }
   return NextResponse.json({ ref: mid, levelId, added, removed });
 }

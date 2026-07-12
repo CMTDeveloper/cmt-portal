@@ -41,3 +41,13 @@ export async function removeLevelTeacherClient(levelId: string, mid: string): Pr
   });
   if (!res.ok) throw new Error(`remove-teacher-${res.status}`);
 }
+
+/** Set (or clear, with null) the Lead teacher for a level. Throws on non-OK. */
+export async function setLevelLeadTeacherClient(levelId: string, mid: string | null): Promise<void> {
+  const res = await fetch(`/api/admin/levels/${encodeURIComponent(levelId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ leadTeacherRef: mid }),
+  });
+  if (!res.ok) throw new Error(`set-lead-${res.status}`);
+}

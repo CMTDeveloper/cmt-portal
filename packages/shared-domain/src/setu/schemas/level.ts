@@ -30,6 +30,7 @@ export const LevelDocSchema = z.object({
   pid: z.string().min(1),
   periodLabel: z.string().min(1),
   teacherRefs: z.array(z.string()), // mids/tids of assigned teachers (denormalized for "my levels")
+  leadTeacherRef: z.string().nullable().optional(), // one of teacherRefs marked as Lead; others render as Assistant
   enabled: z.boolean(),
   createdAt: z.date(),
   createdBy: z.string().min(1),
@@ -75,6 +76,7 @@ export const UpdateLevelSchema = z
     ageLabel: z.string().min(1).optional(),
     curriculum: z.string().min(1).optional(),
     enabled: z.boolean().optional(),
+    leadTeacherRef: z.string().nullable().optional(),
   })
   .refine(
     (d) => {

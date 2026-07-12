@@ -44,6 +44,7 @@ export default async function LevelsPage({ searchParams }: { searchParams: Promi
       pid: data.pid as string,
       periodLabel: data.periodLabel as string,
       teacherRefs: (data.teacherRefs ?? []) as string[],
+      leadTeacherRef: (data.leadTeacherRef ?? null) as string | null,
       enabled: data.enabled as boolean,
       createdAt: (data.createdAt as TS).toDate().toISOString(),
       createdBy: data.createdBy as string,

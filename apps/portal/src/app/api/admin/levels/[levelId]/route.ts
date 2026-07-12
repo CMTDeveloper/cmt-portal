@@ -89,6 +89,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ levelI
   if (data.curriculum !== undefined) update.curriculum = data.curriculum;
   if (data.enabled !== undefined) update.enabled = data.enabled;
 
+  // Lead teacher: a pointer into teacherRefs (the source of truth for who teaches
+  // the level). A non-null lead MUST already be one of the level's teachers; null
+  // clears the Lead. Doc-schema reads never require it, so pre-feature docs are fine.
+  if (data.leadTeacherRef !== undefined) {
+    if (data.leadTeacherRef !== null && !existing.teacherRefs.includes(data.leadTeacherRef)) {
+      return NextResponse.json({ error: 'lead-not-a-teacher' }, { status: 400 });
+    }
+    update.leadTeacherRef = data.leadTeacherRef; // string or null
+  }
+
   await ref.update(update);
   return NextResponse.json({ levelId });
 }

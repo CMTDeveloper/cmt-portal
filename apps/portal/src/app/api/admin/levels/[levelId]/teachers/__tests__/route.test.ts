@@ -64,6 +64,9 @@ const { store, seedLevel, seedAssignment, getLevel, getAssignment, FieldValue, p
         async set(data: Doc, opts?: { merge?: boolean }) {
           applySet(collection, id, data, opts);
         },
+        async update(data: Doc) {
+          applySet(collection, id, data, { merge: true });
+        },
       };
     }
 
@@ -237,6 +240,37 @@ describe('DELETE /api/admin/levels/[levelId]/teachers', () => {
     expect(res.status).toBe(200);
     expect(getLevel(LEVEL_1)?.teacherRefs).toEqual([]);
     expect(getAssignment(MID_1)?.levelIds).toEqual([]);
+  });
+
+  it('clears leadTeacherRef when the removed teacher was the level Lead', async () => {
+    seedAssignment(MID_1, [LEVEL_1]);
+    store.get('levels')!.set(LEVEL_1, {
+      pid: 'bv-brampton-2025-26',
+      teacherRefs: [MID_1],
+      leadTeacherRef: MID_1,
+    });
+
+    const { DELETE } = await import('../route');
+    const res = await DELETE(makeRequest('DELETE', { mid: MID_1 }, 'uid-admin'), params());
+    expect(res.status).toBe(200);
+    expect(getLevel(LEVEL_1)?.teacherRefs).toEqual([]);
+    expect(getLevel(LEVEL_1)?.leadTeacherRef).toBeNull();
+  });
+
+  it('leaves leadTeacherRef intact when a non-lead teacher is removed', async () => {
+    seedAssignment(MID_1, [LEVEL_1]);
+    seedAssignment(MID_2, [LEVEL_1]);
+    store.get('levels')!.set(LEVEL_1, {
+      pid: 'bv-brampton-2025-26',
+      teacherRefs: [MID_1, MID_2],
+      leadTeacherRef: MID_2,
+    });
+
+    const { DELETE } = await import('../route');
+    const res = await DELETE(makeRequest('DELETE', { mid: MID_1 }, 'uid-admin'), params());
+    expect(res.status).toBe(200);
+    expect(getLevel(LEVEL_1)?.teacherRefs).toEqual([MID_2]);
+    expect(getLevel(LEVEL_1)?.leadTeacherRef).toBe(MID_2);
   });
 
   it('N=2 — removing one of two teachers leaves the other on the level', async () => {

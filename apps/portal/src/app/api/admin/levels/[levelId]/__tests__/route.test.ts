@@ -35,6 +35,7 @@ const EXISTING = {
   levelKind: 'level',
   gradeBand: ['Gr 2', 'Gr 3'],
   periodLabel: '2025-26',
+  teacherRefs: ['CMT-FAM1-01', 'CMT-FAM2-01'],
 };
 
 const params = (levelId = 'brampton-level-2-bv-brampton-2025-26') => ({
@@ -147,6 +148,30 @@ describe('PATCH /api/admin/levels/[levelId]', () => {
     expect(res.status).toBe(200);
     const update = mockUpdate.mock.calls[0]![0] as Record<string, unknown>;
     expect(update.levelName).toBe('Level 9');
+  });
+
+  it('persists a leadTeacherRef that is one of the level teacherRefs', async () => {
+    const { PATCH } = await import('../route');
+    const res = await PATCH(makeRequest('PATCH', { leadTeacherRef: 'CMT-FAM1-01' }, 'uid-admin'), params());
+    expect(res.status).toBe(200);
+    const update = mockUpdate.mock.calls[0]![0] as Record<string, unknown>;
+    expect(update.leadTeacherRef).toBe('CMT-FAM1-01');
+  });
+
+  it('accepts a null leadTeacherRef (clears the Lead)', async () => {
+    const { PATCH } = await import('../route');
+    const res = await PATCH(makeRequest('PATCH', { leadTeacherRef: null }, 'uid-admin'), params());
+    expect(res.status).toBe(200);
+    const update = mockUpdate.mock.calls[0]![0] as Record<string, unknown>;
+    expect(update.leadTeacherRef).toBeNull();
+  });
+
+  it('rejects a leadTeacherRef that is not one of the level teacherRefs (400 lead-not-a-teacher)', async () => {
+    const { PATCH } = await import('../route');
+    const res = await PATCH(makeRequest('PATCH', { leadTeacherRef: 'CMT-NOPE-99' }, 'uid-admin'), params());
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'lead-not-a-teacher' });
+    expect(mockUpdate).not.toHaveBeenCalled();
   });
 
   it('does not 500 when renaming a phantom level doc that has no levelName', async () => {
