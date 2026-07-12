@@ -89,21 +89,21 @@ beforeEach(() => {
 });
 
 describe('public-id allocator', () => {
-  it('family ids start at 1001 and increment', async () => {
-    expect(await allocateFamilyPublicId()).toBe('1001');
-    expect(await allocateFamilyPublicId()).toBe('1002');
+  it('family ids start at 5001 and increment', async () => {
+    expect(await allocateFamilyPublicId()).toBe('5001');
+    expect(await allocateFamilyPublicId()).toBe('5002');
   });
 
   it('skips a candidate that equals an existing legacy check-in id', async () => {
-    // 1001 and 1002 are already some family's legacy id; the allocator must skip
+    // 5001 and 5002 are already some family's legacy id; the allocator must skip
     // them (they would collide under the kiosk legacy-first lookup) and hand out
     // the next non-legacy number.
-    legacyIds.add('1001');
-    legacyIds.add('1002');
-    expect(await allocateFamilyPublicId()).toBe('1003');
+    legacyIds.add('5001');
+    legacyIds.add('5002');
+    expect(await allocateFamilyPublicId()).toBe('5003');
     // The counter advanced past the skipped ids; the next allocation continues.
-    legacyIds.add('1004');
-    expect(await allocateFamilyPublicId()).toBe('1005');
+    legacyIds.add('5004');
+    expect(await allocateFamilyPublicId()).toBe('5005');
   });
 
   it('member ids start at 50001 and reserve contiguous blocks', async () => {

@@ -8,7 +8,12 @@ import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 
 const FAMILY_COUNTER = 'familyPublicId';
 const MEMBER_COUNTER = 'memberPublicId';
-const FAMILY_START = 1001;
+// Family publicFids begin at 5001 so they sit in a band ABOVE every real legacy
+// check-in id (those top out in the low thousands; the lone 99991 is junk). That
+// keeps publicFids visually distinct from legacy ids and collision-free without
+// interleaving. The `isExistingLegacyId` skip below is kept as belt-and-suspenders.
+// (At runtime the persisted counter drives allocation; this is the fresh-DB base.)
+const FAMILY_START = 5001;
 const MEMBER_START = 50001;
 
 async function allocateBlock(counter: string, start: number, count: number): Promise<number[]> {

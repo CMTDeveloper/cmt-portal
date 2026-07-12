@@ -21,7 +21,7 @@
     "grant:admin": "tsx --env-file=.env.local scripts/grant-admin.ts",
     "grant:welcome-team": "tsx --env-file=.env.local scripts/grant-welcome-team.ts",
     "migrate:legacy-families": "tsx --env-file=.env.local scripts/migrate-legacy-families.ts",
-    "renumber:public-ids": "tsx --env-file=.env.local scripts/renumber-colliding-public-ids.ts",
+    "renumber:public-ids": "tsx --env-file=.env.local scripts/renumber-public-ids.ts",
     "migrate:programs": "tsx --env-file=.env.local scripts/migrate-to-programs.ts",
     "migrate:calendar-ids": "tsx --env-file=.env.local scripts/migrate-calendar-entry-ids.ts",
     "migrate:public-ids": "tsx --env-file=.env.local scripts/assign-public-ids.ts",
