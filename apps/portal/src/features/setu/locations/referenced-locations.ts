@@ -7,8 +7,12 @@ import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
  * point at (the name is the key, so a removed centre would orphan them).
  *
  * Uses .count() aggregation (no doc streaming). families/offerings/levels are
- * top-level; enrollments live under families, so it's a collectionGroup query.
- * All are single-field equality => auto-indexed, no composite index needed.
+ * top-level single-field equality queries (auto-indexed). enrollments live under
+ * families, so it's a collectionGroup query - and a collectionGroup single-field
+ * query is NOT auto-indexed: it needs the `enrollments.location` COLLECTION_GROUP
+ * field-override in firestore.indexes.json (without it this line throws
+ * FAILED_PRECONDITION and the remove-guard 500s). Deploy that override before
+ * this runs in any environment.
  */
 export async function countLocationReferences(location: string): Promise<number> {
   const db = portalFirestore();
