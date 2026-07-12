@@ -11,12 +11,7 @@ import type {
   Location,
 } from '@cmt/shared-domain';
 import type { ProgramRow } from '@/features/admin/programs/programs-table';
-import {
-  searchTeachersClient,
-  addLevelTeacherClient,
-  removeLevelTeacherClient,
-  type TeacherHit,
-} from './assign-teacher-client';
+import { searchTeachersClient, type TeacherHit } from './assign-teacher-client';
 
 // Serialised shape from GET /api/admin/levels (Timestamps → ISO strings).
 export type LevelRow = Omit<LevelDoc, 'createdAt' | 'updatedAt'> & {
@@ -36,23 +31,16 @@ export interface LevelTeacher {
   name: string;
 }
 
-/** Emitted when a per-level teacher pill is added or removed, so the parent can
- * keep its own `levels[].teacherRefs` in sync. */
-export interface TeacherAssignmentChange {
-  levelId: string;
-  mid: string;
-  op: 'add' | 'remove';
-}
-
 interface LevelsTableProps {
   initialLevels: LevelRow[];
   periods: PeriodOption[];
   /** Optional list of programs to show a program selector (E3). When absent the selector is hidden. */
   programs?: ProgramRow[];
-  /** levelId → resolved {mid,name} teachers, paired by mid (never zipped by index). */
+  /** levelId → resolved {mid,name} teachers, paired by mid (never zipped by index).
+   * Owned by LevelsManagement; the row renders these read-only (add/remove/lead
+   * happen only in the detail panel). */
   teachersByLevel?: Record<string, LevelTeacher[]>;
   onLevelsChange?: (levels: LevelRow[]) => void;
-  onAssignmentSaved?: (change: TeacherAssignmentChange) => void;
   /** When true (viewing a past school year), mutate controls are disabled. */
   readOnly?: boolean;
   // ── Filter values, owned by LevelsManagement (the parent filter bar). ──────
@@ -339,7 +327,6 @@ export function LevelsTable({
   programs,
   teachersByLevel,
   onLevelsChange,
-  onAssignmentSaved,
   readOnly = false,
   selectedLocation,
   search = '',
@@ -352,10 +339,9 @@ export function LevelsTable({
   const [editing, setEditing] = useState<LevelRow | null>(null);
   // Program filter: default to 'bala-vihar' if programs prop provided
   const [selectedProgramKey, setSelectedProgramKey] = useState('bala-vihar');
-  // Per-level teacher pills, mirrored in state for optimistic add/remove.
-  const [teachers, setTeachers] = useState<Record<string, LevelTeacher[]>>(teachersByLevel ?? {});
-  // Which level's "Assign teacher" popover is open (levelId), or null.
-  const [assigning, setAssigning] = useState<string | null>(null);
+  // Read-only teacher pills, owned by LevelsManagement (single source of truth).
+  // The row only displays them; add/remove/lead happen in the detail panel.
+  const teachersByLevelMap = teachersByLevel ?? {};
 
   // Filter programs that use levels (for the selector)
   const levelPrograms = programs?.filter((p) => p.capabilities.usesLevels) ?? [];
@@ -404,84 +390,33 @@ export function LevelsTable({
     }
   }
 
-  async function handleAddTeacher(levelId: string, hit: TeacherHit) {
-    if ((teachers[levelId] ?? []).some((t) => t.mid === hit.mid)) {
-      toast.error(`${hit.name} is already assigned to this level.`);
-      return;
-    }
-    try {
-      await addLevelTeacherClient(levelId, hit.mid);
-      setTeachers((prev) => ({
-        ...prev,
-        [levelId]: [...(prev[levelId] ?? []), { mid: hit.mid, name: hit.name }],
-      }));
-      onAssignmentSaved?.({ levelId, mid: hit.mid, op: 'add' });
-      setAssigning(null);
-      toast.success(`Assigned ${hit.name}. Takes effect on their next sign-in.`);
-    } catch {
-      toast.error('Could not assign teacher — please try again.');
-    }
-  }
-
-  async function handleRemoveTeacher(levelId: string, mid: string) {
-    try {
-      await removeLevelTeacherClient(levelId, mid);
-      setTeachers((prev) => ({
-        ...prev,
-        [levelId]: (prev[levelId] ?? []).filter((t) => t.mid !== mid),
-      }));
-      onAssignmentSaved?.({ levelId, mid, op: 'remove' });
-      toast.success('Teacher removed. Takes effect on their next sign-in.');
-    } catch {
-      toast.error('Could not remove teacher — please try again.');
-    }
-  }
-
-  // Plain render helper (NOT a nested component) — inlined into both the desktop
-  // table cell and the mobile card so pills + the Assign popover render the same
-  // in each. Calling it as `teacherCell(l)` keeps element identity stable.
+  // Plain render helper (NOT a nested component) - inlined into both the desktop
+  // table cell and the mobile card so the read-only teacher summary renders the
+  // same in each. Calling it as `teacherCell(l)` keeps element identity stable.
+  // Teacher management (add/remove/lead) lives ONLY in the detail panel; the row
+  // is a read-only summary so there is a single source of truth.
   const teacherCell = (l: LevelRow) => {
-    const list = teachers[l.levelId] ?? [];
+    const list = teachersByLevelMap[l.levelId] ?? [];
+    if (list.length === 0) {
+      return <span style={{ fontSize: 12, color: 'var(--muted)' }}>—</span>;
+    }
     return (
-      <div style={{ position: 'relative' }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
-          {list.map((t) => (
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+        {list.map((t) => {
+          const isLead = l.leadTeacherRef === t.mid;
+          return (
             <span
               key={t.mid}
               className="pill"
               style={{ fontSize: 11, fontWeight: 600, background: 'var(--surface2)', color: 'var(--ink)', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 9px', borderRadius: 999 }}
             >
               {t.name}
-              {!readOnly && (
-                <button
-                  type="button"
-                  aria-label={`Remove ${t.name}`}
-                  onClick={() => void handleRemoveTeacher(l.levelId, t.mid)}
-                  style={{ border: 0, background: 'transparent', cursor: 'pointer', color: 'var(--muted)', fontSize: 13, lineHeight: 1, padding: 0 }}
-                >
-                  ×
-                </button>
-              )}
+              <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', color: isLead ? 'var(--accentDeep)' : 'var(--muted)' }}>
+                {isLead ? 'Lead' : 'Asst'}
+              </span>
             </span>
-          ))}
-          {list.length === 0 && readOnly && <span style={{ fontSize: 12, color: 'var(--muted)' }}>—</span>}
-          {!readOnly && (
-            <button
-              type="button"
-              onClick={() => setAssigning((cur) => (cur === l.levelId ? null : l.levelId))}
-              style={{ ...actionBtnStyle, padding: '3px 10px' }}
-            >
-              + Assign teacher
-            </button>
-          )}
-        </div>
-        {!readOnly && assigning === l.levelId && (
-          <AssignTeacherPopover
-            existingMids={list.map((t) => t.mid)}
-            onPick={(hit) => void handleAddTeacher(l.levelId, hit)}
-            onClose={() => setAssigning(null)}
-          />
-        )}
+          );
+        })}
       </div>
     );
   };
@@ -625,7 +560,7 @@ interface AssignTeacherPopoverProps {
   onClose: () => void;
 }
 
-function AssignTeacherPopover({ existingMids, onPick, onClose }: AssignTeacherPopoverProps) {
+export function AssignTeacherPopover({ existingMids, onPick, onClose }: AssignTeacherPopoverProps) {
   const [q, setQ] = useState('');
   const [results, setResults] = useState<TeacherHit[]>([]);
   const [loading, setLoading] = useState(false);

@@ -1,15 +1,17 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
 const toastMock = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), warning: vi.fn() }));
 vi.mock('@cmt/ui', () => ({ toast: toastMock }));
 
-// The inline pills call these client wrappers; mock the -client module (never
+// The detail panel calls these client wrappers; mock the -client module (never
 // the server fn) per repo rule. No calls fire on render — declared for safety.
 const clientMock = vi.hoisted(() => ({
   searchTeachersClient: vi.fn(),
   addLevelTeacherClient: vi.fn(),
   removeLevelTeacherClient: vi.fn(),
+  setLevelLeadTeacherClient: vi.fn(),
 }));
 vi.mock('../assign-teacher-client', () => clientMock);
 
@@ -77,7 +79,7 @@ const TEACHERS_BY_LEVEL: Record<string, LevelTeacher[]> = {
 };
 
 describe('LevelsManagement', () => {
-  it('renders the levels table directly with no "Teacher assignments" tab', () => {
+  it('renders the levels table with read-only teacher pills and an empty detail panel', () => {
     render(
       <LevelsManagement
         initialLevels={LEVELS}
@@ -91,11 +93,34 @@ describe('LevelsManagement', () => {
     // The tab strip is gone entirely.
     expect(screen.queryByRole('tab', { name: 'Teacher assignments' })).toBeNull();
     expect(screen.queryByRole('tab', { name: 'Levels' })).toBeNull();
-    // The level and its inline pills render directly (N=2 teachers).
+    // The level and its read-only pills render directly (N=2 teachers).
     expect(screen.getAllByText('Level 1')[0]).toBeTruthy();
     expect(screen.getAllByText('Meera Rao')[0]).toBeTruthy();
     expect(screen.getAllByText('Anil Kumar')[0]).toBeTruthy();
-    expect(screen.getAllByRole('button', { name: /assign teacher/i })[0]).toBeTruthy();
+    // Teacher management moved to the panel: no add-teacher control in the row.
+    expect(screen.queryByRole('button', { name: /assign teacher/i })).toBeNull();
+    // The detail panel prompts for a selection until a level is picked.
+    expect(screen.getByText(/select a level/i)).toBeTruthy();
+  });
+
+  it('opens the detail panel with an Add teacher control when a level is selected', async () => {
+    const user = userEvent.setup();
+    render(
+      <LevelsManagement
+        initialLevels={LEVELS}
+        periods={PERIODS}
+        programs={PROGRAMS}
+        locationOptions={['Brampton']}
+        teachersByLevel={TEACHERS_BY_LEVEL}
+      />,
+    );
+
+    await user.click(screen.getAllByText('Level 1')[0]!);
+
+    // Panel now shows the level's teachers with an Add teacher control.
+    expect(screen.getByRole('button', { name: /add teacher/i })).toBeTruthy();
+    // Neither teacher is the lead on this fixture, so both read Assistant Teacher.
+    expect(screen.getAllByText('Assistant Teacher')).toHaveLength(2);
   });
 
   it('disables the "New level" control when readOnly (viewing a past year)', () => {

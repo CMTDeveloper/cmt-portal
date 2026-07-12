@@ -6,8 +6,8 @@ import {
   type LevelRow,
   type LevelTeacher,
   type PeriodOption,
-  type TeacherAssignmentChange,
 } from './levels-table';
+import { LevelDetailPanel } from './level-detail-panel';
 import type { ProgramRow } from '@/features/admin/programs/programs-table';
 
 interface LevelsManagementProps {
@@ -31,6 +31,10 @@ export function LevelsManagement({
   readOnly = false,
 }: LevelsManagementProps) {
   const [levels, setLevels] = useState(initialLevels);
+  // Single source of truth for the per-level teacher pills. Both the list (for
+  // its read-only row summary) and the detail panel (which mutates them) read
+  // from this map, so add/remove/lead stays consistent everywhere.
+  const [teachers, setTeachers] = useState<Record<string, LevelTeacher[]>>(teachersByLevel ?? {});
   // The location filter is ALWAYS exactly one centre - there is no "All" (a
   // focused single-centre list, per the owner requirement). Default to the
   // first configured centre.
@@ -39,19 +43,48 @@ export function LevelsManagement({
   const [showDisabled, setShowDisabled] = useState(false);
   const [selectedLevelId, setSelectedLevelId] = useState<string | null>(null);
 
-  // Keep the parent's `levels[].teacherRefs` in sync when a pill is added or
-  // removed inline, so the modal/edit flow and the stat cards see the current
-  // teacher set.
-  function handleAssignmentSaved(change: TeacherAssignmentChange) {
+  // The panel mutates the selected level's teachers; these callbacks update BOTH
+  // the `teachers` map (row summary + panel pills) AND `levels[].teacherRefs` /
+  // `leadTeacherRef` (stat cards + badges) so every surface stays in sync.
+  function handleTeacherAdded(mid: string, name: string) {
+    if (!selectedLevelId) return;
+    setTeachers((prev) => {
+      const list = prev[selectedLevelId] ?? [];
+      if (list.some((t) => t.mid === mid)) return prev;
+      return { ...prev, [selectedLevelId]: [...list, { mid, name }] };
+    });
+    setLevels((prev) =>
+      prev.map((level) =>
+        level.levelId === selectedLevelId && !level.teacherRefs.includes(mid)
+          ? { ...level, teacherRefs: [...level.teacherRefs, mid] }
+          : level,
+      ),
+    );
+  }
+
+  function handleTeacherRemoved(mid: string) {
+    if (!selectedLevelId) return;
+    setTeachers((prev) => ({
+      ...prev,
+      [selectedLevelId]: (prev[selectedLevelId] ?? []).filter((t) => t.mid !== mid),
+    }));
     setLevels((prev) =>
       prev.map((level) => {
-        if (level.levelId !== change.levelId) return level;
-        if (change.op === 'add') {
-          if (level.teacherRefs.includes(change.mid)) return level;
-          return { ...level, teacherRefs: [...level.teacherRefs, change.mid] };
-        }
-        return { ...level, teacherRefs: level.teacherRefs.filter((ref) => ref !== change.mid) };
+        if (level.levelId !== selectedLevelId) return level;
+        const teacherRefs = level.teacherRefs.filter((ref) => ref !== mid);
+        return level.leadTeacherRef === mid
+          ? { ...level, teacherRefs, leadTeacherRef: null }
+          : { ...level, teacherRefs };
       }),
+    );
+  }
+
+  function handleLeadChanged(mid: string | null) {
+    if (!selectedLevelId) return;
+    setLevels((prev) =>
+      prev.map((level) =>
+        level.levelId === selectedLevelId ? { ...level, leadTeacherRef: mid } : level,
+      ),
     );
   }
 
@@ -73,6 +106,7 @@ export function LevelsManagement({
   const selectedLevel = selectedLevelId
     ? (levels.find((l) => l.levelId === selectedLevelId) ?? null)
     : null;
+  const selectedTeachers = teachers[selectedLevelId ?? ''] ?? [];
 
   return (
     <section>
@@ -159,17 +193,16 @@ export function LevelsManagement({
         <StatCard testId="stat-needing-teachers" value={stats.needingTeachers} label="Needs teachers" tone="warn" />
       </div>
 
-      {/* Master-detail: left = the levels list; right = the teacher detail panel
-          (Task 12 fills it; for now it is a placeholder with an empty-state prompt). */}
+      {/* Master-detail: left = the levels list (read-only teacher summary);
+          right = the teacher detail panel where add/remove/lead happen. */}
       <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_minmax(0,380px)]">
         <div className="card" style={{ padding: 22 }}>
           <LevelsTable
             initialLevels={levels}
             periods={periods}
             programs={programs}
-            teachersByLevel={teachersByLevel ?? {}}
+            teachersByLevel={teachers}
             onLevelsChange={setLevels}
-            onAssignmentSaved={handleAssignmentSaved}
             readOnly={readOnly}
             selectedLocation={selectedLocation}
             search={search}
@@ -178,7 +211,14 @@ export function LevelsManagement({
             onSelectLevel={setSelectedLevelId}
           />
         </div>
-        <LevelDetailPanel selectedLevel={selectedLevel} />
+        <LevelDetailPanel
+          level={selectedLevel}
+          teachers={selectedTeachers}
+          readOnly={readOnly}
+          onTeacherAdded={handleTeacherAdded}
+          onTeacherRemoved={handleTeacherRemoved}
+          onLeadChanged={handleLeadChanged}
+        />
       </div>
     </section>
   );
@@ -212,39 +252,6 @@ function StatCard({ testId, value, label, tone }: { testId: string; value: numbe
         </span>
         <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--body-text)', lineHeight: 1.25 }}>{label}</span>
       </span>
-    </div>
-  );
-}
-
-// ─── Detail panel placeholder ────────────────────────────────────────────────
-// Task 12 replaces this with the full teacher-management panel. For now it shows
-// an empty-state prompt when nothing is selected, and a minimal summary once a
-// level is picked so selection is visibly wired.
-
-function LevelDetailPanel({ selectedLevel }: { selectedLevel: LevelRow | null }) {
-  if (!selectedLevel) {
-    return (
-      <div
-        className="card"
-        style={{ padding: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', minHeight: 180 }}
-      >
-        <p style={{ fontSize: 13, color: 'var(--muted)', maxWidth: 240, lineHeight: 1.5 }}>
-          Select a level to manage its teachers.
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="card" style={{ padding: 22 }}>
-      <p style={{ fontSize: 11, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--muted)' }}>Selected level</p>
-      <h2 style={{ fontSize: 18, fontWeight: 600, marginTop: 6 }}>{selectedLevel.levelName}</h2>
-      <p style={{ fontSize: 13, color: 'var(--body-text)', marginTop: 4 }}>
-        {selectedLevel.location ?? 'Brampton'} · {selectedLevel.periodLabel}
-      </p>
-      <p style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 14, lineHeight: 1.5 }}>
-        Teacher management for this level is moving here.
-      </p>
     </div>
   );
 }

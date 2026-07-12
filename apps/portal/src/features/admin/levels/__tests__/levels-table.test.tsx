@@ -115,7 +115,10 @@ describe('LevelsTable', () => {
   });
 });
 
-describe('LevelsTable — inline teacher pills', () => {
+describe('LevelsTable — read-only teacher summary', () => {
+  // Teacher management (add/remove/lead) now lives in the detail panel; the row
+  // shows a read-only summary paired by mid, with a Lead/Assistant hint.
+  const LEVEL_WITH_LEAD: LevelRow = { ...LEVEL, leadTeacherRef: 'CMT-AAAA1111-01' };
   const TWO_TEACHERS: Record<string, LevelTeacher[]> = {
     [LEVEL.levelId]: [
       { mid: 'CMT-AAAA1111-01', name: 'Meera Rao' },
@@ -123,42 +126,21 @@ describe('LevelsTable — inline teacher pills', () => {
     ],
   };
 
-  it('renders a name pill per teacher (N=2) and an Assign teacher button', () => {
-    render(<LevelsTable initialLevels={[LEVEL]} periods={PERIODS} teachersByLevel={TWO_TEACHERS} />);
+  it('renders a read-only name pill per teacher (N=2) with a Lead/Assistant hint', () => {
+    render(<LevelsTable initialLevels={[LEVEL_WITH_LEAD]} periods={PERIODS} teachersByLevel={TWO_TEACHERS} />);
     // Rendered in both the mobile card and the desktop table, so match all.
     expect(screen.getAllByText('Meera Rao')[0]).toBeTruthy();
     expect(screen.getAllByText('Anil Kumar')[0]).toBeTruthy();
-    expect(screen.getAllByRole('button', { name: /assign teacher/i })[0]).toBeTruthy();
+    // Lead/Assistant hint reflects leadTeacherRef (Meera is Lead, Anil is Asst).
+    expect(screen.getAllByText('Lead')[0]).toBeTruthy();
+    expect(screen.getAllByText('Asst')[0]).toBeTruthy();
+  });
+
+  it('exposes no add/remove teacher controls in the row (panel-only)', () => {
+    render(<LevelsTable initialLevels={[LEVEL_WITH_LEAD]} periods={PERIODS} teachersByLevel={TWO_TEACHERS} />);
+    expect(screen.queryByRole('button', { name: /assign teacher/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Remove / })).toBeNull();
     // No legacy "Teacher assignments" tab anywhere.
     expect(screen.queryByRole('tab', { name: 'Teacher assignments' })).toBeNull();
-  });
-
-  it('searches via the popover and assigns the clicked result', async () => {
-    clientMock.searchTeachersClient.mockResolvedValue([
-      { mid: 'CMT-CCCC3333-01', name: 'Sita Iyer', email: 'sita@example.com', fid: 'f1', location: 'Brampton' },
-    ]);
-    clientMock.addLevelTeacherClient.mockResolvedValue(undefined);
-    const user = userEvent.setup();
-    render(<LevelsTable initialLevels={[LEVEL]} periods={PERIODS} teachersByLevel={{ [LEVEL.levelId]: [] }} />);
-
-    await user.click(screen.getAllByRole('button', { name: /assign teacher/i })[0]!);
-    await user.type(screen.getAllByLabelText('Search teacher')[0]!, 'sita');
-
-    await waitFor(() => expect(clientMock.searchTeachersClient).toHaveBeenCalledWith('sita'));
-    await user.click(await screen.findByText('Sita Iyer'));
-    await waitFor(() =>
-      expect(clientMock.addLevelTeacherClient).toHaveBeenCalledWith(LEVEL.levelId, 'CMT-CCCC3333-01'),
-    );
-  });
-
-  it('removes a teacher when its pill × is clicked', async () => {
-    clientMock.removeLevelTeacherClient.mockResolvedValue(undefined);
-    const user = userEvent.setup();
-    render(<LevelsTable initialLevels={[LEVEL]} periods={PERIODS} teachersByLevel={TWO_TEACHERS} />);
-
-    await user.click(screen.getAllByRole('button', { name: 'Remove Meera Rao' })[0]!);
-    await waitFor(() =>
-      expect(clientMock.removeLevelTeacherClient).toHaveBeenCalledWith(LEVEL.levelId, 'CMT-AAAA1111-01'),
-    );
   });
 });
