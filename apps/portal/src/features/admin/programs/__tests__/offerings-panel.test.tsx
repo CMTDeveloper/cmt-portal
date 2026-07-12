@@ -50,34 +50,34 @@ beforeEach(() => {
 
 describe('OfferingsPanel', () => {
   it('renders existing offerings with term labels (mobile+desktop)', () => {
-    render(<OfferingsPanel programKey="bala-vihar" initialOfferings={[BASE_OFFERING]} usesDonation={true} />);
+    render(<OfferingsPanel programKey="bala-vihar" initialOfferings={[BASE_OFFERING]} usesDonation={true} locationOptions={['Brampton', 'Scarborough']} />);
     // Both mobile and desktop renders, so use getAllByText
     expect(screen.getAllByText('2025-26').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('Brampton').length).toBeGreaterThanOrEqual(1);
   });
 
   it('shows "+ New offering" button', () => {
-    render(<OfferingsPanel programKey="bala-vihar" initialOfferings={[]} usesDonation={true} />);
+    render(<OfferingsPanel programKey="bala-vihar" initialOfferings={[]} usesDonation={true} locationOptions={['Brampton', 'Scarborough']} />);
     expect(screen.getByRole('button', { name: /new offering/i })).toBeTruthy();
   });
 
   it('opens create modal on "+ New offering" click', async () => {
     const user = userEvent.setup();
-    render(<OfferingsPanel programKey="bala-vihar" initialOfferings={[]} usesDonation={true} />);
+    render(<OfferingsPanel programKey="bala-vihar" initialOfferings={[]} usesDonation={true} locationOptions={['Brampton', 'Scarborough']} />);
     await user.click(screen.getByRole('button', { name: /new offering/i }));
     expect(screen.getByRole('dialog')).toBeTruthy();
   });
 
   it('shows teacher-managed as a payment source option', async () => {
     const user = userEvent.setup();
-    render(<OfferingsPanel programKey="bala-vihar" initialOfferings={[]} usesDonation={true} />);
+    render(<OfferingsPanel programKey="bala-vihar" initialOfferings={[]} usesDonation={true} locationOptions={['Brampton', 'Scarborough']} />);
     await user.click(screen.getByRole('button', { name: /new offering/i }));
     expect(screen.getByRole('option', { name: /teacher managed/i })).toBeTruthy();
   });
 
   it('hides the donation + payment fields for a no-donation program', async () => {
     const user = userEvent.setup();
-    render(<OfferingsPanel programKey="om-chanting" initialOfferings={[]} usesDonation={false} />);
+    render(<OfferingsPanel programKey="om-chanting" initialOfferings={[]} usesDonation={false} locationOptions={['Brampton', 'Scarborough']} />);
     await user.click(screen.getByRole('button', { name: /new offering/i }));
     expect(screen.getByRole('dialog')).toBeTruthy();
     // Term/dates still present, but no donation tiers or payment source.
@@ -89,7 +89,7 @@ describe('OfferingsPanel', () => {
 
   it('omits pricingTiers/legacy paymentSource in the POST for a no-donation program', async () => {
     const user = userEvent.setup();
-    render(<OfferingsPanel programKey="om-chanting" initialOfferings={[]} usesDonation={false} />);
+    render(<OfferingsPanel programKey="om-chanting" initialOfferings={[]} usesDonation={false} locationOptions={['Brampton', 'Scarborough']} />);
     await user.click(screen.getByRole('button', { name: /new offering/i }));
     await user.type(screen.getByPlaceholderText('2025-26'), '2026-summer');
     const dateInputs = document.querySelectorAll('input[type="date"]');
@@ -107,7 +107,7 @@ describe('OfferingsPanel', () => {
 
   it('POSTs to /api/admin/offerings on create', async () => {
     const user = userEvent.setup();
-    render(<OfferingsPanel programKey="bala-vihar" initialOfferings={[]} usesDonation={true} />);
+    render(<OfferingsPanel programKey="bala-vihar" initialOfferings={[]} usesDonation={true} locationOptions={['Brampton', 'Scarborough']} />);
     await user.click(screen.getByRole('button', { name: /new offering/i }));
 
     await user.type(screen.getByPlaceholderText('2025-26'), '2026-27');
@@ -129,7 +129,7 @@ describe('OfferingsPanel', () => {
 
   it('POSTs teacher-managed paymentSource when selected', async () => {
     const user = userEvent.setup();
-    render(<OfferingsPanel programKey="bala-vihar" initialOfferings={[]} usesDonation={true} />);
+    render(<OfferingsPanel programKey="bala-vihar" initialOfferings={[]} usesDonation={true} locationOptions={['Brampton', 'Scarborough']} />);
     await user.click(screen.getByRole('button', { name: /new offering/i }));
 
     await user.type(screen.getByPlaceholderText('2025-26'), '2026-27');
@@ -147,14 +147,14 @@ describe('OfferingsPanel', () => {
   });
 
   it('shows "Duplicate" button for existing offerings', () => {
-    render(<OfferingsPanel programKey="bala-vihar" initialOfferings={[BASE_OFFERING]} usesDonation={true} />);
+    render(<OfferingsPanel programKey="bala-vihar" initialOfferings={[BASE_OFFERING]} usesDonation={true} locationOptions={['Brampton', 'Scarborough']} />);
     // Duplicate button appears in at least one of mobile/desktop renders
     expect(screen.getAllByRole('button', { name: /duplicate/i }).length).toBeGreaterThanOrEqual(1);
   });
 
   it('Duplicate opens modal pre-filled with dates shifted +1 year', async () => {
     const user = userEvent.setup();
-    render(<OfferingsPanel programKey="bala-vihar" initialOfferings={[BASE_OFFERING]} usesDonation={true} />);
+    render(<OfferingsPanel programKey="bala-vihar" initialOfferings={[BASE_OFFERING]} usesDonation={true} locationOptions={['Brampton', 'Scarborough']} />);
     const dupButtons = screen.getAllByRole('button', { name: /duplicate/i });
     await user.click(dupButtons[0]!);
     expect(screen.getByRole('dialog')).toBeTruthy();
@@ -164,7 +164,7 @@ describe('OfferingsPanel', () => {
 
   it('shows toast.success after create', async () => {
     const user = userEvent.setup();
-    render(<OfferingsPanel programKey="bala-vihar" initialOfferings={[]} usesDonation={true} />);
+    render(<OfferingsPanel programKey="bala-vihar" initialOfferings={[]} usesDonation={true} locationOptions={['Brampton', 'Scarborough']} />);
     await user.click(screen.getByRole('button', { name: /new offering/i }));
     await user.type(screen.getByPlaceholderText('2025-26'), '2026-27');
     const dateInputs = document.querySelectorAll('input[type="date"]');
@@ -185,7 +185,7 @@ describe('OfferingsPanel', () => {
       }),
     }) as unknown as typeof fetch;
 
-    render(<OfferingsPanel programKey="bala-vihar" initialOfferings={[]} usesDonation={true} />);
+    render(<OfferingsPanel programKey="bala-vihar" initialOfferings={[]} usesDonation={true} locationOptions={['Brampton', 'Scarborough']} />);
     await user.click(screen.getByRole('button', { name: /new offering/i }));
     await user.type(screen.getByPlaceholderText('2025-26'), '2026-27');
     const dateInputs = document.querySelectorAll('input[type="date"]');
@@ -208,7 +208,7 @@ describe('OfferingsPanel', () => {
       }),
     }) as unknown as typeof fetch;
 
-    render(<OfferingsPanel programKey="bala-vihar" initialOfferings={[]} usesDonation={true} />);
+    render(<OfferingsPanel programKey="bala-vihar" initialOfferings={[]} usesDonation={true} locationOptions={['Brampton', 'Scarborough']} />);
     await user.click(screen.getByRole('button', { name: /new offering/i }));
     await user.type(screen.getByPlaceholderText('2025-26'), '2026-27');
     const dateInputs = document.querySelectorAll('input[type="date"]');

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { SetuLogo, SetuIcon } from '@cmt/ui';
-import { LOCATIONS, displayFid } from '@cmt/shared-domain/setu';
+import { displayFid } from '@cmt/shared-domain/setu';
 import type { Location, RosterFamilyRow, RosterPayment } from '@cmt/shared-domain/setu';
 import { CspRoot } from '@/features/family/components/atoms';
 import { searchFamiliesClient } from '@/features/setu/search/search-families-client';
@@ -166,7 +166,7 @@ function SearchHitCard({ hit }: { hit: FamilySearchHit }) {
 }
 
 // ── Core content (rendered into both mobile + desktop branches) ────────────────
-function RosterContent({ year }: { year?: string }) {
+function RosterContent({ year, locationOptions }: { year?: string; locationOptions: string[] }) {
   // Filters
   const [location, setLocation] = useState<Location | null>(null);
   const [program, setProgram] = useState<string | null>(null);
@@ -305,7 +305,7 @@ function RosterContent({ year }: { year?: string }) {
         <div className="col" style={{ gap: 10 }}>
           <FilterRow label="Location">
             <FilterChip active={location === null} onClick={() => setLocation(null)}>All</FilterChip>
-            {LOCATIONS.map((loc) => (
+            {locationOptions.map((loc) => (
               <FilterChip key={loc} active={location === loc} onClick={() => setLocation(loc)}>{loc}</FilterChip>
             ))}
           </FilterRow>
@@ -394,7 +394,7 @@ function Notice({ tone, children }: { tone: 'muted' | 'err'; children: React.Rea
   return <p style={{ fontSize: 14, color: 'var(--muted)', textAlign: 'center', margin: '24px 0' }}>{children}</p>;
 }
 
-export function RosterBrowser({ year }: { year?: string }) {
+export function RosterBrowser({ year, locationOptions }: { year?: string; locationOptions: string[] }) {
   return (
     <>
       {/* Mobile — own CspRoot + 90px bottom padding for the fixed WelcomeMobileNav. */}
@@ -410,7 +410,7 @@ export function RosterBrowser({ year }: { year?: string }) {
                 Browse every family, filter by location or program, and search by name, email, phone, or FID.
               </p>
             </header>
-            <RosterContent {...(year ? { year } : {})} />
+            <RosterContent locationOptions={locationOptions} {...(year ? { year } : {})} />
           </div>
         </CspRoot>
       </div>
@@ -424,7 +424,7 @@ export function RosterBrowser({ year }: { year?: string }) {
           </p>
         </header>
         <div style={{ maxWidth: 720 }}>
-          <RosterContent {...(year ? { year } : {})} />
+          <RosterContent locationOptions={locationOptions} {...(year ? { year } : {})} />
         </div>
       </div>
     </>

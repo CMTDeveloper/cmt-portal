@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { SetuIcon } from '@cmt/ui';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { listPrograms } from '@/features/setu/programs/get-programs';
+import { getLocationOptions } from '@/lib/locations';
 import { ProgramsTable, type ProgramRow } from '@/features/admin/programs/programs-table';
 
 export const metadata = { title: 'Programs' };
@@ -11,6 +12,7 @@ export default async function AdminProgramsPage() {
   await connection();
 
   const programs = await listPrograms();
+  const locationOptions = await getLocationOptions();
 
   // Tally OPEN offerings (enabled + endDate null/future) per program so the
   // table can flag active programs that no family can yet see. Single equality
@@ -54,7 +56,7 @@ export default async function AdminProgramsPage() {
       </header>
 
       <div className="card" style={{ padding: 'clamp(14px, 4vw, 22px)' }}>
-        <ProgramsTable initialPrograms={rows} />
+        <ProgramsTable initialPrograms={rows} locationOptions={locationOptions} />
       </div>
     </>
   );

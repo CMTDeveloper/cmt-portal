@@ -9,7 +9,7 @@ import type {
   MemberType,
   AttendanceMode,
 } from '@cmt/shared-domain';
-import { LOCATIONS, PROGRAM_TERM_TYPES, MEMBER_TYPES, ATTENDANCE_MODES } from '@cmt/shared-domain';
+import { PROGRAM_TERM_TYPES, MEMBER_TYPES, ATTENDANCE_MODES } from '@cmt/shared-domain';
 import Link from 'next/link';
 
 // Serialised shape from GET /api/admin/programs (Timestamps → ISO strings)
@@ -24,6 +24,8 @@ export type ProgramRow = Omit<ProgramDoc, 'createdAt' | 'updatedAt'> & {
 
 interface ProgramsTableProps {
   initialPrograms: ProgramRow[];
+  /** Admin-managed centre list (from getLocationOptions()) for the create form. */
+  locationOptions: string[];
 }
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -67,11 +69,12 @@ function VisibilityHint({ program }: { program: ProgramRow }) {
 // ─── Create Modal ─────────────────────────────────────────────────────────────
 
 interface CreateModalProps {
+  locationOptions: string[];
   onClose: () => void;
   onCreated: (program: ProgramRow) => void;
 }
 
-function CreateProgramModal({ onClose, onCreated }: CreateModalProps) {
+function CreateProgramModal({ locationOptions, onClose, onCreated }: CreateModalProps) {
   const [pending, startTransition] = useTransition();
   const [label, setLabel] = useState('');
   const [programKey, setProgramKey] = useState('');
@@ -222,7 +225,7 @@ function CreateProgramModal({ onClose, onCreated }: CreateModalProps) {
             <div>
               <div style={labelStyle}>Locations (empty = location-less / online)</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
-                {LOCATIONS.map((loc) => (
+                {locationOptions.map((loc) => (
                   <label key={loc} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
                     <input
                       type="checkbox"
@@ -332,7 +335,7 @@ const cardKeyStyle: React.CSSProperties = {
 
 // ─── Main table ──────────────────────────────────────────────────────────────
 
-export function ProgramsTable({ initialPrograms }: ProgramsTableProps) {
+export function ProgramsTable({ initialPrograms, locationOptions }: ProgramsTableProps) {
   const [programs, setPrograms] = useState<ProgramRow[]>(initialPrograms);
   const [modalOpen, setModalOpen] = useState(false);
 
@@ -439,7 +442,7 @@ export function ProgramsTable({ initialPrograms }: ProgramsTableProps) {
         </>
       )}
 
-      {modalOpen && <CreateProgramModal onClose={() => setModalOpen(false)} onCreated={handleCreated} />}
+      {modalOpen && <CreateProgramModal locationOptions={locationOptions} onClose={() => setModalOpen(false)} onCreated={handleCreated} />}
     </>
   );
 }

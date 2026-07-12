@@ -50,14 +50,14 @@ beforeEach(() => {
 
 describe('ProgramForm', () => {
   it('renders all key fields pre-filled from program', () => {
-    render(<ProgramForm program={BASE_PROGRAM} />);
+    render(<ProgramForm program={BASE_PROGRAM} locationOptions={['Brampton', 'Scarborough']} />);
     expect((screen.getByLabelText(/^label$/i) as HTMLInputElement).value).toBe('Bala Vihar');
     expect((screen.getByLabelText(/short description/i) as HTMLInputElement).value).toBe('Sunday Bala Vihar classes');
   });
 
   it('PATCHes only changed fields on save', async () => {
     const user = userEvent.setup();
-    render(<ProgramForm program={BASE_PROGRAM} />);
+    render(<ProgramForm program={BASE_PROGRAM} locationOptions={['Brampton', 'Scarborough']} />);
 
     const labelInput = screen.getByLabelText(/^label$/i);
     await user.clear(labelInput);
@@ -77,7 +77,7 @@ describe('ProgramForm', () => {
 
   it('shows toast.success after save', async () => {
     const user = userEvent.setup();
-    render(<ProgramForm program={BASE_PROGRAM} />);
+    render(<ProgramForm program={BASE_PROGRAM} locationOptions={['Brampton', 'Scarborough']} />);
     const labelInput = screen.getByLabelText(/^label$/i);
     await user.clear(labelInput);
     await user.type(labelInput, 'Updated');
@@ -92,7 +92,7 @@ describe('ProgramForm', () => {
     }) as unknown as typeof fetch;
 
     const user = userEvent.setup();
-    render(<ProgramForm program={BASE_PROGRAM} />);
+    render(<ProgramForm program={BASE_PROGRAM} locationOptions={['Brampton', 'Scarborough']} />);
     const labelInput = screen.getByLabelText(/^label$/i);
     await user.clear(labelInput);
     await user.type(labelInput, 'X');

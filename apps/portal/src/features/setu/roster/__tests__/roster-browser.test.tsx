@@ -32,7 +32,7 @@ describe('RosterBrowser', () => {
       families: [{ fid: 'CMT-X', publicFid: '1042', legacyFid: '1', name: 'Patel', location: 'Brampton', memberCount: 4, payment: 'paid', programs: ['Bala Vihar'] }],
       nextCursor: null, total: 1,
     });
-    render(<RosterBrowser />);
+    render(<RosterBrowser locationOptions={['Brampton', 'Scarborough']} />);
     expect((await screen.findAllByText(/Patel Family/)).length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText(/1 famil/i).length).toBeGreaterThanOrEqual(1);
     // The displayed Family ID is the 4-digit publicFid, not the internal CMT- fid.
@@ -42,7 +42,7 @@ describe('RosterBrowser', () => {
   it('switches to search results when the search box has text', async () => {
     fetchRosterClient.mockResolvedValue({ families: [], nextCursor: null, total: 0 });
     searchFamiliesClient.mockResolvedValue([{ fid: 'CMT-S', publicFid: '2050', legacyFid: null, name: 'Sharma', location: 'Markham', memberCount: 2 }]);
-    render(<RosterBrowser />);
+    render(<RosterBrowser locationOptions={['Brampton', 'Scarborough']} />);
     await userEvent.type(screen.getAllByTestId('roster-search-input')[0]!, 'sharma');
     await waitFor(() => expect(screen.getAllByText(/Sharma Family/).length).toBeGreaterThanOrEqual(1));
     expect(screen.getAllByText(/FID 2050/).length).toBeGreaterThanOrEqual(1);
@@ -57,7 +57,7 @@ describe('RosterBrowser', () => {
       ],
       nextCursor: null, total: 3,
     });
-    render(<RosterBrowser />);
+    render(<RosterBrowser locationOptions={['Brampton', 'Scarborough']} />);
     expect((await screen.findAllByText('Confirmed')).length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('Registered').length).toBeGreaterThanOrEqual(1);
     // three families, three payment chips, but only two engagement chips → the
@@ -70,7 +70,7 @@ describe('RosterBrowser', () => {
       families: [{ fid: 'CMT-X', publicFid: null, legacyFid: null, name: 'Patel', location: 'Brampton', memberCount: 1, payment: 'unknown', programs: [] }],
       nextCursor: 'CMT-X', total: 10,
     });
-    render(<RosterBrowser />);
+    render(<RosterBrowser locationOptions={['Brampton', 'Scarborough']} />);
     expect((await screen.findAllByRole('button', { name: /load more/i })).length).toBeGreaterThanOrEqual(1);
   });
 });

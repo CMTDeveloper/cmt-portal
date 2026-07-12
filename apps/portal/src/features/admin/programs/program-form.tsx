@@ -3,13 +3,15 @@
 import { useState, useTransition } from 'react';
 import { toast } from '@cmt/ui';
 import type { ProgramDoc, Location, ProgramTermType, MemberType, AttendanceMode } from '@cmt/shared-domain';
-import { LOCATIONS, PROGRAM_TERM_TYPES, MEMBER_TYPES, ATTENDANCE_MODES } from '@cmt/shared-domain';
+import { PROGRAM_TERM_TYPES, MEMBER_TYPES, ATTENDANCE_MODES } from '@cmt/shared-domain';
 import type { ProgramRow } from './programs-table';
 
 export type { ProgramRow };
 
 interface ProgramFormProps {
   program: ProgramRow;
+  /** Admin-managed centre list (from getLocationOptions()) for the picker. */
+  locationOptions: string[];
 }
 
 function FieldError({ msg }: { msg: string }) {
@@ -26,7 +28,7 @@ const fieldStyle: React.CSSProperties = {
   fontFamily: 'var(--body)', boxSizing: 'border-box',
 };
 
-export function ProgramForm({ program }: ProgramFormProps) {
+export function ProgramForm({ program, locationOptions }: ProgramFormProps) {
   const [pending, startTransition] = useTransition();
 
   const [label, setLabel] = useState(program.label);
@@ -138,7 +140,7 @@ export function ProgramForm({ program }: ProgramFormProps) {
         <div>
           <div style={labelStyle}>Locations (empty = location-less / online)</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
-            {LOCATIONS.map((loc) => (
+            {locationOptions.map((loc) => (
               <label key={loc} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
                 <input
                   type="checkbox"

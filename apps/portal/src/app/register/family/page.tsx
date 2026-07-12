@@ -12,7 +12,7 @@ import { flags } from '@/lib/flags';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Location = 'Brampton' | 'Mississauga' | 'Scarborough' | 'Markham';
+type Location = string;
 // Capture forms drop PreferNotToSay — the matrix treats it as missing, so a
 // human must pick Male or Female. '' is the no-selection placeholder.
 type Gender = 'Male' | 'Female';
@@ -64,7 +64,7 @@ function RegisterFamilyPrototype() {
       <div className="field" style={{ marginBottom: 14 }}>
         <label>Primary location <span className="req">·</span></label>
         <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
-          {(['Brampton', 'Mississauga', 'Scarborough', 'Markham'] as const).map((l, i) => (
+          {(['Brampton', 'Scarborough'] as const).map((l, i) => (
             <button key={i} className="pill" style={{
               padding: '8px 12px', fontSize: 13,
               background: i === 0 ? 'var(--accent)' : 'var(--surface)',
@@ -177,6 +177,19 @@ function RegisterFamilyReal() {
 
   const [familyName, setFamilyName] = useState('');
   const [location, setLocation] = useState<Location | null>(null);
+  // Location pills read the admin-managed centre list. Default to the seed pair
+  // so the picker works pre-fetch; keep the default on fetch failure so a network
+  // hiccup never blocks registration. This is the only pre-auth surface, so it
+  // fetches the public endpoint client-side (no server lib access here).
+  const [locationOptions, setLocationOptions] = useState<string[]>(['Brampton', 'Scarborough']);
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/setu/locations')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (!cancelled && Array.isArray(j?.options) && j.options.length) setLocationOptions(j.options as string[]); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
   // Required family home address. Families are Ontario-based, so default province to ON.
   const [street, setStreet] = useState('');
   const [unit, setUnit] = useState('');
@@ -489,7 +502,7 @@ function RegisterFamilyReal() {
       <div className="field" style={{ marginBottom: 14 }}>
         <label>Primary location <span className="req">·</span></label>
         <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
-          {(['Brampton', 'Mississauga', 'Scarborough', 'Markham'] as const).map(l => (
+          {locationOptions.map(l => (
             <button
               key={l}
               className="pill"

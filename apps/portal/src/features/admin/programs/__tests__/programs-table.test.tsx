@@ -71,7 +71,7 @@ beforeEach(() => {
 
 describe('ProgramsTable', () => {
   it('renders program rows with status badges (mobile+desktop)', () => {
-    render(<ProgramsTable initialPrograms={[BASE_PROGRAM, DRAFT_PROGRAM]} />);
+    render(<ProgramsTable initialPrograms={[BASE_PROGRAM, DRAFT_PROGRAM]} locationOptions={['Brampton', 'Scarborough']} />);
     // Both mobile and desktop render, so use getAllByText
     expect(screen.getAllByText('Bala Vihar').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('Tabla').length).toBeGreaterThanOrEqual(1);
@@ -81,28 +81,28 @@ describe('ProgramsTable', () => {
   });
 
   it('flags an active program with no open offerings as hidden from families', () => {
-    render(<ProgramsTable initialPrograms={[{ ...BASE_PROGRAM, programKey: 'tabla', label: 'Tabla', openOfferingCount: 0 }]} />);
+    render(<ProgramsTable initialPrograms={[{ ...BASE_PROGRAM, programKey: 'tabla', label: 'Tabla', openOfferingCount: 0 }]} locationOptions={['Brampton', 'Scarborough']} />);
     expect(screen.getAllByText(/no open offerings/i).length).toBeGreaterThanOrEqual(1);
   });
 
   it('does not flag an active program that has open offerings', () => {
-    render(<ProgramsTable initialPrograms={[{ ...BASE_PROGRAM, openOfferingCount: 2 }]} />);
+    render(<ProgramsTable initialPrograms={[{ ...BASE_PROGRAM, openOfferingCount: 2 }]} locationOptions={['Brampton', 'Scarborough']} />);
     expect(screen.queryAllByText(/no open offerings/i).length).toBe(0);
   });
 
   it('does not flag a draft program (its status already conveys hidden)', () => {
-    render(<ProgramsTable initialPrograms={[{ ...DRAFT_PROGRAM, openOfferingCount: 0 }]} />);
+    render(<ProgramsTable initialPrograms={[{ ...DRAFT_PROGRAM, openOfferingCount: 0 }]} locationOptions={['Brampton', 'Scarborough']} />);
     expect(screen.queryAllByText(/no open offerings/i).length).toBe(0);
   });
 
   it('shows "+ New program" button', () => {
-    render(<ProgramsTable initialPrograms={[]} />);
+    render(<ProgramsTable initialPrograms={[]} locationOptions={['Brampton', 'Scarborough']} />);
     expect(screen.getByRole('button', { name: /new program/i })).toBeTruthy();
   });
 
   it('opens create modal on "+ New program" click', async () => {
     const user = userEvent.setup();
-    render(<ProgramsTable initialPrograms={[]} />);
+    render(<ProgramsTable initialPrograms={[]} locationOptions={['Brampton', 'Scarborough']} />);
     await user.click(screen.getByRole('button', { name: /new program/i }));
     expect(screen.getByRole('dialog')).toBeTruthy();
     expect(screen.getByLabelText(/program key/i)).toBeTruthy();
@@ -110,7 +110,7 @@ describe('ProgramsTable', () => {
 
   it('POSTs to /api/admin/programs on create', async () => {
     const user = userEvent.setup();
-    render(<ProgramsTable initialPrograms={[]} />);
+    render(<ProgramsTable initialPrograms={[]} locationOptions={['Brampton', 'Scarborough']} />);
     await user.click(screen.getByRole('button', { name: /new program/i }));
 
     await user.type(screen.getByLabelText(/^label$/i), 'Tabla');
@@ -129,7 +129,7 @@ describe('ProgramsTable', () => {
 
   it('shows toast.success after create', async () => {
     const user = userEvent.setup();
-    render(<ProgramsTable initialPrograms={[]} />);
+    render(<ProgramsTable initialPrograms={[]} locationOptions={['Brampton', 'Scarborough']} />);
     await user.click(screen.getByRole('button', { name: /new program/i }));
     await user.type(screen.getByLabelText(/^label$/i), 'OM Chanting');
     await user.type(screen.getByLabelText(/program key/i), 'om-chanting');
@@ -144,7 +144,7 @@ describe('ProgramsTable', () => {
     }) as unknown as typeof fetch;
 
     const user = userEvent.setup();
-    render(<ProgramsTable initialPrograms={[]} />);
+    render(<ProgramsTable initialPrograms={[]} locationOptions={['Brampton', 'Scarborough']} />);
     await user.click(screen.getByRole('button', { name: /new program/i }));
     await user.type(screen.getByLabelText(/^label$/i), 'Test');
     await user.type(screen.getByLabelText(/program key/i), 'test');

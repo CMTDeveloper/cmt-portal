@@ -5,6 +5,7 @@ import { Timestamp } from '@cmt/firebase-shared/admin/firestore';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { SetuIcon } from '@cmt/ui';
 import { getProgram } from '@/features/setu/programs/get-programs';
+import { getLocationOptions } from '@/lib/locations';
 import { ProgramForm, type ProgramRow } from '@/features/admin/programs/program-form';
 import { OfferingsPanel, type OfferingRow } from '@/features/admin/programs/offerings-panel';
 
@@ -21,6 +22,8 @@ export default async function AdminProgramKeyPage({ params }: { params: Promise<
 
   const program = await getProgram(key);
   if (!program) notFound();
+
+  const locationOptions = await getLocationOptions();
 
   const programRow: ProgramRow = {
     ...program,
@@ -84,7 +87,7 @@ export default async function AdminProgramKeyPage({ params }: { params: Promise<
       {/* Program editor */}
       <div className="card" style={{ padding: 'clamp(14px, 4vw, 22px)', marginBottom: 24 }}>
         <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 18 }}>Program settings</h2>
-        <ProgramForm program={programRow} />
+        <ProgramForm program={programRow} locationOptions={locationOptions} />
       </div>
 
       {/* Per-program offerings */}
@@ -110,7 +113,7 @@ export default async function AdminProgramKeyPage({ params }: { params: Promise<
             </span>
           </div>
         )}
-        <OfferingsPanel programKey={key} initialOfferings={offerings} usesDonation={program.capabilities.usesDonation} />
+        <OfferingsPanel programKey={key} initialOfferings={offerings} usesDonation={program.capabilities.usesDonation} locationOptions={locationOptions} />
       </div>
     </>
   );

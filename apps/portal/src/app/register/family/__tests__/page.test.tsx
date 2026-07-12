@@ -84,10 +84,26 @@ Object.defineProperty(window, 'location', {
 
 import RegisterFamilyPage from '../page';
 
+// The real form fetches the admin-managed centre list on mount (GET
+// /api/setu/locations). Provide the four historical centres so the location-pill
+// tests (Mississauga, Markham) still find their buttons. Every fetch helper is
+// URL-routed (not ordered) so this mount fetch never disturbs the OTP sequence.
+const LOCATION_OPTIONS = ['Brampton', 'Mississauga', 'Scarborough', 'Markham'];
+function locationsResponse() {
+  return { ok: true, status: 200, json: async () => ({ options: LOCATION_OPTIONS }) };
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   flagsMock.setuAuth = true;
   window.location.href = '';
+  // Default: satisfy the mount locations fetch; any other URL resolves ok-empty.
+  // Tests needing OTP/register behaviour override with their own URL-routed impl.
+  fetchMock.mockImplementation((url: string) =>
+    url === '/api/setu/locations'
+      ? Promise.resolve(locationsResponse())
+      : Promise.resolve({ ok: true, status: 200, json: async () => ({}) }),
+  );
 });
 
 // ── Flow helpers ────────────────────────────────────────────────────────────
@@ -97,12 +113,17 @@ beforeEach(() => {
 
 type Json = { ok: boolean; status?: number; json: () => Promise<unknown> };
 
-/** Queue: send-code 200, verify-code 200 {registrationGrant}, then `register`. */
+/** Route by URL: locations → 4 centres, send-code 200, verify-code 200
+ *  {registrationGrant}, register → the supplied response. Order-independent, so
+ *  the mount locations fetch can't shift the OTP sequence. */
 function queueOtpThenRegister(register: Json) {
-  fetchMock
-    .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ success: true }) })
-    .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ registrationGrant: 'grant-xyz' }) })
-    .mockResolvedValueOnce(register);
+  fetchMock.mockImplementation((url: string) => {
+    if (url === '/api/setu/locations') return Promise.resolve(locationsResponse());
+    if (url === '/api/setu/auth/send-code') return Promise.resolve({ ok: true, status: 200, json: async () => ({ success: true }) });
+    if (url === '/api/setu/auth/verify-code') return Promise.resolve({ ok: true, status: 200, json: async () => ({ registrationGrant: 'grant-xyz' }) });
+    if (url === '/api/setu/register') return Promise.resolve(register);
+    return Promise.resolve({ ok: true, status: 200, json: async () => ({}) });
+  });
 }
 
 async function fillForm(
@@ -118,7 +139,9 @@ async function fillForm(
   // [7]=managerFoodAllergies.
   const textInputs = document.querySelectorAll('input[type="text"]');
   await user.type(textInputs[0] as HTMLElement, opts.family);
-  await user.click(screen.getAllByRole('button', { name: opts.location })[0]!);
+  // Location pills come from the mount /api/setu/locations fetch — await them.
+  const locBtns = await screen.findAllByRole('button', { name: opts.location });
+  await user.click(locBtns[0]!);
 
   // Home address is required before the OTP flow can fire. Target by aria-label
   // (index-stable); province defaults to ON but set it explicitly.
@@ -224,10 +247,11 @@ describe('RegisterFamilyPage — initial state (flag on)', () => {
     expect(inputs.length).toBeGreaterThan(0);
   });
 
-  it('shows location buttons', () => {
+  it('shows location buttons from the admin-managed list', async () => {
     render(<RegisterFamilyPage />);
+    // Mississauga/Markham only render after the mount locations fetch resolves.
+    expect((await screen.findAllByRole('button', { name: 'Mississauga' })).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('button', { name: 'Brampton' }).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole('button', { name: 'Mississauga' }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('button', { name: 'Scarborough' }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('button', { name: 'Markham' }).length).toBeGreaterThan(0);
   });
@@ -255,8 +279,8 @@ describe('RegisterFamilyPage — client-side validation', () => {
       expect(screen.getAllByText(/family name is required/i).length).toBeGreaterThan(0);
     });
 
-    // No fetch call since validation failed
-    expect(fetchMock).not.toHaveBeenCalled();
+    // Validation failed → no submit fetch fired (only the mount locations fetch).
+    expect(fetchMock.mock.calls.some((c) => c[0] === '/api/setu/auth/send-code')).toBe(false);
   });
 
   it('missing location shows location error', async () => {
@@ -289,8 +313,8 @@ describe('RegisterFamilyPage — successful submit (OTP-gated)', () => {
     await fillForm(user, { family: 'Sharma', location: 'Mississauga', first: 'Priya', last: 'Sharma' });
 
     await submitToCodeStep(user);
-    // The FIRST call is send-code — NOT register (the family isn't created yet).
-    expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/setu/auth/send-code');
+    // Submit calls send-code — NOT register (the family isn't created yet).
+    expect(fetchMock.mock.calls.some((c) => c[0] === '/api/setu/auth/send-code')).toBe(true);
     expect(fetchMock.mock.calls.some((c) => c[0] === '/api/setu/register')).toBe(false);
 
     await enterCodeAndCreate(user);
@@ -321,9 +345,12 @@ describe('RegisterFamilyPage — successful submit (OTP-gated)', () => {
   });
 
   it('a wrong code shows an inline error and never calls register', async () => {
-    fetchMock
-      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ success: true }) }) // send-code
-      .mockResolvedValueOnce({ ok: false, status: 400, json: async () => ({ error: 'invalid-or-expired' }) }); // verify-code
+    fetchMock.mockImplementation((url: string) => {
+      if (url === '/api/setu/locations') return Promise.resolve(locationsResponse());
+      if (url === '/api/setu/auth/send-code') return Promise.resolve({ ok: true, status: 200, json: async () => ({ success: true }) });
+      if (url === '/api/setu/auth/verify-code') return Promise.resolve({ ok: false, status: 400, json: async () => ({ error: 'invalid-or-expired' }) });
+      return Promise.resolve({ ok: true, status: 200, json: async () => ({}) });
+    });
 
     const user = userEvent.setup();
     render(<RegisterFamilyPage />);
@@ -422,7 +449,12 @@ describe('RegisterFamilyPage — server validation errors (after OTP)', () => {
 
 describe('RegisterFamilyPage — network error', () => {
   it('shows toast.error on fetch throw', async () => {
-    fetchMock.mockRejectedValueOnce(new Error('net::ERR_FAILED'));
+    // Locations still resolves (so the pills render); only send-code rejects.
+    fetchMock.mockImplementation((url: string) => {
+      if (url === '/api/setu/locations') return Promise.resolve(locationsResponse());
+      if (url === '/api/setu/auth/send-code') return Promise.reject(new Error('net::ERR_FAILED'));
+      return Promise.resolve({ ok: true, status: 200, json: async () => ({}) });
+    });
 
     const user = userEvent.setup();
     render(<RegisterFamilyPage />);
@@ -430,7 +462,7 @@ describe('RegisterFamilyPage — network error', () => {
     const textInputs = document.querySelectorAll('input[type="text"]');
     await user.type(textInputs[0] as HTMLElement, 'Iyer');
 
-    const bBtn = screen.getAllByRole('button', { name: 'Markham' });
+    const bBtn = await screen.findAllByRole('button', { name: 'Markham' });
     await user.click(bBtn[0]!);
 
     // Home address is required before submit fires the send-code fetch.

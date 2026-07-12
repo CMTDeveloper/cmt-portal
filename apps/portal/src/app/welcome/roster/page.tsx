@@ -4,6 +4,7 @@ import type { Metadata } from 'next';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { getLiveSchoolYearCached } from '@/features/setu/rollover/live-school-year';
 import { listKnownSchoolYears, resolveViewYear } from '@/features/setu/rollover/view-year';
+import { getLocationOptions } from '@/lib/locations';
 import { RosterBrowser } from '@/features/setu/roster/roster-browser';
 
 export const metadata: Metadata = {
@@ -36,5 +37,6 @@ async function WelcomeRosterBody({ searchParams }: { searchParams: Promise<{ yea
   const liveYear = await getLiveSchoolYearCached();
   const years = await listKnownSchoolYears(db, liveYear);
   const view = resolveViewYear(years, liveYear, (await searchParams).year ?? null);
-  return <RosterBrowser {...(view.status !== 'live' ? { year: view.year } : {})} />;
+  const locationOptions = await getLocationOptions();
+  return <RosterBrowser locationOptions={locationOptions} {...(view.status !== 'live' ? { year: view.year } : {})} />;
 }

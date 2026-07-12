@@ -10,7 +10,6 @@ import type {
   Location,
   PaymentSource,
 } from '@cmt/shared-domain';
-import { LOCATIONS } from '@cmt/shared-domain';
 import { toTorontoStartOfDayISO, toTorontoEndOfDayISO, isoToTorontoDateInput } from '@/lib/toronto-date';
 
 // ─── responsive hook ─────────────────────────────────────────────────────────
@@ -41,6 +40,8 @@ interface OfferingsPanelProps {
   initialOfferings: OfferingRow[];
   /** program.capabilities.usesDonation — hides the donation/payment fields when false. */
   usesDonation: boolean;
+  /** Admin-managed centre list (from getLocationOptions()) for the location select. */
+  locationOptions: string[];
 }
 
 // Editable tier row (string fields for form inputs)
@@ -118,11 +119,12 @@ interface ModalProps {
   /** When set, modal is opened in "duplicate" mode with pre-filled values */
   duplicateFrom: OfferingRow | null;
   usesDonation: boolean;
+  locationOptions: string[];
   onClose: () => void;
   onSaved: (offering: OfferingRow) => void;
 }
 
-function OfferingModal({ programKey, editing, duplicateFrom, usesDonation, onClose, onSaved }: ModalProps) {
+function OfferingModal({ programKey, editing, duplicateFrom, usesDonation, locationOptions, onClose, onSaved }: ModalProps) {
   const isEdit = editing !== null;
   const prefill = duplicateFrom ?? editing;
   const [pending, startTransition] = useTransition();
@@ -323,7 +325,7 @@ function OfferingModal({ programKey, editing, duplicateFrom, usesDonation, onClo
                 style={fieldStyle}
               >
                 <option value="">None (location-less)</option>
-                {LOCATIONS.map((l) => <option key={l} value={l}>{l}</option>)}
+                {locationOptions.map((l) => <option key={l} value={l}>{l}</option>)}
               </select>
             </label>
 
@@ -447,7 +449,7 @@ const actionBtnStyle: React.CSSProperties = {
 
 // ─── Main panel ──────────────────────────────────────────────────────────────
 
-export function OfferingsPanel({ programKey, initialOfferings, usesDonation }: OfferingsPanelProps) {
+export function OfferingsPanel({ programKey, initialOfferings, usesDonation, locationOptions }: OfferingsPanelProps) {
   const [offerings, setOfferings] = useState<OfferingRow[]>(initialOfferings);
   const [showDisabled, setShowDisabled] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -587,6 +589,7 @@ export function OfferingsPanel({ programKey, initialOfferings, usesDonation }: O
           editing={editing}
           duplicateFrom={duplicateFrom}
           usesDonation={usesDonation}
+          locationOptions={locationOptions}
           onClose={closeModal}
           onSaved={handleSaved}
         />

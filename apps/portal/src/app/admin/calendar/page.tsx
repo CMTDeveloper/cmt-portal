@@ -2,8 +2,8 @@ import { connection } from 'next/server';
 import Link from 'next/link';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { SetuIcon } from '@cmt/ui';
-import { LOCATIONS, type Location } from '@cmt/shared-domain';
 import { CalendarEditor } from '@/features/admin/calendar/calendar-editor';
+import { getLocationOptions } from '@/lib/locations';
 import { listPrograms } from '@/features/setu/programs/get-programs';
 import type { ProgramRow } from '@/features/admin/programs/programs-table';
 import { getLiveSchoolYearCached } from '@/features/setu/rollover/live-school-year';
@@ -24,7 +24,7 @@ export default async function AdminCalendarPage({ searchParams }: { searchParams
   // so they compare directly against the entries' "YYYY-MM-DD" date strings.
   const { start: windowStart, end: windowEnd } = schoolYearDateRange(view.year);
 
-  const locations = [...LOCATIONS] as Location[];
+  const locations = await getLocationOptions();
   const programDocs = await listPrograms();
   const programs: ProgramRow[] = programDocs.map((p) => ({
     ...p,
