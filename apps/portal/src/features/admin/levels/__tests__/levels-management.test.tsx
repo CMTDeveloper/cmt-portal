@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 const toastMock = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), warning: vi.fn() }));
@@ -117,10 +117,46 @@ describe('LevelsManagement', () => {
 
     await user.click(screen.getAllByText('Level 1')[0]!);
 
+    // The selected-level panel body is rendered twice in jsdom (the always-on
+    // desktop column + the mobile bottom-sheet drawer, both present because CSS
+    // `hidden`/`md:hidden` does not unmount). Scope the assertions to the desktop
+    // column so they stay unambiguous without weakening what they verify.
+    const desktopPanel = within(screen.getByTestId('level-detail-desktop'));
     // Panel now shows the level's teachers with an Add teacher control.
-    expect(screen.getByRole('button', { name: /add teacher/i })).toBeTruthy();
+    expect(desktopPanel.getByRole('button', { name: /add teacher/i })).toBeTruthy();
     // Neither teacher is the lead on this fixture, so both read Assistant Teacher.
-    expect(screen.getAllByText('Assistant Teacher')).toHaveLength(2);
+    expect(desktopPanel.getAllByText('Assistant Teacher')).toHaveLength(2);
+  });
+
+  it('opens a mobile bottom-sheet drawer on select and clears the selection when closed', async () => {
+    const user = userEvent.setup();
+    render(
+      <LevelsManagement
+        initialLevels={LEVELS}
+        periods={PERIODS}
+        programs={PROGRAMS}
+        locationOptions={['Brampton']}
+        teachersByLevel={TEACHERS_BY_LEVEL}
+      />,
+    );
+
+    // Nothing selected: the mobile drawer is not mounted and the desktop panel
+    // shows its empty state.
+    expect(screen.queryByTestId('level-detail-mobile')).toBeNull();
+    expect(screen.getByText(/select a level/i)).toBeTruthy();
+
+    await user.click(screen.getAllByText('Level 1')[0]!);
+
+    // Selecting mounts the mobile drawer with the same panel body.
+    const drawer = screen.getByTestId('level-detail-mobile');
+    expect(within(drawer).getByRole('button', { name: /add teacher/i })).toBeTruthy();
+
+    // Closing the drawer clears the selection: the drawer unmounts and the
+    // desktop empty state returns.
+    await user.click(within(drawer).getByRole('button', { name: /close/i }));
+
+    expect(screen.queryByTestId('level-detail-mobile')).toBeNull();
+    expect(screen.getByText(/select a level/i)).toBeTruthy();
   });
 
   it('disables the "New level" control when readOnly (viewing a past year)', () => {

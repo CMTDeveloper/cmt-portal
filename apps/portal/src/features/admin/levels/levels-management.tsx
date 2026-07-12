@@ -221,8 +221,26 @@ export function LevelsManagement({
         <StatCard testId="stat-needing-teachers" value={stats.needingTeachers} label="Needs teachers" tone="warn" />
       </div>
 
+      {/* The mobile bottom-sheet drawer + its backdrop. On mobile the detail
+          panel used to strand at the very bottom of the single-column list;
+          instead it now opens as a bottom sheet over the list (matching the
+          Users & Roles responsive drawer). Desktop is unaffected - the drawer
+          block is `md:hidden` and only mounts when a level is selected. */}
+      <style>{`
+        @keyframes lvl-fade { from { opacity: 0 } to { opacity: 1 } }
+        @keyframes lvl-sheet { from { transform: translateY(100%) } to { transform: none } }
+        .lvl-backdrop { position: fixed; inset: 0; background: rgba(15,26,34,.4); z-index: 55; animation: lvl-fade .15s ease; }
+        .lvl-drawer { position: fixed; left: 0; right: 0; bottom: 0; z-index: 56; max-height: 88dvh; overflow-y: auto;
+          background: var(--surface); border-top-left-radius: 18px; border-top-right-radius: 18px; animation: lvl-sheet .22s ease; }
+        @media (prefers-reduced-motion: reduce) {
+          .lvl-backdrop, .lvl-drawer { animation: none; }
+        }
+      `}</style>
+
       {/* Master-detail: left = the levels list (read-only teacher summary);
-          right = the teacher detail panel where add/remove/lead happen. */}
+          right = the teacher detail panel where add/remove/lead happen. On
+          desktop the panel column is always visible with its own empty state;
+          on mobile it is hidden here and surfaced via the drawer below. */}
       <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_minmax(0,380px)]">
         <div className="card" style={{ padding: 22 }}>
           <LevelsTable
@@ -240,15 +258,87 @@ export function LevelsManagement({
             onSelectLevel={setSelectedLevelId}
           />
         </div>
-        <LevelDetailPanel
-          level={selectedLevel}
-          teachers={selectedTeachers}
-          readOnly={readOnly}
-          onTeacherAdded={handleTeacherAdded}
-          onTeacherRemoved={handleTeacherRemoved}
-          onLeadChanged={handleLeadChanged}
-        />
+        {/* Desktop-only detail column (always visible, keeps its empty state). */}
+        <div className="hidden md:block" data-testid="level-detail-desktop">
+          <LevelDetailPanel
+            level={selectedLevel}
+            teachers={selectedTeachers}
+            readOnly={readOnly}
+            onTeacherAdded={handleTeacherAdded}
+            onTeacherRemoved={handleTeacherRemoved}
+            onLeadChanged={handleLeadChanged}
+          />
+        </div>
       </div>
+
+      {/* Mobile drawer: mounted ONLY when a level is selected, so the list is
+          full-width otherwise and the empty state is not duplicated. */}
+      {selectedLevel && (
+        <div className="md:hidden">
+          <div className="lvl-backdrop" onClick={() => setSelectedLevelId(null)} />
+          <div
+            className="lvl-drawer"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Level details: ${selectedLevel.levelName}`}
+            data-testid="level-detail-mobile"
+          >
+            <div
+              style={{
+                position: 'sticky',
+                top: 0,
+                zIndex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+                padding: '14px 16px 10px',
+                background: 'var(--surface)',
+                borderBottom: '1px solid var(--line)',
+              }}
+            >
+              <h2 style={{ fontSize: 16, fontWeight: 600, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {selectedLevel.levelName}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setSelectedLevelId(null)}
+                aria-label="Close"
+                style={{
+                  flex: '0 0 auto',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 36,
+                  height: 36,
+                  border: '1px solid var(--line)',
+                  borderRadius: 'var(--radiusSm)',
+                  background: 'var(--surface)',
+                  color: 'var(--muted)',
+                  fontSize: 20,
+                  lineHeight: 1,
+                  cursor: 'pointer',
+                  fontFamily: 'var(--body)',
+                }}
+              >
+                ×
+              </button>
+            </div>
+            {/* Bottom padding clears the fixed mobile nav bar (z-index 50) so the
+                Add-teacher control is never hidden behind it. */}
+            <div style={{ padding: 14, paddingBottom: 'calc(84px + env(safe-area-inset-bottom))' }}>
+              <LevelDetailPanel
+                level={selectedLevel}
+                teachers={selectedTeachers}
+                readOnly={readOnly}
+                onTeacherAdded={handleTeacherAdded}
+                onTeacherRemoved={handleTeacherRemoved}
+                onLeadChanged={handleLeadChanged}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
