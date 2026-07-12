@@ -30,6 +30,7 @@ const GROUPS: Array<{
       { href: '/admin/school-year', title: 'School year rollover', icon: 'check', tone: 'primary', sub: 'Promote Bala Vihar families to the next school year — advance grades, re-assign levels, keep history.' },
       { href: '/admin/prasad', title: 'Prasad rotation', icon: 'heart', tone: 'primary', sub: 'Assign and manage prasad Sundays — one per family per year, clustered near a child’s birthday month.' },
       { href: '/admin/volunteering-skills', title: 'Volunteering skills', icon: 'check', tone: 'primary', sub: 'Manage the list of volunteering skills families choose from for adult members.' },
+      { href: '/admin/locations', title: 'Locations', icon: 'home', tone: 'primary', sub: 'Manage the centre locations families choose from and programs are organized by.' },
       { href: '/welcome/seva', title: 'Seva', icon: 'heart', tone: 'primary', sub: 'Manage seva opportunities and review volunteer signups.' },
     ],
   },
