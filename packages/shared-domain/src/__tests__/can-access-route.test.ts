@@ -689,6 +689,34 @@ describe('canAccessRoute — /api/admin/volunteering-skills — admin-only', () 
   });
 });
 
+describe('canAccessRoute — /api/setu/locations — PUBLIC (centre list)', () => {
+  // The centre list is PUBLIC (in PUBLIC_ROUTES): the pre-auth registration
+  // location picker reads it with no session, and canAccessRoute short-circuits
+  // public routes to `true` for every role. The options are org-wide,
+  // non-sensitive config; writes stay admin-only via /api/admin/locations.
+  const anonymous = { uid: 'anon' } as unknown as SessionClaims;
+  it('allows anonymous GET /api/setu/locations (public, pre-auth)', () => {
+    expect(canAccessRoute(anonymous, '/api/setu/locations', 'GET')).toBe(true);
+  });
+  it('allows every authenticated role GET', () => {
+    expect(canAccessRoute(manager, '/api/setu/locations', 'GET')).toBe(true);
+    expect(canAccessRoute(member, '/api/setu/locations', 'GET')).toBe(true);
+    expect(canAccessRoute(welcomeTeam, '/api/setu/locations', 'GET')).toBe(true);
+    expect(canAccessRoute(family, '/api/setu/locations', 'GET')).toBe(true);
+    expect(canAccessRoute(admin, '/api/setu/locations', 'GET')).toBe(true);
+  });
+});
+
+describe('canAccessRoute — /api/admin/locations — admin-only (write)', () => {
+  it('allows admin to PUT', () => {
+    expect(canAccessRoute(admin, '/api/admin/locations', 'PUT')).toBe(true);
+  });
+  it('denies welcome-team and family-manager', () => {
+    expect(canAccessRoute(welcomeTeam, '/api/admin/locations', 'PUT')).toBe(false);
+    expect(canAccessRoute(manager, '/api/admin/locations', 'PUT')).toBe(false);
+  });
+});
+
 describe('canAccessRoute — /api/setu/donations', () => {
   it('allows family-manager to POST /api/setu/donations/checkout', () => {
     expect(canAccessRoute(manager, '/api/setu/donations/checkout', 'POST')).toBe(true);

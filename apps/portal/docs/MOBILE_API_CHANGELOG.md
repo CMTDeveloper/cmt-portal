@@ -22,6 +22,11 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
+## 2026-07-12 - `<this-commit>` - NEW public GET /api/setu/locations (centre list)
+New **public** (pre-auth) read-only endpoint. `<this-commit>` is a placeholder - reconcile to the real SHA after the commit lands.
+- **GET `/api/setu/locations`** -> `200 { options: string[] }` - the admin-managed centre list (e.g. `['Brampton', 'Scarborough']`), defaulting to `['Brampton', 'Scarborough']` until an admin saves a custom list. No auth required (org-wide, non-sensitive config); also readable by any signed-in setu family. No request body.
+  - **Mobile:** fetch the centre list from this endpoint in the registration flow (and any location picker) **instead of hardcoding the four centres**. Add a `locations` fetch + a `{ options: string[] }` response type in `src/api/*`; render the returned list. No request-shape change; additive endpoint.
+
 ## 2026-07-11 - `7c2a396` - enrolledVia gains 'kiosk'
 `EnrollmentDoc.enrolledVia` (schemas/enrollment.ts) now includes `'kiosk'` for door/kiosk-driven auto-enrollments. Mobile: widen the enrolledVia union to accept `'kiosk'` on any enrollment read; no request-shape change.
 

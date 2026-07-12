@@ -179,6 +179,17 @@ export function canAccessRoute(
     return isSetuFamily(claims) || isWelcomeTeam(claims);
   }
 
+  // Setu API — centre locations: read-only list for the registration + member
+  // forms. PUBLIC (in PUBLIC_ROUTES) so the pre-auth picker reads it; this clause
+  // just confirms any signed-in setu family may read it too. Writes go through
+  // /api/admin/locations (admin).
+  if (
+    pathname === '/api/setu/locations' ||
+    pathname.startsWith('/api/setu/locations/')
+  ) {
+    return isSetuFamily(claims);
+  }
+
   // Setu API — volunteering-skill options: read-only list for the member
   // add/edit forms. Any signed-in setu family (incl. a family-member editing
   // their own profile). Writes go through /api/admin/volunteering-skills (admin).
