@@ -12,7 +12,7 @@ const mockFirestore = vi.mocked(portalFirestore);
 type MockDocData = Record<string, unknown>;
 
 // Family docs keyed by their CMT- doc id. The where() mock filters this map by
-// the queried field/value so that "publicFid tried first" is genuinely exercised.
+// the queried field/value so that "legacyFid tried first" is genuinely exercised.
 const families = new Map<string, MockDocData>();
 
 function makeDb() {
@@ -46,25 +46,7 @@ beforeEach(() => {
 });
 
 describe('resolveKioskFamily', () => {
-  it('resolves by publicFid first', async () => {
-    families.set('CMT-A', {
-      publicFid: '1075',
-      legacyFid: '477',
-      location: 'Brampton',
-      name: 'Rana family',
-    });
-    const r = await resolveKioskFamily('1075');
-    expect(r).toMatchObject({
-      fid: 'CMT-A',
-      matchedOn: 'publicFid',
-      publicFid: '1075',
-      legacyFid: '477',
-      location: 'Brampton',
-      name: 'Rana family',
-    });
-  });
-
-  it('falls back to legacyFid when no publicFid match', async () => {
+  it('resolves by legacyFid first (the primary door lookup)', async () => {
     families.set('CMT-A', {
       publicFid: '1075',
       legacyFid: '477',
@@ -72,7 +54,37 @@ describe('resolveKioskFamily', () => {
       name: 'Rana family',
     });
     const r = await resolveKioskFamily('477');
-    expect(r).toMatchObject({ fid: 'CMT-A', matchedOn: 'legacyFid' });
+    expect(r).toMatchObject({
+      fid: 'CMT-A',
+      matchedOn: 'legacyFid',
+      publicFid: '1075',
+      legacyFid: '477',
+      location: 'Brampton',
+      name: 'Rana family',
+    });
+  });
+
+  it('resolves the LEGACY owner when a number is one family legacyFid AND another family publicFid (the collision)', async () => {
+    // The exact door bug: 1257 is Matta's legacy check-in id AND Vadhavkar's new
+    // publicFid. A publicFid-first lookup returned Vadhavkar; legacy-first must
+    // return Matta (the person entering their legacy id).
+    families.set('CMT-MATTA', { publicFid: '1514', legacyFid: '1257', name: 'Matta family' });
+    families.set('CMT-VADHAVKAR', { publicFid: '1257', legacyFid: '931', name: 'Vadhavkar family' });
+    const r = await resolveKioskFamily('1257');
+    expect(r).toMatchObject({ fid: 'CMT-MATTA', matchedOn: 'legacyFid', name: 'Matta family' });
+  });
+
+  it('falls back to publicFid when the id is not any family legacyFid', async () => {
+    // A Setu-only family (or a family whose new id nobody uses as a legacy id):
+    // publicFid resolves via the fallback.
+    families.set('CMT-A', {
+      publicFid: '1075',
+      legacyFid: '477',
+      location: 'Brampton',
+      name: 'Rana family',
+    });
+    const r = await resolveKioskFamily('1075');
+    expect(r).toMatchObject({ fid: 'CMT-A', matchedOn: 'publicFid' });
   });
 
   it('returns null for an unknown id', async () => {

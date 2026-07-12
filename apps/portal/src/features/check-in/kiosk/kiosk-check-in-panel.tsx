@@ -68,10 +68,32 @@ export function KioskCheckInPanel({ family, source, checkInId, onDone }: Props) 
     }
   }
 
+  // After the legacy-first resolve, `family.fid` carries the family's NEW
+  // publicFid, while `checkInId` is what they typed at the door (their legacy
+  // check-in id - the new ids are not distributed yet). When they differ, the
+  // family used their OLD id, so nudge them to start using the new one. Only on
+  // the Setu path (legacy-lookup families have no new id to show).
+  const showNewId = source === 'setu' && Boolean(family.fid) && checkInId !== family.fid;
+  const newIdBanner = showNewId ? (
+    <div className="rounded-lg border-2 border-[hsl(var(--primary))] bg-[hsl(var(--primary))]/5 p-4 text-center">
+      <p className="text-sm font-medium text-[hsl(var(--foreground))]">
+        We are switching to new Family IDs
+      </p>
+      <p className="my-1 text-4xl font-extrabold tracking-wider text-[hsl(var(--primary))]">
+        {family.fid}
+      </p>
+      <p className="text-sm text-[hsl(var(--foreground))]">
+        This is your family&apos;s new Family ID. Please start using it - next time enter{' '}
+        <strong>{family.fid}</strong> instead of {checkInId}.
+      </p>
+    </div>
+  ) : null;
+
   if (enrolled) {
     return (
       <div className="mx-auto flex w-full max-w-md flex-col gap-4 rounded-lg border border-[hsl(var(--border))] p-6 text-center">
         <h2 className="text-2xl font-bold text-[hsl(var(--heading))]">Checked in</h2>
+        {newIdBanner}
         <p role="status" className="rounded bg-[hsl(var(--muted))] p-3 text-sm text-[hsl(var(--foreground))]">
           Added to Bala Vihar for this year
         </p>
@@ -93,6 +115,8 @@ export function KioskCheckInPanel({ family, source, checkInId, onDone }: Props) 
           Family ID: <code>{family.fid}</code>
         </p>
       </header>
+
+      {newIdBanner}
 
       <ul className="flex flex-col gap-2">
         {family.students.map((s) => (

@@ -8,15 +8,17 @@
  *   1. Auth is required — an UNAUTHENTICATED POST /api/check-in/setu/check-in and
  *      GET /api/check-in/setu/lookup each 401 (middleware `no-session`), proving
  *      the routes are NOT public.
- *   2. Lookup (step 1) — GET /api/check-in/setu/lookup?id=<publicFid> as the kiosk
- *      session → 200, the family's children in the legacy `Family.students` shape
- *      (N≥2 students).
- *   3. Check-in + auto-enroll — POST /api/check-in/setu/check-in with the family's
- *      publicFid and both children present → 200; family.publicFid matches;
- *      enroll.enrolled === true; enroll.created === true.
- *   4. Idempotent — re-POST the same → enroll.created === false.
- *   5. Legacy id resolves the SAME family — POST with the family's legacyFid → 200
- *      and family.fid equals the CMT- doc id captured in step 3.
+ *   2. Lookup by LEGACY id (the real door flow) - GET /api/check-in/setu/lookup?id=
+ *      <legacyFid> as the kiosk session -> 200, children in the legacy Family shape
+ *      (N>=2), and Family.fid is the family's NEW publicFid (the nudge target).
+ *   3. Check-in by LEGACY id + auto-enroll - POST /api/check-in/setu/check-in with
+ *      the family's legacyFid and both children present -> 200; family.legacyFid and
+ *      family.publicFid both echoed; enroll.enrolled === true; enroll.created === true.
+ *   4. Idempotent - re-POST the same -> enroll.created === false.
+ *   5. The publicFid resolves the SAME family (publicFid fallback) - POST with the
+ *      family's publicFid -> 200 and family.fid equals the CMT- doc id from step 3.
+ *      (resolveKioskFamily is legacy-first; the fixture's publicFid is not any
+ *      family's legacy id, so it resolves via the fallback.)
  *   6. Enrollment now exists — a direct Firestore read of
  *      families/{fid}/enrollments/{eid} shows an ACTIVE Bala Vihar enrollment
  *      covering the eligible children. (The kiosk role cannot reach
@@ -201,15 +203,19 @@ test.describe('Setu kiosk new-ID lookup + auto-enroll (deployed UAT) — UNRUN',
     }
   });
 
-  test('lookup (step 1) returns the family children in the Family.students shape', async () => {
-    const res = await kioskCtx.get(`/api/check-in/setu/lookup?id=${encodeURIComponent(FIXTURE_PUBLIC_FID!)}`);
+  test('lookup by the LEGACY id returns the children + the family NEW publicFid', async () => {
+    // The real door flow: a family enters their LEGACY check-in id. resolveKioskFamily
+    // is legacy-first, so this lands on the right family, and the returned Family.fid
+    // is that family's NEW publicFid - the value the kiosk UI nudges them to adopt.
+    const res = await kioskCtx.get(`/api/check-in/setu/lookup?id=${encodeURIComponent(FIXTURE_LEGACY_FID!)}`);
     expect(res.status(), `lookup GET: ${await res.text()}`).toBe(200);
     const body = (await res.json()) as LookupBody;
 
-    // The kiosk panel renders the legacy Family shape: fid + students[].
-    expect(body.fid).toBeTruthy();
+    // The kiosk panel renders the legacy Family shape: fid + students[]. fid is the
+    // NEW publicFid (the nudge target), NOT the entered legacy id.
+    expect(body.fid, 'lookup should return the NEW publicFid').toBe(FIXTURE_PUBLIC_FID);
     expect(Array.isArray(body.students)).toBeTruthy();
-    // N≥2 fixture invariant — this family has at least two children.
+    // N≥2 fixture invariant - this family has at least two children.
     expect(body.students.length, 'fixture must have ≥2 children').toBeGreaterThanOrEqual(2);
     for (const s of body.students) {
       expect(s.sid, 'student sid (member mid) missing').toBeTruthy();
@@ -218,19 +224,20 @@ test.describe('Setu kiosk new-ID lookup + auto-enroll (deployed UAT) — UNRUN',
     childSids = body.students.map((s) => s.sid);
   });
 
-  test('check-in by publicFid records + auto-enrolls into the current Bala Vihar (created)', async () => {
+  test('check-in by the LEGACY id records + auto-enrolls, and returns the new publicFid', async () => {
     // Mark BOTH children present (the N=2 path), exactly as the kiosk panel submits.
     const students = Object.fromEntries(childSids.map((sid) => [sid, true]));
     const res = await kioskCtx.post('/api/check-in/setu/check-in', {
-      data: { id: FIXTURE_PUBLIC_FID, students },
+      data: { id: FIXTURE_LEGACY_FID, students },
     });
     expect(res.status(), `check-in POST: ${await res.text()}`).toBe(200);
     const body = (await res.json()) as CheckInBody;
 
-    // The resolved family echoes the entered publicFid; capture the CMT- doc id
-    // (the join key resolveKioskFamily returns) for the legacy-id + enrollment
-    // assertions and for cleanup.
-    expect(body.family.publicFid).toBe(FIXTURE_PUBLIC_FID);
+    // Legacy-first resolve lands on the right family; the response carries BOTH ids
+    // so the UI can nudge "your new Family ID is <publicFid>". Capture the CMT- doc
+    // id (the join key) for the fallback + enrollment assertions and for cleanup.
+    expect(body.family.legacyFid).toBe(FIXTURE_LEGACY_FID);
+    expect(body.family.publicFid, 'check-in must echo the new publicFid for the nudge').toBe(FIXTURE_PUBLIC_FID);
     expect(body.family.fid).toBeTruthy();
     familyDocFid = body.family.fid;
     writtenCheckInIds.push(...body.checkInIds);
@@ -247,7 +254,7 @@ test.describe('Setu kiosk new-ID lookup + auto-enroll (deployed UAT) — UNRUN',
   test('a second identical check-in is idempotent (created === false)', async () => {
     const students = Object.fromEntries(childSids.map((sid) => [sid, true]));
     const res = await kioskCtx.post('/api/check-in/setu/check-in', {
-      data: { id: FIXTURE_PUBLIC_FID, students },
+      data: { id: FIXTURE_LEGACY_FID, students },
     });
     expect(res.status(), `re-check-in POST: ${await res.text()}`).toBe(200);
     const body = (await res.json()) as CheckInBody;
@@ -261,19 +268,20 @@ test.describe('Setu kiosk new-ID lookup + auto-enroll (deployed UAT) — UNRUN',
     }
   });
 
-  test('the legacy check-in id resolves the SAME family', async () => {
+  test('the new publicFid resolves the SAME family (publicFid fallback)', async () => {
     const students = Object.fromEntries(childSids.map((sid) => [sid, true]));
     const res = await kioskCtx.post('/api/check-in/setu/check-in', {
-      data: { id: FIXTURE_LEGACY_FID, students },
+      data: { id: FIXTURE_PUBLIC_FID, students },
     });
-    expect(res.status(), `legacy-id check-in POST: ${await res.text()}`).toBe(200);
+    expect(res.status(), `publicFid check-in POST: ${await res.text()}`).toBe(200);
     const body = (await res.json()) as CheckInBody;
     writtenCheckInIds.push(...body.checkInIds);
 
-    // resolveKioskFamily falls through publicFid → legacyFid, so the legacy id
-    // lands on the exact same family doc (and its enrollment is already active).
+    // resolveKioskFamily is legacy-first; the publicFid is NOT any family legacy id
+    // (fully-clean fixture), so it resolves via the publicFid fallback to the exact
+    // same family doc (its enrollment is already active from the legacy check-in).
     expect(body.family.fid).toBe(familyDocFid);
-    expect(body.family.legacyFid).toBe(FIXTURE_LEGACY_FID);
+    expect(body.family.publicFid).toBe(FIXTURE_PUBLIC_FID);
     expect(body.enroll.enrolled).toBe(true);
     if (body.enroll.enrolled) {
       expect(body.enroll.created).toBe(false);

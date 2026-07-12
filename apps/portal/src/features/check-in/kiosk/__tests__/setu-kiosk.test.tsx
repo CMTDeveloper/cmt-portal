@@ -141,4 +141,42 @@ describe('Setu kiosk flow (KioskHome)', () => {
     expect(await screen.findByText(/enter your family id/i)).toBeInTheDocument();
     expect(screen.queryByText(/added to bala vihar/i)).not.toBeInTheDocument();
   });
+
+  it('shows the new-Family-ID nudge when a family is resolved by their legacy id', async () => {
+    const user = userEvent.setup();
+    // Enter the legacy id 477; the Setu lookup resolves the family whose NEW
+    // publicFid is 1075. entered (477) !== family.fid (1075) -> nudge.
+    vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => setuFamily,
+    } as Response);
+
+    render(<KioskHome />);
+    await user.type(screen.getByLabelText(/family id/i), '477');
+    await user.click(screen.getByRole('button', { name: /find/i }));
+    await screen.findByText(/alice/i);
+
+    expect(screen.getByText(/switching to new family ids/i)).toBeInTheDocument();
+    expect(screen.getByText(/instead of 477/i)).toBeInTheDocument();
+    // The new id (1075) is rendered prominently (also in the header + sentence).
+    expect(screen.getAllByText(/1075/).length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('does NOT show the nudge when the family entered their new publicFid already', async () => {
+    const user = userEvent.setup();
+    // Enter 1075, which IS the family's new publicFid (== family.fid) -> no nudge.
+    vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => setuFamily,
+    } as Response);
+
+    render(<KioskHome />);
+    await user.type(screen.getByLabelText(/family id/i), '1075');
+    await user.click(screen.getByRole('button', { name: /find/i }));
+    await screen.findByText(/alice/i);
+
+    expect(screen.queryByText(/switching to new family ids/i)).not.toBeInTheDocument();
+  });
 });
