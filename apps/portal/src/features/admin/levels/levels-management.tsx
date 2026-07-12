@@ -258,8 +258,11 @@ export function LevelsManagement({
             onSelectLevel={setSelectedLevelId}
           />
         </div>
-        {/* Desktop-only detail column (always visible, keeps its empty state). */}
-        <div className="hidden md:block" data-testid="level-detail-desktop">
+        {/* Desktop-only detail column (always visible, keeps its empty state).
+            `md:contents` dissolves this wrapper at md+ so LevelDetailPanel is the
+            DIRECT grid child (stretches to the row height exactly as before);
+            `hidden` removes it on mobile, where the drawer below takes over. */}
+        <div className="hidden md:contents" data-testid="level-detail-desktop">
           <LevelDetailPanel
             level={selectedLevel}
             teachers={selectedTeachers}
