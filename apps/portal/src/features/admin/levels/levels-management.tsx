@@ -121,7 +121,7 @@ export function LevelsManagement({
     <section>
       {readOnly && (
         <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 14 }}>
-          Viewing a past year — read-only.
+          Viewing a past year - read-only.
         </p>
       )}
 
