@@ -46,6 +46,10 @@ interface LevelsTableProps {
   // ── Filter values, owned by LevelsManagement (the parent filter bar). ──────
   /** Restrict the list to one centre. When omitted, no location filter applies. */
   selectedLocation?: string;
+  /** Selected program key (owned by LevelsManagement's top filter bar). Used for
+   * row filtering and as the "+ New level" modal's default programKey. Defaults
+   * to 'bala-vihar' so the table renders standalone in tests without a parent. */
+  selectedProgramKey?: string;
   /** Substring match over levelName + curriculum. */
   search?: string;
   /** When true, disabled levels are included in the list. */
@@ -329,6 +333,7 @@ export function LevelsTable({
   onLevelsChange,
   readOnly = false,
   selectedLocation,
+  selectedProgramKey = 'bala-vihar',
   search = '',
   showDisabled = false,
   selectedLevelId = null,
@@ -337,17 +342,12 @@ export function LevelsTable({
   const [levels, setLevels] = useState<LevelRow[]>(initialLevels);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<LevelRow | null>(null);
-  // Program filter: default to 'bala-vihar' if programs prop provided
-  const [selectedProgramKey, setSelectedProgramKey] = useState('bala-vihar');
   // Read-only teacher pills, owned by LevelsManagement (single source of truth).
   // The row only displays them; add/remove/lead happen in the detail panel.
   const teachersByLevelMap = teachersByLevel ?? {};
 
-  // Filter programs that use levels (for the selector)
-  const levelPrograms = programs?.filter((p) => p.capabilities.usesLevels) ?? [];
-
-  // Filtering is driven by the parent's filter bar (location + search +
-  // showDisabled) plus this toolbar's own program selector.
+  // Filtering is driven entirely by the parent's top filter bar: location +
+  // program (selectedProgramKey) + search + showDisabled.
   const query = search.trim().toLowerCase();
   const displayed = levels
     .filter((l) => !selectedLocation || (l.location ?? 'Brampton') === selectedLocation)
@@ -423,23 +423,9 @@ export function LevelsTable({
 
   return (
     <>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18, flexWrap: 'wrap' }}>
-        {levelPrograms.length > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, color: 'var(--body-text)' }}>
-            <span>Program</span>
-            <select
-              value={selectedProgramKey}
-              onChange={(e) => setSelectedProgramKey(e.target.value)}
-              style={{ marginLeft: 2, padding: '5px 8px', borderRadius: 'var(--radiusSm)', border: '1px solid var(--line2)', background: 'var(--bg)', fontSize: 13, fontFamily: 'var(--body)' }}
-              aria-label="Program"
-            >
-              {levelPrograms.map((p) => (
-                <option key={p.programKey} value={p.programKey}>{p.label}</option>
-              ))}
-            </select>
-          </div>
-        )}
-        <div style={{ flex: 1 }} />
+      {/* The Program selector now lives in LevelsManagement's top filter bar;
+          this toolbar keeps only the "+ New level" action, right-aligned. */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12, marginBottom: 18, flexWrap: 'wrap' }}>
         <button className="btn btn--p" onClick={() => { setEditing(null); setModalOpen(true); }} disabled={readOnly} style={{ fontSize: 13, padding: '8px 18px', opacity: readOnly ? 0.5 : 1 }}>+ New level</button>
       </div>
 

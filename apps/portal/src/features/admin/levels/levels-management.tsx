@@ -39,9 +39,17 @@ export function LevelsManagement({
   // focused single-centre list, per the owner requirement). Default to the
   // first configured centre.
   const [selectedLocation, setSelectedLocation] = useState<string>(locationOptions[0] ?? 'Brampton');
+  // Program filter now lives in the top filter bar (was previously owned by
+  // LevelsTable). Default to 'bala-vihar'; passed down to LevelsTable for row
+  // filtering + the "+ New level" modal default.
+  const [selectedProgramKey, setSelectedProgramKey] = useState('bala-vihar');
   const [search, setSearch] = useState('');
   const [showDisabled, setShowDisabled] = useState(false);
   const [selectedLevelId, setSelectedLevelId] = useState<string | null>(null);
+
+  // Programs that use levels drive the Program select. Mirror the gate the table
+  // used: show the select only when there is at least one such program.
+  const levelPrograms = programs.filter((p) => p.capabilities.usesLevels);
 
   // The panel mutates the selected level's teachers; these callbacks update BOTH
   // the `teachers` map (row summary + panel pills) AND `levels[].teacherRefs` /
@@ -94,6 +102,7 @@ export function LevelsManagement({
   const query = search.trim().toLowerCase();
   const filtered = levels
     .filter((l) => (l.location ?? 'Brampton') === selectedLocation)
+    .filter((l) => l.programKey === selectedProgramKey)
     .filter((l) => showDisabled || l.enabled)
     .filter((l) => !query || `${l.levelName} ${l.curriculum}`.toLowerCase().includes(query));
 
@@ -155,6 +164,25 @@ export function LevelsManagement({
             })}
           </div>
 
+          {levelPrograms.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, color: 'var(--body-text)' }}>
+              <span>Program</span>
+              <select
+                value={selectedProgramKey}
+                onChange={(e) => {
+                  setSelectedProgramKey(e.target.value);
+                  setSelectedLevelId(null);
+                }}
+                style={{ marginLeft: 2, padding: '5px 8px', borderRadius: 'var(--radiusSm)', border: '1px solid var(--line2)', background: 'var(--bg)', fontSize: 13, fontFamily: 'var(--body)' }}
+                aria-label="Program"
+              >
+                {levelPrograms.map((p) => (
+                  <option key={p.programKey} value={p.programKey}>{p.label}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <input
             type="search"
             value={search}
@@ -205,6 +233,7 @@ export function LevelsManagement({
             onLevelsChange={setLevels}
             readOnly={readOnly}
             selectedLocation={selectedLocation}
+            selectedProgramKey={selectedProgramKey}
             search={search}
             showDisabled={showDisabled}
             selectedLevelId={selectedLevelId}
