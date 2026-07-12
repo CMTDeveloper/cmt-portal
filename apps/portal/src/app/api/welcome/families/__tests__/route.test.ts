@@ -60,8 +60,18 @@ describe('GET /api/welcome/families', () => {
     expect(await res.text()).toContain('Ravi Patel');
   });
 
-  it('400 on an invalid query param (unknown location)', async () => {
+  it('accepts any location string as a filter (location is a dynamic centre, not a closed enum)', async () => {
+    // Locations are now admin-managed, so `location` is a free-form filter, not a
+    // fixed enum. An arbitrary centre is passed through to the query and simply
+    // matches no families (200 + empty) rather than 400-ing.
+    listRosterFamilies.mockResolvedValue({ families: [], nextCursor: null, total: 0 });
     const res = await GET(req('/api/welcome/families?location=Toronto', WELCOME));
+    expect(res.status).toBe(200);
+    expect(listRosterFamilies).toHaveBeenCalledWith(expect.objectContaining({ location: 'Toronto' }));
+  });
+
+  it('400 on a malformed query param (empty location string)', async () => {
+    const res = await GET(req('/api/welcome/families?location=', WELCOME));
     expect(res.status).toBe(400);
   });
 });
