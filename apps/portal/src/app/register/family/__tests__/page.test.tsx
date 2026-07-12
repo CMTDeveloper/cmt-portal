@@ -139,7 +139,7 @@ async function fillForm(
   // [7]=managerFoodAllergies.
   const textInputs = document.querySelectorAll('input[type="text"]');
   await user.type(textInputs[0] as HTMLElement, opts.family);
-  // Location pills come from the mount /api/setu/locations fetch — await them.
+  // Location pills come from the mount /api/setu/locations fetch - await them.
   const locBtns = await screen.findAllByRole('button', { name: opts.location });
   await user.click(locBtns[0]!);
 
@@ -313,7 +313,7 @@ describe('RegisterFamilyPage — successful submit (OTP-gated)', () => {
     await fillForm(user, { family: 'Sharma', location: 'Mississauga', first: 'Priya', last: 'Sharma' });
 
     await submitToCodeStep(user);
-    // Submit calls send-code — NOT register (the family isn't created yet).
+    // Submit calls send-code - NOT register (the family isn't created yet).
     expect(fetchMock.mock.calls.some((c) => c[0] === '/api/setu/auth/send-code')).toBe(true);
     expect(fetchMock.mock.calls.some((c) => c[0] === '/api/setu/register')).toBe(false);
 
