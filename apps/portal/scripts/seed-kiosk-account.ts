@@ -25,6 +25,7 @@ import { portalAuth } from '@cmt/firebase-shared/admin/auth';
 import { sha256Hex } from '@/features/check-in/shared';
 import { normalizeContactForKey } from '@cmt/shared-domain/setu';
 import { addCapability, type ClaimsShape } from '@/lib/auth/role-claims';
+import { findSetuFamilyByContact } from '@/features/setu/auth/find-family-by-contact';
 
 const EMAIL = process.env['KIOSK_ACCOUNT_EMAIL'];
 const PASSWORD = process.env['KIOSK_ACCOUNT_PASSWORD'];
@@ -69,6 +70,22 @@ async function main(): Promise<void> {
   // door account with a fixed, committed-adjacent email.
   if (PASSWORD.length < 8 || PASSWORD.length > 128 || !/[a-zA-Z]/.test(PASSWORD) || !/\d/.test(PASSWORD)) {
     console.error('KIOSK_ACCOUNT_PASSWORD must be 8-128 chars with at least one letter and one digit.');
+    process.exit(1);
+  }
+
+  // Collision guard (mirrors grantStandaloneRole in seed-test-accounts.ts): the
+  // kiosk uid is sha256Hex(normalizeContactForKey('email', EMAIL)) - the SAME
+  // derivation Setu FAMILY users use. If KIOSK_ACCOUNT_EMAIL maps to a real
+  // family's contact, ensureAuthPassword would updateUser() on that family user
+  // (resetting their password + emailVerified) and bolt 'kiosk' onto their
+  // claims. Refuse before any Auth write. Placed after the UAT + env guards so
+  // an unconfigured run still exits without this Firebase read.
+  const collision = await findSetuFamilyByContact('email', EMAIL);
+  if (collision.source === 'setu') {
+    console.error(
+      "REFUSING: KIOSK_ACCOUNT_EMAIL must not be an existing family's contact; " +
+        'choose a dedicated address like kiosk-tablet@chinmayatoronto.org.',
+    );
     process.exit(1);
   }
 
