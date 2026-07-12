@@ -117,6 +117,10 @@ export async function buildSessionClaimsForContact(
   // 'teacher' in extraRoles; admin already inherits teacher via isTeacher.
   const isTeacherUser =
     allExistingRoles.has('teacher') || (result.mid ? await isTeacherAssigned(result.mid) : false);
+  // Kiosk is a dedicated staff role that lives ONLY on the account's custom
+  // claims (a generic tablet account with no family/member), so it comes solely
+  // from allExistingRoles - never from a member-role or family resolution.
+  const isKioskUser = allExistingRoles.has('kiosk');
 
   function preservedExtras(): string[] {
     const extras: string[] = [];
@@ -126,8 +130,14 @@ export async function buildSessionClaimsForContact(
     return extras;
   }
 
-  // Brand-new user with no invite and no sevak role — no session, redirect to register.
-  if (result.source === null && !hasPendingInvite && !isWelcomeTeamUser && !isAdminUser) {
+  // Brand-new user with no invite and no sevak role - no session, redirect to register.
+  if (
+    result.source === null &&
+    !hasPendingInvite &&
+    !isWelcomeTeamUser &&
+    !isAdminUser &&
+    !isKioskUser
+  ) {
     return { redirectTo: '/register?contact=verified' };
   }
 
@@ -204,6 +214,11 @@ export async function buildSessionClaimsForContact(
     } else if (isWelcomeTeamUser) {
       claims = { role: 'welcome-team', ...contactClaim };
       redirectTo = '/welcome';
+    } else if (isKioskUser) {
+      // Generic kiosk tablet account: mint a kiosk session and land on the
+      // check-in kiosk. isKiosk() inherits admin, so an admin above wins first.
+      claims = { role: 'kiosk', ...contactClaim };
+      redirectTo = '/check-in';
     }
   }
 
