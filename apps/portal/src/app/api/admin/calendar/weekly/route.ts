@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
-import { SetWeeklyScheduleSchema, isAdmin, isWelcomeTeam, LOCATIONS, type Location } from '@cmt/shared-domain';
+import { SetWeeklyScheduleSchema, isAdmin, isWelcomeTeam, type Location } from '@cmt/shared-domain';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
 import { getWeeklySchedule } from '@/features/setu/calendar/calendar';
+import { getLocationOptions } from '@/lib/locations';
 
 function sevak(req: Request) {
   const session = readSessionFromHeaders(req);
@@ -17,7 +18,8 @@ export async function GET(req: Request) {
   const gate = sevak(req);
   if (gate.error) return gate.error;
   const location = new URL(req.url).searchParams.get('location');
-  if (!location || !(LOCATIONS as readonly string[]).includes(location)) {
+  const locations = await getLocationOptions();
+  if (!location || !locations.includes(location)) {
     return NextResponse.json({ error: 'location-required' }, { status: 400 });
   }
   const rows = await getWeeklySchedule(location as Location);

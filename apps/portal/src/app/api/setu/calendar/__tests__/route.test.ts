@@ -12,6 +12,10 @@ vi.mock('@/features/setu/calendar/calendar', () => ({
 vi.mock('@/features/setu/rollover/live-school-year', () => ({
   getLiveSchoolYearCached: mockLiveYear,
 }));
+// The route now validates `location` against the admin-managed centre list.
+vi.mock('@/lib/locations', () => ({
+  getLocationOptions: vi.fn().mockResolvedValue(['Brampton', 'Scarborough']),
+}));
 
 function req(url: string, role?: string): Request {
   const headers: Record<string, string> = {};

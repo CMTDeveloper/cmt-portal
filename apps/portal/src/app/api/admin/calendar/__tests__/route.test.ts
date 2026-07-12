@@ -13,6 +13,10 @@ const { mockGetSchoolYearConfig } = vi.hoisted(() => ({ mockGetSchoolYearConfig:
 vi.mock('@/features/setu/rollover/school-year-config', () => ({
   getSchoolYearConfig: mockGetSchoolYearConfig,
 }));
+// The GET route now validates `location` against the admin-managed centre list.
+vi.mock('@/lib/locations', () => ({
+  getLocationOptions: vi.fn().mockResolvedValue(['Brampton', 'Scarborough']),
+}));
 
 function makeRequest(method: string, url: string, body?: unknown, uid?: string, role = 'admin'): Request {
   const headers: Record<string, string> = { 'content-type': 'application/json', 'x-portal-role': role };

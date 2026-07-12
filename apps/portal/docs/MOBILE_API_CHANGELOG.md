@@ -22,6 +22,11 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
+## 2026-07-12 - `<this-commit>` - POST /api/setu/register `location` is now a dynamic centre string (was a 4-value enum)
+`<this-commit>` is a placeholder - reconcile to the real SHA after the commit lands.
+- **POST `/api/setu/register`**: `location` changed from a fixed enum (`'Brampton' | 'Mississauga' | 'Scarborough' | 'Markham'`) to **any string that is a member of the admin-managed centre list** (see `GET /api/setu/locations`). Sending a value NOT in that list now returns **400 `{ error: 'invalid-location' }`** (a new error code on this route; a non-string / empty `location` still returns 400 `bad-request`). Every other request/response shape and error code is unchanged.
+- **Mobile action:** stop hardcoding the four centres in the registration screen. Fetch the centre list from `GET /api/setu/locations` and send one of its returned `options` as `location`. Handle the new 400 `invalid-location` (e.g. if the picker is stale) by re-fetching the list.
+
 ## 2026-07-12 - `<this-commit>` - NEW public GET /api/setu/locations (centre list)
 New **public** (pre-auth) read-only endpoint. `<this-commit>` is a placeholder - reconcile to the real SHA after the commit lands.
 - **GET `/api/setu/locations`** -> `200 { options: string[] }` - the admin-managed centre list (e.g. `['Brampton', 'Scarborough']`), defaulting to `['Brampton', 'Scarborough']` until an admin saves a custom list. No auth required (org-wide, non-sensitive config); also readable by any signed-in setu family. No request body.

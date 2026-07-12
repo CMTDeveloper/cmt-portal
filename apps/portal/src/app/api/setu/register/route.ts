@@ -15,6 +15,7 @@ import {
   REGISTER_RATE_LIMIT_MAX,
 } from '@/features/check-in/shared';
 import { whatsMissingForMember, type MemberRequiredField, FamilyAddressSchema } from '@cmt/shared-domain';
+import { getLocationOptions } from '@/lib/locations';
 
 
 // Capture-form gender is Male|Female ONLY (no PreferNotToSay) — the matrix
@@ -37,7 +38,7 @@ const bodySchema = z.object({
   email: z.string().email(),
   phone: z.string().min(7),
   familyName: z.string().min(1),
-  location: z.enum(['Brampton', 'Mississauga', 'Scarborough', 'Markham']),
+  location: z.string().min(1),
   // Required family home address collected at registration. Flows through the
   // `input` spread of parsed.data into registerFamily.
   familyAddress: FamilyAddressSchema,
@@ -109,6 +110,15 @@ export async function POST(req: Request) {
   const rate = await checkAndRecordOtpRateLimit(`register:${ip}`, REGISTER_RATE_LIMIT_MAX);
   if (!rate.allowed) {
     return NextResponse.json({ error: 'rate-limited', resetAt: rate.resetAt }, { status: 429 });
+  }
+
+  // MEMBERSHIP GATE: `location` must be one of the admin-managed centres. Checked
+  // AFTER the rate limiter (so the Firestore read is bounded) but BEFORE the
+  // one-time registration grant is consumed (so an invalid location never burns
+  // the grant). A valid configured centre falls through unchanged.
+  const allowedLocations = await getLocationOptions();
+  if (!allowedLocations.includes(parsed.data.location)) {
+    return NextResponse.json({ error: 'invalid-location' }, { status: 400 });
   }
 
   // OWNERSHIP GATE: consume the one-time registration grant proving this email

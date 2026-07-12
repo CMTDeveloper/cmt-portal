@@ -24,6 +24,11 @@ vi.mock('@cmt/firebase-shared/admin/session', () => ({
   createPortalSessionCookie: vi.fn(),
   exchangeCustomTokenForIdToken: vi.fn(),
 }));
+// The route now validates `location` against the admin-managed centre list.
+// Mock it to a fixed two-centre set so tests are independent of Firestore.
+vi.mock('@/lib/locations', () => ({
+  getLocationOptions: vi.fn().mockResolvedValue(['Brampton', 'Scarborough']),
+}));
 
 import { POST } from '../route';
 import { checkAndRecordOtpRateLimit } from '@/features/check-in/shared';
@@ -144,6 +149,18 @@ describe('POST /api/setu/register', () => {
   it('returns 400 on invalid location', async () => {
     const res = await POST(makeRequest({ ...validBody, location: 'Toronto' }));
     expect(res.status).toBe(400);
+  });
+
+  it('rejects a location that is not a configured centre', async () => {
+    const res = await POST(makeRequest({ ...validBody, location: 'Nowhere' }));
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: 'invalid-location' });
+    expect(registerFamily).not.toHaveBeenCalled();
+  });
+
+  it('accepts a configured centre', async () => {
+    const res = await POST(makeRequest({ ...validBody, location: 'Scarborough' }));
+    expect(res.status).not.toBe(400);
   });
 
   it('returns 400 when familyAddress is missing (address is required)', async () => {

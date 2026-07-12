@@ -4,7 +4,10 @@ import { hashContactKey } from './hash-contact-key';
 import { generateFid } from './generate-fid';
 import { allocateFamilyPublicId, allocateMemberPublicIds } from '@/features/setu/ids/public-id-allocator';
 
-export type Location = 'Brampton' | 'Mississauga' | 'Scarborough' | 'Markham';
+// Centre names are admin-managed at runtime (validated against getLocationOptions()
+// at the register route before this input is built), so the type is an open string
+// to match `@cmt/shared-domain`'s relaxed `Location` rather than a fixed enum.
+export type Location = string;
 export type Gender = 'Male' | 'Female' | 'PreferNotToSay';
 export type MemberType = 'Adult' | 'Child';
 

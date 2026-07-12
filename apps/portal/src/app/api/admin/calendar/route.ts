@@ -5,10 +5,10 @@ import {
   calendarEntryId,
   isAdmin,
   isWelcomeTeam,
-  LOCATIONS,
   type Location,
 } from '@cmt/shared-domain';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
+import { getLocationOptions } from '@/lib/locations';
 import { getCalendarSerialized } from '@/features/setu/calendar/calendar';
 import {
   assertWritableYear,
@@ -30,7 +30,8 @@ export async function GET(req: Request) {
   if (gate.error) return gate.error;
 
   const location = new URL(req.url).searchParams.get('location');
-  if (!location || !(LOCATIONS as readonly string[]).includes(location)) {
+  const locations = await getLocationOptions();
+  if (!location || !locations.includes(location)) {
     return NextResponse.json({ error: 'location-required' }, { status: 400 });
   }
   const entries = await getCalendarSerialized(location as Location);
