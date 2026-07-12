@@ -45,8 +45,12 @@ describe('CreateOfferingSchema', () => {
     expect(CreateOfferingSchema.safeParse({ ...validCreate, location: null }).success).toBe(true);
   });
 
-  it('rejects unknown location string', () => {
-    expect(CreateOfferingSchema.safeParse({ ...validCreate, location: 'Toronto' }).success).toBe(false);
+  it('accepts an admin-added centre not in the default set (location is dynamic)', () => {
+    expect(CreateOfferingSchema.safeParse({ ...validCreate, location: 'Toronto' }).success).toBe(true);
+  });
+
+  it('rejects an empty location string', () => {
+    expect(CreateOfferingSchema.safeParse({ ...validCreate, location: '' }).success).toBe(false);
   });
 
   it('accepts any valid programKey slug (dynamic)', () => {

@@ -26,8 +26,12 @@ describe('FamilyDocSchema', () => {
     }
   });
 
-  it('rejects unknown location', () => {
-    expect(FamilyDocSchema.safeParse({ ...validFamily, location: 'Toronto' }).success).toBe(false);
+  it('accepts an admin-added centre not in the default set (location is dynamic)', () => {
+    expect(FamilyDocSchema.safeParse({ ...validFamily, location: 'Toronto' }).success).toBe(true);
+  });
+
+  it('rejects an empty location', () => {
+    expect(FamilyDocSchema.safeParse({ ...validFamily, location: '' }).success).toBe(false);
   });
 
   it('accepts null legacyFid', () => {

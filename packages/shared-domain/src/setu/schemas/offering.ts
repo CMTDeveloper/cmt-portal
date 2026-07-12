@@ -9,8 +9,8 @@ export const BALA_VIHAR = 'bala-vihar';
 export const PROGRAM_TERM_TYPES = ['term', 'one-time', 'rolling'] as const;
 export type ProgramTermType = (typeof PROGRAM_TERM_TYPES)[number];
 
-export const LOCATIONS = ['Brampton', 'Mississauga', 'Scarborough', 'Markham'] as const;
-export type Location = (typeof LOCATIONS)[number];
+export const LOCATIONS = ['Brampton', 'Scarborough'] as const; // default seed; admin-managed list is the source of truth at runtime
+export type Location = string;
 
 // Where a family's payment status for a period comes from:
 //  - 'portal' → the Setu donations collection (Stripe checkouts through the portal).
@@ -49,7 +49,7 @@ export const OfferingDocSchema = z.object({
   oid: z.string().min(1),
   programKey: programKeySchema,
   programLabel: z.string().min(1),
-  location: z.enum(LOCATIONS).nullable(),
+  location: z.string().min(1).nullable(),
   termLabel: z.string().min(1),
   termType: z.enum(PROGRAM_TERM_TYPES),
   startDate: z.date(),
@@ -113,7 +113,7 @@ export function resolveSuggestedAmount(
 export const CreateOfferingSchema = z
   .object({
     programKey: programKeySchema,
-    location: z.enum(LOCATIONS).nullable(),
+    location: z.string().min(1).nullable(),
     termLabel: z.string().min(1),
     termType: z.enum(PROGRAM_TERM_TYPES),
     startDate: z.string().datetime({ offset: true }),

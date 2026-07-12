@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { programKeySchema, LOCATIONS } from './offering';
+import { programKeySchema } from './offering';
 import { toSafeSlug } from '../../utils/slug';
 
 // A Bala Vihar "class" is a Level at a location for a period. Level names and
@@ -20,7 +20,7 @@ export function levelSlug(levelName: string): string {
 export const LevelDocSchema = z.object({
   levelId: z.string().min(1), // `{location}-{levelSlug}-{pid}`
   programKey: programKeySchema,
-  location: z.enum(LOCATIONS).nullable(),
+  location: z.string().min(1).nullable(),
   levelName: z.string().min(1),
   levelKind: z.enum(LEVEL_KINDS),
   order: z.number().int().min(0),
@@ -48,7 +48,7 @@ function gradeBandConsistent(d: { levelKind: LevelKind; gradeBand: string[] }): 
 export const CreateLevelSchema = z
   .object({
     programKey: programKeySchema,
-    location: z.enum(LOCATIONS),
+    location: z.string().min(1),
     pid: z.string().min(1),
     levelName: z.string().min(1),
     levelKind: z.enum(LEVEL_KINDS),

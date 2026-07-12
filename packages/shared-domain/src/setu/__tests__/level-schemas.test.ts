@@ -55,8 +55,12 @@ describe('CreateLevelSchema', () => {
     expect(CreateLevelSchema.safeParse({ ...validCreate, levelKind: 'senior' }).success).toBe(false);
   });
 
-  it('rejects an unknown location', () => {
-    expect(CreateLevelSchema.safeParse({ ...validCreate, location: 'Toronto' }).success).toBe(false);
+  it('accepts an admin-added centre not in the default set (location is dynamic)', () => {
+    expect(CreateLevelSchema.safeParse({ ...validCreate, location: 'Toronto' }).success).toBe(true);
+  });
+
+  it('rejects an empty location', () => {
+    expect(CreateLevelSchema.safeParse({ ...validCreate, location: '' }).success).toBe(false);
   });
 
   it('rejects a negative order', () => {

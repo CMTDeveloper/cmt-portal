@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { LOCATIONS, programKeySchema } from './schemas/offering';
+import { programKeySchema } from './schemas/offering';
 
 export const ROSTER_PAYMENTS = ['paid', 'outstanding', 'unknown'] as const;
 export type RosterPayment = (typeof ROSTER_PAYMENTS)[number];
@@ -37,7 +37,7 @@ export const RosterQuerySchema = z.object({
   // the existing welcome-team search endpoint (`searchFamilies`) client-side when
   // the search box is non-empty, and shows browse (this query) when it's empty.
   // Keeping `q` out of this schema avoids a silently-ignored param.
-  location: z.enum(LOCATIONS).optional(),
+  location: z.string().min(1).optional(),
   program: programKeySchema.optional(),
   // School-year scope ("2025-26"). When set, the roster lists only families with
   // an active enrollment in that year (in-memory filter on the enrollments read,

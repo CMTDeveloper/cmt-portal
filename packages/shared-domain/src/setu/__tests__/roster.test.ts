@@ -16,8 +16,9 @@ describe('roster schemas', () => {
     expect(RosterQuerySchema.parse({ limit: '25' }).limit).toBe(25);
   });
 
-  it('RosterQuerySchema rejects an unknown location and clamps limit to <=100', () => {
-    expect(RosterQuerySchema.safeParse({ location: 'Toronto' }).success).toBe(false);
+  it('RosterQuerySchema accepts an admin-added centre (dynamic), rejects empty, and clamps limit to <=100', () => {
+    expect(RosterQuerySchema.safeParse({ location: 'Toronto' }).success).toBe(true);
+    expect(RosterQuerySchema.safeParse({ location: '' }).success).toBe(false);
     expect(RosterQuerySchema.safeParse({ limit: 500 }).success).toBe(false);
   });
 

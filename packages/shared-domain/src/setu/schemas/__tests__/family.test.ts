@@ -81,6 +81,16 @@ describe('FamilyDocSchema - familyEmergencyContact', () => {
   });
 });
 
+describe('FamilyDocSchema - location (dynamic)', () => {
+  it('accepts an admin-added centre not in the default set (location is dynamic)', () => {
+    const base = {
+      fid: 'CMT-X', legacyFid: null, name: 'Test', location: 'Oakville',
+      createdAt: new Date(), managers: ['u1'], searchKeys: [],
+    };
+    expect(FamilyDocSchema.parse(base).location).toBe('Oakville');
+  });
+});
+
 describe('CANADIAN_PROVINCES + CANADIAN_POSTAL_RE', () => {
   it('lists Ontario first (code + name)', () => {
     expect(CANADIAN_PROVINCES[0]).toEqual({ code: 'ON', name: 'Ontario' });

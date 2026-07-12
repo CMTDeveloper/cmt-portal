@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { programKeySchema, LOCATIONS } from './offering';
+import { programKeySchema } from './offering';
 import { toSafeSlug } from '../../utils/slug';
 
 // The managed school-year calendar that replaces the per-location PDF. One
@@ -28,7 +28,7 @@ export function calendarEntryId(programKey: string, location: string, date: stri
 export const ClassCalendarEntryDocSchema = z.object({
   entryId: z.string().min(1),
   programKey: programKeySchema,
-  location: z.enum(LOCATIONS).nullable(),
+  location: z.string().min(1).nullable(),
   date: YMD,
   kind: z.enum(CALENDAR_KINDS),
   classType: z.enum(CLASS_TYPES).nullable(),
@@ -58,7 +58,7 @@ function kindConsistent(d: {
 export const CreateCalendarEntrySchema = z
   .object({
     programKey: programKeySchema.default('bala-vihar'),
-    location: z.enum(LOCATIONS),
+    location: z.string().min(1),
     date: YMD,
     kind: z.enum(CALENDAR_KINDS),
     classType: z.enum(CLASS_TYPES).nullable().default(null),
@@ -99,7 +99,7 @@ export type UpdateCalendarEntryInput = z.infer<typeof UpdateCalendarEntrySchema>
 const ScheduleRowSchema = z.object({ time: z.string().min(1), label: z.string().min(1) });
 
 export const WeeklyScheduleDocSchema = z.object({
-  location: z.enum(LOCATIONS),
+  location: z.string().min(1),
   rows: z.array(ScheduleRowSchema),
   updatedAt: z.date(),
   updatedBy: z.string().min(1),
@@ -108,7 +108,7 @@ export const WeeklyScheduleDocSchema = z.object({
 export type WeeklyScheduleDoc = z.infer<typeof WeeklyScheduleDocSchema>;
 
 export const SetWeeklyScheduleSchema = z.object({
-  location: z.enum(LOCATIONS),
+  location: z.string().min(1),
   rows: z.array(ScheduleRowSchema),
 });
 

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { LOCATIONS, programKeySchema } from './offering';
+import { programKeySchema } from './offering';
 
 // Per-child snapshot of the grade/level for THIS enrollment's school year.
 // Enables a child's Bala Vihar "journey" across years without a new collection.
@@ -17,7 +17,7 @@ export const EnrollmentDocSchema = z.object({
   programKey: programKeySchema,
   programLabel: z.string().min(1),
   termLabel: z.string().min(1),
-  location: z.enum(LOCATIONS).nullable(),
+  location: z.string().min(1).nullable(),
   enrolledAt: z.date(),
   enrolledVia: z.enum(['family-initiated', 'first-attendance', 'welcome-team', 'promotion', 'kiosk']),
   enrolledByMid: z.string().nullable(),
@@ -56,7 +56,7 @@ export const OverrideEnrollmentBodySchema = z.object({
 export type OverrideEnrollmentBody = z.infer<typeof OverrideEnrollmentBodySchema>;
 
 export const ResolveActivePeriodParamsSchema = z.object({
-  location: z.enum(LOCATIONS),
+  location: z.string().min(1),
   programKey: programKeySchema,
 });
 

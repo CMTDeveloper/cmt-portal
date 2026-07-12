@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { LOCATIONS, programKeySchema, PROGRAM_TERM_TYPES } from './offering';
+import { programKeySchema, PROGRAM_TERM_TYPES } from './offering';
 
 export const MEMBER_TYPES = ['child', 'adult', 'any'] as const;
 export type MemberType = (typeof MEMBER_TYPES)[number];
@@ -33,7 +33,7 @@ export const ProgramDocSchema = z.object({
   label: z.string().min(1),
   shortDescription: z.string().default(''),
   status: z.enum(['active', 'draft', 'archived']),
-  locations: z.array(z.enum(LOCATIONS)), // [] = location-less
+  locations: z.array(z.string().min(1)), // [] = location-less
   termType: z.enum(PROGRAM_TERM_TYPES),
   eligibility: ProgramEligibilitySchema,
   capabilities: ProgramCapabilitiesSchema,
@@ -50,7 +50,7 @@ export const CreateProgramSchema = z.object({
   label: z.string().min(1),
   shortDescription: z.string().default(''),
   status: z.enum(['active', 'draft', 'archived']).default('draft'),
-  locations: z.array(z.enum(LOCATIONS)).default([]),
+  locations: z.array(z.string().min(1)).default([]),
   termType: z.enum(PROGRAM_TERM_TYPES),
   eligibility: ProgramEligibilitySchema,
   capabilities: ProgramCapabilitiesSchema,
