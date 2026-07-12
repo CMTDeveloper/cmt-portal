@@ -97,7 +97,10 @@ type LookupBody = {
  * project loads family.json by default — a kiosk request must NOT use it).
  */
 async function signInKioskContext(baseURL: string): Promise<APIRequestContext> {
-  const ctx = await request.newContext({ baseURL });
+  // Start from an EMPTY cookie jar, not the setu project's default family.json
+  // storageState (playwright.config setu project) - otherwise the context would
+  // carry a pre-existing session and the kiosk sign-in would layer on top of it.
+  const ctx = await request.newContext({ baseURL, storageState: { cookies: [], origins: [] } });
   const res = await ctx.post('/api/setu/auth/password-sign-in', {
     data: { email: KIOSK_EMAIL, password: KIOSK_PASSWORD },
   });
@@ -125,30 +128,50 @@ test.describe('Setu kiosk new-ID lookup + auto-enroll (deployed UAT) — UNRUN',
   let childSids: string[] = []; // lookup student sids === member mids === enrolledMids entries
   const writtenCheckInIds: string[] = []; // every check_in_events doc this run appended
 
+  // Delete every ACTIVE Bala Vihar enrollment on the fixture family. Index-free
+  // (reads the small enrollments subcollection, filters in memory). Used both as
+  // a clean-slate before the run (so enroll.created is deterministically true even
+  // if a prior run leaked an enrollment) and as teardown after it.
+  async function cleanFixtureBvEnrollments(): Promise<void> {
+    if (!familyDocFid) return;
+    const { portalFirestore } = await import('@cmt/firebase-shared/admin/firestore');
+    const db = portalFirestore();
+    const enr = await db.collection('families').doc(familyDocFid).collection('enrollments').get();
+    for (const d of enr.docs) {
+      const x = d.data() as { programKey?: string; status?: string };
+      if (x.programKey === BALA_VIHAR && x.status === 'active') await d.ref.delete();
+    }
+  }
+
   test.beforeAll(async ({ baseURL }) => {
+    // Resolve the fixture family's CMT- doc id from its publicFid (admin SDK), so
+    // both the enrollment assertion and cleanup have it even if a test fails early.
+    const { portalFirestore } = await import('@cmt/firebase-shared/admin/firestore');
+    const snap = await portalFirestore()
+      .collection('families')
+      .where('publicFid', '==', FIXTURE_PUBLIC_FID)
+      .limit(1)
+      .get();
+    familyDocFid = snap.docs[0]?.id ?? '';
+    // Clean slate: a prior/aborted run must not leave an active BV enrollment that
+    // would make this run's first check-in return created:false.
+    await cleanFixtureBvEnrollments();
     kioskCtx = await signInKioskContext(baseURL!);
   });
 
   test.afterAll(async () => {
     if (kioskCtx) await kioskCtx.dispose();
-    if (!familyDocFid) return; // nothing was created — nothing to undo
+    if (!familyDocFid) return; // fixture never resolved - nothing to undo
 
     // Delete directly with the SAME admin SDK the seeds use (playwright.config
-    // loads .env.local, so the portal creds are in process.env). Removing the
-    // enrollment doc returns the fixture to "no active BV enrollment" so the next
-    // run's enroll.created is true again; the check_in_events are append-only
-    // event rows, cleared here so the fixture's history stays clean.
+    // loads .env.local, so the portal creds are in process.env). Remove EVERY
+    // active BV enrollment on the fixture (not just the tracked eid) so a partial
+    // run can't leave the fixture enrolled; the check_in_events this run appended
+    // are cleared too so the fixture's history stays clean.
     try {
       const { portalFirestore } = await import('@cmt/firebase-shared/admin/firestore');
       const db = portalFirestore();
-      if (createdEid) {
-        await db
-          .collection('families')
-          .doc(familyDocFid)
-          .collection('enrollments')
-          .doc(createdEid)
-          .delete();
-      }
+      await cleanFixtureBvEnrollments();
       for (const id of writtenCheckInIds) {
         await db.collection('check_in_events').doc(id).delete();
       }
@@ -158,9 +181,11 @@ test.describe('Setu kiosk new-ID lookup + auto-enroll (deployed UAT) — UNRUN',
   });
 
   test('unauthenticated check-in + lookup are denied (routes are not public)', async ({ baseURL }) => {
-    // A fresh context with NO session cookie — middleware `canAccessRoute` gates
+    // A fresh context with NO session cookie - middleware `canAccessRoute` gates
     // both paths to the kiosk role, so no-session returns 401 (proves not public).
-    const anon = await request.newContext({ baseURL: baseURL! });
+    // Explicit empty storageState overrides the setu project's family.json default
+    // (playwright.config), which would otherwise make this context authenticated.
+    const anon = await request.newContext({ baseURL: baseURL!, storageState: { cookies: [], origins: [] } });
     try {
       const post = await anon.post('/api/check-in/setu/check-in', {
         data: { id: FIXTURE_PUBLIC_FID, students: {} },
