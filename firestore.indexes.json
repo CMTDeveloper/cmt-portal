@@ -264,6 +264,13 @@
       ]
     },
     {
+      "collectionGroup": "enrollments",
+      "fieldPath": "location",
+      "indexes": [
+        { "queryScope": "COLLECTION_GROUP", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "members",
       "fieldPath": "mid",
       "indexes": [
