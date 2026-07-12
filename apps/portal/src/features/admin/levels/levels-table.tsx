@@ -55,6 +55,18 @@ interface LevelsTableProps {
   onAssignmentSaved?: (change: TeacherAssignmentChange) => void;
   /** When true (viewing a past school year), mutate controls are disabled. */
   readOnly?: boolean;
+  // ── Filter values, owned by LevelsManagement (the parent filter bar). ──────
+  /** Restrict the list to one centre. When omitted, no location filter applies. */
+  selectedLocation?: string;
+  /** Substring match over levelName + curriculum. */
+  search?: string;
+  /** When true, disabled levels are included in the list. */
+  showDisabled?: boolean;
+  // ── Master-list selection, driven by LevelsManagement. ────────────────────
+  /** The currently selected level's id (highlighted row); null when none. */
+  selectedLevelId?: string | null;
+  /** Row click handler; selects the level for the detail panel. */
+  onSelectLevel?: (levelId: string) => void;
 }
 
 const LEVEL_KIND_LABELS: Record<LevelKind, string> = {
@@ -329,9 +341,13 @@ export function LevelsTable({
   onLevelsChange,
   onAssignmentSaved,
   readOnly = false,
+  selectedLocation,
+  search = '',
+  showDisabled = false,
+  selectedLevelId = null,
+  onSelectLevel,
 }: LevelsTableProps) {
   const [levels, setLevels] = useState<LevelRow[]>(initialLevels);
-  const [showDisabled, setShowDisabled] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<LevelRow | null>(null);
   // Program filter: default to 'bala-vihar' if programs prop provided
@@ -344,8 +360,14 @@ export function LevelsTable({
   // Filter programs that use levels (for the selector)
   const levelPrograms = programs?.filter((p) => p.capabilities.usesLevels) ?? [];
 
-  const displayed = (showDisabled ? levels : levels.filter((l) => l.enabled))
-    .filter((l) => !programs || l.programKey === selectedProgramKey);
+  // Filtering is driven by the parent's filter bar (location + search +
+  // showDisabled) plus this toolbar's own program selector.
+  const query = search.trim().toLowerCase();
+  const displayed = levels
+    .filter((l) => !selectedLocation || (l.location ?? 'Brampton') === selectedLocation)
+    .filter((l) => showDisabled || l.enabled)
+    .filter((l) => !programs || l.programKey === selectedProgramKey)
+    .filter((l) => !query || `${l.levelName} ${l.curriculum}`.toLowerCase().includes(query));
 
   function updateLevels(updater: (prev: LevelRow[]) => LevelRow[]) {
     setLevels((prev) => {
@@ -482,10 +504,6 @@ export function LevelsTable({
             </select>
           </div>
         )}
-        <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, cursor: 'pointer', color: 'var(--body-text)' }}>
-          <input type="checkbox" checked={showDisabled} onChange={(e) => setShowDisabled(e.target.checked)} style={{ accentColor: 'var(--accent)' }} />
-          Show disabled levels
-        </label>
         <div style={{ flex: 1 }} />
         <button className="btn btn--p" onClick={() => { setEditing(null); setModalOpen(true); }} disabled={readOnly} style={{ fontSize: 13, padding: '8px 18px', opacity: readOnly ? 0.5 : 1 }}>+ New level</button>
       </div>
@@ -499,7 +517,17 @@ export function LevelsTable({
           {/* Mobile: stacked card rows — table overflows a phone width. */}
           <div className="block md:hidden">
             {displayed.map((l, i) => (
-              <div key={l.levelId} style={{ padding: '16px 0', borderTop: i > 0 ? '1px solid var(--line)' : undefined }}>
+              <div
+                key={l.levelId}
+                onClick={() => onSelectLevel?.(l.levelId)}
+                style={{
+                  padding: '16px 0',
+                  borderTop: i > 0 ? '1px solid var(--line)' : undefined,
+                  cursor: onSelectLevel ? 'pointer' : 'default',
+                  background: l.levelId === selectedLevelId ? 'var(--accentSoft)' : undefined,
+                  boxShadow: l.levelId === selectedLevelId ? 'inset 3px 0 0 var(--accent)' : undefined,
+                }}
+              >
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -542,7 +570,17 @@ export function LevelsTable({
               </thead>
               <tbody>
                 {displayed.map((l, i) => (
-                  <tr key={l.levelId} style={{ borderBottom: '1px solid var(--line)', background: i % 2 === 0 ? 'transparent' : 'var(--bg)' }}>
+                  <tr
+                    key={l.levelId}
+                    onClick={() => onSelectLevel?.(l.levelId)}
+                    aria-selected={l.levelId === selectedLevelId}
+                    style={{
+                      borderBottom: '1px solid var(--line)',
+                      background: l.levelId === selectedLevelId ? 'var(--accentSoft)' : i % 2 === 0 ? 'transparent' : 'var(--bg)',
+                      cursor: onSelectLevel ? 'pointer' : 'default',
+                      boxShadow: l.levelId === selectedLevelId ? 'inset 3px 0 0 var(--accent)' : undefined,
+                    }}
+                  >
                     <td style={tdStyle}>{l.location}</td>
                     <td style={tdStyle}>{l.periodLabel}</td>
                     <td style={{ ...tdStyle, fontWeight: 600 }}>{l.levelName}</td>

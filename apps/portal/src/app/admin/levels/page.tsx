@@ -10,6 +10,7 @@ import { listPrograms } from '@/features/setu/programs/get-programs';
 import type { ProgramRow } from '@/features/admin/programs/programs-table';
 import { getLiveSchoolYearCached } from '@/features/setu/rollover/live-school-year';
 import { listKnownSchoolYears, resolveViewYear } from '@/features/setu/rollover/view-year';
+import { getLocationOptions } from '@/lib/locations';
 
 export const metadata = { title: 'Level management' };
 
@@ -23,10 +24,11 @@ export default async function LevelsPage({ searchParams }: { searchParams: Promi
   const years = await listKnownSchoolYears(db, liveYear);
   const view = resolveViewYear(years, liveYear, (await searchParams).year ?? null);
 
-  const [levelsSnap, periodsSnap, programDocs] = await Promise.all([
+  const [levelsSnap, periodsSnap, programDocs, locationOptions] = await Promise.all([
     db.collection('levels').orderBy('location', 'asc').orderBy('order', 'asc').get(),
     db.collection('donationPeriods').where('enabled', '==', true).get(),
     listPrograms(),
+    getLocationOptions(),
   ]);
 
   const levels: LevelRow[] = levelsSnap.docs.map((d) => {
@@ -96,7 +98,7 @@ export default async function LevelsPage({ searchParams }: { searchParams: Promi
         </p>
       </header>
 
-      <LevelsManagement initialLevels={levels} periods={periods} programs={programs} teachersByLevel={teachersByLevel} readOnly={view.status === 'past'} />
+      <LevelsManagement initialLevels={levels} periods={periods} programs={programs} locationOptions={locationOptions} teachersByLevel={teachersByLevel} readOnly={view.status === 'past'} />
     </>
   );
 }
