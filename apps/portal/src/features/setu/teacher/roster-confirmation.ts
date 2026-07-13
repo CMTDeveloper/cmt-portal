@@ -43,8 +43,10 @@ export async function deriveConfirmedFidsForLevel(
     od.paymentSource !== undefined ? { paymentSource: od.paymentSource as never } : {},
   );
 
+  // Cheap signals first (no reads): a deliberate enrolledVia, or any attended
+  // mid. Whatever is still inconclusive needs the expensive per-family reads.
+  const needsRead: LevelEnrollment[] = [];
   for (const enr of enrollments) {
-    // Cheap signals first (no reads).
     if (enr.enrolledVia === 'family-initiated' || enr.enrolledVia === 'first-attendance') {
       confirmed.add(enr.fid);
       continue;
@@ -53,21 +55,31 @@ export async function deriveConfirmedFidsForLevel(
       confirmed.add(enr.fid);
       continue;
     }
-    // Expensive signals only when still inconclusive.
-    const donSnap = await db
-      .collection('families')
-      .doc(enr.fid)
-      .collection('donations')
-      .where('status', '==', 'completed')
-      .get();
-    const donations = donSnap.docs.map((d) => d.data() as DonationDoc);
-    const legacyPaid =
-      source === 'legacy' && enr.legacyFid
-        ? (await getLegacyPaymentStatus(enr.legacyFid)) === 'paid'
-        : false;
-    if (isEnrollmentConfirmed({ eid: enr.eid, enrolledVia: enr.enrolledVia }, { attendedCount: 0, donations, legacyPaid })) {
-      confirmed.add(enr.fid);
-    }
+    needsRead.push(enr);
   }
+
+  // Expensive signals (donations + legacy) in PARALLEL - this helper runs on the
+  // teacher attendance page load AND every autosave tap, and early in the year the
+  // inconclusive set is large (~all promotion carry-forwards), so a serial loop
+  // would stack ~N round-trips per save. Set.add across concurrent tasks is safe
+  // (single-threaded JS). Bounded to one level (~130 families max).
+  await Promise.all(
+    needsRead.map(async (enr) => {
+      const donSnap = await db
+        .collection('families')
+        .doc(enr.fid)
+        .collection('donations')
+        .where('status', '==', 'completed')
+        .get();
+      const donations = donSnap.docs.map((d) => d.data() as DonationDoc);
+      const legacyPaid =
+        source === 'legacy' && enr.legacyFid
+          ? (await getLegacyPaymentStatus(enr.legacyFid)) === 'paid'
+          : false;
+      if (isEnrollmentConfirmed({ eid: enr.eid, enrolledVia: enr.enrolledVia }, { attendedCount: 0, donations, legacyPaid })) {
+        confirmed.add(enr.fid);
+      }
+    }),
+  );
   return confirmed;
 }

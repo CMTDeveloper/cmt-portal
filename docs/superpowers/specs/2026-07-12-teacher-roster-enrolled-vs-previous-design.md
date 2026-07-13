@@ -52,8 +52,13 @@ Issue #23 (owner decision 2026-07-02) defines "truly enrolled" as
 The **family dashboard** (`features/setu/roster/family-engagement.ts`) and **admin
 reports** (`features/setu/reports/enrollment-report.ts:deriveBvConfirmedFids`) already
 apply this. Only the **teacher roster ignores it.** This design applies the same rule
-to the teacher surface, keeping the teacher's "Enrolled" list consistent with the
-family's own "Enrolled" badge and the admin reports.
+to the teacher surface. The teacher's "Enrolled" set matches the **admin report's**
+confirmed set exactly (both use the bulk `deriveBvConfirmedFids`-style signals: teacher
+attendance + donation + legacy-paid + deliberate enrolledVia). The **family dashboard**
+(`deriveFamilyRosterSignals`) additionally counts door self-check-ins, so it is a strict
+superset: a door-only family reads "Enrolled" on its own dashboard but sits in the
+teacher's "Previous students" list until a teacher marks them. That door-only divergence
+is the documented v1 limitation (see the confirmation-signal note below).
 
 ## 3. Goal / Non-goals
 
@@ -196,10 +201,16 @@ matching the existing attendance route).
   stays in Previous until first teacher mark. Same tradeoff the reports helper already
   accepts (`deriveBvConfirmedFids` omits door check-ins to stay bulk). One teacher tap
   resolves it. Revisit if it bites.
-- **Future date / read-only past dates:** the Previous-students action respects the
-  same future-date guard as the marker (can't mark a class that hasn't happened).
+- **Future date (v1 limitation, matches existing surfaces):** the marker's future-date
+  guard is UI-only, and neither `saveAttendance` nor `confirmPreviousStudent` rejects a
+  future `date` server-side. So a teacher who manually navigates to a future-dated
+  attendance page could confirm a previous student for a Sunday that has not happened.
+  This matches the pre-existing Visitors/marker/save behavior (no server-side future
+  guard anywhere on the teacher surface) and is low-likelihood (the default flow uses the
+  current / most-recent Sunday). A follow-up could add a `date > torontoToday()` reject to
+  BOTH `confirmPreviousStudent` and `saveAttendance` as a consistency pass - out of scope here.
 - **Idempotency:** re-marking the same previous student is a `merge` upsert on the
-  composite `aid` — no duplicate events.
+  composite `aid` - no duplicate events.
 
 ## 9. Alternatives considered
 
