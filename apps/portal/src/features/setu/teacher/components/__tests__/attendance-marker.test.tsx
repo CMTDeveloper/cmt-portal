@@ -49,9 +49,11 @@ it('collapses a prior Late mark to Present (Late is retired)', () => {
   expect(row('Aarav Shah').getAttribute('aria-pressed')).toBe('true');
 });
 
-it('shows an "arrived" badge for the door-checked-in student', () => {
+it('door check-ins are simply Present — no separate "arrived" badge', () => {
   render(<AttendanceMarker {...props()} />);
-  expect(within(row('Diya Patel')).getByText(/arrived/i)).toBeDefined();
+  // Diya is door-seeded Present (pressed) with no extra "arrived" chip.
+  expect(row('Diya Patel').getAttribute('aria-pressed')).toBe('true');
+  expect(within(row('Diya Patel')).queryByText(/arrived/i)).toBeNull();
 });
 
 it('tapping a row toggles Present on and off', async () => {
@@ -141,14 +143,14 @@ it('hides the banner once a row has a portal source', () => {
   expect(screen.queryByText(/checked in on arrival/i)).toBeNull();
 });
 
-it('stat strip shows Enrolled, Arrived (door) and a live Present count', async () => {
+it('stat strip shows Enrolled and a live Present count (no Arrived)', async () => {
   const user = userEvent.setup();
   render(<AttendanceMarker {...props()} />);
   const strip = screen.getByRole('group', { name: /attendance summary/i });
   const enrolled = within(strip).getByText('Enrolled').closest('div') as HTMLElement;
   expect(within(enrolled).getByText('2')).toBeDefined();
-  const arrived = within(strip).getByText('Arrived').closest('div') as HTMLElement;
-  expect(within(arrived).getByText('1')).toBeDefined();
+  // "Arrived" is retired — door check-ins are just Present.
+  expect(within(strip).queryByText('Arrived')).toBeNull();
   const present = within(strip).getByText('Present').closest('div') as HTMLElement;
   expect(within(present).getByText('1')).toBeDefined();
   // Tap Aarav present → Present 1 → 2.

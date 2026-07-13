@@ -68,6 +68,9 @@ export function TeacherTopBar({ yearBadge }: TeacherTopBarProps = {}) {
           margin: '0 auto',
           padding: '12px 20px',
           gap: 12,
+          // Wrap rather than overlap if the row ever exceeds the viewport
+          // (the right cluster is nowrap + flexShrink:0).
+          flexWrap: 'wrap',
         }}
       >
         {/* Left: brand mark + teacher eyebrow */}

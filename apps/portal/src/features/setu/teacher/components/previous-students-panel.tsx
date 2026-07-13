@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { toast } from '@cmt/ui';
 
 interface Row {
@@ -38,6 +39,7 @@ export function PreviousStudentsPanel({ levelId, levelName, ageLabel, date, init
   const [rows, setRows] = useState<Row[]>(initialRows);
   const [pending, startTransition] = useTransition();
   const [busyMid, setBusyMid] = useState<string | null>(null);
+  const router = useRouter();
 
   function markPresent(row: Row) {
     setBusyMid(row.mid);
@@ -55,6 +57,11 @@ export function PreviousStudentsPanel({ levelId, levelName, ageLabel, date, init
         toast.success(`${row.firstName} added to this year's class.`);
         // Siblings confirm together: drop every row sharing this family id.
         setRows((prev) => prev.filter((r) => r.fid !== row.fid));
+        // Invalidate the client Router Cache so the "Back to attendance" soft
+        // nav re-fetches: the now-confirmed student must show as Present on the
+        // Enrolled list, not stale-unmarked. (cacheComponents caches visited
+        // routes' RSC payloads; without this the mark isn't visible til reload.)
+        router.refresh();
       } catch {
         toast.error('Network error - please try again.');
       } finally {

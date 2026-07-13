@@ -84,13 +84,16 @@ describe('buildRoster', () => {
     expect(r.members.map((m) => m.mid)).toEqual(['CMT-A-01']);
   });
 
-  it('sorts by last name then first name', () => {
+  it('sorts by first name then last name (roster shows "First Last")', () => {
+    // First-name and last-name orders DISAGREE, so this proves first name wins:
+    // by last name it'd be Apple→Zephyr (Bala, Anil); by first name it's Anil→Bala.
     const families: RosterFamily[] = [
-      { fid: 'CMT-Z', legacyFid: null, enrolledMids: ['CMT-Z-02'], members: [child('CMT-Z-02', 'Zephyr', '2', { firstName: 'Anil' })] },
-      { fid: 'CMT-A', legacyFid: 'legacy-A', enrolledMids: ['CMT-A-02'], members: [child('CMT-A-02', 'Apple', '2', { firstName: 'Bala' })] },
+      { fid: 'CMT-Z', legacyFid: null, enrolledMids: ['CMT-Z-02'], members: [child('CMT-Z-02', 'Apple', '2', { firstName: 'Bala' })] },
+      { fid: 'CMT-A', legacyFid: 'legacy-A', enrolledMids: ['CMT-A-02'], members: [child('CMT-A-02', 'Zephyr', '2', { firstName: 'Anil' })] },
     ];
     const r = buildRoster(level2, families, [], '2026-01-18', NOW, new Set(families.map((f) => f.fid)));
-    expect(r.members.map((m) => m.lastName)).toEqual(['Apple', 'Zephyr']);
+    expect(r.members.map((m) => m.firstName)).toEqual(['Anil', 'Bala']);
+    expect(r.members.map((m) => m.lastName)).toEqual(['Zephyr', 'Apple']);
   });
 
   it('excludes a grade-matching member NOT in enrolledMids, includes one that is', () => {

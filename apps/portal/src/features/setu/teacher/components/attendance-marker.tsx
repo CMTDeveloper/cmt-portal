@@ -382,8 +382,10 @@ export function AttendanceMarker({ levelId, levelName, ageLabel, date, today, ro
         </div>
       ) : (
         <>
-          {/* 4-up summary: Enrolled + Arrived are static per load; Present + Unmarked
-              are live off the taps. */}
+          {/* 3-up summary: Enrolled is static per load; Present + Unmarked are
+              live off the taps. Door self-check-ins already seed Present (there
+              is no separate "arrived" state — anyone checked in at the front is
+              Present), so the door count only surfaces in the banner below. */}
           <div
             role="group"
             aria-label="Attendance summary"
@@ -398,7 +400,6 @@ export function AttendanceMarker({ levelId, levelName, ageLabel, date, today, ro
             }}
           >
             <StatCell label="Enrolled" value={total} valueColor="var(--ink)" />
-            <StatCell label="Arrived" value={doorCount} valueColor="var(--info-deep)" />
             <StatCell label="Present" value={presentCount} valueColor="var(--ok)" />
             <span style={{ flex: 1, minWidth: 0, display: 'flex' }}>
               <StatCell label="Unmarked" value={unmarkedCount} valueColor="var(--accentDeep)" />
@@ -552,15 +553,8 @@ export function AttendanceMarker({ levelId, levelName, ageLabel, date, today, ro
                     <span style={{ fontSize: 15.5, fontWeight: 600, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {r.firstName} {r.lastName}
                     </span>
-                    {((showGrade && r.schoolGrade) || r.checkedInAtDoor) && (
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
-                        {showGrade && r.schoolGrade && <span style={{ fontSize: 12, color: 'var(--muted)' }}>Gr {r.schoolGrade}</span>}
-                        {r.checkedInAtDoor && (
-                          <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--info-deep)', background: 'var(--info-soft)', padding: '2px 7px', borderRadius: 999 }}>
-                            arrived
-                          </span>
-                        )}
-                      </span>
+                    {showGrade && r.schoolGrade && (
+                      <span style={{ fontSize: 12, color: 'var(--muted)' }}>Gr {r.schoolGrade}</span>
                     )}
                   </span>
                   {isP ? (

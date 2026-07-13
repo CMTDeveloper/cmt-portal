@@ -97,7 +97,9 @@ export function buildRoster(
     }
   }
 
-  const byName = (a: RosterMember, b: RosterMember) => a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName);
+  // Sort by first name (then last) — the roster displays "First Last", so this
+  // reads alphabetically to a teacher scanning the list.
+  const byName = (a: RosterMember, b: RosterMember) => a.firstName.localeCompare(b.firstName) || a.lastName.localeCompare(b.lastName);
   members.sort(byName);
   previousStudents.sort(byName);
   const markedCount = members.filter((m) => m.status !== 'unaccounted').length;

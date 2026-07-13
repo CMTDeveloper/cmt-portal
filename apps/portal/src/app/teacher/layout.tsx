@@ -41,10 +41,12 @@ async function TeacherChrome({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      {/* Mobile — sticky top bar + centered content */}
+      {/* Mobile — sticky top bar + centered content. The year badge is
+          desktop-sidebar-only (matches /family + /welcome); putting it in the
+          narrow mobile bar overflowed and overlapped the brand. */}
       <div className="block md:hidden">
         <CspRoot style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column' }}>
-          <TeacherTopBar yearBadge={<SchoolYearBadge />} />
+          <TeacherTopBar />
           <main style={{ flex: 1, maxWidth: 760, width: '100%', margin: '0 auto', padding: '24px 20px 48px' }}>
             {body}
           </main>

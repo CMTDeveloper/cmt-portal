@@ -4,6 +4,8 @@ import userEvent from '@testing-library/user-event';
 
 const toastMock = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 vi.mock('@cmt/ui', () => ({ toast: toastMock }));
+const refreshMock = vi.hoisted(() => vi.fn());
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: refreshMock }) }));
 import { PreviousStudentsPanel } from '../previous-students-panel';
 
 const initial = [
@@ -12,7 +14,7 @@ const initial = [
   { mid: 'D-02', fid: 'D', firstName: 'Dan', lastName: 'Date', schoolGrade: 'Grade 2' },
 ];
 
-beforeEach(() => { toastMock.success.mockReset(); toastMock.error.mockReset(); vi.restoreAllMocks(); });
+beforeEach(() => { toastMock.success.mockReset(); toastMock.error.mockReset(); refreshMock.mockReset(); vi.restoreAllMocks(); });
 
 describe('PreviousStudentsPanel', () => {
   it('marks a previous student present and removes the whole family from the list', async () => {
@@ -26,6 +28,8 @@ describe('PreviousStudentsPanel', () => {
     expect(screen.queryByText('Cara Cherry')).toBeNull();
     expect(screen.queryByText('Cody Cherry')).toBeNull();
     expect(screen.getByText('Dan Date')).toBeTruthy();
+    // Router Cache invalidated so "Back to attendance" shows the new Present mark.
+    expect(refreshMock).toHaveBeenCalled();
   });
 
   it('renders the empty state when there are no previous students', () => {
