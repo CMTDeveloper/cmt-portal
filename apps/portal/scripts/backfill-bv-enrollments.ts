@@ -4,13 +4,13 @@
  * Reads every legacy family from the prod RTDB roster (MASTER_FIREBASE
  * credentials, READ-ONLY) and, for each family with ≥1 CURRENTLY-REGISTERED
  * child, writes an ACTIVE Bala Vihar enrollment under that center's 2025-26
- * offering into the Setu Firestore (PORTAL_FIREBASE credentials — UAT by
+ * offering into the Setu Firestore (PORTAL_FIREBASE credentials - UAT by
  * default). The legacy roster accumulates since 2012; only kids with a non-null
  * legacy `level` are currently registered (graduated/inactive kids carry a NULL
  * level and are excluded from enrolledMids).
  *
  * Per family:
- *   1. lazyMigrateLegacyFamily(legacyFid) — idempotent; ensures the Setu
+ *   1. lazyMigrateLegacyFamily(legacyFid) - idempotent; ensures the Setu
  *      family + members + contactKeys exist; returns the Setu fid.
  *   2. Re-parse the legacy family → its non-parent children with the corrected
  *      schoolGrade (JK/SK fix from legacy-parser) + legacySid + legacyLevel.
@@ -21,14 +21,14 @@
  *      freshly parsed value, upsert schoolGrade (fixes stale grades).
  *   5. enrolledMids = the CURRENT children's Setu child mids (via legacySid).
  *   6. Upsert families/{fid}/enrollments/{fid}-{oid} with the full schema-valid
- *      doc INCLUDING `pid: oid` — the field deriveRoster queries on
+ *      doc INCLUDING `pid: oid` - the field deriveRoster queries on
  *      (collectionGroup('enrollments').where('pid','==',level.pid)). Without it
  *      the teacher roster stays EMPTY despite "successful" enrollments.
  *      set(...,{merge:true}) replaces enrolledMids with the current-only array.
  *
  * Does NOT call enrollFamily/getProgram (they use Next 'use cache' and throw
  * outside a render context). Writes the enrollment doc directly, mirroring
- * seed-e2e-family.ts ensureEnrollment() — but that helper OMITS `pid`; this
+ * seed-e2e-family.ts ensureEnrollment() - but that helper OMITS `pid`; this
  * script ADDS it.
  *
  * Center → offering: Scarborough → bv-scarborough-2025-26; everything else
@@ -37,7 +37,7 @@
  *
  * Standing constraints:
  *   - UAT writes ONLY. Refuses unless PORTAL_FIREBASE_PROJECT_ID is
- *     chinmaya-setu-uat (pass --allow-prod to bypass — never used here).
+ *     chinmaya-setu-uat (pass --allow-prod to bypass - never used here).
  *   - The RTDB read of prod 715b8 is read-only by design. NEVER writes 715b8.
  *   - Idempotent: deterministic eid = `${fid}-${oid}`, set(..., { merge:true }).
  *
@@ -294,7 +294,7 @@ async function main(): Promise<void> {
 
   console.log('\nLegacy Bala Vihar enrollment backfill');
   console.log(`  Read from:  ${masterProject} (RTDB roster, read-only)`);
-  console.log(`  Write to:   ${portalProject} (Firestore${args.dryRun ? ', DRY-RUN — no writes' : ''})`);
+  console.log(`  Write to:   ${portalProject} (Firestore${args.dryRun ? ', DRY-RUN - no writes' : ''})`);
   if (args.limit !== null) console.log(`  Limit:      first ${args.limit} families`);
   if (args.fid !== null) console.log(`  Filter:     legacyFid=${args.fid} only`);
   console.log('');
@@ -400,11 +400,11 @@ async function main(): Promise<void> {
   } else {
     console.log(`  Enrolled:            ${counts.enrolled}`);
   }
-  console.log(`  Deactivated (stale): ${counts.deactivated}${args.dryRun ? ' (dry-run — not written)' : ''}`);
+  console.log(`  Deactivated (stale): ${counts.deactivated}${args.dryRun ? ' (dry-run - not written)' : ''}`);
   console.log(`  Skipped (already enr):${counts.skippedAlreadyEnrolled}`);
   console.log(`  Skipped (no current):${counts.skippedNoCurrentChildren}`);
   console.log(`  Skipped (no kids):   ${counts.skippedNoChildren}`);
-  console.log(`  Grade fixes applied: ${counts.gradeFixes}${args.dryRun ? ' (dry-run — not written)' : ''}`);
+  console.log(`  Grade fixes applied: ${counts.gradeFixes}${args.dryRun ? ' (dry-run - not written)' : ''}`);
   console.log(`  Prior-year cancelled: ${counts.priorYearCancelled}${args.dryRun ? ' (dry-run - not written)' : ''}`);
   console.log(`  Errors:              ${counts.errors}`);
   console.log('  Per offering:');
