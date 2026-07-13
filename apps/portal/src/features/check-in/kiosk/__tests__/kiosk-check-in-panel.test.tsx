@@ -34,6 +34,39 @@ describe('KioskCheckInPanel', () => {
     for (const b of boxes) expect(b).toBeChecked();
   });
 
+  it('shows every member including adults, labelled "Adult", all checked by default', () => {
+    const withAdults: Family = {
+      ...family,
+      students: [
+        { sid: '10', fid: '42', firstName: 'Dinesh', lastName: 'Acme', level: '', isAdult: true },
+        { sid: '11', fid: '42', firstName: 'Noopur', lastName: 'Acme', level: '', isAdult: true },
+        ...family.students,
+      ],
+    };
+    render(<KioskCheckInPanel family={withAdults} source="legacy" checkInId="42" onDone={() => {}} />);
+    expect(screen.getByText('Dinesh Acme')).toBeInTheDocument();
+    expect(screen.getByText('Noopur Acme')).toBeInTheDocument();
+    expect(screen.getAllByText('Adult')).toHaveLength(2);
+    const boxes = screen.getAllByRole('checkbox');
+    expect(boxes).toHaveLength(4);
+    for (const b of boxes) expect(b).toBeChecked();
+  });
+
+  it('shows the "tap to mark not present" instruction', () => {
+    render(<KioskCheckInPanel family={family} source="legacy" checkInId="42" onDone={() => {}} />);
+    expect(screen.getByText(/mark them as not present/i)).toBeInTheDocument();
+  });
+
+  it('toggling by clicking anywhere on the member row unchecks that member', async () => {
+    const user = userEvent.setup();
+    render(<KioskCheckInPanel family={family} source="legacy" checkInId="42" onDone={() => {}} />);
+    // Click the member's NAME (not the checkbox) - the whole row is tappable.
+    await user.click(screen.getByText('Bob Acme'));
+    const boxes = screen.getAllByRole('checkbox');
+    expect(boxes[0]).toBeChecked();
+    expect(boxes[1]).not.toBeChecked();
+  });
+
   it('submits students map to POST endpoint', async () => {
     const user = userEvent.setup();
     const onDone = vi.fn();

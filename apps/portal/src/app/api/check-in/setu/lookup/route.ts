@@ -40,20 +40,23 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'family-not-found' }, { status: 404 });
   }
 
-  // The kiosk checks in students (children). Adults are excluded, mirroring both
-  // the legacy roster (parent rows dropped) and the welcome/family detail view
-  // (children = members with type 'Child'). `level` reuses the same child label
-  // that view derives - the member's schoolGrade.
+  // The kiosk checks in the WHOLE family: a family arrives together and a sevak
+  // checks off who actually came. So every member - adults AND children -
+  // appears, matching the legacy family-check-in app. Adults are flagged so the
+  // panel labels them "Adult" and carry no school level; children keep their
+  // schoolGrade label.
   const displayFid = resolved.publicFid ?? resolved.legacyFid ?? resolved.fid;
-  const students: Student[] = data.members
-    .filter((m) => m.type === 'Child')
-    .map((m) => ({
+  const students: Student[] = data.members.map((m) => {
+    const isAdult = m.type === 'Adult';
+    return {
       sid: m.mid,
       fid: displayFid,
       firstName: m.firstName,
       lastName: m.lastName,
-      level: m.schoolGrade ?? '',
-    }));
+      level: isAdult ? '' : (m.schoolGrade ?? ''),
+      isAdult,
+    };
+  });
 
   const family: Family = {
     // `fid` must be a value Task-5's resolveKioskFamily can re-resolve for the

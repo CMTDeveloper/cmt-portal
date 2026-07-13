@@ -108,8 +108,10 @@ function familyFromRosterRows(rows: LegacyRosterStudent[]): Family | null {
   const nameSource = parentRows[0] ?? first;
   const lastName = nameSource.plname || nameSource.lname;
   const contacts = uniqueContacts(contactRowsFor(rows).flatMap(rosterContactsFor));
+  // Include EVERY roster row - adults (grade 99) and children alike - so the
+  // kiosk shows the whole family and a sevak can check who actually came.
+  // Adults are flagged so the UI labels them "Adult" instead of a school level.
   const students = rows
-    .filter((r) => r.grade !== 99)
     .map(mapRosterStudent)
     .filter((student): student is Student => Boolean(student));
 
@@ -129,14 +131,22 @@ function mapRosterStudent(student: LegacyRosterStudent): Student | null {
     return null;
   }
 
+  // grade 99 identifies parent/guardian rows in the legacy roster schema.
+  const isAdult = student.grade === 99;
+  // The legacy roster stores a literal 'NULL' string for a missing level; never
+  // surface that as a member label. Adults have no school level at all.
+  const rawLevel = student.level ?? '';
+  const level = isAdult || rawLevel === 'NULL' ? '' : rawLevel;
+
   const mapped: Student = {
     sid,
     fid,
     firstName: student.fname ?? '',
     lastName: student.lname ?? '',
-    level: student.level ?? '',
+    level,
+    isAdult,
   };
-  if (student.classid) {
+  if (student.classid && student.classid !== 'NULL') {
     mapped.className = student.classid;
   }
 

@@ -118,27 +118,45 @@ export function KioskCheckInPanel({ family, source, checkInId, onDone }: Props) 
 
       {newIdBanner}
 
+      <div>
+        <h3 className="text-lg font-semibold text-[hsl(var(--heading))]">Family members</h3>
+        <p className="mt-1 text-sm text-[hsl(var(--primary))]">
+          Please tap a member to mark them as not present today.
+        </p>
+      </div>
+
       <ul className="flex flex-col gap-2">
-        {family.students.map((s) => (
-          <li
-            key={s.sid}
-            className="flex items-center gap-3 rounded border border-[hsl(var(--border))] p-3"
-          >
-            <input
-              id={`k-${s.sid}`}
-              type="checkbox"
-              checked={selected[s.sid] ?? false}
-              onChange={() => toggle(s.sid)}
-              className="h-5 w-5"
-            />
-            <label htmlFor={`k-${s.sid}`} className="flex-1">
-              <div className="font-medium">
-                {s.firstName} {s.lastName}
-              </div>
-              <div className="text-sm text-[hsl(var(--foreground))]">{s.level}</div>
-            </label>
-          </li>
-        ))}
+        {family.students.map((s) => {
+          const isChecked = selected[s.sid] ?? false;
+          const sublabel = s.isAdult ? 'Adult' : s.level;
+          return (
+            <li key={s.sid}>
+              {/* The whole row is a <label> so tapping anywhere toggles the box -
+                  matches the legacy family-check-in app and works well at a
+                  touch kiosk. */}
+              <label
+                htmlFor={`k-${s.sid}`}
+                className="flex cursor-pointer items-center gap-3 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--muted))] p-4 transition-colors hover:bg-[hsl(var(--accent))]"
+              >
+                <input
+                  id={`k-${s.sid}`}
+                  type="checkbox"
+                  checked={isChecked}
+                  onChange={() => toggle(s.sid)}
+                  className="h-5 w-5 shrink-0"
+                />
+                <span className="min-w-0 flex-1 select-none">
+                  <span className="block font-semibold text-[hsl(var(--heading))]">
+                    {s.firstName} {s.lastName}
+                  </span>
+                  {sublabel && (
+                    <span className="text-sm text-[hsl(var(--foreground))]">{sublabel}</span>
+                  )}
+                </span>
+              </label>
+            </li>
+          );
+        })}
       </ul>
 
       {error && (

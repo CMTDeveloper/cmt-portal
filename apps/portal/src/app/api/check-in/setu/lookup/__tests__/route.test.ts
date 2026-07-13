@@ -53,7 +53,7 @@ beforeEach(() => {
 });
 
 describe('GET /api/check-in/setu/lookup', () => {
-  it('resolves a publicFid and returns the Family with children mapped to students', async () => {
+  it('resolves a publicFid and returns the WHOLE family (adults + children) as members', async () => {
     mocks.resolveKioskFamily.mockResolvedValue(resolvedFamily);
     await testApiHandler({
       appHandler,
@@ -69,18 +69,24 @@ describe('GET /api/check-in/setu/lookup', () => {
         // (publicFid preferred), NOT the CMT- doc id which it cannot look up.
         expect(body.fid).toBe('1075');
 
-        // Only children become students; the two adults are excluded.
-        expect(body.students).toHaveLength(2);
-        const sids = body.students.map((s: { sid: string }) => s.sid);
-        expect(sids).toEqual(['CMT-A-03', 'CMT-A-04']);
-
-        const first = body.students[0];
-        expect(first).toMatchObject({
-          sid: 'CMT-A-03',
+        // The kiosk checks in the whole family: all 4 members appear so a sevak
+        // can check who actually came. Adults are flagged and carry no level.
+        expect(body.students).toHaveLength(4);
+        const byMid = Object.fromEntries(
+          body.students.map((s: { sid: string }) => [s.sid, s]),
+        );
+        expect(byMid['CMT-A-01']).toMatchObject({
+          firstName: 'Raj',
+          isAdult: true,
+          level: '',
+        });
+        expect(byMid['CMT-A-02']).toMatchObject({ firstName: 'Priya', isAdult: true });
+        expect(byMid['CMT-A-03']).toMatchObject({
           firstName: 'Aarav',
-          lastName: 'Rana',
+          isAdult: false,
           level: 'Grade 3',
         });
+        expect(byMid['CMT-A-04']).toMatchObject({ firstName: 'Isha', isAdult: false });
       },
     });
     expect(mocks.resolveKioskFamily).toHaveBeenCalledWith('1075');

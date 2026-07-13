@@ -299,6 +299,63 @@ describe('rosterContactsFor parent-row filtering', () => {
   });
 });
 
+describe('family members include parents (whole-family check-in)', () => {
+  it('includes grade-99 parent rows as adult members alongside children', async () => {
+    (readRtdb as unknown as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        parentA: {
+          sid: 3504,
+          fid: 1257,
+          fname: 'Dinesh',
+          lname: 'Matta',
+          plname: 'Matta',
+          grade: 99,
+          level: 'NULL',
+          pemail: 'dinesh@example.com',
+          payment: 'paid',
+        },
+        child: {
+          sid: 3505,
+          fid: 1257,
+          fname: 'Divina',
+          lname: 'Matta',
+          grade: 1,
+          level: 'Level 1 (Gr 1)',
+          payment: 'paid',
+        },
+        parentB: {
+          sid: 3506,
+          fid: 1257,
+          fname: 'Noopur',
+          lname: 'Matta',
+          plname: 'Matta',
+          grade: 99,
+          level: 'NULL',
+          pemail: 'noopur@example.com',
+          payment: 'paid',
+        },
+      });
+
+    const family = await findFamilyById('1257');
+
+    // All three members show so the sevak can check who actually came.
+    expect(family?.students).toHaveLength(3);
+    const byName = Object.fromEntries(
+      (family?.students ?? []).map((s) => [s.firstName, s]),
+    );
+    expect(byName.Dinesh).toMatchObject({ sid: '3504', isAdult: true });
+    expect(byName.Noopur).toMatchObject({ sid: '3506', isAdult: true });
+    expect(byName.Divina).toMatchObject({
+      sid: '3505',
+      isAdult: false,
+      level: 'Level 1 (Gr 1)',
+    });
+    // A legacy 'NULL' level string must never surface as a member label.
+    expect(byName.Dinesh?.level).toBe('');
+  });
+});
+
 describe('findFamilyById numeric fid coercion', () => {
   it('matches numeric fid 42 stored as number to string lookup "42"', async () => {
     (readRtdb as unknown as ReturnType<typeof vi.fn>)

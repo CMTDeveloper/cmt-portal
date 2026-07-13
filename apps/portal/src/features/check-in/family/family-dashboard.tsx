@@ -30,7 +30,9 @@ export function FamilyDashboard({ data }: Props) {
       <section>
         <h2 className="mb-2 text-xl font-semibold text-[hsl(var(--heading))]">Your kids</h2>
         <ul className="grid gap-2 sm:grid-cols-2">
-          {family.students.map((student) => (
+          {/* family.students now carries the whole family (adults + children) for
+              the door kiosk; this "Your kids" list stays child-only. */}
+          {family.students.filter((student) => !student.isAdult).map((student) => (
             <li
               key={student.sid}
               className="rounded border border-[hsl(var(--border))] p-3"

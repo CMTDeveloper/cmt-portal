@@ -9,8 +9,10 @@
  *      GET /api/check-in/setu/lookup each 401 (middleware `no-session`), proving
  *      the routes are NOT public.
  *   2. Lookup by LEGACY id (the real door flow) - GET /api/check-in/setu/lookup?id=
- *      <legacyFid> as the kiosk session -> 200, children in the legacy Family shape
- *      (N>=2), and Family.fid is the family's NEW publicFid (the nudge target).
+ *      <legacyFid> as the kiosk session -> 200, the WHOLE family (adults AND
+ *      children, N>=2) in the legacy Family shape with adults flagged isAdult, and
+ *      Family.fid is the family's NEW publicFid (the nudge target). The kiosk checks
+ *      in the whole family; only children are BV-eligible so only they auto-enroll.
  *   3. Check-in by LEGACY id + auto-enroll - POST /api/check-in/setu/check-in with
  *      the family's legacyFid and both children present -> 200; family.legacyFid and
  *      family.publicFid both echoed; enroll.enrolled === true; enroll.created === true.
@@ -39,8 +41,9 @@
  *      with KIOSK_ACCOUNT_EMAIL + KIOSK_ACCOUNT_PASSWORD set in .env.local. That
  *      account carries the least-privilege `kiosk` role that authorizes both routes.
  *   3. A UAT fixture family that HAS a publicFid, HAS a legacyFid (legacy check-in
- *      id), has ≥2 children eligible for Bala Vihar (valid birthMonthYear), and has
- *      NO active Bala Vihar enrollment. Point the spec at it via:
+ *      id), has ≥1 adult member (every migrated family does), has ≥2 children
+ *      eligible for Bala Vihar (valid birthMonthYear), and has NO active Bala Vihar
+ *      enrollment. Point the spec at it via:
  *        KIOSK_FIXTURE_PUBLIC_FID=<the family's publicFid>
  *        KIOSK_FIXTURE_LEGACY_FID=<the family's legacy check-in id>
  *      (Reuse a migrated family or designate a seeded one; the spec never mutates
@@ -82,7 +85,14 @@ type CheckInBody = {
   checkInIds: string[];
 };
 
-type LookupStudent = { sid: string; fid: string; firstName: string; lastName: string; level: string };
+type LookupStudent = {
+  sid: string;
+  fid: string;
+  firstName: string;
+  lastName: string;
+  level: string;
+  isAdult?: boolean;
+};
 type LookupBody = {
   fid: string;
   name: string;
@@ -127,7 +137,8 @@ test.describe('Setu kiosk new-ID lookup + auto-enroll (deployed UAT) — UNRUN',
   // Captured across the serial tests for the enrollment assertion + cleanup.
   let familyDocFid = ''; // the CMT- doc id (parent of the enrollment subcollection)
   let createdEid = ''; // families/{fid}/enrollments/{eid} — the enrollment we made
-  let childSids: string[] = []; // lookup student sids === member mids === enrolledMids entries
+  let allMemberSids: string[] = []; // every member the lookup returned (adults + children) — the kiosk submits ALL of them
+  let childSids: string[] = []; // CHILD member mids only === the enrolledMids the auto-enroll should cover
   const writtenCheckInIds: string[] = []; // every check_in_events doc this run appended
 
   // Delete every ACTIVE Bala Vihar enrollment on the fixture family. Index-free
@@ -203,7 +214,7 @@ test.describe('Setu kiosk new-ID lookup + auto-enroll (deployed UAT) — UNRUN',
     }
   });
 
-  test('lookup by the LEGACY id returns the children + the family NEW publicFid', async () => {
+  test('lookup by the LEGACY id returns the WHOLE family (adults + children) + the NEW publicFid', async () => {
     // The real door flow: a family enters their LEGACY check-in id. resolveKioskFamily
     // is legacy-first, so this lands on the right family, and the returned Family.fid
     // is that family's NEW publicFid - the value the kiosk UI nudges them to adopt.
@@ -215,18 +226,27 @@ test.describe('Setu kiosk new-ID lookup + auto-enroll (deployed UAT) — UNRUN',
     // NEW publicFid (the nudge target), NOT the entered legacy id.
     expect(body.fid, 'lookup should return the NEW publicFid').toBe(FIXTURE_PUBLIC_FID);
     expect(Array.isArray(body.students)).toBeTruthy();
-    // N≥2 fixture invariant - this family has at least two children.
-    expect(body.students.length, 'fixture must have ≥2 children').toBeGreaterThanOrEqual(2);
     for (const s of body.students) {
       expect(s.sid, 'student sid (member mid) missing').toBeTruthy();
       expect(s.firstName).toBeTruthy();
     }
-    childSids = body.students.map((s) => s.sid);
+
+    // The whole family checks in together: adults AND children both appear so a
+    // sevak can check who actually came. Adults are flagged and carry no level.
+    const adults = body.students.filter((s) => s.isAdult);
+    const children = body.students.filter((s) => !s.isAdult);
+    expect(adults.length, 'lookup must include ≥1 adult (whole-family check-in)').toBeGreaterThanOrEqual(1);
+    expect(children.length, 'fixture must have ≥2 children').toBeGreaterThanOrEqual(2);
+    for (const a of adults) expect(a.level, 'adult rows carry no school level').toBe('');
+
+    allMemberSids = body.students.map((s) => s.sid);
+    childSids = children.map((s) => s.sid);
   });
 
   test('check-in by the LEGACY id records + auto-enrolls, and returns the new publicFid', async () => {
-    // Mark BOTH children present (the N=2 path), exactly as the kiosk panel submits.
-    const students = Object.fromEntries(childSids.map((sid) => [sid, true]));
+    // Mark the WHOLE family present (adults + children), exactly as the kiosk panel
+    // submits. Only the children are BV-eligible, so only they auto-enroll.
+    const students = Object.fromEntries(allMemberSids.map((sid) => [sid, true]));
     const res = await kioskCtx.post('/api/check-in/setu/check-in', {
       data: { id: FIXTURE_LEGACY_FID, students },
     });
@@ -252,7 +272,7 @@ test.describe('Setu kiosk new-ID lookup + auto-enroll (deployed UAT) — UNRUN',
   });
 
   test('a second identical check-in is idempotent (created === false)', async () => {
-    const students = Object.fromEntries(childSids.map((sid) => [sid, true]));
+    const students = Object.fromEntries(allMemberSids.map((sid) => [sid, true]));
     const res = await kioskCtx.post('/api/check-in/setu/check-in', {
       data: { id: FIXTURE_LEGACY_FID, students },
     });
@@ -269,7 +289,7 @@ test.describe('Setu kiosk new-ID lookup + auto-enroll (deployed UAT) — UNRUN',
   });
 
   test('the new publicFid resolves the SAME family (publicFid fallback)', async () => {
-    const students = Object.fromEntries(childSids.map((sid) => [sid, true]));
+    const students = Object.fromEntries(allMemberSids.map((sid) => [sid, true]));
     const res = await kioskCtx.post('/api/check-in/setu/check-in', {
       data: { id: FIXTURE_PUBLIC_FID, students },
     });
