@@ -10,7 +10,6 @@ interface ErrorFallbackProps {
 
 export function ErrorFallback({ error, reset, feature }: ErrorFallbackProps) {
   React.useEffect(() => {
-    // eslint-disable-next-line no-console
     console.error('[ErrorFallback]', error);
   }, [error]);
 
