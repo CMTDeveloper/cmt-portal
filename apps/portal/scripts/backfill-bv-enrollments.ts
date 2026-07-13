@@ -61,9 +61,13 @@ import {
   fetchLegacyFamilyForMigration,
   type LegacyLocation,
 } from '@/features/setu/registration/legacy-parser';
-
-const BV_BRAMPTON_OID = 'bv-brampton-2025-26';
-const BV_SCARBOROUGH_OID = 'bv-scarborough-2025-26';
+import { getSchoolYearConfig } from '@/features/setu/rollover/school-year-config';
+import {
+  bvOidForCenter,
+  hasActiveEnrollmentForOid,
+  priorYearBvEidsToCancel,
+  type EnrollmentLite,
+} from '@/features/setu/enrollment/legacy-backfill-helpers';
 
 type Db = ReturnType<typeof portalFirestore>;
 
@@ -84,11 +88,6 @@ function parseArgs(argv: string[]): Args {
     else if (a === '--fid') args.fid = argv[++i] ?? null;
   }
   return args;
-}
-
-/** Scarborough → Scarborough offering; everything else → Brampton offering. */
-function oidForCenter(center: LegacyLocation): string {
-  return center === 'Scarborough' ? BV_SCARBOROUGH_OID : BV_BRAMPTON_OID;
 }
 
 function toDate(v: unknown): Date {
@@ -129,6 +128,7 @@ interface FamilyOutcome {
   status:
     | 'enrolled'
     | 'deactivated'
+    | 'skipped-already-enrolled'
     | 'skipped-no-current-children'
     | 'skipped-no-children'
     | 'error'
@@ -137,6 +137,8 @@ interface FamilyOutcome {
   oid?: string;
   childCount?: number;
   gradeFixes?: number;
+  priorYearCancelled?: number;
+  gradelessKids?: { name: string; mid: string }[];
   error?: string;
 }
 
@@ -144,84 +146,86 @@ async function processFamily(
   db: Db,
   legacyFid: string,
   offerings: Map<string, OfferingInfo>,
+  year: string,
   dryRun: boolean,
 ): Promise<FamilyOutcome> {
   // 1. Ensure the Setu family + members exist (idempotent), get the Setu fid.
   const migrate = await lazyMigrateLegacyFamily(legacyFid);
   const fid = migrate.fid;
 
-  // 2. Re-parse the legacy family → its non-parent children (schoolGrade now
-  //    JK/SK-correct) + center.
+  // 2. Re-parse the legacy family -> its non-parent children + center.
   const legacy = await fetchLegacyFamilyForMigration(legacyFid);
-  if (!legacy) {
-    return { status: 'error', error: 'legacy family vanished mid-run' };
-  }
+  if (!legacy) return { status: 'error', error: 'legacy family vanished mid-run' };
   const center = legacy.location;
+  if (legacy.children.length === 0) return { status: 'skipped-no-children', center };
 
-  if (legacy.children.length === 0) {
-    return { status: 'skipped-no-children', center };
-  }
-
-  // 3. Identify CURRENT kids: those with a non-null legacy `level`. The legacy
-  //    roster accumulates since 2012; graduated/inactive kids carry a NULL level
-  //    and must NOT be enrolled. Map legacySid → fresh schoolGrade for current
-  //    kids only (the grade re-assert stays scoped to current kids).
+  // 3. Current kids = non-null legacy level (graduated/inactive carry NULL).
   const currentChildren = legacy.children.filter((c) => c.legacyLevel != null);
-  const currentLegacySids = new Set(
-    currentChildren.map((c) => c.legacySid).filter((s): s is string => s != null),
-  );
+  const currentLegacySids = new Set(currentChildren.map((c) => c.legacySid).filter((s): s is string => s != null));
   const gradeByLegacySid = new Map<string, string | null>();
   for (const child of currentChildren) {
     if (child.legacySid != null) gradeByLegacySid.set(child.legacySid, child.schoolGrade);
   }
 
-  // 4. Pick the offering for this center.
-  const oid = oidForCenter(center);
+  // 4. Current-year offering for this center.
+  const oid = bvOidForCenter(center, year);
   const offering = offerings.get(oid);
-  if (!offering) {
-    return { status: 'error', center, oid, error: `offering ${oid} not loaded` };
-  }
+  if (!offering) return { status: 'error', center, oid, error: `offering ${oid} not loaded` };
   const eid = `${fid}-${oid}`;
 
-  // 5. No current BV kids → don't enroll. If a prior run created an enrollment,
-  //    deactivate it (status:'cancelled', merge); otherwise nothing to do.
+  // 5. SKIP-GUARD: if the family already has an active enrollment for this
+  //    current-year offering, leave it completely alone. The rollover ADVANCED
+  //    promoted kids' grades (grade 1 -> 2, ...), which the legacy roster does not
+  //    know - re-asserting here would revert them. Read enrollments once; reuse
+  //    for the prior-year cancel below.
+  const enrollSnap = await db.collection('families').doc(fid).collection('enrollments').get();
+  const enrollments: EnrollmentLite[] = enrollSnap.docs.map((d) => {
+    const e = d.data() as { oid?: string; eid?: string; status?: string };
+    return { oid: e.oid, eid: e.eid ?? d.id, status: e.status };
+  });
+  if (hasActiveEnrollmentForOid(enrollments, oid)) {
+    return { status: 'skipped-already-enrolled', center, oid };
+  }
+
+  // 6. No current BV kids -> deactivate a stale enrollment for THIS oid if present.
   if (currentChildren.length === 0) {
     const enrollRef = db.collection('families').doc(fid).collection('enrollments').doc(eid);
     const existing = await enrollRef.get();
     if (existing.exists) {
-      if (!dryRun) {
-        await enrollRef.set({ status: 'cancelled' }, { merge: true });
-      }
+      if (!dryRun) await enrollRef.set({ status: 'cancelled' }, { merge: true });
       return { status: 'deactivated', center, oid };
     }
     return { status: 'skipped-no-current-children', center, oid };
   }
 
-  // 6. Walk Setu members → enrolledMids = the CURRENT children's mids (via the
-  //    legacySid map). Re-assert schoolGrade for current kids where stale.
+  // 7. enrolledMids = current children's mids (via legacySid). Re-assert grade
+  //    where stale, and record any current child with no parseable grade.
   const membersSnap = await db.collection('families').doc(fid).collection('members').get();
   const enrolledMids: string[] = [];
+  const gradelessKids: { name: string; mid: string }[] = [];
   let gradeFixes = 0;
   for (const doc of membersSnap.docs) {
     const m = doc.data() as {
       mid?: string;
       type?: 'Adult' | 'Child';
+      firstName?: string;
+      lastName?: string;
       schoolGrade?: string | null;
       legacySid?: string | null;
     };
     if (!m.mid || m.type !== 'Child') continue;
-    if (m.legacySid == null || !currentLegacySids.has(m.legacySid)) continue; // skip graduated/inactive
+    if (m.legacySid == null || !currentLegacySids.has(m.legacySid)) continue;
     enrolledMids.push(m.mid);
 
-    // Re-assert grade where the freshly parsed value differs from what's stored.
+    const freshGrade = gradeByLegacySid.has(m.legacySid) ? (gradeByLegacySid.get(m.legacySid) ?? null) : (m.schoolGrade ?? null);
+    if (freshGrade == null || freshGrade === '') {
+      gradelessKids.push({ name: `${m.firstName ?? ''} ${m.lastName ?? ''}`.trim(), mid: m.mid });
+    }
     if (gradeByLegacySid.has(m.legacySid)) {
-      const freshGrade = gradeByLegacySid.get(m.legacySid) ?? null;
       const storedGrade = m.schoolGrade ?? null;
       if (freshGrade !== storedGrade) {
         gradeFixes++;
-        if (!dryRun) {
-          await doc.ref.set({ schoolGrade: freshGrade }, { merge: true });
-        }
+        if (!dryRun) await doc.ref.set({ schoolGrade: freshGrade }, { merge: true });
       }
     }
   }
@@ -233,41 +237,43 @@ async function processFamily(
 
   const suggestedAmountSnapshot = resolveSuggestedAmount(offering, offering.startDate);
 
+  const priorEids = priorYearBvEidsToCancel(enrollments, oid);
+
   if (dryRun) {
-    return { status: 'dry-run', center, oid, childCount: enrolledMids.length, gradeFixes };
+    return { status: 'dry-run', center, oid, childCount: enrolledMids.length, gradeFixes, priorYearCancelled: priorEids.length, gradelessKids };
   }
 
-  // 8. Upsert the enrollment doc — CRUCIALLY carrying `pid: oid`. set(...,{merge})
-  //    replaces enrolledMids with the current-only array.
-  await db
-    .collection('families')
-    .doc(fid)
-    .collection('enrollments')
-    .doc(eid)
-    .set(
-      {
-        eid,
-        fid,
-        oid,
-        pid: oid, // ★ REQUIRED — deriveRoster queries where('pid','==',level.pid)
-        programKey: offering.programKey,
-        programLabel: offering.programLabel,
-        termLabel: offering.termLabel,
-        location: offering.location,
-        enrolledMids,
-        enrolledAt: FieldValue.serverTimestamp(),
-        enrolledVia: 'welcome-team',
-        enrolledByMid: managerMid,
-        suggestedAmountSnapshot,
-        suggestedAmountOverride: null,
-        status: 'active',
-        cancelledAt: null,
-        cancelledReason: null,
-      },
+  // 8. Upsert the enrollment doc - CRUCIALLY carrying pid: oid.
+  await db.collection('families').doc(fid).collection('enrollments').doc(eid).set(
+    {
+      eid, fid, oid,
+      pid: oid, // required - deriveRoster queries where('pid','==',level.pid)
+      programKey: offering.programKey,
+      programLabel: offering.programLabel,
+      termLabel: offering.termLabel,
+      location: offering.location,
+      enrolledMids,
+      enrolledAt: FieldValue.serverTimestamp(),
+      enrolledVia: 'welcome-team',
+      enrolledByMid: managerMid,
+      suggestedAmountSnapshot,
+      suggestedAmountOverride: null,
+      status: 'active',
+      cancelledAt: null,
+      cancelledReason: null,
+    },
+    { merge: true },
+  );
+
+  // 9. Cancel stale prior-year BV enrollments so exactly one active BV enrollment remains.
+  for (const staleEid of priorEids) {
+    await db.collection('families').doc(fid).collection('enrollments').doc(staleEid).set(
+      { status: 'cancelled', cancelledAt: FieldValue.serverTimestamp(), cancelledReason: `superseded-by-${oid}` },
       { merge: true },
     );
+  }
 
-  return { status: 'enrolled', center, oid, childCount: enrolledMids.length, gradeFixes };
+  return { status: 'enrolled', center, oid, childCount: enrolledMids.length, gradeFixes, priorYearCancelled: priorEids.length, gradelessKids };
 }
 
 async function main(): Promise<void> {
@@ -295,9 +301,13 @@ async function main(): Promise<void> {
 
   const db = portalFirestore();
 
-  // Load both BV offerings once.
+  const { currentYear: year } = await getSchoolYearConfig(db);
+  const bramptonOid = bvOidForCenter('Brampton', year);
+  const scarboroughOid = bvOidForCenter('Scarborough', year);
+  console.log(`  School year: ${year}  (offerings ${bramptonOid} / ${scarboroughOid})\n`);
+
   const offerings = new Map<string, OfferingInfo>();
-  for (const oid of [BV_BRAMPTON_OID, BV_SCARBOROUGH_OID]) {
+  for (const oid of [bramptonOid, scarboroughOid]) {
     const off = await loadOffering(db, oid);
     if (!off) {
       console.error(`REFUSED: offering ${oid} not found in ${portalProject}. Seed offerings first.`);
@@ -327,12 +337,15 @@ async function main(): Promise<void> {
     enrolled: 0,
     wouldEnroll: 0,
     deactivated: 0,
+    skippedAlreadyEnrolled: 0,
     skippedNoCurrentChildren: 0,
     skippedNoChildren: 0,
     errors: 0,
     gradeFixes: 0,
+    priorYearCancelled: 0,
   };
   const perCenter = new Map<string, number>(); // oid → enrolled count
+  const gradelessAll: { name: string; mid: string; legacyFid: string }[] = [];
 
   for (let i = 0; i < families.length; i++) {
     const fam = families[i];
@@ -342,12 +355,17 @@ async function main(): Promise<void> {
     counts.processed++;
 
     try {
-      const outcome = await processFamily(db, legacyFid, offerings, args.dryRun);
+      const outcome = await processFamily(db, legacyFid, offerings, year, args.dryRun);
       counts.gradeFixes += outcome.gradeFixes ?? 0;
+      counts.priorYearCancelled += outcome.priorYearCancelled ?? 0;
+      for (const g of outcome.gradelessKids ?? []) gradelessAll.push({ ...g, legacyFid });
 
       if (outcome.status === 'skipped-no-children') {
         counts.skippedNoChildren++;
         console.log(`${pos} ${legacyFid.padEnd(8)} ↺ skipped (no children)`);
+      } else if (outcome.status === 'skipped-already-enrolled') {
+        counts.skippedAlreadyEnrolled++;
+        console.log(`${pos} ${legacyFid.padEnd(8)} = skipped (already enrolled ${outcome.oid})`);
       } else if (outcome.status === 'skipped-no-current-children') {
         counts.skippedNoCurrentChildren++;
         console.log(`${pos} ${legacyFid.padEnd(8)} ↺ skipped (no current kids)`);
@@ -383,13 +401,19 @@ async function main(): Promise<void> {
     console.log(`  Enrolled:            ${counts.enrolled}`);
   }
   console.log(`  Deactivated (stale): ${counts.deactivated}${args.dryRun ? ' (dry-run — not written)' : ''}`);
+  console.log(`  Skipped (already enr):${counts.skippedAlreadyEnrolled}`);
   console.log(`  Skipped (no current):${counts.skippedNoCurrentChildren}`);
   console.log(`  Skipped (no kids):   ${counts.skippedNoChildren}`);
   console.log(`  Grade fixes applied: ${counts.gradeFixes}${args.dryRun ? ' (dry-run — not written)' : ''}`);
+  console.log(`  Prior-year cancelled: ${counts.priorYearCancelled}${args.dryRun ? ' (dry-run - not written)' : ''}`);
   console.log(`  Errors:              ${counts.errors}`);
   console.log('  Per offering:');
   for (const [oid, n] of perCenter) {
     console.log(`    ${oid}: ${n}`);
+  }
+  if (gradelessAll.length > 0) {
+    console.log(`\n  Enrolled-but-gradeless children (${gradelessAll.length}) - set a grade so they appear on a level:`);
+    for (const g of gradelessAll) console.log(`    ${g.name.padEnd(28)} mid=${g.mid} legacyFid=${g.legacyFid}`);
   }
 
   process.exit(counts.errors > 0 ? 1 : 0);
