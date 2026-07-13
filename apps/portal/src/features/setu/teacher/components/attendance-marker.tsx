@@ -279,10 +279,11 @@ export function AttendanceMarker({ levelId, levelName, ageLabel, date, today, ro
         {/* Date nav — prev/next reload the page with ?date= so the roster + door
             check-ins are re-read server-side for the chosen Sunday. */}
         <div
-          className="between"
           style={{
             marginTop: 16,
-            gap: 10,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 8,
             background: 'var(--surface)',
             border: '1px solid var(--line)',
             borderRadius: 'var(--radius)',
@@ -290,11 +291,12 @@ export function AttendanceMarker({ levelId, levelName, ageLabel, date, today, ro
             boxShadow: 'var(--setu-elev-1, 0 1px 0 rgba(15,26,34,0.04))',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+          {/* Date row — arrows at the edges, date centered, spanning the full width. */}
+          <div className="between" style={{ alignItems: 'center', gap: 6 }}>
             <Link href={`/teacher/levels/${levelId}/attendance?date=${addDays(date, -7)}`} aria-label="Previous Sunday" style={navArrow}>
               ‹
             </Link>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 92, lineHeight: 1.2 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 0, lineHeight: 1.2 }}>
               <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--ink)' }}>{prettyDate(date)}</span>
               <span style={{ fontSize: 11, color: 'var(--muted)', fontFamily: 'var(--mono)' }}>{date}</span>
             </div>
@@ -308,17 +310,21 @@ export function AttendanceMarker({ levelId, levelName, ageLabel, date, today, ro
               </span>
             )}
           </div>
-          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+          {/* Secondary lists on their OWN row so they never crowd the date; each
+              takes an equal half (or full width when there are no previous students). */}
+          <div style={{ display: 'flex', gap: 8 }}>
             {previousCount > 0 && (
               <Link
                 href={`/teacher/levels/${levelId}/previous?date=${date}`}
                 style={{
+                  flex: 1,
+                  justifyContent: 'center',
                   fontSize: 13,
                   fontWeight: 600,
                   color: 'var(--accentDeep)',
                   background: 'var(--accentSoft)',
                   borderRadius: 10,
-                  padding: '9px 12px',
+                  padding: '10px 12px',
                   minHeight: 44,
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -332,12 +338,14 @@ export function AttendanceMarker({ levelId, levelName, ageLabel, date, today, ro
             <Link
               href={`/teacher/levels/${levelId}/visitors?date=${date}`}
               style={{
+                flex: 1,
+                justifyContent: 'center',
                 fontSize: 13,
                 fontWeight: 600,
                 color: 'var(--accentDeep)',
                 background: 'var(--accentSoft)',
                 borderRadius: 10,
-                padding: '9px 12px',
+                padding: '10px 12px',
                 minHeight: 44,
                 display: 'inline-flex',
                 alignItems: 'center',

@@ -154,9 +154,8 @@ export function PreviousStudentsPanel({ levelId, levelName, ageLabel, date, init
                         fontSize: 16,
                         fontWeight: 600,
                         color: 'var(--ink)',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
+                        lineHeight: 1.25,
+                        overflowWrap: 'anywhere',
                       }}
                     >
                       {row.firstName} {row.lastName}
