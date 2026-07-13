@@ -104,25 +104,35 @@ const ATT_MANAGER_MID = `${ATT_FID}-01`;
 const ATT_CHILD_1_MID = `${ATT_FID}-02`;
 const ATT_CHILD_2_MID = `${ATT_FID}-03`;
 
-// ── Enrolled-vs-Previous split fixture (Task 10) ─────────────────────────────
-// Layered on the SAME level/pid as the teacher-attendance fixture above, so the
-// confirmation-scoped roster (getLevelAttendanceView -> deriveRoster
-// withConfirmation) has a REALISTIC mix. Under that logic CMT-E2E-ATT
-// (enrolledVia:'promotion', unengaged) is now the TWO-SIBLING *previous* family,
-// so this block only ADDS the confirmed roster + one extra single previous
-// student around it:
-//   - ENR-A / ENR-B: enrolledVia:'family-initiated' (=> confirmed with no reads),
-//     one grade-matched child each -> the main Enrolled roster is exactly 2 rows.
-//   - PREV: enrolledVia:'promotion', unengaged, one grade-matched child -> a
-//     previous student that REMAINS after CMT-E2E-ATT is confirmed, proving the
-//     unmarked->absent save-sweep never touches previous students.
-// All docs _test:true; every attendanceEvent on this level is cleared in 6d so a
-// reseed restores the ground state. Uses only existing indexes
-// (enrollments(pid,status) + attendanceEvents(levelId,date); previous->confirmed
-// reads attendanceEvents.where('pid') which is single-field auto-indexed).
+// ── Confirmed roster for the binary-attendance fixture (Task 10) ─────────────
+// Under the confirmation-scoped roster (getLevelAttendanceView -> deriveRoster
+// withConfirmation) the §6 CMT-E2E-ATT family (enrolledVia:'promotion', unengaged)
+// is a *previous* student, so e2e-att-level would have NO Enrolled rows. Add two
+// family-initiated (=> confirmed with no reads) single-child families so the
+// binary-attendance spec's Enrolled roster is exactly 2 rows again.
 const SPLIT_ENR_A_FID = 'CMT-E2E-ENR-A';
 const SPLIT_ENR_B_FID = 'CMT-E2E-ENR-B';
-const SPLIT_PREV_FID = 'CMT-E2E-PREV';
+
+// ── Enrolled-vs-Previous split fixture (Task 10) - ISOLATED level ─────────────
+// A DEDICATED level/pid so `e2e/setu/teacher/previous-students.spec.ts` never
+// shares attendanceEvents with attendance-binary.spec.ts (the confirm mutation is
+// pid-scoped, so sharing e2e-att-level would collide under Playwright's parallel
+// runner). Realistic mix on ONE level:
+//   - PENR-A / PENR-B: family-initiated => 2 CONFIRMED students across 2 families
+//     (the Enrolled roster).
+//   - PSIB: promotion, 2 grade-matched siblings => a TWO-SIBLING previous family
+//     (proves the whole family moves together on confirm).
+//   - PSOLO: promotion, one child => a single previous student that REMAINS after
+//     PSIB is confirmed (proves the unmarked->absent save-sweep skips previous).
+// All docs _test:true; the level's attendanceEvents are cleared on every reseed.
+// Uses only existing indexes (enrollments(pid,status) + attendanceEvents(levelId,
+// date); previous->confirmed reads attendanceEvents.where('pid'), single-field).
+const PREV_LEVEL_ID = 'e2e-prev-level';
+const PREV_PID = 'e2e-prev-period';
+const PREV_ENR_A_FID = 'CMT-E2E-PENR-A';
+const PREV_ENR_B_FID = 'CMT-E2E-PENR-B';
+const PREV_SIB_FID = 'CMT-E2E-PSIB';
+const PREV_SOLO_FID = 'CMT-E2E-PSOLO';
 
 type Db = ReturnType<typeof portalFirestore>;
 
@@ -262,26 +272,25 @@ function parseEnrolledVia(argv: string[]): 'family-initiated' | 'promotion' {
 }
 
 /**
- * Seed one isolated _test family (1 adult manager + 1 child) enrolled on the
- * teacher-attendance level's pid (ATT_PID), for the Enrolled-vs-Previous split
- * E2E. The child's grade matches the level's gradeBand so it lands on the roster;
- * the family's `enrolledVia` decides confirmed ('family-initiated') vs previous
- * ('promotion'). Idempotent (merge). Returns the child's mid.
+ * Seed one isolated _test family (1 adult manager + N children) enrolled on the
+ * given `pid`, for the teacher Enrolled-vs-Previous split E2E. Each child's grade
+ * must match the target level's gradeBand so it lands on the roster; the family's
+ * `enrolledVia` decides confirmed ('family-initiated') vs previous ('promotion').
+ * Idempotent (merge). Returns the children's mids (index 0 -> `${fid}-02`, ...).
  */
 async function ensureSplitFamily(
   db: Db,
   opts: {
     fid: string;
     familyName: string;
-    childFirst: string;
-    childLast: string;
-    childGrade: string;
+    pid: string;
     enrolledVia: 'family-initiated' | 'promotion';
+    children: Array<{ firstName: string; lastName: string; schoolGrade: string }>;
   },
-): Promise<string> {
-  const { fid, familyName, childFirst, childLast, childGrade, enrolledVia } = opts;
+): Promise<string[]> {
+  const { fid, familyName, pid, enrolledVia, children } = opts;
   const managerMid = `${fid}-01`;
-  const childMid = `${fid}-02`;
+  const childMids = children.map((_, i) => `${fid}-${String(i + 2).padStart(2, '0')}`);
 
   await db.collection('families').doc(fid).set(
     {
@@ -296,31 +305,41 @@ async function ensureSplitFamily(
     { merge: true },
   );
 
-  const members: Array<{
-    mid: string;
-    firstName: string;
-    lastName: string;
-    type: 'Adult' | 'Child';
-    schoolGrade: string | null;
-    manager: boolean;
-  }> = [
-    { mid: managerMid, firstName: 'Split', lastName: 'Manager', type: 'Adult', schoolGrade: null, manager: true },
-    { mid: childMid, firstName: childFirst, lastName: childLast, type: 'Child', schoolGrade: childGrade, manager: false },
-  ];
-  for (const m of members) {
-    await db.collection('families').doc(fid).collection('members').doc(m.mid).set(
+  await db.collection('families').doc(fid).collection('members').doc(managerMid).set(
+    {
+      mid: managerMid,
+      fid,
+      firstName: 'Split',
+      lastName: 'Manager',
+      type: 'Adult',
+      gender: 'Male',
+      schoolGrade: null,
+      birthMonthYear: '1985-04',
+      foodAllergies: NO_ALLERGIES,
+      volunteeringSkills: ['General Volunteer Support (happy to help where needed)'],
+      manager: true,
+      legacySid: null,
+      joinedAt: FieldValue.serverTimestamp(),
+      _test: true,
+    },
+    { merge: true },
+  );
+
+  for (let i = 0; i < children.length; i += 1) {
+    const c = children[i]!;
+    await db.collection('families').doc(fid).collection('members').doc(childMids[i]!).set(
       {
-        mid: m.mid,
+        mid: childMids[i]!,
         fid,
-        firstName: m.firstName,
-        lastName: m.lastName,
-        type: m.type,
+        firstName: c.firstName,
+        lastName: c.lastName,
+        type: 'Child',
         gender: 'Male',
-        schoolGrade: m.schoolGrade,
-        birthMonthYear: m.type === 'Adult' ? '1985-04' : '2017-05',
+        schoolGrade: c.schoolGrade,
+        birthMonthYear: '2017-05',
         foodAllergies: NO_ALLERGIES,
-        volunteeringSkills: m.type === 'Adult' ? ['General Volunteer Support (happy to help where needed)'] : [],
-        manager: m.manager,
+        volunteeringSkills: [],
+        manager: false,
         legacySid: null,
         joinedAt: FieldValue.serverTimestamp(),
         _test: true,
@@ -329,13 +348,13 @@ async function ensureSplitFamily(
     );
   }
 
-  const eid = `${fid}-${ATT_PID}`;
+  const eid = `${fid}-${pid}`;
   await db.collection('families').doc(fid).collection('enrollments').doc(eid).set(
     {
       eid,
       fid,
-      oid: ATT_PID,
-      pid: ATT_PID,
+      oid: pid,
+      pid,
       programKey: 'bala-vihar',
       programLabel: 'Bala Vihar',
       termLabel: 'E2E',
@@ -343,7 +362,7 @@ async function ensureSplitFamily(
       enrolledAt: FieldValue.serverTimestamp(),
       enrolledVia,
       enrolledByMid: managerMid,
-      enrolledMids: [childMid],
+      enrolledMids: childMids,
       suggestedAmountSnapshot: 0,
       suggestedAmountOverride: null,
       status: 'active',
@@ -353,7 +372,7 @@ async function ensureSplitFamily(
     },
     { merge: true },
   );
-  return childMid;
+  return childMids;
 }
 
 async function main(): Promise<void> {
@@ -830,23 +849,71 @@ async function main(): Promise<void> {
     `  level ${ATT_LEVEL_ID} + family ${ATT_FID} (2 children, pid=${ATT_PID}); cleared ${attEvents.size} prior attendanceEvents`,
   );
 
-  // 6e) Enrolled-vs-Previous split fixture (Task 10) on the SAME level/pid — see
-  //     the SPLIT_* constants for the shape. Two family-initiated (confirmed)
-  //     single-child families make the main Enrolled roster exactly 2 rows; one
-  //     promotion (previous) single-child family plus CMT-E2E-ATT's two siblings
-  //     make the Previous list 3. Idempotent + additive.
-  const splitEnrAMid = await ensureSplitFamily(db, {
-    fid: SPLIT_ENR_A_FID, familyName: 'E2E Enrolled A', childFirst: 'Enrolled', childLast: 'Alpha', childGrade: 'Grade 3', enrolledVia: 'family-initiated',
+  // 6e) Two confirmed (family-initiated) single-child families on e2e-att-level so
+  //     the binary-attendance spec's Enrolled roster is exactly 2 rows (CMT-E2E-ATT
+  //     is now a *previous* family under the confirmation-scoped roster). Additive
+  //     + idempotent. These are the ONLY two Enrolled rows the binary spec taps.
+  const enrAMids = await ensureSplitFamily(db, {
+    fid: SPLIT_ENR_A_FID, familyName: 'E2E Enrolled A', pid: ATT_PID, enrolledVia: 'family-initiated',
+    children: [{ firstName: 'Enrolled', lastName: 'Alpha', schoolGrade: 'Grade 3' }],
   });
-  const splitEnrBMid = await ensureSplitFamily(db, {
-    fid: SPLIT_ENR_B_FID, familyName: 'E2E Enrolled B', childFirst: 'Enrolled', childLast: 'Bravo', childGrade: 'Grade 4', enrolledVia: 'family-initiated',
+  const enrBMids = await ensureSplitFamily(db, {
+    fid: SPLIT_ENR_B_FID, familyName: 'E2E Enrolled B', pid: ATT_PID, enrolledVia: 'family-initiated',
+    children: [{ firstName: 'Enrolled', lastName: 'Bravo', schoolGrade: 'Grade 4' }],
   });
-  const splitPrevMid = await ensureSplitFamily(db, {
-    fid: SPLIT_PREV_FID, familyName: 'E2E Previous Solo', childFirst: 'Solo', childLast: 'Prev', childGrade: 'Grade 3', enrolledVia: 'promotion',
+  console.log(`  binary confirmed roster on ${ATT_LEVEL_ID}: ${SPLIT_ENR_A_FID}:${enrAMids[0]}, ${SPLIT_ENR_B_FID}:${enrBMids[0]}`);
+
+  // 6f) ISOLATED Enrolled-vs-Previous split level for previous-students.spec.ts -
+  //     see the PREV_* constants. A dedicated level/pid so the confirm mutation
+  //     never collides with the binary spec under the parallel runner. Level doc
+  //     mirrors 6a (bespoke periodLabel keeps it off the live-year /admin/levels
+  //     list, but createdAt/updatedAt MUST exist or that page 500s).
+  await db.collection('levels').doc(PREV_LEVEL_ID).set(
+    {
+      levelId: PREV_LEVEL_ID,
+      programKey: 'bala-vihar',
+      location: 'Brampton',
+      levelName: 'E2E Previous-Split Level',
+      levelKind: 'level',
+      order: 98,
+      gradeBand: ['3', '4'],
+      curriculum: 'E2E',
+      pid: PREV_PID,
+      periodLabel: 'E2E',
+      teacherRefs: [managerMid],
+      enabled: true,
+      createdAt: FieldValue.serverTimestamp(),
+      createdBy: 'seed',
+      updatedAt: FieldValue.serverTimestamp(),
+      updatedBy: 'seed',
+      _test: true,
+    },
+    { merge: true },
+  );
+  const pEnrA = await ensureSplitFamily(db, {
+    fid: PREV_ENR_A_FID, familyName: 'E2E Prev-Enrolled A', pid: PREV_PID, enrolledVia: 'family-initiated',
+    children: [{ firstName: 'Penr', lastName: 'Alpha', schoolGrade: 'Grade 3' }],
   });
+  const pEnrB = await ensureSplitFamily(db, {
+    fid: PREV_ENR_B_FID, familyName: 'E2E Prev-Enrolled B', pid: PREV_PID, enrolledVia: 'family-initiated',
+    children: [{ firstName: 'Penr', lastName: 'Bravo', schoolGrade: 'Grade 4' }],
+  });
+  const pSib = await ensureSplitFamily(db, {
+    fid: PREV_SIB_FID, familyName: 'E2E Prev Siblings', pid: PREV_PID, enrolledVia: 'promotion',
+    children: [
+      { firstName: 'Psib', lastName: 'Threegrade', schoolGrade: 'Grade 3' },
+      { firstName: 'Psib', lastName: 'Fourgrade', schoolGrade: 'Grade 4' },
+    ],
+  });
+  const pSolo = await ensureSplitFamily(db, {
+    fid: PREV_SOLO_FID, familyName: 'E2E Prev Solo', pid: PREV_PID, enrolledVia: 'promotion',
+    children: [{ firstName: 'Psolo', lastName: 'Prev', schoolGrade: 'Grade 3' }],
+  });
+  const prevEvents = await db.collection('attendanceEvents').where('levelId', '==', PREV_LEVEL_ID).get();
+  for (const d of prevEvents.docs) await d.ref.delete();
   console.log(
-    `  split fixture: confirmed=[${SPLIT_ENR_A_FID}:${splitEnrAMid}, ${SPLIT_ENR_B_FID}:${splitEnrBMid}] ` +
-      `previous+=[${SPLIT_PREV_FID}:${splitPrevMid}] (+ ${ATT_FID} two-sibling previous)`,
+    `  isolated split level ${PREV_LEVEL_ID}: confirmed=[${pEnrA[0]}, ${pEnrB[0]}] ` +
+      `previous=[sib ${pSib.join('+')}, solo ${pSolo[0]}]; cleared ${prevEvents.size} attendanceEvents`,
   );
 
   console.log(`\n=== done. fid=${fid} uid=${uid} ===\n`);

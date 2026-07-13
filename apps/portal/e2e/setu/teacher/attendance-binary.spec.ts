@@ -37,7 +37,10 @@ test.describe('Teacher — binary attendance', () => {
     ).toHaveURL(new RegExp(`/teacher/levels/${ATT_LEVEL_ID}/attendance`));
 
     // The roster shows exactly the two seeded children as tap-to-present rows.
-    const rows = page.getByTestId('att-row');
+    // The teacher layout renders the marker twice (mobile `.block md:hidden` +
+    // desktop `.hidden md:flex`), so scope to the single visible (desktop) copy -
+    // else getByTestId sees 4 rows and nth() targets a hidden mobile row.
+    const rows = page.getByTestId('att-row').filter({ visible: true });
     await expect(rows).toHaveCount(2, { timeout: 20_000 });
 
     // Binary model: NO Late/Uninformed control anywhere. The Setu marker uses tap
@@ -71,11 +74,11 @@ test.describe('Teacher — binary attendance', () => {
     // Binary: an event per enrolled student (present/absent) — both here.
     expect(((await saveResp.json()) as { saved: number }).saved).toBeGreaterThanOrEqual(2);
     // Status confirms it saved — no button was clicked.
-    await expect(page.getByText(/saved/i).first()).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/saved/i).filter({ visible: true }).first()).toBeVisible({ timeout: 10_000 });
 
     // Reload the same date → the two marks persisted (both rows seed Present).
     await page.reload();
-    const reloaded = page.getByTestId('att-row');
+    const reloaded = page.getByTestId('att-row').filter({ visible: true });
     await expect(reloaded).toHaveCount(2, { timeout: 20_000 });
     await expect(reloaded.nth(0)).toHaveAttribute('aria-pressed', 'true');
     await expect(reloaded.nth(1)).toHaveAttribute('aria-pressed', 'true');
