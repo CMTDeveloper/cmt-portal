@@ -3,11 +3,11 @@
  *
  * Reads every legacy family from the prod RTDB roster (MASTER_FIREBASE
  * credentials, READ-ONLY) and, for each family with ≥1 CURRENTLY-REGISTERED
- * child, writes an ACTIVE Bala Vihar enrollment under that center's 2025-26
- * offering into the Setu Firestore (PORTAL_FIREBASE credentials - UAT by
- * default). The legacy roster accumulates since 2012; only kids with a non-null
- * legacy `level` are currently registered (graduated/inactive kids carry a NULL
- * level and are excluded from enrolledMids).
+ * child, writes an ACTIVE Bala Vihar enrollment under that center's CURRENT
+ * school-year offering into the Setu Firestore (PORTAL_FIREBASE credentials -
+ * UAT by default). The legacy roster accumulates since 2012; only kids with a
+ * non-null legacy `level` are currently registered (graduated/inactive kids
+ * carry a NULL level and are excluded from enrolledMids).
  *
  * Per family:
  *   1. lazyMigrateLegacyFamily(legacyFid) - idempotent; ensures the Setu
@@ -31,9 +31,12 @@
  * seed-e2e-family.ts ensureEnrollment() - but that helper OMITS `pid`; this
  * script ADDS it.
  *
- * Center → offering: Scarborough → bv-scarborough-2025-26; everything else
- * (Brampton / NULL / ALL / missing) → bv-brampton-2025-26 (matches the
- * legacy-parser mapLocation default).
+ * Center → offering: the offering id is derived from the LIVE school year
+ * (getSchoolYearConfig().currentYear): Scarborough → bv-scarborough-<year>;
+ * everything else (Brampton / NULL / ALL / missing) → bv-brampton-<year>
+ * (matches the legacy-parser mapLocation default). Families that already hold
+ * an ACTIVE current-year enrollment are skipped untouched (protects
+ * rollover-promoted grades); a stale prior-year BV enrollment is cancelled.
  *
  * Standing constraints:
  *   - UAT writes ONLY. Refuses unless PORTAL_FIREBASE_PROJECT_ID is
@@ -230,7 +233,7 @@ async function processFamily(
     }
   }
 
-  // 7. Resolve the manager mid (every migrated family has a manager).
+  // Resolve the manager mid (every migrated family has a manager).
   const familySnap = await db.collection('families').doc(fid).get();
   const familyData = familySnap.data() as { managers?: string[] } | undefined;
   const managerMid = familyData?.managers?.[0] ?? `${fid}-01`;
