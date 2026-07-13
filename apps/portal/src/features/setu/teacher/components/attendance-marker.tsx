@@ -16,6 +16,9 @@ interface AttendanceMarkerProps {
   // presentCount is intentionally NOT a prop — the live count is derived from
   // `present` so it updates as the teacher taps students.
   total: number;
+  // Count of previously-enrolled (dropped) students for this level. Drives the
+  // "Previous students (N)" entry point; hidden entirely when 0.
+  previousCount: number;
 }
 
 /** Shift a YYYY-MM-DD by n days (noon-UTC anchor keeps it tz-stable). */
@@ -119,7 +122,7 @@ function StatCell({ label, value, valueColor }: StatCellProps) {
   );
 }
 
-export function AttendanceMarker({ levelId, levelName, ageLabel, date, today, rows, total }: AttendanceMarkerProps) {
+export function AttendanceMarker({ levelId, levelName, ageLabel, date, today, rows, total, previousCount }: AttendanceMarkerProps) {
   // Binary model: a student is Present (✓) or not. Seed Present from a prior
   // Present/Late portal mark or a door self-check-in; everything else starts
   // unmarked. Late collapses to Present (they attended) — Late is retired from
@@ -305,24 +308,46 @@ export function AttendanceMarker({ levelId, levelName, ageLabel, date, today, ro
               </span>
             )}
           </div>
-          <Link
-            href={`/teacher/levels/${levelId}/visitors?date=${date}`}
-            style={{
-              fontSize: 13,
-              fontWeight: 600,
-              color: 'var(--accentDeep)',
-              background: 'var(--accentSoft)',
-              borderRadius: 10,
-              padding: '9px 12px',
-              minHeight: 44,
-              display: 'inline-flex',
-              alignItems: 'center',
-              textDecoration: 'none',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            Visitors →
-          </Link>
+          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+            {previousCount > 0 && (
+              <Link
+                href={`/teacher/levels/${levelId}/previous?date=${date}`}
+                style={{
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: 'var(--accentDeep)',
+                  background: 'var(--accentSoft)',
+                  borderRadius: 10,
+                  padding: '9px 12px',
+                  minHeight: 44,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  textDecoration: 'none',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Previous students ({previousCount})
+              </Link>
+            )}
+            <Link
+              href={`/teacher/levels/${levelId}/visitors?date=${date}`}
+              style={{
+                fontSize: 13,
+                fontWeight: 600,
+                color: 'var(--accentDeep)',
+                background: 'var(--accentSoft)',
+                borderRadius: 10,
+                padding: '9px 12px',
+                minHeight: 44,
+                display: 'inline-flex',
+                alignItems: 'center',
+                textDecoration: 'none',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              Visitors →
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -458,6 +483,10 @@ export function AttendanceMarker({ levelId, levelName, ageLabel, date, today, ro
               {allPresent ? 'Clear all' : 'Mark all present'}
             </button>
           </div>
+
+          <h2 style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--muted)', margin: '16px 0 8px' }}>
+            Enrolled students ({total})
+          </h2>
 
           {/* Roster — each row is a single tap target that toggles Present. */}
           <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 9 }}>

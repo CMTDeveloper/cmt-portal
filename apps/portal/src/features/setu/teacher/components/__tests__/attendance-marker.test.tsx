@@ -18,7 +18,7 @@ const ROWS = [
 // `today` is set AFTER the fixture `date` (2026-01-04) so the default render is
 // a non-future, already-takeable class (canGoNext true → next arrow is a link).
 function props(over: Record<string, unknown> = {}) {
-  return { levelId: 'L', levelName: 'Level 1', ageLabel: 'Gr 1', date: '2026-01-04', today: '2026-01-18', rows: ROWS, total: 2, ...over };
+  return { levelId: 'L', levelName: 'Level 1', ageLabel: 'Gr 1', date: '2026-01-04', today: '2026-01-18', rows: ROWS, total: 2, previousCount: 0, ...over };
 }
 
 function row(name: string): HTMLElement {
@@ -197,4 +197,16 @@ it('"Mark all present" marks everyone, then toggles to "Clear all"', async () =>
 it('renders the "Next unmarked" jump while students remain unmarked', () => {
   render(<AttendanceMarker {...props()} />);
   expect(screen.getByRole('button', { name: /next unmarked/i })).toBeDefined();
+});
+
+it('shows a Previous students button with the count when previousCount > 0, plus the Enrolled students heading', () => {
+  render(<AttendanceMarker {...props({ date: '2026-01-18', today: '2026-06-30', previousCount: 5 })} />);
+  const link = screen.getByRole('link', { name: /previous students \(5\)/i });
+  expect(link.getAttribute('href')).toBe('/teacher/levels/L/previous?date=2026-01-18');
+  expect(screen.getByText(/enrolled students \(2\)/i)).toBeDefined();
+});
+
+it('hides the Previous students button when previousCount is 0', () => {
+  render(<AttendanceMarker {...props({ previousCount: 0 })} />);
+  expect(screen.queryByRole('link', { name: /previous students/i })).toBeNull();
 });

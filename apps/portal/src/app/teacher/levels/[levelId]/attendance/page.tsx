@@ -42,6 +42,7 @@ export default async function TakeAttendancePage({
       today={torontoToday()}
       rows={view.rows}
       total={view.total}
+      previousCount={view.previousCount}
     />
   );
 }
