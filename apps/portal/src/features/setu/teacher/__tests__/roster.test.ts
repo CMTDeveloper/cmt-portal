@@ -26,7 +26,7 @@ describe('buildRoster', () => {
       { fid: 'CMT-A', legacyFid: 'legacy-A', enrolledMids: ['CMT-A-02', 'CMT-A-01'], members: [child('CMT-A-02', 'Apple', 'Grade 2'), adult('CMT-A-01', 'Apple')] },
       { fid: 'CMT-B', legacyFid: null, enrolledMids: ['CMT-B-02', 'CMT-B-03'], members: [child('CMT-B-02', 'Banana', '3'), child('CMT-B-03', 'Banana', '5')] },
     ];
-    const r = buildRoster(level2, families, [], '2026-01-18', NOW);
+    const r = buildRoster(level2, families, [], '2026-01-18', NOW, new Set(families.map((f) => f.fid)));
     // CMT-A-02 (Gr2), CMT-B-02 (3) match; adult + Gr5 excluded
     expect(r.members.map((m) => m.mid).sort()).toEqual(['CMT-A-02', 'CMT-B-02']);
     expect(r.members.every((m) => m.status === 'unaccounted')).toBe(true);
@@ -49,7 +49,7 @@ describe('buildRoster', () => {
       { fid: 'CMT-B', legacyFid: null, enrolledMids: ['CMT-B-02'], members: [child('CMT-B-02', 'Banana', 'Grade 3')] },
     ];
     const events: RosterEventInput[] = [{ mid: 'CMT-A-02', status: 'present', isGuest: false }];
-    const r = buildRoster(level2, families, events, '2026-01-18', NOW);
+    const r = buildRoster(level2, families, events, '2026-01-18', NOW, new Set(families.map((f) => f.fid)));
     const byMid = Object.fromEntries(r.members.map((m) => [m.mid, m.status]));
     expect(byMid['CMT-A-02']).toBe('present');
     expect(byMid['CMT-B-02']).toBe('unaccounted');
@@ -62,7 +62,7 @@ describe('buildRoster', () => {
       { mid: 'CMT-A-02', status: 'late', isGuest: false },
       { mid: 'CMT-Z-09', status: 'present', isGuest: true }, // visiting guest, not on roster
     ];
-    const r = buildRoster(level2, families, events, '2026-01-18', NOW);
+    const r = buildRoster(level2, families, events, '2026-01-18', NOW, new Set(families.map((f) => f.fid)));
     expect(r.members).toHaveLength(1);
     expect(r.members[0]!.status).toBe('late');
   });
@@ -71,7 +71,7 @@ describe('buildRoster', () => {
     const families: RosterFamily[] = [
       { fid: 'CMT-A', legacyFid: 'legacy-A', enrolledMids: ['CMT-A-02'], members: [child('CMT-A-02', 'Apple', 'Grade 2', { foodAllergies: 'Peanuts' })] },
     ];
-    const r = buildRoster(level2, families, [], '2026-01-18', NOW);
+    const r = buildRoster(level2, families, [], '2026-01-18', NOW, new Set(families.map((f) => f.fid)));
     expect(r.members[0]!.hasSafetyInfo).toBe(true);
   });
 
@@ -80,7 +80,7 @@ describe('buildRoster', () => {
     const families: RosterFamily[] = [
       { fid: 'CMT-A', legacyFid: 'legacy-A', enrolledMids: ['CMT-A-01', 'CMT-A-02'], members: [adult('CMT-A-01', 'Apple'), child('CMT-A-02', 'Apple', 'Grade 2')] },
     ];
-    const r = buildRoster(parents, families, [], '2026-01-18', NOW);
+    const r = buildRoster(parents, families, [], '2026-01-18', NOW, new Set(families.map((f) => f.fid)));
     expect(r.members.map((m) => m.mid)).toEqual(['CMT-A-01']);
   });
 
@@ -89,7 +89,7 @@ describe('buildRoster', () => {
       { fid: 'CMT-Z', legacyFid: null, enrolledMids: ['CMT-Z-02'], members: [child('CMT-Z-02', 'Zephyr', '2', { firstName: 'Anil' })] },
       { fid: 'CMT-A', legacyFid: 'legacy-A', enrolledMids: ['CMT-A-02'], members: [child('CMT-A-02', 'Apple', '2', { firstName: 'Bala' })] },
     ];
-    const r = buildRoster(level2, families, [], '2026-01-18', NOW);
+    const r = buildRoster(level2, families, [], '2026-01-18', NOW, new Set(families.map((f) => f.fid)));
     expect(r.members.map((m) => m.lastName)).toEqual(['Apple', 'Zephyr']);
   });
 
@@ -106,8 +106,37 @@ describe('buildRoster', () => {
         ],
       },
     ];
-    const r = buildRoster(level2, families, [], '2026-01-18', NOW);
+    const r = buildRoster(level2, families, [], '2026-01-18', NOW, new Set(families.map((f) => f.fid)));
     expect(r.members.map((m) => m.mid)).toEqual(['CMT-A-02']);
     expect(r.total).toBe(1);
+  });
+});
+
+describe('buildRoster split: enrolled vs previous', () => {
+  const fams: RosterFamily[] = [
+    // confirmed families (fids in the set)
+    { fid: 'CMT-A', legacyFid: null, enrolledMids: ['CMT-A-02'], members: [child('CMT-A-02', 'Apple', '2')] },
+    { fid: 'CMT-B', legacyFid: null, enrolledMids: ['CMT-B-03'], members: [child('CMT-B-03', 'Berry', '3')] },
+    // previous families (NOT in the set) - one is a two-sibling family
+    { fid: 'CMT-C', legacyFid: null, enrolledMids: ['CMT-C-02', 'CMT-C-03'], members: [child('CMT-C-02', 'Cherry', '2'), child('CMT-C-03', 'Cherry', '3')] },
+    { fid: 'CMT-D', legacyFid: null, enrolledMids: ['CMT-D-02'], members: [child('CMT-D-02', 'Date', '2')] },
+  ];
+
+  it('routes confirmed families to members and unconfirmed to previousStudents', () => {
+    const confirmed = new Set(['CMT-A', 'CMT-B']);
+    const r = buildRoster(level2, fams, [], '2026-01-18', NOW, confirmed);
+    expect(r.members.map((m) => m.mid).sort()).toEqual(['CMT-A-02', 'CMT-B-03']);
+    expect(r.total).toBe(2);
+    // both of the two-sibling family's kids land in previous, together
+    expect(r.previousStudents.map((m) => m.mid).sort()).toEqual(['CMT-C-02', 'CMT-C-03', 'CMT-D-02']);
+    expect(r.previousTotal).toBe(3);
+  });
+
+  it('stats (total, markedCount) count only confirmed members', () => {
+    const confirmed = new Set(['CMT-A', 'CMT-B']);
+    const events: RosterEventInput[] = [{ mid: 'CMT-A-02', status: 'present', isGuest: false }];
+    const r = buildRoster(level2, fams, events, '2026-01-18', NOW, confirmed);
+    expect(r.markedCount).toBe(1);
+    expect(r.total).toBe(2);
   });
 });
