@@ -17,8 +17,11 @@
  *   3. currentChildren = children with a non-null legacy `level`.
  *      - If none: the family has no current BV kids → if a prior run left an
  *        enrollment doc, set status:'cancelled' (merge); never create one.
- *   4. For each CURRENT child member whose stored schoolGrade differs from the
- *      freshly parsed value, upsert schoolGrade (fixes stale grades).
+ *   4. schoolGrade is NEVER written here. The legacy roster holds LAST year's
+ *      grades, so re-asserting them onto a current-year enrollment would revert
+ *      the correct (rollover/admin-advanced) Setu grade and drop the child off
+ *      their level. Grades are owned by migration / rollover / admin; current
+ *      children with a missing stored grade are only FLAGGED in the report.
  *   5. enrolledMids = the CURRENT children's Setu child mids (via legacySid).
  *   6. Upsert families/{fid}/enrollments/{fid}-{oid} with the full schema-valid
  *      doc INCLUDING `pid: oid` - the field deriveRoster queries on
@@ -139,7 +142,6 @@ interface FamilyOutcome {
   center?: LegacyLocation;
   oid?: string;
   childCount?: number;
-  gradeFixes?: number;
   priorYearCancelled?: number;
   gradelessKids?: { name: string; mid: string }[];
   error?: string;
@@ -165,10 +167,6 @@ async function processFamily(
   // 3. Current kids = non-null legacy level (graduated/inactive carry NULL).
   const currentChildren = legacy.children.filter((c) => c.legacyLevel != null);
   const currentLegacySids = new Set(currentChildren.map((c) => c.legacySid).filter((s): s is string => s != null));
-  const gradeByLegacySid = new Map<string, string | null>();
-  for (const child of currentChildren) {
-    if (child.legacySid != null) gradeByLegacySid.set(child.legacySid, child.schoolGrade);
-  }
 
   // 4. Current-year offering for this center.
   const oid = bvOidForCenter(center, year);
@@ -201,12 +199,16 @@ async function processFamily(
     return { status: 'skipped-no-current-children', center, oid };
   }
 
-  // 7. enrolledMids = current children's mids (via legacySid). Re-assert grade
-  //    where stale, and record any current child with no parseable grade.
+  // 7. enrolledMids = current children's mids (via legacySid). We deliberately do
+  //    NOT touch schoolGrade here: the legacy roster holds LAST year's grades, so
+  //    re-asserting them onto a CURRENT-year enrollment would revert the correct
+  //    (rollover/admin-advanced) Setu grade and drop the child off their level
+  //    (e.g. reverting a Grade 2 kid to Grade 1 removes them from Level 2). Grades
+  //    are owned by migration / rollover / admin. We only FLAG current children
+  //    whose STORED grade is missing - they will not match any level until it is set.
   const membersSnap = await db.collection('families').doc(fid).collection('members').get();
   const enrolledMids: string[] = [];
   const gradelessKids: { name: string; mid: string }[] = [];
-  let gradeFixes = 0;
   for (const doc of membersSnap.docs) {
     const m = doc.data() as {
       mid?: string;
@@ -219,17 +221,9 @@ async function processFamily(
     if (!m.mid || m.type !== 'Child') continue;
     if (m.legacySid == null || !currentLegacySids.has(m.legacySid)) continue;
     enrolledMids.push(m.mid);
-
-    const freshGrade = gradeByLegacySid.has(m.legacySid) ? (gradeByLegacySid.get(m.legacySid) ?? null) : (m.schoolGrade ?? null);
-    if (freshGrade == null || freshGrade === '') {
+    const storedGrade = m.schoolGrade ?? null;
+    if (storedGrade == null || storedGrade === '') {
       gradelessKids.push({ name: `${m.firstName ?? ''} ${m.lastName ?? ''}`.trim(), mid: m.mid });
-    }
-    if (gradeByLegacySid.has(m.legacySid)) {
-      const storedGrade = m.schoolGrade ?? null;
-      if (freshGrade !== storedGrade) {
-        gradeFixes++;
-        if (!dryRun) await doc.ref.set({ schoolGrade: freshGrade }, { merge: true });
-      }
     }
   }
 
@@ -243,7 +237,7 @@ async function processFamily(
   const priorEids = priorYearBvEidsToCancel(enrollments, oid);
 
   if (dryRun) {
-    return { status: 'dry-run', center, oid, childCount: enrolledMids.length, gradeFixes, priorYearCancelled: priorEids.length, gradelessKids };
+    return { status: 'dry-run', center, oid, childCount: enrolledMids.length, priorYearCancelled: priorEids.length, gradelessKids };
   }
 
   // 8. Upsert the enrollment doc - CRUCIALLY carrying pid: oid.
@@ -276,7 +270,7 @@ async function processFamily(
     );
   }
 
-  return { status: 'enrolled', center, oid, childCount: enrolledMids.length, gradeFixes, priorYearCancelled: priorEids.length, gradelessKids };
+  return { status: 'enrolled', center, oid, childCount: enrolledMids.length, priorYearCancelled: priorEids.length, gradelessKids };
 }
 
 async function main(): Promise<void> {
@@ -344,7 +338,6 @@ async function main(): Promise<void> {
     skippedNoCurrentChildren: 0,
     skippedNoChildren: 0,
     errors: 0,
-    gradeFixes: 0,
     priorYearCancelled: 0,
   };
   const perCenter = new Map<string, number>(); // oid → enrolled count
@@ -359,7 +352,6 @@ async function main(): Promise<void> {
 
     try {
       const outcome = await processFamily(db, legacyFid, offerings, year, args.dryRun);
-      counts.gradeFixes += outcome.gradeFixes ?? 0;
       counts.priorYearCancelled += outcome.priorYearCancelled ?? 0;
       for (const g of outcome.gradelessKids ?? []) gradelessAll.push({ ...g, legacyFid });
 
@@ -384,9 +376,8 @@ async function main(): Promise<void> {
         if (outcome.status === 'enrolled') counts.enrolled++;
         else counts.wouldEnroll++;
         const verb = outcome.status === 'dry-run' ? 'would enroll' : '✓ enrolled';
-        const fixNote = (outcome.gradeFixes ?? 0) > 0 ? `, ${outcome.gradeFixes} grade-fix` : '';
         console.log(
-          `${pos} ${legacyFid.padEnd(8)} ${verb}  center=${outcome.center} → ${outcome.oid}  (${outcome.childCount} children${fixNote})`,
+          `${pos} ${legacyFid.padEnd(8)} ${verb}  center=${outcome.center} → ${outcome.oid}  (${outcome.childCount} children)`,
         );
       }
     } catch (err) {
@@ -407,7 +398,6 @@ async function main(): Promise<void> {
   console.log(`  Skipped (already enr):${counts.skippedAlreadyEnrolled}`);
   console.log(`  Skipped (no current):${counts.skippedNoCurrentChildren}`);
   console.log(`  Skipped (no kids):   ${counts.skippedNoChildren}`);
-  console.log(`  Grade fixes applied: ${counts.gradeFixes}${args.dryRun ? ' (dry-run - not written)' : ''}`);
   console.log(`  Prior-year cancelled: ${counts.priorYearCancelled}${args.dryRun ? ' (dry-run - not written)' : ''}`);
   console.log(`  Errors:              ${counts.errors}`);
   console.log('  Per offering:');
