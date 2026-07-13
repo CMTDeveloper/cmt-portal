@@ -99,10 +99,18 @@ subcollection reads); the plan still runs the mandatory index audit (project rul
 ### 4.2 `deriveRoster` (modify) — `roster.ts`
 Returns the roster **split into two arrays**: `members` (confirmed) and
 `previousStudents` (active but unconfirmed), both built from the same
-enrolled-member matching as today. `buildRoster` gains the confirmed-eid set and
+enrolled-member matching as today. `buildRoster` gains the confirmed-fid set and
 partitions members by their family enrollment's confirmed state. `RosterResult`
 gains `previousStudents: RosterMember[]` and `previousTotal: number`; `total`/
-`markedCount` continue to describe **only** the confirmed `members`.
+`markedCount` continue to describe **only** `members`.
+
+The split is **opt-in** via a `deriveRoster(..., { withConfirmation })` option.
+The default (`false`) puts every active-enrolled member in `members` with
+`previousStudents` empty — i.e. today's exact behavior — so the other two
+`deriveRoster` consumers (`student-detail.ts:canTeacherSeeStudent`, the
+welcome-team `welcome/levels/[levelId]` roster) stay unchanged and are not
+regressed, and pay no confirmation-read cost. Only the teacher attendance view,
+the save path, the previous-students view, and confirm-previous pass `true`.
 
 ### 4.3 `getLevelAttendanceView` (modify) — `level-attendance-view.ts`
 Maps the confirmed `members` into `rows` exactly as today (door-seed logic
@@ -110,10 +118,12 @@ unchanged) and additionally surfaces `previousStudents` as a lightweight list
 (`mid, fid, firstName, lastName, schoolGrade`) plus `previousCount`. The stats
 (`presentCount`, `total`) stay scoped to `rows`.
 
-### 4.4 `saveAttendance` (unchanged in scope, verified safe) — `save-attendance.ts`
-Because it gates on `deriveRoster().members` (now confirmed-only), the absent-sweep
-touches only confirmed students. Previous students are structurally excluded — no
-code change needed, but a test pins this invariant.
+### 4.4 `saveAttendance` (scope it to confirmed) — `save-attendance.ts`
+Calls `deriveRoster(..., { withConfirmation: true })` so its roster gate
+(`fidByMid` from `members`, `skipped` for misses) — and thus the absent-sweep —
+covers ONLY confirmed students. A mark POSTed for a previous student's mid is
+skipped, not written Absent. A test pins this invariant (server-side, not just via
+the client rendering confirmed rows).
 
 ### 4.5 Confirm-a-previous-student action (new)
 - Helper `confirmPreviousStudent(levelId, mid, date, markedBy…)` in
