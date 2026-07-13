@@ -104,6 +104,26 @@ const ATT_MANAGER_MID = `${ATT_FID}-01`;
 const ATT_CHILD_1_MID = `${ATT_FID}-02`;
 const ATT_CHILD_2_MID = `${ATT_FID}-03`;
 
+// ── Enrolled-vs-Previous split fixture (Task 10) ─────────────────────────────
+// Layered on the SAME level/pid as the teacher-attendance fixture above, so the
+// confirmation-scoped roster (getLevelAttendanceView -> deriveRoster
+// withConfirmation) has a REALISTIC mix. Under that logic CMT-E2E-ATT
+// (enrolledVia:'promotion', unengaged) is now the TWO-SIBLING *previous* family,
+// so this block only ADDS the confirmed roster + one extra single previous
+// student around it:
+//   - ENR-A / ENR-B: enrolledVia:'family-initiated' (=> confirmed with no reads),
+//     one grade-matched child each -> the main Enrolled roster is exactly 2 rows.
+//   - PREV: enrolledVia:'promotion', unengaged, one grade-matched child -> a
+//     previous student that REMAINS after CMT-E2E-ATT is confirmed, proving the
+//     unmarked->absent save-sweep never touches previous students.
+// All docs _test:true; every attendanceEvent on this level is cleared in 6d so a
+// reseed restores the ground state. Uses only existing indexes
+// (enrollments(pid,status) + attendanceEvents(levelId,date); previous->confirmed
+// reads attendanceEvents.where('pid') which is single-field auto-indexed).
+const SPLIT_ENR_A_FID = 'CMT-E2E-ENR-A';
+const SPLIT_ENR_B_FID = 'CMT-E2E-ENR-B';
+const SPLIT_PREV_FID = 'CMT-E2E-PREV';
+
 type Db = ReturnType<typeof portalFirestore>;
 
 function toDate(v: unknown): Date {
@@ -239,6 +259,101 @@ function parseEnrolledVia(argv: string[]): 'family-initiated' | 'promotion' {
     console.warn(`  WARN: unrecognized --enrolled-via '${raw}' — defaulting to 'promotion'`);
   }
   return 'promotion';
+}
+
+/**
+ * Seed one isolated _test family (1 adult manager + 1 child) enrolled on the
+ * teacher-attendance level's pid (ATT_PID), for the Enrolled-vs-Previous split
+ * E2E. The child's grade matches the level's gradeBand so it lands on the roster;
+ * the family's `enrolledVia` decides confirmed ('family-initiated') vs previous
+ * ('promotion'). Idempotent (merge). Returns the child's mid.
+ */
+async function ensureSplitFamily(
+  db: Db,
+  opts: {
+    fid: string;
+    familyName: string;
+    childFirst: string;
+    childLast: string;
+    childGrade: string;
+    enrolledVia: 'family-initiated' | 'promotion';
+  },
+): Promise<string> {
+  const { fid, familyName, childFirst, childLast, childGrade, enrolledVia } = opts;
+  const managerMid = `${fid}-01`;
+  const childMid = `${fid}-02`;
+
+  await db.collection('families').doc(fid).set(
+    {
+      fid,
+      name: familyName,
+      location: 'Brampton',
+      legacyFid: null,
+      managers: [managerMid],
+      searchKeys: [familyName.toLowerCase(), fid],
+      _test: true,
+    },
+    { merge: true },
+  );
+
+  const members: Array<{
+    mid: string;
+    firstName: string;
+    lastName: string;
+    type: 'Adult' | 'Child';
+    schoolGrade: string | null;
+    manager: boolean;
+  }> = [
+    { mid: managerMid, firstName: 'Split', lastName: 'Manager', type: 'Adult', schoolGrade: null, manager: true },
+    { mid: childMid, firstName: childFirst, lastName: childLast, type: 'Child', schoolGrade: childGrade, manager: false },
+  ];
+  for (const m of members) {
+    await db.collection('families').doc(fid).collection('members').doc(m.mid).set(
+      {
+        mid: m.mid,
+        fid,
+        firstName: m.firstName,
+        lastName: m.lastName,
+        type: m.type,
+        gender: 'Male',
+        schoolGrade: m.schoolGrade,
+        birthMonthYear: m.type === 'Adult' ? '1985-04' : '2017-05',
+        foodAllergies: NO_ALLERGIES,
+        volunteeringSkills: m.type === 'Adult' ? ['General Volunteer Support (happy to help where needed)'] : [],
+        manager: m.manager,
+        legacySid: null,
+        joinedAt: FieldValue.serverTimestamp(),
+        _test: true,
+      },
+      { merge: true },
+    );
+  }
+
+  const eid = `${fid}-${ATT_PID}`;
+  await db.collection('families').doc(fid).collection('enrollments').doc(eid).set(
+    {
+      eid,
+      fid,
+      oid: ATT_PID,
+      pid: ATT_PID,
+      programKey: 'bala-vihar',
+      programLabel: 'Bala Vihar',
+      termLabel: 'E2E',
+      location: 'Brampton',
+      enrolledAt: FieldValue.serverTimestamp(),
+      enrolledVia,
+      enrolledByMid: managerMid,
+      enrolledMids: [childMid],
+      suggestedAmountSnapshot: 0,
+      suggestedAmountOverride: null,
+      status: 'active',
+      cancelledAt: null,
+      cancelledReason: null,
+      _test: true,
+    },
+    { merge: true },
+  );
+  return childMid;
 }
 
 async function main(): Promise<void> {
@@ -713,6 +828,25 @@ async function main(): Promise<void> {
   for (const d of attEvents.docs) await d.ref.delete();
   console.log(
     `  level ${ATT_LEVEL_ID} + family ${ATT_FID} (2 children, pid=${ATT_PID}); cleared ${attEvents.size} prior attendanceEvents`,
+  );
+
+  // 6e) Enrolled-vs-Previous split fixture (Task 10) on the SAME level/pid — see
+  //     the SPLIT_* constants for the shape. Two family-initiated (confirmed)
+  //     single-child families make the main Enrolled roster exactly 2 rows; one
+  //     promotion (previous) single-child family plus CMT-E2E-ATT's two siblings
+  //     make the Previous list 3. Idempotent + additive.
+  const splitEnrAMid = await ensureSplitFamily(db, {
+    fid: SPLIT_ENR_A_FID, familyName: 'E2E Enrolled A', childFirst: 'Enrolled', childLast: 'Alpha', childGrade: 'Grade 3', enrolledVia: 'family-initiated',
+  });
+  const splitEnrBMid = await ensureSplitFamily(db, {
+    fid: SPLIT_ENR_B_FID, familyName: 'E2E Enrolled B', childFirst: 'Enrolled', childLast: 'Bravo', childGrade: 'Grade 4', enrolledVia: 'family-initiated',
+  });
+  const splitPrevMid = await ensureSplitFamily(db, {
+    fid: SPLIT_PREV_FID, familyName: 'E2E Previous Solo', childFirst: 'Solo', childLast: 'Prev', childGrade: 'Grade 3', enrolledVia: 'promotion',
+  });
+  console.log(
+    `  split fixture: confirmed=[${SPLIT_ENR_A_FID}:${splitEnrAMid}, ${SPLIT_ENR_B_FID}:${splitEnrBMid}] ` +
+      `previous+=[${SPLIT_PREV_FID}:${splitPrevMid}] (+ ${ATT_FID} two-sibling previous)`,
   );
 
   console.log(`\n=== done. fid=${fid} uid=${uid} ===\n`);
