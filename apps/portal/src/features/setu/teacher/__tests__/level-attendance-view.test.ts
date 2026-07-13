@@ -17,6 +17,10 @@ it('seeds unmarked by default; door check-in → present; portal mark wins', asy
       { mid: 'F-03', fid: 'F', firstName: 'B', lastName: 'Y', type: 'Child', schoolGrade: 'Grade 1', hasSafetyInfo: true, status: 'unaccounted', legacyFid: '4421', legacySid: 'S9' },
       { mid: 'G-02', fid: 'G', firstName: 'C', lastName: 'X', type: 'Child', schoolGrade: 'Grade 1', hasSafetyInfo: false, status: 'unaccounted', legacyFid: '7000', legacySid: 'S1' },
     ],
+    previousStudents: [
+      { mid: 'P-02', fid: 'P', firstName: 'Prev', lastName: 'One', type: 'Child', schoolGrade: 'Grade 1', hasSafetyInfo: false, status: 'unaccounted', legacyFid: null, legacySid: null },
+    ],
+    previousTotal: 1,
   });
   mockDoor.mockResolvedValue(new Set(['S9'])); // only F-03 checked in at the door
 
@@ -32,6 +36,8 @@ it('seeds unmarked by default; door check-in → present; portal mark wins', asy
   // presentCount counts only present rows (door + portal) — NOT the total
   expect(view!.presentCount).toBe(1);
   expect(view!.total).toBe(3);
+  // previousCount reflects the unconfirmed carry-forward students
+  expect(view!.previousCount).toBe(1);
   expect(mockDoor).toHaveBeenCalledWith(['4421', '7000'], '2026-01-04'); // unique non-null legacyFids
 });
 
@@ -48,6 +54,8 @@ it('seeds a new kid with no legacyFid as unmarked (null) and skips the door read
     members: [
       { mid: 'N-02', fid: 'N', firstName: 'New', lastName: 'Kid', type: 'Child', schoolGrade: 'Grade 1', hasSafetyInfo: false, status: 'unaccounted', legacyFid: null, legacySid: null },
     ],
+    previousStudents: [],
+    previousTotal: 0,
   });
   const view = await getLevelAttendanceView('L', '2026-01-04');
   expect(view!.rows[0]).toMatchObject({ status: null, source: 'default', checkedInAtDoor: false });

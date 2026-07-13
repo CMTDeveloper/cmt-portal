@@ -26,6 +26,7 @@ export interface AttendanceView {
   rows: AttendanceViewRow[];
   presentCount: number;
   total: number;
+  previousCount: number;
 }
 
 /**
@@ -35,7 +36,7 @@ export interface AttendanceView {
  * badge surfaces the self-check-in overlay. null if the level is missing.
  */
 export async function getLevelAttendanceView(levelId: string, date: string): Promise<AttendanceView | null> {
-  const roster = await deriveRoster(levelId, date);
+  const roster = await deriveRoster(levelId, date, undefined, { withConfirmation: true });
   if (!roster) return null;
 
   const legacyFids = [...new Set(roster.members.map((m) => m.legacyFid).filter((v): v is string => !!v))];
@@ -79,5 +80,6 @@ export async function getLevelAttendanceView(levelId: string, date: string): Pro
     rows,
     presentCount,
     total: rows.length,
+    previousCount: roster.previousStudents.length,
   };
 }

@@ -25,7 +25,7 @@ export type SaveAttendanceResult =
  */
 export async function saveAttendance(params: SaveAttendanceParams): Promise<SaveAttendanceResult> {
   const { levelId, date, marks, markedByUid, markedByMid } = params;
-  const roster = await deriveRoster(levelId, date, params.now);
+  const roster = await deriveRoster(levelId, date, params.now, { withConfirmation: true });
   if (!roster) return { ok: false, reason: 'level-not-found' };
 
   const fidByMid = new Map(roster.members.map((m) => [m.mid, m.fid]));

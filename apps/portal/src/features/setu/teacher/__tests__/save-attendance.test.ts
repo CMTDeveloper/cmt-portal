@@ -26,6 +26,10 @@ const ROSTER = {
     { mid: 'CMT-A-02', fid: 'CMT-A' },
     { mid: 'CMT-B-02', fid: 'CMT-B' },
   ],
+  // Unconfirmed carry-forward students are NOT on the confirmed roster, so
+  // marks for them must be skipped (never written).
+  previousStudents: [{ mid: 'PREV-02', fid: 'PREVFAM' }],
+  previousTotal: 1,
 };
 
 beforeEach(() => {
@@ -80,6 +84,22 @@ describe('saveAttendance', () => {
     expect(res.ok && res.saved).toBe(1);
     expect(res.ok && res.skipped).toEqual(['CMT-Z-99']);
     expect(mockBatchSet).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips marks for previous (unconfirmed) students not on the confirmed roster', async () => {
+    const res = await saveAttendance({
+      levelId: 'lvl',
+      date: '2025-09-07',
+      marks: { 'CMT-A-02': 'present', 'PREV-02': 'present' },
+      markedByUid: 'u',
+      markedByMid: null,
+    });
+    // PREV-02 is only in previousStudents (unconfirmed), so it never lands on
+    // the confirmed roster gate - it is skipped, not written.
+    expect(res.ok && res.saved).toBe(1);
+    expect(res.ok && res.skipped).toEqual(['PREV-02']);
+    expect(mockBatchSet).toHaveBeenCalledTimes(1);
+    expect(mockDoc).toHaveBeenCalledWith('lvl-CMT-A-02-2025-09-07');
   });
 
   it('uses merge:true so re-marking overwrites the same aid (idempotent)', async () => {
