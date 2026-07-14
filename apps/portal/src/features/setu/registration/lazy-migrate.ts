@@ -1,7 +1,7 @@
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
 import { hashContactKey } from './hash-contact-key';
 import { generateFid } from './generate-fid';
-import { allocateFamilyPublicId, allocateMemberPublicIds } from '@/features/setu/ids/public-id-allocator';
+import { allocateMemberPublicIds } from '@/features/setu/ids/public-id-allocator';
 import {
   fetchLegacyFamilyForMigration,
   type LegacyFamilyForMigration,
@@ -66,7 +66,8 @@ export async function lazyMigrateLegacyFamily(legacyFid: string): Promise<LazyMi
     return { migrated: false, fid: preExistingData.fid, legacyFid };
   }
 
-  // Allocate the user-facing 4-digit publicFid + a contiguous block of 5-digit
+  // The user-facing publicFid is minted lazily at the family's first enrollment
+  // (enrollFamily), NOT at migration. Allocate the contiguous block of 5-digit
   // publicMids — one per member doc this migration will create, in the SAME order
   // the txn writes them: adults first (or, when there are no adult rows, a single
   // synthesized manager), then children. These MUST run BEFORE db.runTransaction
@@ -76,7 +77,6 @@ export async function lazyMigrateLegacyFamily(legacyFid: string): Promise<LazyMi
   // Allocation happens AFTER the pre-txn existence read so a no-op re-entry
   // burns no ids.
   const memberCount = (legacy.adults.length || 1) + legacy.children.length;
-  const publicFid = await allocateFamilyPublicId();
   const publicMids = await allocateMemberPublicIds(memberCount);
 
   const result = await db.runTransaction(async (txn) => {
@@ -192,7 +192,6 @@ export async function lazyMigrateLegacyFamily(legacyFid: string): Promise<LazyMi
 
     txn.set(db.collection('families').doc(fid), {
       fid,
-      publicFid,
       legacyFid,
       name: legacy.familyName,
       location: legacy.location,

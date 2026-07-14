@@ -2,7 +2,7 @@ import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestor
 import type { FamilyAddress } from '@cmt/shared-domain';
 import { hashContactKey } from './hash-contact-key';
 import { generateFid } from './generate-fid';
-import { allocateFamilyPublicId, allocateMemberPublicIds } from '@/features/setu/ids/public-id-allocator';
+import { allocateMemberPublicIds } from '@/features/setu/ids/public-id-allocator';
 
 // Centre names are admin-managed at runtime (validated against getLocationOptions()
 // at the register route before this input is built), so the type is an open string
@@ -75,13 +75,13 @@ export async function registerFamily(input: RegisterFamilyInput): Promise<Regist
   const managerMid = `${fid}-01`;
   const now = FieldValue.serverTimestamp();
 
-  // Allocate the user-facing 4-digit publicFid + a contiguous block of 5-digit
+  // The user-facing publicFid is minted lazily at the family's first enrollment
+  // (enrollFamily), NOT at creation. Allocate the contiguous block of 5-digit
   // publicMids (one per member: manager + each additional). These MUST run BEFORE
   // db.runTransaction opens — the allocator runs its own Firestore transaction and
   // Firestore forbids nested transactions. publicMids[0] is always the MANAGER's;
   // additional members map by a clean 0-based loop index (manager=[0], first
   // additional=[1], …) — see the loop below.
-  const publicFid = await allocateFamilyPublicId();
   const publicMids = await allocateMemberPublicIds(1 + input.additionalMembers.length);
   const managerPublicMid = publicMids[0]!;
 
@@ -151,7 +151,6 @@ export async function registerFamily(input: RegisterFamilyInput): Promise<Regist
     const familyRef = db.collection('families').doc(fid);
     txn.set(familyRef, {
       fid,
-      publicFid,
       legacyFid: null,
       name: input.familyName,
       location: input.location,

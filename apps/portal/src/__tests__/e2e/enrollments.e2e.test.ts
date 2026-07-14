@@ -167,9 +167,10 @@ const hasUatCreds =
       const { enrollFamily } = await import('@/features/setu/enrollment/enroll-family');
       const db = portalFirestore();
 
-      // A dedicated family created WITHOUT a publicFid: registerFamily still mints
-      // one pre-Task-2, so strip it. Add a Child so the BV (child-only) offering
-      // has an eligible member (createTestFamily seeds only the adult manager).
+      // A dedicated family created WITHOUT a publicFid (registerFamily no longer
+      // mints one; the delete below is defensive). Add a Child so the BV
+      // (child-only) offering has an eligible member (createTestFamily seeds only
+      // the adult manager).
       const mint = await createTestFamily({
         name: `e2emint${RUN_ID.toLowerCase()} family`,
         email: `e2emint${RUN_ID.toLowerCase()}@test.cmt.invalid`,

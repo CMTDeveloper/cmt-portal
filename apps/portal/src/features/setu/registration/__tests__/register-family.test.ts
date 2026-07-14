@@ -271,7 +271,7 @@ describe('registerFamily — assigns publicFid/publicMid (issue #4)', () => {
   // the harness's actual read API: inspect the captured set() payloads. The
   // public-id-allocator is mocked above (family → '1001', members → 50001+i), so
   // mockRunTransaction only has to serve registerFamily's own transaction.
-  it('assigns publicFid to the family and a publicMid to every member', async () => {
+  it('does NOT set publicFid at creation (minted lazily at enrollment) but assigns a publicMid to every member', async () => {
     const txnSet = vi.fn();
     mockRunTransaction.mockImplementation(async (fn: (txn: unknown) => Promise<unknown>) => {
       const txn = { get: vi.fn().mockResolvedValue({ exists: false }), set: txnSet };
@@ -293,7 +293,8 @@ describe('registerFamily — assigns publicFid/publicMid (issue #4)', () => {
 
     const payloads = txnSet.mock.calls.map((c) => c[1] as Record<string, unknown>);
     const fam = payloads.find((d) => d?.fid === res.fid && d?.name === 'Iyer');
-    expect(fam?.publicFid).toBe('1001');
+    // publicFid is minted lazily at first enrollment (enrollFamily), NOT here.
+    expect(fam?.publicFid).toBeUndefined();
 
     const members = payloads.filter(
       (d) => typeof d?.mid === 'string' && (d?.manager === true || d?.manager === false),

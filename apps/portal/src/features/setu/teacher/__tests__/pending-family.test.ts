@@ -74,7 +74,8 @@ describe('upsertPendingFamilyChild', () => {
 
     const payloads = txnSet.mock.calls.map((c) => c[1] as Record<string, unknown>);
     const familyDoc = payloads.find((d) => 'managers' in d);
-    expect(familyDoc?.publicFid).toBe('1001');
+    // publicFid is minted lazily at first enrollment (enrollFamily), NOT when a teacher adds a child.
+    expect(familyDoc?.publicFid).toBeUndefined();
 
     const memberDocs = payloads.filter(
       (d) => typeof d.mid === 'string' && typeof d.manager === 'boolean',

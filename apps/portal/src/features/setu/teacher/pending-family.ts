@@ -1,7 +1,7 @@
 import { FieldValue, portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { generateFid } from '@/features/setu/registration/generate-fid';
 import { hashContactKey } from '@/features/setu/registration/hash-contact-key';
-import { allocateFamilyPublicId, allocateMemberPublicIds } from '@/features/setu/ids/public-id-allocator';
+import { allocateMemberPublicIds } from '@/features/setu/ids/public-id-allocator';
 
 // The portal has no direct firebase-admin dep, so we derive the Firestore type
 // from the portal handle factory (mirrors check-in-source.ts's pattern).
@@ -58,11 +58,12 @@ export async function upsertPendingFamilyChild(db: Db, params: PendingChildParam
   // Allocate public ids BEFORE the txn opens (the allocator runs its own Firestore
   // transaction; Firestore forbids nested transactions). The branch (append to an
   // existing family vs. create a new one) is only known INSIDE the txn after the
-  // contactKey read, so we pre-allocate the new-family worst case: a publicFid +
-  // two publicMids (manager + child). The existing-family branch consumes only the
+  // contactKey read, so we pre-allocate the new-family worst case of two publicMids
+  // (manager + child). The user-facing publicFid is minted lazily at the family's
+  // first enrollment (enrollFamily), NOT when a teacher adds a child. The
+  // existing-family branch consumes only the
   // first publicMid (the child); the rest is simply unused (counters are cheap
   // monotonic ids — a tiny gap is harmless and never reused).
-  const newFamilyPublicFid = await allocateFamilyPublicId();
   const publicMids = await allocateMemberPublicIds(2);
 
   return db.runTransaction(async (txn) => {
@@ -105,7 +106,6 @@ export async function upsertPendingFamilyChild(db: Db, params: PendingChildParam
 
     txn.set(db.collection('families').doc(newFid), {
       fid: newFid,
-      publicFid: newFamilyPublicFid,
       legacyFid: null,
       name: familyName,
       location: params.levelLocation,

@@ -354,7 +354,8 @@ describe('lazyMigrateLegacyFamily — assigns publicFid/publicMid (issue #4)', (
     await lazyMigrateLegacyFamily('42');
 
     const familyDoc = txnSetCalls.find(([, data]) => 'managers' in data);
-    expect(familyDoc?.[1].publicFid).toBe('1001');
+    // publicFid is minted lazily at first enrollment (enrollFamily), NOT at migration.
+    expect(familyDoc?.[1].publicFid).toBeUndefined();
 
     // legacyShahFamily: 2 adults + 1 child → 3 members, each carries a publicMid.
     // Member docs have a `manager` boolean; contactKey docs (also have `mid`+`type`)
