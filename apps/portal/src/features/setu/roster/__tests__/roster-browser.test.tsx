@@ -62,9 +62,9 @@ describe('RosterBrowser', () => {
   it('filters the list by Level (client-side, over the loaded dataset)', async () => {
     render(<RosterBrowser locationOptions={['Brampton', 'Scarborough']} />);
     await screen.findAllByText('Vaibhav & Noopur Rana');
-    // Click every "Level 4" chip (mobile + desktop) so both branches filter.
-    for (const btn of screen.getAllByRole('button', { name: 'Level 4' })) {
-      await userEvent.click(btn);
+    // Pick "Level 4" in every Level dropdown (mobile + desktop) so both branches filter.
+    for (const sel of screen.getAllByRole('combobox', { name: 'Level' })) {
+      await userEvent.selectOptions(sel, 'Level 4');
     }
     await waitFor(() => expect(screen.queryByText('Vaibhav & Noopur Rana')).not.toBeInTheDocument());
     expect(screen.getAllByText('Priya Shah').length).toBeGreaterThanOrEqual(1);

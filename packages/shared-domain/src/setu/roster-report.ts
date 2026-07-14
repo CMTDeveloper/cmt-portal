@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import { ROSTER_PAYMENTS } from './roster';
+import { GRADE_LADDER } from './grade-ladder';
+import { normalizeGrade } from './schemas/level';
 
 // One Bala Vihar-enrolled child, reduced to what the report filters + counts on.
 export const RosterReportChildSchema = z.object({
@@ -46,7 +48,8 @@ export interface RosterReportSummary {
 // Both must hold on the SAME child (spec: "at least 1 BV child passing every active child filter").
 function childPasses(c: RosterReportChild, f: RosterReportFilters): boolean {
   if (f.level && c.levelName !== f.level) return false;
-  if (f.grade && c.grade !== f.grade) return false;
+  // Grade is compared normalized so a legacy "Grade 4" child matches a "4" filter.
+  if (f.grade && (c.grade == null || normalizeGrade(c.grade) !== normalizeGrade(f.grade))) return false;
   return true;
 }
 
@@ -99,21 +102,12 @@ export function deriveLevelOptions(rows: RosterReportRow[]): string[] {
   return [...set].sort(compareLevel);
 }
 
-// K-family grades first (K, JK, SK, PK), then numeric ascending, then any other string.
-const GRADE_RANK: Record<string, number> = { K: 0, JK: 1, SK: 2, PK: 3 };
-function gradeSortKey(g: string): [number, number, string] {
-  const up = g.toUpperCase();
-  if (up in GRADE_RANK) return [0, GRADE_RANK[up]!, up];
-  const n = Number(g);
-  if (Number.isFinite(n)) return [1, n, g];
-  return [2, 0, up];
-}
+// Grade filter options are the canonical ladder rungs (JK, SK, 1..12) that are
+// actually present, ladder-ordered. Raw child grades are normalized before the
+// match, so "Grade 4" collapses onto "4" and legacy junk that maps to no rung
+// ("Pre L1 (Gr JK-SK)", a stray "J") never surfaces as a filter chip.
 export function deriveGradeOptions(rows: RosterReportRow[]): string[] {
-  const set = new Set<string>();
-  for (const r of rows) for (const c of r.bvChildren) if (c.grade) set.add(c.grade);
-  return [...set].sort((a, b) => {
-    const ka = gradeSortKey(a);
-    const kb = gradeSortKey(b);
-    return ka[0] - kb[0] || ka[1] - kb[1] || ka[2].localeCompare(kb[2]);
-  });
+  const present = new Set<string>();
+  for (const r of rows) for (const c of r.bvChildren) if (c.grade) present.add(normalizeGrade(c.grade));
+  return GRADE_LADDER.filter((rung) => present.has(normalizeGrade(rung)));
 }

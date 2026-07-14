@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { SetuLogo, SetuIcon } from '@cmt/ui';
-import { displayFid, ROSTER_PAYMENTS } from '@cmt/shared-domain/setu';
+import { displayFid, gradeLabel, ROSTER_PAYMENTS } from '@cmt/shared-domain/setu';
 import type {
   RosterReportRow, RosterReportFilters, RosterReportSummary, RosterPayment,
 } from '@cmt/shared-domain/setu';
@@ -42,38 +42,51 @@ function PaymentChip({ payment }: { payment: RosterPayment }) {
   );
 }
 
-// ── Filter chip ─────────────────────────────────────────────────────────────
-function FilterChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="focus-ring"
-      aria-pressed={active}
-      style={{
-        minHeight: 44, padding: '0 14px',
-        fontSize: 13, fontWeight: 600, lineHeight: 1,
-        borderRadius: 99, cursor: 'pointer', whiteSpace: 'nowrap',
-        border: '1px solid',
-        borderColor: active ? 'var(--accent)' : 'var(--line)',
-        background: active ? 'var(--accent)' : 'var(--surface)',
-        color: active ? '#fff' : 'var(--body-text)',
-        transition: 'background .12s, border-color .12s, color .12s',
-      }}
-    >
-      {children}
-    </button>
-  );
-}
+// ── Filter dropdown ───────────────────────────────────────────────────────────
+// A labelled native <select>. Compact by design (Vaibhav's feedback: the old
+// chip walls filled half the screen). "All" (empty value) clears the filter.
+type SelectOption = { value: string; label: string };
 
-function FilterRow({ label, children }: { label: string; children: React.ReactNode }) {
+function FilterSelect({
+  label, value, onChange, options,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: SelectOption[];
+}) {
   return (
-    <div>
-      <div style={{ fontSize: 11, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600, marginBottom: 8 }}>
+    <label style={{ display: 'block', minWidth: 0 }}>
+      <span style={{ display: 'block', fontSize: 11, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600, marginBottom: 6 }}>
         {label}
+      </span>
+      <div style={{ position: 'relative' }}>
+        <select
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="focus-ring"
+          style={{
+            width: '100%', minHeight: 44, padding: '0 34px 0 12px',
+            fontSize: 14, fontWeight: 500, lineHeight: 1.2,
+            border: '1px solid', borderColor: value ? 'var(--accent)' : 'var(--line)',
+            borderRadius: 'var(--radius)', background: 'var(--surface)', color: 'var(--ink)',
+            appearance: 'none', WebkitAppearance: 'none', MozAppearance: 'none',
+            cursor: 'pointer', outline: 'none', boxSizing: 'border-box',
+            transition: 'border-color .12s',
+          }}
+        >
+          <option value="">All</option>
+          {options.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+        <span aria-hidden style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', display: 'inline-flex', color: 'var(--muted)' }}>
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <path d="M2.5 4.5 6 8l3.5-3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </span>
       </div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>{children}</div>
-    </div>
+    </label>
   );
 }
 
@@ -289,43 +302,31 @@ function RosterContent({ year, locationOptions }: { year?: string; locationOptio
       {/* Filters + summary - hidden while searching (search ignores filters by design). */}
       {!searchActive && (
         <>
-          <div className="col" style={{ gap: 10 }}>
-            <FilterRow label="Location">
-              <FilterChip active={location === null} onClick={() => setLocation(null)}>All</FilterChip>
-              {locationOptions.map((loc) => (
-                <FilterChip key={loc} active={location === loc} onClick={() => setLocation(loc)}>{loc}</FilterChip>
-              ))}
-            </FilterRow>
-            <FilterRow label="Program">
-              <FilterChip active={program === null} onClick={() => setProgram(null)}>All</FilterChip>
-              {programOptions.map(([key, label]) => (
-                <FilterChip key={key} active={program === key} onClick={() => setProgram(key)}>{label}</FilterChip>
-              ))}
-            </FilterRow>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10 }}>
+            <FilterSelect
+              label="Location" value={location ?? ''} onChange={(v) => setLocation(v || null)}
+              options={locationOptions.map((loc) => ({ value: loc, label: loc }))}
+            />
+            <FilterSelect
+              label="Program" value={program ?? ''} onChange={(v) => setProgram(v || null)}
+              options={programOptions.map(([key, label]) => ({ value: key, label }))}
+            />
             {levelOptions.length > 0 && (
-              <FilterRow label="Level">
-                <FilterChip active={level === null} onClick={() => setLevel(null)}>All</FilterChip>
-                {levelOptions.map((lv) => (
-                  <FilterChip key={lv} active={level === lv} onClick={() => setLevel(lv)}>{lv}</FilterChip>
-                ))}
-              </FilterRow>
+              <FilterSelect
+                label="Level" value={level ?? ''} onChange={(v) => setLevel(v || null)}
+                options={levelOptions.map((lv) => ({ value: lv, label: lv }))}
+              />
             )}
             {gradeOptions.length > 0 && (
-              <FilterRow label="Grade">
-                <FilterChip active={grade === null} onClick={() => setGrade(null)}>All</FilterChip>
-                {gradeOptions.map((g) => (
-                  <FilterChip key={g} active={grade === g} onClick={() => setGrade(g)}>{g}</FilterChip>
-                ))}
-              </FilterRow>
+              <FilterSelect
+                label="Grade" value={grade ?? ''} onChange={(v) => setGrade(v || null)}
+                options={gradeOptions.map((g) => ({ value: g, label: gradeLabel(g) }))}
+              />
             )}
-            <FilterRow label="Payment">
-              <FilterChip active={payment === null} onClick={() => setPayment(null)}>All</FilterChip>
-              {ROSTER_PAYMENTS.map((p) => (
-                <FilterChip key={p} active={payment === p} onClick={() => setPayment(p)}>
-                  {p[0]!.toUpperCase() + p.slice(1)}
-                </FilterChip>
-              ))}
-            </FilterRow>
+            <FilterSelect
+              label="Payment" value={payment ?? ''} onChange={(v) => setPayment((v || null) as RosterPayment | null)}
+              options={ROSTER_PAYMENTS.map((p) => ({ value: p, label: p[0]!.toUpperCase() + p.slice(1) }))}
+            />
           </div>
 
           {!loading && !loadError && <SummaryStrip summary={summary} />}
