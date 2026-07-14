@@ -22,6 +22,10 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
+## 2026-07-14 - `2c96f02` - `publicFid` is now null until a family's first enrollment (lazy minting)
+The family `publicFid` (the user-facing 5001+ Family ID) is now **minted lazily at a family's FIRST enrollment**, not at family creation. So in every `/api/setu/*` response that returns it - notably **`GET /api/setu/dashboard`** (`family.publicFid`) and **`GET /api/setu/family`** (`family.publicFid`), plus `GET /api/setu/members/[mid]/profile` and the welcome-team `GET /api/setu/family/search` (`hits[].publicFid`) - `publicFid` is now **`null` for a signed-in family that has not yet enrolled**, and becomes the assigned number after their first enrollment (portal enroll / kiosk check-in / teacher-marked attendance). No request-shape, field-name, or error-code change; this is a behavioral change to WHEN the (already-nullable) field is populated.
+- **Mobile action:** treat a `null` `publicFid` as "not yet enrolled" - show an "assigned when you enroll" nudge (or hide the Family ID) rather than a placeholder or the internal `fid`. The field was already typed nullable, so no schema change is required; just handle the null case in the UI. `publicMid` (member ids) is unaffected - still assigned at member creation.
+
 ## 2026-07-13 - `ef5ac68` - GET /api/setu/family/search hit gains additive `parentName`
 Each `FamilySearchHit` in the `GET /api/setu/family/search` response now carries an
 additional **`parentName: string`** field - the family's parents' display name (adult
