@@ -456,7 +456,7 @@ describe('canAccessRoute — /welcome/* — welcome-team', () => {
   });
 });
 
-describe('canAccessRoute — /api/welcome/roster — welcome-team', () => {
+describe('canAccessRoute - /api/welcome/roster - welcome-team', () => {
   it('allows welcome-team on the roster report', () => {
     expect(canAccessRoute(welcomeTeam, '/api/welcome/roster/report', 'GET')).toBe(true);
   });

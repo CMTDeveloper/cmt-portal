@@ -230,7 +230,7 @@ export function canAccessRoute(
     return isWelcomeTeam(claims);
   }
 
-  // Welcome-team API — single-page roster report (browse/filter dataset + CSV).
+  // Welcome-team API - single-page roster report (browse/filter dataset + CSV).
   if (pathname === '/api/welcome/roster' || pathname.startsWith('/api/welcome/roster/')) {
     return isWelcomeTeam(claims);
   }
