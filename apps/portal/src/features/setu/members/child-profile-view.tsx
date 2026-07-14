@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { SetuAvatar, SetuIcon } from '@cmt/ui';
-import { displayMid } from '@cmt/shared-domain/setu';
+import { displayMid, gradeLabel } from '@cmt/shared-domain/setu';
 import { AllergyCallout, SectionLabel } from '@/features/family/components/atoms';
 import { JourneyStrip } from '@/features/setu/rollover/components/journey-strip';
 import type { JourneyRow } from '@/features/setu/rollover/get-child-journey';
@@ -397,7 +397,7 @@ export function ChildProfileView({ profile, editHref, journey }: ChildProfileVie
   const name = `${profile.firstName} ${profile.lastName}`;
   const subLine =
     profile.type === 'Child'
-      ? `Child${profile.schoolGrade ? ` · ${profile.schoolGrade}` : ''}`
+      ? `Child${profile.schoolGrade ? ` · ${gradeLabel(profile.schoolGrade)}` : ''}`
       : 'Adult';
 
   return (

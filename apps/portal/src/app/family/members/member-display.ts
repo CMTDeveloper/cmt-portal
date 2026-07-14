@@ -1,4 +1,4 @@
-import { whatsMissingForMember, type MemberDoc } from '@cmt/shared-domain/setu';
+import { whatsMissingForMember, gradeLabel, type MemberDoc } from '@cmt/shared-domain/setu';
 
 /** The roster-card view of a member used by the My Family page. */
 export type DisplayMember = {
@@ -26,7 +26,7 @@ export function memberToDisplay(m: MemberDoc, currentMid: string | null): Displa
   const nameMissing = rawName.length === 0;
   const name = nameMissing ? (isCurrent ? 'Your profile' : 'Unnamed member') : rawName;
   const typeLabel = m.type === 'Child'
-    ? `Child${m.schoolGrade ? ` · ${m.schoolGrade}` : ''}`
+    ? `Child${m.schoolGrade ? ` · ${gradeLabel(m.schoolGrade)}` : ''}`
     : 'Adult';
   return {
     mid: m.mid,

@@ -14,3 +14,13 @@ export const CHILD_GRADE_OPTIONS: readonly { value: string; label: string }[] = 
   { value: 'Shishu', label: 'Shishu (younger than JK)' },
   ...GRADE_BAND_OPTIONS,
 ];
+
+/** Friendly label for a stored child grade value, for display next to a child's
+ *  name. Numeric grades get a "Grade" prefix ('2' -> 'Grade 2'); JK/SK/Shishu
+ *  and anything else stay as-is (a value already like 'Grade 2' is returned
+ *  unchanged). Empty/null -> ''. */
+export function gradeLabel(value: string | null | undefined): string {
+  if (!value) return '';
+  if (value === 'Shishu') return 'Shishu';
+  return /^\d/.test(value) ? `Grade ${value}` : value;
+}

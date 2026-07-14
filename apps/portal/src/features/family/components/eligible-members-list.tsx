@@ -1,6 +1,6 @@
 'use client';
 
-import { memberEligibleForProgram, type ProgramEligibility } from '@cmt/shared-domain';
+import { memberEligibleForProgram, gradeLabel, type ProgramEligibility } from '@cmt/shared-domain';
 import { SetuAvatar } from '@cmt/ui';
 
 export interface EligibleMember {
@@ -53,7 +53,7 @@ export function EligibleMembersList({ members, eligibility, now }: EligibleMembe
           <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 600, fontSize: 14 }}>{m.firstName} {m.lastName}</div>
             {m.schoolGrade && (
-              <div style={{ fontSize: 12, color: 'var(--muted)' }}>{m.schoolGrade}</div>
+              <div style={{ fontSize: 12, color: 'var(--muted)' }}>{gradeLabel(m.schoolGrade)}</div>
             )}
           </div>
         </div>

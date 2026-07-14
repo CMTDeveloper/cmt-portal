@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { SetuAvatar, SetuIcon } from '@cmt/ui';
-import { displayMid } from '@cmt/shared-domain/setu';
+import { displayMid, gradeLabel } from '@cmt/shared-domain/setu';
 import { CspRoot, AllergyCallout, SectionLabel, DetailGroup } from '@/features/family/components/atoms';
 import { mockFamily } from '@/features/family/data/mock';
 import { flags } from '@/lib/flags';
@@ -56,7 +56,7 @@ export default async function MemberDetailPage({ params }: Props) {
     if (!member) notFound();
 
     const name = `${member.firstName} ${member.lastName}`;
-    const typeLabel = member.type === 'Child' ? `Child${member.schoolGrade ? ` · ${member.schoolGrade}` : ''}` : 'Adult';
+    const typeLabel = member.type === 'Child' ? `Child${member.schoolGrade ? ` · ${gradeLabel(member.schoolGrade)}` : ''}` : 'Adult';
     const canEdit = data.isManager || mid === data.currentMid;
     // Scope attendance to the active Bala Vihar enrollment's window (so a prior
     // year's records don't show under this year's enrollment). Per-member

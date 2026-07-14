@@ -7,7 +7,7 @@ import { EnrollCta } from '@/features/family/components/enroll-cta';
 import { EnrollPanel } from '@/features/family/components/enroll-panel';
 import { EligibleMembersList } from '@/features/family/components/eligible-members-list';
 import { CompleteDonationButton } from '@/features/family/components/complete-donation-button';
-import { resolveSuggestedAmount, paymentSourceOf, memberEligibleForProgram, BALA_VIHAR } from '@cmt/shared-domain';
+import { resolveSuggestedAmount, paymentSourceOf, memberEligibleForProgram, gradeLabel, BALA_VIHAR } from '@cmt/shared-domain';
 import type { OfferingDoc, PaymentSource } from '@cmt/shared-domain';
 import { getProgram } from '@/features/setu/programs/get-programs';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
@@ -382,7 +382,7 @@ export default async function ProgramEnrollPage({ params }: Props) {
                         <SetuAvatar name={`${m.firstName} ${m.lastName}`} size={44} />
                         <div style={{ flex: 1 }}>
                           <div style={{ fontSize: 15, fontWeight: 600 }}>{m.firstName} {m.lastName}</div>
-                          {m.schoolGrade && <div style={{ fontSize: 12, color: 'var(--muted)' }}>{m.schoolGrade}</div>}
+                          {m.schoolGrade && <div style={{ fontSize: 12, color: 'var(--muted)' }}>{gradeLabel(m.schoolGrade)}</div>}
                         </div>
                       </div>
                     ))}
