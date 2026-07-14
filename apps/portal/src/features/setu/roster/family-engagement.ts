@@ -9,7 +9,7 @@ import { isEnrollmentConfirmed } from '@/app/family/_helpers/enrollment-confirma
 import { isoToTorontoDateInput } from '@/lib/toronto-date';
 import { paymentFromAmounts } from './payment';
 
-/** null = no active Bala Vihar enrollment; see RosterFamilyRow.bvEngagement. */
+/** null = no active Bala Vihar enrollment; 'confirmed'/'registered' per issue #23. */
 export type BvEngagement = 'confirmed' | 'registered' | null;
 
 export interface RosterFamilySignals {
