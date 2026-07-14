@@ -18,12 +18,14 @@ test.describe('Roster report (/welcome/roster)', () => {
     const summary = page.getByTestId('roster-summary').filter({ visible: true });
     await expect(summary.getByText(/famil(y|ies)/i)).toBeVisible({ timeout: 30_000 });
 
-    // Real UAT data has Bala Vihar levels (this IS the per-level report), so a Level
-    // chip MUST render - a hard assertion (not a soft guard, which would let an empty
-    // Level list pass vacuously). Filter by it and confirm the list + by-level summary.
-    const levelChip = page.getByRole('button', { name: /^Level /i }).first();
-    await expect(levelChip).toBeVisible({ timeout: 15_000 });
-    await levelChip.click();
+    // Real UAT data has Bala Vihar levels (this IS the per-level report), so the Level
+    // dropdown MUST offer a "Level ..." option - a hard assertion (not a soft guard,
+    // which would let an empty Level list pass vacuously). Select it and confirm the
+    // filtered list + by-level summary. (Filters are dropdowns, not chips.)
+    const levelSelect = page.getByRole('combobox', { name: 'Level' }).filter({ visible: true }).first();
+    await expect(levelSelect).toBeVisible({ timeout: 15_000 });
+    await expect(levelSelect.locator('option', { hasText: /^Level /i }).first()).toBeAttached({ timeout: 15_000 });
+    await levelSelect.selectOption({ index: 1 }); // index 0 is "All"; index 1 is the first real level
     await expect(results.getByRole('link').first()).toBeVisible({ timeout: 15_000 });
     await expect(summary.getByText(/By level/i)).toBeVisible({ timeout: 10_000 });
   });
