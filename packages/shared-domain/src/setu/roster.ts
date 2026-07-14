@@ -56,6 +56,7 @@ export const RosterPersonCsvRowSchema = z.object({
   memberName: z.string(),
   type: z.string(), // 'Adult' | 'Child'
   grade: z.string(),
+  level: z.string(), // BV enrollment level name, '' for adults / non-BV members
   location: z.string(),
   programs: z.string(), // '; '-joined active program labels
   payment: z.string(),

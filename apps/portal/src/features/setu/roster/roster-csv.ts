@@ -2,7 +2,7 @@ import type { RosterPersonCsvRow } from '@cmt/shared-domain/setu';
 import { csvCell } from '@/lib/csv';
 
 const HEADERS: Array<keyof RosterPersonCsvRow> = [
-  'familyName', 'fid', 'legacyFid', 'memberName', 'type', 'grade', 'location', 'programs', 'payment',
+  'familyName', 'fid', 'legacyFid', 'memberName', 'type', 'grade', 'level', 'location', 'programs', 'payment',
 ];
 
 export function rosterToCsv(rows: RosterPersonCsvRow[]): string {

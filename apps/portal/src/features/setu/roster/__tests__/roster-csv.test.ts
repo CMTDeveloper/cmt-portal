@@ -4,12 +4,12 @@ import type { RosterPersonCsvRow } from '@cmt/shared-domain/setu';
 
 const row = (over: Partial<RosterPersonCsvRow>): RosterPersonCsvRow => ({
   familyName: 'Patel', fid: 'CMT-X', legacyFid: '123', memberName: 'Ravi Patel',
-  type: 'Child', grade: '3', location: 'Brampton', programs: 'Bala Vihar', payment: 'paid', ...over,
+  type: 'Child', grade: '3', level: 'Level 3', location: 'Brampton', programs: 'Bala Vihar', payment: 'paid', ...over,
 });
 
 describe('rosterToCsv', () => {
   it('emits a header row even with no data', () => {
-    expect(rosterToCsv([])).toMatch(/^familyName,fid,legacyFid,memberName,type,grade,location,programs,payment$/);
+    expect(rosterToCsv([])).toMatch(/^familyName,fid,legacyFid,memberName,type,grade,level,location,programs,payment$/);
   });
 
   it('emits one row per person with all columns in order', () => {
