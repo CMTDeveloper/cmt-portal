@@ -456,6 +456,18 @@ describe('canAccessRoute — /welcome/* — welcome-team', () => {
   });
 });
 
+describe('canAccessRoute — /api/welcome/roster — welcome-team', () => {
+  it('allows welcome-team on the roster report', () => {
+    expect(canAccessRoute(welcomeTeam, '/api/welcome/roster/report', 'GET')).toBe(true);
+  });
+  it('allows admin on the roster report (admin inherits welcome-team)', () => {
+    expect(canAccessRoute(admin, '/api/welcome/roster/report', 'GET')).toBe(true);
+  });
+  it('denies a family-member role', () => {
+    expect(canAccessRoute(member, '/api/welcome/roster/report', 'GET')).toBe(false);
+  });
+});
+
 describe('canAccessRoute — /api/setu/auth/password-sign-in — public', () => {
   it('allows any authenticated role (public route passes before canAccessRoute)', () => {
     expect(canAccessRoute(manager, '/api/setu/auth/password-sign-in', 'POST')).toBe(true);

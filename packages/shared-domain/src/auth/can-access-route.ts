@@ -230,6 +230,11 @@ export function canAccessRoute(
     return isWelcomeTeam(claims);
   }
 
+  // Welcome-team API — single-page roster report (browse/filter dataset + CSV).
+  if (pathname === '/api/welcome/roster' || pathname.startsWith('/api/welcome/roster/')) {
+    return isWelcomeTeam(claims);
+  }
+
   // Welcome-team API — prasad day-of lists (read-only).
   if (pathname === '/api/welcome/prasad' || pathname.startsWith('/api/welcome/prasad/')) {
     return isWelcomeTeam(claims);
