@@ -8,7 +8,7 @@ import { fetchMigrationStatusClient } from './roster-client';
 /**
  * Compact migration-completeness strip. The reconciliation downloads the whole
  * legacy 715b8 roster (RTDB bills per GB downloaded), so it runs ON DEMAND via
- * the "Check migration status" button — never on page load. Fails QUIET — a
+ * the "Check migration status" button - never on page load. Fails QUIET - a
  * failed check renders a muted line with a retry and never throws into the page.
  */
 export function MigrationStrip() {
@@ -28,7 +28,7 @@ export function MigrationStrip() {
       <div style={stripBase}>
         <span style={{ fontSize: 12, color: 'var(--ink)', fontWeight: 600 }}>Migration status</span>
         <span style={{ fontSize: 12, color: 'var(--muted)' }}>
-          Compares the legacy roster against portal families — run when needed.
+          Compares the legacy roster against portal families - run when needed.
         </span>
         <button type="button" onClick={check} className="focus-ring" style={checkButton}>
           Check migration status
