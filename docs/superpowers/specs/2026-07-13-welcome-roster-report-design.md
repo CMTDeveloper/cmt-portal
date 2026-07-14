@@ -45,6 +45,22 @@ family doc. Filtering a 50-family page on them collapses it to a handful, and co
 would be per-page, not totals. Reliable "kids per level / families who donated" needs the
 **whole** matched set.
 
+## v1 scope decision (2026-07-13)
+
+Ship **five filters**: Location, Program, Level, Grade, Payment - plus live counts and
+filtered CSV export. These cover all three of Vaibhav's stated reports (enrolled BV kids,
+per-level breakdown, families who donated for BV) and are all cheap bulk reads.
+
+**Deferred to a fast-follow: the Status (Confirmed/Registered) engagement filter and the
+Confirmed/Registered card chip.** Accurate engagement needs the door check-in half, which
+lives in the standalone check-in app's Firestore (prod `715b8`) as a per-family
+subcollection with **no bulk read path** - computing it for all ~880 families per report
+load means an ~880-read fan-out against the shared prod DB. Teacher-marks-only would
+under-report "Confirmed" (a door-only attendee shows Registered), which is misleading, so
+we defer rather than approximate. Sections below describe the full design; the engagement
+parts (builder read #6, the `bvEngagement` field, the `status` filter, the Status chip
+row) are **out of v1** and called out inline.
+
 ## Approach (chosen)
 
 **Bulk-load the full filterable dataset once; filter, count, and export client-side.**
@@ -69,7 +85,7 @@ Rejected alternatives:
   JSON browse and the CSV export:
   - identity: `fid, publicFid, legacyFid, name, location, memberCount`
   - `payment: 'paid'|'outstanding'|'unknown'`
-  - `bvEngagement: 'confirmed'|'registered'|null`
+  - `bvEngagement: 'confirmed'|'registered'|null` **(DEFERRED - not built in v1)**
   - `programs: string[]` (active program labels)
   - `bvChildren: Array<{ mid, firstName, lastName, grade: string|null, levelName: string|null }>`
     - one per child in an **active Bala Vihar** enrollment (`enrolledMids` expanded,
@@ -86,13 +102,10 @@ Rejected alternatives:
      (and note BV via `programKey==='bala-vihar'` for the confirmed signal).
   5. `offerings` (`getAll` over active-enrollment oids) → live effective suggested amount
      for the payment computation + BV offering window for engagement.
-  6. **Engagement** (only when Status is a supported filter): `attendanceEvents` for the
-     year window (single-field `date` range, index-free) + door check-ins for the same
-     window, joined per family (teacher event `mid==child.mid && pid==oid`; door by
-     `legacySid`). A family with an active BV enrollment counts **confirmed** if any
-     enrolled child has ≥1 present mark in the offering window, OR a completed BV
-     donation, OR legacy-paid; else **registered**; no active BV ⇒ `null`. This mirrors
-     `deriveFamilyRosterSignals` exactly, batched.
+  6. **Engagement (DEFERRED - not built in v1).** Would join `attendanceEvents` (cheap
+     bulk) with door check-ins, but door check-ins have no bulk read (per-family
+     subcollection in prod `715b8`). Deferred per the 2026-07-13 scope decision; the
+     builder does NOT compute `bvEngagement` in v1.
   - Wrapped in `use cache` with a short TTL so re-visits are instant (filtering is
     client-side regardless).
   - `?year=` scope (two effects, mirroring `list-families.ts`):
@@ -108,10 +121,10 @@ Rejected alternatives:
 - **`matchesRosterFilters(family, filters)`** + **`summarizeRoster(families, filters)`** -
   pure functions (no server/DOM imports) in `packages/shared-domain/src/setu/` so they are
   unit-testable and shared by the client (browse + counts) and the server (CSV filter).
-  - `filters`: `{ location?, program?, level?, grade?, payment?, status? }` - AND across
-    groups; single value per group.
+  - `filters`: `{ location?, program?, level?, grade?, payment? }` - AND across groups;
+    single value per group. (`status` deferred with engagement.)
   - **Family-level** filters: `location`, `program` (has an active enrollment with that
-    programKey), `payment`, `status` (maps to `bvEngagement`).
+    programKey), `payment`.
   - **Child-level** filters (BV-scoped): `level` (`bvChildren` some `levelName===level`),
     `grade` (`bvChildren` some `grade===grade`). A family passes iff it has ≥1 BV child
     passing every active child filter.
@@ -129,13 +142,13 @@ Rejected alternatives:
 - **New** `GET /api/welcome/roster/report?year=` - welcome-team + admin. Returns the JSON
   dataset projected to **lean client rows** (drops `members`; keeps `bvChildren` sans
   names for level/grade filtering + counts):
-  `{ fid, publicFid, legacyFid, name, location, memberCount, payment, bvEngagement,
-    programs, bvChildren: [{ grade, levelName }] }`.
+  `{ fid, publicFid, legacyFid, name, location, memberCount, payment,
+    programs, bvChildren: [{ grade, levelName }] }`. (`bvEngagement` omitted in v1.)
   ~880 rows ≈ 260 KB. Needs an explicit rule in `canAccessRoute` (`/api/welcome/*` is not
   the manager catch-all) - mirror the existing `/api/welcome/families` rule.
 - **CSV** stays on the report endpoint: `GET /api/welcome/roster/report?format=csv` +
-  the active filters as query params (`location, program, level, grade, payment, status,
-  year`). Server calls the same builder, applies `matchesRosterFilters` server-side, and
+  the active filters as query params (`location, program, level, grade, payment, year`).
+  Server calls the same builder, applies `matchesRosterFilters` server-side, and
   emits one row per person with **two new columns: `level`, `grade`** (grade already
   present; `level` added; both are the BV enrollment's values, blank for non-BV members).
 - **Retire** the paginated browse: `/api/welcome/families` (JSON + CSV) and
@@ -154,7 +167,7 @@ Program:   [All] [Bala Vihar] [Tabla] [Vocal] [Yuva Kendra]
 Level:     [All] [Level 1] [Level 2] [Level 3] …      (new; BV levels, from data)
 Grade:     [All] [K] [1] [2] [3] …                    (new; from data)
 Payment:   [All] [Paid] [Outstanding] [Unknown]       (new)
-Status:    [All] [Confirmed] [Registered]             (new)
+                        (Status row DEFERRED - not in v1)
 
 ┌── matches these filters ──────────────────────────┐
 │  42 families · 58 Bala Vihar children             │
@@ -162,7 +175,7 @@ Status:    [All] [Confirmed] [Registered]             (new)
 │  Payment:   Paid 30 · Outstanding 12              │
 └───────────────────────────────────────────────────┘
 
-[Rana Family · FID 1075 · Brampton · Confirmed · Paid · 2 members ›]
+[Rana Family · FID 1075 · Brampton · Paid · 2 members ›]
 [Ashwin Family · …]                                    (Load more)
 ```
 
@@ -191,20 +204,19 @@ Status:    [All] [Confirmed] [Registered]             (new)
 ## Error handling
 
 - The builder never throws per family: a derivation failure for one family yields
-  `payment:'unknown'`, `bvEngagement:null` (same discipline as `deriveFamilyPayment`) so
-  one bad family can't blank the report.
+  `payment:'unknown'` (same discipline as `deriveFamilyPayment`) so one bad family can't
+  blank the report.
 - Endpoint returns 401 (no session) / 403 (not welcome-team) / 404 (flag off) like the
   existing roster routes; the client shows a retry notice on non-OK.
 
 ## Testing
 
 - **Unit (pure):** `matchesRosterFilters` + `summarizeRoster` with an N≥2 fixture -
-  ≥2 families, children across ≥2 levels and ≥2 grades, mixed payment + engagement.
-  Assert: each filter in isolation, AND-combined filters, `childCount`/`byLevel` reflect
-  matching *children* (not families), family included iff ≥1 passing child.
+  ≥2 families, children across ≥2 levels and ≥2 grades, mixed payment. Assert: each filter
+  in isolation, AND-combined filters, `childCount`/`byLevel` reflect matching *children*
+  (not families), family included iff ≥1 passing child.
 - **Builder:** a fake-firestore test that the bulk join maps enrollment level/grade onto
-  `bvChildren`, sums donations, and computes engagement for a confirmed vs a registered
-  family (N≥2).
+  `bvChildren` and sums donations into the payment signal (N≥2).
 - **CSV:** one row per person incl. adults; `level`/`grade` columns populated for BV kids,
   blank for adults; filters honored.
 - **Deployed-UAT E2E** (`e2e/setu/admin/`): sign in as welcome-team, load the report,
@@ -218,13 +230,18 @@ Status:    [All] [Confirmed] [Registered]             (new)
   this page is the ad-hoc slice-and-dice + drill-to-family view). They stay complementary.
 - Level/Grade filters are **Bala Vihar only** (the report's focus). Other programs remain
   filterable by Program; their per-level breakdown is out of scope until asked.
+- **Status (Confirmed/Registered) filter + the engagement chip are deferred** to a
+  fast-follow (needs a bulk teacher+door attendance join; door check-ins are a per-family
+  read against the shared prod `715b8` check-in Firestore with no bulk path).
 - No change to the family/teacher-facing surfaces or the mobile app API.
 
 ## Rollout / ops
 
 - Behind the existing `setuAuth` flag + `canAccessRoute` welcome-team gate; no new flag.
-- No new Firestore indexes ⇒ no index deploy, no runbook §14 DB entry. (If the deployed-UAT
-  walkthrough surfaces a missing single-field index for the `attendanceEvents` date range,
-  deploy it to **UAT only**, never `--force`, never prod - and record it in runbook §14.)
+- No new Firestore indexes ⇒ no index deploy, no runbook §14 DB entry. The v1 reads are the
+  same unfiltered collection / collectionGroup reads `build-csv-rows.ts` already performs
+  (families, members, enrollments, donations, offerings) - all index-free. (Any index need
+  that surfaces in the UAT walkthrough deploys to **UAT only**, never `--force`, never prod,
+  and is recorded in runbook §14.)
 - Mobile API changelog: not required (no `/api/setu/*` change; this is a `/api/welcome/*`
   web-only route).
