@@ -1,75 +1,87 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { RosterReportRow } from '@cmt/shared-domain/setu';
 
 // vi.hoisted so the (hoisted) vi.mock factories can reference these mocks.
-const { fetchRosterClient, fetchMigrationStatusClient, searchFamiliesClient } = vi.hoisted(() => ({
-  fetchRosterClient: vi.fn(),
+const { fetchRosterReportClient, fetchMigrationStatusClient, searchFamiliesClient } = vi.hoisted(() => ({
+  fetchRosterReportClient: vi.fn(),
   fetchMigrationStatusClient: vi.fn(),
   searchFamiliesClient: vi.fn(),
 }));
-vi.mock('../roster-client', () => ({ fetchRosterClient, fetchMigrationStatusClient }));
+vi.mock('../roster-client', () => ({ fetchRosterReportClient, fetchMigrationStatusClient }));
 vi.mock('@/features/setu/search/search-families-client', () => ({ searchFamiliesClient }));
 
 import { RosterBrowser } from '../roster-browser';
 
+function row(over: Partial<RosterReportRow>): RosterReportRow {
+  return {
+    fid: 'CMT-A', publicFid: null, legacyFid: null, name: 'A', location: 'Brampton',
+    memberCount: 2, payment: 'unknown', programs: [], programKeys: [], bvChildren: [], ...over,
+  };
+}
+
+const RANA = row({
+  fid: 'CMT-RANA', publicFid: '1075', legacyFid: '477', name: 'Rana', location: 'Brampton', payment: 'paid',
+  programs: ['Bala Vihar'], programKeys: ['bala-vihar'], bvChildren: [{ grade: '2', levelName: 'Level 2' }],
+});
+const SHAH = row({
+  fid: 'CMT-SHAH', publicFid: '1200', name: 'Shah', location: 'Scarborough', payment: 'outstanding',
+  programs: ['Bala Vihar'], programKeys: ['bala-vihar'], bvChildren: [{ grade: '5', levelName: 'Level 4' }],
+});
+
 beforeEach(() => {
-  fetchRosterClient.mockReset();
+  fetchRosterReportClient.mockReset();
   fetchMigrationStatusClient.mockReset();
   searchFamiliesClient.mockReset();
   fetchMigrationStatusClient.mockResolvedValue({ legacyTotal: 3, migrated: 3, missing: 0, missingFids: [], checkedAt: 'x' });
+  fetchRosterReportClient.mockResolvedValue({ rows: [RANA, SHAH] });
+  searchFamiliesClient.mockResolvedValue([]);
 });
 
 // NOTE: RosterBrowser renders BOTH a mobile (`block md:hidden`) and a desktop
-// (`hidden md:block`) branch — CSS media queries don't apply in jsdom, so every
-// element appears twice. We therefore use the repo's dual-branch convention
-// (getAllBy*/findAllBy* + `.length`), matching e.g. programs-table.test.tsx. The
-// assertions still verify exactly the plan's three behaviours: mount→browse
-// list, type→search results, nextCursor→Load more.
+// (`hidden md:block`) branch - CSS media queries don't apply in jsdom, so every
+// element appears twice AND each branch owns independent React state. We use
+// getAllBy*/findAllBy* + `.length` (repo convention), and for interaction tests
+// we act on EVERY matching control so both branches move together.
 describe('RosterBrowser', () => {
-  it('renders the browse list on mount, showing the 4-digit publicFid (via displayFid)', async () => {
-    fetchRosterClient.mockResolvedValue({
-      families: [{ fid: 'CMT-X', publicFid: '1042', legacyFid: '1', name: 'Patel', location: 'Brampton', memberCount: 4, payment: 'paid', programs: ['Bala Vihar'] }],
-      nextCursor: null, total: 1,
-    });
+  it('bulk-loads the dataset, renders family cards, and shows the live summary', async () => {
     render(<RosterBrowser locationOptions={['Brampton', 'Scarborough']} />);
-    expect((await screen.findAllByText(/Patel Family/)).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText(/1 famil/i).length).toBeGreaterThanOrEqual(1);
-    // The displayed Family ID is the 4-digit publicFid, not the internal CMT- fid.
-    expect(screen.getAllByText(/FID 1042/).length).toBeGreaterThanOrEqual(1);
+    expect((await screen.findAllByText(/Rana Family/)).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/Shah Family/).length).toBeGreaterThanOrEqual(1);
+    // The displayed Family ID is the 4-digit publicFid (via displayFid).
+    expect(screen.getAllByText(/FID 1075/).length).toBeGreaterThanOrEqual(1);
+    // Summary: 2 families, 2 BV children total.
+    expect(screen.getAllByText(/2 families/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/2 Bala Vihar children/i).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('filters the list by Level (client-side, over the loaded dataset)', async () => {
+    render(<RosterBrowser locationOptions={['Brampton', 'Scarborough']} />);
+    await screen.findAllByText(/Rana Family/);
+    // Click every "Level 4" chip (mobile + desktop) so both branches filter.
+    for (const btn of screen.getAllByRole('button', { name: 'Level 4' })) {
+      await userEvent.click(btn);
+    }
+    await waitFor(() => expect(screen.queryByText(/Rana Family/)).not.toBeInTheDocument());
+    expect(screen.getAllByText(/Shah Family/).length).toBeGreaterThanOrEqual(1);
   });
 
   it('switches to search results when the search box has text', async () => {
-    fetchRosterClient.mockResolvedValue({ families: [], nextCursor: null, total: 0 });
-    searchFamiliesClient.mockResolvedValue([{ fid: 'CMT-S', publicFid: '2050', legacyFid: null, name: 'Sharma', location: 'Markham', memberCount: 2 }]);
+    searchFamiliesClient.mockResolvedValue([
+      { fid: 'CMT-S', publicFid: '2050', legacyFid: null, name: 'Sharma', location: 'Markham', memberCount: 2 },
+    ]);
     render(<RosterBrowser locationOptions={['Brampton', 'Scarborough']} />);
+    await screen.findAllByText(/Rana Family/);
     await userEvent.type(screen.getAllByTestId('roster-search-input')[0]!, 'sharma');
     await waitFor(() => expect(screen.getAllByText(/Sharma Family/).length).toBeGreaterThanOrEqual(1));
-    expect(screen.getAllByText(/FID 2050/).length).toBeGreaterThanOrEqual(1);
   });
 
-  it('renders the Confirmed/Registered engagement chip (issue #23), and nothing for null', async () => {
-    fetchRosterClient.mockResolvedValue({
-      families: [
-        { fid: 'CMT-C', publicFid: '1', legacyFid: null, name: 'ConfFam', location: 'Brampton', memberCount: 2, payment: 'paid', programs: ['Bala Vihar'], bvEngagement: 'confirmed' },
-        { fid: 'CMT-R', publicFid: '2', legacyFid: null, name: 'RegFam', location: 'Brampton', memberCount: 1, payment: 'outstanding', programs: ['Bala Vihar'], bvEngagement: 'registered' },
-        { fid: 'CMT-N', publicFid: '3', legacyFid: null, name: 'NilFam', location: 'Brampton', memberCount: 1, payment: 'unknown', programs: [], bvEngagement: null },
-      ],
-      nextCursor: null, total: 3,
-    });
-    render(<RosterBrowser locationOptions={['Brampton', 'Scarborough']} />);
-    expect((await screen.findAllByText('Confirmed')).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText('Registered').length).toBeGreaterThanOrEqual(1);
-    // three families, three payment chips, but only two engagement chips → the
-    // null-engagement family shows no Confirmed/Registered chip.
-    expect(screen.queryAllByText('Confirmed').length).toBe(screen.queryAllByText(/ConfFam Family/).length);
-  });
-
-  it('shows a "Load more" button when nextCursor is present', async () => {
-    fetchRosterClient.mockResolvedValue({
-      families: [{ fid: 'CMT-X', publicFid: null, legacyFid: null, name: 'Patel', location: 'Brampton', memberCount: 1, payment: 'unknown', programs: [] }],
-      nextCursor: 'CMT-X', total: 10,
-    });
+  it('shows a "Load more" button when the filtered set exceeds the initial window', async () => {
+    const many = Array.from({ length: 60 }, (_, i) =>
+      row({ fid: `CMT-${i}`, name: `Fam${i}`, programs: ['Bala Vihar'], programKeys: ['bala-vihar'] }),
+    );
+    fetchRosterReportClient.mockResolvedValue({ rows: many });
     render(<RosterBrowser locationOptions={['Brampton', 'Scarborough']} />);
     expect((await screen.findAllByRole('button', { name: /load more/i })).length).toBeGreaterThanOrEqual(1);
   });

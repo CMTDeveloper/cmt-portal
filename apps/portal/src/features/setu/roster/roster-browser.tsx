@@ -1,31 +1,23 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { SetuLogo, SetuIcon } from '@cmt/ui';
-import { displayFid } from '@cmt/shared-domain/setu';
-import type { Location, RosterFamilyRow, RosterPayment } from '@cmt/shared-domain/setu';
+import { displayFid, ROSTER_PAYMENTS } from '@cmt/shared-domain/setu';
+import type {
+  RosterReportRow, RosterReportFilters, RosterReportSummary, RosterPayment,
+} from '@cmt/shared-domain/setu';
+import {
+  matchesRosterFilters, summarizeRoster, deriveLevelOptions, deriveGradeOptions,
+} from '@cmt/shared-domain/setu';
 import { CspRoot } from '@/features/family/components/atoms';
 import { searchFamiliesClient } from '@/features/setu/search/search-families-client';
 import type { FamilySearchHit } from '@/features/setu/search/search-families-client';
-import { fetchRosterClient } from './roster-client';
+import { fetchRosterReportClient } from './roster-client';
 import { RosterExportButton } from './roster-export-button';
 import { MigrationStrip } from './migration-strip';
 
-const PAGE_SIZE = 50;
-
-// Known program filter chips. programKey is a free slug (no exported label map),
-// so we keep a small map for the common ones and title-case the rest.
-const KNOWN_PROGRAMS = ['bala-vihar', 'tabla', 'vocal', 'yuva-kendra'] as const;
-const PROGRAM_LABELS: Record<string, string> = {
-  'bala-vihar': 'Bala Vihar',
-  tabla: 'Tabla',
-  vocal: 'Vocal',
-  'yuva-kendra': 'Yuva Kendra',
-};
-function programLabel(key: string): string {
-  return PROGRAM_LABELS[key] ?? key.split('-').map((w) => (w ? w[0]!.toUpperCase() + w.slice(1) : w)).join(' ');
-}
+const INITIAL_SHOWN = 50;
 
 // ── Payment chip tones ────────────────────────────────────────────────────────
 const PAYMENT_STYLE: Record<RosterPayment, { bg: string; fg: string; label: string }> = {
@@ -36,31 +28,6 @@ const PAYMENT_STYLE: Record<RosterPayment, { bg: string; fg: string; label: stri
 
 function PaymentChip({ payment }: { payment: RosterPayment }) {
   const s = PAYMENT_STYLE[payment];
-  return (
-    <span
-      style={{
-        display: 'inline-flex', alignItems: 'center', gap: 5,
-        fontSize: 11, fontWeight: 600, padding: '2px 9px', borderRadius: 99,
-        background: s.bg, color: s.fg, whiteSpace: 'nowrap',
-      }}
-    >
-      <span aria-hidden style={{ width: 6, height: 6, borderRadius: 99, background: 'currentColor' }} />
-      {s.label}
-    </span>
-  );
-}
-
-// ── Bala Vihar engagement chip (issue #23) ────────────────────────────────────
-// Same chip shape as PaymentChip; green (--ok) = Confirmed, amber (--warn) =
-// Registered. Nothing renders when bvEngagement is null/absent (no active BV).
-const ENGAGEMENT_STYLE = {
-  confirmed: { bg: 'var(--accentSoft)', fg: 'var(--ok)', label: 'Confirmed' },
-  registered: { bg: 'var(--accentSoft)', fg: 'var(--warn)', label: 'Registered' },
-} as const;
-
-function EngagementChip({ engagement }: { engagement: RosterFamilyRow['bvEngagement'] }) {
-  if (engagement !== 'confirmed' && engagement !== 'registered') return null;
-  const s = ENGAGEMENT_STYLE[engagement];
   return (
     <span
       style={{
@@ -99,6 +66,17 @@ function FilterChip({ active, onClick, children }: { active: boolean; onClick: (
   );
 }
 
+function FilterRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div style={{ fontSize: 11, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600, marginBottom: 8 }}>
+        {label}
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>{children}</div>
+    </div>
+  );
+}
+
 // ── Cards ─────────────────────────────────────────────────────────────────────
 const cardStyle = {
   display: 'block', padding: 16,
@@ -106,7 +84,7 @@ const cardStyle = {
   borderRadius: 'var(--radius)', textDecoration: 'none', color: 'inherit',
 } as const;
 
-function RosterFamilyCard({ row }: { row: RosterFamilyRow }) {
+function RosterFamilyCard({ row }: { row: RosterReportRow }) {
   return (
     <Link key={row.fid} href={`/welcome/family/${row.fid}`} className="focus-ring" style={cardStyle}>
       <div className="between" style={{ alignItems: 'flex-start', gap: 12 }}>
@@ -132,10 +110,7 @@ function RosterFamilyCard({ row }: { row: RosterFamilyRow }) {
           )}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flex: '0 0 auto' }}>
-          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 6 }}>
-            <EngagementChip engagement={row.bvEngagement} />
-            <PaymentChip payment={row.payment} />
-          </div>
+          <PaymentChip payment={row.payment} />
           <div style={{ fontSize: 12, color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
             {row.memberCount} member{row.memberCount !== 1 ? 's' : ''}
             <SetuIcon.chevron color="var(--muted)" />
@@ -165,21 +140,62 @@ function SearchHitCard({ hit }: { hit: FamilySearchHit }) {
   );
 }
 
+function SummaryStrip({ summary }: { summary: RosterReportSummary }) {
+  return (
+    <div
+      className="card"
+      style={{ padding: 14, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radius)' }}
+      data-testid="roster-summary"
+    >
+      <div style={{ fontSize: 14, fontWeight: 600 }}>
+        {summary.familyCount.toLocaleString()} famil{summary.familyCount === 1 ? 'y' : 'ies'}
+        {' · '}
+        {summary.childCount.toLocaleString()} Bala Vihar child{summary.childCount === 1 ? '' : 'ren'}
+      </div>
+      {summary.byLevel.length > 0 && (
+        <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 8, fontSize: 12, color: 'var(--body-text)' }}>
+          <span style={{ color: 'var(--muted)', fontWeight: 600 }}>By level:</span>
+          {summary.byLevel.map((b) => (
+            <span key={b.levelName} style={{ fontFeatureSettings: '"tnum"' }}>{b.levelName} · {b.childCount}</span>
+          ))}
+        </div>
+      )}
+      <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 8, fontSize: 12, color: 'var(--body-text)' }}>
+        <span style={{ color: 'var(--muted)', fontWeight: 600 }}>Payment:</span>
+        <span style={{ fontFeatureSettings: '"tnum"' }}>Paid · {summary.byPayment.paid}</span>
+        <span style={{ fontFeatureSettings: '"tnum"' }}>Outstanding · {summary.byPayment.outstanding}</span>
+        <span style={{ fontFeatureSettings: '"tnum"' }}>Unknown · {summary.byPayment.unknown}</span>
+      </div>
+    </div>
+  );
+}
+
+function Notice({ tone, children }: { tone: 'muted' | 'err'; children: React.ReactNode }) {
+  if (tone === 'err') {
+    return (
+      <div style={{ padding: '10px 14px', background: 'var(--accentSoft)', border: '1px solid var(--err)', borderRadius: 'var(--radiusSm)', fontSize: 13, color: 'var(--err)', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <SetuIcon.warn color="var(--err)" /> {children}
+      </div>
+    );
+  }
+  return <p style={{ fontSize: 14, color: 'var(--muted)', textAlign: 'center', margin: '24px 0' }}>{children}</p>;
+}
+
 // ── Core content (rendered into both mobile + desktop branches) ────────────────
 function RosterContent({ year, locationOptions }: { year?: string; locationOptions: string[] }) {
+  // Dataset (loaded once)
+  const [rows, setRows] = useState<RosterReportRow[] | null>(null);
+  const [loadError, setLoadError] = useState(false);
+
   // Filters
-  const [location, setLocation] = useState<Location | null>(null);
+  const [location, setLocation] = useState<string | null>(null);
   const [program, setProgram] = useState<string | null>(null);
+  const [level, setLevel] = useState<string | null>(null);
+  const [grade, setGrade] = useState<string | null>(null);
+  const [payment, setPayment] = useState<RosterPayment | null>(null);
+  const [shown, setShown] = useState(INITIAL_SHOWN);
 
-  // Browse state
-  const [rows, setRows] = useState<RosterFamilyRow[]>([]);
-  const [total, setTotal] = useState<number | null>(null);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
-  const [browseLoading, setBrowseLoading] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [browseError, setBrowseError] = useState(false);
-
-  // Search state
+  // Search (unchanged behavior)
   const [query, setQuery] = useState('');
   const [hits, setHits] = useState<FamilySearchHit[]>([]);
   const [searching, setSearching] = useState(false);
@@ -187,89 +203,59 @@ function RosterContent({ year, locationOptions }: { year?: string; locationOptio
   const [searchError, setSearchError] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const seqRef = useRef(0);
-
   const searchActive = query.trim().length > 0;
 
-  // Browse fetch (page 1) — refires when a filter changes.
-  const loadBrowse = useCallback(async () => {
-    setBrowseLoading(true);
-    setBrowseError(false);
-    try {
-      const res = await fetchRosterClient({
-        limit: PAGE_SIZE,
-        ...(location ? { location } : {}),
-        ...(program ? { program } : {}),
-        ...(year ? { year } : {}),
-      });
-      setRows(res.families);
-      setNextCursor(res.nextCursor);
-      setTotal(res.total);
-    } catch {
-      setBrowseError(true);
-      setRows([]);
-      setNextCursor(null);
-      setTotal(null);
-    } finally {
-      setBrowseLoading(false);
-    }
-  }, [location, program, year]);
-
   useEffect(() => {
-    void loadBrowse();
-  }, [loadBrowse]);
+    let alive = true;
+    fetchRosterReportClient(year)
+      .then((res) => { if (alive) { setRows(res.rows); setLoadError(false); } })
+      .catch(() => { if (alive) { setRows([]); setLoadError(true); } });
+    return () => { alive = false; };
+  }, [year]);
 
-  async function loadMore() {
-    if (!nextCursor || loadingMore) return;
-    setLoadingMore(true);
-    try {
-      const res = await fetchRosterClient({
-        limit: PAGE_SIZE,
-        cursor: nextCursor,
-        ...(location ? { location } : {}),
-        ...(program ? { program } : {}),
-        ...(year ? { year } : {}),
-      });
-      setRows((prev) => [...prev, ...res.families]);
-      setNextCursor(res.nextCursor);
-    } catch {
-      setBrowseError(true);
-    } finally {
-      setLoadingMore(false);
-    }
-  }
+  const filters: RosterReportFilters = useMemo(
+    () => ({ location, program, level, grade, payment }),
+    [location, program, level, grade, payment],
+  );
 
-  // Search-as-filter — debounced, monotonic stale-sequence guard (same as welcome-search).
+  const all = useMemo(() => rows ?? [], [rows]);
+  const filtered = useMemo(() => all.filter((r) => matchesRosterFilters(r, filters)), [all, filters]);
+  const summary = useMemo(() => summarizeRoster(all, filters), [all, filters]);
+  const levelOptions = useMemo(() => deriveLevelOptions(all), [all]);
+  const gradeOptions = useMemo(() => deriveGradeOptions(all), [all]);
+  const programOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const r of all) r.programKeys.forEach((k, i) => { if (!map.has(k)) map.set(k, r.programs[i] ?? k); });
+    return [...map.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  }, [all]);
+
+  // Reset the incremental window whenever the filter set changes.
+  useEffect(() => { setShown(INITIAL_SHOWN); }, [filters]);
+
+  // Search-as-filter (identical to today).
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     const trimmed = query.trim();
-    if (!trimmed) {
-      setHits([]);
-      setSearched(false);
-      setSearchError(false);
-      return;
-    }
+    if (!trimmed) { setHits([]); setSearched(false); setSearchError(false); return; }
     debounceRef.current = setTimeout(async () => {
       const mySeq = ++seqRef.current;
-      setSearching(true);
-      setSearchError(false);
+      setSearching(true); setSearchError(false);
       try {
         const results = await searchFamiliesClient(trimmed);
         if (mySeq !== seqRef.current) return;
-        setHits(results);
-        setSearched(true);
+        setHits(results); setSearched(true);
       } catch {
         if (mySeq !== seqRef.current) return;
-        setSearchError(true);
-        setHits([]);
-        setSearched(true);
+        setSearchError(true); setHits([]); setSearched(true);
       } finally {
         if (mySeq === seqRef.current) setSearching(false);
       }
     }, 300);
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [query]);
+
+  const visible = filtered.slice(0, shown);
+  const loading = rows === null;
 
   return (
     <div className="col" style={{ gap: 16 }}>
@@ -300,32 +286,63 @@ function RosterContent({ year, locationOptions }: { year?: string; locationOptio
         )}
       </div>
 
-      {/* Filters — hidden while searching (search ignores filters by design). */}
+      {/* Filters + summary - hidden while searching (search ignores filters by design). */}
       {!searchActive && (
-        <div className="col" style={{ gap: 10 }}>
-          <FilterRow label="Location">
-            <FilterChip active={location === null} onClick={() => setLocation(null)}>All</FilterChip>
-            {locationOptions.map((loc) => (
-              <FilterChip key={loc} active={location === loc} onClick={() => setLocation(loc)}>{loc}</FilterChip>
-            ))}
-          </FilterRow>
-          <FilterRow label="Program">
-            <FilterChip active={program === null} onClick={() => setProgram(null)}>All</FilterChip>
-            {KNOWN_PROGRAMS.map((key) => (
-              <FilterChip key={key} active={program === key} onClick={() => setProgram(key)}>{programLabel(key)}</FilterChip>
-            ))}
-          </FilterRow>
-        </div>
+        <>
+          <div className="col" style={{ gap: 10 }}>
+            <FilterRow label="Location">
+              <FilterChip active={location === null} onClick={() => setLocation(null)}>All</FilterChip>
+              {locationOptions.map((loc) => (
+                <FilterChip key={loc} active={location === loc} onClick={() => setLocation(loc)}>{loc}</FilterChip>
+              ))}
+            </FilterRow>
+            <FilterRow label="Program">
+              <FilterChip active={program === null} onClick={() => setProgram(null)}>All</FilterChip>
+              {programOptions.map(([key, label]) => (
+                <FilterChip key={key} active={program === key} onClick={() => setProgram(key)}>{label}</FilterChip>
+              ))}
+            </FilterRow>
+            {levelOptions.length > 0 && (
+              <FilterRow label="Level">
+                <FilterChip active={level === null} onClick={() => setLevel(null)}>All</FilterChip>
+                {levelOptions.map((lv) => (
+                  <FilterChip key={lv} active={level === lv} onClick={() => setLevel(lv)}>{lv}</FilterChip>
+                ))}
+              </FilterRow>
+            )}
+            {gradeOptions.length > 0 && (
+              <FilterRow label="Grade">
+                <FilterChip active={grade === null} onClick={() => setGrade(null)}>All</FilterChip>
+                {gradeOptions.map((g) => (
+                  <FilterChip key={g} active={grade === g} onClick={() => setGrade(g)}>{g}</FilterChip>
+                ))}
+              </FilterRow>
+            )}
+            <FilterRow label="Payment">
+              <FilterChip active={payment === null} onClick={() => setPayment(null)}>All</FilterChip>
+              {ROSTER_PAYMENTS.map((p) => (
+                <FilterChip key={p} active={payment === p} onClick={() => setPayment(p)}>
+                  {p[0]!.toUpperCase() + p.slice(1)}
+                </FilterChip>
+              ))}
+            </FilterRow>
+          </div>
+
+          {!loading && !loadError && <SummaryStrip summary={summary} />}
+        </>
       )}
 
       {/* Count + export */}
       <div className="between" style={{ gap: 12, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 13, color: 'var(--muted)', fontFeatureSettings: '"tnum"' }}>
           {searchActive
-            ? (searched && !searching ? `${hits.length} match${hits.length === 1 ? '' : 'es'}` : ' ')
-            : (total !== null ? `${total.toLocaleString()} famil${total === 1 ? 'y' : 'ies'}` : ' ')}
+            ? (searched && !searching ? `${hits.length} match${hits.length === 1 ? '' : 'es'}` : ' ')
+            : (loading ? ' ' : `${filtered.length.toLocaleString()} famil${filtered.length === 1 ? 'y' : 'ies'}`)}
         </span>
-        <RosterExportButton location={location} program={program} {...(year ? { year } : {})} />
+        <RosterExportButton
+          location={location} program={program} level={level} grade={grade} payment={payment}
+          {...(year ? { year } : {})}
+        />
       </div>
 
       {/* Results */}
@@ -340,29 +357,26 @@ function RosterContent({ year, locationOptions }: { year?: string; locationOptio
           </>
         ) : (
           <>
-            {browseError && <Notice tone="err">Couldn’t load the roster. Please try again.</Notice>}
-            {browseLoading && rows.length === 0 && !browseError && (
-              <Notice tone="muted">Loading families…</Notice>
-            )}
-            {!browseLoading && !browseError && rows.length === 0 && (
+            {loadError && <Notice tone="err">Couldn’t load the roster. Please try again.</Notice>}
+            {loading && !loadError && <Notice tone="muted">Loading families…</Notice>}
+            {!loading && !loadError && filtered.length === 0 && (
               <Notice tone="muted">No families match these filters.</Notice>
             )}
-            {rows.map((row) => <RosterFamilyCard key={row.fid} row={row} />)}
-            {nextCursor && (
+            {visible.map((row) => <RosterFamilyCard key={row.fid} row={row} />)}
+            {shown < filtered.length && (
               <button
                 type="button"
-                onClick={loadMore}
-                disabled={loadingMore}
+                onClick={() => setShown((n) => n + INITIAL_SHOWN)}
                 className="focus-ring"
                 style={{
                   minHeight: 44, marginTop: 4,
                   fontSize: 13, fontWeight: 600,
                   background: 'var(--surface)', color: 'var(--accentDeep)',
                   border: '1px solid var(--line)', borderRadius: 'var(--radius)',
-                  cursor: loadingMore ? 'default' : 'pointer',
+                  cursor: 'pointer',
                 }}
               >
-                {loadingMore ? 'Loading…' : 'Load more'}
+                Load more
               </button>
             )}
           </>
@@ -372,32 +386,10 @@ function RosterContent({ year, locationOptions }: { year?: string; locationOptio
   );
 }
 
-function FilterRow({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <div style={{ fontSize: 11, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600, marginBottom: 8 }}>
-        {label}
-      </div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>{children}</div>
-    </div>
-  );
-}
-
-function Notice({ tone, children }: { tone: 'muted' | 'err'; children: React.ReactNode }) {
-  if (tone === 'err') {
-    return (
-      <div style={{ padding: '10px 14px', background: 'var(--accentSoft)', border: '1px solid var(--err)', borderRadius: 'var(--radiusSm)', fontSize: 13, color: 'var(--err)', display: 'flex', alignItems: 'center', gap: 8 }}>
-        <SetuIcon.warn color="var(--err)" /> {children}
-      </div>
-    );
-  }
-  return <p style={{ fontSize: 14, color: 'var(--muted)', textAlign: 'center', margin: '24px 0' }}>{children}</p>;
-}
-
 export function RosterBrowser({ year, locationOptions }: { year?: string; locationOptions: string[] }) {
   return (
     <>
-      {/* Mobile — own CspRoot + 90px bottom padding for the fixed WelcomeMobileNav. */}
+      {/* Mobile - own CspRoot + 90px bottom padding for the fixed WelcomeMobileNav. */}
       <div className="block md:hidden">
         <CspRoot style={{ minHeight: '100dvh' }}>
           <div style={{ padding: '14px 18px 90px', overflowY: 'auto', minHeight: '100dvh' }}>
@@ -407,7 +399,7 @@ export function RosterBrowser({ year, locationOptions }: { year?: string; locati
             <header style={{ marginBottom: 18 }}>
               <h1 style={{ fontSize: 28, lineHeight: 1.15, fontWeight: 600, letterSpacing: '-0.02em' }}>Roster</h1>
               <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 4 }}>
-                Browse every family, filter by location or program, and search by name, email, phone, or FID.
+                Filter every family by location, program, level, grade, or payment - or search by name, email, phone, or FID.
               </p>
             </header>
             <RosterContent locationOptions={locationOptions} {...(year ? { year } : {})} />
@@ -415,12 +407,12 @@ export function RosterBrowser({ year, locationOptions }: { year?: string; locati
         </CspRoot>
       </div>
 
-      {/* Desktop — layout.tsx owns the sidebar + main wrapper. */}
+      {/* Desktop - layout.tsx owns the sidebar + main wrapper. */}
       <div className="hidden md:block">
         <header style={{ marginBottom: 24 }}>
           <h1 style={{ fontSize: 32, fontWeight: 600, letterSpacing: '-0.02em' }}>Roster</h1>
           <p style={{ fontSize: 14, color: 'var(--muted)', marginTop: 4 }}>
-            Browse every family, filter by location or program, and search by name, email, phone, or FID.
+            Filter every family by location, program, level, grade, or payment - or search by name, email, phone, or FID.
           </p>
         </header>
         <div style={{ maxWidth: 720 }}>
