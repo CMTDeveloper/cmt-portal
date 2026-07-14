@@ -18,13 +18,14 @@ test.describe('Roster report (/welcome/roster)', () => {
     const summary = page.getByTestId('roster-summary').filter({ visible: true });
     await expect(summary.getByText(/famil(y|ies)/i)).toBeVisible({ timeout: 30_000 });
 
-    // Apply the first available Level filter chip; the list stays populated (a
-    // filter only narrows, never errors).
+    // Real UAT data has Bala Vihar levels (this IS the per-level report), so a Level
+    // chip MUST render - a hard assertion (not a soft guard, which would let an empty
+    // Level list pass vacuously). Filter by it and confirm the list + by-level summary.
     const levelChip = page.getByRole('button', { name: /^Level /i }).first();
-    if (await levelChip.isVisible().catch(() => false)) {
-      await levelChip.click();
-      await expect(results.getByRole('link').first()).toBeVisible({ timeout: 15_000 });
-    }
+    await expect(levelChip).toBeVisible({ timeout: 15_000 });
+    await levelChip.click();
+    await expect(results.getByRole('link').first()).toBeVisible({ timeout: 15_000 });
+    await expect(summary.getByText(/By level/i)).toBeVisible({ timeout: 10_000 });
   });
 
   test('search-as-filter (by FID) -> drill into family detail', async ({ page }) => {

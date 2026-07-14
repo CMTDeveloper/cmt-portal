@@ -19,7 +19,7 @@ function toDate(v: unknown): Date {
 type Meta = { name: string; location: string; legacyFid: string; publicFid: string | null };
 type Member = { mid: string; firstName: string; lastName: string; type: string; grade: string };
 type ActiveEnr = {
-  programKey: string; programLabel: string; oid: string; levelName: string | null;
+  programKey: string; programLabel: string; oid: string; pid: string;
   schoolGrade: string | null; enrolledMids: string[]; snapshot: number; override: number | null;
   enrolledAt: Date; termLabel: string;
 };
@@ -82,7 +82,9 @@ export async function buildRosterReportDataset(params: { year?: string }): Promi
       programKey: String(d['programKey'] ?? ''),
       programLabel: String(d['programLabel'] ?? ''),
       oid: String(d['oid'] ?? ''),
-      levelName: typeof d['levelName'] === 'string' ? (d['levelName'] as string) : null,
+      // pid is the level-roster join key (encodes location + year); enrollments do
+      // NOT store per-child level, so the child's level is derived from grade below.
+      pid: String(d['pid'] ?? d['oid'] ?? ''),
       schoolGrade: typeof d['schoolGrade'] === 'string' ? (d['schoolGrade'] as string) : null,
       enrolledMids: Array.isArray(d['enrolledMids']) ? (d['enrolledMids'] as string[]) : [],
       snapshot: typeof d['suggestedAmountSnapshot'] === 'number' ? (d['suggestedAmountSnapshot'] as number) : 0,
@@ -114,6 +116,24 @@ export async function buildRosterReportDataset(params: { year?: string }): Promi
     for (const snap of got) if (snap.exists) offerings.set(snap.id, snap.data() as OfferingDoc);
   }
 
+  // 5b) levels -> a BV child's level is their school grade matched to a level's
+  // gradeBand, scoped by the enrollment's pid (which encodes location + year).
+  // Enrollment docs do NOT carry per-child level (the enrollment is at the program
+  // level), so we derive it here - the same grade-band rule the teacher roster uses.
+  // Key: `${pid}|${grade}` -> levelName. Bands within one pid are disjoint by design;
+  // a stray overlap is last-write-wins (rare, non-fatal).
+  const levelSnap = await db.collection('levels').get();
+  const levelByPidGrade = new Map<string, string>();
+  for (const d of levelSnap.docs) {
+    const x = d.data() as { pid?: unknown; levelName?: unknown; programKey?: unknown; gradeBand?: unknown };
+    if (x.programKey !== BV_PROGRAM_KEY) continue;
+    const pid = typeof x.pid === 'string' ? x.pid : '';
+    const levelName = typeof x.levelName === 'string' ? x.levelName : '';
+    if (!pid || !levelName) continue;
+    const band = Array.isArray(x.gradeBand) ? x.gradeBand : [];
+    for (const g of band) levelByPidGrade.set(`${pid}|${String(g)}`, levelName);
+  }
+
   // 6) which families appear: all of them (live year), or year-scoped enrollees only
   const fids = params.year ? [...meta.keys()].filter((fid) => (activeByFid.get(fid) ?? []).length > 0) : [...meta.keys()];
   fids.sort((a, b) => {
@@ -139,8 +159,9 @@ export async function buildRosterReportDataset(params: { year?: string }): Promi
     const programKeys = [...new Set(active.map((a) => a.programKey).filter(Boolean))];
 
     // BV children: expand each active Bala Vihar enrollment's enrolledMids. Grade from
-    // the member doc (falls back to the enrollment's schoolGrade); level from the enrollment.
-    // levelByMid drives the per-person CSV level column.
+    // the member doc (falls back to the enrollment's schoolGrade); level is derived by
+    // matching that grade to a level's gradeBand for the enrollment's pid. levelByMid
+    // drives the per-person CSV level column.
     const bvChildren: RosterReportChild[] = [];
     const levelByMid = new Map<string, string>();
     const memberByMid = new Map(members.map((m) => [m.mid, m] as const));
@@ -148,9 +169,10 @@ export async function buildRosterReportDataset(params: { year?: string }): Promi
       if (a.programKey !== BV_PROGRAM_KEY) continue;
       for (const mid of a.enrolledMids) {
         const mem = memberByMid.get(mid);
-        const grade = (mem?.grade || a.schoolGrade) ?? null;
-        bvChildren.push({ grade: grade || null, levelName: a.levelName });
-        if (a.levelName) levelByMid.set(mid, a.levelName);
+        const grade = mem?.grade || a.schoolGrade || '';
+        const levelName = grade ? (levelByPidGrade.get(`${a.pid}|${grade}`) ?? null) : null;
+        bvChildren.push({ grade: grade || null, levelName });
+        if (levelName) levelByMid.set(mid, levelName);
       }
     }
 

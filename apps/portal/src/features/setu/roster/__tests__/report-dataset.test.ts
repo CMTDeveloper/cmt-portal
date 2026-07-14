@@ -39,23 +39,30 @@ beforeEach(() => {
     members: [
       { id: 'm1', __fid: 'CMT-RANA', mid: 'm1', firstName: 'Vaibhav', lastName: 'Rana', type: 'Adult', schoolGrade: '' },
       { id: 'm2', __fid: 'CMT-RANA', mid: 'm2', firstName: 'Harshita', lastName: 'Rana', type: 'Child', schoolGrade: '2' },
-      { id: 'm3', __fid: 'CMT-SHAH', mid: 'm3', firstName: 'Aarav', lastName: 'Shah', type: 'Child', schoolGrade: '2' },
+      { id: 'm3', __fid: 'CMT-SHAH', mid: 'm3', firstName: 'Aarav', lastName: 'Shah', type: 'Child', schoolGrade: '6' },
     ],
     enrollments: [
-      // suggestedAmountOverride pins the expected amount to 200 so `payment` does not
-      // depend on resolveSuggestedAmount (empty-tier offerings resolve to 0).
+      // The enrollment does NOT carry per-child level (real BV enrollments have no
+      // levelName); the builder derives level from the child's grade + the level's
+      // gradeBand, keyed by pid (falls back to oid here). suggestedAmountOverride pins
+      // the expected amount to 200 so payment is deterministic.
       { id: 'e1', __fid: 'CMT-RANA', fid: 'CMT-RANA', status: 'active', programKey: 'bala-vihar',
-        programLabel: 'Bala Vihar', oid: 'off-bv', termLabel: '2026-27', levelName: 'Level 2',
-        schoolGrade: '2', enrolledMids: ['m2'], suggestedAmountOverride: 200, suggestedAmountSnapshot: 200, enrolledAt: new Date('2026-09-01') },
+        programLabel: 'Bala Vihar', oid: 'off-bv', termLabel: '2026-27',
+        enrolledMids: ['m2'], suggestedAmountOverride: 200, suggestedAmountSnapshot: 200, enrolledAt: new Date('2026-09-01') },
       { id: 'e2', __fid: 'CMT-SHAH', fid: 'CMT-SHAH', status: 'active', programKey: 'bala-vihar',
-        programLabel: 'Bala Vihar', oid: 'off-bv', termLabel: '2026-27', levelName: 'Level 2',
-        schoolGrade: '2', enrolledMids: ['m3'], suggestedAmountOverride: 200, suggestedAmountSnapshot: 200, enrolledAt: new Date('2026-09-01') },
+        programLabel: 'Bala Vihar', oid: 'off-bv', termLabel: '2026-27',
+        enrolledMids: ['m3'], suggestedAmountOverride: 200, suggestedAmountSnapshot: 200, enrolledAt: new Date('2026-09-01') },
     ],
     donations: [
       { id: 'd1', __fid: 'CMT-RANA', fid: 'CMT-RANA', status: 'completed', amountCAD: 200, programKey: 'bala-vihar' },
     ],
     offerings: [
       { id: 'off-bv', oid: 'off-bv', programKey: 'bala-vihar', pricingTiers: [], enabled: true },
+    ],
+    // Level = child grade matched to a gradeBand, keyed by the enrollment's pid.
+    levels: [
+      { id: 'lvl2', pid: 'off-bv', levelName: 'Level 2', programKey: 'bala-vihar', location: 'Brampton', gradeBand: ['2', '3'] },
+      { id: 'lvl4', pid: 'off-bv', levelName: 'Level 4', programKey: 'bala-vihar', location: 'Scarborough', gradeBand: ['6', '7'] },
     ],
   };
 });
@@ -67,7 +74,10 @@ describe('buildRosterReportDataset', () => {
     const shah = out.find((f) => f.row.fid === 'CMT-SHAH')!;
 
     expect(rana.row.name).toBe('Rana');
+    // Level derived from grade band, NOT a stored enrollment field: grade 2 -> Level 2.
     expect(rana.row.bvChildren).toEqual([{ grade: '2', levelName: 'Level 2' }]);
+    // grade 6 -> Level 4 (different level, proving per-child grade-band derivation).
+    expect(shah.row.bvChildren).toEqual([{ grade: '6', levelName: 'Level 4' }]);
     expect(rana.row.programKeys).toEqual(['bala-vihar']);
     expect(rana.row.payment).toBe('paid'); // 200 donated >= 200 expected
     expect(shah.row.payment).toBe('outstanding'); // 0 donated < 200 expected
