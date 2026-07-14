@@ -4,10 +4,16 @@ vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
   portalFirestore: vi.fn(),
 }));
 
+vi.mock('@/features/setu/registration/lazy-migrate', () => ({
+  lazyMigrateLegacyFamily: vi.fn(),
+}));
+
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
-import { resolveKioskFamily } from '../resolve-kiosk-family';
+import { lazyMigrateLegacyFamily } from '@/features/setu/registration/lazy-migrate';
+import { resolveKioskFamily, resolveKioskFamilyOrMigrate } from '../resolve-kiosk-family';
 
 const mockFirestore = vi.mocked(portalFirestore);
+const mockLazyMigrate = vi.mocked(lazyMigrateLegacyFamily);
 
 type MockDocData = Record<string, unknown>;
 
@@ -124,5 +130,38 @@ describe('resolveKioskFamily', () => {
       location: null,
       name: 'CMT-B',
     });
+  });
+});
+
+describe('resolveKioskFamilyOrMigrate', () => {
+  it('returns a Setu hit without migrating', async () => {
+    families.set('CMT-A', { publicFid: '5075', legacyFid: '477', name: 'Rana family' });
+    const r = await resolveKioskFamilyOrMigrate('477');
+    expect(r).toMatchObject({ fid: 'CMT-A', matchedOn: 'legacyFid' });
+    expect(mockLazyMigrate).not.toHaveBeenCalled();
+  });
+
+  it('on a Setu miss, migrates the legacy family then re-resolves', async () => {
+    // The entered number is not in Setu yet (first touch at the door). The
+    // migrate "creates" the record - simulated by adding it to the map keyed by
+    // the legacyFid = the entered id - so the re-resolve finds it. The migrated
+    // record has NO publicFid (minted later by the check-in auto-enroll).
+    mockLazyMigrate.mockImplementation(async (legacyFid: string) => {
+      families.set('CMT-NEW', { legacyFid, name: 'Door family', location: 'Brampton' });
+      return { migrated: true, fid: 'CMT-NEW', legacyFid };
+    });
+    const r = await resolveKioskFamilyOrMigrate('888');
+    expect(mockLazyMigrate).toHaveBeenCalledWith('888');
+    expect(r).toMatchObject({ fid: 'CMT-NEW', matchedOn: 'legacyFid', legacyFid: '888', publicFid: null });
+  });
+
+  it('returns null when the number is in neither Setu nor the legacy roster', async () => {
+    mockLazyMigrate.mockRejectedValue(new Error('Legacy family not found: fid=999'));
+    expect(await resolveKioskFamilyOrMigrate('999')).toBeNull();
+  });
+
+  it('returns null for blank input without migrating', async () => {
+    expect(await resolveKioskFamilyOrMigrate('   ')).toBeNull();
+    expect(mockLazyMigrate).not.toHaveBeenCalled();
   });
 });

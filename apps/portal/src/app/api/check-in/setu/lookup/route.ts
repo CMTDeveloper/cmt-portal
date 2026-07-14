@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { Family, Student } from '@cmt/shared-domain/check-in';
 import { flags } from '@/lib/flags';
-import { resolveKioskFamily } from '@/features/setu/check-in/resolve-kiosk-family';
+import { resolveKioskFamilyOrMigrate } from '@/features/setu/check-in/resolve-kiosk-family';
 import { getFamilyByFid } from '@/features/setu/members/get-family-by-fid';
 
 /**
@@ -28,7 +28,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'bad-request' }, { status: 400 });
   }
 
-  const resolved = await resolveKioskFamily(id);
+  const resolved = await resolveKioskFamilyOrMigrate(id);
   if (!resolved) {
     return NextResponse.json({ error: 'family-not-found' }, { status: 404 });
   }

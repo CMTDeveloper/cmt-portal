@@ -10,6 +10,11 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock('@/features/setu/check-in/resolve-kiosk-family', () => ({
   resolveKioskFamily: mocks.resolveKioskFamily,
+  // The route calls resolveKioskFamilyOrMigrate (resolve + lazy migrate-on-miss);
+  // point it at the same mock so these route tests exercise the route's behavior
+  // given a resolver result. The migrate-on-miss logic itself is unit-tested in
+  // features/setu/check-in/__tests__/resolve-kiosk-family.test.ts.
+  resolveKioskFamilyOrMigrate: mocks.resolveKioskFamily,
 }));
 vi.mock('@/features/setu/members/get-family-by-fid', () => ({
   getFamilyByFid: mocks.getFamilyByFid,

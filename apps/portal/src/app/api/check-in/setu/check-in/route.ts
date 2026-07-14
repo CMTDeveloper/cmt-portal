@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { flags } from '@/lib/flags';
-import { resolveKioskFamily } from '@/features/setu/check-in/resolve-kiosk-family';
+import { resolveKioskFamilyOrMigrate } from '@/features/setu/check-in/resolve-kiosk-family';
 import {
   autoEnrollBalaVihar,
   type AutoEnrollResult,
@@ -38,7 +38,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'bad-request' }, { status: 400 });
   }
 
-  const family = await resolveKioskFamily(parsed.data.id);
+  const family = await resolveKioskFamilyOrMigrate(parsed.data.id);
   if (!family) {
     return NextResponse.json({ error: 'family-not-found' }, { status: 404 });
   }

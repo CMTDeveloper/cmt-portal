@@ -1,6 +1,7 @@
 import 'server-only';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import type { Location } from '@cmt/shared-domain';
+import { lazyMigrateLegacyFamily } from '@/features/setu/registration/lazy-migrate';
 
 export type ResolvedKioskFamily = {
   fid: string; // CMT- doc id (join key)
@@ -44,4 +45,31 @@ export async function resolveKioskFamily(id: string): Promise<ResolvedKioskFamil
     name: typeof data.name === 'string' && data.name ? data.name : doc.id,
     matchedOn: legacyDoc ? 'legacyFid' : 'publicFid',
   };
+}
+
+/**
+ * Resolve a kiosk family, lazily migrating a LEGACY family that is not in Setu
+ * yet (their first touch is the door). Under lazy publicFid minting, legacy
+ * families are pulled into Setu on first engagement rather than bulk-migrated,
+ * so a first-time family at the door will miss the Setu lookup above.
+ *
+ * On a Setu miss we treat the entered number as a legacy check-in id and run the
+ * idempotent lazyMigrateLegacyFamily; on success we re-resolve. A number that is
+ * in neither Setu nor the legacy roster makes lazyMigrateLegacyFamily throw, and
+ * we return null (genuinely unknown) - matching the previous not-found behavior.
+ * The migrate creates the family record WITHOUT a publicFid; that is minted when
+ * the check-in auto-enrolls the family (enrollFamily).
+ */
+export async function resolveKioskFamilyOrMigrate(id: string): Promise<ResolvedKioskFamily | null> {
+  const found = await resolveKioskFamily(id);
+  if (found) return found;
+
+  const trimmed = id.trim();
+  if (!trimmed) return null;
+  try {
+    await lazyMigrateLegacyFamily(trimmed);
+  } catch {
+    return null;
+  }
+  return resolveKioskFamily(trimmed);
 }
