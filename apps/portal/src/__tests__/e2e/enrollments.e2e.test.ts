@@ -159,6 +159,63 @@ const hasUatCreds =
       }
     });
 
+    // ── Lazy publicFid mint (Model Y2) ──────────────────────────────────────
+
+    it('mints publicFid on the family FIRST enrollment and reuses it on the next (no re-mint / no burn)', async () => {
+      const { createTestFamily } = await import('./helpers/fixtures');
+      const { portalFirestore, FieldValue } = await import('@cmt/firebase-shared/admin/firestore');
+      const { enrollFamily } = await import('@/features/setu/enrollment/enroll-family');
+      const db = portalFirestore();
+
+      // A dedicated family created WITHOUT a publicFid: registerFamily still mints
+      // one pre-Task-2, so strip it. Add a Child so the BV (child-only) offering
+      // has an eligible member (createTestFamily seeds only the adult manager).
+      const mint = await createTestFamily({
+        name: `e2emint${RUN_ID.toLowerCase()} family`,
+        email: `e2emint${RUN_ID.toLowerCase()}@test.cmt.invalid`,
+        phone: `416${TS.slice(-6)}9`,
+        location: 'Brampton',
+      });
+      const mintFid = mint.fid;
+      const childMid = `${mintFid}-child`;
+      await db.collection('families').doc(mintFid).collection('members').doc(childMid).set({
+        mid: childMid, type: 'Child', firstName: 'Mint', lastName: 'Child',
+        birthMonthYear: null, manager: false, _test: true,
+      });
+      await db.collection('families').doc(mintFid).update({ publicFid: FieldValue.delete() });
+      expect((await db.collection('families').doc(mintFid).get()).data()?.['publicFid']).toBeUndefined();
+
+      // A second offering under the same program so the second enrollment is a
+      // real multi-program enroll (created:true again), not an idempotent no-op.
+      const oid2 = `${oid}-b`;
+      await db.collection('offerings').doc(oid2).set({
+        oid: oid2, programKey: PROGRAM_KEY, programLabel: PROGRAM_LABEL, location: LOCATION,
+        termLabel: `${TERM_LABEL} B`, termType: 'term',
+        startDate: new Date(START_DATE), endDate: new Date(END_DATE),
+        pricingTiers: [{ effectiveFrom: '2020-01-01', amountCAD: SUGGESTED_AMOUNT, label: 'Full year' }],
+        enabled: true, createdAt: new Date(), createdBy: `e2e-setup-${RUN_ID}`,
+        updatedAt: new Date(), updatedBy: `e2e-setup-${RUN_ID}`, _test: true,
+      });
+
+      try {
+        // First enrollment -> mints a publicFid in the 5001+ band
+        const first = await enrollFamily({ fid: mintFid, oid, enrolledVia: 'family-initiated', enrolledByMid: null });
+        expect(first.created).toBe(true);
+        await db.collection('families').doc(mintFid).collection('enrollments').doc(`${mintFid}-${oid}`).set({ _test: true }, { merge: true });
+        const minted = (await db.collection('families').doc(mintFid).get()).data()?.['publicFid'];
+        expect(typeof minted).toBe('string');
+        expect(Number(minted)).toBeGreaterThanOrEqual(5001);
+
+        // Second enrollment into a different offering keeps the SAME id (no re-mint)
+        const second = await enrollFamily({ fid: mintFid, oid: oid2, enrolledVia: 'family-initiated', enrolledByMid: null });
+        expect(second.created).toBe(true);
+        await db.collection('families').doc(mintFid).collection('enrollments').doc(`${mintFid}-${oid2}`).set({ _test: true }, { merge: true });
+        expect((await db.collection('families').doc(mintFid).get()).data()?.['publicFid']).toBe(minted);
+      } finally {
+        await db.collection('offerings').doc(oid2).delete().catch(() => {});
+      }
+    });
+
     // ── POST /api/setu/enrollments ──────────────────────────────────────────
 
     it('POST /api/setu/enrollments — creates enrollment, returns 201 + eid + suggestedAmount', async () => {
