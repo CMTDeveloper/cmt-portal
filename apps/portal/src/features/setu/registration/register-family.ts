@@ -42,6 +42,10 @@ export interface RegisterFamilyInput {
   familyAddress?: FamilyAddress;
   manager: RegisterFamilyManager;
   additionalMembers: AdditionalMember[];
+  // Test/seed seam ONLY: pin a deterministic fid so a wiped `_test` fixture can
+  // be re-seeded at the same well-known id the E2E specs hardcode. The register
+  // ROUTE never sets this — production always mints a random fid.
+  fid?: string;
 }
 
 export interface RegisterFamilyResult {
@@ -71,7 +75,7 @@ export async function registerFamily(input: RegisterFamilyInput): Promise<Regist
   const emailHash = hashContactKey('email', input.email);
   const phoneHash = hashContactKey('phone', input.phone);
 
-  const fid = generateFid();
+  const fid = input.fid ?? generateFid();
   const managerMid = `${fid}-01`;
   const now = FieldValue.serverTimestamp();
 

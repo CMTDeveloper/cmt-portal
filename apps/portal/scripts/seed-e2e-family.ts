@@ -56,6 +56,10 @@ import { getSchoolYearConfig } from '@/features/setu/rollover/school-year-config
 const EMAIL = process.env['E2E_FAMILY_EMAIL'];
 const PASSWORD = process.env['E2E_FAMILY_PASSWORD'];
 const PHONE = process.env['E2E_FAMILY_PHONE'] ?? '+15195550100';
+// The E2E specs (roster / prasad / rollover-set-grade / enroll-wording) hardcode
+// this fid, so seed the family deterministically here — a wiped `_test` fixture
+// re-seeds to the SAME id instead of a fresh random one (registerFamily fid seam).
+const E2E_FAMILY_FID = 'CMT-FSWEDU2X';
 const LEGACY_FID = 'E2E-ATT-1';
 const CHILD_SID = 'E2E-SID-1';
 // Issue #4 — deterministic public ids on the fixture so the public-FID/MID E2E
@@ -416,6 +420,7 @@ async function main(): Promise<void> {
     console.log(`reusing existing family ${fid} (manager mid ${managerMid})`);
   } else {
     const res = await registerFamily({
+      fid: E2E_FAMILY_FID, // deterministic — specs hardcode this id
       email: EMAIL,
       phone: PHONE,
       familyName: 'E2E Test Family',
@@ -423,7 +428,10 @@ async function main(): Promise<void> {
       // Gate-complete: gender Male (PreferNotToSay reads as missing to the gate).
       manager: { firstName: 'E2E', lastName: 'Tester', gender: 'Male' },
       additionalMembers: [
-        { firstName: 'E2E', lastName: 'Child', type: 'Child', gender: 'Male', schoolGrade: 'Grade 4', birthMonthYear: '2017-03', foodAllergies: NO_ALLERGIES },
+        // Canonical grade token ('4', not 'Grade 4') — the member forms only ever
+        // write canonical CHILD_GRADE_OPTIONS values; a raw 'Grade 4' would seed
+        // the exact non-canonical dirt the roster Grade filter now guards against.
+        { firstName: 'E2E', lastName: 'Child', type: 'Child', gender: 'Male', schoolGrade: '4', birthMonthYear: '2017-03', foodAllergies: NO_ALLERGIES },
       ],
     });
     fid = res.fid;
