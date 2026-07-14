@@ -5,7 +5,7 @@ import { MobileInviteButton, DesktopInviteButton } from './invite-button';
 import { PromoteManagerButton } from './promote-manager-button';
 import { mockFamily } from '@/features/family/data/mock';
 import { flags } from '@/lib/flags';
-import { displayFid, type FamilyEmergencyContact, type FamilyAddress } from '@cmt/shared-domain';
+import { type FamilyEmergencyContact, type FamilyAddress } from '@cmt/shared-domain';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 import { FamilyEmergencyContactCard } from '@/features/setu/members/family-emergency-contact-card';
 import { FamilyAddressCard } from '@/features/setu/members/family-address-card';
@@ -39,9 +39,10 @@ export default async function FamilyRosterPage() {
     const data = await getCurrentFamily();
     if (data) {
       familyName = data.family.name;
-      // Show the friendly 4-digit publicFid (issue #23), consistent with the
-      // home dashboard; the raw CMT- fid stays the internal join key.
-      familyFid = displayFid(data.family);
+      // Show the friendly publicFid (issue #23), consistent with the home
+      // dashboard, or a dash until the family's first enrollment mints it
+      // (Model Y2). The internal CMT- fid stays the join key and is never shown.
+      familyFid = data.family.publicFid ?? '-';
       familyLocation = data.family.location;
       familyJoinedYear = data.family.createdAt.getFullYear();
       members = data.members.map((m) => memberToDisplay(m, data.currentMid));

@@ -2,7 +2,6 @@ import { connection } from 'next/server';
 import Link from 'next/link';
 import type { ReactNode, SVGProps, CSSProperties } from 'react';
 import { SetuLogo, SetuAvatar, SetuIcon } from '@cmt/ui';
-import { displayFid } from '@cmt/shared-domain';
 import { CspRoot } from '@/features/family/components/atoms';
 import { flags } from '@/lib/flags';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
@@ -163,6 +162,22 @@ function FamilyIdValue({ fid, mobile = false }: { fid: string; mobile?: boolean 
   );
 }
 
+/** Shown in place of the ID value when a family has not enrolled yet, so the
+ *  publicFid is not minted. Mirrors FamilyIdValue's label; never leaks the
+ *  internal CMT- id. */
+function FamilyIdPending() {
+  return (
+    <div data-testid="family-id-pending" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--accentDeep)' }}>
+        Your Family ID
+      </span>
+      <span style={{ fontSize: 15, color: 'var(--muted)', marginTop: 2, maxWidth: 220, lineHeight: 1.3 }}>
+        Assigned when you enroll
+      </span>
+    </div>
+  );
+}
+
 /** The new-vs-old ID transition copy. Rendered ONLY when the family has a legacy
  *  check-in ID (migrated families); net-new families never see this section. */
 function IdTransition({ legacyFid, mobile = false }: { legacyFid: string; mobile?: boolean }) {
@@ -288,7 +303,10 @@ export default async function FamilyDashboardPage() {
       const currentMember = data.members.find((m) => m.mid === data.currentMid);
       if (currentMember) managerName = `${currentMember.firstName} ${currentMember.lastName}`;
       isManager = data.isManager;
-      familyFid = displayFid(data.family);
+      // The real user-facing Family ID, or null until the family's first
+      // enrollment mints it (Model Y2). Read publicFid directly - NOT displayFid,
+      // which would fall back to the internal CMT- id and show it to the family.
+      familyFid = data.family.publicFid ?? null;
       familyLegacyId = data.family.legacyFid;
       const dash = await loadFamilyDashboard(data.family, data.members);
       model = dash.model;
@@ -381,7 +399,7 @@ export default async function FamilyDashboardPage() {
                 <IconBadge size={52}>
                   <SetuIcon.people width={24} height={24} />
                 </IconBadge>
-                {familyFid ? <FamilyIdValue fid={familyFid} mobile /> : null}
+                {familyFid ? <FamilyIdValue fid={familyFid} mobile /> : <FamilyIdPending />}
               </div>
               {showLegacy && familyLegacyId ? <IdTransition legacyFid={familyLegacyId} mobile /> : null}
               <div style={{ height: 1, background: 'var(--line)' }} />
@@ -450,7 +468,7 @@ export default async function FamilyDashboardPage() {
               <IconBadge size={56}>
                 <SetuIcon.people width={26} height={26} />
               </IconBadge>
-              {familyFid ? <FamilyIdValue fid={familyFid} /> : null}
+              {familyFid ? <FamilyIdValue fid={familyFid} /> : <FamilyIdPending />}
             </div>
             <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center' }}>
               {showLegacy && familyLegacyId ? <IdTransition legacyFid={familyLegacyId} /> : null}
