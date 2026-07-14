@@ -22,6 +22,18 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
+## 2026-07-13 - `ef5ac68` - GET /api/setu/family/search hit gains additive `parentName`
+Each `FamilySearchHit` in the `GET /api/setu/family/search` response now carries an
+additional **`parentName: string`** field - the family's parents' display name (adult
+members, manager first; e.g. `"Vaibhav & Noopur Rana"`, or the stored family name as a
+fallback when a family has no adult member). Every existing field (`fid`, `publicFid`,
+`legacyFid`, `name`, `location`, `memberCount`) is unchanged; `name` still holds the
+stored (legacy) family name.
+- **Mobile action: none required.** `/api/setu/family/search` is a **welcome-team-only
+  admin endpoint** (not used by the family-facing mobile app). The change is purely
+  additive. IF the mobile ever mirrors this endpoint, add an optional `parentName: string`
+  to its hit schema. No request-shape or error-code change.
+
 ## 2026-07-12 - `6d994a8` - NEW POST /api/setu/teacher/attendance/confirm-previous + teacher roster splits Enrolled vs Previous
 The teacher attendance roster is now split. The main **Enrolled students** list shows only enrollments that are engagement-confirmed (the existing issue #23 `isEnrollmentConfirmed` rule: family-initiated / first-attendance enrolledVia, OR attended >=1 class this year, OR a completed donation for the eid, OR legacy-paid). Rollover carry-forwards that have not re-engaged (`enrolledVia:'promotion'`/`'welcome-team'`, no engagement) are moved OFF the main roster into a secondary **Previous students** list. The attendance stats and the unmarked->absent save-sweep now cover ONLY the confirmed roster - a previous student is never auto-marked Absent.
 - **NEW `POST /api/setu/teacher/attendance/confirm-previous`** (teacher-gated, under the already-gated `/api/setu/teacher/*` prefix). Body `{ levelId: string, mid: string, date: 'YYYY-MM-DD' }`. Marks ONE previous student present, which confirms that family's already-active enrollment (no new enrollment doc). Success -> `{ ok: true, fid }`. Errors: 403 `teacher-required` (non-teacher), 403 `not-your-class` / 404 `not-found` (level access), 400 `bad-request` (body), 400 `not-a-previous-student` (mid is not an unconfirmed carry-forward on this level), 404 `level-not-found`.
