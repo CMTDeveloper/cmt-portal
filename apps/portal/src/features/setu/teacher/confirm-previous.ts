@@ -1,5 +1,6 @@
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
 import { attendanceAid } from '@cmt/shared-domain';
+import { ensurePublicFid } from '@/features/setu/enrollment/ensure-public-fid';
 import { deriveRoster } from './roster';
 
 export interface ConfirmPreviousParams {
@@ -35,5 +36,17 @@ export async function confirmPreviousStudent(params: ConfirmPreviousParams): Pro
     { merge: true },
   );
   await batch.commit();
+
+  // Confirming a carry-forward family is an engagement event under Model Y2: the
+  // family's active (rollover) enrollment did not go through enrollFamily, so mint
+  // its user-facing publicFid now if it lacks one - otherwise a re-engaged
+  // returning family would show "Enrolled" with no Family ID. Idempotent + best-
+  // effort (the attendance write already committed).
+  try {
+    await ensurePublicFid(row.fid);
+  } catch (e) {
+    console.error('[confirmPreviousStudent] publicFid mint failed (attendance already committed)', e);
+  }
+
   return { ok: true, fid: row.fid };
 }

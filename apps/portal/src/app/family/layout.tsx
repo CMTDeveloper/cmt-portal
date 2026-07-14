@@ -16,7 +16,6 @@ import {
   isFamilyAddressComplete,
   type WithRole,
 } from '@cmt/shared-domain';
-import { displayFid } from '@cmt/shared-domain/setu';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { getDisclaimerStateForFamily } from '@/features/setu/disclaimers/acceptance';
 import { flags } from '@/lib/flags';
@@ -92,7 +91,12 @@ async function SidebarWithIdentity() {
   if (data) {
     const currentMember = data.members.find((m) => m.mid === data.currentMid);
     if (currentMember) displayName = `${currentMember.firstName} ${currentMember.lastName}`;
-    subtitle = `${data.family.name}${data.family.legacyFid ? ` · FID ${displayFid(data.family)} · Legacy ${data.family.legacyFid}` : ` · FID ${displayFid(data.family)}`}`;
+    // Show the friendly publicFid only when it is set (Model Y2 mints it at first
+    // enrollment); the internal CMT- id is never shown on this family-facing
+    // sidebar. The legacy check-in id still shows when present.
+    const fidClause = data.family.publicFid ? ` · FID ${data.family.publicFid}` : '';
+    const legacyClause = data.family.legacyFid ? ` · Legacy ${data.family.legacyFid}` : '';
+    subtitle = `${data.family.name}${fidClause}${legacyClause}`;
   }
   return <DesktopSidebarLive displayName={displayName} subtitle={subtitle} showSignOut isAdmin={sevak.isAdmin} showTeacher={sevak.showTeacher} yearBadge={<SchoolYearBadge />}/>;
 }

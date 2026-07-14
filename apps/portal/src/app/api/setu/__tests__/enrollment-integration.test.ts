@@ -3,6 +3,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // ── next/cache ─────────────────────────────────────────────────────────────────
 vi.mock('next/cache', () => ({ revalidateTag: vi.fn(), cacheTag: vi.fn(), cacheLife: vi.fn() }));
 
+// enrollFamily lazily mints the family publicFid via ensurePublicFid AFTER its
+// txn commits. Stub it here so these route/txn tests don't hit the real allocator
+// + family read (that path is covered by ensure-public-fid's own test and the
+// real-UAT enrollments.e2e test).
+vi.mock('@/features/setu/enrollment/ensure-public-fid', () => ({
+  ensurePublicFid: vi.fn().mockResolvedValue('5001'),
+}));
+
 // ── get-programs mock ────────────────────────────────────────────────────────
 // enroll-family reads getProgram for BOTH the active-gate AND eligibility. Default:
 // an active BV program with child eligibility. The not-available test overrides it.

@@ -1,7 +1,7 @@
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
 import { memberEligibleForProgram, resolveSuggestedAmount, type EnrollmentDoc, type OfferingDoc, type PricingTier } from '@cmt/shared-domain';
 import { getProgram } from '@/features/setu/programs/get-programs';
-import { allocateFamilyPublicId } from '@/features/setu/ids/public-id-allocator';
+import { ensurePublicFid } from './ensure-public-fid';
 
 type EnrollVia = EnrollmentDoc['enrolledVia'];
 
@@ -27,6 +27,8 @@ export type EnrollFamilyResult =
  * - enrolledMids is derived from members that pass the program's eligibility
  *   (memberEligibleForProgram) inside the txn — BV (child) → children, while
  *   'any'/'adult' programs enroll all matching members.
+ * - After the enrollment commits, lazily mints the family's user-facing publicFid
+ *   via ensurePublicFid (the single mint point under Model Y2; idempotent).
  *
  * Throws with message 'offering-not-found' | 'offering-disabled' | 'offering-expired'
  * | 'family-not-found' | 'program-not-available' | 'no-eligible-members' for caller
@@ -36,19 +38,6 @@ export async function enrollFamily(params: EnrollFamilyParams): Promise<EnrollFa
   const { fid, oid, enrolledVia, enrolledByMid } = params;
   const db = portalFirestore();
   const eid = `${fid}-${oid}`;
-  const familyRef = db.collection('families').doc(fid);
-
-  // Lazy publicFid mint: the user-facing Family ID is assigned at a family's
-  // FIRST enrollment, not at family creation (registration / legacy-migration /
-  // teacher-add all leave it unset). The allocator opens its OWN Firestore
-  // transaction and Firestore forbids nested transactions, so pre-read the
-  // family here and pre-allocate ONLY when it has no publicFid - re-enrollments
-  // and multi-program families must never burn an id from the bounded 5001+ band.
-  const preFamilySnap = await familyRef.get();
-  const preAllocatedPublicFid =
-    preFamilySnap.exists && !preFamilySnap.data()?.['publicFid']
-      ? await allocateFamilyPublicId()
-      : null;
 
   const result = await db.runTransaction(async (txn) => {
     const offeringRef = db.collection('offerings').doc(oid);
@@ -57,6 +46,7 @@ export async function enrollFamily(params: EnrollFamilyParams): Promise<EnrollFa
       .doc(fid)
       .collection('enrollments')
       .doc(eid);
+    const familyRef = db.collection('families').doc(fid);
 
     const [offeringSnap, enrollmentSnap, familySnap] = await Promise.all([
       txn.get(offeringRef),
@@ -146,18 +136,6 @@ export async function enrollFamily(params: EnrollFamilyParams): Promise<EnrollFa
       throw new Error('no-eligible-members');
     }
 
-    // Commit the lazy publicFid mint. This is the family's FIRST successful
-    // enrollment (an existing active enrollment already returned above; an
-    // ineligible family already threw), so mint here - AFTER all txn reads
-    // (Firestore requires every read before any write) and only if the txn's own
-    // family read still shows no publicFid. A concurrent enrollment that already
-    // minted one (rare TOCTOU) wins; preAllocatedPublicFid then goes unused - a
-    // harmless gap (ids need not be contiguous), matching the allocator's
-    // documented burn-on-skip behavior.
-    if (preAllocatedPublicFid && !(familySnap.data() as Record<string, unknown>)['publicFid']) {
-      txn.update(familyRef, { publicFid: preAllocatedPublicFid });
-    }
-
     txn.set(enrollmentRef, {
       eid,
       fid,
@@ -180,6 +158,17 @@ export async function enrollFamily(params: EnrollFamilyParams): Promise<EnrollFa
 
     return { created: true as const, eid, suggestedAmountSnapshot };
   });
+
+  // Lazy-mint the family's user-facing publicFid now that the enrollment has
+  // committed - the single mint point under Model Y2. Idempotent (a family that
+  // already has one keeps it). Best-effort: the enrollment already succeeded, so
+  // a transient mint failure must not fail it - the id mints on the family's next
+  // engagement (ensurePublicFid is idempotent).
+  try {
+    await ensurePublicFid(fid);
+  } catch (e) {
+    console.error('[enrollFamily] publicFid mint failed (enrollment already committed)', e);
+  }
 
   return result;
 }
