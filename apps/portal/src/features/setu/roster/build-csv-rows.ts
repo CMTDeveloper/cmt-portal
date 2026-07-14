@@ -120,7 +120,7 @@ export async function buildRosterCsvRows(filters: { location?: string; program?:
       rows.push({
         familyName: fam.name, fid, legacyFid: fam.legacyFid,
         memberName: `${m.firstName} ${m.lastName}`.trim(),
-        type: m.type, grade: m.grade, location: fam.location, programs, payment,
+        type: m.type, grade: m.grade, level: '', location: fam.location, programs, payment,
       });
     }
   }
