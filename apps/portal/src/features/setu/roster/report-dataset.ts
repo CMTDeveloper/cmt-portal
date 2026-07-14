@@ -1,6 +1,6 @@
 import 'server-only';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
-import { resolveSuggestedAmount } from '@cmt/shared-domain';
+import { resolveSuggestedAmount, formatFamilyParentNames } from '@cmt/shared-domain';
 import type { OfferingDoc, RosterPersonCsvRow, RosterReportRow, RosterReportChild } from '@cmt/shared-domain';
 import { paymentFromAmounts } from './payment';
 
@@ -17,7 +17,7 @@ function toDate(v: unknown): Date {
 }
 
 type Meta = { name: string; location: string; legacyFid: string; publicFid: string | null };
-type Member = { mid: string; firstName: string; lastName: string; type: string; grade: string };
+type Member = { mid: string; firstName: string; lastName: string; type: string; grade: string; manager: boolean };
 type ActiveEnr = {
   programKey: string; programLabel: string; oid: string; pid: string;
   schoolGrade: string | null; enrolledMids: string[]; snapshot: number; override: number | null;
@@ -55,7 +55,7 @@ export async function buildRosterReportDataset(params: { year?: string }): Promi
   for (const m of memberSnap.docs) {
     const fid = m.ref.parent.parent?.id;
     if (!fid || !meta.has(fid)) continue;
-    const d = m.data() as { mid?: unknown; firstName?: unknown; lastName?: unknown; type?: unknown; schoolGrade?: unknown };
+    const d = m.data() as { mid?: unknown; firstName?: unknown; lastName?: unknown; type?: unknown; schoolGrade?: unknown; manager?: unknown };
     const arr = membersByFid.get(fid) ?? [];
     arr.push({
       mid: typeof d.mid === 'string' ? d.mid : m.id,
@@ -63,6 +63,7 @@ export async function buildRosterReportDataset(params: { year?: string }): Promi
       lastName: String(d.lastName ?? ''),
       type: String(d.type ?? ''),
       grade: typeof d.schoolGrade === 'string' ? d.schoolGrade : '',
+      manager: d.manager === true,
     });
     membersByFid.set(fid, arr);
   }
@@ -181,6 +182,7 @@ export async function buildRosterReportDataset(params: { year?: string }): Promi
       publicFid: fam.publicFid,
       legacyFid: fam.legacyFid || null,
       name: fam.name,
+      parentName: formatFamilyParentNames(members, fam.name),
       location: fam.location,
       memberCount: members.length,
       payment,

@@ -9,7 +9,7 @@ import {
 
 function row(over: Partial<RosterReportRow>): RosterReportRow {
   return {
-    fid: 'CMT-A', publicFid: null, legacyFid: null, name: 'A', location: 'Brampton',
+    fid: 'CMT-A', publicFid: null, legacyFid: null, name: 'A', parentName: 'A Parent', location: 'Brampton',
     memberCount: 2, payment: 'unknown', programs: [], programKeys: [], bvChildren: [],
     ...over,
   };

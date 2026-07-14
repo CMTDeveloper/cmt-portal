@@ -70,6 +70,7 @@ describe('searchTeachers — surfaces adult members of matched families', () => 
         publicFid: null,
         legacyFid: null,
         name: 'Sharma Family',
+        parentName: 'Anil Sharma',
         location: 'Brampton',
         memberCount: 3,
       },
@@ -117,8 +118,8 @@ describe('searchTeachers — surfaces adult members of matched families', () => 
 
   it('dedupes an adult mid that appears across two matched families', async () => {
     mockSearchFamilies.mockResolvedValue([
-      { fid: 'FAM-A', publicFid: null, legacyFid: null, name: 'A Family', location: 'Brampton', memberCount: 1 },
-      { fid: 'FAM-B', publicFid: null, legacyFid: null, name: 'B Family', location: 'Mississauga', memberCount: 1 },
+      { fid: 'FAM-A', publicFid: null, legacyFid: null, name: 'A Family', parentName: 'Adult A', location: 'Brampton', memberCount: 1 },
+      { fid: 'FAM-B', publicFid: null, legacyFid: null, name: 'B Family', parentName: 'Adult B', location: 'Mississauga', memberCount: 1 },
     ]);
     const dupAdult = { mid: 'DUP-01', type: 'Adult', firstName: 'Dup', lastName: 'Person', email: null };
     mockFirestore.mockReturnValue(

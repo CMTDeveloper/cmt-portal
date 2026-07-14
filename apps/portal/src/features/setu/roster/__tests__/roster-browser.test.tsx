@@ -16,17 +16,18 @@ import { RosterBrowser } from '../roster-browser';
 
 function row(over: Partial<RosterReportRow>): RosterReportRow {
   return {
-    fid: 'CMT-A', publicFid: null, legacyFid: null, name: 'A', location: 'Brampton',
+    fid: 'CMT-A', publicFid: null, legacyFid: null, name: 'A', parentName: 'A Parent', location: 'Brampton',
     memberCount: 2, payment: 'unknown', programs: [], programKeys: [], bvChildren: [], ...over,
   };
 }
 
 const RANA = row({
-  fid: 'CMT-RANA', publicFid: '1075', legacyFid: '477', name: 'Rana', location: 'Brampton', payment: 'paid',
+  fid: 'CMT-RANA', publicFid: '1075', legacyFid: '477', name: 'Rana', parentName: 'Vaibhav & Noopur Rana',
+  location: 'Brampton', payment: 'paid',
   programs: ['Bala Vihar'], programKeys: ['bala-vihar'], bvChildren: [{ grade: '2', levelName: 'Level 2' }],
 });
 const SHAH = row({
-  fid: 'CMT-SHAH', publicFid: '1200', name: 'Shah', location: 'Scarborough', payment: 'outstanding',
+  fid: 'CMT-SHAH', publicFid: '1200', name: 'Shah', parentName: 'Priya Shah', location: 'Scarborough', payment: 'outstanding',
   programs: ['Bala Vihar'], programKeys: ['bala-vihar'], bvChildren: [{ grade: '5', levelName: 'Level 4' }],
 });
 
@@ -45,10 +46,12 @@ beforeEach(() => {
 // getAllBy*/findAllBy* + `.length` (repo convention), and for interaction tests
 // we act on EVERY matching control so both branches move together.
 describe('RosterBrowser', () => {
-  it('bulk-loads the dataset, renders family cards, and shows the live summary', async () => {
+  it('bulk-loads the dataset, renders PARENT names as the card title, and shows the live summary', async () => {
     render(<RosterBrowser locationOptions={['Brampton', 'Scarborough']} />);
-    expect((await screen.findAllByText(/Rana Family/)).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText(/Shah Family/).length).toBeGreaterThanOrEqual(1);
+    // Card title is the parents' name, NOT "Rana family Family".
+    expect((await screen.findAllByText('Vaibhav & Noopur Rana')).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Priya Shah').length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText(/family Family/i)).not.toBeInTheDocument();
     // The displayed Family ID is the 4-digit publicFid (via displayFid).
     expect(screen.getAllByText(/FID 1075/).length).toBeGreaterThanOrEqual(1);
     // Summary: 2 families, 2 BV children total.
@@ -58,28 +61,28 @@ describe('RosterBrowser', () => {
 
   it('filters the list by Level (client-side, over the loaded dataset)', async () => {
     render(<RosterBrowser locationOptions={['Brampton', 'Scarborough']} />);
-    await screen.findAllByText(/Rana Family/);
+    await screen.findAllByText('Vaibhav & Noopur Rana');
     // Click every "Level 4" chip (mobile + desktop) so both branches filter.
     for (const btn of screen.getAllByRole('button', { name: 'Level 4' })) {
       await userEvent.click(btn);
     }
-    await waitFor(() => expect(screen.queryByText(/Rana Family/)).not.toBeInTheDocument());
-    expect(screen.getAllByText(/Shah Family/).length).toBeGreaterThanOrEqual(1);
+    await waitFor(() => expect(screen.queryByText('Vaibhav & Noopur Rana')).not.toBeInTheDocument());
+    expect(screen.getAllByText('Priya Shah').length).toBeGreaterThanOrEqual(1);
   });
 
-  it('switches to search results when the search box has text', async () => {
+  it('switches to search results when the search box has text (parent name on hits too)', async () => {
     searchFamiliesClient.mockResolvedValue([
-      { fid: 'CMT-S', publicFid: '2050', legacyFid: null, name: 'Sharma', location: 'Markham', memberCount: 2 },
+      { fid: 'CMT-S', publicFid: '2050', legacyFid: null, name: 'Sharma', parentName: 'Ravi Sharma', location: 'Markham', memberCount: 2 },
     ]);
     render(<RosterBrowser locationOptions={['Brampton', 'Scarborough']} />);
-    await screen.findAllByText(/Rana Family/);
+    await screen.findAllByText('Vaibhav & Noopur Rana');
     await userEvent.type(screen.getAllByTestId('roster-search-input')[0]!, 'sharma');
-    await waitFor(() => expect(screen.getAllByText(/Sharma Family/).length).toBeGreaterThanOrEqual(1));
+    await waitFor(() => expect(screen.getAllByText('Ravi Sharma').length).toBeGreaterThanOrEqual(1));
   });
 
   it('shows a "Load more" button when the filtered set exceeds the initial window', async () => {
     const many = Array.from({ length: 60 }, (_, i) =>
-      row({ fid: `CMT-${i}`, name: `Fam${i}`, programs: ['Bala Vihar'], programKeys: ['bala-vihar'] }),
+      row({ fid: `CMT-${i}`, name: `Fam${i}`, parentName: `Parent ${i}`, programs: ['Bala Vihar'], programKeys: ['bala-vihar'] }),
     );
     fetchRosterReportClient.mockResolvedValue({ rows: many });
     render(<RosterBrowser locationOptions={['Brampton', 'Scarborough']} />);

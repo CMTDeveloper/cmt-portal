@@ -13,7 +13,8 @@ export const RosterReportRowSchema = z.object({
   fid: z.string(),
   publicFid: z.string().nullable(),
   legacyFid: z.string().nullable(),
-  name: z.string(),
+  name: z.string(),           // stored family name (legacy-derived; kept for search/fallback)
+  parentName: z.string(),     // parents' display name for the card title (see formatFamilyParentNames)
   location: z.string(),
   memberCount: z.number().int().nonnegative(),
   payment: z.enum(ROSTER_PAYMENTS),

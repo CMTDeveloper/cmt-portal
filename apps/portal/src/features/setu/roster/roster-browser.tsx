@@ -89,7 +89,7 @@ function RosterFamilyCard({ row }: { row: RosterReportRow }) {
     <Link key={row.fid} href={`/welcome/family/${row.fid}`} className="focus-ring" style={cardStyle}>
       <div className="between" style={{ alignItems: 'flex-start', gap: 12 }}>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 15, fontWeight: 600 }}>{row.name} Family</div>
+          <div style={{ fontSize: 15, fontWeight: 600 }}>{row.parentName}</div>
           <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2, fontFamily: 'var(--mono)' }}>
             FID {displayFid(row)}{row.legacyFid ? ` · Legacy ${row.legacyFid}` : ''} · {row.location}
           </div>
@@ -126,7 +126,7 @@ function SearchHitCard({ hit }: { hit: FamilySearchHit }) {
     <Link key={hit.fid} href={`/welcome/family/${hit.fid}`} className="focus-ring" style={cardStyle}>
       <div className="between">
         <div>
-          <div style={{ fontSize: 15, fontWeight: 600 }}>{hit.name} Family</div>
+          <div style={{ fontSize: 15, fontWeight: 600 }}>{hit.parentName}</div>
           <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2, fontFamily: 'var(--mono)' }}>
             FID {displayFid(hit)}{hit.legacyFid ? ` · Legacy ${hit.legacyFid}` : ''} · {hit.location}
           </div>

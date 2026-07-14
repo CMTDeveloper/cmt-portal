@@ -18,6 +18,7 @@ export * from './schemas/sevak';
 export * from './schemas/disclaimers';
 export * from './roster';
 export * from './roster-report';
+export * from './family-display-name';
 export * from './reports';
 export * from './grade-ladder';
 export * from './grades';

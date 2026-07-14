@@ -1,5 +1,6 @@
 import 'server-only';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
+import { formatFamilyParentNames } from '@cmt/shared-domain';
 import { hashContactKey } from '@/features/setu/registration/hash-contact-key';
 import type { FamilySearchHit } from './types';
 
@@ -19,7 +20,7 @@ function looksLikeEmail(q: string): boolean {
 
 type RawFamilyData = Record<string, unknown>;
 
-function toHit(fid: string, data: RawFamilyData): Omit<FamilySearchHit, 'memberCount'> {
+function toHit(fid: string, data: RawFamilyData): Omit<FamilySearchHit, 'memberCount' | 'parentName'> {
   return {
     fid,
     publicFid: typeof data.publicFid === 'string' ? data.publicFid : null,
@@ -106,20 +107,27 @@ export async function searchFamilies(q: string): Promise<FamilySearchHit[]> {
   // Cap at 20 before fetching member counts
   const topFids = Array.from(rawHits.keys()).slice(0, 20);
 
-  // Fetch member counts in parallel
-  const memberCounts = await Promise.all(
-    topFids.map((fid) =>
-      familiesCol
-        .doc(fid)
-        .collection('members')
-        .limit(100)
-        .get()
-        .then((snap) => snap.docs.length),
-    ),
+  // Fetch each family's members once -> member count + parents' display name.
+  const memberSnaps = await Promise.all(
+    topFids.map((fid) => familiesCol.doc(fid).collection('members').limit(100).get()),
   );
 
-  return topFids.map((fid, i) => ({
-    ...toHit(fid, rawHits.get(fid)!),
-    memberCount: memberCounts[i] ?? 0,
-  }));
+  return topFids.map((fid, i) => {
+    const data = rawHits.get(fid)!;
+    const fallback = typeof data.name === 'string' && data.name ? (data.name as string) : fid;
+    const members = memberSnaps[i]!.docs.map((d) => {
+      const md = d.data() as { firstName?: unknown; lastName?: unknown; type?: unknown; manager?: unknown };
+      return {
+        firstName: String(md.firstName ?? ''),
+        lastName: String(md.lastName ?? ''),
+        type: String(md.type ?? ''),
+        manager: md.manager === true,
+      };
+    });
+    return {
+      ...toHit(fid, data),
+      parentName: formatFamilyParentNames(members, fallback),
+      memberCount: memberSnaps[i]!.docs.length,
+    };
+  });
 }

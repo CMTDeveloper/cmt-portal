@@ -32,8 +32,12 @@ test.describe('Roster report (/welcome/roster)', () => {
     await page.goto('/welcome/roster');
     const results = page.getByTestId('roster-results').filter({ visible: true });
     await page.getByTestId('roster-search-input').filter({ visible: true }).fill('CMT-FSWEDU2X');
-    const hit = results.getByText(/E2E Test Family/i).first();
+    // The card title is now the PARENT name (not "... family Family"), so locate the
+    // seeded family's result by its link href, not by a family-name string.
+    const hit = results.locator('a[href*="/welcome/family/CMT-FSWEDU2X"]').first();
     await expect(hit).toBeVisible({ timeout: 20_000 });
+    // The old "<name> Family" suffix must be gone from the result card.
+    await expect(hit).not.toContainText(/family Family/i);
     await hit.click();
     await expect(page).toHaveURL(/\/welcome\/family\/CMT-FSWEDU2X/, { timeout: 20_000 });
   });

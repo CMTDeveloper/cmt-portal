@@ -37,7 +37,7 @@ beforeEach(() => {
       { id: 'CMT-SHAH', name: 'Shah', location: 'Scarborough', legacyFid: '', publicFid: '1200' },
     ],
     members: [
-      { id: 'm1', __fid: 'CMT-RANA', mid: 'm1', firstName: 'Vaibhav', lastName: 'Rana', type: 'Adult', schoolGrade: '' },
+      { id: 'm1', __fid: 'CMT-RANA', mid: 'm1', firstName: 'Vaibhav', lastName: 'Rana', type: 'Adult', schoolGrade: '', manager: true },
       { id: 'm2', __fid: 'CMT-RANA', mid: 'm2', firstName: 'Harshita', lastName: 'Rana', type: 'Child', schoolGrade: '2' },
       { id: 'm3', __fid: 'CMT-SHAH', mid: 'm3', firstName: 'Aarav', lastName: 'Shah', type: 'Child', schoolGrade: '6' },
     ],
@@ -74,6 +74,10 @@ describe('buildRosterReportDataset', () => {
     const shah = out.find((f) => f.row.fid === 'CMT-SHAH')!;
 
     expect(rana.row.name).toBe('Rana');
+    // parentName = the family's adult(s); Rana has one adult manager.
+    expect(rana.row.parentName).toBe('Vaibhav Rana');
+    // Shah has only a child member -> parentName falls back to the family name.
+    expect(shah.row.parentName).toBe('Shah');
     // Level derived from grade band, NOT a stored enrollment field: grade 2 -> Level 2.
     expect(rana.row.bvChildren).toEqual([{ grade: '2', levelName: 'Level 2' }]);
     // grade 6 -> Level 4 (different level, proving per-child grade-band derivation).
