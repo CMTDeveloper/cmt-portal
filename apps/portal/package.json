@@ -15,6 +15,7 @@
     "seed:e2e-pending-family": "tsx --env-file=.env.local scripts/seed-e2e-pending-family.ts",
     "reset:family-to-pending": "tsx --env-file=.env.local scripts/reset-family-to-pending.ts",
     "normalize:legacy-grades": "tsx --env-file=.env.local scripts/normalize-legacy-grades.ts",
+    "strip:eager-publicfids": "tsx --env-file=.env.local scripts/strip-eager-publicfids.ts",
     "seed:join-request-family": "tsx --env-file=.env.local scripts/seed-join-request-family.ts",
     "seed:profile-completion-family": "tsx --env-file=.env.local scripts/seed-profile-completion-family.ts",
     "seed:test-accounts": "tsx --env-file=.env.local scripts/seed-test-accounts.ts",
