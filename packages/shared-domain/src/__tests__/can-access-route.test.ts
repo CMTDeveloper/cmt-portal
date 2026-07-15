@@ -852,10 +852,6 @@ describe('canAccessRoute — reports API (/api/welcome/reports)', () => {
     expect(canAccessRoute(welcomeTeam, '/api/welcome/reports/attendance', 'GET')).toBe(true);
     expect(canAccessRoute(admin, '/api/welcome/reports/attendance', 'GET')).toBe(true);
   });
-  it('donations: admin only (welcome-team denied)', () => {
-    expect(canAccessRoute(admin, '/api/welcome/reports/donations', 'GET')).toBe(true);
-    expect(canAccessRoute(welcomeTeam, '/api/welcome/reports/donations', 'GET')).toBe(false);
-  });
   it('family roles denied everywhere under reports', () => {
     expect(canAccessRoute(manager, '/api/welcome/reports/enrollment', 'GET')).toBe(false);
     expect(canAccessRoute(member, '/api/welcome/reports/enrollment', 'GET')).toBe(false);

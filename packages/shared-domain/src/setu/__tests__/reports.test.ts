@@ -2,12 +2,12 @@
 import { describe, it, expect } from 'vitest';
 import {
   ReportQuerySchema, REPORT_KINDS,
-  EnrollmentReportSchema, AttendanceReportSchema, DonationsReportSchema,
+  EnrollmentReportSchema, AttendanceReportSchema,
 } from '../reports';
 
 describe('report schemas', () => {
-  it('REPORT_KINDS are the three native kinds', () => {
-    expect(REPORT_KINDS).toEqual(['enrollment', 'attendance', 'donations']);
+  it('REPORT_KINDS are the two native kinds (donations report removed)', () => {
+    expect(REPORT_KINDS).toEqual(['enrollment', 'attendance']);
   });
   it('ReportQuerySchema defaults format=json and accepts from/to/program/location', () => {
     expect(ReportQuerySchema.parse({}).format).toBe('json');
@@ -42,10 +42,5 @@ describe('report schemas', () => {
       byProgram: [{ programKey: 'bala-vihar', programLabel: 'Bala Vihar', present: 5, absent: 1, late: 1, total: 7, rate: 0.71 }],
       from: '2026-01-01', to: '2026-12-31', totalEvents: 7,
     }).byLevel[0]!.rate).toBeCloseTo(0.71);
-    expect(DonationsReportSchema.parse({
-      byPeriod: [{ pid: 'p1', label: 'BV 2025-26', programLabel: 'Bala Vihar', completedCAD: 500, completedCount: 5 }],
-      byProgram: [{ programKey: 'bala-vihar', programLabel: 'Bala Vihar', completedCAD: 500, completedCount: 5 }],
-      paidFamilies: 5, outstandingFamilies: 3, totalCompletedCAD: 500,
-    }).paidFamilies).toBe(5);
   });
 });

@@ -5,7 +5,6 @@ import { SetuLogo, SetuIcon } from '@cmt/ui';
 import type {
   EnrollmentReport,
   AttendanceReport,
-  DonationsReport,
 } from '@cmt/shared-domain';
 import { CspRoot } from '@/features/family/components/atoms';
 import { ReportExportButton as CheckInExportButton } from '@/features/check-in/admin';
@@ -27,22 +26,6 @@ function StatChip({ label, value, tone = 'neutral' }: { label: string; value: st
     >
       <span style={{ fontSize: 18, fontWeight: 700, lineHeight: 1, color: fg, fontFeatureSettings: '"tnum"' }}>{value}</span>
       <span style={{ fontSize: 10.5, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600 }}>{label}</span>
-    </span>
-  );
-}
-
-function PaymentChip({ kind, value }: { kind: 'paid' | 'outstanding'; value: number }) {
-  const ok = kind === 'paid';
-  return (
-    <span
-      style={{
-        display: 'inline-flex', alignItems: 'center', gap: 6,
-        fontSize: 12, fontWeight: 600, padding: '4px 11px', borderRadius: 99,
-        background: 'var(--accentSoft)', color: ok ? 'var(--ok)' : 'var(--warn)', whiteSpace: 'nowrap',
-      }}
-    >
-      <span aria-hidden style={{ width: 6, height: 6, borderRadius: 99, background: 'currentColor' }} />
-      <span style={{ fontFeatureSettings: '"tnum"' }}>{value.toLocaleString()}</span> {ok ? 'paid' : 'outstanding'}
     </span>
   );
 }
@@ -341,69 +324,6 @@ function AttendanceCard({ year }: { year?: string }) {
   );
 }
 
-function moneyCAD(n: number): string {
-  return `$${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
-}
-
-function DonationsCard({ year }: { year?: string }) {
-  const [data, setData] = useState<DonationsReport | null>(null);
-  const [state, setState] = useState<'loading' | 'ok' | 'error'>('loading');
-
-  useEffect(() => {
-    let alive = true;
-    setState('loading');
-    fetchReport('donations', { ...(year ? { year } : {}) })
-      .then((r) => { if (alive) { setData(r); setState('ok'); } })
-      .catch(() => { if (alive) setState('error'); });
-    return () => { alive = false; };
-  }, [year]);
-
-  return (
-    <CardShell
-      testId="report-card-donations"
-      icon={<SetuIcon.receipt />}
-      title="Donations"
-      subtitle="Completed contributions by period and program. Admin only."
-    >
-      {state === 'loading' && <LoadingNote>Loading donations…</LoadingNote>}
-      {state === 'error' && <ErrorNote>Couldn’t load donations. Please try again.</ErrorNote>}
-      {state === 'ok' && data && (
-        <>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
-            <StatChip label="Total completed" value={moneyCAD(data.totalCompletedCAD)} tone="ok" />
-            <PaymentChip kind="paid" value={data.paidFamilies} />
-            <PaymentChip kind="outstanding" value={data.outstandingFamilies} />
-          </div>
-          <SummaryTable
-            caption="By donation period"
-            cols={[
-              { key: 'label', label: 'Period' },
-              { key: 'programLabel', label: 'Program' },
-              { key: 'completedCAD', label: 'Completed', numeric: true, render: (r) => moneyCAD(r['completedCAD'] as number) },
-              { key: 'completedCount', label: 'Count', numeric: true },
-            ]}
-            rows={data.byPeriod.map((p) => ({ __key: p.pid, label: p.label, programLabel: p.programLabel, completedCAD: p.completedCAD, completedCount: p.completedCount }))}
-          />
-          <SummaryTable
-            caption="By program"
-            cols={[
-              { key: 'programLabel', label: 'Program' },
-              { key: 'completedCAD', label: 'Completed', numeric: true, render: (r) => moneyCAD(r['completedCAD'] as number) },
-              { key: 'completedCount', label: 'Count', numeric: true },
-            ]}
-            rows={data.byProgram.map((p) => ({ __key: p.programKey, programLabel: p.programLabel, completedCAD: p.completedCAD, completedCount: p.completedCount }))}
-          />
-          <ReportExportButton kind="donations" filename="donations-summary" {...(year ? { year } : {})} />
-          <p style={{ fontSize: 11.5, color: 'var(--muted)', lineHeight: 1.5, margin: 0 }}>
-            Totals are best-effort — accounting@ remains the settlement source of truth (no Stripe webhook).
-            All-time, by donation period.
-          </p>
-        </>
-      )}
-    </CardShell>
-  );
-}
-
 function LegacyCard() {
   return (
     <CardShell
@@ -430,7 +350,6 @@ function HubBody({ isAdmin, year }: { isAdmin: boolean; year?: string }) {
     <div className="col" style={{ gap: 16, maxWidth: 760 }}>
       <EnrollmentCard {...(year ? { year } : {})} />
       <AttendanceCard {...(year ? { year } : {})} />
-      {isAdmin && <DonationsCard {...(year ? { year } : {})} />}
       {isAdmin && <LegacyCard />}
     </div>
   );
@@ -449,7 +368,7 @@ export function ReportsHub({ isAdmin, year }: { isAdmin: boolean; year?: string 
             <header style={{ marginBottom: 18 }}>
               <h1 style={{ fontSize: 28, lineHeight: 1.15, fontWeight: 600, letterSpacing: '-0.02em' }}>Reports</h1>
               <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 4 }}>
-                Enrollment, attendance, and donation summaries — view on screen or export to CSV.
+                Enrollment and attendance summaries — view on screen or export to CSV.
               </p>
             </header>
             <HubBody isAdmin={isAdmin} {...(year ? { year } : {})} />
@@ -462,7 +381,7 @@ export function ReportsHub({ isAdmin, year }: { isAdmin: boolean; year?: string 
         <header style={{ marginBottom: 24 }}>
           <h1 style={{ fontSize: 32, fontWeight: 600, letterSpacing: '-0.02em' }}>Reports</h1>
           <p style={{ fontSize: 14, color: 'var(--muted)', marginTop: 4 }}>
-            Enrollment, attendance, and donation summaries — view on screen or export to CSV.
+            Enrollment and attendance summaries — view on screen or export to CSV.
           </p>
         </header>
         <HubBody isAdmin={isAdmin} {...(year ? { year } : {})} />

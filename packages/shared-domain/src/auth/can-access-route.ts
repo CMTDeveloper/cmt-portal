@@ -253,11 +253,8 @@ export function canAccessRoute(
     return isWelcomeTeam(claims);
   }
 
-  // Welcome-team API — reports hub. Donations report is ADMIN-ONLY (D5); it must
-  // be checked before the general reports rule.
-  if (pathname === '/api/welcome/reports/donations') {
-    return isAdmin(claims);
-  }
+  // Welcome-team API — reports hub (enrollment + attendance). The donations
+  // report was removed (no collective financial info in the reports hub).
   if (pathname === '/api/welcome/reports' || pathname.startsWith('/api/welcome/reports/')) {
     return isWelcomeTeam(claims);
   }

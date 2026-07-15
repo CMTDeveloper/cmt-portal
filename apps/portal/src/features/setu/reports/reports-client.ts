@@ -1,7 +1,6 @@
 import type {
   EnrollmentReport,
   AttendanceReport,
-  DonationsReport,
 } from '@cmt/shared-domain';
 
 // Maps each report kind to its response shape so `fetchReport` is fully typed
@@ -9,7 +8,6 @@ import type {
 interface ReportByKind {
   enrollment: EnrollmentReport;
   attendance: AttendanceReport;
-  donations: DonationsReport;
 }
 export type ReportKindKey = keyof ReportByKind;
 

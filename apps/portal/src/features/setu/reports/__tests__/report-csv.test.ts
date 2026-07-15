@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import type { EnrollmentReport, AttendanceReport, DonationsReport } from '@cmt/shared-domain';
-import { enrollmentReportToCsv, attendanceReportToCsv, donationsReportToCsv } from '../report-csv';
+import type { EnrollmentReport, AttendanceReport } from '@cmt/shared-domain';
+import { enrollmentReportToCsv, attendanceReportToCsv } from '../report-csv';
 
 describe('enrollmentReportToCsv', () => {
   it('emits a header row even with no data', () => {
@@ -80,44 +80,5 @@ describe('attendanceReportToCsv', () => {
       totalEvents: 1,
     };
     expect(attendanceReportToCsv(r)).toContain('"Grade 3, ""G3"""');
-  });
-});
-
-describe('donationsReportToCsv', () => {
-  it('emits a header row even with no data', () => {
-    const r: DonationsReport = {
-      byPeriod: [],
-      byProgram: [],
-      paidFamilies: 0,
-      outstandingFamilies: 0,
-      totalCompletedCAD: 0,
-    };
-    expect(donationsReportToCsv(r)).toBe('scope,key,label,completedCAD,completedCount');
-  });
-
-  it('emits one row per byPeriod and byProgram entry in column order', () => {
-    const r: DonationsReport = {
-      byPeriod: [{ pid: 'p1', label: '2025-26', programLabel: 'Bala Vihar', completedCAD: 1200, completedCount: 6 }],
-      byProgram: [{ programKey: 'bala-vihar', programLabel: 'Bala Vihar', completedCAD: 1200, completedCount: 6 }],
-      paidFamilies: 6,
-      outstandingFamilies: 1,
-      totalCompletedCAD: 1200,
-    };
-    const lines = donationsReportToCsv(r).split('\n');
-    expect(lines).toHaveLength(3); // header + 2
-    expect(lines[0]).toBe('scope,key,label,completedCAD,completedCount');
-    expect(lines[1]).toBe('period,p1,2025-26,1200,6');
-    expect(lines[2]).toBe('program,bala-vihar,Bala Vihar,1200,6');
-  });
-
-  it('escapes RFC-4180 values with a comma and double-quote', () => {
-    const r: DonationsReport = {
-      byPeriod: [{ pid: 'p1', label: '2025-26, "FY"', programLabel: 'Bala Vihar', completedCAD: 1, completedCount: 1 }],
-      byProgram: [],
-      paidFamilies: 1,
-      outstandingFamilies: 0,
-      totalCompletedCAD: 1,
-    };
-    expect(donationsReportToCsv(r)).toContain('"2025-26, ""FY"""');
   });
 });

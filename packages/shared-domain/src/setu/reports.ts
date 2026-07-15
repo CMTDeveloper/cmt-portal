@@ -2,23 +2,23 @@
 import { z } from 'zod';
 import { programKeySchema } from './schemas/offering';
 
-export const REPORT_KINDS = ['enrollment', 'attendance', 'donations'] as const;
+export const REPORT_KINDS = ['enrollment', 'attendance'] as const;
 export type ReportKind = (typeof REPORT_KINDS)[number];
 
 const YMD = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD');
 
 // v1 report filters: `program` (all kinds) and `from`/`to` (attendance only —
-// the route fills defaults; donations is all-time by donation-period, and the
-// donations/enrollment data carry no clean location field, so `location` is
-// intentionally NOT a report filter in v1 — see the Phase 4 plan deviations).
+// the route fills defaults; the enrollment data carries no clean location field,
+// so `location` is intentionally NOT a report filter in v1 — see the Phase 4 plan
+// deviations).
 export const ReportQuerySchema = z.object({
   format: z.enum(['json', 'csv']).default('json'),
   from: YMD.optional(),
   to: YMD.optional(),
   program: programKeySchema.optional(),
-  // School-year scope ("2025-26"). When set, enrollment/attendance/donations are
-  // filtered to that year (in-memory, index-free). Omitted ⇒ unscoped (all-time /
-  // all-families). The SchoolYearSwitcher omits it for the live year on purpose.
+  // School-year scope ("2025-26"). When set, enrollment/attendance are filtered to
+  // that year (in-memory, index-free). Omitted ⇒ unscoped (all-time / all-families).
+  // The SchoolYearSwitcher omits it for the live year on purpose.
   year: z.string().regex(/^\d{4}-\d{2}$/).optional(),
 });
 export type ReportQuery = z.infer<typeof ReportQuerySchema>;
@@ -55,18 +55,3 @@ export const AttendanceReportSchema = z.object({
   totalEvents: z.number().int().nonnegative(),
 });
 export type AttendanceReport = z.infer<typeof AttendanceReportSchema>;
-
-export const DonationsReportSchema = z.object({
-  byPeriod: z.array(z.object({
-    pid: z.string(), label: z.string(), programLabel: z.string(),
-    completedCAD: z.number().nonnegative(), completedCount: z.number().int().nonnegative(),
-  })),
-  byProgram: z.array(z.object({
-    programKey: z.string(), programLabel: z.string(),
-    completedCAD: z.number().nonnegative(), completedCount: z.number().int().nonnegative(),
-  })),
-  paidFamilies: z.number().int().nonnegative(),
-  outstandingFamilies: z.number().int().nonnegative(),
-  totalCompletedCAD: z.number().nonnegative(),
-});
-export type DonationsReport = z.infer<typeof DonationsReportSchema>;

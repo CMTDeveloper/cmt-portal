@@ -3,19 +3,16 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const {
   buildEnrollmentReport,
   buildAttendanceReport,
-  buildDonationsReport,
   buildRosterCsvRows,
   rosterToCsv,
 } = vi.hoisted(() => ({
   buildEnrollmentReport: vi.fn(),
   buildAttendanceReport: vi.fn(),
-  buildDonationsReport: vi.fn(),
   buildRosterCsvRows: vi.fn(),
   rosterToCsv: vi.fn(),
 }));
 vi.mock('@/features/setu/reports/enrollment-report', () => ({ buildEnrollmentReport }));
 vi.mock('@/features/setu/reports/attendance-report', () => ({ buildAttendanceReport }));
-vi.mock('@/features/setu/reports/donations-report', () => ({ buildDonationsReport }));
 vi.mock('@/features/setu/roster/build-csv-rows', () => ({ buildRosterCsvRows }));
 vi.mock('@/features/setu/roster/roster-csv', () => ({ rosterToCsv }));
 vi.mock('@/lib/flags', () => ({ flags: { setuAuth: true } }));
@@ -26,7 +23,6 @@ function req(url: string, headers: Record<string, string>): Request {
   return new Request(`https://x${url}`, { headers });
 }
 const WELCOME = { 'x-portal-role': 'welcome-team', 'x-portal-extra-roles': '' };
-const ADMIN = { 'x-portal-role': 'admin', 'x-portal-extra-roles': '' };
 const FAMILY = { 'x-portal-role': 'family-member', 'x-portal-extra-roles': '' };
 
 function call(url: string, headers: Record<string, string>, kind: string) {
@@ -36,14 +32,10 @@ function call(url: string, headers: Record<string, string>, kind: string) {
 const ENROLLMENT_REPORT = {
   byProgram: [], byLevel: [], totalActiveEnrollments: 0, totalMembers: 0,
 };
-const DONATIONS_REPORT = {
-  byPeriod: [], byProgram: [], paidFamilies: 0, outstandingFamilies: 0, totalCompletedCAD: 0,
-};
 
 beforeEach(() => {
   buildEnrollmentReport.mockReset();
   buildAttendanceReport.mockReset();
-  buildDonationsReport.mockReset();
   buildRosterCsvRows.mockReset();
   rosterToCsv.mockReset();
 });
@@ -59,16 +51,9 @@ describe('GET /api/welcome/reports/[kind]', () => {
     expect(res.status).toBe(403);
   });
 
-  it('403 for welcome-team on donations (admin-only)', async () => {
+  it('400 on the removed donations kind', async () => {
     const res = await call('/api/welcome/reports/donations', WELCOME, 'donations');
-    expect(res.status).toBe(403);
-  });
-
-  it('200 for admin on donations', async () => {
-    buildDonationsReport.mockResolvedValue(DONATIONS_REPORT);
-    const res = await call('/api/welcome/reports/donations', ADMIN, 'donations');
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual(DONATIONS_REPORT);
+    expect(res.status).toBe(400);
   });
 
   it('200 returns enrollment report JSON for welcome-team', async () => {

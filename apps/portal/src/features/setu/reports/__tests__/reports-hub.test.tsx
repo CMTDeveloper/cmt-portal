@@ -1,9 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import type {
   EnrollmentReport,
   AttendanceReport,
-  DonationsReport,
 } from '@cmt/shared-domain';
 
 // vi.hoisted so the (hoisted) vi.mock factory can reference the mock.
@@ -40,25 +39,10 @@ const attendance: AttendanceReport = {
   totalEvents: 17,
 };
 
-const donations: DonationsReport = {
-  byPeriod: [
-    { pid: 'p1', label: 'BV 2025-26', programLabel: 'Bala Vihar', completedCAD: 500, completedCount: 5 },
-    { pid: 'p2', label: 'Tabla 2025', programLabel: 'Tabla', completedCAD: 200, completedCount: 2 },
-  ],
-  byProgram: [
-    { programKey: 'bala-vihar', programLabel: 'Bala Vihar', completedCAD: 500, completedCount: 5 },
-    { programKey: 'tabla', programLabel: 'Tabla', completedCAD: 200, completedCount: 2 },
-  ],
-  paidFamilies: 5,
-  outstandingFamilies: 3,
-  totalCompletedCAD: 700,
-};
-
 // Resolve each report by the kind the card requests.
 function routeByKind(kind: string) {
   if (kind === 'enrollment') return Promise.resolve(enrollment);
   if (kind === 'attendance') return Promise.resolve(attendance);
-  if (kind === 'donations') return Promise.resolve(donations);
   return Promise.reject(new Error(`unexpected-kind-${kind}`));
 }
 
@@ -101,18 +85,16 @@ describe('ReportsHub', () => {
     expect((await screen.findAllByText(/90%/)).length).toBeGreaterThanOrEqual(1);
   });
 
-  it('renders the donations + legacy cards when isAdmin is true', async () => {
+  it('renders the legacy card for admins, and never the removed donations card', () => {
     render(<ReportsHub isAdmin />);
-    expect(screen.getAllByTestId('report-card-donations').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByTestId('report-card-legacy').length).toBeGreaterThanOrEqual(1);
-    await waitFor(() =>
-      expect(screen.getAllByText(/BV 2025-26/).length).toBeGreaterThanOrEqual(1),
-    );
+    // The donations report was removed — it must never render, for anyone.
+    expect(screen.queryByTestId('report-card-donations')).toBeNull();
   });
 
-  it('hides the donations + legacy cards when isAdmin is false', () => {
+  it('hides the legacy card when isAdmin is false', () => {
     render(<ReportsHub isAdmin={false} />);
-    expect(screen.queryByTestId('report-card-donations')).toBeNull();
     expect(screen.queryByTestId('report-card-legacy')).toBeNull();
+    expect(screen.queryByTestId('report-card-donations')).toBeNull();
   });
 });
