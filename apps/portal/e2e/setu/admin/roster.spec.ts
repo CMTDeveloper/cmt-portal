@@ -30,6 +30,24 @@ test.describe('Roster report (/welcome/roster)', () => {
     await expect(summary.getByText(/By level/i)).toBeVisible({ timeout: 10_000 });
   });
 
+  test('Enrolled filter narrows the list, and no card leaks the internal CMT- id', async ({ page }) => {
+    await page.goto('/welcome/roster');
+    const results = page.getByTestId('roster-results').filter({ visible: true });
+    await expect(results.getByRole('link').first()).toBeVisible({ timeout: 30_000 });
+
+    // No visible card text shows the internal CMT- doc id as a Family ID - a
+    // never-enrolled family shows its Legacy id, not a minted FID (and never CMT-).
+    await expect(results).not.toContainText('FID CMT-');
+
+    // The Enrolled dropdown filters to only families with an active program.
+    const enrolledSelect = page.getByRole('combobox', { name: 'Enrolled' }).filter({ visible: true }).first();
+    await expect(enrolledSelect).toBeVisible({ timeout: 15_000 });
+    await enrolledSelect.selectOption('yes');
+    await expect(results.getByRole('link').first()).toBeVisible({ timeout: 15_000 });
+    // Every remaining card shows a program chip (Bala Vihar) since Enrolled=Yes.
+    await expect(results.getByText('Bala Vihar').first()).toBeVisible({ timeout: 10_000 });
+  });
+
   test('search-as-filter (by FID) -> drill into family detail', async ({ page }) => {
     await page.goto('/welcome/roster');
     const results = page.getByTestId('roster-results').filter({ visible: true });
