@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { SetuLogo, SetuIcon } from '@cmt/ui';
 import { gradeLabel, ROSTER_PAYMENTS } from '@cmt/shared-domain/setu';
 import type {
-  RosterReportRow, RosterReportFilters, RosterReportSummary, RosterPayment,
+  RosterReportRow, RosterReportFilters, RosterReportSummary, RosterPayment, RosterEngagement,
 } from '@cmt/shared-domain/setu';
 import {
   matchesRosterFilters, summarizeRoster, deriveLevelOptions, deriveGradeOptions,
@@ -38,6 +38,26 @@ function PaymentChip({ payment }: { payment: RosterPayment }) {
     >
       <span aria-hidden style={{ width: 6, height: 6, borderRadius: 99, background: 'currentColor' }} />
       {s.label}
+    </span>
+  );
+}
+
+// Issue #23 engagement badge. 'confirmed' → Enrolled (green); 'registered' → a
+// carry-forward that hasn't re-engaged; null (no active BV) shows nothing.
+function EngagementChip({ engagement }: { engagement: RosterReportRow['bvEngagement'] }) {
+  if (!engagement) return null;
+  const enrolled = engagement === 'confirmed';
+  return (
+    <span
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 5,
+        fontSize: 11, fontWeight: 600, padding: '2px 9px', borderRadius: 99, whiteSpace: 'nowrap',
+        background: enrolled ? 'var(--accentSoft)' : 'var(--surface2)',
+        color: enrolled ? 'var(--ok)' : 'var(--muted)',
+      }}
+    >
+      <span aria-hidden style={{ width: 6, height: 6, borderRadius: 99, background: 'currentColor' }} />
+      {enrolled ? 'Enrolled' : 'Registered'}
     </span>
   );
 }
@@ -135,6 +155,7 @@ function RosterFamilyCard({ row }: { row: RosterReportRow }) {
           )}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flex: '0 0 auto' }}>
+          <EngagementChip engagement={row.bvEngagement} />
           <PaymentChip payment={row.payment} />
           <div style={{ fontSize: 12, color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
             {row.memberCount} member{row.memberCount !== 1 ? 's' : ''}
@@ -186,6 +207,12 @@ function SummaryStrip({ summary }: { summary: RosterReportSummary }) {
         </div>
       )}
       <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 8, fontSize: 12, color: 'var(--body-text)' }}>
+        <span style={{ color: 'var(--muted)', fontWeight: 600 }}>Engagement:</span>
+        <span style={{ fontFeatureSettings: '"tnum"' }}>Enrolled · {summary.byEngagement.enrolled}</span>
+        <span style={{ fontFeatureSettings: '"tnum"' }}>Registered · {summary.byEngagement.registered}</span>
+        <span style={{ fontFeatureSettings: '"tnum"' }}>Not enrolled · {summary.byEngagement.notEnrolled}</span>
+      </div>
+      <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 8, fontSize: 12, color: 'var(--body-text)' }}>
         <span style={{ color: 'var(--muted)', fontWeight: 600 }}>Payment:</span>
         <span style={{ fontFeatureSettings: '"tnum"' }}>Paid · {summary.byPayment.paid}</span>
         <span style={{ fontFeatureSettings: '"tnum"' }}>Outstanding · {summary.byPayment.outstanding}</span>
@@ -218,7 +245,7 @@ function RosterContent({ year, locationOptions }: { year?: string; locationOptio
   const [level, setLevel] = useState<string | null>(null);
   const [grade, setGrade] = useState<string | null>(null);
   const [payment, setPayment] = useState<RosterPayment | null>(null);
-  const [enrolled, setEnrolled] = useState<boolean | null>(null);
+  const [engagement, setEngagement] = useState<RosterEngagement | null>(null);
   const [shown, setShown] = useState(INITIAL_SHOWN);
 
   // Search (unchanged behavior)
@@ -240,8 +267,8 @@ function RosterContent({ year, locationOptions }: { year?: string; locationOptio
   }, [year]);
 
   const filters: RosterReportFilters = useMemo(
-    () => ({ location, program, level, grade, payment, enrolled }),
-    [location, program, level, grade, payment, enrolled],
+    () => ({ location, program, level, grade, payment, engagement }),
+    [location, program, level, grade, payment, engagement],
   );
 
   const all = useMemo(() => rows ?? [], [rows]);
@@ -341,9 +368,13 @@ function RosterContent({ year, locationOptions }: { year?: string; locationOptio
               options={ROSTER_PAYMENTS.map((p) => ({ value: p, label: p[0]!.toUpperCase() + p.slice(1) }))}
             />
             <FilterSelect
-              label="Enrolled" value={enrolled == null ? '' : enrolled ? 'yes' : 'no'}
-              onChange={(v) => setEnrolled(v === '' ? null : v === 'yes')}
-              options={[{ value: 'yes', label: 'Enrolled' }, { value: 'no', label: 'Not enrolled' }]}
+              label="Engagement" value={engagement ?? ''}
+              onChange={(v) => setEngagement(v === '' ? null : (v as RosterEngagement))}
+              options={[
+                { value: 'enrolled', label: 'Enrolled' },
+                { value: 'registered', label: 'Registered' },
+                { value: 'not-enrolled', label: 'Not enrolled' },
+              ]}
             />
           </div>
 
@@ -359,7 +390,7 @@ function RosterContent({ year, locationOptions }: { year?: string; locationOptio
             : (loading ? ' ' : `${filtered.length.toLocaleString()} famil${filtered.length === 1 ? 'y' : 'ies'}`)}
         </span>
         <RosterExportButton
-          location={location} program={program} level={level} grade={grade} payment={payment} enrolled={enrolled}
+          location={location} program={program} level={level} grade={grade} payment={payment} engagement={engagement}
           {...(year ? { year } : {})}
         />
       </div>

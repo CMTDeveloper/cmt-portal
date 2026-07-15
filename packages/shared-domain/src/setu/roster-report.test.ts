@@ -10,20 +10,20 @@ import {
 function row(over: Partial<RosterReportRow>): RosterReportRow {
   return {
     fid: 'CMT-A', publicFid: null, legacyFid: null, name: 'A', parentName: 'A Parent', location: 'Brampton',
-    memberCount: 2, payment: 'unknown', programs: [], programKeys: [], bvChildren: [],
+    memberCount: 2, payment: 'unknown', programs: [], programKeys: [], bvChildren: [], bvEngagement: null,
     ...over,
   };
 }
 
-// Two families, kids across two levels + two grades, mixed payment.
+// Two families, kids across two levels + two grades, mixed payment + engagement.
 const rana = row({
   fid: 'CMT-RANA', name: 'Rana', location: 'Brampton', payment: 'paid',
-  programs: ['Bala Vihar'], programKeys: ['bala-vihar'],
+  programs: ['Bala Vihar'], programKeys: ['bala-vihar'], bvEngagement: 'confirmed',
   bvChildren: [{ grade: '2', levelName: 'Level 2' }, { grade: '6', levelName: 'Level 5' }],
 });
 const shah = row({
   fid: 'CMT-SHAH', name: 'Shah', location: 'Scarborough', payment: 'outstanding',
-  programs: ['Bala Vihar', 'Tabla'], programKeys: ['bala-vihar', 'tabla'],
+  programs: ['Bala Vihar', 'Tabla'], programKeys: ['bala-vihar', 'tabla'], bvEngagement: 'registered',
   bvChildren: [{ grade: '2', levelName: 'Level 2' }],
 });
 const rows = [rana, shah];
@@ -53,15 +53,17 @@ describe('matchesRosterFilters', () => {
     expect(matchesRosterFilters(legacy, { grade: 'Grade 4' })).toBe(true);
     expect(matchesRosterFilters(legacy, { grade: '5' })).toBe(false);
   });
-  it('enrolled filter: true keeps only families with an active program, false only families with none', () => {
-    const enrolled = row({ fid: 'CMT-EN', programKeys: ['bala-vihar'] });
-    const notEnrolled = row({ fid: 'CMT-NO', programKeys: [] });
-    const set = [enrolled, notEnrolled];
-    expect(set.filter((r) => matchesRosterFilters(r, { enrolled: true }))).toEqual([enrolled]);
-    expect(set.filter((r) => matchesRosterFilters(r, { enrolled: false }))).toEqual([notEnrolled]);
-    // null/undefined = no enrolled filter → both pass.
-    expect(set.filter((r) => matchesRosterFilters(r, { enrolled: null }))).toHaveLength(2);
-    expect(set.filter((r) => matchesRosterFilters(r, {}))).toHaveLength(2);
+  it('engagement filter maps confirmed→enrolled, registered→registered, null→not-enrolled', () => {
+    const enrolled = row({ fid: 'CMT-EN', bvEngagement: 'confirmed' });      // confirmed carry-forward / self-enrolled
+    const registered = row({ fid: 'CMT-RG', bvEngagement: 'registered' });   // active but not re-engaged
+    const none = row({ fid: 'CMT-NO', bvEngagement: null });                 // no active BV
+    const set = [enrolled, registered, none];
+    expect(set.filter((r) => matchesRosterFilters(r, { engagement: 'enrolled' }))).toEqual([enrolled]);
+    expect(set.filter((r) => matchesRosterFilters(r, { engagement: 'registered' }))).toEqual([registered]);
+    expect(set.filter((r) => matchesRosterFilters(r, { engagement: 'not-enrolled' }))).toEqual([none]);
+    // null/undefined = no engagement filter → all pass.
+    expect(set.filter((r) => matchesRosterFilters(r, { engagement: null }))).toHaveLength(3);
+    expect(set.filter((r) => matchesRosterFilters(r, {}))).toHaveLength(3);
   });
   it('AND across groups', () => {
     expect(rows.filter((r) => matchesRosterFilters(r, { location: 'Brampton', level: 'Level 2' }))).toEqual([rana]);
@@ -84,6 +86,8 @@ describe('summarizeRoster', () => {
       { levelName: 'Level 5', childCount: 1 },
     ]);
     expect(s.byPayment).toEqual({ paid: 1, outstanding: 1, unknown: 0 });
+    // rana is confirmed (Enrolled), shah is registered.
+    expect(s.byEngagement).toEqual({ enrolled: 1, registered: 1, notEnrolled: 0 });
   });
   it('level filter narrows childCount to matching children only', () => {
     const s = summarizeRoster(rows, { level: 'Level 2' });

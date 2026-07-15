@@ -23,8 +23,19 @@ export const RosterReportRowSchema = z.object({
   programs: z.array(z.string()),    // active program LABELS, for display chips
   programKeys: z.array(z.string()), // active program KEYS, for the Program filter
   bvChildren: z.array(RosterReportChildSchema),
+  // Issue #23 Bala Vihar engagement, same rule as the family dashboard + teacher
+  // roster: 'confirmed' = engagement-confirmed ("Enrolled"); 'registered' = has an
+  // active BV enrollment but hasn't re-engaged (a rollover carry-forward / staff
+  // backfill); null = no active BV enrollment ("Not enrolled").
+  bvEngagement: z.enum(['confirmed', 'registered']).nullable(),
 });
 export type RosterReportRow = z.infer<typeof RosterReportRowSchema>;
+
+/** The 3-state Bala Vihar engagement a row filters + summarizes on. */
+export type RosterEngagement = 'enrolled' | 'registered' | 'not-enrolled';
+export function rosterEngagementOf(row: Pick<RosterReportRow, 'bvEngagement'>): RosterEngagement {
+  return row.bvEngagement === 'confirmed' ? 'enrolled' : row.bvEngagement === 'registered' ? 'registered' : 'not-enrolled';
+}
 
 export const RosterReportResponseSchema = z.object({ rows: z.array(RosterReportRowSchema) });
 export type RosterReportResponse = z.infer<typeof RosterReportResponseSchema>;
@@ -35,7 +46,7 @@ export interface RosterReportFilters {
   level?: string | null;                                     // levelName (BV)
   grade?: string | null;                                     // schoolGrade
   payment?: (typeof ROSTER_PAYMENTS)[number] | null;
-  enrolled?: boolean | null;                                 // true = has an active program; false = none
+  engagement?: RosterEngagement | null;                      // BV engagement (issue #23)
 }
 
 export interface RosterReportSummary {
@@ -43,6 +54,7 @@ export interface RosterReportSummary {
   childCount: number;
   byLevel: Array<{ levelName: string; childCount: number }>;
   byPayment: { paid: number; outstanding: number; unknown: number };
+  byEngagement: { enrolled: number; registered: number; notEnrolled: number };
 }
 
 // Does a single BV child satisfy the active per-child filters (level, grade)?
@@ -58,7 +70,7 @@ export function matchesRosterFilters(row: RosterReportRow, f: RosterReportFilter
   if (f.location && row.location !== f.location) return false;
   if (f.program && !row.programKeys.includes(f.program)) return false;
   if (f.payment && row.payment !== f.payment) return false;
-  if (f.enrolled != null && row.programKeys.length > 0 !== f.enrolled) return false;
+  if (f.engagement && rosterEngagementOf(row) !== f.engagement) return false;
   if (f.level || f.grade) {
     if (!row.bvChildren.some((c) => childPasses(c, f))) return false;
   }
@@ -71,9 +83,14 @@ export function summarizeRoster(rows: RosterReportRow[], f: RosterReportFilters)
   const included = rows.filter((r) => matchesRosterFilters(r, f));
   const byLevelMap = new Map<string, number>();
   const byPayment = { paid: 0, outstanding: 0, unknown: 0 };
+  const byEngagement = { enrolled: 0, registered: 0, notEnrolled: 0 };
   let childCount = 0;
   for (const r of included) {
     byPayment[r.payment]++;
+    const eng = rosterEngagementOf(r);
+    if (eng === 'enrolled') byEngagement.enrolled++;
+    else if (eng === 'registered') byEngagement.registered++;
+    else byEngagement.notEnrolled++;
     for (const c of r.bvChildren) {
       if (!childPasses(c, f)) continue;
       childCount++;
@@ -84,7 +101,7 @@ export function summarizeRoster(rows: RosterReportRow[], f: RosterReportFilters)
   const byLevel = [...byLevelMap.entries()]
     .map(([levelName, count]) => ({ levelName, childCount: count }))
     .sort((a, b) => compareLevel(a.levelName, b.levelName));
-  return { familyCount: included.length, childCount, byLevel, byPayment };
+  return { familyCount: included.length, childCount, byLevel, byPayment, byEngagement };
 }
 
 // "Level 2" < "Level 10" (numeric); non-numeric names sort last alphabetically.

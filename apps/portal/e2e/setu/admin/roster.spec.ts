@@ -30,7 +30,7 @@ test.describe('Roster report (/welcome/roster)', () => {
     await expect(summary.getByText(/By level/i)).toBeVisible({ timeout: 10_000 });
   });
 
-  test('Enrolled filter narrows the list, and no card leaks the internal CMT- id', async ({ page }) => {
+  test('Engagement filter narrows the list, summary shows the split, and no card leaks CMT-', async ({ page }) => {
     await page.goto('/welcome/roster');
     const results = page.getByTestId('roster-results').filter({ visible: true });
     await expect(results.getByRole('link').first()).toBeVisible({ timeout: 30_000 });
@@ -39,13 +39,17 @@ test.describe('Roster report (/welcome/roster)', () => {
     // never-enrolled family shows its Legacy id, not a minted FID (and never CMT-).
     await expect(results).not.toContainText('FID CMT-');
 
-    // The Enrolled dropdown filters to only families with an active program.
-    const enrolledSelect = page.getByRole('combobox', { name: 'Enrolled' }).filter({ visible: true }).first();
-    await expect(enrolledSelect).toBeVisible({ timeout: 15_000 });
-    await enrolledSelect.selectOption('yes');
+    // The summary carries the issue-#23 engagement split (Enrolled / Registered / Not enrolled).
+    const summary = page.getByTestId('roster-summary').filter({ visible: true });
+    await expect(summary.getByText(/Engagement:/)).toBeVisible({ timeout: 30_000 });
+
+    // Filtering to "Registered" shows only carry-forwards (every card has a Registered badge).
+    const engSelect = page.getByRole('combobox', { name: 'Engagement' }).filter({ visible: true }).first();
+    await expect(engSelect).toBeVisible({ timeout: 15_000 });
+    await engSelect.selectOption('registered');
     await expect(results.getByRole('link').first()).toBeVisible({ timeout: 15_000 });
-    // Every remaining card shows a program chip (Bala Vihar) since Enrolled=Yes.
-    await expect(results.getByText('Bala Vihar').first()).toBeVisible({ timeout: 10_000 });
+    // No Enrolled-badged card remains among the results (only Registered families).
+    await expect(results.getByText('Enrolled', { exact: true })).toHaveCount(0);
   });
 
   test('search-as-filter (by FID) -> drill into family detail', async ({ page }) => {

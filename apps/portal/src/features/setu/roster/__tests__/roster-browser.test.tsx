@@ -17,23 +17,24 @@ import { RosterBrowser } from '../roster-browser';
 function row(over: Partial<RosterReportRow>): RosterReportRow {
   return {
     fid: 'CMT-A', publicFid: null, legacyFid: null, name: 'A', parentName: 'A Parent', location: 'Brampton',
-    memberCount: 2, payment: 'unknown', programs: [], programKeys: [], bvChildren: [], ...over,
+    memberCount: 2, payment: 'unknown', programs: [], programKeys: [], bvChildren: [], bvEngagement: null, ...over,
   };
 }
 
 const RANA = row({
   fid: 'CMT-RANA', publicFid: '1075', legacyFid: '477', name: 'Rana', parentName: 'Vaibhav & Noopur Rana',
-  location: 'Brampton', payment: 'paid',
+  location: 'Brampton', payment: 'paid', bvEngagement: 'confirmed',
   programs: ['Bala Vihar'], programKeys: ['bala-vihar'], bvChildren: [{ grade: '2', levelName: 'Level 2' }],
 });
 const SHAH = row({
   fid: 'CMT-SHAH', publicFid: '1200', name: 'Shah', parentName: 'Priya Shah', location: 'Scarborough', payment: 'outstanding',
+  bvEngagement: 'registered',
   programs: ['Bala Vihar'], programKeys: ['bala-vihar'], bvChildren: [{ grade: '5', levelName: 'Level 4' }],
 });
-// Never-enrolled family: no publicFid (lazy model), no active program.
+// Never-enrolled family: no publicFid (lazy model), no active program, no BV engagement.
 const PENDING = row({
   fid: 'CMT-PENDINGXYZ', publicFid: null, legacyFid: '999', name: 'Anup', parentName: 'Aariyan Anup',
-  location: 'Brampton', payment: 'unknown', programs: [], programKeys: [], bvChildren: [],
+  location: 'Brampton', payment: 'unknown', programs: [], programKeys: [], bvChildren: [], bvEngagement: null,
 });
 
 beforeEach(() => {
@@ -85,15 +86,17 @@ describe('RosterBrowser', () => {
     expect(screen.queryByText(/FID CMT-/)).not.toBeInTheDocument();
   });
 
-  it('Enrolled filter: "Not enrolled" keeps only families with no active program', async () => {
-    fetchRosterReportClient.mockResolvedValue({ rows: [RANA, PENDING] });
+  it('Engagement filter: "Registered" keeps only carry-forwards (not Enrolled or Not-enrolled)', async () => {
+    // RANA = confirmed (Enrolled), SHAH = registered, PENDING = null (Not enrolled).
+    fetchRosterReportClient.mockResolvedValue({ rows: [RANA, SHAH, PENDING] });
     render(<RosterBrowser locationOptions={['Brampton', 'Scarborough']} />);
-    await screen.findAllByText('Aariyan Anup');
-    for (const sel of screen.getAllByRole('combobox', { name: 'Enrolled' })) {
-      await userEvent.selectOptions(sel, 'no');
+    await screen.findAllByText('Priya Shah');
+    for (const sel of screen.getAllByRole('combobox', { name: 'Engagement' })) {
+      await userEvent.selectOptions(sel, 'registered');
     }
     await waitFor(() => expect(screen.queryByText('Vaibhav & Noopur Rana')).not.toBeInTheDocument());
-    expect(screen.getAllByText('Aariyan Anup').length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText('Aariyan Anup')).not.toBeInTheDocument();
+    expect(screen.getAllByText('Priya Shah').length).toBeGreaterThanOrEqual(1);
   });
 
   it('switches to search results when the search box has text (parent name on hits too)', async () => {

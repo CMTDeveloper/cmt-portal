@@ -18,10 +18,11 @@ function toDate(v: unknown): Date {
 
 type Meta = { name: string; location: string; legacyFid: string; publicFid: string | null };
 type Member = { mid: string; firstName: string; lastName: string; type: string; grade: string; manager: boolean };
+type EnrolledVia = 'family-initiated' | 'first-attendance' | 'welcome-team' | 'promotion' | 'kiosk';
 type ActiveEnr = {
-  programKey: string; programLabel: string; oid: string; pid: string;
+  programKey: string; programLabel: string; oid: string; pid: string; eid: string;
   schoolGrade: string | null; enrolledMids: string[]; snapshot: number; override: number | null;
-  enrolledAt: Date; termLabel: string;
+  enrolledAt: Date; termLabel: string; enrolledVia: EnrolledVia;
 };
 
 /**
@@ -78,27 +79,32 @@ export async function buildRosterReportDataset(params: { year?: string }): Promi
     if (params.year && termLabel !== params.year) continue;
     const fid = typeof d['fid'] === 'string' ? (d['fid'] as string) : e.ref.parent.parent?.id;
     if (!fid || !meta.has(fid)) continue;
+    const oid = String(d['oid'] ?? '');
     const arr = activeByFid.get(fid) ?? [];
     arr.push({
       programKey: String(d['programKey'] ?? ''),
       programLabel: String(d['programLabel'] ?? ''),
-      oid: String(d['oid'] ?? ''),
+      oid,
       // pid is the level-roster join key (encodes location + year); enrollments do
       // NOT store per-child level, so the child's level is derived from grade below.
       pid: String(d['pid'] ?? d['oid'] ?? ''),
+      eid: typeof d['eid'] === 'string' ? (d['eid'] as string) : `${fid}-${oid}`,
       schoolGrade: typeof d['schoolGrade'] === 'string' ? (d['schoolGrade'] as string) : null,
       enrolledMids: Array.isArray(d['enrolledMids']) ? (d['enrolledMids'] as string[]) : [],
       snapshot: typeof d['suggestedAmountSnapshot'] === 'number' ? (d['suggestedAmountSnapshot'] as number) : 0,
       override: typeof d['suggestedAmountOverride'] === 'number' ? (d['suggestedAmountOverride'] as number) : null,
       enrolledAt: toDate(d['enrolledAt']),
       termLabel,
+      enrolledVia: (typeof d['enrolledVia'] === 'string' ? (d['enrolledVia'] as EnrolledVia) : 'promotion'),
     });
     activeByFid.set(fid, arr);
   }
 
-  // 4) completed donations summed by fid
+  // 4) completed donations by fid: summed amount (payment) + the set of eids they
+  // cover (issue #23 confirmation matches a completed donation to its enrollment eid).
   const donSnap = await db.collectionGroup('donations').get();
   const paidByFid = new Map<string, number>();
+  const completedEidsByFid = new Map<string, Set<string>>();
   for (const dd of donSnap.docs) {
     const d = dd.data() as Record<string, unknown>;
     if (d['status'] !== 'completed') continue;
@@ -106,6 +112,26 @@ export async function buildRosterReportDataset(params: { year?: string }): Promi
     if (!fid || !meta.has(fid)) continue;
     const amt = typeof d['amountCAD'] === 'number' ? (d['amountCAD'] as number) : 0;
     paidByFid.set(fid, (paidByFid.get(fid) ?? 0) + amt);
+    if (typeof d['eid'] === 'string') {
+      const set = completedEidsByFid.get(fid) ?? new Set<string>();
+      set.add(d['eid'] as string);
+      completedEidsByFid.set(fid, set);
+    }
+  }
+
+  // 4b) attendance: present/late marks graduate a carry-forward from Registered →
+  // Enrolled (issue #23). Bulk-read attended events once, grouped by pid (which
+  // encodes location+year), mirroring deriveConfirmedFidsForLevel's pid scoping.
+  const attSnap = await db.collection('attendanceEvents').where('status', 'in', ['present', 'late']).get();
+  const attendedMidsByPid = new Map<string, Set<string>>();
+  for (const ad of attSnap.docs) {
+    const a = ad.data() as { pid?: unknown; mid?: unknown };
+    const pid = typeof a.pid === 'string' ? a.pid : '';
+    const mid = typeof a.mid === 'string' ? a.mid : '';
+    if (!pid || !mid) continue;
+    const set = attendedMidsByPid.get(pid) ?? new Set<string>();
+    set.add(mid);
+    attendedMidsByPid.set(pid, set);
   }
 
   // 5) offerings for the active enrollments -> live effective suggested amount
@@ -177,6 +203,27 @@ export async function buildRosterReportDataset(params: { year?: string }): Promi
       }
     }
 
+    // Issue #23 Bala Vihar engagement for the family's active BV enrollment(s):
+    // 'confirmed' ("Enrolled") if any is engagement-confirmed — a deliberate
+    // enrolledVia (family-initiated / first-attendance), a present/late mark by an
+    // enrolled child (scoped by pid), or a completed donation matching its eid;
+    // else 'registered' (an active carry-forward / staff backfill that hasn't
+    // re-engaged); null when there's no active BV enrollment. legacyPaid is NOT
+    // consulted — every active BV offering is portal-sourced (the 2025-26 legacy
+    // cutover offerings are no longer active), so a legacy read can't change this.
+    const activeBv = active.filter((a) => a.programKey === BV_PROGRAM_KEY);
+    let bvEngagement: 'confirmed' | 'registered' | null = null;
+    if (activeBv.length > 0) {
+      const completedEids = completedEidsByFid.get(fid);
+      const confirmed = activeBv.some((a) =>
+        a.enrolledVia === 'family-initiated' ||
+        a.enrolledVia === 'first-attendance' ||
+        a.enrolledMids.some((mid) => attendedMidsByPid.get(a.pid)?.has(mid)) ||
+        (completedEids?.has(a.eid) ?? false),
+      );
+      bvEngagement = confirmed ? 'confirmed' : 'registered';
+    }
+
     const row: RosterReportRow = {
       fid,
       publicFid: fam.publicFid,
@@ -189,6 +236,7 @@ export async function buildRosterReportDataset(params: { year?: string }): Promi
       programs,
       programKeys,
       bvChildren,
+      bvEngagement,
     };
 
     const programsJoined = programs.join('; ');
