@@ -35,6 +35,7 @@ export interface RosterReportFilters {
   level?: string | null;                                     // levelName (BV)
   grade?: string | null;                                     // schoolGrade
   payment?: (typeof ROSTER_PAYMENTS)[number] | null;
+  enrolled?: boolean | null;                                 // true = has an active program; false = none
 }
 
 export interface RosterReportSummary {
@@ -57,6 +58,7 @@ export function matchesRosterFilters(row: RosterReportRow, f: RosterReportFilter
   if (f.location && row.location !== f.location) return false;
   if (f.program && !row.programKeys.includes(f.program)) return false;
   if (f.payment && row.payment !== f.payment) return false;
+  if (f.enrolled != null && row.programKeys.length > 0 !== f.enrolled) return false;
   if (f.level || f.grade) {
     if (!row.bvChildren.some((c) => childPasses(c, f))) return false;
   }

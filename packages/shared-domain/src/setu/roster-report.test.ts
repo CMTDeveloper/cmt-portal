@@ -53,6 +53,16 @@ describe('matchesRosterFilters', () => {
     expect(matchesRosterFilters(legacy, { grade: 'Grade 4' })).toBe(true);
     expect(matchesRosterFilters(legacy, { grade: '5' })).toBe(false);
   });
+  it('enrolled filter: true keeps only families with an active program, false only families with none', () => {
+    const enrolled = row({ fid: 'CMT-EN', programKeys: ['bala-vihar'] });
+    const notEnrolled = row({ fid: 'CMT-NO', programKeys: [] });
+    const set = [enrolled, notEnrolled];
+    expect(set.filter((r) => matchesRosterFilters(r, { enrolled: true }))).toEqual([enrolled]);
+    expect(set.filter((r) => matchesRosterFilters(r, { enrolled: false }))).toEqual([notEnrolled]);
+    // null/undefined = no enrolled filter → both pass.
+    expect(set.filter((r) => matchesRosterFilters(r, { enrolled: null }))).toHaveLength(2);
+    expect(set.filter((r) => matchesRosterFilters(r, {}))).toHaveLength(2);
+  });
   it('AND across groups', () => {
     expect(rows.filter((r) => matchesRosterFilters(r, { location: 'Brampton', level: 'Level 2' }))).toEqual([rana]);
     expect(rows.filter((r) => matchesRosterFilters(r, { location: 'Scarborough', level: 'Level 5' }))).toEqual([]);

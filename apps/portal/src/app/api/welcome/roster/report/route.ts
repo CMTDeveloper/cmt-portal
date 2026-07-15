@@ -29,12 +29,14 @@ export async function GET(req: Request) {
   if (searchParams.get('format') === 'csv') {
     // exactOptionalPropertyTypes: only set filter keys that are present.
     const pay = paymentParam(searchParams.get('payment'));
+    const enrolledRaw = searchParams.get('enrolled');
     const filters: RosterReportFilters = {
       ...(searchParams.get('location') ? { location: searchParams.get('location') } : {}),
       ...(searchParams.get('program') ? { program: searchParams.get('program') } : {}),
       ...(searchParams.get('level') ? { level: searchParams.get('level') } : {}),
       ...(searchParams.get('grade') ? { grade: searchParams.get('grade') } : {}),
       ...(pay ? { payment: pay } : {}),
+      ...(enrolledRaw === 'yes' || enrolledRaw === 'no' ? { enrolled: enrolledRaw === 'yes' } : {}),
     };
     const personRows = dataset.filter((f) => matchesRosterFilters(f.row, filters)).flatMap((f) => f.personRows);
     const csv = rosterToCsv(personRows);

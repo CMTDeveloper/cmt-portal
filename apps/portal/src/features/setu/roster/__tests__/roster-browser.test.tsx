@@ -30,6 +30,11 @@ const SHAH = row({
   fid: 'CMT-SHAH', publicFid: '1200', name: 'Shah', parentName: 'Priya Shah', location: 'Scarborough', payment: 'outstanding',
   programs: ['Bala Vihar'], programKeys: ['bala-vihar'], bvChildren: [{ grade: '5', levelName: 'Level 4' }],
 });
+// Never-enrolled family: no publicFid (lazy model), no active program.
+const PENDING = row({
+  fid: 'CMT-PENDINGXYZ', publicFid: null, legacyFid: '999', name: 'Anup', parentName: 'Aariyan Anup',
+  location: 'Brampton', payment: 'unknown', programs: [], programKeys: [], bvChildren: [],
+});
 
 beforeEach(() => {
   fetchRosterReportClient.mockReset();
@@ -68,6 +73,27 @@ describe('RosterBrowser', () => {
     }
     await waitFor(() => expect(screen.queryByText('Vaibhav & Noopur Rana')).not.toBeInTheDocument());
     expect(screen.getAllByText('Priya Shah').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('a family without a publicFid shows its legacy id, never the internal CMT- fid', async () => {
+    fetchRosterReportClient.mockResolvedValue({ rows: [PENDING] });
+    render(<RosterBrowser locationOptions={['Brampton', 'Scarborough']} />);
+    await screen.findAllByText('Aariyan Anup');
+    // The card meta line shows "Legacy 999" and NEVER leaks the CMT- doc id.
+    expect(screen.getAllByText(/Legacy 999/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText(/CMT-PENDINGXYZ/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/FID CMT-/)).not.toBeInTheDocument();
+  });
+
+  it('Enrolled filter: "Not enrolled" keeps only families with no active program', async () => {
+    fetchRosterReportClient.mockResolvedValue({ rows: [RANA, PENDING] });
+    render(<RosterBrowser locationOptions={['Brampton', 'Scarborough']} />);
+    await screen.findAllByText('Aariyan Anup');
+    for (const sel of screen.getAllByRole('combobox', { name: 'Enrolled' })) {
+      await userEvent.selectOptions(sel, 'no');
+    }
+    await waitFor(() => expect(screen.queryByText('Vaibhav & Noopur Rana')).not.toBeInTheDocument());
+    expect(screen.getAllByText('Aariyan Anup').length).toBeGreaterThanOrEqual(1);
   });
 
   it('switches to search results when the search box has text (parent name on hits too)', async () => {

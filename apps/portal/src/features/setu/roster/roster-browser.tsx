@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { SetuLogo, SetuIcon } from '@cmt/ui';
-import { displayFid, gradeLabel, ROSTER_PAYMENTS } from '@cmt/shared-domain/setu';
+import { gradeLabel, ROSTER_PAYMENTS } from '@cmt/shared-domain/setu';
 import type {
   RosterReportRow, RosterReportFilters, RosterReportSummary, RosterPayment,
 } from '@cmt/shared-domain/setu';
@@ -97,6 +97,18 @@ const cardStyle = {
   borderRadius: 'var(--radius)', textDecoration: 'none', color: 'inherit',
 } as const;
 
+// The mono sub-line under a family's name. The new Family ID is shown ONLY when
+// it has actually been minted (publicFid present) — a family that hasn't enrolled
+// has none, so we show just its legacy id + location and NEVER fall back to the
+// internal CMT- id (which displayFid would leak).
+function familyMetaLine(f: { publicFid?: string | null; legacyFid?: string | null; location: string }): string {
+  const parts: string[] = [];
+  if (f.publicFid) parts.push(`FID ${f.publicFid}`);
+  if (f.legacyFid) parts.push(`Legacy ${f.legacyFid}`);
+  parts.push(f.location);
+  return parts.join(' · ');
+}
+
 function RosterFamilyCard({ row }: { row: RosterReportRow }) {
   return (
     <Link key={row.fid} href={`/welcome/family/${row.fid}`} className="focus-ring" style={cardStyle}>
@@ -104,7 +116,7 @@ function RosterFamilyCard({ row }: { row: RosterReportRow }) {
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 15, fontWeight: 600 }}>{row.parentName}</div>
           <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2, fontFamily: 'var(--mono)' }}>
-            FID {displayFid(row)}{row.legacyFid ? ` · Legacy ${row.legacyFid}` : ''} · {row.location}
+            {familyMetaLine(row)}
           </div>
           {row.programs.length > 0 && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
@@ -141,7 +153,7 @@ function SearchHitCard({ hit }: { hit: FamilySearchHit }) {
         <div>
           <div style={{ fontSize: 15, fontWeight: 600 }}>{hit.parentName}</div>
           <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2, fontFamily: 'var(--mono)' }}>
-            FID {displayFid(hit)}{hit.legacyFid ? ` · Legacy ${hit.legacyFid}` : ''} · {hit.location}
+            {familyMetaLine(hit)}
           </div>
         </div>
         <div style={{ textAlign: 'right' }}>
@@ -206,6 +218,7 @@ function RosterContent({ year, locationOptions }: { year?: string; locationOptio
   const [level, setLevel] = useState<string | null>(null);
   const [grade, setGrade] = useState<string | null>(null);
   const [payment, setPayment] = useState<RosterPayment | null>(null);
+  const [enrolled, setEnrolled] = useState<boolean | null>(null);
   const [shown, setShown] = useState(INITIAL_SHOWN);
 
   // Search (unchanged behavior)
@@ -227,8 +240,8 @@ function RosterContent({ year, locationOptions }: { year?: string; locationOptio
   }, [year]);
 
   const filters: RosterReportFilters = useMemo(
-    () => ({ location, program, level, grade, payment }),
-    [location, program, level, grade, payment],
+    () => ({ location, program, level, grade, payment, enrolled }),
+    [location, program, level, grade, payment, enrolled],
   );
 
   const all = useMemo(() => rows ?? [], [rows]);
@@ -327,6 +340,11 @@ function RosterContent({ year, locationOptions }: { year?: string; locationOptio
               label="Payment" value={payment ?? ''} onChange={(v) => setPayment((v || null) as RosterPayment | null)}
               options={ROSTER_PAYMENTS.map((p) => ({ value: p, label: p[0]!.toUpperCase() + p.slice(1) }))}
             />
+            <FilterSelect
+              label="Enrolled" value={enrolled == null ? '' : enrolled ? 'yes' : 'no'}
+              onChange={(v) => setEnrolled(v === '' ? null : v === 'yes')}
+              options={[{ value: 'yes', label: 'Enrolled' }, { value: 'no', label: 'Not enrolled' }]}
+            />
           </div>
 
           {!loading && !loadError && <SummaryStrip summary={summary} />}
@@ -341,7 +359,7 @@ function RosterContent({ year, locationOptions }: { year?: string; locationOptio
             : (loading ? ' ' : `${filtered.length.toLocaleString()} famil${filtered.length === 1 ? 'y' : 'ies'}`)}
         </span>
         <RosterExportButton
-          location={location} program={program} level={level} grade={grade} payment={payment}
+          location={location} program={program} level={level} grade={grade} payment={payment} enrolled={enrolled}
           {...(year ? { year } : {})}
         />
       </div>

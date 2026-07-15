@@ -10,6 +10,8 @@ interface Props {
   level?: string | null;
   grade?: string | null;
   payment?: string | null;
+  /** true = only enrolled families, false = only not-enrolled, null = both. */
+  enrolled?: boolean | null;
   /** School-year scope ("2025-26"); omitted for the live year. */
   year?: string;
 }
@@ -21,7 +23,7 @@ interface Props {
  * server re-runs the bulk builder and applies the same filter predicate as the
  * on-screen list.
  */
-export function RosterExportButton({ location, program, level, grade, payment, year }: Props) {
+export function RosterExportButton({ location, program, level, grade, payment, enrolled, year }: Props) {
   const [pending, startTransition] = useTransition();
   const [failed, setFailed] = useState(false);
 
@@ -35,6 +37,7 @@ export function RosterExportButton({ location, program, level, grade, payment, y
         if (level) qs.set('level', level);
         if (grade) qs.set('grade', grade);
         if (payment) qs.set('payment', payment);
+        if (enrolled != null) qs.set('enrolled', enrolled ? 'yes' : 'no');
         if (year) qs.set('year', year);
         const res = await fetch(`/api/welcome/roster/report?${qs.toString()}`, { credentials: 'same-origin' });
         if (!res.ok) throw new Error(`export-failed-${res.status}`);
