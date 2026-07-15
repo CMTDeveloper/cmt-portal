@@ -41,11 +41,8 @@ export default async function DonateSuccessPage({
         <p style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.6, marginBottom: 24 }}>
           Your official CRA tax receipt will be mailed by <strong>accounting@chinmayatoronto.org</strong> each February for the prior calendar year.
         </p>
-        <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
-          <Link href="/family/donations" className="btn btn--p" style={{ padding: '12px 20px', textDecoration: 'none' }}>
-            View my donations
-          </Link>
-          <Link href="/family" className="btn btn--g" style={{ padding: '12px 20px', textDecoration: 'none' }}>
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
+          <Link href="/family" className="btn btn--p" style={{ padding: '12px 20px', textDecoration: 'none' }}>
             Back to family
           </Link>
         </div>
