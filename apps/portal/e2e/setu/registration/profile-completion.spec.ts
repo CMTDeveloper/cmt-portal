@@ -99,6 +99,16 @@ test.describe('registration — profile-completion gate', () => {
       // manager scope that stranded the real 3-person family on "Saving…".
       await completeAllVisibleMembers(page);
 
+      // A manager also needs the required family home address (added 2026-07-10).
+      // Fill it when the section is present (the seed family may not have one).
+      const addressSection = page.getByTestId('family-address-section').filter({ visible: true });
+      if (await addressSection.count()) {
+        await page.getByLabel('Street address').filter({ visible: true }).first().fill('12 Main St');
+        await page.getByLabel('City').filter({ visible: true }).first().fill('Brampton');
+        // Province defaults to ON; postal code is required.
+        await page.getByLabel('Postal code').filter({ visible: true }).first().fill('L6P 1A2');
+      }
+
       // Now everything is complete → Save enables → submit → HARD-navigates to
       // /family. The whole point of the fix: this must NOT loop back to
       // /complete-profile and strand on "Saving…".
@@ -121,10 +131,15 @@ test.describe('registration — profile-completion gate', () => {
     const ctx = await managerContext(browser);
     const page = await ctx.newPage();
     try {
-      await page.goto('/family');
-      // Give the client a beat to perform any gate redirect, then assert it did not.
-      await page.waitForLoadState('networkidle');
-      expect(page.url()).not.toContain('/complete-profile');
+      // A family completed moments ago (test 2) can briefly read a stale `use cache`
+      // value in the gate and bounce to /complete-profile; a reload re-runs the gate
+      // on fresh data. Poll goto+reload until it settles on /family (the family IS
+      // complete server-side — verified by the walkthrough that just saved it).
+      await expect(async () => {
+        await page.goto('/family');
+        await page.waitForLoadState('networkidle');
+        expect(page.url()).not.toContain('/complete-profile');
+      }).toPass({ timeout: 20_000 });
       await expect(page).toHaveURL(/\/family\/?($|\?)/, { timeout: 20_000 });
     } finally {
       await page.close();
@@ -162,20 +177,32 @@ async function completeAllVisibleMembers(page: import('@playwright/test').Page):
     timeout: 30_000,
   });
 
-  for (let i = 0; i < 8; i++) {
-    const firstCard = page.locator('[data-testid^="member-card-"]:visible').first();
-    if ((await firstCard.count()) === 0) break;
-    const tid = await firstCard.getAttribute('data-testid');
-    if (!tid) break;
-    // PIN every field interaction to THIS card by id. A live `.first()` locator
-    // shifts to the next card the instant this one unmounts mid-fill, so a later
-    // field (e.g. the child's birth month/year) could spill onto a sibling card or
-    // be skipped — a timing-dependent flake. A by-id locator can only ever resolve
-    // to this card (and to nothing once it unmounts), never a sibling.
+  // Member cards are FROZEN once rendered (issue #18: the visible field set never
+  // shrinks while the user types, so an input can't vanish mid-typing). A card
+  // therefore does NOT unmount when satisfied — it stays and flips to "all set ✓".
+  // So enumerate every visible card by id up-front and fill each; confirm each
+  // reads "all set ✓" rather than waiting for it to disappear.
+  const tids: string[] = [];
+  for (const el of await page.locator('[data-testid^="member-card-"]:visible').all()) {
+    const tid = await el.getAttribute('data-testid');
+    if (tid && !tids.includes(tid)) tids.push(tid);
+  }
+
+  for (const tid of tids) {
+    // A by-id locator can only ever resolve to THIS card, never a sibling.
     const card = page.locator(`[data-testid="${tid}"]:visible`);
 
-    // foodAllergies → "No known allergies" (click, not check — the field unmounts
-    // the moment it's satisfied, which would race check()'s post-click assertion).
+    // firstName / lastName → an invited/empty-named member can now fill them here.
+    const first = card.getByLabel('First name', { exact: true });
+    if (await first.count()) await first.first().fill('Test');
+    const last = card.getByLabel('Last name', { exact: true });
+    if (await last.count()) await last.first().fill('Member');
+
+    // gender (Male|Female) → pick the first real option.
+    const gender = card.getByRole('combobox', { name: /Gender/i });
+    if (await gender.count()) await gender.first().selectOption({ index: 1 });
+
+    // foodAllergies → "No known allergies".
     const noAllergies = card.getByRole('checkbox', { name: /No known allergies/i });
     if (await noAllergies.count()) await noAllergies.first().click();
 
@@ -191,26 +218,19 @@ async function completeAllVisibleMembers(page: import('@playwright/test').Page):
       await card.getByRole('combobox', { name: /Birth year/i }).first().selectOption({ index: 1 });
     }
 
-    // Wait for THIS member to drop out (fully satisfied) before the next card.
-    // Fail fast with the card's own "still needs …" text if it doesn't clear —
-    // the filler only handles allergies/skills/birthMonthYear, so a future seed
-    // that leaves gender/schoolGrade/email/phone blank would otherwise hang for
-    // 10s and fail with a cryptic timeout.
-    if (tid) {
-      const stillVisible = page.locator(`[data-testid="${tid}"]:visible`);
-      try {
-        await expect(stillVisible).toHaveCount(0, { timeout: 10_000 });
-      } catch {
-        const text = (await stillVisible.first().innerText().catch(() => '')) || '(card text unavailable)';
-        throw new Error(
-          `completeAllVisibleMembers: card ${tid} did not complete after filling all known field ` +
-            `types — it still needs a field this helper does not handle. Card text: ${text}`,
-        );
-      }
+    // The card must now read "all set ✓". Fail fast with its own text if not — the
+    // filler only handles the fields above, so a seed that leaves something else
+    // blank surfaces here instead of a cryptic Save-stays-disabled timeout.
+    try {
+      await expect(card.getByText(/all set/i).first()).toBeVisible({ timeout: 10_000 });
+    } catch {
+      const text = (await card.first().innerText().catch(() => '')) || '(card text unavailable)';
+      throw new Error(
+        `completeAllVisibleMembers: card ${tid} is not "all set" after filling all known field ` +
+          `types — it still needs a field this helper does not handle. Card text: ${text}`,
+      );
     }
   }
-  // Every member satisfied → no cards left; the "all set" note is showing.
-  await expect(page.locator('[data-testid^="member-card-"]:visible')).toHaveCount(0, { timeout: 10_000 });
 }
 
 /**
