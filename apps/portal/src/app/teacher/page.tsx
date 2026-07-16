@@ -1,18 +1,14 @@
-import { cookies } from 'next/headers';
 import Link from 'next/link';
-import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
 import { levelGradeSummary } from '@cmt/shared-domain';
 import { getMyLevels } from '@/features/setu/teacher/levels';
+import { getServerSession } from '@/lib/auth/server-session';
 
 export const metadata = { title: 'My classes — CMT Teacher' };
 
 export default async function TeacherDashboardPage() {
-  const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get('__session')?.value;
-  const raw = sessionCookie ? await verifyPortalSessionCookie(sessionCookie) : null;
-  const mid = (raw as { mid?: string } | null)?.mid ?? null;
-
-  const levels = await getMyLevels(mid);
+  // Verified claims from middleware's x-portal-* headers (no re-verify).
+  const session = await getServerSession();
+  const levels = await getMyLevels(session?.mid ?? null);
 
   return (
     <>

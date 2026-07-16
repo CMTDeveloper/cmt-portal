@@ -1,10 +1,8 @@
-import { cookies } from 'next/headers';
-import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
-import type { WithRole } from '@cmt/shared-domain';
 import { canTeachLevel } from '@/features/setu/teacher/guard';
 import { getLevelAttendanceView } from '@/features/setu/teacher/level-attendance-view';
 import { mostRecentSunday, torontoToday } from '@/features/setu/calendar/calendar';
 import { AttendanceMarker } from '@/features/setu/teacher/components/attendance-marker';
+import { getServerSession } from '@/lib/auth/server-session';
 
 export const metadata = { title: 'Take attendance — CMT Teacher' };
 
@@ -18,11 +16,7 @@ export default async function TakeAttendancePage({
   const { levelId } = await params;
   const { date: dateParam } = await searchParams;
 
-  const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get('__session')?.value;
-  const claims = (sessionCookie ? await verifyPortalSessionCookie(sessionCookie) : null) as
-    | (WithRole & { mid?: string | null })
-    | null;
+  const claims = await getServerSession(); // middleware's verified x-portal-* claims
   if (!claims) return <p style={{ color: 'var(--err)', fontSize: 14 }}>Please sign in.</p>;
 
   const access = await canTeachLevel(claims, levelId);

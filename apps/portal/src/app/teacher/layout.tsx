@@ -1,7 +1,6 @@
 import { Suspense } from 'react';
-import { cookies } from 'next/headers';
-import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
-import { isAdmin, isTeacher, type WithRole } from '@cmt/shared-domain';
+import { isAdmin, isTeacher } from '@cmt/shared-domain';
+import { getServerSession } from '@/lib/auth/server-session';
 import { CspRoot } from '@/features/family/components/atoms';
 import { DesktopSidebarLive } from '@/features/family/components/desktop-sidebar';
 import { TeacherTopBar } from '@/features/setu/teacher/components/teacher-top-bar';
@@ -25,18 +24,12 @@ const DENIED = (
 // (inherits). No strict role equality. The bar/sidebar render regardless of
 // `allowed` so a denied user can still sign out.
 async function TeacherChrome({ children }: { children: React.ReactNode }) {
-  const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get('__session')?.value;
-  let allowed = false;
-  let admin = false;
-  if (sessionCookie) {
-    const raw = await verifyPortalSessionCookie(sessionCookie).catch(() => null);
-    if (raw) {
-      const withRole = raw as unknown as WithRole;
-      allowed = isTeacher(withRole);
-      admin = isAdmin(withRole);
-    }
-  }
+  // Read middleware's already-verified claims (x-portal-* headers) instead of
+  // re-verifying the cookie — middleware is the one checkRevoked gate for every
+  // /teacher request, so a re-verify here is a redundant Auth round-trip.
+  const session = await getServerSession();
+  const allowed = session ? isTeacher(session) : false;
+  const admin = session ? isAdmin(session) : false;
   const body = allowed ? children : DENIED;
 
   return (

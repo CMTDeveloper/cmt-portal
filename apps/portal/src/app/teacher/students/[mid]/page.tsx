@@ -1,23 +1,17 @@
 import Link from 'next/link';
-import { cookies } from 'next/headers';
-import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
-import type { WithRole } from '@cmt/shared-domain';
 import { AllergyCallout, SectionLabel, DetailGroup } from '@/features/family/components/atoms';
 import { canTeacherSeeStudent, getStudentDetail } from '@/features/setu/teacher/student-detail';
 import { getMemberAchievements } from '@/features/setu/members/get-achievements';
 import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
 import { AwardBadge } from '@/features/setu/teacher/components/award-badge';
+import { getServerSession } from '@/lib/auth/server-session';
 
 export const metadata = { title: 'Student — CMT Teacher' };
 
 export default async function StudentDetailPage({ params }: { params: Promise<{ mid: string }> }) {
   const { mid } = await params;
 
-  const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get('__session')?.value;
-  const claims = (sessionCookie ? await verifyPortalSessionCookie(sessionCookie) : null) as
-    | (WithRole & { mid?: string | null })
-    | null;
+  const claims = await getServerSession(); // middleware's verified x-portal-* claims
   if (!claims) return <p style={{ color: 'var(--err)', fontSize: 14 }}>Please sign in.</p>;
 
   if (!(await canTeacherSeeStudent(claims, mid))) {
