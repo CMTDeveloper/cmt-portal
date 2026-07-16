@@ -58,20 +58,33 @@ export async function deriveConfirmedFidsForLevel(
     needsRead.push(enr);
   }
 
-  // Expensive signals (donations + legacy) in PARALLEL - this helper runs on the
-  // teacher attendance page load AND every autosave tap, and early in the year the
-  // inconclusive set is large (~all promotion carry-forwards), so a serial loop
-  // would stack ~N round-trips per save. Set.add across concurrent tasks is safe
-  // (single-threaded JS). Bounded to one level (~130 families max).
+  // Expensive signal (completed donations) as ONE bulk read, NOT a per-family
+  // fan-out. This helper runs on the teacher attendance page load AND every
+  // autosave tap, and early in the year the inconclusive set is large (~all
+  // promotion carry-forwards), so the old per-family donation read stacked ~N
+  // round-trips per save. Read every completed donation once via a collectionGroup
+  // and group by fid (status filtered in memory to avoid a collection-group
+  // single-field index — same tradeoff as report-dataset.ts). Then only the
+  // legacy-payment reads (rare — only when the offering is legacy-sourced) run
+  // per-family, in parallel.
+  const needsReadFids = new Set(needsRead.map((e) => e.fid));
+  const donationsByFid = new Map<string, DonationDoc[]>();
+  if (needsRead.length > 0) {
+    const donSnap = await db.collectionGroup('donations').get();
+    for (const d of donSnap.docs) {
+      const data = d.data() as DonationDoc & { status?: unknown };
+      if (data.status !== 'completed') continue;
+      const fid = d.ref.parent.parent?.id;
+      if (!fid || !needsReadFids.has(fid)) continue;
+      const arr = donationsByFid.get(fid) ?? [];
+      arr.push(data as DonationDoc);
+      donationsByFid.set(fid, arr);
+    }
+  }
+
   await Promise.all(
     needsRead.map(async (enr) => {
-      const donSnap = await db
-        .collection('families')
-        .doc(enr.fid)
-        .collection('donations')
-        .where('status', '==', 'completed')
-        .get();
-      const donations = donSnap.docs.map((d) => d.data() as DonationDoc);
+      const donations = donationsByFid.get(enr.fid) ?? [];
       const legacyPaid =
         source === 'legacy' && enr.legacyFid
           ? (await getLegacyPaymentStatus(enr.legacyFid)) === 'paid'

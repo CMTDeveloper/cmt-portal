@@ -153,36 +153,55 @@ export async function deriveRoster(
   }
   const fids = [...enrolledMidsByFid.keys()];
 
-  const [families, eventsSnap] = await Promise.all([
-    Promise.all(
-      fids.map(async (fid): Promise<RosterFamily> => {
-        const [famDoc, memSnap] = await Promise.all([
-          db.collection('families').doc(fid).get(),
-          db.collection('families').doc(fid).collection('members').get(),
-        ]);
-        const legacyFid = (famDoc.data()?.legacyFid as string | undefined) ?? null;
-        return {
-          fid,
-          legacyFid,
-          enrolledMids: enrolledMidsByFid.get(fid) ?? [],
-          members: memSnap.docs.map((d) => {
-            const m = d.data();
-            return {
-              mid: m.mid,
-              firstName: m.firstName,
-              lastName: m.lastName,
-              type: m.type,
-              schoolGrade: m.schoolGrade ?? null,
-              birthMonthYear: m.birthMonthYear ?? null,
-              foodAllergies: m.foodAllergies ?? null,
-              legacySid: m.legacySid ?? null,
-            };
-          }),
-        };
-      }),
-    ),
+  // Bulk reads, NOT a per-family fan-out. The old loop did 2 round-trips per
+  // family (family doc + members subcollection) — ~2N calls that made the
+  // teacher screens slow on every nav and every autosave. Instead: one batched
+  // getAll of the family docs (for legacyFid) and one batched getAll of exactly
+  // the enrolled members. Member doc id === mid is the universal write
+  // convention, so the enrolled members are addressable directly by mid without
+  // scanning each family's whole subcollection. (Matches the bulk pattern in
+  // features/setu/roster/report-dataset.ts; needs no new index — getAll is a
+  // BatchGetDocuments.)
+  const familyRefs = fids.map((fid) => db.collection('families').doc(fid));
+  const memberRefs = fids.flatMap((fid) =>
+    (enrolledMidsByFid.get(fid) ?? []).map((mid) => db.collection('families').doc(fid).collection('members').doc(mid)),
+  );
+
+  const [famDocs, memberDocs, eventsSnap] = await Promise.all([
+    familyRefs.length ? db.getAll(...familyRefs) : Promise.resolve([]),
+    memberRefs.length ? db.getAll(...memberRefs) : Promise.resolve([]),
     db.collection('attendanceEvents').where('levelId', '==', levelId).where('date', '==', date).get(),
   ]);
+
+  const legacyFidByFid = new Map<string, string | null>();
+  for (const fd of famDocs) legacyFidByFid.set(fd.id, (fd.data()?.legacyFid as string | undefined) ?? null);
+
+  const membersByFid = new Map<string, RosterMemberInput[]>();
+  for (const md of memberDocs) {
+    if (!md.exists) continue; // enrolledMid with no member doc (deleted) — skip
+    const fid = md.ref.parent.parent?.id;
+    if (!fid) continue;
+    const m = md.data() as Record<string, unknown>;
+    const arr = membersByFid.get(fid) ?? [];
+    arr.push({
+      mid: m['mid'] as string,
+      firstName: m['firstName'] as string,
+      lastName: m['lastName'] as string,
+      type: m['type'] as 'Adult' | 'Child',
+      schoolGrade: (m['schoolGrade'] as string | undefined) ?? null,
+      birthMonthYear: (m['birthMonthYear'] as string | undefined) ?? null,
+      foodAllergies: (m['foodAllergies'] as string | undefined) ?? null,
+      legacySid: (m['legacySid'] as string | undefined) ?? null,
+    });
+    membersByFid.set(fid, arr);
+  }
+
+  const families: RosterFamily[] = fids.map((fid) => ({
+    fid,
+    legacyFid: legacyFidByFid.get(fid) ?? null,
+    enrolledMids: enrolledMidsByFid.get(fid) ?? [],
+    members: membersByFid.get(fid) ?? [],
+  }));
 
   const events: RosterEventInput[] = eventsSnap.docs.map((d) => {
     const e = d.data();

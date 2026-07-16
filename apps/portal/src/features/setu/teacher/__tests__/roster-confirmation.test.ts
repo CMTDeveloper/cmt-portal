@@ -5,12 +5,19 @@ vi.mock('@/features/setu/donations/legacy-payment', () => ({
   getLegacyPaymentStatus: vi.fn(async (lf: string) => (lf === 'legacy-PAID' ? 'paid' : 'partial')),
 }));
 
-// Minimal fake Firestore covering the 3 read shapes this helper uses.
+// Minimal fake Firestore. Donations are now read in BULK via one
+// collectionGroup('donations').get() (status filtered in memory), NOT a
+// per-family subcollection fan-out — so `collection('families')` is never
+// touched and throws if it is (guards against a fan-out regression).
+const counters = { collectionGroupDonations: 0 };
 function fakeDb(opts: {
   attendance: Array<{ mid: string; status: string }>;
   paymentSource?: string;
   donationsByFid?: Record<string, Array<{ status: string; eid: string }>>;
 }) {
+  const allDonations = Object.entries(opts.donationsByFid ?? {}).flatMap(([fid, docs]) =>
+    docs.map((d) => ({ data: () => d, ref: { parent: { parent: { id: fid } } } })),
+  );
   return {
     collection(name: string) {
       if (name === 'attendanceEvents') {
@@ -19,16 +26,12 @@ function fakeDb(opts: {
       if (name === 'offerings') {
         return { doc: () => ({ get: async () => ({ exists: true, data: () => ({ paymentSource: opts.paymentSource ?? 'portal' }) }) }) };
       }
-      if (name === 'families') {
-        return {
-          doc: (fid: string) => ({
-            collection: () => ({
-              where: () => ({ get: async () => ({ docs: (opts.donationsByFid?.[fid] ?? []).map((d) => ({ data: () => d })) }) }),
-            }),
-          }),
-        };
-      }
-      throw new Error(`unexpected collection ${name}`);
+      throw new Error(`unexpected per-family read via collection('${name}') — donations must be bulk`);
+    },
+    collectionGroup(name: string) {
+      if (name !== 'donations') throw new Error(`unexpected collectionGroup ${name}`);
+      counters.collectionGroupDonations++;
+      return { get: async () => ({ docs: allDonations }) };
     },
   } as unknown as FirebaseFirestore.Firestore;
 }
@@ -57,6 +60,7 @@ describe('deriveConfirmedFidsForLevel', () => {
   });
 
   it('confirms via a completed donation tied to the eid, and via legacy-paid', async () => {
+    counters.collectionGroupDonations = 0;
     const db = fakeDb({
       attendance: [],
       paymentSource: 'legacy',
@@ -68,5 +72,7 @@ describe('deriveConfirmedFidsForLevel', () => {
       base({ fid: 'H', eid: 'H-o', legacyFid: 'legacy-partial' }),      // nothing → not confirmed
     ]);
     expect(set).toEqual(new Set(['E', 'G']));
+    // ONE bulk donations read for all 3 inconclusive families — not a per-family fan-out.
+    expect(counters.collectionGroupDonations).toBe(1);
   });
 });
