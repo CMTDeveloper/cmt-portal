@@ -6,6 +6,7 @@ import {
   whatsMissingForMember,
   isMemberComplete,
   incompleteMembers,
+  membersRequiringCompletion,
   type MemberCompletenessInput,
 } from '../member-required-fields';
 
@@ -106,5 +107,31 @@ describe('incompleteMembers — N=2 family', () => {
         { ...completeChild, mid: 'F-02' },
       ]),
     ).toEqual([]);
+  });
+});
+
+describe('membersRequiringCompletion', () => {
+  const manager = { mid: 'F-01', manager: true };
+  const child = { mid: 'F-02', manager: false };
+  const coManager = { mid: 'F-03', manager: true }; // invited spouse, own login
+  const members = [manager, child, coManager];
+
+  it('a plain member is responsible for ONLY their own record', () => {
+    expect(membersRequiringCompletion(members, 'F-02', false)).toEqual([child]);
+  });
+
+  it('a manager is responsible for own record + non-manager members, NOT co-managers', () => {
+    // The original manager must NOT be trapped by an invited co-manager's
+    // half-filled record — co-managers self-complete via their own login.
+    expect(membersRequiringCompletion(members, 'F-01', true)).toEqual([manager, child]);
+  });
+
+  it('a co-manager is responsible for own record + non-managers, not the other manager', () => {
+    expect(membersRequiringCompletion(members, 'F-03', true)).toEqual([child, coManager]);
+  });
+
+  it('a member with manager undefined/null is treated as a non-manager dependent', () => {
+    const legacy = { mid: 'F-04' }; // no manager flag
+    expect(membersRequiringCompletion([manager, legacy], 'F-01', true)).toEqual([manager, legacy]);
   });
 });

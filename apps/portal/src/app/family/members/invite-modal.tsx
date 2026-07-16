@@ -12,6 +12,8 @@ interface Props {
 }
 
 export function InviteModal({ open, onClose }: Props) {
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [relation, setRelation] = useState<Relation>('Spouse');
   const [sending, setSending] = useState(false);
@@ -21,6 +23,12 @@ export function InviteModal({ open, onClose }: Props) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = email.trim();
+    const first = firstName.trim();
+    const last = lastName.trim();
+    if (!first || !last) {
+      toast.error('Enter their first and last name');
+      return;
+    }
     if (!trimmed) {
       toast.error('Enter an email address');
       return;
@@ -31,7 +39,7 @@ export function InviteModal({ open, onClose }: Props) {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         credentials: 'same-origin',
-        body: JSON.stringify({ email: trimmed, relation }),
+        body: JSON.stringify({ firstName: first, lastName: last, email: trimmed, relation }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -44,6 +52,8 @@ export function InviteModal({ open, onClose }: Props) {
         return;
       }
       toast.success('Invite sent!');
+      setFirstName('');
+      setLastName('');
       setEmail('');
       setRelation('Spouse');
       onClose();
@@ -98,6 +108,37 @@ export function InviteModal({ open, onClose }: Props) {
         </p>
 
         <form onSubmit={handleSubmit}>
+          <div className="row" style={{ gap: 8, marginBottom: 14 }}>
+            <div className="field" style={{ flex: 1 }}>
+              <label htmlFor="invite-first-name">First name</label>
+              <input
+                id="invite-first-name"
+                className="input"
+                type="text"
+                placeholder="Priya"
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                autoComplete="given-name"
+                disabled={sending}
+                required
+              />
+            </div>
+            <div className="field" style={{ flex: 1 }}>
+              <label htmlFor="invite-last-name">Last name</label>
+              <input
+                id="invite-last-name"
+                className="input"
+                type="text"
+                placeholder="Sharma"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                autoComplete="family-name"
+                disabled={sending}
+                required
+              />
+            </div>
+          </div>
+
           <div className="field" style={{ marginBottom: 14 }}>
             <label htmlFor="invite-email">Email address</label>
             <input

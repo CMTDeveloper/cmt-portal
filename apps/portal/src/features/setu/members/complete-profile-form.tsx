@@ -6,6 +6,7 @@ import {
   whatsMissingForMember,
   isMemberComplete,
   isFamilyAddressComplete,
+  membersRequiringCompletion,
   CANADIAN_POSTAL_RE,
   CHILD_GRADE_OPTIONS,
   NO_ALLERGIES,
@@ -59,6 +60,8 @@ function isValidPhone(s: string): boolean {
 // each from the member's current value so a partially-complete member only has
 // to fill the gaps.
 interface MemberDraft {
+  firstName: string;
+  lastName: string;
   gender: '' | Gender;
   foodAllergies: string;
   noAllergies: boolean;
@@ -81,6 +84,8 @@ function seedDraft(m: MemberDoc): MemberDraft {
   }
   const existingAllergies = (m.foodAllergies ?? '').trim();
   return {
+    firstName: m.firstName ?? '',
+    lastName: m.lastName ?? '',
     gender: m.gender === 'Male' || m.gender === 'Female' ? m.gender : '',
     foodAllergies: existingAllergies === NO_ALLERGIES ? '' : existingAllergies,
     noAllergies: existingAllergies === NO_ALLERGIES,
@@ -102,8 +107,10 @@ function draftToMemberShape(m: MemberDoc, d: MemberDraft) {
   return {
     type: m.type,
     gender: d.gender || null,
-    firstName: m.firstName,
-    lastName: m.lastName,
+    // Use the draft's name when the member is filling in a missing one; fall back
+    // to the stored value (a member who already has a name never edits it here).
+    firstName: d.firstName.trim() || m.firstName,
+    lastName: d.lastName.trim() || m.lastName,
     foodAllergies: foodAllergies || null,
     email: d.email.trim() || null,
     phone: d.phone.trim() || null,
@@ -126,9 +133,15 @@ const FIELD_LABEL: Record<MemberRequiredField, string> = {
   birthMonthYear: 'Birth month & year',
 };
 
-// Fields that have NO input on this screen (they're set at registration / by a
-// sevak). If one is missing the card explains it rather than rendering a dead end.
-const UNFILLABLE_FIELDS: readonly MemberRequiredField[] = ['firstName', 'lastName', 'type'];
+// Fields with NO input on this screen. `type` (Adult/Child) is set at
+// registration / by a sevak — a member missing it is a data error the family
+// can't fix, so the card explains it rather than rendering a dead end. firstName
+// / lastName are NOT here: an invited co-manager accepts with an empty name (by
+// design) and MUST be able to set it here, otherwise they — and the manager whose
+// gate scopes the whole family — are trapped. A member who already HAS a name
+// never sees the input (the field isn't in the missing set), so renaming stays
+// effectively sevak-only.
+const UNFILLABLE_FIELDS: readonly MemberRequiredField[] = ['type'];
 
 /**
  * A single member's outstanding problems for the SUBMIT gate: the required
@@ -207,9 +220,7 @@ export function CompleteProfileForm() {
         // a "save to continue" screen — hard-navigate straight to the dashboard.
         // The /family gate re-checks server-side. Keep loading=true so the form
         // never flashes before we leave.
-        const scoped = result.isManager
-          ? result.members
-          : result.members.filter((m) => m.mid === result.currentMid);
+        const scoped = membersRequiringCompletion(result.members, result.currentMid, result.isManager);
         // A manager must ALSO have the required family home address before we can
         // short-circuit to /family — otherwise the gate would bounce them right
         // back here (a redirect loop) even though every member is complete.
@@ -246,9 +257,7 @@ export function CompleteProfileForm() {
   // frozen to the server's missing set and never shrinks while the user types.
   const cards = useMemo(() => {
     if (!data) return [] as { member: MemberDoc; missing: MemberRequiredField[] }[];
-    const scoped = data.isManager
-      ? data.members
-      : data.members.filter((m) => m.mid === data.currentMid);
+    const scoped = membersRequiringCompletion(data.members, data.currentMid, data.isManager);
     return scoped
       .map((member) => ({ member, missing: whatsMissingForMember(member) }))
       .filter((t) => t.missing.length > 0);
@@ -257,7 +266,7 @@ export function CompleteProfileForm() {
   // The members in scope (for the submit gate + PATCH loop).
   const scopedMembers = useMemo(() => {
     if (!data) return [] as MemberDoc[];
-    return data.isManager ? data.members : data.members.filter((m) => m.mid === data.currentMid);
+    return membersRequiringCompletion(data.members, data.currentMid, data.isManager);
   }, [data]);
 
   // Whether the manager's family home address is filled and valid. Non-managers
@@ -335,6 +344,11 @@ export function CompleteProfileForm() {
 
         const body: Record<string, unknown> = {
           type: member.type,
+          // Only send a name when non-empty (the server requires min length 1);
+          // for a member filling in a missing name this is the new value, for one
+          // that already had a name it's the unchanged existing value.
+          ...(draft.firstName.trim() ? { firstName: draft.firstName.trim() } : {}),
+          ...(draft.lastName.trim() ? { lastName: draft.lastName.trim() } : {}),
           gender: draft.gender || undefined,
           foodAllergies,
           email: draft.email.trim() || null,
@@ -460,7 +474,7 @@ export function CompleteProfileForm() {
           {data.isManager ? 'Member' : 'Your profile'}
         </p>
         <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--accentDeep)', letterSpacing: '-0.01em', marginBottom: 4 }}>
-          {member.firstName} {member.lastName}
+          {`${member.firstName ?? ''} ${member.lastName ?? ''}`.trim() || (data.isManager ? 'New member' : 'Your details')}
         </div>
         <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 14 }}>
           {member.type}
@@ -490,6 +504,35 @@ export function CompleteProfileForm() {
             </p>
           );
         })()}
+
+        {(show('firstName') || show('lastName')) && (
+          <div className="row" style={{ gap: 8, marginBottom: 14 }}>
+            {show('firstName') && (
+              <div className="field" style={{ flex: 1 }}>
+                <label>First name <span className="req">·</span></label>
+                <input
+                  className="input"
+                  aria-label="First name"
+                  value={draft.firstName}
+                  onChange={(e) => update(member.mid, { firstName: e.target.value })}
+                />
+                <FieldError message={fieldErr('firstName')} />
+              </div>
+            )}
+            {show('lastName') && (
+              <div className="field" style={{ flex: 1 }}>
+                <label>Last name <span className="req">·</span></label>
+                <input
+                  className="input"
+                  aria-label="Last name"
+                  value={draft.lastName}
+                  onChange={(e) => update(member.mid, { lastName: e.target.value })}
+                />
+                <FieldError message={fieldErr('lastName')} />
+              </div>
+            )}
+          </div>
+        )}
 
         {show('gender') && (
           <div className="field" style={{ marginBottom: 14 }}>

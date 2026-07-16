@@ -128,3 +128,28 @@ export function incompleteMembers(
   }
   return out;
 }
+
+/**
+ * The members a given session is responsible for completing before the
+ * profile-completion gate passes.
+ *
+ * - A plain member → only their own record.
+ * - A manager → their own record PLUS every non-manager member (children /
+ *   dependents added without their own login). Other managers (co-managers, e.g.
+ *   an invited spouse who accepted with `manager: true`) complete their OWN
+ *   profile via their OWN login, so they are EXCLUDED from another manager's set.
+ *   Otherwise an invited co-manager's half-filled record would trap the original
+ *   manager on /complete-profile forever, unable to finish someone else's fields.
+ *
+ * The /family gate and the /complete-profile form MUST both scope through this
+ * one helper so they can never disagree on who blocks whom (a mismatch bounces
+ * the user /complete-profile ⇄ /family).
+ */
+export function membersRequiringCompletion<T extends { mid: string; manager?: boolean | null }>(
+  members: readonly T[],
+  currentMid: string,
+  isManager: boolean,
+): T[] {
+  if (!isManager) return members.filter((m) => m.mid === currentMid);
+  return members.filter((m) => m.mid === currentMid || m.manager !== true);
+}

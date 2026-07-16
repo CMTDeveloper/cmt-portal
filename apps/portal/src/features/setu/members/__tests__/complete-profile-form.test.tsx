@@ -79,6 +79,7 @@ function child(over: Partial<MemberDoc> = {}): MemberDoc {
     firstName: 'Lil',
     lastName: 'One',
     type: 'Child',
+    manager: false, // children are dependents, never managers — in the manager's completion scope
     email: null,
     phone: null,
     volunteeringSkills: [],
@@ -239,12 +240,12 @@ describe('CompleteProfileForm — submit flow', () => {
     expect(navigateTo).not.toHaveBeenCalled();
   });
 
-  // Manager scope is the WHOLE family: every incomplete member must be PATCHed and
-  // the form must hard-navigate exactly ONCE (the shape that stranded a real
-  // 3-person family on "Saving…").
-  it('manager scope (N>1): completes every member, then hard-navigates exactly once', async () => {
+  // A manager's scope is their OWN record + non-manager dependents: every such
+  // incomplete member must be PATCHed and the form must hard-navigate exactly ONCE
+  // (the shape that stranded a real 3-person family on "Saving…").
+  it('manager scope (N>1): completes own record + a dependent, then hard-navigates exactly once', async () => {
     const a = adult({ foodAllergies: null, volunteeringSkills: [] });
-    const b = adult({ mid: 'CMT-1-03', firstName: 'Co', foodAllergies: null, volunteeringSkills: [] });
+    const b = adult({ mid: 'CMT-1-03', firstName: 'Dep', manager: false, foodAllergies: null, volunteeringSkills: [] });
     getFamily.mockResolvedValue(family([a, b]));
     patchMember.mockResolvedValue({ ok: true, status: 200 });
     const user = userEvent.setup();
@@ -260,8 +261,8 @@ describe('CompleteProfileForm — submit flow', () => {
     await user.click(save());
     expect(patchMember).not.toHaveBeenCalled();
 
-    // Complete member 2 (Co).
-    await user.click(screen.getAllByRole('checkbox', { name: /No known allergies for Co/i })[0]!);
+    // Complete member 2 (Dep).
+    await user.click(screen.getAllByRole('checkbox', { name: /No known allergies for Dep/i })[0]!);
     await user.click(within(screen.getAllByTestId('member-card-CMT-1-03')[0]!).getByTestId('skills-add'));
     await user.click(save());
 
@@ -271,22 +272,44 @@ describe('CompleteProfileForm — submit flow', () => {
     expect(navigateTo).toHaveBeenCalledTimes(1);
   });
 
-  // A member missing an UNFILLABLE field (firstName/lastName/type have no input)
-  // must not strand the user: explain it, and on Save toast that a sevak is needed
-  // rather than navigating into a gate bounce.
-  it('explains an unfillable missing field and never navigates', async () => {
+  // Bug 4c: an invited co-manager (manager: true, own login) with a half-filled
+  // record must NOT block the original manager. Their card never renders in the
+  // manager's scope, and the manager can save + leave with only their own record.
+  it('a manager is NOT blocked by an incomplete CO-MANAGER (co-manager self-completes)', async () => {
+    const me = adult(); // complete manager
+    const coManager = adult({ mid: 'CMT-1-03', firstName: '', lastName: '', gender: 'PreferNotToSay' as MemberDoc['gender'], foodAllergies: null, volunteeringSkills: [] });
+    getFamily.mockResolvedValue(family([me, coManager]));
+    render(<CompleteProfileForm />);
+
+    // Everything IN SCOPE (just the manager's own complete record) is done → the
+    // form short-circuits straight to the dashboard; the co-manager card is absent.
+    await waitFor(() => expect(navigateTo).toHaveBeenCalledWith('/family'));
+    expect(screen.queryByTestId('member-card-CMT-1-03')).toBeNull();
+  });
+
+  // firstName / lastName are now FILLABLE when missing (an invited co-manager
+  // accepts with an empty name and MUST set it here). A member missing a name
+  // renders an input — NOT the sevak-only dead end — and can complete + navigate.
+  it('lets a member fill a MISSING name (not a sevak-only dead end), then PATCHes it', async () => {
     getFamily.mockResolvedValue(family([adult({ firstName: '' })])); // only firstName missing
+    patchMember.mockResolvedValue({ ok: true, status: 200 });
     const user = userEvent.setup();
     render(<CompleteProfileForm />);
     await waitFor(() => expect(screen.getAllByTestId('member-card-CMT-1-01').length).toBeGreaterThan(0));
 
-    expect(screen.getAllByTestId('member-unfillable-CMT-1-01').length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/can't be edited here/i).length).toBeGreaterThan(0);
+    // No "ask a sevak" dead end for a missing name — a First name input renders.
+    expect(screen.queryByTestId('member-unfillable-CMT-1-01')).toBeNull();
+    const firstName = screen.getAllByLabelText('First name')[0]! as HTMLInputElement;
+    expect(firstName).toBeInTheDocument();
 
+    await user.type(firstName, 'Noopur');
     await user.click(save());
-    expect(patchMember).not.toHaveBeenCalled();
-    expect(navigateTo).not.toHaveBeenCalled();
-    await waitFor(() => expect(toastMock.error).toHaveBeenCalledWith(expect.stringMatching(/sevak/i)));
+
+    await waitFor(() => expect(patchMember).toHaveBeenCalledTimes(1));
+    const [mid, body] = patchMember.mock.calls[0]!;
+    expect(mid).toBe('CMT-1-01');
+    expect(body).toMatchObject({ firstName: 'Noopur' });
+    await waitFor(() => expect(navigateTo).toHaveBeenCalledWith('/family'));
   });
 
   it('redirects straight to the dashboard when everything in scope is already complete', async () => {

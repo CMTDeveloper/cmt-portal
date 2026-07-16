@@ -12,7 +12,7 @@ import {
   isAdmin,
   isTeacher,
   incompleteMembers,
-  isMemberComplete,
+  membersRequiringCompletion,
   isFamilyAddressComplete,
   type WithRole,
 } from '@cmt/shared-domain';
@@ -45,13 +45,14 @@ export async function ProfileCompletionGate() {
   const data = await getCurrentFamily();
   if (!data) return null; // unauthenticated — middleware already handles redirect
 
-  const incomplete = data.isManager
-    ? incompleteMembers(data.members).length > 0 || !isFamilyAddressComplete(data.family)
-    : (() => {
-        const me = data.members.find((m) => m.mid === data.currentMid);
-        // No own record found ⇒ nothing this member can complete; don't trap them.
-        return me ? !isMemberComplete(me) : false;
-      })();
+  // Scope through the shared helper so this gate and the /complete-profile form
+  // can never disagree on who blocks whom. A manager is responsible for their own
+  // record + non-manager dependents (NOT invited co-managers, who self-complete),
+  // plus the required family home address.
+  const scope = membersRequiringCompletion(data.members, data.currentMid, data.isManager);
+  const incomplete =
+    incompleteMembers(scope).length > 0 ||
+    (data.isManager && !isFamilyAddressComplete(data.family));
 
   if (incomplete) redirect(COMPLETE_PROFILE_PATH);
   return null;

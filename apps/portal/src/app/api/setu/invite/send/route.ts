@@ -10,6 +10,12 @@ import { setuInviteEmail } from '@/lib/aws/templates/setu-invite-email';
 
 
 const bodySchema = z.object({
+  // The manager names the person they're inviting so the invited co-manager isn't
+  // created with an empty name (which would strand them + the manager on the
+  // profile-completion gate). Optional for backward compatibility with any older
+  // client; when absent the invitee falls back to setting their own name.
+  firstName: z.string().min(1).max(60).optional(),
+  lastName: z.string().min(1).max(60).optional(),
   email: z.string().email(),
   relation: z.string().min(1).max(40),
 });
@@ -39,7 +45,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'bad-request', issues: parsed.error.issues }, { status: 400 });
   }
 
-  const { email, relation } = parsed.data;
+  const { email, relation, firstName, lastName } = parsed.data;
   const normalizedEmail = email.toLowerCase().trim();
 
   const env = portalEnv();
@@ -99,6 +105,10 @@ export async function POST(req: Request) {
         token,
         email: normalizedEmail,
         relation,
+        // The invited person's name (manager-provided) so accept can create a
+        // fully-named member. Null when an older client omits them.
+        firstName: firstName ?? null,
+        lastName: lastName ?? null,
         inviterMid: inviterMid ?? null,
         inviterName,
         familyName,

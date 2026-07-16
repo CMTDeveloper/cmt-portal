@@ -132,12 +132,12 @@ export async function POST(req: Request) {
         mid: newMid,
         publicMid: newPublicMid,
         uid: session.uid,
-        // Placeholder by absence — empty firstName/lastName triggers the
-        // "Complete your profile" CTA on the dashboard (family/page.tsx
-        // needsProfile = !trimmedFirst). The co-manager fills in their
-        // real name in /family/members/[mid]/edit.
-        firstName: '',
-        lastName: '',
+        // Name comes from the invite (the manager named the person they invited),
+        // so the co-manager joins fully-named. Falls back to empty only for a
+        // legacy invite created without a name — and the /complete-profile form now
+        // lets the co-manager fill a missing name in place, so it's never a dead end.
+        firstName: typeof d['firstName'] === 'string' ? d['firstName'] : '',
+        lastName: typeof d['lastName'] === 'string' ? d['lastName'] : '',
         type: 'Adult',
         gender: 'PreferNotToSay',
         manager: true,

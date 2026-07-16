@@ -544,6 +544,51 @@ describe('RegisterFamilyPage — additional members', () => {
     });
   });
 
+  // Bug 1: a member the user filled in but never committed with "Add member" was
+  // silently dropped on submit. The guard auto-commits a COMPLETE draft.
+  it('auto-commits an uncommitted-but-complete member draft on submit', async () => {
+    queueOtpThenRegister({ ok: true, json: async () => ({ redirectTo: '/family' }) });
+    const user = userEvent.setup();
+    render(<RegisterFamilyPage />);
+    await fillForm(user, { family: 'Gupta', location: 'Scarborough', first: 'Sunita', last: 'Gupta' });
+
+    // Fill a COMPLETE child draft but do NOT click "Add member".
+    await user.click(screen.getAllByRole('button', { name: /add another member/i })[0]!);
+    await user.type(screen.getAllByLabelText(/member first name/i)[0]!, 'Rahul');
+    await user.type(screen.getAllByLabelText(/member last name/i)[0]!, 'Gupta');
+    await user.click(screen.getAllByRole('button', { name: 'Child' })[0]!);
+    await user.click(screen.getAllByRole('button', { name: 'Male' })[1]!);
+    await user.type(screen.getAllByLabelText(/member food allergies/i)[0]!, 'None known');
+    await user.type(screen.getAllByLabelText(/member school grade/i)[0]!, 'Grade 3');
+    await user.selectOptions(screen.getAllByLabelText(/birth month/i)[0]!, '3');
+    await user.selectOptions(screen.getAllByLabelText(/birth year/i)[0]!, String(new Date().getFullYear() - 8));
+
+    // Submit WITHOUT "Add member" — the guard commits it, so it reaches the POST.
+    await submitToCodeStep(user);
+    await enterCodeAndCreate(user);
+
+    await waitFor(() => {
+      const body = registerCallBody() as { additionalMembers?: Array<{ firstName: string }> };
+      expect(body.additionalMembers?.some((m) => m.firstName === 'Rahul')).toBe(true);
+    });
+  });
+
+  it('blocks submit (no OTP) when an uncommitted member draft is incomplete', async () => {
+    const user = userEvent.setup();
+    render(<RegisterFamilyPage />);
+    await fillForm(user, { family: 'Gupta', location: 'Scarborough', first: 'Sunita', last: 'Gupta' });
+
+    // Start a member but leave it incomplete (only a first name).
+    await user.click(screen.getAllByRole('button', { name: /add another member/i })[0]!);
+    await user.type(screen.getAllByLabelText(/member first name/i)[0]!, 'Rahul');
+
+    await user.click(screen.getAllByRole('button', { name: /verify email & create family/i })[0]!);
+
+    // Blocked before the OTP send + a guiding error is shown — nothing is lost.
+    expect(fetchMock.mock.calls.some((c) => c[0] === '/api/setu/auth/send-code')).toBe(false);
+    expect(screen.getAllByText(/finish adding this member/i).length).toBeGreaterThan(0);
+  });
+
   it("includes a member's email and phone in the register POST body", async () => {
     queueOtpThenRegister({ ok: true, json: async () => ({ redirectTo: '/family' }) });
 

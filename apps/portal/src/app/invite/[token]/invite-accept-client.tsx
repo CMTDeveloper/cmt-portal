@@ -1,15 +1,24 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from '@cmt/ui';
 import { acceptInviteClient } from '@/features/setu/invite/accept-invite-client';
 
 interface Props {
   token: string;
   mobile?: boolean;
+  // True when the invitee has just returned from sign-in (the page carries
+  // ?intent=accept). We then accept automatically — clicking the emailed link +
+  // signing in is enough, no second "Accept & join" click (Vaibhav's report).
+  autoAccept?: boolean;
 }
 
-export function InviteAcceptClient({ token, mobile }: Props) {
+// Module-level, shared by the mobile + desktop copies of this component that the
+// invite page renders simultaneously — so the auto-accept fires EXACTLY once
+// across both, never a double POST (the 2nd would 409 'already-accepted').
+let autoAcceptStarted = false;
+
+export function InviteAcceptClient({ token, mobile, autoAccept }: Props) {
   const [accepting, setAccepting] = useState(false);
 
   async function handleAccept() {
@@ -18,7 +27,10 @@ export function InviteAcceptClient({ token, mobile }: Props) {
       const result = await acceptInviteClient(token);
       if (!result.ok) {
         if (result.error === 'no-session') {
-          window.location.href = `/sign-in?from=/invite/${encodeURIComponent(token)}`;
+          // Prove email ownership first (email-match is enforced server-side), then
+          // come back to THIS invite with ?intent=accept so it completes itself.
+          const dest = `/invite/${encodeURIComponent(token)}?intent=accept`;
+          window.location.href = `/sign-in?from=${encodeURIComponent(dest)}`;
           return;
         }
         toast.error(errorMessage(result.error));
@@ -31,6 +43,15 @@ export function InviteAcceptClient({ token, mobile }: Props) {
       setAccepting(false);
     }
   }
+
+  useEffect(() => {
+    // Fire once when autoAccept is set (the module guard makes it once across the
+    // mobile + desktop copies). handleAccept only depends on `token` via closure.
+    if (autoAccept && !autoAcceptStarted) {
+      autoAcceptStarted = true;
+      void handleAccept();
+    }
+  }, [autoAccept]);
 
   function errorMessage(code: string): string {
     const map: Record<string, string> = {

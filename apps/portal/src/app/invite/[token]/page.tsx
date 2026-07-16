@@ -8,12 +8,14 @@ import { InviteAcceptClient } from './invite-accept-client';
 
 export default function InvitePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ token: string }>;
+  searchParams: Promise<{ intent?: string }>;
 }) {
   return (
     <Suspense fallback={<InviteSkeleton/>}>
-      <InviteBody params={params}/>
+      <InviteBody params={params} searchParams={searchParams}/>
     </Suspense>
   );
 }
@@ -33,10 +35,15 @@ function InviteSkeleton() {
 
 async function InviteBody({
   params,
+  searchParams,
 }: {
   params: Promise<{ token: string }>;
+  searchParams: Promise<{ intent?: string }>;
 }) {
   const { token } = await params;
+  // Set by invite-accept-client's sign-in redirect: the invitee has proven email
+  // ownership and returned here to finish joining — accept automatically.
+  const autoAccept = (await searchParams).intent === 'accept';
 
   // ── Resolve invite ──────────────────────────────────────────────────────────
   type InviteState =
@@ -156,7 +163,7 @@ async function InviteBody({
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
               {inviteContent}
             </div>
-            <InviteAcceptClient token={token} mobile/>
+            <InviteAcceptClient token={token} mobile autoAccept={autoAccept}/>
           </div>
         </CspRoot>
       </div>
@@ -172,7 +179,7 @@ async function InviteBody({
 
             <div style={{ maxWidth: 480, width: '100%', alignSelf: 'center', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', paddingBottom: 60 }}>
               {inviteContent}
-              <InviteAcceptClient token={token}/>
+              <InviteAcceptClient token={token} autoAccept={autoAccept}/>
             </div>
 
             <div style={{ fontSize: 12, color: 'var(--muted)', display: 'flex', gap: 18 }}>

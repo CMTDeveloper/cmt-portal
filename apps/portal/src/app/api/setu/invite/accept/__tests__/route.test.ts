@@ -113,6 +113,10 @@ beforeEach(() => {
     exists: true,
     data: () => ({
       token: validInvite.token,
+      // The manager named the invitee at send time (Bugs 3+4) — accept copies it
+      // onto the new member so they join fully-named, not empty.
+      firstName: 'Priya',
+      lastName: 'Patel',
       inviterMid: validInvite.inviterMid,
       inviterName: validInvite.inviterName,
       familyName: validInvite.familyName,
@@ -257,7 +261,8 @@ describe('POST /api/setu/invite/accept', () => {
     const memberWrite = mockSet.mock.calls.find(
       ([, data]) => data && typeof data === 'object' && 'firstName' in data,
     );
-    expect(memberWrite?.[1]).toMatchObject({ publicMid: '50001' });
+    // Named from the invite (not empty) + carries the allocated publicMid.
+    expect(memberWrite?.[1]).toMatchObject({ publicMid: '50001', firstName: 'Priya', lastName: 'Patel', manager: true });
   });
 
   it('happy path: sets __session cookie with refreshed claims after invite accept', async () => {

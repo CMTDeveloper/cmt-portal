@@ -310,6 +310,36 @@ function RegisterFamilyReal() {
   // advance to the code step. The family is NOT created yet.
   async function handleSubmit() {
     setFieldErrors({});
+
+    // Don't silently drop a member the user started adding but never committed
+    // with "Add member" (the draft lives OUTSIDE additionalMembers, so it would
+    // otherwise be lost on submit — the family5s report). If the add-member panel
+    // is open with real content: auto-commit it when complete, else block and
+    // point at the unfinished fields.
+    const hasDraftContent =
+      draftFirstName.trim() !== '' ||
+      draftLastName.trim() !== '' ||
+      draftEmail.trim() !== '' ||
+      draftPhone.trim() !== '' ||
+      draftSchoolGrade.trim() !== '' ||
+      draftBirthMonth !== '' ||
+      draftBirthYear !== '';
+    if (showAddMember && hasDraftContent) {
+      const email = draftEmail.trim();
+      const emailInvalid = draftType === 'Adult' && email !== '' && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
+      if (emailInvalid || !draftComplete || !draftGender) {
+        setDraftError(
+          emailInvalid
+            ? 'Enter a valid email for the member you started adding.'
+            : 'Finish adding this member — or clear these fields — before continuing.',
+        );
+        return;
+      }
+      setAdditionalMembers((prev) => [...prev, { ...draftMember, id: `${Date.now()}`, gender: draftGender }]);
+      resetDraft();
+      setShowAddMember(false);
+    }
+
     const errors: Record<string, string> = {};
     if (!familyName.trim()) errors.familyName = 'Family name is required.';
     if (!location) errors.location = 'Please select a primary location.';
