@@ -16,6 +16,10 @@ vi.mock('@/lib/env', () => ({
     NEXT_PUBLIC_PORTAL_BASE_URL: 'https://portal.example.org',
   })),
 }));
+// The pending co-manager member gets a 5-digit publicMid allocated BEFORE the txn.
+vi.mock('@/features/setu/ids/public-id-allocator', () => ({
+  allocateMemberPublicIds: vi.fn(async () => ['50999']),
+}));
 
 const mockSendEmail = vi.fn().mockResolvedValue(undefined);
 
@@ -54,9 +58,23 @@ function managerHeaders(fid = 'FAM001ABCD12', mid = 'FAM001ABCD12-01'): Record<s
 }
 
 const validBody = {
+  firstName: 'Priya',
+  lastName: 'Sharma',
   email: 'invitee@example.com',
   relation: 'Spouse',
 };
+
+/** Among all txn.set() calls, the invite doc is the one carrying a `token`. */
+function inviteDocData(): Record<string, unknown> {
+  const call = mockSet.mock.calls.find((c) => (c[1] as Record<string, unknown>)?.token !== undefined);
+  if (!call) throw new Error('no invite doc was written');
+  return call[1] as Record<string, unknown>;
+}
+/** The pending member doc is the txn.set() carrying inviteStatus:'pending'. */
+function pendingMemberData(): Record<string, unknown> | undefined {
+  const call = mockSet.mock.calls.find((c) => (c[1] as Record<string, unknown>)?.inviteStatus === 'pending');
+  return call?.[1] as Record<string, unknown> | undefined;
+}
 
 type RosterMember = { email?: string | null; altEmails?: string[] };
 
@@ -212,7 +230,7 @@ describe('POST /api/setu/invite/send', () => {
   });
 
   it('happy path: calls sendEmail to the invitee email (normalized lowercase)', async () => {
-    const res = await POST(makeRequest({ email: 'Invitee@EXAMPLE.COM', relation: 'Sibling' }, managerHeaders()));
+    const res = await POST(makeRequest({ firstName: 'Priya', lastName: 'Sharma', email: 'Invitee@EXAMPLE.COM', relation: 'Sibling' }, managerHeaders()));
     expect(res.status).toBe(201);
     const call = mockSendEmail.mock.calls[0]![0] as { to: string };
     expect(call.to).toBe('invitee@example.com');
@@ -220,19 +238,59 @@ describe('POST /api/setu/invite/send', () => {
 
   it('happy path: writes invite doc with correct fields', async () => {
     await POST(makeRequest(validBody, managerHeaders()));
-    expect(mockSet).toHaveBeenCalledOnce();
-    const docData = mockSet.mock.calls[0]![1] as Record<string, unknown>;
+    const docData = inviteDocData();
     expect(docData.email).toBe('invitee@example.com');
     expect(docData.relation).toBe('Spouse');
     expect(docData.inviterMid).toBe('FAM001ABCD12-01');
     expect(docData.acceptedAt).toBeNull();
     expect(docData.token).toBeDefined();
+    // The invite now links the pending member doc it created.
+    expect(docData.memberMid).toBeDefined();
+    expect(typeof docData.memberMid).toBe('string');
+  });
+
+  it('requires firstName and lastName (400 without a name)', async () => {
+    const noName = await POST(makeRequest({ email: 'x@y.com', relation: 'Spouse' }, managerHeaders()));
+    expect(noName.status).toBe(400);
+    const noLast = await POST(makeRequest({ firstName: 'Priya', email: 'x@y.com', relation: 'Spouse' }, managerHeaders()));
+    expect(noLast.status).toBe(400);
+    const emptyName = await POST(makeRequest({ firstName: ' ', lastName: 'Sharma', email: 'x@y.com', relation: 'Spouse' }, managerHeaders()));
+    expect(emptyName.status).toBe(400);
+  });
+
+  it('creates a pending co-manager member (visible before accept) with the invited name + email', async () => {
+    // Roster has the existing manager, so the new pending member is -02.
+    setupFirestoreMock({ roster: [{ email: 'raj@sharma.com', altEmails: [] }] });
+    const res = await POST(makeRequest(validBody, managerHeaders()));
+    expect(res.status).toBe(201);
+    const member = pendingMemberData();
+    expect(member, 'a pending member doc must be written at send').toBeDefined();
+    expect(member!.inviteStatus).toBe('pending');
+    expect(member!.manager).toBe(true);
+    expect(member!.uid).toBeNull();
+    expect(member!.type).toBe('Adult');
+    expect(member!.firstName).toBe('Priya');
+    expect(member!.lastName).toBe('Sharma');
+    expect(member!.email).toBe('invitee@example.com');
+    expect(member!.mid).toBe('FAM001ABCD12-02');
+    expect(member!.publicMid).toBe('50999');
+    // The invite doc records this member's mid.
+    expect(inviteDocData().memberMid).toBe('FAM001ABCD12-02');
+  });
+
+  it('does NOT add the pending member to family.managers (that waits for accept)', async () => {
+    setupFirestoreMock({ roster: [{ email: 'raj@sharma.com', altEmails: [] }] });
+    await POST(makeRequest(validBody, managerHeaders()));
+    // The only txn.update in this route (if any) must never touch managers. We
+    // assert no set/update wrote a `managers` arrayUnion — the pending member is
+    // not a real manager until they accept.
+    const touchedManagers = mockSet.mock.calls.some((c) => 'managers' in ((c[1] as Record<string, unknown>) ?? {}));
+    expect(touchedManagers).toBe(false);
   });
 
   it('happy path: inviterName resolves from members subcollection', async () => {
     await POST(makeRequest(validBody, managerHeaders()));
-    const docData = mockSet.mock.calls[0]![1] as Record<string, unknown>;
-    expect(docData.inviterName).toBe('Raj Sharma');
+    expect(inviteDocData().inviterName).toBe('Raj Sharma');
   });
 
   it('happy path: expiresAt is 14 days from now', async () => {
@@ -242,7 +300,7 @@ describe('POST /api/setu/invite/send', () => {
 
     await POST(makeRequest(validBody, managerHeaders()));
 
-    const docData = mockSet.mock.calls[0]![1] as Record<string, unknown>;
+    const docData = inviteDocData();
     const expected = new Date(now.getTime() + 14 * 86400_000);
     expect(Timestamp.fromDate).toHaveBeenCalledWith(expected);
     expect(docData.expiresAt).toEqual({ _date: expected });

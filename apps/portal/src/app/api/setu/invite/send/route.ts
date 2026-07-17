@@ -7,18 +7,23 @@ import { portalFirestore, FieldValue, Timestamp } from '@cmt/firebase-shared/adm
 import { portalEnv } from '@/lib/env';
 import { resolveSender } from '@/lib/aws/resolve-sender';
 import { setuInviteEmail } from '@/lib/aws/templates/setu-invite-email';
+import { allocateMemberPublicIds } from '@/features/setu/ids/public-id-allocator';
 
 
 const bodySchema = z.object({
-  // The manager names the person they're inviting so the invited co-manager isn't
-  // created with an empty name (which would strand them + the manager on the
-  // profile-completion gate). Optional for backward compatibility with any older
-  // client; when absent the invitee falls back to setting their own name.
-  firstName: z.string().min(1).max(60).optional(),
-  lastName: z.string().min(1).max(60).optional(),
+  // The manager names the person they're inviting. REQUIRED: send now creates the
+  // co-manager member immediately (inviteStatus:'pending') so the family sees them
+  // before they accept, and a member doc must have a non-empty name (MemberDoc
+  // read-validation enforces min(1)). The invite modal already collects both.
+  firstName: z.string().trim().min(1).max(60),
+  lastName: z.string().trim().min(1).max(60),
   email: z.string().email(),
   relation: z.string().min(1).max(40),
 });
+
+function zeroPad(n: number): string {
+  return n.toString().padStart(2, '0');
+}
 
 export async function POST(req: Request) {
   if (!flags.setuAuth) {
@@ -53,6 +58,11 @@ export async function POST(req: Request) {
   const expiresAt = new Date(Date.now() + env.SETU_INVITE_TTL_DAYS * 86400_000);
 
   const db = portalFirestore();
+
+  // The pending co-manager member created inside the txn needs a 5-digit publicMid.
+  // Allocate it BEFORE the txn opens (the allocator runs its own Firestore
+  // transaction and Firestore forbids nested transactions).
+  const newPublicMid = (await allocateMemberPublicIds(1))[0]!;
 
   let inviterName: string;
   let familyName: string;
@@ -100,15 +110,45 @@ export async function POST(req: Request) {
       }
       inviterName = resolvedInviterName;
 
+      // Create the co-manager member NOW (inviteStatus:'pending') so the family
+      // sees them on the members list before they accept. It is deliberately NOT
+      // added to family.managers and has NO contactKey yet — both happen on accept,
+      // which preserves the last-manager count and the anti-theft contactKey check.
+      // uid is null until the invitee signs in and accept binds their auth.
+      const memberCount = (membersSnap.docs as unknown[]).length;
+      const newMid = `${fid}-${zeroPad(memberCount + 1)}`;
+      const memberRef = db.collection('families').doc(fid).collection('members').doc(newMid);
+      txn.set(memberRef, {
+        mid: newMid,
+        publicMid: newPublicMid,
+        uid: null,
+        firstName,
+        lastName,
+        type: 'Adult',
+        gender: 'PreferNotToSay',
+        manager: true,
+        joinedAt: FieldValue.serverTimestamp(),
+        email: normalizedEmail,
+        phone: null,
+        schoolGrade: null,
+        birthMonthYear: null,
+        volunteeringSkills: [],
+        foodAllergies: null,
+        emergencyContacts: [null, null],
+        inviteStatus: 'pending',
+      });
+
       const inviteRef = db.collection('families').doc(fid).collection('invites').doc(token);
       txn.set(inviteRef, {
         token,
         email: normalizedEmail,
         relation,
-        // The invited person's name (manager-provided) so accept can create a
-        // fully-named member. Null when an older client omits them.
-        firstName: firstName ?? null,
-        lastName: lastName ?? null,
+        // The invited person's name (manager-provided) — also stored on the member.
+        firstName,
+        lastName,
+        // Links the pending member this invite created, so accept LINKS it (sets
+        // uid, adds to managers, writes contactKey) instead of creating a duplicate.
+        memberMid: newMid,
         inviterMid: inviterMid ?? null,
         inviterName,
         familyName,
