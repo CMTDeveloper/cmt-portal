@@ -97,4 +97,19 @@ describe('getFamilyByFid — multi-contact defaults', () => {
     expect(member.contactsNudgeDismissedAt).toEqual(dismissed);
     expect(member.volunteeringSkillsNudgeDismissedAt).toEqual(dismissed);
   });
+
+  // Regression: this hand-map is the REAL data source for /family + the gate. A
+  // deployed-UAT E2E caught inviteStatus being dropped here (a pending co-manager
+  // rendered as a normal member, no "Invite pending" badge). Keep it mapped.
+  it('maps inviteStatus for a pending co-manager, and defaults it to null when absent', async () => {
+    mockMembersGet.mockResolvedValue({
+      docs: [
+        { data: () => ({ mid: 'CMT-AB12CD34-01', firstName: 'Raj', lastName: 'Patel', type: 'Adult', gender: 'Male', manager: true, joinedAt: { toDate: () => new Date() }, email: 'raj@example.com', phone: null }) },
+        { data: () => ({ mid: 'CMT-AB12CD34-03', firstName: 'Bob', lastName: 'Jones', type: 'Adult', gender: 'PreferNotToSay', manager: true, joinedAt: { toDate: () => new Date() }, email: 'bob@example.com', phone: null, inviteStatus: 'pending' }) },
+      ],
+    });
+    const result = await getFamilyByFid('CMT-AB12CD34');
+    expect(result!.members[0]!.inviteStatus ?? null).toBeNull(); // absent ⇒ active
+    expect(result!.members[1]!.inviteStatus).toBe('pending');
+  });
 });

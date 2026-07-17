@@ -67,6 +67,11 @@ export async function getFamilyByFid(fid: string): Promise<FamilyAndMembers | nu
       volunteeringSkills: d.volunteeringSkills ?? [],
       foodAllergies: d.foodAllergies ?? null,
       emergencyContacts: d.emergencyContacts ?? [null, null],
+      // Pending-invite lifecycle: drives the "Invite pending" badge + the
+      // completion-gate exclusion. MUST be mapped here — this hand-map is the
+      // real data source for /family and the gate; dropping it makes a pending
+      // co-manager render as a normal (incomplete) member instead of "pending".
+      inviteStatus: d.inviteStatus ?? null,
     } as MemberDoc;
   });
 
