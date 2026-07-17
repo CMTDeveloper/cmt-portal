@@ -152,6 +152,15 @@ const MANAGER_DOC = {
 
 const INVITE_EMAIL = 'bob@example.com';
 const INVITE_RELATION = 'Spouse';
+// invite/send now REQUIRES a name (it creates the pending member); include it.
+const INVITE_NAME = { firstName: 'Bob', lastName: 'Jones' };
+
+/** send now writes TWO docs (pending member + invite); the invite is the one with a token. */
+function inviteSetData(): Record<string, unknown> {
+  const call = mockFirestoreSet.mock.calls.find((c) => (c[1] as Record<string, unknown>)?.token !== undefined);
+  if (!call) throw new Error('no invite doc written');
+  return call[1] as Record<string, unknown>;
+}
 
 // ── Request helpers ───────────────────────────────────────────────────────────
 
@@ -292,7 +301,7 @@ describe('happy path: send → GET invite → accept', () => {
     setupSendTransaction();
 
     const res = await sendPOST(
-      makeRequest('POST', '/api/setu/invite/send', { email: INVITE_EMAIL, relation: INVITE_RELATION }, managerHeaders()),
+      makeRequest('POST', '/api/setu/invite/send', { ...INVITE_NAME, email: INVITE_EMAIL, relation: INVITE_RELATION }, managerHeaders()),
     );
 
     expect(res.status).toBe(201);
@@ -311,16 +320,16 @@ describe('happy path: send → GET invite → accept', () => {
     setupSendTransaction();
 
     await sendPOST(
-      makeRequest('POST', '/api/setu/invite/send', { email: INVITE_EMAIL, relation: INVITE_RELATION }, managerHeaders()),
+      makeRequest('POST', '/api/setu/invite/send', { ...INVITE_NAME, email: INVITE_EMAIL, relation: INVITE_RELATION }, managerHeaders()),
     );
 
-    expect(mockFirestoreSet).toHaveBeenCalledOnce();
-    const doc = mockFirestoreSet.mock.calls[0]![1]! as Record<string, unknown>;
+    const doc = inviteSetData();
     expect(doc.email).toBe(INVITE_EMAIL);
     expect(doc.relation).toBe(INVITE_RELATION);
     expect(doc.inviterMid).toBe(MANAGER_MID);
     expect(doc.acceptedAt).toBeNull();
     expect(doc.token).toBeDefined();
+    expect(doc.memberMid).toBeDefined(); // links the pending member created at send
   });
 
   it('GET /api/setu/invite/[token] returns familyName + inviterName + relation for valid token', async () => {
@@ -661,7 +670,7 @@ describe('send: email normalization', () => {
       makeRequest(
         'POST',
         '/api/setu/invite/send',
-        { email: 'BOB@EXAMPLE.COM', relation: 'Sibling' },
+        { ...INVITE_NAME, email: 'BOB@EXAMPLE.COM', relation: 'Sibling' },
         managerHeaders(),
       ),
     );
@@ -669,8 +678,7 @@ describe('send: email normalization', () => {
     const emailCall = mockSendEmail.mock.calls[0]![0]! as { to: string };
     expect(emailCall.to).toBe('bob@example.com');
 
-    const docData = mockFirestoreSet.mock.calls[0]![1]! as Record<string, unknown>;
-    expect(docData.email).toBe('bob@example.com');
+    expect(inviteSetData().email).toBe('bob@example.com');
   });
 });
 
@@ -690,7 +698,7 @@ describe('send: TTL correctness', () => {
       makeRequest(
         'POST',
         '/api/setu/invite/send',
-        { email: INVITE_EMAIL, relation: INVITE_RELATION },
+        { ...INVITE_NAME, email: INVITE_EMAIL, relation: INVITE_RELATION },
         managerHeaders(),
       ),
     );
