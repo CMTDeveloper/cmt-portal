@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import type { SetuAttendanceStatus } from '@cmt/shared-domain';
 import type { AttendanceViewRow } from '@/features/setu/teacher/level-attendance-view';
+import { NotInClassSection, type PreviousRow } from './not-in-class-section';
 
 interface AttendanceMarkerProps {
   levelId: string;
@@ -16,9 +17,12 @@ interface AttendanceMarkerProps {
   // presentCount is intentionally NOT a prop — the live count is derived from
   // `present` so it updates as the teacher taps students.
   total: number;
-  // Count of previously-enrolled (dropped) students for this level. Drives the
-  // "Previous students (N)" entry point; hidden entirely when 0.
+  // Count of previously-enrolled (dropped) students — surfaced inline in the
+  // "Not in this class yet" section's Previous group (kept for the empty-state
+  // hint; the rows themselves come from previousStudents).
   previousCount: number;
+  // Carry-forward students rendered inline in "Not in this class yet".
+  previousStudents: PreviousRow[];
 }
 
 /** Shift a YYYY-MM-DD by n days (noon-UTC anchor keeps it tz-stable). */
@@ -122,7 +126,7 @@ function StatCell({ label, value, valueColor }: StatCellProps) {
   );
 }
 
-export function AttendanceMarker({ levelId, levelName, ageLabel, date, today, rows, total, previousCount }: AttendanceMarkerProps) {
+export function AttendanceMarker({ levelId, levelName, ageLabel, date, today, rows, total, previousStudents }: AttendanceMarkerProps) {
   // Binary model: a student is Present (✓) or not. Seed Present from a prior
   // Present/Late portal mark or a door self-check-in; everything else starts
   // unmarked. Late collapses to Present (they attended) — Late is retired from
@@ -310,31 +314,10 @@ export function AttendanceMarker({ levelId, levelName, ageLabel, date, today, ro
               </span>
             )}
           </div>
-          {/* Secondary lists on their OWN row so they never crowd the date; each
-              takes an equal half (or full width when there are no previous students). */}
+          {/* Secondary list on its own row. Previous students moved INTO the
+              inline "Not in this class yet" section below (Vaibhav: one list, not
+              several); Visitors (door check-ins) stays a distinct flow. */}
           <div style={{ display: 'flex', gap: 8 }}>
-            {previousCount > 0 && (
-              <Link
-                href={`/teacher/levels/${levelId}/previous?date=${date}`}
-                style={{
-                  flex: 1,
-                  justifyContent: 'center',
-                  fontSize: 13,
-                  fontWeight: 600,
-                  color: 'var(--accentDeep)',
-                  background: 'var(--accentSoft)',
-                  borderRadius: 10,
-                  padding: '10px 12px',
-                  minHeight: 44,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  textDecoration: 'none',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                Previous students ({previousCount})
-              </Link>
-            )}
             <Link
               href={`/teacher/levels/${levelId}/visitors?date=${date}`}
               style={{
@@ -581,6 +564,13 @@ export function AttendanceMarker({ levelId, levelName, ageLabel, date, today, ro
             <div style={{ textAlign: 'center', padding: '34px 16px', color: 'var(--muted)', fontSize: 14 }}>No students match.</div>
           )}
         </>
+      )}
+
+      {/* Consolidated "Not in this class yet": Previous students + Registered ·
+          not enrolled. Shown even with zero enrolled students so a teacher can
+          find a registered-but-unenrolled child (Vaibhav's family6 case). */}
+      {!isFuture && (
+        <NotInClassSection levelId={levelId} date={date} previousStudents={previousStudents} />
       )}
 
       {/* Floating "next unmarked" jump — only when there's something left to mark. */}

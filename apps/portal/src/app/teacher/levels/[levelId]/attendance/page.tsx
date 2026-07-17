@@ -37,6 +37,7 @@ export default async function TakeAttendancePage({
       rows={view.rows}
       total={view.total}
       previousCount={view.previousCount}
+      previousStudents={view.previousStudents}
     />
   );
 }

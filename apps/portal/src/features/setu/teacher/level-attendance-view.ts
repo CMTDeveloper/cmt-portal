@@ -16,6 +16,16 @@ export interface AttendanceViewRow {
   checkedInAtDoor: boolean;
 }
 
+/** A carry-forward (previous) student surfaced inline in the attendance screen's
+ *  "Not in this class yet" section. Marking present confirms them in place. */
+export interface PreviousStudentRow {
+  mid: string;
+  fid: string;
+  firstName: string;
+  lastName: string;
+  schoolGrade: string | null;
+}
+
 export interface AttendanceView {
   levelId: string;
   levelName: string;
@@ -27,6 +37,9 @@ export interface AttendanceView {
   presentCount: number;
   total: number;
   previousCount: number;
+  /** The carry-forward students themselves (already computed for previousCount),
+   *  rendered inline in the "Not in this class yet" section. */
+  previousStudents: PreviousStudentRow[];
 }
 
 /**
@@ -81,5 +94,12 @@ export async function getLevelAttendanceView(levelId: string, date: string): Pro
     presentCount,
     total: rows.length,
     previousCount: roster.previousStudents.length,
+    previousStudents: roster.previousStudents.map((m) => ({
+      mid: m.mid,
+      fid: m.fid,
+      firstName: m.firstName,
+      lastName: m.lastName,
+      schoolGrade: m.schoolGrade,
+    })),
   };
 }

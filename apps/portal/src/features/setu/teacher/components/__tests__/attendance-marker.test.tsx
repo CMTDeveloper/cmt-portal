@@ -4,6 +4,9 @@ import userEvent from '@testing-library/user-event';
 
 vi.mock('next/link', () => ({ default: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a> }));
 vi.mock('@cmt/ui', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+// The inline "Not in this class yet" section (rendered on non-future dates) uses
+// useRouter; stub it so these marker tests don't need a router provider.
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 
 import { AttendanceMarker } from '../attendance-marker';
 import type { SetuAttendanceStatus } from '@cmt/shared-domain';
@@ -18,7 +21,7 @@ const ROWS = [
 // `today` is set AFTER the fixture `date` (2026-01-04) so the default render is
 // a non-future, already-takeable class (canGoNext true → next arrow is a link).
 function props(over: Record<string, unknown> = {}) {
-  return { levelId: 'L', levelName: 'Level 1', ageLabel: 'Gr 1', date: '2026-01-04', today: '2026-01-18', rows: ROWS, total: 2, previousCount: 0, ...over };
+  return { levelId: 'L', levelName: 'Level 1', ageLabel: 'Gr 1', date: '2026-01-04', today: '2026-01-18', rows: ROWS, total: 2, previousCount: 0, previousStudents: [], ...over };
 }
 
 function row(name: string): HTMLElement {
@@ -201,14 +204,25 @@ it('renders the "Next unmarked" jump while students remain unmarked', () => {
   expect(screen.getByRole('button', { name: /next unmarked/i })).toBeDefined();
 });
 
-it('shows a Previous students button with the count when previousCount > 0, plus the Enrolled students heading', () => {
-  render(<AttendanceMarker {...props({ date: '2026-01-18', today: '2026-06-30', previousCount: 5 })} />);
-  const link = screen.getByRole('link', { name: /previous students \(5\)/i });
-  expect(link.getAttribute('href')).toBe('/teacher/levels/L/previous?date=2026-01-18');
+it('renders previous students inline in the consolidated "Not in this class yet" section (no /previous page link)', async () => {
+  const user = userEvent.setup();
+  render(
+    <AttendanceMarker
+      {...props({ previousStudents: [{ mid: 'P-1', fid: 'P', firstName: 'Harshita', lastName: 'M', schoolGrade: 'Grade 2' }] })}
+    />,
+  );
+  // The separate /previous page link is gone — previous students moved inline.
+  expect(screen.queryByRole('link', { name: /previous students/i })).toBeNull();
   expect(screen.getByText(/enrolled students \(2\)/i)).toBeDefined();
+  // Expand the consolidated section → the previous student is listed there.
+  await user.click(screen.getByRole('button', { name: /not in this class yet/i }));
+  expect(await screen.findByText('Harshita M')).toBeDefined();
+  expect(screen.getByText(/Previous students \(1\)/i)).toBeDefined();
 });
 
-it('hides the Previous students button when previousCount is 0', () => {
-  render(<AttendanceMarker {...props({ previousCount: 0 })} />);
-  expect(screen.queryByRole('link', { name: /previous students/i })).toBeNull();
+it('shows the "Not in this class yet" section even with zero previous students (to find registered kids)', () => {
+  render(<AttendanceMarker {...props({ previousStudents: [] })} />);
+  // Always present on a non-future date so a teacher can expand it to enroll a
+  // registered-but-unenrolled child (Vaibhav's family6 case).
+  expect(screen.getByRole('button', { name: /not in this class yet/i })).toBeDefined();
 });
