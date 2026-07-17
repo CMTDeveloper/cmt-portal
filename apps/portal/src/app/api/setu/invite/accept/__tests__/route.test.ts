@@ -282,4 +282,77 @@ describe('POST /api/setu/invite/accept', () => {
     expect(exchangeCustomTokenForIdToken).toHaveBeenCalledWith('custom-token');
     expect(createPortalSessionCookie).toHaveBeenCalledWith('id-token', expect.any(Number));
   });
+
+  // ── LINK path (Feature B): the invite already created a pending member ────────
+  describe('links the existing pending member (invite carries memberMid)', () => {
+    const PENDING_MID = 'FAM001ABCD12-03';
+
+    /** Re-queue the txn reads for an invite that has a memberMid + a pending member. */
+    function setupLinkPath(memberExists = true) {
+      mockGetSession.mockReturnValue(validSession);
+      const linkInviteSnap = {
+        exists: true,
+        data: () => ({
+          token: validInvite.token,
+          memberMid: PENDING_MID, // ← links the pending member created at send
+          firstName: 'Priya',
+          lastName: 'Patel',
+          inviterMid: validInvite.inviterMid,
+          inviterName: validInvite.inviterName,
+          familyName: validInvite.familyName,
+          relation: validInvite.relation,
+          email: validInvite.email,
+          expiresAt: { toDate: () => validInvite.expiresAt },
+          acceptedAt: null,
+          acceptedByMid: null,
+        }),
+        ref: { parent: { parent: { id: 'FAM001ABCD12' } }, update: mockUpdate },
+      };
+      const familySnap = { exists: true, data: () => ({ fid: 'FAM001ABCD12', name: 'Patel Family', managers: ['FAM001ABCD12-01'] }) };
+      const existingMemberSnap = {
+        exists: memberExists,
+        data: () => (memberExists ? { mid: PENDING_MID, publicMid: '50900', firstName: 'Priya', lastName: 'Patel', manager: true, uid: null, inviteStatus: 'pending' } : undefined),
+      };
+      const contactKeySnap = { exists: false };
+      mockGet.mockReset();
+      mockGet
+        .mockResolvedValueOnce(linkInviteSnap)   // txn.get(inviteDoc.ref)
+        .mockResolvedValueOnce(familySnap)        // family doc
+        .mockResolvedValueOnce(existingMemberSnap) // the pending member doc
+        .mockResolvedValueOnce(contactKeySnap);   // contactKey
+    }
+
+    it('UPDATES the pending member (uid + inviteStatus:null) instead of creating a new one', async () => {
+      setupLinkPath();
+      const res = await POST(makeRequest({ token: 'tok-abc123' }));
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.mid).toBe(PENDING_MID); // reuses the pending member's mid
+      // The member was UPDATED to bind the invitee's auth + activate it.
+      const memberUpdate = mockUpdate.mock.calls.find(([, data]) => data && 'uid' in data);
+      expect(memberUpdate?.[1]).toMatchObject({ uid: 'uid-priya', inviteStatus: null });
+      // No NEW member doc was written (no set() with a firstName payload).
+      const memberCreate = mockSet.mock.calls.find(([, data]) => data && typeof data === 'object' && 'firstName' in data);
+      expect(memberCreate).toBeUndefined();
+    });
+
+    it('adds the linked member to family.managers and writes its contactKey', async () => {
+      setupLinkPath();
+      await POST(makeRequest({ token: 'tok-abc123' }));
+      expect(FieldValue.arrayUnion).toHaveBeenCalledWith(PENDING_MID);
+      const contactKeyWrite = mockSet.mock.calls.find(([, data]) => data && 'contactKey' in data);
+      expect(contactKeyWrite?.[1]).toMatchObject({ fid: 'FAM001ABCD12', mid: PENDING_MID });
+    });
+
+    it('fails closed (404) when the invite names a member that no longer exists', async () => {
+      // Inconsistent state — cancel removes the member AND the invite together, so
+      // an invite pointing at a deleted member is treated as not-found rather than
+      // minting a colliding sequence id.
+      setupLinkPath(false);
+      const res = await POST(makeRequest({ token: 'tok-abc123' }));
+      expect(res.status).toBe(404);
+      const body = await res.json();
+      expect(body.error).toBe('invite-not-found');
+    });
+  });
 });

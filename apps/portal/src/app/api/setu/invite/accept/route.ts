@@ -94,15 +94,30 @@ export async function POST(req: Request) {
       const fid = inviteDoc.ref.parent.parent?.id;
       if (!fid) throw new Error('invite-not-found');
 
+      // The invite created a pending member at send time (Feature B); accept LINKS
+      // that existing doc rather than creating a duplicate. Legacy invites (created
+      // before this change) have no memberMid — those fall back to the create path.
+      const memberMid = typeof d['memberMid'] === 'string' ? d['memberMid'] : null;
+
       // 3. Read family doc
       const familyRef = db.collection('families').doc(fid);
       const familySnap = await txn.get(familyRef);
       if (!familySnap.exists) throw new Error('invite-not-found');
 
-      // 4. Read members subcollection for sequence
-      const membersSnap = await txn.get(
-        db.collection('families').doc(fid).collection('members'),
-      );
+      // 4. Read either the existing pending member (link path) OR the members
+      //    subcollection for the next sequence id (legacy create path).
+      const existingMemberRef = memberMid
+        ? db.collection('families').doc(fid).collection('members').doc(memberMid)
+        : null;
+      const existingMemberSnap = existingMemberRef ? await txn.get(existingMemberRef) : null;
+      const membersSnap = existingMemberRef
+        ? null
+        : await txn.get(db.collection('families').doc(fid).collection('members'));
+
+      // The invite named a pending member but it's gone (an inconsistent state —
+      // cancel deletes the member AND the invite together, so this shouldn't
+      // happen). Fail closed rather than mint a colliding sequence id.
+      if (existingMemberRef && !existingMemberSnap?.exists) throw new Error('invite-not-found');
 
       // 5. Read contactKey to check for theft
       const contactHash = hashContactKey(session.type, session.value);
@@ -118,42 +133,50 @@ export async function POST(req: Request) {
 
       // --- ALL WRITES ---
 
-      const memberCount = (membersSnap as { size: number }).size ?? 0;
-      const newMid = `${fid}-${zeroPad(memberCount + 1)}`;
       const nowTs = FieldValue.serverTimestamp();
 
-      // Write new member doc
-      const memberRef = db
-        .collection('families')
-        .doc(fid)
-        .collection('members')
-        .doc(newMid);
-      txn.set(memberRef, {
-        mid: newMid,
-        publicMid: newPublicMid,
-        uid: session.uid,
-        // Name comes from the invite (the manager named the person they invited),
-        // so the co-manager joins fully-named. Falls back to empty only for a
-        // legacy invite created without a name — and the /complete-profile form now
-        // lets the co-manager fill a missing name in place, so it's never a dead end.
-        firstName: typeof d['firstName'] === 'string' ? d['firstName'] : '',
-        lastName: typeof d['lastName'] === 'string' ? d['lastName'] : '',
-        type: 'Adult',
-        gender: 'PreferNotToSay',
-        manager: true,
-        joinedAt: nowTs,
-        email: session.type === 'email' ? session.value : null,
-        phone: session.type === 'phone' ? session.value : null,
-        schoolGrade: null,
-        birthMonthYear: null,
-        volunteeringSkills: [],
-        foodAllergies: null,
-        emergencyContacts: [null, null],
-      });
+      // Resolve the member id being bound. Link path reuses the pending member's
+      // mid; create path mints the next sequence id.
+      const boundMid =
+        existingMemberRef && existingMemberSnap?.exists
+          ? memberMid!
+          : `${fid}-${zeroPad(((membersSnap as { size: number } | null)?.size ?? 0) + 1)}`;
+      const memberRef = db.collection('families').doc(fid).collection('members').doc(boundMid);
 
-      // Update family.managers
+      if (existingMemberRef && existingMemberSnap?.exists) {
+        // LINK: bind the invitee's auth to the pending member and activate it.
+        // Keep its existing publicMid, name, and email (set at invite-send); the
+        // allocated newPublicMid is unused here (a tiny id gap is harmless).
+        txn.update(memberRef, {
+          uid: session.uid,
+          inviteStatus: null,
+          ...(session.type === 'email' ? { email: session.value } : { phone: session.value }),
+        });
+      } else {
+        // CREATE (legacy invite with no pending member): mint the co-manager now.
+        txn.set(memberRef, {
+          mid: boundMid,
+          publicMid: newPublicMid,
+          uid: session.uid,
+          firstName: typeof d['firstName'] === 'string' ? d['firstName'] : '',
+          lastName: typeof d['lastName'] === 'string' ? d['lastName'] : '',
+          type: 'Adult',
+          gender: 'PreferNotToSay',
+          manager: true,
+          joinedAt: nowTs,
+          email: session.type === 'email' ? session.value : null,
+          phone: session.type === 'phone' ? session.value : null,
+          schoolGrade: null,
+          birthMonthYear: null,
+          volunteeringSkills: [],
+          foodAllergies: null,
+          emergencyContacts: [null, null],
+        });
+      }
+
+      // Update family.managers (arrayUnion is idempotent if already present)
       txn.update(familyRef, {
-        managers: FieldValue.arrayUnion(newMid),
+        managers: FieldValue.arrayUnion(boundMid),
       });
 
       // Write contactKey
@@ -161,16 +184,16 @@ export async function POST(req: Request) {
         contactKey: contactHash,
         type: session.type,
         fid,
-        mid: newMid,
+        mid: boundMid,
       });
 
       // Mark invite accepted
       txn.update(inviteDoc.ref, {
         acceptedAt: nowTs,
-        acceptedByMid: newMid,
+        acceptedByMid: boundMid,
       });
 
-      return { mid: newMid, fid };
+      return { mid: boundMid, fid };
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
