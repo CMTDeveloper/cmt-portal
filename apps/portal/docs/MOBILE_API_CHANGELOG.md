@@ -22,6 +22,12 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
+## 2026-07-17 - NEW GET/POST /api/setu/teacher/grade-eligible - registered-but-unenrolled children for a class
+NEW teacher-only route backing the attendance screen's "Registered · not enrolled" group.
+- **`GET /api/setu/teacher/grade-eligible?levelId=`** → `{ view: { levelId, levelName, ageLabel, students: [{ mid, fid, firstName, lastName, schoolGrade, familyName }] } }` — registered children at the level's location whose grade/age matches but who have no active enrollment. `403 teacher-required`, `403 not-your-class`, `404 not-found`, `400 bad-request`.
+- **`POST /api/setu/teacher/grade-eligible`** body `{ levelId, mid, date: 'YYYY-MM-DD' }` → `{ ok: true, autoEnrolled: boolean }` — marks that child present as a guest, which auto-enrolls them for the period (they then appear on the enrolled roster).
+- **Mobile action:** only if the mobile has a teacher/attendance surface — mirror the two shapes. Purely additive; no change to existing teacher endpoints.
+
 ## 2026-07-17 - `ccc9490` - invite/send now REQUIRES a name + creates a pending member; NEW invite/cancel; accept links (supersedes `2e3c404`)
 The co-manager invite flow changed so the invited person is added to the family **immediately at send** (visible before they accept), per Vaibhav's report that a recipient wasn't added until they logged in and accepted a second time.
 - **`POST /api/setu/invite/send`** — `firstName` and `lastName` are now **REQUIRED** (they were optional in `2e3c404`). A 400 is returned without them. Response is unchanged (`201 { token }`). Sending now also **creates the co-manager member** in the same transaction with **`inviteStatus: 'pending'`**, `manager: true`, `uid: null`, and the invited name+email. That member is deliberately NOT in `family.managers` and has no `contactKey` until accept.
