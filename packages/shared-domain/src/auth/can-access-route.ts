@@ -145,11 +145,13 @@ export function canAccessRoute(
   //   - POST /api/setu/invite/accept requires the invitee's verified contact
   //     to match the invite email; a fresh OTP-signed-in invitee has
   //     role='family' (no fid yet) and must be allowed through middleware.
-  // POST /api/setu/invite/send is intentionally NOT covered here — it falls
-  // through to the catch-all below and is manager + welcome-team + admin only.
+  // POST /api/setu/invite/send and /api/setu/invite/cancel are intentionally NOT
+  // covered here — they fall through to the catch-all below and are manager +
+  // welcome-team + admin only (the handlers further enforce own-family scope).
   if (
     pathname.startsWith('/api/setu/invite/') &&
-    !pathname.startsWith('/api/setu/invite/send')
+    !pathname.startsWith('/api/setu/invite/send') &&
+    !pathname.startsWith('/api/setu/invite/cancel')
   ) {
     return claims.role != null;
   }

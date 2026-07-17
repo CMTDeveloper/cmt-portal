@@ -362,6 +362,17 @@ describe('canAccessRoute — /api/setu/invite/* — Setu family + welcome-team (
   it('denies teacher on /api/setu/invite/send', () => {
     expect(canAccessRoute(teacher, '/api/setu/invite/send')).toBe(false);
   });
+  // /api/setu/invite/cancel is manager-only (like send) — it must NOT fall into
+  // the any-signed-in-user invite rule, or a family-member could cancel invites.
+  it('allows family-manager on /api/setu/invite/cancel', () => {
+    expect(canAccessRoute(manager, '/api/setu/invite/cancel', 'POST')).toBe(true);
+  });
+  it('denies family-member on /api/setu/invite/cancel (manager-only)', () => {
+    expect(canAccessRoute(member, '/api/setu/invite/cancel', 'POST')).toBe(false);
+  });
+  it('denies fresh-OTP family on /api/setu/invite/cancel', () => {
+    expect(canAccessRoute(family, '/api/setu/invite/cancel', 'POST')).toBe(false);
+  });
 });
 
 describe('canAccessRoute — /api/setu/invite/accept — any signed-in user', () => {

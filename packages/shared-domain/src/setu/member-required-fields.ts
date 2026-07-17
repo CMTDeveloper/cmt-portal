@@ -146,7 +146,7 @@ export function incompleteMembers(
  * the user /complete-profile ⇄ /family).
  */
 export function membersRequiringCompletion<
-  T extends { mid: string; manager?: boolean | null; inviteStatus?: string | null },
+  T extends { mid: string; manager?: boolean | null; inviteStatus?: string | null | undefined },
 >(members: readonly T[], currentMid: string, isManager: boolean): T[] {
   // A pending-invite member (created at invite-send, not yet accepted) is nobody's
   // completion task: they have no session and complete their OWN profile after

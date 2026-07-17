@@ -3,6 +3,7 @@ import { SetuAvatar, SetuIcon } from '@cmt/ui';
 import { CspRoot } from '@/features/family/components/atoms';
 import { MobileInviteButton, DesktopInviteButton } from './invite-button';
 import { PromoteManagerButton } from './promote-manager-button';
+import { CancelInviteButton } from './cancel-invite-button';
 import { mockFamily } from '@/features/family/data/mock';
 import { flags } from '@/lib/flags';
 import { type FamilyEmergencyContact, type FamilyAddress } from '@cmt/shared-domain';
@@ -92,10 +93,12 @@ export default async function FamilyRosterPage() {
                         <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
                           {m.nameMissing && m.isCurrent ? 'Tap to add your name →' : m.type}
                         </div>
-                        <div style={{ marginTop: 4, display: 'inline-flex', alignItems: 'center', fontSize: 11, fontWeight: 600, padding: '1px 8px', borderRadius: 99, background: m.missingCount > 0 ? 'var(--setu-warn-soft)' : 'var(--setu-ok-soft)', color: m.missingCount > 0 ? 'var(--warn, #a06410)' : 'var(--ok)' }}>
-                          {m.missingCount > 0
-                            ? `${m.missingCount} field${m.missingCount !== 1 ? 's' : ''} to complete`
-                            : '✓ Complete'}
+                        <div style={{ marginTop: 4, display: 'inline-flex', alignItems: 'center', fontSize: 11, fontWeight: 600, padding: '1px 8px', borderRadius: 99, background: m.invitePending ? 'var(--info-soft)' : m.missingCount > 0 ? 'var(--setu-warn-soft)' : 'var(--setu-ok-soft)', color: m.invitePending ? 'var(--info-deep)' : m.missingCount > 0 ? 'var(--warn, #a06410)' : 'var(--ok)' }}>
+                          {m.invitePending
+                            ? 'Invite pending · awaiting sign-in'
+                            : m.missingCount > 0
+                              ? `${m.missingCount} field${m.missingCount !== 1 ? 's' : ''} to complete`
+                              : '✓ Complete'}
                         </div>
                         {m.warn && <div style={{ marginTop: 6, fontSize: 11, color: 'var(--err)', display: 'flex', alignItems: 'center', gap: 4 }}><SetuIcon.warn/> {m.warn}</div>}
                       </div>
@@ -103,6 +106,9 @@ export default async function FamilyRosterPage() {
                     </Link>
                     {canManage && !m.isManager && m.isAdult && (
                       <PromoteManagerButton mid={m.mid} name={m.name} variant="mobile"/>
+                    )}
+                    {canManage && m.invitePending && (
+                      <CancelInviteButton mid={m.mid} name={m.name} variant="mobile"/>
                     )}
                   </div>
                 ))}
@@ -142,7 +148,11 @@ export default async function FamilyRosterPage() {
                   <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{m.type}</div>
                 </div>
                 <div className="row" style={{ gap: 8 }}>
-                  {m.missingCount > 0 ? (
+                  {m.invitePending ? (
+                    <span className="pill" style={{ background: 'var(--info-soft)', color: 'var(--info-deep)', fontSize: 11, fontWeight: 600 }} title="Invited — awaiting their sign-in">
+                      Invite pending
+                    </span>
+                  ) : m.missingCount > 0 ? (
                     <Link href={`/family/members/${m.mid}/edit`} className="pill" style={{ background: 'var(--setu-warn-soft)', color: 'var(--warn, #a06410)', textDecoration: 'none', fontSize: 11, fontWeight: 600 }}>
                       Complete info ({m.missingCount})
                     </Link>
@@ -154,8 +164,14 @@ export default async function FamilyRosterPage() {
                   {canManage && !m.isManager && m.isAdult && (
                     <PromoteManagerButton mid={m.mid} name={m.name} variant="desktop"/>
                   )}
-                  <Link href={`/family/members/${m.mid}/profile`} className="btn btn--s" style={{ padding: '6px 10px', fontSize: 12 }}>Profile</Link>
-                  <Link href={`/family/members/${m.mid}/edit`} className="btn btn--s" style={{ padding: '6px 10px', fontSize: 12 }}><SetuIcon.edit/> Edit</Link>
+                  {canManage && m.invitePending ? (
+                    <CancelInviteButton mid={m.mid} name={m.name} variant="desktop"/>
+                  ) : (
+                    <>
+                      <Link href={`/family/members/${m.mid}/profile`} className="btn btn--s" style={{ padding: '6px 10px', fontSize: 12 }}>Profile</Link>
+                      <Link href={`/family/members/${m.mid}/edit`} className="btn btn--s" style={{ padding: '6px 10px', fontSize: 12 }}><SetuIcon.edit/> Edit</Link>
+                    </>
+                  )}
                 </div>
               </div>
               {m.nameMissing && m.isCurrent && (
