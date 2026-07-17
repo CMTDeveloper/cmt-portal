@@ -145,11 +145,14 @@ export function incompleteMembers(
  * one helper so they can never disagree on who blocks whom (a mismatch bounces
  * the user /complete-profile ⇄ /family).
  */
-export function membersRequiringCompletion<T extends { mid: string; manager?: boolean | null }>(
-  members: readonly T[],
-  currentMid: string,
-  isManager: boolean,
-): T[] {
-  if (!isManager) return members.filter((m) => m.mid === currentMid);
-  return members.filter((m) => m.mid === currentMid || m.manager !== true);
+export function membersRequiringCompletion<
+  T extends { mid: string; manager?: boolean | null; inviteStatus?: string | null },
+>(members: readonly T[], currentMid: string, isManager: boolean): T[] {
+  // A pending-invite member (created at invite-send, not yet accepted) is nobody's
+  // completion task: they have no session and complete their OWN profile after
+  // accepting. Drop them up-front so neither the invitee nor any manager is ever
+  // blocked by a pending row.
+  const active = members.filter((m) => m.inviteStatus !== 'pending');
+  if (!isManager) return active.filter((m) => m.mid === currentMid);
+  return active.filter((m) => m.mid === currentMid || m.manager !== true);
 }

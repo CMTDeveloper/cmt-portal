@@ -39,6 +39,14 @@ describe('MemberDocSchema — multi-contact fields', () => {
     expect(parsed.emergencyContacts).toEqual([null, null]);
   });
 
+  it('defaults inviteStatus to absent (active member) and accepts "pending"', () => {
+    expect(MemberDocSchema.parse(base).inviteStatus ?? null).toBeNull();
+    const pending = MemberDocSchema.parse({ ...base, inviteStatus: 'pending' });
+    expect(pending.inviteStatus).toBe('pending');
+    // null is accepted too (an accepted invite clears the field to null).
+    expect(MemberDocSchema.parse({ ...base, inviteStatus: null }).inviteStatus).toBeNull();
+  });
+
   it('preserves provided altEmails/altPhones and a dismissed timestamp', () => {
     const parsed = MemberDocSchema.parse({
       ...base,

@@ -30,6 +30,13 @@ export const MemberDocSchema = z.object({
   volunteeringSkillsNudgeDismissedAt: z.date().nullable().optional(),
   // optional; absent ⇒ active. Only the legacy-migration path sets 'pending' (gates non-manager portal access).
   portalAccess: z.enum(['active', 'pending']).optional(),
+  // Co-manager invite lifecycle (Feature B). Set to 'pending' when the member is
+  // created at invite-SEND (so the invited person is visible to the family before
+  // they accept); cleared to null on accept. Absent/null ⇒ a normal active member.
+  // A pending member has uid:null, is NOT in family.managers, and has no
+  // contactKey until accept — so it is excluded from the profile-completion gate
+  // and shows an "Invite pending" badge instead of a missing-fields count.
+  inviteStatus: z.enum(['pending']).nullable().optional(),
   schoolGrade: z.string().nullable(),
   birthMonthYear: z.string().nullable(),
   // Birth month only (1-12), no year — the legacy roster's `dob_m`. Used by the

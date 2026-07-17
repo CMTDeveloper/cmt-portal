@@ -17,11 +17,14 @@ export type DisplayMember = {
   nameMissing: boolean;
   /** Count of still-missing required fields for this member (0 ⇒ complete). */
   missingCount: number;
+  /** Co-manager invited but not yet accepted — shows an "Invite pending" badge. */
+  invitePending: boolean;
 };
 
 /** Pure mapper from a stored member to its roster-card display shape. */
 export function memberToDisplay(m: MemberDoc, currentMid: string | null): DisplayMember {
   const isCurrent = currentMid !== null && m.mid === currentMid;
+  const invitePending = m.inviteStatus === 'pending';
   const rawName = `${m.firstName ?? ''} ${m.lastName ?? ''}`.trim();
   const nameMissing = rawName.length === 0;
   const name = nameMissing ? (isCurrent ? 'Your profile' : 'Unnamed member') : rawName;
@@ -31,8 +34,9 @@ export function memberToDisplay(m: MemberDoc, currentMid: string | null): Displa
   return {
     mid: m.mid,
     name,
+    // A pending invitee shows "Invite pending"; else the Manager tag (or none).
+    tag: invitePending ? 'Invite pending' : m.manager ? 'Manager' : null,
     type: typeLabel,
-    tag: m.manager ? 'Manager' : null,
     isManager: m.manager,
     isAdult: m.type === 'Adult',
     warn: m.foodAllergies ?? null,
@@ -41,6 +45,9 @@ export function memberToDisplay(m: MemberDoc, currentMid: string | null): Displa
     role: m.volunteeringSkills.length > 0 ? m.volunteeringSkills.join(', ') : null,
     isCurrent,
     nameMissing,
-    missingCount: whatsMissingForMember(m).length,
+    // A pending member completes their own profile AFTER accepting, so never
+    // surface a missing-fields count on their card in the meantime.
+    missingCount: invitePending ? 0 : whatsMissingForMember(m).length,
+    invitePending,
   };
 }

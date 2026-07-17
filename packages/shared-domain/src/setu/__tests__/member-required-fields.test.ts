@@ -134,4 +134,15 @@ describe('membersRequiringCompletion', () => {
     const legacy = { mid: 'F-04' }; // no manager flag
     expect(membersRequiringCompletion([manager, legacy], 'F-01', true)).toEqual([manager, legacy]);
   });
+
+  it('EXCLUDES a pending-invite member — nobody must complete their profile until they accept', () => {
+    // A co-manager invited but not yet accepted (inviteStatus:'pending', no
+    // session) must never block the original manager's gate, even though it is
+    // a non-manager-... wait it is manager:true; belt-and-braces on inviteStatus.
+    const pending = { mid: 'F-05', manager: true, inviteStatus: 'pending' as const };
+    const pendingDependent = { mid: 'F-06', manager: false, inviteStatus: 'pending' as const };
+    const all = [manager, child, pending, pendingDependent];
+    // Manager scope: own + non-manager dependents, but NEITHER pending row.
+    expect(membersRequiringCompletion(all, 'F-01', true)).toEqual([manager, child]);
+  });
 });

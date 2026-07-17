@@ -58,3 +58,24 @@ describe('memberToDisplay — missingCount (Slice 1 Part D)', () => {
     expect(memberToDisplay(m, 'FAM1-01').missingCount).toBe(2);
   });
 });
+
+describe('memberToDisplay — pending invite (Feature B)', () => {
+  it('flags a pending-invite member and shows an "Invite pending" tag', () => {
+    // An invited co-manager, created at invite-send but not yet accepted.
+    const m = makeMember({ manager: true, inviteStatus: 'pending', uid: null });
+    const d = memberToDisplay(m, null);
+    expect(d.invitePending).toBe(true);
+    expect(d.tag).toBe('Invite pending');
+  });
+
+  it('never shows a missing-field count for a pending member (they complete their own profile after accepting)', () => {
+    // Missing gender/skills would normally count > 0; pending suppresses it.
+    const m = makeMember({ manager: true, inviteStatus: 'pending', gender: 'PreferNotToSay', volunteeringSkills: [], foodAllergies: null });
+    expect(memberToDisplay(m, null).missingCount).toBe(0);
+  });
+
+  it('a normal (accepted) member is not flagged pending', () => {
+    expect(memberToDisplay(makeMember({ manager: true }), null).invitePending).toBe(false);
+    expect(memberToDisplay(makeMember({ manager: true }), null).tag).toBe('Manager');
+  });
+});

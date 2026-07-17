@@ -30,6 +30,7 @@ export default async function FamilyRosterPage() {
     isCurrent: false,
     nameMissing: false,
     missingCount: 0,
+    invitePending: false,
   }));
   // Only a family manager may promote others; the mock view is read-only.
   let canManage = false;
