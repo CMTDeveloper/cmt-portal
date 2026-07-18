@@ -100,4 +100,64 @@ describe('NotInClassSection', () => {
     await user.click(screen.getByRole('button', { name: /not in this class yet/i }));
     expect(await screen.findByText(/Everyone eligible for this class is already enrolled/i)).toBeDefined();
   });
+
+  // ── cap + search (busy locations: Brampton Level 2 = 54 registered-not-enrolled) ──
+  const manyEligible = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({
+      mid: `M-${i}`,
+      fid: `F-${i}`,
+      firstName: `Kid${String(i).padStart(2, '0')}`,
+      lastName: 'Test',
+      schoolGrade: 'Grade 2',
+      familyName: `Fam${i}`,
+    }));
+
+  it('caps the registered list at 20 with a total count, a search box, and a "showing X of N" footer', async () => {
+    mockFetch(manyEligible(25));
+    const user = userEvent.setup();
+    render(<NotInClassSection levelId="L" date="2026-10-04" previousStudents={[]} />);
+    await user.click(screen.getByRole('button', { name: /not in this class yet/i }));
+    await screen.findByText('Kid00 Test');
+
+    // Heading shows the FULL count, not the capped one.
+    expect(screen.getByText(/Registered · not enrolled \(25\)/i)).toBeDefined();
+    // Only the first 20 (Kid00..Kid19) render; Kid20+ are behind search.
+    expect(screen.getByText('Kid19 Test')).toBeDefined();
+    expect(screen.queryByText('Kid20 Test')).toBeNull();
+    expect(screen.getByText(/Showing 20 of 25/i)).toBeDefined();
+    expect(screen.getByRole('searchbox', { name: /search registered students/i })).toBeDefined();
+  });
+
+  it('search finds a registered child beyond the cap and hides non-matches', async () => {
+    mockFetch(manyEligible(25));
+    const user = userEvent.setup();
+    render(<NotInClassSection levelId="L" date="2026-10-04" previousStudents={[]} />);
+    await user.click(screen.getByRole('button', { name: /not in this class yet/i }));
+    await screen.findByText('Kid00 Test');
+
+    await user.type(screen.getByRole('searchbox', { name: /search registered students/i }), 'Kid24');
+    expect(await screen.findByText('Kid24 Test')).toBeDefined(); // was beyond the cap
+    expect(screen.queryByText('Kid00 Test')).toBeNull(); // non-match hidden
+    expect(screen.queryByText(/Showing 20 of/i)).toBeNull(); // footer hidden while searching
+  });
+
+  it('does not render a search box or footer when the registered list fits under the cap', async () => {
+    // default ELIGIBLE is a single row
+    const user = userEvent.setup();
+    render(<NotInClassSection levelId="L" date="2026-10-04" previousStudents={[]} />);
+    await user.click(screen.getByRole('button', { name: /not in this class yet/i }));
+    await screen.findByText('Child1 Family6');
+    expect(screen.queryByRole('searchbox')).toBeNull();
+    expect(screen.queryByText(/Showing \d+ of/i)).toBeNull();
+  });
+
+  it('shows a no-match message when the search matches nothing', async () => {
+    mockFetch(manyEligible(25));
+    const user = userEvent.setup();
+    render(<NotInClassSection levelId="L" date="2026-10-04" previousStudents={[]} />);
+    await user.click(screen.getByRole('button', { name: /not in this class yet/i }));
+    await screen.findByText('Kid00 Test');
+    await user.type(screen.getByRole('searchbox', { name: /search registered students/i }), 'Zzzznobody');
+    expect(await screen.findByText(/no registered students match/i)).toBeDefined();
+  });
 });

@@ -154,4 +154,45 @@ test.describe('Teacher - consolidated "Not in this class yet" section', () => {
     expect(sibFourDoc.exists, 'confirmed unmarked student SHOULD be swept Absent').toBe(true);
     expect((sibFourDoc.data() as { status?: string } | undefined)?.status).toBe('absent');
   });
+
+  // A busy location (Brampton "Level 2" ≈ 54 registered-not-enrolled) proves the
+  // cap + search against REAL UAT data, not a seeded fixture. Read-only: this test
+  // never marks anyone present, so no real family's attendance is mutated. Pool
+  // size comes from the deployed API's own response (no re-derivation in the spec).
+  test('busy location: the registered list caps at 20 behind a search box (read-only)', async ({ page }) => {
+    const { portalFirestore } = await import('@cmt/firebase-shared/admin/firestore');
+    const db = portalFirestore();
+
+    // Cheap lookup: Brampton "Level 2" (the level Vaibhav flagged) — one indexed
+    // query on pid, no member scan. Skip if it isn't in this UAT snapshot.
+    const levelsSnap = await db.collection('levels').where('pid', '==', 'bv-brampton-2026-27').get();
+    const level2 = levelsSnap.docs.find((d) => d.data().levelName === 'Level 2');
+    test.skip(!level2, 'Brampton Level 2 not found in UAT');
+    const levelId = level2!.id;
+
+    const searchBox = () => page.getByRole('searchbox', { name: /search registered students/i }).filter({ visible: true }).first();
+
+    // Expand the section and capture the registered group's lazy GET, whose body
+    // gives the true pool size — skip if the data no longer exceeds the cap.
+    const [eligibleResp] = await Promise.all([
+      page.waitForResponse((r) => r.url().includes('/api/setu/teacher/grade-eligible') && r.request().method() === 'GET', { timeout: 30_000 }),
+      (async () => {
+        await page.goto(`/teacher/levels/${levelId}/attendance?date=${DATE}`);
+        await expandSection(page);
+      })(),
+    ]);
+    const body = (await eligibleResp.json()) as { view?: { students?: unknown[] } };
+    const poolSize = body.view?.students?.length ?? 0;
+    test.skip(poolSize <= 20, `Brampton Level 2 registered pool is ${poolSize} (≤20) — cap not exercised`);
+
+    // >20 rows → search box + cap footer render.
+    await expect(searchBox()).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText(/Showing 20 of \d+/i).filter({ visible: true }).first()).toBeVisible();
+
+    // Searching covers the whole pool, not just the capped slice; a no-match query
+    // collapses the list to the empty note and hides the cap footer.
+    await searchBox().fill('zzzznomatch');
+    await expect(page.getByText(/no registered students match/i).filter({ visible: true }).first()).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/Showing 20 of \d+/i).filter({ visible: true })).toHaveCount(0);
+  });
 });

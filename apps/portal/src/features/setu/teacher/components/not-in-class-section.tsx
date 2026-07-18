@@ -42,6 +42,23 @@ const groupHeading: React.CSSProperties = {
   margin: '4px 0 8px',
 };
 
+const searchInput: React.CSSProperties = {
+  width: '100%',
+  padding: '10px 12px',
+  margin: '0 0 10px',
+  fontSize: 14,
+  fontFamily: 'var(--body)',
+  color: 'var(--ink)',
+  background: 'var(--surface)',
+  border: '1px solid var(--line)',
+  borderRadius: 10,
+};
+
+// The registered · not-enrolled pool at a busy location is dozens deep (Brampton
+// Level 2 ≈ 54). Show the first slice and let a teacher search for the rest, so
+// the section stays scannable without hiding anyone.
+const REGISTERED_CAP = 20;
+
 /**
  * The consolidated "Not in this class yet" section on the attendance screen. Two
  * headed groups so a teacher scans one list, not several (Vaibhav):
@@ -58,6 +75,7 @@ export function NotInClassSection({ levelId, date, previousStudents }: Props) {
   const [loadError, setLoadError] = useState(false);
   const [loading, setLoading] = useState(false);
   const [busyMid, setBusyMid] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
   const [pending, startTransition] = useTransition();
   const router = useRouter();
 
@@ -123,6 +141,18 @@ export function NotInClassSection({ levelId, date, previousStudents }: Props) {
   const knownCount = previous.length + (eligible?.length ?? 0);
   const loadedEmpty = eligible !== null && previous.length === 0 && eligible.length === 0;
 
+  // Registered group: filter by the search box, then cap the default view. A
+  // search reveals matches beyond the cap; an active query keeps the box visible
+  // even after the pool shrinks below the cap (so a filter is always clearable).
+  const eligibleList = eligible ?? [];
+  const q = query.trim().toLowerCase();
+  const filteredEligible = q
+    ? eligibleList.filter((r) => `${r.firstName} ${r.lastName}`.toLowerCase().includes(q) || r.familyName.toLowerCase().includes(q))
+    : eligibleList;
+  const shownEligible = q ? filteredEligible : filteredEligible.slice(0, REGISTERED_CAP);
+  const showSearch = eligibleList.length > REGISTERED_CAP || q.length > 0;
+  const showCapFooter = !q && eligibleList.length > REGISTERED_CAP;
+
   return (
     <section style={{ marginTop: 20 }}>
       <button
@@ -157,7 +187,7 @@ export function NotInClassSection({ levelId, date, previousStudents }: Props) {
           {/* Registered · not enrolled FIRST (Vaibhav): a teacher is most likely
               looking for a walk-in registered child to enroll on the spot. */}
           <div>
-            <h3 style={groupHeading}>Registered · not enrolled</h3>
+            <h3 style={groupHeading}>Registered · not enrolled{eligible && eligible.length > 0 ? ` (${eligible.length})` : ''}</h3>
             <p style={{ fontSize: 12.5, color: 'var(--muted)', margin: '0 0 10px', lineHeight: 1.5 }}>
               Registered for this location and grade, but not enrolled in Bala Vihar. Mark one present to enroll them.
             </p>
@@ -168,18 +198,40 @@ export function NotInClassSection({ levelId, date, previousStudents }: Props) {
               </button>
             )}
             {eligible !== null && eligible.length > 0 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {eligible.map((row) => (
-                  <PersonRow
-                    key={row.mid}
-                    name={`${row.firstName} ${row.lastName}`}
-                    grade={row.schoolGrade}
-                    sub={row.familyName}
-                    busy={pending && busyMid === row.mid}
-                    onMark={() => enrollEligible(row)}
+              <>
+                {showSearch && (
+                  <input
+                    type="search"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="Search by name…"
+                    aria-label="Search registered students"
+                    style={searchInput}
                   />
-                ))}
-              </div>
+                )}
+                {shownEligible.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {shownEligible.map((row) => (
+                      <PersonRow
+                        key={row.mid}
+                        name={`${row.firstName} ${row.lastName}`}
+                        grade={row.schoolGrade}
+                        sub={row.familyName}
+                        busy={pending && busyMid === row.mid}
+                        onMark={() => enrollEligible(row)}
+                      />
+                    ))}
+                  </div>
+                )}
+                {q && shownEligible.length === 0 && (
+                  <div style={{ fontSize: 13, color: 'var(--muted)', padding: '4px 2px' }}>No registered students match “{query.trim()}”.</div>
+                )}
+                {showCapFooter && (
+                  <div style={{ fontSize: 12, color: 'var(--muted)', padding: '8px 2px 0' }}>
+                    Showing {REGISTERED_CAP} of {eligible.length} · search to add others
+                  </div>
+                )}
+              </>
             )}
             {eligible !== null && eligible.length === 0 && !loadError && (
               <div style={{ fontSize: 13, color: 'var(--muted)', padding: '4px 2px' }}>No registered students waiting to enroll.</div>
