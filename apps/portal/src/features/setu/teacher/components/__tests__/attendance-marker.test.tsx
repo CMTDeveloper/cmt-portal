@@ -226,3 +226,31 @@ it('shows the "Not in this class yet" section even with zero previous students (
   // registered-but-unenrolled child (Vaibhav's family6 case).
   expect(screen.getByRole('button', { name: /not in this class yet/i })).toBeDefined();
 });
+
+it('re-seeds a newly-enrolled member as Present when router.refresh() delivers fresh rows (no remount)', () => {
+  // Simulates: mark a child from "Not in this class yet" → they enroll + get a
+  // present event → router.refresh() re-renders THIS component with new rows.
+  // The child must show marked immediately, not only after a hard reload.
+  const { rerender } = render(<AttendanceMarker {...props()} />);
+  expect(screen.queryByRole('button', { name: /Child6 Family6/i })).toBeNull();
+
+  const newChild = { mid: 'F-99', fid: 'F6', firstName: 'Child6', lastName: 'Family6', schoolGrade: 'Grade 1', hasSafetyInfo: false, status: 'present' as SetuAttendanceStatus | null, source: 'portal' as const, checkedInAtDoor: false };
+  rerender(<AttendanceMarker {...props({ rows: [...ROWS, newChild], total: 3 })} />);
+
+  // The freshly-enrolled child appears AND is pressed (Present), without a remount.
+  expect(row('Child6 Family6').getAttribute('aria-pressed')).toBe('true');
+});
+
+it('preserves the teacher\'s in-progress taps when router.refresh() delivers fresh rows', async () => {
+  const user = userEvent.setup();
+  const { rerender } = render(<AttendanceMarker {...props()} />);
+  // Tap Aarav (server-unmarked) → present locally, not yet saved.
+  await user.click(row('Aarav Shah'));
+  expect(row('Aarav Shah').getAttribute('aria-pressed')).toBe('true');
+
+  // A refresh arrives with a new member; Aarav's local tap must NOT be reverted
+  // to his (still-unmarked) server status.
+  const newChild = { mid: 'F-99', fid: 'F6', firstName: 'Child6', lastName: 'Family6', schoolGrade: 'Grade 1', hasSafetyInfo: false, status: null as SetuAttendanceStatus | null, source: 'default' as const, checkedInAtDoor: false };
+  rerender(<AttendanceMarker {...props({ rows: [...ROWS, newChild], total: 3 })} />);
+  expect(row('Aarav Shah').getAttribute('aria-pressed')).toBe('true');
+});

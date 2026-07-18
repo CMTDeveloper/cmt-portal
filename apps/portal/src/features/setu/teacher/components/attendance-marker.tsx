@@ -140,6 +140,26 @@ export function AttendanceMarker({ levelId, levelName, ageLabel, date, today, ro
   const [filter, setFilter] = useState<'all' | 'unmarked'>('all');
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
 
+  // When router.refresh() delivers a fresh roster — e.g. a child just enrolled via
+  // the inline "Not in this class yet" section — this component RE-RENDERS with new
+  // `rows` but does NOT remount, so the mount-only useState initializer above never
+  // re-runs and the newly-arrived member would show Unmarked until a hard reload.
+  // Seed any member that isn't already tracked from its server status, WITHOUT
+  // clobbering the teacher's in-progress taps (existing keys are left untouched).
+  useEffect(() => {
+    setPresent((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const r of rows) {
+        if (!(r.mid in prev)) {
+          next[r.mid] = r.status === 'present' || r.status === 'late';
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [rows]);
+
   // Autosave plumbing: presentRef always mirrors the latest map so the debounced
   // timer / pagehide beacon persist current state (not a stale closure). unsaved
   // tracks whether there's a change the server hasn't confirmed yet.

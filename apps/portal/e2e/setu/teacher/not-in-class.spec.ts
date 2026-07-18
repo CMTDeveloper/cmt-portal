@@ -109,6 +109,14 @@ test.describe('Teacher - consolidated "Not in this class yet" section', () => {
     await expect(page.getByText('Psolo Prev').filter({ visible: true })).toHaveCount(1);
     expect(await countFromLabel(page, /Previous students \(\d+\)/)).toBe(1);
 
+    // ── (c2) LIVE (no reload): the confirmed student joins the Enrolled roster and
+    //        shows Present immediately via router.refresh. Regression guard — the
+    //        marker must RE-SEED the fresh rows, else a just-marked child stays
+    //        Unmarked until a hard page reload (Vaibhav). ─────────────────────────
+    const liveRow = visibleAttRows(page).filter({ hasText: 'Psib Threegrade' }).first();
+    await expect(liveRow).toHaveCount(1, { timeout: 15_000 });
+    await expect(liveRow).toHaveAttribute('aria-pressed', 'true');
+
     // ── (d) Reload: the confirmed family joins the Enrolled roster (+2); the
     //        section's Previous group drops to 1. ────────────────────────────────
     await page.goto(`/teacher/levels/${LEVEL_ID}/attendance?date=${DATE}`);
