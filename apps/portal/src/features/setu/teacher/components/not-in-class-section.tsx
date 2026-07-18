@@ -154,27 +154,8 @@ export function NotInClassSection({ levelId, date, previousStudents }: Props) {
 
       {expanded && (
         <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {previous.length > 0 && (
-            <div>
-              <h3 style={groupHeading}>Previous students ({previous.length})</h3>
-              <p style={{ fontSize: 12.5, color: 'var(--muted)', margin: '0 0 10px', lineHeight: 1.5 }}>
-                Returning from last year. Mark one present to add their family to this year&apos;s class.
-              </p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {previous.map((row) => (
-                  <PersonRow
-                    key={row.mid}
-                    name={`${row.firstName} ${row.lastName}`}
-                    grade={row.schoolGrade}
-                    sub={null}
-                    busy={pending && busyMid === row.mid}
-                    onMark={() => confirmPrevious(row)}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-
+          {/* Registered · not enrolled FIRST (Vaibhav): a teacher is most likely
+              looking for a walk-in registered child to enroll on the spot. */}
           <div>
             <h3 style={groupHeading}>Registered · not enrolled</h3>
             <p style={{ fontSize: 12.5, color: 'var(--muted)', margin: '0 0 10px', lineHeight: 1.5 }}>
@@ -204,6 +185,27 @@ export function NotInClassSection({ levelId, date, previousStudents }: Props) {
               <div style={{ fontSize: 13, color: 'var(--muted)', padding: '4px 2px' }}>No registered students waiting to enroll.</div>
             )}
           </div>
+
+          {previous.length > 0 && (
+            <div>
+              <h3 style={groupHeading}>Previous students ({previous.length})</h3>
+              <p style={{ fontSize: 12.5, color: 'var(--muted)', margin: '0 0 10px', lineHeight: 1.5 }}>
+                Returning from last year. Mark one present to add their family to this year&apos;s class.
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {previous.map((row) => (
+                  <PersonRow
+                    key={row.mid}
+                    name={`${row.firstName} ${row.lastName}`}
+                    grade={row.schoolGrade}
+                    sub={null}
+                    busy={pending && busyMid === row.mid}
+                    onMark={() => confirmPrevious(row)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
 
           {loadedEmpty && (
             <div style={{ fontSize: 13, color: 'var(--muted)', textAlign: 'center', padding: '4px 2px' }}>

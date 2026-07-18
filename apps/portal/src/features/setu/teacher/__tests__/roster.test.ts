@@ -67,6 +67,22 @@ describe('buildRoster', () => {
     expect(r.members[0]!.status).toBe('late');
   });
 
+  it('a just-enrolled member with a NON-guest present event shows Present, but a guest event stays Unmarked', () => {
+    // Regression for Vaibhav's report: a "Registered · not enrolled" child marked
+    // present is enrolled AND gets a NON-guest event, so they show Present on the
+    // roster immediately. A guest event for the same enrolled member would be
+    // skipped (why the grade-eligible flow now writes isGuest:false).
+    const fam = (isGuest: boolean): { families: RosterFamily[]; events: RosterEventInput[] } => ({
+      families: [{ fid: 'CMT-A', legacyFid: null, enrolledMids: ['CMT-A-02'], members: [child('CMT-A-02', 'Apple', 'Grade 2')] }],
+      events: [{ mid: 'CMT-A-02', status: 'present', isGuest }],
+    });
+    const roster = new Set(['CMT-A']);
+    const rReg = buildRoster(level2, fam(false).families, fam(false).events, '2026-01-18', NOW, roster);
+    expect(rReg.members[0]!.status).toBe('present');
+    const rGuest = buildRoster(level2, fam(true).families, fam(true).events, '2026-01-18', NOW, roster);
+    expect(rGuest.members[0]!.status).toBe('unaccounted');
+  });
+
   it('surfaces a safety dot for a child with allergies', () => {
     const families: RosterFamily[] = [
       { fid: 'CMT-A', legacyFid: 'legacy-A', enrolledMids: ['CMT-A-02'], members: [child('CMT-A-02', 'Apple', 'Grade 2', { foodAllergies: 'Peanuts' })] },

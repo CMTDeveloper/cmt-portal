@@ -68,13 +68,16 @@ describe('POST /api/setu/teacher/grade-eligible (mark present → auto-enroll)',
     expect((await POST(postReq('teacher', { levelId: 'lvl', date: '2026-10-04' }))).status).toBe(400);
     expect(mockMarkGuest).not.toHaveBeenCalled();
   });
-  it('marks present as a guest (auto-enroll) with session uid/mid', async () => {
+  it('marks present as a ROSTER member (isGuest:false) + auto-enroll, with session uid/mid', async () => {
     const { POST } = await import('../route');
     const res = await POST(postReq('teacher', markBody));
     expect(res.status).toBe(200);
     expect(mockMarkGuest).toHaveBeenCalledWith(expect.objectContaining({
       levelId: 'lvl', mid: 'FAM-6-03', date: '2026-10-04', status: 'present',
       markedByUid: 'uid-teacher', markedByMid: 'CMT-A-01',
+      // Regular (non-guest) event so the newly-enrolled child shows Present on the
+      // enrolled roster immediately, not just after the attendance is re-taken.
+      isGuest: false,
     }));
     expect(await res.json()).toEqual({ ok: true, autoEnrolled: true });
   });

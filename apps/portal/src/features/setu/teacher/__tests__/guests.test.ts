@@ -67,6 +67,15 @@ describe('markGuest', () => {
     expect(res).toMatchObject({ ok: true, autoEnrolled: false });
     expect(mockEnroll).not.toHaveBeenCalled();
   });
+
+  it('writes a NON-guest event when isGuest:false (registered → roster member enroll)', async () => {
+    // The "Registered · not enrolled → mark present" flow enrolls the child AS a
+    // roster member, so the event must be isGuest:false or buildRoster skips it.
+    mockEnrollGet.mockResolvedValue({ exists: false });
+    await markGuest({ levelId: 'lvl', date: '2025-09-07', mid: 'CMT-Z-09', status: 'present', markedByUid: 'uid-t', markedByMid: 'CMT-T-01', isGuest: false });
+    const payload = mockSet.mock.calls[0]![0] as Record<string, unknown>;
+    expect(payload.isGuest).toBe(false);
+  });
 });
 
 describe('listGuests', () => {

@@ -30,10 +30,18 @@ export type MarkGuestResult =
   | { ok: false; reason: 'level-not-found' | 'member-not-found' };
 
 /**
- * Mark a visiting student present at a level (isGuest:true). This is the
- * documented first-attendance auto-enroll site (brief §5 / design §7.5): if the
- * guest's family has no active enrollment for the level's period, enroll them
- * (pins the donation snapshot — suggested, never charged).
+ * Mark a student present at a level, auto-enrolling their family on first
+ * attendance (brief §5 / design §7.5): if the family has no active enrollment for
+ * the level's period, enroll them (pins the donation snapshot — suggested, never
+ * charged).
+ *
+ * `isGuest` (default true) controls whether the attendance event is a GUEST mark
+ * or a regular roster mark:
+ *  - true  → a visiting student (door/walk-in). Shows in the Visitors list; the
+ *    enrolled roster's `buildRoster` intentionally SKIPS guest events.
+ *  - false → the student is being enrolled AS a roster member (the "Registered ·
+ *    not enrolled → mark present" flow). A regular event so it shows Present on
+ *    the enrolled roster immediately, not just after the attendance is re-taken.
  */
 export async function markGuest(params: {
   levelId: string;
@@ -42,6 +50,7 @@ export async function markGuest(params: {
   status: SetuAttendanceStatus;
   markedByUid: string;
   markedByMid: string | null;
+  isGuest?: boolean;
 }): Promise<MarkGuestResult> {
   const db = portalFirestore();
   const levelSnap = await db.collection('levels').doc(params.levelId).get();
@@ -69,7 +78,7 @@ export async function markGuest(params: {
       pid: level.pid,
       date: params.date,
       status: params.status,
-      isGuest: true,
+      isGuest: params.isGuest ?? true,
       markedByUid: params.markedByUid,
       markedByMid: params.markedByMid,
       markedAt: now,

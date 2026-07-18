@@ -1,5 +1,5 @@
 import { it, expect, vi, beforeEach, describe } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 const mockRefresh = vi.fn();
@@ -55,7 +55,10 @@ describe('NotInClassSection', () => {
     await user.click(screen.getByRole('button', { name: /not in this class yet/i }));
     await screen.findByText('Harshita M');
 
-    await user.click(screen.getAllByRole('button', { name: /mark present/i })[0]!);
+    // Registered · not enrolled renders FIRST now, so scope to Harshita's card
+    // (the Previous group) rather than the first Mark-present button.
+    const harshitaCard = screen.getByText('Harshita M').closest('.card') as HTMLElement;
+    await user.click(within(harshitaCard).getByRole('button', { name: /mark present/i }));
     await waitFor(() => {
       const calls = (global.fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls;
       expect(calls.some((c) => (c[0] as string) === '/api/setu/teacher/attendance/confirm-previous')).toBe(true);
@@ -78,6 +81,16 @@ describe('NotInClassSection', () => {
       expect(posts).toHaveLength(1);
     });
     await waitFor(() => expect(screen.queryByText('Child1 Family6')).toBeNull());
+  });
+
+  it('renders "Registered · not enrolled" BEFORE "Previous students" (Vaibhav order)', async () => {
+    const user = userEvent.setup();
+    render(<NotInClassSection levelId="L" date="2026-10-04" previousStudents={PREV} />);
+    await user.click(screen.getByRole('button', { name: /not in this class yet/i }));
+    const registered = await screen.findByText(/Registered · not enrolled/i);
+    const previous = screen.getByText(/Previous students/i);
+    // Registered heading precedes the Previous heading in document order.
+    expect(registered.compareDocumentPosition(previous) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('shows an all-enrolled empty state when there are no previous and no registered kids', async () => {

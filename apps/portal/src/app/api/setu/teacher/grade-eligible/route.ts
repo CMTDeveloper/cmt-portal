@@ -59,6 +59,10 @@ export async function POST(req: Request) {
     status: 'present',
     markedByUid: session.uid,
     markedByMid: session.mid,
+    // The child is being enrolled AS a roster member, so record a regular (non-
+    // guest) attendance event — otherwise buildRoster skips it and they show
+    // Unmarked on the enrolled roster until the attendance is re-taken.
+    isGuest: false,
   });
   if (!result.ok) {
     const status = result.reason === 'level-not-found' ? 404 : 400;
