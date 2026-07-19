@@ -12,7 +12,9 @@ type Db = FirebaseFirestore.Firestore;
 export interface DisclaimerState {
   version: number;
   schoolYear: string;
+  intro: string;
   sections: DisclaimerSection[];
+  acknowledgement: string;
   accepted: boolean;
 }
 
@@ -31,7 +33,9 @@ export async function getDisclaimerStateForFamily(
   return {
     version: config.version,
     schoolYear: currentYear,
+    intro: config.intro,
     sections: config.sections,
+    acknowledgement: config.acknowledgement,
     accepted: isDisclaimerAccepted(family.disclaimersAccepted ?? null, config, currentYear),
   };
 }

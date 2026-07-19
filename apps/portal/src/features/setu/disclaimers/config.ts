@@ -20,23 +20,35 @@ export async function getDisclaimersConfig(db: Db): Promise<DisclaimersConfig> {
   return parsed.success ? parsed.data : { ...DEFAULT_DISCLAIMERS_CONFIG };
 }
 
-// Compare only the content (id/title/body) — bookkeeping fields never trigger a
-// version bump.
-function sameSections(a: DisclaimerSection[], b: DisclaimerSection[]): boolean {
-  const norm = (xs: DisclaimerSection[]) =>
-    JSON.stringify(xs.map((s) => ({ id: s.id, title: s.title, body: s.body })));
+/** Editable disclaimer content (everything a publish can change). */
+export interface DisclaimerContent {
+  intro: string;
+  sections: DisclaimerSection[];
+  acknowledgement: string;
+}
+
+// Compare only the content (intro + id/title/body + acknowledgement) —
+// bookkeeping fields (version/updatedAt/updatedBy) never trigger a version bump.
+function sameContent(a: DisclaimerContent, b: DisclaimerContent): boolean {
+  const norm = (c: DisclaimerContent) =>
+    JSON.stringify({
+      intro: c.intro,
+      sections: c.sections.map((s) => ({ id: s.id, title: s.title, body: s.body })),
+      acknowledgement: c.acknowledgement,
+    });
   return norm(a) === norm(b);
 }
 
 /**
  * Publish new disclaimer content. Bumps `version` by 1 and writes when the
- * sections differ from the current content; a no-op (returns current unchanged)
- * when identical, so re-publishing the same text never forces a needless
- * re-accept. Runs in a transaction so version can't race between two publishes.
+ * content (intro, sections, or acknowledgement) differs from the current; a
+ * no-op (returns current unchanged) when identical, so re-publishing the same
+ * text never forces a needless re-accept. Runs in a transaction so version can't
+ * race between two publishes.
  */
 export async function setDisclaimersConfig(
   db: Db,
-  sections: DisclaimerSection[],
+  content: DisclaimerContent,
   actorMid: string,
 ): Promise<DisclaimersConfig> {
   const ref = db.collection(CONFIG_COLLECTION).doc(CONFIG_DOC);
@@ -46,14 +58,21 @@ export async function setDisclaimersConfig(
     const current: DisclaimersConfig =
       parsed && parsed.success ? parsed.data : { ...DEFAULT_DISCLAIMERS_CONFIG };
 
-    if (sameSections(current.sections, sections)) return current;
+    if (sameContent(current, content)) return current;
 
-    const next: DisclaimersConfig = { version: current.version + 1, sections };
+    const next: DisclaimersConfig = {
+      version: current.version + 1,
+      intro: content.intro,
+      sections: content.sections,
+      acknowledgement: content.acknowledgement,
+    };
     txn.set(
       ref,
       {
         version: next.version,
-        sections,
+        intro: next.intro,
+        sections: next.sections,
+        acknowledgement: next.acknowledgement,
         updatedAt: FieldValue.serverTimestamp(),
         updatedBy: actorMid,
       },

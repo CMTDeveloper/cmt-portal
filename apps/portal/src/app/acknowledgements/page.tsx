@@ -33,7 +33,7 @@ async function DisclaimersGate() {
   const state = await getDisclaimerStateForFamily(portalFirestore(), data.family);
   if (state.accepted) redirect('/family');
 
-  return <DisclaimerAcceptForm sections={state.sections} />;
+  return <DisclaimerAcceptForm sections={state.sections} intro={state.intro} acknowledgement={state.acknowledgement} />;
 }
 
 export default function DisclaimersPage() {

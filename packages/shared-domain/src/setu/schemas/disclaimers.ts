@@ -12,9 +12,17 @@ export type DisclaimerSection = z.infer<typeof DisclaimerSectionSchema>;
 // The admin-editable content doc (app_config/disclaimers). version is a positive
 // int bumped on each publish that changes content. updatedAt/updatedBy are
 // write-only bookkeeping, optional on read.
+//
+// `intro` is the preamble shown above the sections; `acknowledgement` is the
+// binding statement shown above the single "I Acknowledge" action. Both are
+// read-tolerant (optional, default '') so a config written before these fields
+// existed still parses — non-empty is enforced only where it matters (the
+// acknowledgement always renders; an empty intro just hides that block).
 export const DisclaimersConfigSchema = z.object({
   version: z.number().int().positive(),
+  intro: z.string().optional().default(''),
   sections: z.array(DisclaimerSectionSchema),
+  acknowledgement: z.string().optional().default(''),
   updatedAt: z.unknown().optional(),
   updatedBy: z.string().optional(),
 });

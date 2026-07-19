@@ -6,8 +6,10 @@ import { readSessionFromHeaders } from '@/lib/auth/headers';
 import { getDisclaimersConfig, setDisclaimersConfig } from '@/features/setu/disclaimers/config';
 
 // Write-time validation: non-empty id/title/body (the read schema deliberately
-// does NOT enforce this). 1..8 sections is a sane bound for the editor.
+// does NOT enforce this). 1..8 sections is a sane bound for the editor. intro and
+// acknowledgement are optional (default '') — trimmed, generously bounded.
 const PutSchema = z.object({
+  intro: z.string().trim().max(4000).optional().default(''),
   sections: z
     .array(
       z.object({
@@ -18,6 +20,7 @@ const PutSchema = z.object({
     )
     .min(1)
     .max(8),
+  acknowledgement: z.string().trim().max(4000).optional().default(''),
 });
 
 /** GET /api/admin/disclaimers — current editable content (admin only). */
@@ -27,7 +30,10 @@ export async function GET(req: Request) {
   if (!isAdmin(session)) return NextResponse.json({ error: 'admin-required' }, { status: 403 });
 
   const config = await getDisclaimersConfig(portalFirestore());
-  return NextResponse.json({ version: config.version, sections: config.sections }, { status: 200 });
+  return NextResponse.json(
+    { version: config.version, intro: config.intro, sections: config.sections, acknowledgement: config.acknowledgement },
+    { status: 200 },
+  );
 }
 
 /** PUT /api/admin/disclaimers — publish edited content; bumps the version when
@@ -45,6 +51,7 @@ export async function PUT(req: Request) {
 
   // actorMid: prefer the admin's mid; fall back to uid so the audit field is set.
   const actor = session.mid ?? session.uid ?? 'admin';
-  const config = await setDisclaimersConfig(portalFirestore(), parsed.data.sections, actor);
+  const { intro, sections, acknowledgement } = parsed.data;
+  const config = await setDisclaimersConfig(portalFirestore(), { intro, sections, acknowledgement }, actor);
   return NextResponse.json({ version: config.version }, { status: 200 });
 }

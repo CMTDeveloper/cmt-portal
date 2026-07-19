@@ -29,7 +29,12 @@ export default async function AdminDisclaimersPage() {
       </header>
 
       <div style={{ maxWidth: 640 }}>
-        <DisclaimersEditor initialSections={config.sections} initialVersion={config.version} />
+        <DisclaimersEditor
+          initialIntro={config.intro}
+          initialSections={config.sections}
+          initialAcknowledgement={config.acknowledgement}
+          initialVersion={config.version}
+        />
       </div>
     </>
   );

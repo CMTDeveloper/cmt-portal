@@ -21,12 +21,12 @@ describe('GET /api/admin/disclaimers', () => {
     readSession.mockReturnValue({ role: 'family-manager' });
     expect((await GET(new Request('http://x'))).status).toBe(403);
   });
-  it('returns the editable config for an admin', async () => {
+  it('returns the editable config (incl. intro + acknowledgement) for an admin', async () => {
     readSession.mockReturnValue({ role: 'admin', uid: 'u' });
-    getConfig.mockResolvedValue({ version: 4, sections: [SECTION] });
+    getConfig.mockResolvedValue({ version: 4, intro: 'Hari Om!', sections: [SECTION], acknowledgement: 'I confirm.' });
     const res = await GET(new Request('http://x'));
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ version: 4, sections: [SECTION] });
+    expect(await res.json()).toMatchObject({ version: 4, intro: 'Hari Om!', sections: [SECTION], acknowledgement: 'I confirm.' });
   });
 });
 
@@ -36,12 +36,27 @@ describe('PUT /api/admin/disclaimers', () => {
     const res = await PUT(new Request('http://x', { method: 'PUT', body: JSON.stringify({ sections: [{ id: 'a', title: '', body: 'b' }] }) }));
     expect(res.status).toBe(400);
   });
-  it('publishes and returns the new version', async () => {
+  it('publishes and returns the new version (intro/acknowledgement default to empty)', async () => {
     readSession.mockReturnValue({ role: 'admin', uid: 'u', mid: 'm-admin' });
     setConfig.mockResolvedValue({ version: 5, sections: [SECTION] });
     const res = await PUT(new Request('http://x', { method: 'PUT', body: JSON.stringify({ sections: [SECTION] }) }));
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ version: 5 });
-    expect(setConfig).toHaveBeenCalledWith(expect.anything(), [SECTION], 'm-admin');
+    expect(setConfig).toHaveBeenCalledWith(expect.anything(), { intro: '', sections: [SECTION], acknowledgement: '' }, 'm-admin');
+  });
+
+  it('passes intro + acknowledgement through to setDisclaimersConfig', async () => {
+    readSession.mockReturnValue({ role: 'admin', uid: 'u', mid: 'm-admin' });
+    setConfig.mockResolvedValue({ version: 6, sections: [SECTION] });
+    const res = await PUT(new Request('http://x', {
+      method: 'PUT',
+      body: JSON.stringify({ intro: 'Hari Om!', sections: [SECTION], acknowledgement: 'I confirm.' }),
+    }));
+    expect(res.status).toBe(200);
+    expect(setConfig).toHaveBeenCalledWith(
+      expect.anything(),
+      { intro: 'Hari Om!', sections: [SECTION], acknowledgement: 'I confirm.' },
+      'm-admin',
+    );
   });
 });

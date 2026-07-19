@@ -4,6 +4,12 @@
 // surface an error toast (matches searchFamiliesClient).
 import type { DisclaimerSection } from '@cmt/shared-domain/setu';
 
+export interface DisclaimerContentInput {
+  intro: string;
+  sections: DisclaimerSection[];
+  acknowledgement: string;
+}
+
 export async function acceptDisclaimersClient(): Promise<void> {
   const res = await fetch('/api/setu/disclaimers/accept', {
     method: 'POST',
@@ -13,12 +19,12 @@ export async function acceptDisclaimersClient(): Promise<void> {
   if (!res.ok) throw new Error(`accept-failed:${res.status}`);
 }
 
-export async function saveDisclaimersClient(sections: DisclaimerSection[]): Promise<number> {
+export async function saveDisclaimersClient(content: DisclaimerContentInput): Promise<number> {
   const res = await fetch('/api/admin/disclaimers', {
     method: 'PUT',
     headers: { 'content-type': 'application/json' },
     credentials: 'same-origin',
-    body: JSON.stringify({ sections }),
+    body: JSON.stringify(content),
   });
   if (!res.ok) throw new Error(`save-failed:${res.status}`);
   const body = (await res.json()) as { version: number };

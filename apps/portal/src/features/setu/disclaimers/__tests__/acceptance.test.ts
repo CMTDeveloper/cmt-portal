@@ -5,7 +5,12 @@ vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
   FieldValue: { serverTimestamp: () => '__ts__' },
 }));
 vi.mock('../config', () => ({
-  getDisclaimersConfig: vi.fn(async () => ({ version: 3, sections: DEFAULT_DISCLAIMERS_CONFIG.sections })),
+  getDisclaimersConfig: vi.fn(async () => ({
+    version: 3,
+    intro: DEFAULT_DISCLAIMERS_CONFIG.intro,
+    sections: DEFAULT_DISCLAIMERS_CONFIG.sections,
+    acknowledgement: DEFAULT_DISCLAIMERS_CONFIG.acknowledgement,
+  })),
 }));
 vi.mock('@/features/setu/rollover/school-year-config', () => ({
   getSchoolYearConfig: vi.fn(async () => ({ currentYear: '2026-27' })),
@@ -23,7 +28,9 @@ describe('getDisclaimerStateForFamily', () => {
     expect(state.accepted).toBe(true);
     expect(state.version).toBe(3);
     expect(state.schoolYear).toBe('2026-27');
-    expect(state.sections).toHaveLength(4);
+    expect(state.sections).toHaveLength(5);
+    expect(state.intro).toContain('Hari Om!');
+    expect(state.acknowledgement).toContain('I confirm');
   });
 
   it('accepted=false when no acceptance is stored', async () => {
