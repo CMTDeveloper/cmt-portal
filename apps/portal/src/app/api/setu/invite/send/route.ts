@@ -8,6 +8,7 @@ import { portalEnv } from '@/lib/env';
 import { resolveSender } from '@/lib/aws/resolve-sender';
 import { setuInviteEmail } from '@/lib/aws/templates/setu-invite-email';
 import { allocateMemberPublicIds } from '@/features/setu/ids/public-id-allocator';
+import { nextMemberMid } from '@/features/setu/ids/member-mid';
 
 
 const bodySchema = z.object({
@@ -20,10 +21,6 @@ const bodySchema = z.object({
   email: z.string().email(),
   relation: z.string().min(1).max(40),
 });
-
-function zeroPad(n: number): string {
-  return n.toString().padStart(2, '0');
-}
 
 export async function POST(req: Request) {
   if (!flags.setuAuth) {
@@ -115,8 +112,10 @@ export async function POST(req: Request) {
       // added to family.managers and has NO contactKey yet — both happen on accept,
       // which preserves the last-manager count and the anti-theft contactKey check.
       // uid is null until the invitee signs in and accept binds their auth.
-      const memberCount = (membersSnap.docs as unknown[]).length;
-      const newMid = `${fid}-${zeroPad(memberCount + 1)}`;
+      // Collision-free: highest existing suffix + 1, NOT member count (count+1
+      // reuses a deleted member's slot and txn.set below would overwrite them —
+      // the Rana-family data-loss bug).
+      const newMid = nextMemberMid(fid, (membersSnap.docs as Array<{ id: string }>).map((d) => d.id));
       const memberRef = db.collection('families').doc(fid).collection('members').doc(newMid);
       txn.set(memberRef, {
         mid: newMid,

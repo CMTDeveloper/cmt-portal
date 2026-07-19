@@ -5,6 +5,7 @@ import { flags } from '@/lib/flags';
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
 import { hashContactKey } from '@/features/setu/registration/hash-contact-key';
 import { allocateMemberPublicIds } from '@/features/setu/ids/public-id-allocator';
+import { nextMemberMid } from '@/features/setu/ids/member-mid';
 import { syncActiveEnrollmentMemberships } from '@/features/setu/enrollment/sync-enrollment-members';
 import { whatsMissingForMember, type MemberRequiredField } from '@cmt/shared-domain';
 
@@ -43,9 +44,6 @@ const addMemberSchema = z.object({
   emergencyContacts: z.tuple([emergencyContactSchema, emergencyContactSchema]).nullish(),
 });
 
-function zeroPad(n: number): string {
-  return n.toString().padStart(2, '0');
-}
 
 // Maps a missing required field (from the shared matrix) to the 400 error code
 // the write routes return. Adult email/phone collapse to one `contact-required`.
@@ -217,8 +215,9 @@ export async function POST(req: Request) {
       }
     }
 
-    const memberCount = (membersSnap as { size: number }).size ?? 0;
-    const newMid = `${fid}-${zeroPad(memberCount + 1)}`;
+    // Collision-free: highest existing suffix + 1, NOT member count (count+1
+    // reuses a deleted member's slot and the txn.set below would overwrite them).
+    const newMid = nextMemberMid(fid, (membersSnap.docs as Array<{ id: string }>).map((d) => d.id));
     const now = FieldValue.serverTimestamp();
 
     const memberRef = db.collection('families').doc(fid).collection('members').doc(newMid);

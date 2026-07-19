@@ -76,7 +76,9 @@ function pendingMemberData(): Record<string, unknown> | undefined {
   return call?.[1] as Record<string, unknown> | undefined;
 }
 
-type RosterMember = { email?: string | null; altEmails?: string[] };
+// `mid` is optional — set it to model an explicit doc id (e.g. a numbering gap);
+// otherwise the mock synthesizes a sequential id.
+type RosterMember = { email?: string | null; altEmails?: string[]; mid?: string };
 
 function setupFirestoreMock(overrides: {
   familyExists?: boolean;
@@ -107,9 +109,15 @@ function setupFirestoreMock(overrides: {
     data: () => familyExists ? { fid: 'FAM001ABCD12', name: familyName } : undefined,
   };
   // The route reads the members subcollection to reject inviting an existing
-  // member; the read returns a query snapshot with a `.docs` array.
+  // member AND to allocate the next mid; the read returns a query snapshot whose
+  // docs carry a real `.id` (sequential member ids, manager = -01, like Firestore).
   const membersSnap = {
-    docs: roster.map((m) => ({ data: () => m })),
+    docs: roster.map((m, i) => ({
+      // Honor an explicit `mid` (to model numbering gaps) else synthesize a
+      // sequential id (manager = -01), like Firestore returns.
+      id: m.mid ?? `FAM001ABCD12-${String(i + 1).padStart(2, '0')}`,
+      data: () => m,
+    })),
   };
   const memberSnap = {
     exists: memberExists,
@@ -276,6 +284,24 @@ describe('POST /api/setu/invite/send', () => {
     expect(member!.publicMid).toBe('50999');
     // The invite doc records this member's mid.
     expect(inviteDocData().memberMid).toBe('FAM001ABCD12-02');
+  });
+
+  it('never reuses a deleted member’s slot — regression for the Rana-family data loss', async () => {
+    // The wife (-02) had been deleted, leaving a gap: -01, -03, -04. The old
+    // count+1 logic computed -04 and OVERWROTE the child at -04. The new mid MUST
+    // be -05 so no existing member doc is clobbered.
+    setupFirestoreMock({
+      roster: [
+        { mid: 'FAM001ABCD12-01', email: 'vaibhav@rana.com', altEmails: [] },
+        { mid: 'FAM001ABCD12-03', email: 'parth@rana.com', altEmails: [] },
+        { mid: 'FAM001ABCD12-04', email: 'harshita@rana.com', altEmails: [] },
+      ],
+    });
+    const res = await POST(makeRequest(validBody, managerHeaders()));
+    expect(res.status).toBe(201);
+    const member = pendingMemberData();
+    expect(member!.mid).toBe('FAM001ABCD12-05');
+    expect(inviteDocData().memberMid).toBe('FAM001ABCD12-05');
   });
 
   it('does NOT add the pending member to family.managers (that waits for accept)', async () => {
