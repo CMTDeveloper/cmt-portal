@@ -141,7 +141,6 @@ export function DisclaimerAcceptForm({
         type="submit"
         className="btn btn--p btn--block"
         data-testid="disclaimers-accept"
-        aria-disabled={!acknowledged}
         disabled={saving}
       >
         {saving ? 'Saving…' : 'I Acknowledge'}
