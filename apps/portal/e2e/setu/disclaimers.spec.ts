@@ -15,10 +15,15 @@ import { signInFamilyAndSaveStorage } from '../auth-helpers';
  *      shared fixture's prior acceptance STALE (drives it "pending" through the
  *      REAL API — no shelling out to the seed mid-run).
  *   2. Visiting /family then bounces to /acknowledgements (the layout DisclaimerGate).
- *   3. The accept screen's continue button is disabled until every section's
- *      checkbox is checked, then enabled.
+ *   3. The accept screen shows the intro + sections + acknowledgement; the single
+ *      "I Acknowledge" button is disabled until the one acknowledgement checkbox
+ *      is ticked, then enabled.
  *   4. Accepting hard-navigates to /family and the gate no longer fires on a
  *      re-visit.
+ *
+ * The admin PUT round-trips intro + sections + acknowledgement (the content model
+ * carries all three) so publishing/restoring here never blanks the live intro or
+ * acknowledgement.
  *
  * PRECONDITION (owner gate): NEXT_PUBLIC_FEATURE_SETU_DISCLAIMERS=true must be set
  * in the UAT Vercel env, and the shared fixture seeded `--disclaimers accepted`
@@ -38,10 +43,11 @@ test.describe.configure({ mode: 'serial' });
 // re-auth; the per-test `page`/`request` fixtures get baseURL from the config.
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3001';
 
-// A deep copy of the PRE-mutation `sections` array captured in the test, so the
-// afterAll can PUT the original content back and stop this spec permanently
-// appending `(rev <ms>)` to section 0's body in the shared UAT config doc.
-let originalSections: unknown[] | null = null;
+// A deep copy of the PRE-mutation content (intro + sections + acknowledgement)
+// captured in the test, so the afterAll can PUT the original content back and stop
+// this spec permanently appending `(rev <ms>)` to section 0's body — or blanking
+// the intro/acknowledgement — in the shared UAT config doc.
+let originalContent: { intro: string; sections: unknown[]; acknowledgement: string } | null = null;
 
 test.beforeAll(async () => {
   // Skip the whole file when creds are absent (CI without .env.local), matching
@@ -57,29 +63,32 @@ test('manager is gated to /acknowledgements, accepts, and reaches the dashboard'
   test.skip(!hasFamilyCreds, 'E2E_FAMILY_EMAIL / E2E_FAMILY_PASSWORD required (run seed:e2e-family first)');
 
   // 1) Make the fixture "pending" by publishing a new admin version (bumps the
-  //    content version → the fixture's prior acceptance is now stale).
+  //    content version → the fixture's prior acceptance is now stale). Round-trip
+  //    intro + acknowledgement so publishing never blanks them.
   const editRes = await request.get('/api/admin/disclaimers');
   expect(editRes.ok()).toBeTruthy();
-  const { sections } = await editRes.json();
+  const { intro, sections, acknowledgement } = await editRes.json();
   // Snapshot the ORIGINAL content BEFORE mutating so afterAll can restore it.
-  originalSections = JSON.parse(JSON.stringify(sections));
+  originalContent = JSON.parse(JSON.stringify({ intro, sections, acknowledgement }));
   const bumped = sections.map((s: { id: string; title: string; body: string }, i: number) =>
     i === 0 ? { ...s, body: `${s.body} (rev ${Date.now()})` } : s,
   );
-  const pubRes = await request.put('/api/admin/disclaimers', { data: { sections: bumped } });
+  const pubRes = await request.put('/api/admin/disclaimers', { data: { intro, sections: bumped, acknowledgement } });
   expect(pubRes.ok()).toBeTruthy();
 
   // 2) Visiting /family now bounces to /acknowledgements (hard nav re-runs the gate).
   await page.goto('/family');
   await expect(page).toHaveURL(/\/acknowledgements$/);
 
-  // 3) The accept screen shows the sections; the button is disabled until all
-  //    boxes are checked.
+  // 3) The accept screen shows the content; the single "I Acknowledge" button is
+  //    disabled until the one acknowledgement checkbox is ticked. (There is no
+  //    per-section checkbox anymore — a single confirm gates the button.)
   const acceptBtn = page.getByTestId('disclaimers-accept');
+  await expect(acceptBtn).toHaveText(/I Acknowledge/);
   await expect(acceptBtn).toBeDisabled();
-  for (const s of bumped) {
-    await page.getByTestId(`disclaimer-check-${s.id}`).click();
-  }
+  // The first section's title renders (proves the content, not a checkbox, is shown).
+  await expect(page.getByText(bumped[0].title, { exact: false }).first()).toBeVisible();
+  await page.getByTestId('disclaimer-ack-checkbox').click();
   await expect(acceptBtn).toBeEnabled();
 
   // 4) Accept → hard nav to /family, and no more gate on re-visit.
@@ -96,12 +105,13 @@ test.afterAll(async () => {
   // this is a belt-and-braces restore in case it failed mid-way).
   const ctx = await pwRequest.newContext({ baseURL: BASE_URL });
   await signInFamilyAndSaveStorage(ctx);
-  // Restore the ORIGINAL content so we don't permanently pollute the shared UAT
-  // config doc with the `(rev <ms>)` body bump. Wrapped so a cleanup failure
-  // never fails the suite.
-  if (originalSections) {
+  // Restore the ORIGINAL content (intro + sections + acknowledgement) so we don't
+  // permanently pollute the shared UAT config doc with the `(rev <ms>)` body bump
+  // or blank the intro/acknowledgement. Wrapped so a cleanup failure never fails
+  // the suite.
+  if (originalContent) {
     try {
-      await ctx.put('/api/admin/disclaimers', { data: { sections: originalSections } });
+      await ctx.put('/api/admin/disclaimers', { data: originalContent });
     } catch {
       // best-effort restore; ignore
     }
