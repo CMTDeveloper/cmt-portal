@@ -22,7 +22,7 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
-## 2026-07-19 - `8918f55` - GET /api/setu/disclaimers gains `intro` + `acknowledgement`; content is now a single-acknowledgement flow
+## 2026-07-19 - `6bfbc95` - GET /api/setu/disclaimers gains `intro` + `acknowledgement`; content is now a single-acknowledgement flow
 The disclaimers/acknowledgements content model gained two fields, and the family-facing UX changed from a per-section checkbox to one "I Acknowledge" at the bottom (matching the printed CMT Bala Vihar Acknowledgements).
 - **`GET /api/setu/disclaimers`** response gains two string fields: **`intro`** (preamble shown above the sections; may contain a URL to auto-link, e.g. the pledge link) and **`acknowledgement`** (the binding statement shown above the acknowledge action). Both are **always present** now (server defaults them to `''`); an empty string means "hide that block". `version`, `schoolYear`, `sections`, and `accepted` are **unchanged**. Section `body` strings are newline-separated bullets (each line starts with `• `).
 - **Acceptance UX (behavioral, no endpoint change):** `POST /api/setu/disclaimers/accept` is **unchanged** (no body, records `{version, schoolYear}`). The intended UI is now: render `intro`, the read-only value sections, then `acknowledgement`, and gate a single confirm on ONE checkbox — not a checkbox per section.
