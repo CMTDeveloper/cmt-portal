@@ -80,18 +80,21 @@ test('manager is gated to /acknowledgements, accepts, and reaches the dashboard'
   await page.goto('/family');
   await expect(page).toHaveURL(/\/acknowledgements$/);
 
-  // 3) The accept screen shows the content; the single "I Acknowledge" button is
-  //    disabled until the one acknowledgement checkbox is ticked. (There is no
-  //    per-section checkbox anymore — a single confirm gates the button.)
+  // 3) The accept screen shows the content. Clicking "I Acknowledge" WITHOUT
+  //    ticking the single checkbox surfaces a validation error and does NOT
+  //    proceed (no per-section checkboxes — one confirm gates submission).
   const acceptBtn = page.getByTestId('disclaimers-accept');
   await expect(acceptBtn).toHaveText(/I Acknowledge/);
-  await expect(acceptBtn).toBeDisabled();
   // The first section's title renders (proves the content, not a checkbox, is shown).
   await expect(page.getByText(bumped[0].title, { exact: false }).first()).toBeVisible();
-  await page.getByTestId('disclaimer-ack-checkbox').click();
-  await expect(acceptBtn).toBeEnabled();
+  await acceptBtn.click(); // unchecked
+  await expect(page.getByTestId('disclaimer-ack-error')).toBeVisible();
+  await expect(page).toHaveURL(/\/acknowledgements$/); // did not proceed
 
-  // 4) Accept → hard nav to /family, and no more gate on re-visit.
+  // 4) Tick the box (clears the error), accept → hard nav to /family, and no more
+  //    gate on re-visit.
+  await page.getByTestId('disclaimer-ack-checkbox').click();
+  await expect(page.getByTestId('disclaimer-ack-error')).toHaveCount(0);
   await acceptBtn.click();
   await expect(page).toHaveURL(/\/family$/);
   await page.goto('/family');

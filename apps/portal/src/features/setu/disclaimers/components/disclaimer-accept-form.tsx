@@ -38,11 +38,19 @@ export function DisclaimerAcceptForm({
   acknowledgement?: string;
 }) {
   const [acknowledged, setAcknowledged] = useState(false);
+  const [showError, setShowError] = useState(false);
   const [saving, setSaving] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!acknowledged || saving) return;
+    if (saving) return;
+    // The button stays enabled so a click gives feedback: if the box isn't
+    // ticked, show a validation message and highlight it instead of silently
+    // no-op'ing (a disabled button gave no clue why nothing happened).
+    if (!acknowledged) {
+      setShowError(true);
+      return;
+    }
     setSaving(true);
     try {
       await acceptDisclaimersClient();
@@ -93,22 +101,48 @@ export function DisclaimerAcceptForm({
         </div>
       )}
 
-      <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', fontSize: 13.5, marginBottom: 16, lineHeight: 1.5 }}>
+      <label
+        style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: 10,
+          cursor: 'pointer',
+          fontSize: 13.5,
+          marginBottom: showError ? 8 : 16,
+          lineHeight: 1.5,
+          padding: 10,
+          margin: '0 -10px',
+          borderRadius: 10,
+          border: `1px solid ${showError ? 'var(--err)' : 'transparent'}`,
+          background: showError ? 'var(--err-soft, rgba(200,30,30,0.06))' : 'transparent',
+        }}
+      >
         <input
           type="checkbox"
           data-testid="disclaimer-ack-checkbox"
           checked={acknowledged}
-          onChange={(e) => setAcknowledged(e.target.checked)}
+          aria-invalid={showError}
+          onChange={(e) => {
+            setAcknowledged(e.target.checked);
+            if (e.target.checked) setShowError(false);
+          }}
           style={{ width: 18, height: 18, marginTop: 2, flexShrink: 0 }}
         />
         On behalf of my family, I confirm that I have read and agree to the above.
       </label>
 
+      {showError && (
+        <p role="alert" data-testid="disclaimer-ack-error" style={{ fontSize: 13, color: 'var(--err)', margin: '0 0 14px', lineHeight: 1.5 }}>
+          Please check the box above to acknowledge before continuing.
+        </p>
+      )}
+
       <button
         type="submit"
         className="btn btn--p btn--block"
         data-testid="disclaimers-accept"
-        disabled={!acknowledged || saving}
+        aria-disabled={!acknowledged}
+        disabled={saving}
       >
         {saving ? 'Saving…' : 'I Acknowledge'}
       </button>

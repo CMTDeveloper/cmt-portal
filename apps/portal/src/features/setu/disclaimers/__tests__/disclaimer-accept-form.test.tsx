@@ -45,16 +45,23 @@ describe('DisclaimerAcceptForm', () => {
     expect(screen.getByTestId('disclaimer-ack-checkbox')).toBeInTheDocument();
   });
 
-  it('keeps the "I Acknowledge" button disabled until the single box is checked', () => {
+  it('shows a validation error (and does NOT submit) when "I Acknowledge" is clicked unchecked', async () => {
     render(<DisclaimerAcceptForm sections={SECTIONS} intro={INTRO} acknowledgement={ACK} />);
     const btn = screen.getByTestId('disclaimers-accept');
     expect(btn).toHaveTextContent('I Acknowledge');
-    expect(btn).toBeDisabled();
+    expect(screen.queryByTestId('disclaimer-ack-error')).toBeNull();
+
+    fireEvent.click(btn); // unchecked
+    expect(screen.getByTestId('disclaimer-ack-error')).toBeInTheDocument();
+    expect(accept).not.toHaveBeenCalled();
+    expect(navigateTo).not.toHaveBeenCalled();
+
+    // Ticking the box clears the error.
     fireEvent.click(screen.getByTestId('disclaimer-ack-checkbox'));
-    expect(btn).toBeEnabled();
+    expect(screen.queryByTestId('disclaimer-ack-error')).toBeNull();
   });
 
-  it('acknowledges then hard-navigates to /family', async () => {
+  it('acknowledges then hard-navigates to /family once the box is checked', async () => {
     render(<DisclaimerAcceptForm sections={SECTIONS} intro={INTRO} acknowledgement={ACK} />);
     fireEvent.click(screen.getByTestId('disclaimer-ack-checkbox'));
     fireEvent.click(screen.getByTestId('disclaimers-accept'));
