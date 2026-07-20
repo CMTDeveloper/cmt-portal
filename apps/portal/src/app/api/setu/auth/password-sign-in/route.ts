@@ -1,18 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { flags } from '@/lib/flags';
-import { checkAndRecordOtpRateLimit, normalizeContact } from '@/features/check-in/shared';
-import { portalAuth } from '@cmt/firebase-shared/admin/auth';
-import {
-  createPortalSessionCookie,
-  exchangeCustomTokenForIdToken,
-} from '@cmt/firebase-shared/admin/session';
-import {
-  buildSessionClaimsForContact,
-  hasSession,
-  isPendingApproval,
-} from '@/features/setu/auth/build-session-claims';
-import { firebaseSignInWithPassword } from '@/features/setu/auth/firebase-rest';
+import { mintPasswordSession } from '@/features/setu/auth/mint-password-session';
 
 const bodySchema = z.object({
   email: z.string().email(),
@@ -32,84 +21,49 @@ export async function POST(req: Request) {
   }
 
   const { email, password } = parsed.data;
-  const normalized = normalizeContact('email', email);
-
-  const rate = await checkAndRecordOtpRateLimit(normalized);
-  if (!rate.allowed) {
-    return NextResponse.json({ error: 'too-many-requests', resetAt: rate.resetAt }, { status: 429 });
-  }
-
-  const signInResult = await firebaseSignInWithPassword({ email, password });
-
-  if (!signInResult.ok) {
-    switch (signInResult.error) {
-      case 'invalid-credentials':
-        return NextResponse.json({ error: 'invalid-credentials' }, { status: 401 });
-      case 'user-disabled':
-        return NextResponse.json({ error: 'user-disabled' }, { status: 403 });
-      case 'too-many-requests':
-        return NextResponse.json({ error: 'too-many-requests' }, { status: 429 });
-      default:
-        return NextResponse.json({ error: 'network' }, { status: 500 });
-    }
-  }
-
-  const sessionResult = await buildSessionClaimsForContact({
-    type: 'email',
-    value: email,
-    contactProvenance: 'password',
-  });
-
-  // Gated member: the email resolves to a non-manager member whose
-  // portalAccess === 'pending' (awaiting a manager's approval). Even with a
-  // valid password we do NOT mint a family session — the gate must hold on
-  // every sign-in path, not just OTP.
-  if (isPendingApproval(sessionResult)) {
-    return NextResponse.json(
-      {
-        pendingApproval: true,
-        pendingFid: sessionResult.pendingFid,
-        pendingMatchedMid: sessionResult.pendingMatchedMid,
-      },
-      { status: 200 },
-    );
-  }
-
-  if (!hasSession(sessionResult)) {
-    return NextResponse.json({ redirectTo: sessionResult.redirectTo }, { status: 200 });
-  }
-
-  const { uid, claims, redirectTo: baseRedirectTo } = sessionResult;
 
   const reqUrl = new URL(req.url);
   const urlMode = reqUrl.searchParams.get('mode');
   const mode = urlMode === 'mobile' || parsed.data.mode === 'mobile' ? 'mobile' : 'web';
+  const from = reqUrl.searchParams.get('from');
 
-  let redirectTo = baseRedirectTo;
-  const fromParam = reqUrl.searchParams.get('from');
-  if (fromParam && fromParam.startsWith('/') && !fromParam.startsWith('//')) {
-    redirectTo = fromParam;
+  const result = await mintPasswordSession({ email, password, from, mode });
+
+  switch (result.status) {
+    case 'error':
+      return NextResponse.json(
+        result.resetAt !== undefined
+          ? { error: result.error, resetAt: result.resetAt }
+          : { error: result.error },
+        { status: result.httpStatus },
+      );
+    case 'pending-approval':
+      // Gated member: the email resolves to a non-manager member whose
+      // portalAccess === 'pending' (awaiting a manager's approval). Even with a
+      // valid password we do NOT mint a family session - the gate must hold on
+      // every sign-in path, not just OTP.
+      return NextResponse.json(
+        {
+          pendingApproval: true,
+          pendingFid: result.pendingFid,
+          pendingMatchedMid: result.pendingMatchedMid,
+        },
+        { status: 200 },
+      );
+    case 'no-session':
+      return NextResponse.json({ redirectTo: result.redirectTo }, { status: 200 });
+    case 'mobile':
+      return NextResponse.json({ customToken: result.customToken }, { status: 200 });
+    case 'session': {
+      const res = NextResponse.json({ redirectTo: result.redirectTo }, { status: 200 });
+      res.cookies.set('__session', result.cookieValue, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/',
+        maxAge: result.maxAgeSeconds,
+      });
+      return res;
+    }
   }
-
-  const auth = portalAuth();
-  await auth.setCustomUserClaims(uid, claims);
-  const customToken = await auth.createCustomToken(uid, claims);
-
-  if (mode === 'mobile') {
-    return NextResponse.json({ customToken }, { status: 200 });
-  }
-
-  const idToken = await exchangeCustomTokenForIdToken(customToken);
-  const expiresInDays = Number(process.env.SESSION_COOKIE_EXPIRES_DAYS ?? '14');
-  const session = await createPortalSessionCookie(idToken, expiresInDays);
-
-  const res = NextResponse.json({ redirectTo }, { status: 200 });
-  res.cookies.set('__session', session, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    path: '/',
-    maxAge: expiresInDays * 24 * 60 * 60,
-  });
-  return res;
 }
