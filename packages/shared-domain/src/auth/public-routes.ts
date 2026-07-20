@@ -64,6 +64,8 @@ export const PUBLIC_ROUTES = [
   '/check-in',
   '/check-in/guest',
   '/check-in/lookup',
+  // Kiosk staff login PAGE - public; the sevak team has no session yet.
+  '/check-in/staff-sign-in',
 
   // Public auth APIs (legacy Slice B)
   '/api/auth/admin/signin',
