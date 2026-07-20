@@ -207,7 +207,7 @@ function SummaryStrip({ summary }: { summary: RosterReportSummary }) {
         </div>
       )}
       <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 8, fontSize: 12, color: 'var(--body-text)' }}>
-        <span style={{ color: 'var(--muted)', fontWeight: 600 }}>Engagement:</span>
+        <span style={{ color: 'var(--muted)', fontWeight: 600 }}>Enrollment:</span>
         <span style={{ fontFeatureSettings: '"tnum"' }}>Enrolled · {summary.byEngagement.enrolled}</span>
         <span style={{ fontFeatureSettings: '"tnum"' }}>Registered · {summary.byEngagement.registered}</span>
         <span style={{ fontFeatureSettings: '"tnum"' }}>Not enrolled · {summary.byEngagement.notEnrolled}</span>
@@ -239,13 +239,16 @@ function RosterContent({ year, locationOptions }: { year?: string; locationOptio
   const [rows, setRows] = useState<RosterReportRow[] | null>(null);
   const [loadError, setLoadError] = useState(false);
 
-  // Filters
+  // Filters. Default to the "active, settled" families the welcome team cares
+  // about most - Paid + Enrolled - so the roster opens on real families rather
+  // than the long tail of registered-not-enrolled / unpaid. Either dropdown can be
+  // set back to "All" to widen the view.
   const [location, setLocation] = useState<string | null>(null);
   const [program, setProgram] = useState<string | null>(null);
   const [level, setLevel] = useState<string | null>(null);
   const [grade, setGrade] = useState<string | null>(null);
-  const [payment, setPayment] = useState<RosterPayment | null>(null);
-  const [engagement, setEngagement] = useState<RosterEngagement | null>(null);
+  const [payment, setPayment] = useState<RosterPayment | null>('paid');
+  const [engagement, setEngagement] = useState<RosterEngagement | null>('enrolled');
   const [shown, setShown] = useState(INITIAL_SHOWN);
 
   // Search (unchanged behavior)
@@ -368,7 +371,7 @@ function RosterContent({ year, locationOptions }: { year?: string; locationOptio
               options={ROSTER_PAYMENTS.map((p) => ({ value: p, label: p[0]!.toUpperCase() + p.slice(1) }))}
             />
             <FilterSelect
-              label="Engagement" value={engagement ?? ''}
+              label="Enrollment" value={engagement ?? ''}
               onChange={(v) => setEngagement(v === '' ? null : (v as RosterEngagement))}
               options={[
                 { value: 'enrolled', label: 'Enrolled' },

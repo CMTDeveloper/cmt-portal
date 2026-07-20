@@ -51,11 +51,33 @@ beforeEach(() => {
 // element appears twice AND each branch owns independent React state. We use
 // getAllBy*/findAllBy* + `.length` (repo convention), and for interaction tests
 // we act on EVERY matching control so both branches move together.
+// The roster opens filtered to Paid + Enrolled. Clear both back to "All" so a
+// test can see the full loaded set (used where the test isn't about that default).
+async function clearDefaultFilters() {
+  await screen.findAllByRole('combobox', { name: 'Payment' });
+  for (const sel of screen.getAllByRole('combobox', { name: 'Payment' })) await userEvent.selectOptions(sel, '');
+  for (const sel of screen.getAllByRole('combobox', { name: 'Enrollment' })) await userEvent.selectOptions(sel, '');
+}
+
 describe('RosterBrowser', () => {
+  it('opens filtered to Paid + Enrolled by default', async () => {
+    // RANA = paid + enrolled → shown; SHAH = outstanding + registered → hidden.
+    fetchRosterReportClient.mockResolvedValue({ rows: [RANA, SHAH, PENDING] });
+    render(<RosterBrowser locationOptions={['Brampton', 'Scarborough']} />);
+    expect((await screen.findAllByText('Vaibhav & Noopur Rana')).length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText('Priya Shah')).not.toBeInTheDocument();
+    expect(screen.queryByText('Aariyan Anup')).not.toBeInTheDocument();
+    // The Payment + Enrollment dropdowns reflect the active default.
+    for (const sel of screen.getAllByRole('combobox', { name: 'Payment' })) expect((sel as HTMLSelectElement).value).toBe('paid');
+    for (const sel of screen.getAllByRole('combobox', { name: 'Enrollment' })) expect((sel as HTMLSelectElement).value).toBe('enrolled');
+  });
+
   it('bulk-loads the dataset, renders PARENT names as the card title, and shows the live summary', async () => {
     render(<RosterBrowser locationOptions={['Brampton', 'Scarborough']} />);
+    await screen.findAllByText('Vaibhav & Noopur Rana');
+    await clearDefaultFilters(); // widen from the Paid+Enrolled default to see both families
     // Card title is the parents' name, NOT "Rana family Family".
-    expect((await screen.findAllByText('Vaibhav & Noopur Rana')).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Vaibhav & Noopur Rana').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('Priya Shah').length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText(/family Family/i)).not.toBeInTheDocument();
     // The displayed Family ID is the 4-digit publicFid (via displayFid).
@@ -68,6 +90,7 @@ describe('RosterBrowser', () => {
   it('filters the list by Level (client-side, over the loaded dataset)', async () => {
     render(<RosterBrowser locationOptions={['Brampton', 'Scarborough']} />);
     await screen.findAllByText('Vaibhav & Noopur Rana');
+    await clearDefaultFilters(); // SHAH is registered/outstanding — widen so it's visible to filter on
     // Pick "Level 4" in every Level dropdown (mobile + desktop) so both branches filter.
     for (const sel of screen.getAllByRole('combobox', { name: 'Level' })) {
       await userEvent.selectOptions(sel, 'Level 4');
@@ -79,6 +102,7 @@ describe('RosterBrowser', () => {
   it('a family without a publicFid shows its legacy id, never the internal CMT- fid', async () => {
     fetchRosterReportClient.mockResolvedValue({ rows: [PENDING] });
     render(<RosterBrowser locationOptions={['Brampton', 'Scarborough']} />);
+    await clearDefaultFilters(); // PENDING is unknown/not-enrolled — widen to see it
     await screen.findAllByText('Aariyan Anup');
     // The card meta line shows "Legacy 999" and NEVER leaks the CMT- doc id.
     expect(screen.getAllByText(/Legacy 999/).length).toBeGreaterThanOrEqual(1);
@@ -86,12 +110,17 @@ describe('RosterBrowser', () => {
     expect(screen.queryByText(/FID CMT-/)).not.toBeInTheDocument();
   });
 
-  it('Engagement filter: "Registered" keeps only carry-forwards (not Enrolled or Not-enrolled)', async () => {
+  it('Enrollment filter: "Registered" keeps only carry-forwards (not Enrolled or Not-enrolled)', async () => {
     // RANA = confirmed (Enrolled), SHAH = registered, PENDING = null (Not enrolled).
     fetchRosterReportClient.mockResolvedValue({ rows: [RANA, SHAH, PENDING] });
     render(<RosterBrowser locationOptions={['Brampton', 'Scarborough']} />);
-    await screen.findAllByText('Priya Shah');
-    for (const sel of screen.getAllByRole('combobox', { name: 'Engagement' })) {
+    // Isolate the Enrollment filter: clear the Payment default (SHAH is outstanding)
+    // so payment doesn't also filter it out.
+    await screen.findAllByRole('combobox', { name: 'Payment' });
+    for (const sel of screen.getAllByRole('combobox', { name: 'Payment' })) await userEvent.selectOptions(sel, '');
+    // Under the Enrolled default only RANA shows; switching to Registered swaps to SHAH.
+    await screen.findAllByText('Vaibhav & Noopur Rana');
+    for (const sel of screen.getAllByRole('combobox', { name: 'Enrollment' })) {
       await userEvent.selectOptions(sel, 'registered');
     }
     await waitFor(() => expect(screen.queryByText('Vaibhav & Noopur Rana')).not.toBeInTheDocument());
@@ -115,6 +144,7 @@ describe('RosterBrowser', () => {
     );
     fetchRosterReportClient.mockResolvedValue({ rows: many });
     render(<RosterBrowser locationOptions={['Brampton', 'Scarborough']} />);
+    await clearDefaultFilters(); // fixtures are unknown/not-enrolled — widen so all 60 show
     expect((await screen.findAllByRole('button', { name: /load more/i })).length).toBeGreaterThanOrEqual(1);
   });
 });
