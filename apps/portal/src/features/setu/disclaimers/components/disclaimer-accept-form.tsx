@@ -22,11 +22,13 @@ function linkify(text: string): React.ReactNode {
 }
 
 /**
- * Acknowledgements screen. The family reads the intro + value sections + the
- * acknowledgement statement, ticks a single box, and confirms with one
- * "I Acknowledge" action (mirrors the printed CMT Bala Vihar Acknowledgements).
- * On submit it records acceptance and leaves via a HARD navigation to /family
- * (never router.push) so the /family gate re-runs server-side on fresh data.
+ * Acknowledgements screen. The family reads the intro, ticks a box on EVERY value
+ * section to confirm they have read it, reads the acknowledgement statement, and
+ * confirms with the "I Acknowledge" button at the end. The button stays enabled so
+ * a click gives feedback: if any section is unticked it shows a validation message
+ * and highlights the unticked sections (a disabled button gave no clue why nothing
+ * happened). On submit it records acceptance and leaves via a HARD navigation to
+ * /family (never router.push) so the /family gate re-runs server-side on fresh data.
  */
 export function DisclaimerAcceptForm({
   sections,
@@ -37,17 +39,24 @@ export function DisclaimerAcceptForm({
   intro?: string;
   acknowledgement?: string;
 }) {
-  const [acknowledged, setAcknowledged] = useState(false);
+  const [checked, setChecked] = useState<Record<string, boolean>>({});
   const [showError, setShowError] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  const allChecked = sections.length > 0 && sections.every((s) => checked[s.id]);
+
+  function toggle(id: string, value: boolean) {
+    setChecked((prev) => {
+      const next = { ...prev, [id]: value };
+      if (sections.every((s) => next[s.id])) setShowError(false); // all done → clear error
+      return next;
+    });
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (saving) return;
-    // The button stays enabled so a click gives feedback: if the box isn't
-    // ticked, show a validation message and highlight it instead of silently
-    // no-op'ing (a disabled button gave no clue why nothing happened).
-    if (!acknowledged) {
+    if (!allChecked) {
       setShowError(true);
       return;
     }
@@ -79,18 +88,37 @@ export function DisclaimerAcceptForm({
         </p>
       )}
       <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 8, lineHeight: 1.5, marginBottom: 22 }}>
-        Please read the following before acknowledging.
+        Please read and confirm each section below to continue.
       </p>
 
-      {sections.map((s) => (
-        <div key={s.id} className="card" style={{ padding: 18, marginBottom: 14 }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
-            <span aria-hidden style={{ fontSize: 15 }}>🪷</span>
-            <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--accentDeep)' }}>{s.title}</div>
+      {sections.map((s) => {
+        const isChecked = !!checked[s.id];
+        const invalid = showError && !isChecked;
+        return (
+          <div
+            key={s.id}
+            className="card"
+            style={{ padding: 18, marginBottom: 14, borderColor: invalid ? 'var(--err)' : undefined }}
+          >
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
+              <span aria-hidden style={{ fontSize: 15 }}>🪷</span>
+              <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--accentDeep)' }}>{s.title}</div>
+            </div>
+            <p style={{ fontSize: 13.5, color: 'var(--body-text)', lineHeight: 1.7, whiteSpace: 'pre-wrap', margin: '0 0 12px' }}>{s.body}</p>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 13.5 }}>
+              <input
+                type="checkbox"
+                data-testid={`disclaimer-check-${s.id}`}
+                checked={isChecked}
+                aria-invalid={invalid}
+                onChange={(e) => toggle(s.id, e.target.checked)}
+                style={{ width: 18, height: 18, flexShrink: 0 }}
+              />
+              I have read and agree to the above.
+            </label>
           </div>
-          <p style={{ fontSize: 13.5, color: 'var(--body-text)', lineHeight: 1.7, whiteSpace: 'pre-wrap', margin: 0 }}>{s.body}</p>
-        </div>
-      ))}
+        );
+      })}
 
       {acknowledgement?.trim() && (
         <div className="card" style={{ padding: 18, marginBottom: 16, background: 'var(--accentSoft)', borderColor: 'var(--accent)' }}>
@@ -101,39 +129,9 @@ export function DisclaimerAcceptForm({
         </div>
       )}
 
-      <label
-        style={{
-          display: 'flex',
-          alignItems: 'flex-start',
-          gap: 10,
-          cursor: 'pointer',
-          fontSize: 13.5,
-          marginBottom: showError ? 8 : 16,
-          lineHeight: 1.5,
-          padding: 10,
-          margin: '0 -10px',
-          borderRadius: 10,
-          border: `1px solid ${showError ? 'var(--err)' : 'transparent'}`,
-          background: showError ? 'var(--err-soft, rgba(200,30,30,0.06))' : 'transparent',
-        }}
-      >
-        <input
-          type="checkbox"
-          data-testid="disclaimer-ack-checkbox"
-          checked={acknowledged}
-          aria-invalid={showError}
-          onChange={(e) => {
-            setAcknowledged(e.target.checked);
-            if (e.target.checked) setShowError(false);
-          }}
-          style={{ width: 18, height: 18, marginTop: 2, flexShrink: 0 }}
-        />
-        On behalf of my family, I confirm that I have read and agree to the above.
-      </label>
-
-      {showError && (
+      {showError && !allChecked && (
         <p role="alert" data-testid="disclaimer-ack-error" style={{ fontSize: 13, color: 'var(--err)', margin: '0 0 14px', lineHeight: 1.5 }}>
-          Please check the box above to acknowledge before continuing.
+          Please confirm every section above before continuing.
         </p>
       )}
 

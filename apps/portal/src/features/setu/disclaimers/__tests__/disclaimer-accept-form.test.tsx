@@ -39,31 +39,36 @@ describe('DisclaimerAcceptForm', () => {
     expect(link).toHaveAttribute('href', 'https://chinmayatoronto.org/cmpledge');
   });
 
-  it('has NO per-section checkboxes — a single acknowledgement gates the button', () => {
+  it('has a checkbox on EVERY section (Vaibhav)', () => {
     render(<DisclaimerAcceptForm sections={SECTIONS} intro={INTRO} acknowledgement={ACK} />);
-    expect(screen.queryByTestId('disclaimer-check-a')).toBeNull();
-    expect(screen.getByTestId('disclaimer-ack-checkbox')).toBeInTheDocument();
+    expect(screen.getByTestId('disclaimer-check-a')).toBeInTheDocument();
+    expect(screen.getByTestId('disclaimer-check-b')).toBeInTheDocument();
+    // No single combined acknowledgement checkbox anymore.
+    expect(screen.queryByTestId('disclaimer-ack-checkbox')).toBeNull();
   });
 
-  it('shows a validation error (and does NOT submit) when "I Acknowledge" is clicked unchecked', async () => {
+  it('shows a validation error (and does NOT submit) when "I Acknowledge" is clicked with any section unticked', async () => {
     render(<DisclaimerAcceptForm sections={SECTIONS} intro={INTRO} acknowledgement={ACK} />);
     const btn = screen.getByTestId('disclaimers-accept');
     expect(btn).toHaveTextContent('I Acknowledge');
     expect(screen.queryByTestId('disclaimer-ack-error')).toBeNull();
 
-    fireEvent.click(btn); // unchecked
+    // Tick only ONE of the two sections, then submit.
+    fireEvent.click(screen.getByTestId('disclaimer-check-a'));
+    fireEvent.click(btn);
     expect(screen.getByTestId('disclaimer-ack-error')).toBeInTheDocument();
     expect(accept).not.toHaveBeenCalled();
     expect(navigateTo).not.toHaveBeenCalled();
 
-    // Ticking the box clears the error.
-    fireEvent.click(screen.getByTestId('disclaimer-ack-checkbox'));
+    // Ticking the remaining section clears the error.
+    fireEvent.click(screen.getByTestId('disclaimer-check-b'));
     expect(screen.queryByTestId('disclaimer-ack-error')).toBeNull();
   });
 
-  it('acknowledges then hard-navigates to /family once the box is checked', async () => {
+  it('acknowledges then hard-navigates to /family once every section is checked', async () => {
     render(<DisclaimerAcceptForm sections={SECTIONS} intro={INTRO} acknowledgement={ACK} />);
-    fireEvent.click(screen.getByTestId('disclaimer-ack-checkbox'));
+    fireEvent.click(screen.getByTestId('disclaimer-check-a'));
+    fireEvent.click(screen.getByTestId('disclaimer-check-b'));
     fireEvent.click(screen.getByTestId('disclaimers-accept'));
     await waitFor(() => expect(accept).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(navigateTo).toHaveBeenCalledWith('/family'));

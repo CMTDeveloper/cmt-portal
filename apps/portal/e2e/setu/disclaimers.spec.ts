@@ -15,11 +15,11 @@ import { signInFamilyAndSaveStorage } from '../auth-helpers';
  *      shared fixture's prior acceptance STALE (drives it "pending" through the
  *      REAL API — no shelling out to the seed mid-run).
  *   2. Visiting /family then bounces to /acknowledgements (the layout DisclaimerGate).
- *   3. The accept screen shows the intro + sections + acknowledgement; the single
- *      "I Acknowledge" button is disabled until the one acknowledgement checkbox
- *      is ticked, then enabled.
- *   4. Accepting hard-navigates to /family and the gate no longer fires on a
- *      re-visit.
+ *   3. The accept screen shows the intro + sections (each with its own checkbox) +
+ *      acknowledgement; clicking "I Acknowledge" before every section is ticked
+ *      shows a validation error and does NOT proceed.
+ *   4. Ticking every section then accepting hard-navigates to /family and the gate
+ *      no longer fires on a re-visit.
  *
  * The admin PUT round-trips intro + sections + acknowledgement (the content model
  * carries all three) so publishing/restoring here never blanks the live intro or
@@ -80,20 +80,20 @@ test('manager is gated to /acknowledgements, accepts, and reaches the dashboard'
   await page.goto('/family');
   await expect(page).toHaveURL(/\/acknowledgements$/);
 
-  // 3) The accept screen shows the content. Clicking "I Acknowledge" WITHOUT
-  //    ticking the single checkbox surfaces a validation error and does NOT
-  //    proceed (no per-section checkboxes — one confirm gates submission).
+  // 3) The accept screen shows a checkbox on EVERY section. Clicking "I Acknowledge"
+  //    before ticking them all surfaces a validation error and does NOT proceed.
   const acceptBtn = page.getByTestId('disclaimers-accept');
   await expect(acceptBtn).toHaveText(/I Acknowledge/);
-  // The first section's title renders (proves the content, not a checkbox, is shown).
   await expect(page.getByText(bumped[0].title, { exact: false }).first()).toBeVisible();
-  await acceptBtn.click(); // unchecked
+  await acceptBtn.click(); // nothing ticked yet
   await expect(page.getByTestId('disclaimer-ack-error')).toBeVisible();
   await expect(page).toHaveURL(/\/acknowledgements$/); // did not proceed
 
-  // 4) Tick the box (clears the error), accept → hard nav to /family, and no more
-  //    gate on re-visit.
-  await page.getByTestId('disclaimer-ack-checkbox').click();
+  // 4) Tick every section (clears the error), accept → hard nav to /family, and no
+  //    more gate on re-visit.
+  for (const s of bumped) {
+    await page.getByTestId(`disclaimer-check-${s.id}`).click();
+  }
   await expect(page.getByTestId('disclaimer-ack-error')).toHaveCount(0);
   await acceptBtn.click();
   await expect(page).toHaveURL(/\/family$/);
