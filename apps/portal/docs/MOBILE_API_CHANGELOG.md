@@ -22,6 +22,12 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
+## 2026-07-20 - kiosk staff login slice - NEW web-only POST /api/setu/auth/kiosk-sign-in; password-sign-in shape UNCHANGED - NO mobile action
+The door-tablet kiosk got a friendly staff login. This is a **web/kiosk-only** surface; the family mobile app does not (and must not) call it. Recorded here explicitly so the contract-sync cron does not read the silence as an oversight.
+- **NEW `POST /api/setu/auth/kiosk-sign-in`** (web-only) - shared-credential staff login for the door kiosk. Body `{ username, password }` (the friendly `sevak` username maps server-side to the kiosk account email); `200 { redirectTo }` + sets the `__session` cookie on success; `401 invalid-credentials`, `429 too-many-requests` (+ optional `resetAt`), `400 bad-request`, `403 forbidden`, `500 server-misconfigured`, `404 not-found` (auth flag off). **Mobile action: NONE** - the mobile app never signs into the kiosk; do not mirror this route.
+- **`POST /api/setu/auth/password-sign-in`** (the family sign-in the mobile DOES use) - request + response shape, error codes, and cookie are **byte-for-byte UNCHANGED**. It was only refactored internally to share the new `mintPasswordSession` helper with kiosk-sign-in. **Mobile action: NONE.**
+- The middleware-gated **`/api/check-in/*`** legacy + setu kiosk routes are likewise **web/kiosk-only** (consumed by the door tablet, not the mobile family app). No mobile mirror.
+
 ## 2026-07-19 - `6bfbc95` - GET /api/setu/disclaimers gains `intro` + `acknowledgement`; content is now a single-acknowledgement flow
 The disclaimers/acknowledgements content model gained two fields, and the family-facing UX changed from a per-section checkbox to one "I Acknowledge" at the bottom (matching the printed CMT Bala Vihar Acknowledgements).
 - **`GET /api/setu/disclaimers`** response gains two string fields: **`intro`** (preamble shown above the sections; may contain a URL to auto-link, e.g. the pledge link) and **`acknowledgement`** (the binding statement shown above the acknowledge action). Both are **always present** now (server defaults them to `''`); an empty string means "hide that block". `version`, `schoolYear`, `sections`, and `accepted` are **unchanged**. Section `body` strings are newline-separated bullets (each line starts with `• `).
