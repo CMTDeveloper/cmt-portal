@@ -78,7 +78,8 @@ export function PromoteStep({ fromYear, toYear, unlocked, report, committing, on
 
       <p style={{ fontSize: 13.5, color: 'var(--body-text)', marginTop: 10, lineHeight: 1.55, maxWidth: 560 }}>
         Advances every child one grade, moves them into next year&rsquo;s level, and closes their {fromYear} record
-        (kept as history). Graduating Grade 12 students complete the program.
+        (kept as history). Graduating Grade 12 students complete the program. This does <strong>not</strong> enroll
+        anyone for next year — each family re-enrolls when they sign up, attend, or check in.
       </p>
 
       {!unlocked ? (

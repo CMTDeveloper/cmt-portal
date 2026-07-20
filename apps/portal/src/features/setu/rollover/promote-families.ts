@@ -1,6 +1,5 @@
 import { FieldValue } from '@cmt/firebase-shared/admin/firestore';
 import {
-  resolveSuggestedAmount,
   type LevelDoc,
   type OfferingDoc,
   type PromotionRow,
@@ -248,8 +247,6 @@ export async function promoteFamilies(db: Db, args: PromoteArgs): Promise<Rollov
     const tgtRef = enrollmentsCol.doc(tgtEid);
     const srcRef = enrollmentsCol.doc(srcEid);
 
-    const programKey = ctx.programKey ?? fam.programKey;
-    const programLabel = ctx.programLabel ?? fam.programLabel;
     const location = ctx.location ?? fam.location;
 
     if (args.dryRun) {
@@ -298,10 +295,17 @@ export async function promoteFamilies(db: Db, args: PromoteArgs): Promise<Rollov
         now,
       });
 
-      // WRITES — only when the family made progress (at least one child
-      // advanced, graduated, or stayed in shishu). A family whose every child
-      // is needs-grade / shishu-aged-out keeps its source enrollment ACTIVE so
-      // a re-run can pick it up once the data is corrected.
+      // WRITES — grade + level ONLY (Vaibhav's model). Bump each promoted child's
+      // school grade and close the source (prior-year) enrollment; the new grade
+      // maps to the new-year level via the admin-defined level grade-bands at read
+      // time. We deliberately do NOT create a new-year enrollment: a family
+      // re-enrolls FRESH each year through an actual action — manual enroll, teacher
+      // first-attendance, or self check-in — which is also the single point where the
+      // Family ID (publicFid) is minted. So the annual rollover never "registers"
+      // anyone; it only advances grades/levels for families that were enrolled last
+      // year. Only writes when the family made progress (≥1 child advanced,
+      // graduated, or stayed in shishu); an all-needs-attention family keeps its
+      // source enrollment ACTIVE so a re-run can pick it up once its data is fixed.
       if (familyProgressed(familyPlan)) {
         for (const upd of familyPlan.gradeUpdates) {
           txn.set(membersCol.doc(upd.mid), { schoolGrade: upd.schoolGrade }, { merge: true });
@@ -316,28 +320,6 @@ export async function promoteFamilies(db: Db, args: PromoteArgs): Promise<Rollov
           },
           { merge: true },
         );
-        if (familyPlan.promotedMids.length > 0) {
-          txn.set(tgtRef, {
-            eid: tgtEid,
-            fid: fam.fid,
-            oid: ctx.targetOid,
-            pid: ctx.targetOid,
-            programKey,
-            programLabel,
-            termLabel: toYear,
-            location,
-            enrolledAt: FieldValue.serverTimestamp(),
-            enrolledVia: 'promotion',
-            enrolledByMid: args.actorMid ?? null,
-            enrolledMids: familyPlan.promotedMids,
-            suggestedAmountSnapshot: resolveSuggestedAmount({ pricingTiers: ctx.pricingTiers }, now),
-            suggestedAmountOverride: null,
-            status: 'active',
-            cancelledAt: null,
-            cancelledReason: null,
-            levelSnapshots: familyPlan.targetSnapshots,
-          });
-        }
       }
       return familyPlan;
     });

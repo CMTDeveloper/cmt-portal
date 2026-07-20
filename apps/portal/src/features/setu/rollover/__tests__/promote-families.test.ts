@@ -164,6 +164,15 @@ function collectionGroupMatch(path: string, group: string): boolean {
 // ── Fixtures ────────────────────────────────────────────────────────────────
 
 function seedLevels(fake: ReturnType<typeof makeFakeDb>) {
+  // Level 1 (Grade 1) — both years, for the Grade 1 → Level 2 promotion case.
+  fake.seed('levels', 'brampton-level-1-bv-brampton-2025-26', {
+    levelId: 'brampton-level-1-bv-brampton-2025-26', levelName: 'Level 1', levelKind: 'level',
+    gradeBand: ['1'], pid: 'bv-brampton-2025-26', location: 'Brampton',
+  });
+  fake.seed('levels', 'brampton-level-1-bv-brampton-2026-27', {
+    levelId: 'brampton-level-1-bv-brampton-2026-27', levelName: 'Level 1', levelKind: 'level',
+    gradeBand: ['1'], pid: 'bv-brampton-2026-27', location: 'Brampton',
+  });
   // 2025-26 source levels (Brampton)
   fake.seed('levels', 'brampton-level-2-bv-brampton-2025-26', {
     levelId: 'brampton-level-2-bv-brampton-2025-26',
@@ -245,7 +254,7 @@ beforeEach(() => {
 });
 
 describe('promoteFamilies', () => {
-  it('advances grades, closes the source enrollment with history, and creates the target enrollment', async () => {
+  it('advances grades + remaps levels and closes the source enrollment, WITHOUT creating a new-year enrollment', async () => {
     const fake = makeFakeDb();
     seedLevels(fake);
     seedTargetOffering(fake);
@@ -269,18 +278,12 @@ describe('promoteFamilies', () => {
     expect(srcSnaps['F1-02']!.levelName).toBe('Level 2');
     expect(srcSnaps['F1-03']!.levelName).toBe('Level 2');
 
-    // ── target enrollment created ──
-    const tgt = fake.readSub('F1', 'enrollments', 'F1-bv-brampton-2026-27')!;
-    expect(tgt['status']).toBe('active');
-    expect(tgt['pid']).toBe('bv-brampton-2026-27');
-    expect(tgt['oid']).toBe('bv-brampton-2026-27');
-    expect(tgt['enrolledVia']).toBe('promotion');
-    expect(tgt['enrolledMids']).toEqual(['F1-02', 'F1-03']);
-    const tgtSnaps = tgt['levelSnapshots'] as Record<string, { levelName: string | null }>;
-    expect(tgtSnaps['F1-02']!.levelName).toBe('Level 2'); // Gr3 → still Level 2
-    expect(tgtSnaps['F1-03']!.levelName).toBe('Level 3'); // Gr4 → Level 3
+    // ── NO new-year enrollment created (Vaibhav's model): the family re-enrolls
+    //    fresh via an actual action, not the rollover. ──
+    expect(fake.readSub('F1', 'enrollments', 'F1-bv-brampton-2026-27')).toBeUndefined();
 
-    // ── report ──
+    // ── report still reports the grade + level TRANSITION (derived from the plan,
+    //    not from any created enrollment). ──
     expect(report.promoted).toBe(2);
     expect(report.advanced).toBe(2);
     expect(report.graduated).toBe(0);
@@ -289,6 +292,7 @@ describe('promoteFamilies', () => {
     expect(report.fromYear).toBe('2025-26');
     expect(report.toYear).toBe('2026-27');
     expect(report.dryRun).toBe(false);
+    // Gr3 → Gr4 remaps Level 2 → Level 3; Gr2 → Gr3 stays in Level 2.
     expect(report.byTransition).toContainEqual({ label: 'Grade 2 → Grade 3 · Level 2 → Level 2', count: 1 });
     expect(report.byTransition).toContainEqual({ label: 'Grade 3 → Grade 4 · Level 2 → Level 3', count: 1 });
 
@@ -306,8 +310,9 @@ describe('promoteFamilies', () => {
     ]);
 
     await promoteFamilies(fake.db, ARGS);
-    // After commit the source is cancelled atomically with the target create, so a
-    // re-run finds NO active source enrollments → nothing to advance (idempotent).
+    // After commit the source enrollment is cancelled, so a re-run finds NO active
+    // source enrollments → nothing to advance (source-cancellation is the
+    // idempotency guard now that no target enrollment is created).
     const report2 = await promoteFamilies(fake.db, ARGS);
 
     expect(report2.familiesProcessed).toBe(0);
@@ -318,7 +323,7 @@ describe('promoteFamilies', () => {
     expect(fake.readSub('F1', 'members', 'F1-03')!['schoolGrade']).toBe('4');
   });
 
-  it('skips a family whose target enrollment is already active (re-entry / partial-run gate)', async () => {
+  it('skips a family that already has an active new-year enrollment (early re-enroller gate)', async () => {
     const fake = makeFakeDb();
     seedLevels(fake);
     seedTargetOffering(fake);
@@ -326,9 +331,10 @@ describe('promoteFamilies', () => {
       { mid: 'F1-02', grade: '2', first: 'A' },
       { mid: 'F1-03', grade: '3', first: 'B' },
     ]);
-    // Simulate a partial prior run: the source is STILL active (so it is
-    // re-discovered) but a target enrollment already exists active. The per-family
-    // gate must skip this family — never double-advancing grades.
+    // A family that already RE-ENROLLED for the new year (e.g. self check-in before
+    // the admin ran the rollover) still has an active prior-year source enrollment,
+    // so it is re-discovered — but the per-family gate must skip it (never
+    // double-advancing grades) because the new-year enrollment already exists.
     fake.seedSub('F1', 'enrollments', 'F1-bv-brampton-2026-27', {
       eid: 'F1-bv-brampton-2026-27',
       fid: 'F1',
@@ -390,6 +396,25 @@ describe('promoteFamilies', () => {
     expect(report.familiesProcessed).toBeGreaterThanOrEqual(1);
     // F9 was unmutated (zero progress) → it must NOT be revalidated.
     expect(report.affectedFids).not.toContain('F9');
+  });
+
+  it("Vaibhav's example: a Grade 1 child last year → Grade 2 this year, remapped Level 1 → Level 2, no enrollment", async () => {
+    const fake = makeFakeDb();
+    seedLevels(fake);
+    seedTargetOffering(fake);
+    seedFamily(fake, 'F3', [{ mid: 'F3-02', grade: '1', first: 'D' }]);
+
+    const report = await promoteFamilies(fake.db, ARGS);
+
+    // School grade bumped 1 → 2.
+    expect(fake.readSub('F3', 'members', 'F3-02')!['schoolGrade']).toBe('2');
+    // The transition remaps Level 1 (Grade 1) → Level 2 (Grade 2 & 3) per the
+    // new-year level grade-bands.
+    expect(report.byTransition).toContainEqual({ label: 'Grade 1 → Grade 2 · Level 1 → Level 2', count: 1 });
+    // Still no new-year enrollment — the child re-enrolls fresh (and gets a FID then).
+    expect(fake.readSub('F3', 'enrollments', 'F3-bv-brampton-2026-27')).toBeUndefined();
+    // The prior-year enrollment is closed.
+    expect(fake.readSub('F3', 'enrollments', 'F3-bv-brampton-2025-26')!['status']).toBe('cancelled');
   });
 
   it('dry-run reports counts but writes nothing', async () => {
