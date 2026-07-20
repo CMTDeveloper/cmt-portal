@@ -17,6 +17,7 @@ const family: Family = {
 
 beforeEach(() => {
   vi.spyOn(global, 'fetch').mockReset();
+  vi.stubGlobal('location', { assign: vi.fn(), href: '' });
 });
 
 describe('KioskCheckInPanel', () => {
@@ -99,5 +100,22 @@ describe('KioskCheckInPanel', () => {
     render(<KioskCheckInPanel family={family} source="legacy" checkInId="42" onDone={() => {}} />);
     await user.click(screen.getByRole('button', { name: /check in/i }));
     expect(await screen.findByRole('alert')).toBeInTheDocument();
+  });
+
+  it('on a 401 hard-navigates to staff sign-in and does NOT show the generic error', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+      json: async () => ({ error: 'unauthorized' }),
+    } as Response);
+    render(<KioskCheckInPanel family={family} source="legacy" checkInId="42" onDone={() => {}} />);
+    await user.click(screen.getByRole('button', { name: /check in/i }));
+    await vi.waitFor(() =>
+      expect(window.location.assign).toHaveBeenCalledWith(
+        '/check-in/staff-sign-in?error=session-expired',
+      ),
+    );
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });

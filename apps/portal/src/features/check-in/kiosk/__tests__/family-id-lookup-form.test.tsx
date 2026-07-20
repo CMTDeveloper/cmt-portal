@@ -5,6 +5,7 @@ import { FamilyIdLookupForm } from '../family-id-lookup-form';
 
 beforeEach(() => {
   vi.spyOn(global, 'fetch').mockReset();
+  vi.stubGlobal('location', { assign: vi.fn(), href: '' });
 });
 
 describe('FamilyIdLookupForm', () => {
@@ -80,5 +81,61 @@ describe('FamilyIdLookupForm', () => {
     await user.type(screen.getByLabelText(/family id/i), 'abc');
     await user.click(screen.getByRole('button', { name: /find/i }));
     expect(await screen.findByRole('alert')).toHaveTextContent(/valid number/i);
+  });
+
+  it('on a 401 from the Setu lookup hard-navigates and does NOT fall through to legacy', async () => {
+    const user = userEvent.setup();
+    const onFamily = vi.fn();
+    const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+      json: async () => ({ error: 'unauthorized' }),
+    } as Response);
+
+    render(<FamilyIdLookupForm onFamily={onFamily} />);
+    await user.type(screen.getByLabelText(/family id/i), '42');
+    await user.click(screen.getByRole('button', { name: /find/i }));
+
+    await vi.waitFor(() =>
+      expect(window.location.assign).toHaveBeenCalledWith(
+        '/check-in/staff-sign-in?error=session-expired',
+      ),
+    );
+    // Only the Setu lookup fired - it must NOT fall through to the legacy lookup.
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(fetchSpy).toHaveBeenCalledWith('/api/check-in/setu/lookup?id=42');
+    expect(onFamily).not.toHaveBeenCalled();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('on a 401 from the legacy lookup (after Setu 404) hard-navigates to staff sign-in', async () => {
+    const user = userEvent.setup();
+    const onFamily = vi.fn();
+    const fetchSpy = vi
+      .spyOn(global, 'fetch')
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        json: async () => ({ error: 'family-not-found' }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        json: async () => ({ error: 'unauthorized' }),
+      } as Response);
+
+    render(<FamilyIdLookupForm onFamily={onFamily} />);
+    await user.type(screen.getByLabelText(/family id/i), '42');
+    await user.click(screen.getByRole('button', { name: /find/i }));
+
+    await vi.waitFor(() =>
+      expect(window.location.assign).toHaveBeenCalledWith(
+        '/check-in/staff-sign-in?error=session-expired',
+      ),
+    );
+    expect(fetchSpy).toHaveBeenNthCalledWith(1, '/api/check-in/setu/lookup?id=42');
+    expect(fetchSpy).toHaveBeenNthCalledWith(2, '/api/check-in/families/42');
+    expect(onFamily).not.toHaveBeenCalled();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });

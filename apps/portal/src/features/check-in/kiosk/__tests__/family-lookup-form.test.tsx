@@ -5,6 +5,7 @@ import { FamilyLookupForm } from '../family-lookup-form';
 
 beforeEach(() => {
   vi.spyOn(global, 'fetch').mockReset();
+  vi.stubGlobal('location', { assign: vi.fn(), href: '' });
 });
 
 describe('FamilyLookupForm', () => {
@@ -46,5 +47,24 @@ describe('FamilyLookupForm', () => {
     await user.type(screen.getByLabelText(/email/i), 'nobody@example.com');
     await user.click(screen.getByRole('button', { name: /look up/i }));
     expect(await screen.findByRole('alert')).toHaveTextContent(/not found/i);
+    expect(window.location.assign).not.toHaveBeenCalled();
+  });
+
+  it('on a 401 hard-navigates to staff sign-in and does NOT show a 404 error', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+      json: async () => ({ error: 'unauthorized' }),
+    } as Response);
+    render(<FamilyLookupForm />);
+    await user.type(screen.getByLabelText(/email/i), 'a@b.com');
+    await user.click(screen.getByRole('button', { name: /look up/i }));
+    await vi.waitFor(() =>
+      expect(window.location.assign).toHaveBeenCalledWith(
+        '/check-in/staff-sign-in?error=session-expired',
+      ),
+    );
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });

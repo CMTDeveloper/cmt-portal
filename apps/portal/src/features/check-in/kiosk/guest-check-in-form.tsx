@@ -1,6 +1,7 @@
 'use client';
 import { useState, type FormEvent } from 'react';
 import { Button, Input, Label } from '@cmt/ui';
+import { handleKioskAuthExpiry } from './kiosk-auth';
 
 export function GuestCheckInForm() {
   const [done, setDone] = useState(false);
@@ -28,6 +29,7 @@ export function GuestCheckInForm() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(payload),
       });
+      if (handleKioskAuthExpiry(res)) return;
       if (!res.ok) {
         setError('Check-in failed. Try again.');
         return;

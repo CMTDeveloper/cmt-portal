@@ -58,4 +58,23 @@ describe('GuestCheckInForm', () => {
     await user.click(screen.getByRole('button', { name: /check in/i }));
     expect(await screen.findByText(/thank you/i)).toBeInTheDocument();
   });
+
+  it('on a 401 hard-navigates to staff sign-in and does NOT show the generic error', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+      json: async () => ({ error: 'unauthorized' }),
+    } as Response);
+    render(<GuestCheckInForm />);
+    await user.type(screen.getByLabelText(/first name/i), 'Carol');
+    await user.type(screen.getByLabelText(/last name/i), 'Visitor');
+    await user.click(screen.getByRole('button', { name: /check in/i }));
+    await vi.waitFor(() =>
+      expect(window.location.assign).toHaveBeenCalledWith(
+        '/check-in/staff-sign-in?error=session-expired',
+      ),
+    );
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
 });

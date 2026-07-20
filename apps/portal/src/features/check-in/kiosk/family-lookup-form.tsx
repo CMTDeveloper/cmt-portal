@@ -1,6 +1,7 @@
 'use client';
 import { useState, useTransition, type FormEvent } from 'react';
 import { Button, Input, Label } from '@cmt/ui';
+import { handleKioskAuthExpiry } from './kiosk-auth';
 
 type ContactType = 'email' | 'phone';
 
@@ -21,6 +22,7 @@ export function FamilyLookupForm() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ type, value }),
       });
+      if (handleKioskAuthExpiry(res)) return;
       if (res.status === 404) {
         setError('Not found — no family matches this contact.');
         return;

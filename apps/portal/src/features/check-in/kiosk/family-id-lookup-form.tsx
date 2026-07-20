@@ -2,6 +2,7 @@
 import { useState, type FormEvent } from 'react';
 import { Button, Input, Label } from '@cmt/ui';
 import type { Family } from '@cmt/shared-domain/check-in';
+import { handleKioskAuthExpiry } from './kiosk-auth';
 
 interface Props {
   onFamily: (family: Family, source: 'setu' | 'legacy', checkInId: string) => void;
@@ -25,6 +26,7 @@ export function FamilyIdLookupForm({ onFamily }: Props) {
       // not in Setu yet - falls through to the legacy roster lookup; any other
       // Setu failure is a real error, not a "try legacy" signal.
       const setuRes = await fetch(`/api/check-in/setu/lookup?id=${value}`);
+      if (handleKioskAuthExpiry(setuRes)) return;
       if (setuRes.ok) {
         const family = (await setuRes.json()) as Family;
         onFamily(family, 'setu', value);
@@ -37,6 +39,7 @@ export function FamilyIdLookupForm({ onFamily }: Props) {
 
       // Legacy fallback for families not yet migrated into Setu.
       const legacyRes = await fetch(`/api/check-in/families/${value}`);
+      if (handleKioskAuthExpiry(legacyRes)) return;
       if (legacyRes.status === 404) {
         setError('Family not found for this ID.');
         return;

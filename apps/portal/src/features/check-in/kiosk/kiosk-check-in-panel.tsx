@@ -2,6 +2,7 @@
 import { useState, type FormEvent } from 'react';
 import { Button } from '@cmt/ui';
 import type { Family } from '@cmt/shared-domain/check-in';
+import { handleKioskAuthExpiry } from './kiosk-auth';
 
 interface Props {
   family: Family;
@@ -44,6 +45,7 @@ export function KioskCheckInPanel({ family, source, checkInId, onDone }: Props) 
               headers: { 'content-type': 'application/json' },
               body: JSON.stringify({ students: selected }),
             });
+      if (handleKioskAuthExpiry(res)) return;
       if (!res.ok) {
         setError('Check-in failed. Please try again.');
         return;
