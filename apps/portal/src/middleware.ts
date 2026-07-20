@@ -3,7 +3,7 @@ import {
   verifyPortalSessionCookie,
   verifyPortalIdToken,
 } from '@cmt/firebase-shared/admin/session';
-import { isPublicRoute, canAccessRoute, type SessionClaims } from '@cmt/shared-domain';
+import { isPublicRoute, canAccessRoute, isSafeInternalPath, type SessionClaims } from '@cmt/shared-domain';
 
 // Public auth-entry pages. If a signed-in user lands on one of these, send
 // them straight to their dashboard instead of showing the marketing/sign-in UI.
@@ -151,13 +151,11 @@ function dashboardForRole(role: unknown): string | null {
 }
 
 // Only allow internal, non-protocol-relative paths. Rejects ?from=//evil.com
-// and ?from=https://evil.com to avoid open-redirect issues.
+// and ?from=https://evil.com to avoid open-redirect issues. The predicate is the
+// shared isSafeInternalPath so this guard stays in lockstep with the sign-in
+// endpoints + forms.
 function safeFrom(from: string | null): string | null {
-  if (!from) return null;
-  if (!from.startsWith('/')) return null;
-  if (from.startsWith('//')) return null;
-  if (from.includes('://')) return null;
-  return from;
+  return isSafeInternalPath(from) ? from : null;
 }
 
 function deny(req: NextRequest, reason: 'no-session' | 'unauthorized') {

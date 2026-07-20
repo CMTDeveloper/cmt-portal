@@ -10,6 +10,7 @@ import {
   isPendingApproval,
 } from '@/features/setu/auth/build-session-claims';
 import { firebaseSignInWithPassword } from '@/features/setu/auth/firebase-rest';
+import { isSafeInternalPath } from '@cmt/shared-domain';
 
 export type MintPasswordSessionResult =
   | { status: 'error'; httpStatus: 401 | 403 | 429 | 500; error: string; resetAt?: string }
@@ -24,12 +25,6 @@ export type MintPasswordSessionResult =
       uid: string;
       claims: Record<string, unknown>;
     };
-
-/** A `from` param is safe iff it is a same-origin absolute path. Mirrors the
- * middleware's redirect-safety semantics exactly (no shared helper exists). */
-function isSafeFrom(from: string): boolean {
-  return from.startsWith('/') && !from.startsWith('//') && !from.includes('://');
-}
 
 /**
  * Shared cookie-minting core for every password-based sign-in path (family
@@ -91,7 +86,7 @@ export async function mintPasswordSession(args: {
   }
 
   const { uid, claims, redirectTo: baseRedirectTo } = sessionResult;
-  const redirectTo = from && isSafeFrom(from) ? from : baseRedirectTo;
+  const redirectTo = isSafeInternalPath(from) ? from : baseRedirectTo;
 
   const auth = portalAuth();
   await auth.setCustomUserClaims(uid, claims);

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { isSafeInternalPath } from '@cmt/shared-domain';
 import { SetuLogo } from '@cmt/ui';
 import { CspRoot } from '@/features/family/components/atoms';
 
@@ -13,8 +14,7 @@ export function StaffSignInForm() {
   const searchParams = useSearchParams();
 
   const rawFrom = searchParams?.get('from');
-  const isSafe = !!rawFrom && rawFrom.startsWith('/') && !rawFrom.startsWith('//') && !rawFrom.includes('://');
-  const from = isSafe ? rawFrom : null;
+  const from = isSafeInternalPath(rawFrom) ? rawFrom : null;
 
   const errorParam = searchParams?.get('error');
   const banner =

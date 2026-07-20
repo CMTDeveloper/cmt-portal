@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { isKiosk, type WithRole } from '@cmt/shared-domain';
+import { isKiosk, isSafeInternalPath, type WithRole } from '@cmt/shared-domain';
 import { flags } from '@/lib/flags';
 import { mintPasswordSession } from '@/features/setu/auth/mint-password-session';
 
@@ -8,12 +8,6 @@ const bodySchema = z.object({
   username: z.string().min(1),
   password: z.string().min(1),
 });
-
-/** A `from` param is safe iff it is a same-origin absolute path. Mirrors the
- * middleware's redirect-safety semantics exactly (no shared helper exists). */
-function isSafeFrom(from: string): boolean {
-  return from.startsWith('/') && !from.startsWith('//') && !from.includes('://');
-}
 
 /**
  * Shared-credential staff login for the door kiosk. A friendly `sevak` username
@@ -83,7 +77,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
 
-  const redirectTo = from && isSafeFrom(from) ? from : '/check-in';
+  const redirectTo = isSafeInternalPath(from) ? from : '/check-in';
 
   const res = NextResponse.json({ redirectTo }, { status: 200 });
   res.cookies.set('__session', result.cookieValue, {
