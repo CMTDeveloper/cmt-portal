@@ -36,6 +36,25 @@ describe('FamilyLookupForm', () => {
     expect(await screen.findByText(/42/)).toBeInTheDocument();
   });
 
+  it('leads with the NEW Family ID and marks the legacy id as retiring (Vaibhav)', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ familyId: '477', publicFid: '5891' }),
+    } as Response);
+
+    render(<FamilyLookupForm />);
+    await user.type(screen.getByLabelText(/email/i), 'a@b.com');
+    await user.click(screen.getByRole('button', { name: /look up/i }));
+
+    // New id shown prominently (appears as the big number AND in the "enter …"
+    // sentence).
+    expect(await screen.findByText('Your new Family ID')).toBeInTheDocument();
+    expect(screen.getAllByText('5891').length).toBeGreaterThan(0);
+    // Legacy id called out as the one to stop using.
+    expect(screen.getByText(/instead of 477/)).toBeInTheDocument();
+  });
+
   it('shows error on 404', async () => {
     const user = userEvent.setup();
     vi.spyOn(global, 'fetch').mockResolvedValueOnce({

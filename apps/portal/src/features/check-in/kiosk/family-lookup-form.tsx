@@ -5,17 +5,22 @@ import { handleKioskAuthExpiry } from './kiosk-auth';
 
 type ContactType = 'email' | 'phone';
 
+interface LookupResult {
+  familyId: string;
+  publicFid: string | null;
+}
+
 export function FamilyLookupForm() {
   const [type, setType] = useState<ContactType>('email');
   const [value, setValue] = useState('');
-  const [familyId, setFamilyId] = useState<string | null>(null);
+  const [result, setResult] = useState<LookupResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
-    setFamilyId(null);
+    setResult(null);
     startTransition(async () => {
       const res = await fetch('/api/check-in/lookup', {
         method: 'POST',
@@ -31,8 +36,8 @@ export function FamilyLookupForm() {
         setError('Something went wrong. Try again.');
         return;
       }
-      const body = (await res.json()) as { familyId: string };
-      setFamilyId(body.familyId);
+      const body = (await res.json()) as { familyId: string; publicFid?: string | null };
+      setResult({ familyId: body.familyId, publicFid: body.publicFid ?? null });
     });
   }
 
@@ -78,11 +83,25 @@ export function FamilyLookupForm() {
             {error}
           </div>
         )}
-        {familyId && (
-          <div className="rounded border-l-4 border-emerald-500 bg-emerald-50 p-3 text-emerald-900">
-            Your family ID is <strong>{familyId}</strong>
-          </div>
-        )}
+        {result &&
+          (result.publicFid && result.publicFid !== result.familyId ? (
+            // The family has a NEW Family ID: lead with it and mark the legacy id
+            // as retiring - matching the check-in kiosk nudge.
+            <div className="rounded-lg border-2 border-[hsl(var(--primary))] bg-[hsl(var(--primary))]/5 p-4 text-center">
+              <p className="text-sm font-medium text-[hsl(var(--foreground))]">Your new Family ID</p>
+              <p className="my-1 text-4xl font-extrabold tracking-wider text-[hsl(var(--primary))]">
+                {result.publicFid}
+              </p>
+              <p className="text-sm text-[hsl(var(--foreground))]">
+                Please start using it - next time enter <strong>{result.publicFid}</strong> instead
+                of {result.familyId}.
+              </p>
+            </div>
+          ) : (
+            <div className="rounded border-l-4 border-emerald-500 bg-emerald-50 p-3 text-emerald-900">
+              Your family ID is <strong>{result.familyId}</strong>
+            </div>
+          ))}
         <Button type="submit" disabled={pending}>
           {pending ? 'Looking up…' : 'Look up'}
         </Button>
