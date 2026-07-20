@@ -6,7 +6,7 @@ import { SetuLogo } from '@cmt/ui';
 import { CspRoot } from '@/features/family/components/atoms';
 
 // Staff sign-in for the check-in kiosk (a shared door tablet). Username + password
-// against POST /api/setu/auth/kiosk-sign-in — the sevak team has no session yet.
+// against POST /api/setu/auth/kiosk-sign-in - the sevak team has no session yet.
 // HARD-navigates on success so the middleware gate re-runs server-side on the
 // fresh __session cookie (a soft router.push would read a stale server render).
 export function StaffSignInForm() {

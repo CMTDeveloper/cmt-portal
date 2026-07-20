@@ -27,8 +27,8 @@ export const PUBLIC_ROUTES = [
   '/api/setu/auth/send-code',
   '/api/setu/auth/verify-code',
   '/api/setu/auth/password-sign-in',
-  // Kiosk staff login — friendly-username → kiosk email; public because the
-  // sevak team has no session yet.
+  // Kiosk staff login - friendly-username maps to the kiosk email; public because
+  // the sevak team has no session yet.
   '/api/setu/auth/kiosk-sign-in',
   '/api/setu/auth/signout',
   // Magic-link redemption (the token itself is the credential — no session needed)

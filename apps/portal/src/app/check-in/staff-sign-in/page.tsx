@@ -7,7 +7,7 @@ export const metadata = { title: 'Staff sign-in' };
 
 export default function StaffSignInPage() {
   if (!flags.checkInKiosk) notFound();
-  // StaffSignInForm uses useSearchParams() — Next 16 requires it inside Suspense
+  // StaffSignInForm uses useSearchParams() - Next 16 requires it inside Suspense
   // (CSR-bailout during prerender of the dynamic ?from=/?error= query).
   return (
     <Suspense fallback={null}>

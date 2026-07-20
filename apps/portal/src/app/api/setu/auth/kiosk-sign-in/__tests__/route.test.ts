@@ -161,7 +161,7 @@ describe('POST /api/setu/auth/kiosk-sign-in', () => {
     );
   });
 
-  it('rejects unsafe ?from=//evil.com — falls back to /check-in', async () => {
+  it('rejects unsafe ?from=//evil.com - falls back to /check-in', async () => {
     // Even if the helper echoes a hostile redirectTo, the route re-applies the
     // /check-in default for any unsafe from.
     mockedMint.mockResolvedValue({ ...kioskSessionResult(), redirectTo: '//evil.com' });
@@ -175,7 +175,7 @@ describe('POST /api/setu/auth/kiosk-sign-in', () => {
     expect((await res.json()).redirectTo).toBe('/check-in');
   });
 
-  it('rejects unsafe ?from=https://x — falls back to /check-in', async () => {
+  it('rejects unsafe ?from=https://x - falls back to /check-in', async () => {
     mockedMint.mockResolvedValue({ ...kioskSessionResult(), redirectTo: '/check-in' });
 
     const res = await POST(

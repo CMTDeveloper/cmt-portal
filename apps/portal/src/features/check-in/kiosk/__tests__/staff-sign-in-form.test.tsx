@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-// Controllable searchParams — default empty; tests set `.value` before render.
+// Controllable searchParams - default empty; tests set `.value` before render.
 const searchParamsMock = vi.hoisted(() => ({ value: '' }));
 vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(searchParamsMock.value),
