@@ -47,6 +47,15 @@ describe('DisclaimerAcceptForm', () => {
     expect(screen.queryByTestId('disclaimer-ack-checkbox')).toBeNull();
   });
 
+  it('labels each checkbox "acknowledge", not "agree" (Vaibhav)', () => {
+    render(<DisclaimerAcceptForm sections={SECTIONS} intro={INTRO} acknowledgement={ACK} />);
+    // One "I have read and acknowledge the above." label per section, no "agree".
+    expect(screen.getAllByText('I have read and acknowledge the above.')).toHaveLength(
+      SECTIONS.length,
+    );
+    expect(screen.queryByText(/I have read and agree to the above\./)).toBeNull();
+  });
+
   it('shows a validation error (and does NOT submit) when "I Acknowledge" is clicked with any section unticked', async () => {
     render(<DisclaimerAcceptForm sections={SECTIONS} intro={INTRO} acknowledgement={ACK} />);
     const btn = screen.getByTestId('disclaimers-accept');

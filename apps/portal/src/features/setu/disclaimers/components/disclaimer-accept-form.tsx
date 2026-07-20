@@ -114,7 +114,7 @@ export function DisclaimerAcceptForm({
                 onChange={(e) => toggle(s.id, e.target.checked)}
                 style={{ width: 18, height: 18, flexShrink: 0 }}
               />
-              I have read and agree to the above.
+              I have read and acknowledge the above.
             </label>
           </div>
         );
