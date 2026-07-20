@@ -18,11 +18,26 @@ export function canAccessRoute(
   if (pathname === '/check-in/family' || pathname.startsWith('/check-in/family/')) {
     return isFamily(claims);
   }
+  // Kiosk PAGES - no longer public (removed from PUBLIC_ROUTES), gated to the
+  // shared kiosk credential (admin inherits kiosk). Exact-match leaf pages so
+  // they never collide with /check-in/staff-sign-in, /check-in/admin,
+  // /check-in/teacher, or /check-in/family.
+  if (pathname === '/check-in' || pathname === '/check-in/guest' || pathname === '/check-in/lookup') {
+    return isKiosk(claims) || isAdmin(claims);
+  }
 
   if (pathname.startsWith('/api/check-in/admin/')) return isAdmin(claims);
   if (pathname.startsWith('/api/check-in/teacher/')) return isTeacher(claims);
   if (pathname.startsWith('/api/check-in/family/')) return isFamily(claims);
   if (pathname.startsWith('/api/check-in/notifications/')) return isAdmin(claims);
+  // Legacy kiosk APIs - no longer public (removed from PUBLIC_ROUTES), gated to
+  // the shared kiosk credential (admin inherits kiosk). One prefix covers both
+  // /api/check-in/families/{id} and /api/check-in/families/{id}/check-in; two
+  // exact matches cover lookup + guests. `families/` does NOT start with
+  // `family/`, so the isFamily rule above is unaffected.
+  if (pathname.startsWith('/api/check-in/families/')) return isKiosk(claims) || isAdmin(claims);
+  if (pathname === '/api/check-in/lookup') return isKiosk(claims) || isAdmin(claims);
+  if (pathname === '/api/check-in/guests') return isKiosk(claims) || isAdmin(claims);
   // Authenticated Setu kiosk endpoints (door tablet) - NOT public. Covers the
   // lookup (GET .../setu/lookup) + submit (POST .../setu/check-in) paths and any
   // future Setu kiosk path in one prefix. The dedicated least-privilege `kiosk`

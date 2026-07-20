@@ -40,10 +40,20 @@ describe('PUBLIC_ROUTES', () => {
     expect(PUBLIC_ROUTES).toContain('/login/teacher');
     expect(PUBLIC_ROUTES).toContain('/login/family');
   });
-  it('includes kiosk routes', () => {
-    expect(PUBLIC_ROUTES).toContain('/check-in');
-    expect(PUBLIC_ROUTES).toContain('/check-in/guest');
-    expect(PUBLIC_ROUTES).toContain('/check-in/lookup');
+  it('keeps ONLY the kiosk staff login public (kiosk pages+APIs moved to canAccessRoute)', () => {
+    // The kiosk staff login PAGE + its sign-in API stay public - the sevak team
+    // has no session yet when they land on them.
+    expect(PUBLIC_ROUTES).toContain('/check-in/staff-sign-in');
+    expect(PUBLIC_ROUTES).toContain('/api/setu/auth/kiosk-sign-in');
+    // The three kiosk pages + four legacy kiosk APIs are no longer public - they
+    // are now gated to kiosk-or-admin via canAccessRoute.
+    expect(PUBLIC_ROUTES).not.toContain('/check-in');
+    expect(PUBLIC_ROUTES).not.toContain('/check-in/guest');
+    expect(PUBLIC_ROUTES).not.toContain('/check-in/lookup');
+    expect(PUBLIC_ROUTES).not.toContain('/api/check-in/families/:familyId');
+    expect(PUBLIC_ROUTES).not.toContain('/api/check-in/families/:familyId/check-in');
+    expect(PUBLIC_ROUTES).not.toContain('/api/check-in/lookup');
+    expect(PUBLIC_ROUTES).not.toContain('/api/check-in/guests');
   });
   it('includes public auth APIs', () => {
     expect(PUBLIC_ROUTES).toContain('/api/auth/admin/signin');
@@ -81,7 +91,7 @@ describe('matchRoute', () => {
 describe('isPublicRoute', () => {
   it('returns true for a listed public route', () => {
     expect(isPublicRoute('/login')).toBe(true);
-    expect(isPublicRoute('/check-in/guest')).toBe(true);
+    expect(isPublicRoute('/check-in/staff-sign-in')).toBe(true);
   });
   it('returns false for a protected route', () => {
     expect(isPublicRoute('/check-in/admin')).toBe(false);
@@ -89,13 +99,26 @@ describe('isPublicRoute', () => {
     expect(isPublicRoute('/family')).toBe(false);
     expect(isPublicRoute('/family/members')).toBe(false);
   });
+  it('no longer treats the kiosk pages + legacy kiosk APIs as public (now kiosk-or-admin)', () => {
+    expect(isPublicRoute('/check-in')).toBe(false);
+    expect(isPublicRoute('/check-in/guest')).toBe(false);
+    expect(isPublicRoute('/check-in/lookup')).toBe(false);
+    expect(isPublicRoute('/api/check-in/families/1075')).toBe(false);
+    expect(isPublicRoute('/api/check-in/families/1075/check-in')).toBe(false);
+    expect(isPublicRoute('/api/check-in/lookup')).toBe(false);
+    expect(isPublicRoute('/api/check-in/guests')).toBe(false);
+  });
+  it('keeps the kiosk staff login page + sign-in API public (they ARE the login)', () => {
+    expect(isPublicRoute('/check-in/staff-sign-in')).toBe(true);
+    expect(isPublicRoute('/api/setu/auth/kiosk-sign-in')).toBe(true);
+  });
   it('returns true for Setu OTP auth APIs', () => {
     expect(isPublicRoute('/api/setu/auth/send-code')).toBe(true);
     expect(isPublicRoute('/api/setu/auth/verify-code')).toBe(true);
     expect(isPublicRoute('/api/setu/auth/signout')).toBe(true);
   });
   it('returns true for :param route matches', () => {
-    expect(isPublicRoute('/api/check-in/families/42')).toBe(true);
+    expect(isPublicRoute('/api/setu/auth/magic/abc123')).toBe(true);
   });
   it('returns true for cron routes (self-verify CRON_SECRET in their handlers)', () => {
     expect(isPublicRoute('/api/cron/reset-cache')).toBe(true);

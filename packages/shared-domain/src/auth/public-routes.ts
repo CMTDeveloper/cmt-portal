@@ -60,11 +60,9 @@ export const PUBLIC_ROUTES = [
   // (always {ok:true}), like family-lookup, so middleware must not 401 it.
   '/api/setu/join-request/send',
 
-  // Kiosk (public) — feature-flagged in the app layer
-  '/check-in',
-  '/check-in/guest',
-  '/check-in/lookup',
-  // Kiosk staff login PAGE - public; the sevak team has no session yet.
+  // Kiosk staff login PAGE - public; the sevak team has no session yet. The
+  // kiosk pages (/check-in, /check-in/guest, /check-in/lookup) and the legacy
+  // kiosk APIs moved OUT of this list to canAccessRoute (kiosk-or-admin).
   '/check-in/staff-sign-in',
 
   // Public auth APIs (legacy Slice B)
@@ -74,11 +72,8 @@ export const PUBLIC_ROUTES = [
   '/api/auth/family/verify-code',
   '/api/auth/signout',
 
-  // Public kiosk APIs
-  '/api/check-in/families/:familyId',
-  '/api/check-in/families/:familyId/check-in',
-  '/api/check-in/lookup',
-  '/api/check-in/guests',
+  // The legacy kiosk APIs (/api/check-in/{families/:familyId[/check-in],lookup,
+  // guests}) moved OUT of this list to canAccessRoute (kiosk-or-admin).
 
   // Vercel Cron endpoints. Listed here BECAUSE their handlers self-verify
   // CRON_SECRET via a timing-safe Bearer check (verifyCronAuth) — Vercel Cron

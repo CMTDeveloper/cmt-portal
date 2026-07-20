@@ -16,10 +16,69 @@ describe('canAccessRoute — public routes', () => {
     expect(canAccessRoute(teacher, '/login')).toBe(true);
     expect(canAccessRoute(family, '/login')).toBe(true);
   });
-  it('allows anyone to access /check-in kiosk routes', () => {
-    expect(canAccessRoute(family, '/check-in')).toBe(true);
-    expect(canAccessRoute(family, '/check-in/guest')).toBe(true);
-    expect(canAccessRoute(family, '/check-in/lookup')).toBe(true);
+  it('allows anyone to access the kiosk staff login page + sign-in API', () => {
+    // These stay public - the sevak team has no session yet when they land here.
+    expect(canAccessRoute(family, '/check-in/staff-sign-in')).toBe(true);
+    expect(canAccessRoute(family, '/api/setu/auth/kiosk-sign-in', 'POST')).toBe(true);
+  });
+});
+
+describe('canAccessRoute - kiosk pages + legacy kiosk APIs - kiosk-or-admin', () => {
+  // Task 3 security gate: the three kiosk pages + four legacy kiosk APIs were
+  // removed from PUBLIC_ROUTES and are now gated to kiosk-or-admin. The sevak
+  // team shares the single kiosk credential; welcome-team is intentionally NOT
+  // allowed. A no-session request falls through to the final default-deny.
+  const noClaims = { uid: 'anon' } as unknown as SessionClaims;
+  const kioskPaths = ['/check-in', '/check-in/guest', '/check-in/lookup'];
+  const apiPaths = [
+    '/api/check-in/families/1075',
+    '/api/check-in/families/1075/check-in',
+    '/api/check-in/lookup',
+    '/api/check-in/guests',
+  ];
+  const allPaths = [...kioskPaths, ...apiPaths];
+
+  it('allows the kiosk role on every kiosk page + legacy API', () => {
+    for (const p of allPaths) {
+      expect(canAccessRoute(kiosk, p)).toBe(true);
+    }
+  });
+  it('allows admin (inherits kiosk) on every kiosk page + legacy API', () => {
+    for (const p of allPaths) {
+      expect(canAccessRoute(admin, p)).toBe(true);
+    }
+  });
+  it('denies family-manager on every kiosk page + legacy API', () => {
+    for (const p of allPaths) {
+      expect(canAccessRoute(manager, p)).toBe(false);
+    }
+  });
+  it('denies family-member on every kiosk page + legacy API', () => {
+    for (const p of allPaths) {
+      expect(canAccessRoute(member, p)).toBe(false);
+    }
+  });
+  it('denies welcome-team on every kiosk page + legacy API (shared kiosk credential)', () => {
+    for (const p of allPaths) {
+      expect(canAccessRoute(welcomeTeam, p)).toBe(false);
+    }
+  });
+  it('denies the legacy family role on every kiosk page + legacy API', () => {
+    for (const p of allPaths) {
+      expect(canAccessRoute(family, p)).toBe(false);
+    }
+  });
+  it('denies a no-session request on every kiosk page + legacy API (default-deny)', () => {
+    for (const p of allPaths) {
+      expect(canAccessRoute(noClaims, p)).toBe(false);
+    }
+  });
+  it('does NOT swallow /api/check-in/family/{id} - it still routes to isFamily (families vs family collision)', () => {
+    // /api/check-in/families/ must not shadow /api/check-in/family/: the word
+    // "family" diverges from "families" at the 'y' vs 'i'. The family API stays
+    // family-only; kiosk is denied there.
+    expect(canAccessRoute(family, '/api/check-in/family/123')).toBe(true);
+    expect(canAccessRoute(kiosk, '/api/check-in/family/123')).toBe(false);
   });
 });
 
