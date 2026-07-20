@@ -146,6 +146,7 @@ function dashboardForRole(role: unknown): string | null {
   if (role === 'family-manager' || role === 'family-member') return '/family';
   if (role === 'admin') return '/admin';
   if (role === 'welcome-team') return '/welcome';
+  if (role === 'kiosk') return '/check-in';
   return null;
 }
 
@@ -164,6 +165,15 @@ function deny(req: NextRequest, reason: 'no-session' | 'unauthorized') {
   const isApi = pathname.startsWith('/api/');
   if (isApi) {
     return NextResponse.json({ error: reason }, { status: 401 });
+  }
+  // Kiosk pages: send an unauthenticated / wrong-role visitor to the shared
+  // staff login (NOT the family /sign-in or legacy /login). Exact-match the three
+  // kiosk leaf pages so /check-in/{admin,teacher,family} keep their own logins.
+  if (pathname === '/check-in' || pathname === '/check-in/guest' || pathname === '/check-in/lookup') {
+    const redirect = new URL('/check-in/staff-sign-in', req.nextUrl.origin);
+    redirect.searchParams.set('from', pathname);
+    redirect.searchParams.set('error', reason === 'no-session' ? 'session-expired' : 'unauthorized');
+    return NextResponse.redirect(redirect);
   }
   // Setu routes (family + welcome-team + new /admin) redirect to the new
   // /sign-in. Legacy /check-in/admin still goes to legacy /login (will be
