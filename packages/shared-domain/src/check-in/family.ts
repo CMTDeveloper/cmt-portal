@@ -9,7 +9,15 @@ export interface Student {
   fid: string;
   firstName: string;
   lastName: string;
+  // A child's Bala Vihar level NAME for display (e.g. "Level 6"), NOT the raw
+  // grade. The Setu kiosk lookup derives this from the child's grade via the
+  // same level match the teacher roster/dashboard use; the legacy roster path
+  // carries its stored level string. Empty for adults.
   level: string;
+  // Friendly grade label shown ALONGSIDE the level (e.g. "Grade 6") so a family
+  // can spot/correct a mis-placed child at check-in. Only the Setu path sets it;
+  // absent on adults and on the legacy path.
+  grade?: string;
   className?: string;
   dateOfBirth?: string;
   // True for adult family members (parents/guardians): legacy roster rows with

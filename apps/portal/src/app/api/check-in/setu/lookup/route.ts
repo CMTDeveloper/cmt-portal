@@ -1,8 +1,14 @@
 import { NextResponse } from 'next/server';
 import type { Family, Student } from '@cmt/shared-domain/check-in';
+import { BALA_VIHAR, gradeLabel } from '@cmt/shared-domain';
 import { flags } from '@/lib/flags';
 import { resolveKioskFamilyOrMigrate } from '@/features/setu/check-in/resolve-kiosk-family';
 import { getFamilyByFid } from '@/features/setu/members/get-family-by-fid';
+import { getOpenOfferingsForFamily } from '@/features/setu/enrollment/get-open-offerings';
+import {
+  fetchEnabledLevelsForPid,
+  matchChildLevel,
+} from '@/features/setu/enrollment/derive-child-level';
 
 /**
  * Authenticated Setu kiosk lookup (step 1 of the two-step kiosk flow).
@@ -40,21 +46,57 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'family-not-found' }, { status: 404 });
   }
 
+  // Derive each child's Bala Vihar LEVEL (e.g. "Level 6") so the panel shows the
+  // level - not the raw grade number ("6") - alongside the grade for verification.
+  // Reuses the SAME open-offering + level match the family dashboard and teacher
+  // roster use, so the kiosk places a child in the exact level they'd see there.
+  // Off-season (no open offering) leaves `levels` empty → children fall back to a
+  // friendly grade label ("Grade 6"), still an improvement over the bare number.
+  const offerings = await getOpenOfferingsForFamily(BALA_VIHAR, resolved.location);
+  const oid = offerings[0]?.oid;
+  const levels = oid ? await fetchEnabledLevelsForPid(oid) : [];
+  const now = new Date();
+
   // The kiosk checks in the WHOLE family: a family arrives together and a sevak
   // checks off who actually came. So every member - adults AND children -
   // appears, matching the legacy family-check-in app. Adults are flagged so the
-  // panel labels them "Adult" and carry no school level; children keep their
-  // schoolGrade label.
+  // panel labels them "Adult" and carry no school level; children show their
+  // level + grade.
   const displayFid = resolved.publicFid ?? resolved.legacyFid ?? resolved.fid;
   const students: Student[] = data.members.map((m) => {
     const isAdult = m.type === 'Adult';
+    if (isAdult) {
+      return {
+        sid: m.mid,
+        fid: displayFid,
+        firstName: m.firstName,
+        lastName: m.lastName,
+        level: '',
+        isAdult: true,
+      };
+    }
+    const grade = gradeLabel(m.schoolGrade ?? null);
+    const matched = matchChildLevel(
+      {
+        type: m.type,
+        schoolGrade: m.schoolGrade ?? null,
+        birthMonthYear: m.birthMonthYear ?? null,
+      },
+      levels,
+      now,
+    );
+    // Prefer the level name; when no enabled level matches (off-season, or a
+    // grade outside every band) fall back to the friendly grade so the label is
+    // never blank or a bare number.
+    const level = matched?.levelName ?? grade;
     return {
       sid: m.mid,
       fid: displayFid,
       firstName: m.firstName,
       lastName: m.lastName,
-      level: isAdult ? '' : (m.schoolGrade ?? ''),
-      isAdult,
+      level,
+      ...(grade ? { grade } : {}),
+      isAdult: false,
     };
   });
 

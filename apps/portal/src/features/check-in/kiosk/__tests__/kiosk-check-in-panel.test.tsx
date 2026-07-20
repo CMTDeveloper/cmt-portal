@@ -53,6 +53,22 @@ describe('KioskCheckInPanel', () => {
     for (const b of boxes) expect(b).toBeChecked();
   });
 
+  it('shows a child\'s level AND grade, deduped when they are the same (Vaibhav)', () => {
+    const withLevels: Family = {
+      ...family,
+      students: [
+        // Distinct level + grade → both shown, level first.
+        { sid: '1', fid: '42', firstName: 'Aarav', lastName: 'Acme', level: 'Level 6', grade: 'Grade 6' },
+        // Off-season fallback: level == grade → shown once, not "Grade 2 · Grade 2".
+        { sid: '2', fid: '42', firstName: 'Isha', lastName: 'Acme', level: 'Grade 2', grade: 'Grade 2' },
+      ],
+    };
+    render(<KioskCheckInPanel family={withLevels} source="setu" checkInId="42" onDone={() => {}} />);
+    expect(screen.getByText('Level 6 · Grade 6')).toBeInTheDocument();
+    expect(screen.getByText('Grade 2')).toBeInTheDocument();
+    expect(screen.queryByText('Grade 2 · Grade 2')).not.toBeInTheDocument();
+  });
+
   it('shows the "tap to mark not present" instruction', () => {
     render(<KioskCheckInPanel family={family} source="legacy" checkInId="42" onDone={() => {}} />);
     expect(screen.getByText(/mark them as not present/i)).toBeInTheDocument();

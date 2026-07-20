@@ -130,7 +130,12 @@ export function KioskCheckInPanel({ family, source, checkInId, onDone }: Props) 
       <ul className="flex flex-col gap-2">
         {family.students.map((s) => {
           const isChecked = selected[s.sid] ?? false;
-          const sublabel = s.isAdult ? 'Adult' : s.level;
+          // Children show their Bala Vihar level AND grade (e.g. "Level 6 · Grade 6")
+          // so a family can spot a mis-placed child; dedupe so a grade-only
+          // fallback ("Grade 6" in both fields) does not render twice.
+          const sublabel = s.isAdult
+            ? 'Adult'
+            : [...new Set([s.level, s.grade].filter(Boolean))].join(' · ');
           return (
             <li key={s.sid}>
               {/* The whole row is a <label> so tapping anywhere toggles the box -
