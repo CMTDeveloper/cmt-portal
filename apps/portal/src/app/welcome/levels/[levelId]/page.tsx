@@ -2,7 +2,7 @@ import { connection } from 'next/server';
 import Link from 'next/link';
 import { SetuIcon } from '@cmt/ui';
 import { deriveRoster } from '@/features/setu/teacher/roster';
-import { torontoToday } from '@/features/setu/calendar/calendar';
+import { mostRecentSunday } from '@/features/setu/calendar/calendar';
 import type { RosterStatus } from '@cmt/shared-domain';
 
 export const metadata = { title: 'Roster — CMT Welcome' };
@@ -24,7 +24,10 @@ export default async function WelcomeRosterPage({
   await connection();
   const { levelId } = await params;
   const { date: dateParam } = await searchParams;
-  const date = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : torontoToday();
+  // Default to the class day (most recent Sunday), matching the teacher
+  // attendance page + roster API. torontoToday() lands on a non-class weekday and
+  // would show an empty/wrong day's attendance (and miss door/teacher marks).
+  const date = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : mostRecentSunday();
 
   const roster = await deriveRoster(levelId, date);
   if (!roster) return <p style={{ color: 'var(--muted)', fontSize: 14 }}>That class doesn’t exist.</p>;
