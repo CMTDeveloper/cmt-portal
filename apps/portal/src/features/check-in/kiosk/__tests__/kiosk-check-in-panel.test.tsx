@@ -94,7 +94,7 @@ describe('KioskCheckInPanel', () => {
 
     render(<KioskCheckInPanel family={family} source="legacy" checkInId="42" onDone={onDone} />);
     await user.click(screen.getAllByRole('checkbox')[1]!);
-    await user.click(screen.getByRole('button', { name: /check in/i }));
+    await user.click(screen.getByRole('button', { name: /check in family/i }));
 
     expect(global.fetch).toHaveBeenCalledWith(
       '/api/check-in/families/42/check-in',
@@ -103,7 +103,45 @@ describe('KioskCheckInPanel', () => {
         body: JSON.stringify({ students: { '1': true, '2': false } }),
       }),
     );
+    // A confirmation screen shows first; onDone fires only when the sevak taps Done.
+    expect(await screen.findByText(/checked in!/i)).toBeInTheDocument();
+    expect(onDone).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: /done/i }));
     expect(onDone).toHaveBeenCalled();
+  });
+
+  it('confirms a successful check-in even when no new enrollment was created (Vaibhav)', async () => {
+    const user = userEvent.setup();
+    const onDone = vi.fn();
+    // Setu path, already-enrolled family: enroll.created === false. Previously this
+    // silently reset with no confirmation.
+    vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ enroll: { enrolled: true, created: false } }),
+    } as Response);
+
+    render(<KioskCheckInPanel family={family} source="setu" checkInId="42" onDone={onDone} />);
+    await user.click(screen.getByRole('button', { name: /check in family/i }));
+
+    expect(await screen.findByText(/checked in!/i)).toBeInTheDocument();
+    expect(screen.getByText(/has been checked in for today/i)).toBeInTheDocument();
+    // The BV enrollment line only appears for a NEW enrollment.
+    expect(screen.queryByText(/added to bala vihar/i)).not.toBeInTheDocument();
+    expect(onDone).not.toHaveBeenCalled();
+  });
+
+  it('adds the "Added to Bala Vihar" line when the check-in created a new enrollment', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ enroll: { enrolled: true, created: true } }),
+    } as Response);
+
+    render(<KioskCheckInPanel family={family} source="setu" checkInId="42" onDone={() => {}} />);
+    await user.click(screen.getByRole('button', { name: /check in family/i }));
+
+    expect(await screen.findByText(/checked in!/i)).toBeInTheDocument();
+    expect(screen.getByText(/added to bala vihar/i)).toBeInTheDocument();
   });
 
   it('shows an error on server failure', async () => {

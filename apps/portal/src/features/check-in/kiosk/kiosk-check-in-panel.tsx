@@ -20,8 +20,11 @@ export function KioskCheckInPanel({ family, source, checkInId, onDone }: Props) 
   );
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-  // Set only when the check-in newly created a Bala Vihar enrollment, so the
-  // sevak sees that notable moment on a confirmation screen before resetting.
+  // Set on ANY successful check-in so the family/sevak always sees a clear
+  // confirmation screen (not a silent reset) before returning to the start.
+  const [checkedIn, setCheckedIn] = useState(false);
+  // Set only when the check-in newly created a Bala Vihar enrollment, so that
+  // notable moment gets an extra line on the confirmation screen.
   const [enrolled, setEnrolled] = useState(false);
 
   function toggle(sid: string) {
@@ -52,19 +55,18 @@ export function KioskCheckInPanel({ family, source, checkInId, onDone }: Props) 
       }
 
       // On the Setu path the check-in may have auto-enrolled the family into the
-      // current Bala Vihar offering. Surface that only when it was newly created
-      // (`enroll.created === true`); a re-check-in of an already-enrolled family
-      // just resets like the legacy path.
+      // current Bala Vihar offering. Surface that as an extra line only when it
+      // was newly created (`enroll.created === true`).
       if (source === 'setu') {
         const body = (await res.json().catch(() => null)) as {
           enroll?: { created?: boolean };
         } | null;
         if (body?.enroll?.created === true) {
           setEnrolled(true);
-          return;
         }
       }
-      onDone();
+      // Always confirm a successful check-in (setu OR legacy, enrolled or not).
+      setCheckedIn(true);
     } finally {
       setPending(false);
     }
@@ -91,14 +93,22 @@ export function KioskCheckInPanel({ family, source, checkInId, onDone }: Props) 
     </div>
   ) : null;
 
-  if (enrolled) {
+  if (checkedIn) {
     return (
       <div className="mx-auto flex w-full max-w-md flex-col gap-4 rounded-lg border border-[hsl(var(--border))] p-6 text-center">
-        <h2 className="text-2xl font-bold text-[hsl(var(--heading))]">Checked in</h2>
-        {newIdBanner}
-        <p role="status" className="rounded bg-[hsl(var(--muted))] p-3 text-sm text-[hsl(var(--foreground))]">
-          Added to Bala Vihar for this year
+        <div className="text-5xl" aria-hidden>
+          ✅
+        </div>
+        <h2 className="text-2xl font-bold text-[hsl(var(--heading))]">Checked in!</h2>
+        <p role="status" className="text-sm text-[hsl(var(--foreground))]">
+          {family.name} has been checked in for today.
         </p>
+        {newIdBanner}
+        {enrolled && (
+          <p role="status" className="rounded bg-[hsl(var(--muted))] p-3 text-sm text-[hsl(var(--foreground))]">
+            Added to Bala Vihar for this year
+          </p>
+        )}
         <Button type="button" onClick={onDone}>
           Done
         </Button>

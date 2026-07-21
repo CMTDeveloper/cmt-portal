@@ -113,7 +113,7 @@ describe('Setu kiosk flow (KioskHome)', () => {
     expect(await screen.findByText(/added to bala vihar/i)).toBeInTheDocument();
   });
 
-  it('does not show the enroll confirmation when the family was already enrolled (created false)', async () => {
+  it('still confirms the check-in (without the enroll line) when the family was already enrolled (created false)', async () => {
     const user = userEvent.setup();
     vi.spyOn(global, 'fetch')
       .mockResolvedValueOnce({
@@ -135,11 +135,15 @@ describe('Setu kiosk flow (KioskHome)', () => {
     await user.type(screen.getByLabelText(/family id/i), '1075');
     await user.click(screen.getByRole('button', { name: /find/i }));
     await screen.findByText(/alice/i);
-    await user.click(screen.getByRole('button', { name: /check in/i }));
+    await user.click(screen.getByRole('button', { name: /check in family/i }));
 
-    // Back to the empty lookup prompt - no confirmation banner for a re-check-in.
-    expect(await screen.findByText(/enter your family id/i)).toBeInTheDocument();
+    // A confirmation still shows (Vaibhav), just without the BV enrollment line.
+    expect(await screen.findByText(/checked in!/i)).toBeInTheDocument();
     expect(screen.queryByText(/added to bala vihar/i)).not.toBeInTheDocument();
+
+    // Tapping Done returns to the empty lookup prompt.
+    await user.click(screen.getByRole('button', { name: /done/i }));
+    expect(await screen.findByText(/enter your family id/i)).toBeInTheDocument();
   });
 
   it('shows the new-Family-ID nudge when a family is resolved by their legacy id', async () => {
