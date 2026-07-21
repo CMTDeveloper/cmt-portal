@@ -7,7 +7,6 @@ import type {
   AttendanceReport,
 } from '@cmt/shared-domain';
 import { CspRoot } from '@/features/family/components/atoms';
-import { ReportExportButton as CheckInExportButton } from '@/features/check-in/admin';
 import { fetchReport } from './reports-client';
 import { ReportExportButton } from './report-export-button';
 
@@ -324,38 +323,18 @@ function AttendanceCard({ year }: { year?: string }) {
   );
 }
 
-function LegacyCard() {
-  return (
-    <CardShell
-      testId="report-card-legacy"
-      icon={<SetuIcon.dl />}
-      title="Legacy check-in"
-      subtitle="Door-app CSV exports from the standalone kiosk."
-    >
-      <p style={{ fontSize: 11, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600, margin: 0 }}>
-        Legacy door-app exports
-      </p>
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <CheckInExportButton kind="check-ins" label="Export check-ins CSV" />
-        <CheckInExportButton kind="guests" label="Export guests CSV" />
-      </div>
-    </CardShell>
-  );
-}
-
 // ── Shared body (rendered into both mobile + desktop branches) ──────────────────
 
-function HubBody({ isAdmin, year }: { isAdmin: boolean; year?: string }) {
+function HubBody({ year }: { year?: string }) {
   return (
     <div className="col" style={{ gap: 16, maxWidth: 760 }}>
       <EnrollmentCard {...(year ? { year } : {})} />
       <AttendanceCard {...(year ? { year } : {})} />
-      {isAdmin && <LegacyCard />}
     </div>
   );
 }
 
-export function ReportsHub({ isAdmin, year }: { isAdmin: boolean; year?: string }) {
+export function ReportsHub({ year }: { year?: string }) {
   return (
     <>
       {/* Mobile — own CspRoot + 90px bottom padding for the fixed WelcomeMobileNav. */}
@@ -371,7 +350,7 @@ export function ReportsHub({ isAdmin, year }: { isAdmin: boolean; year?: string 
                 Enrollment and attendance summaries — view on screen or export to CSV.
               </p>
             </header>
-            <HubBody isAdmin={isAdmin} {...(year ? { year } : {})} />
+            <HubBody {...(year ? { year } : {})} />
           </div>
         </CspRoot>
       </div>
@@ -384,7 +363,7 @@ export function ReportsHub({ isAdmin, year }: { isAdmin: boolean; year?: string 
             Enrollment and attendance summaries — view on screen or export to CSV.
           </p>
         </header>
-        <HubBody isAdmin={isAdmin} {...(year ? { year } : {})} />
+        <HubBody {...(year ? { year } : {})} />
       </div>
     </>
   );

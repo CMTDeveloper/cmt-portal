@@ -57,7 +57,7 @@ beforeEach(() => {
 // (getAllBy*/findAllBy* + `.length`).
 describe('ReportsHub', () => {
   it('renders the enrollment card with mocked summary data', async () => {
-    render(<ReportsHub isAdmin={false} />);
+    render(<ReportsHub />);
     expect(screen.getAllByTestId('report-card-enrollment').length).toBeGreaterThanOrEqual(1);
     // Program row + total chips load from the mocked report.
     expect((await screen.findAllByText('Bala Vihar')).length).toBeGreaterThanOrEqual(1);
@@ -65,7 +65,7 @@ describe('ReportsHub', () => {
   });
 
   it('renders the confirmed/registered split — numbers on the BV row, em-dash on others', async () => {
-    render(<ReportsHub isAdmin={false} />);
+    render(<ReportsHub />);
     // Wait for the enrollment report to resolve (the split lives in the same
     // "By program" table as the "Bala Vihar" label).
     await screen.findAllByText('Bala Vihar');
@@ -77,7 +77,7 @@ describe('ReportsHub', () => {
   });
 
   it('renders the attendance card with a from/to range and rolled-up rows', async () => {
-    render(<ReportsHub isAdmin={false} />);
+    render(<ReportsHub />);
     expect(screen.getAllByTestId('report-card-attendance').length).toBeGreaterThanOrEqual(1);
     // Level rows render once the attendance report resolves.
     expect((await screen.findAllByText('Level 1')).length).toBeGreaterThanOrEqual(1);
@@ -85,16 +85,11 @@ describe('ReportsHub', () => {
     expect((await screen.findAllByText(/90%/)).length).toBeGreaterThanOrEqual(1);
   });
 
-  it('renders the legacy card for admins, and never the removed donations card', () => {
-    render(<ReportsHub isAdmin />);
-    expect(screen.getAllByTestId('report-card-legacy').length).toBeGreaterThanOrEqual(1);
-    // The donations report was removed — it must never render, for anyone.
-    expect(screen.queryByTestId('report-card-donations')).toBeNull();
-  });
-
-  it('hides the legacy card when isAdmin is false', () => {
-    render(<ReportsHub isAdmin={false} />);
+  it('never renders the removed legacy check-in or donations cards', () => {
+    render(<ReportsHub />);
+    // Legacy door-app CSV exports were removed from the hub (CMT, 2026-07-20).
     expect(screen.queryByTestId('report-card-legacy')).toBeNull();
+    // The donations report was removed earlier — it must never render, for anyone.
     expect(screen.queryByTestId('report-card-donations')).toBeNull();
   });
 });
