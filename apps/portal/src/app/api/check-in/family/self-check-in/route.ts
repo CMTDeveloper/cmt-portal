@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { findFamilyById } from '@/features/check-in/shared';
+import { markSelfCheckInAttendance } from '@/features/setu/check-in/self-check-in-attendance';
 import { flags } from '@/lib/flags';
 import type { FamilySelfCheckInResponse } from '@cmt/shared-domain/check-in';
 
@@ -57,6 +58,12 @@ export async function POST(req: Request) {
     ),
   );
   const checkInIds = docRefs.map((ref) => ref.id);
+
+  // Best-effort: mirror the door kiosk — mark each present child present in their
+  // Bala Vihar class attendance so the teacher sees self-checked-in kids too.
+  // Legacy ids in, Setu attendance out; never fails the recorded check-in.
+  const presentLegacySids = entries.filter(([, isPresent]) => isPresent).map(([sid]) => sid);
+  await markSelfCheckInAttendance({ legacyFamilyId: familyId, presentLegacySids });
 
   const body: FamilySelfCheckInResponse = { success: true, checkInIds };
   return NextResponse.json(body, { status: 200 });

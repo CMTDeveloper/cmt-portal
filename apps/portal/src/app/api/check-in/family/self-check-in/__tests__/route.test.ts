@@ -13,6 +13,13 @@ vi.mock('@/features/check-in/shared', () => ({
   findFamilyById: vi.fn(),
 }));
 
+// The Setu attendance bridge is unit-tested in
+// features/setu/check-in/__tests__/self-check-in-attendance.test.ts. Mock it here.
+const mockMarkAttendance = vi.hoisted(() => vi.fn());
+vi.mock('@/features/setu/check-in/self-check-in-attendance', () => ({
+  markSelfCheckInAttendance: mockMarkAttendance,
+}));
+
 const mockFlags = vi.hoisted(() => ({ checkInFamily: true }));
 vi.mock('@/lib/flags', () => ({ flags: mockFlags }));
 
@@ -38,6 +45,7 @@ beforeEach(() => {
   mockFlags.checkInFamily = true;
   fakeCollection.add.mockResolvedValue(fakeAddResults);
   mockFindFamilyById.mockResolvedValue(familyWith123);
+  mockMarkAttendance.mockResolvedValue({ marked: 0 });
 });
 
 describe('POST /api/check-in/family/self-check-in', () => {
@@ -162,6 +170,29 @@ describe('POST /api/check-in/family/self-check-in', () => {
       },
     });
     expect(fakeCollection.add).toHaveBeenCalledTimes(3);
+  });
+
+  it('best-effort marks Setu class attendance for the PRESENT (checked) students only', async () => {
+    await testApiHandler({
+      appHandler,
+      requestPatcher: (req) => {
+        req.headers.set('x-portal-family-id', '42');
+        req.headers.set('x-portal-uid', 'u1');
+      },
+      test: async ({ fetch }) => {
+        const res = await fetch({
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ students: { '1': true, '2': false, '3': true } }),
+        });
+        expect(res.status).toBe(200);
+      },
+    });
+    // Absent (unchecked '2') is excluded; keyed by the legacy family id + legacy sids.
+    expect(mockMarkAttendance).toHaveBeenCalledWith({
+      legacyFamilyId: '42',
+      presentLegacySids: ['1', '3'],
+    });
   });
 
   it('sets checkedInBy to family and recordedByUid on the Firestore doc', async () => {
