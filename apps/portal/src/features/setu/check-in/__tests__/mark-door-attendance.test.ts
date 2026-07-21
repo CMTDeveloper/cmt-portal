@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { attendanceAid } from '@cmt/shared-domain';
-import { torontoToday } from '@/features/setu/calendar/calendar';
+import { mostRecentSunday } from '@/features/setu/calendar/calendar';
 
 const mocks = vi.hoisted(() => ({
   portalFirestore: vi.fn(),
@@ -30,8 +30,10 @@ const LEVELS = [
   { levelId: 'L-1', levelName: 'Level 1', levelKind: 'level' as const, gradeBand: ['1'] },
 ];
 
+// A Monday: mostRecentSunday(NOW) is the PRIOR Sunday (the class day the teacher
+// views), NOT the raw calendar date — this is exactly the bug the switch fixes.
 const NOW = new Date('2026-07-20T12:00:00Z');
-const DATE = torontoToday(NOW);
+const DATE = mostRecentSunday(NOW); // 2026-07-19
 
 let created: Array<Record<string, unknown>>;
 let existingAids: Set<string>;

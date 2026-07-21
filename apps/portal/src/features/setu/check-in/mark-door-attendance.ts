@@ -6,7 +6,7 @@ import {
   fetchEnabledLevelsForPid,
   matchChildLevel,
 } from '@/features/setu/enrollment/derive-child-level';
-import { torontoToday } from '@/features/setu/calendar/calendar';
+import { mostRecentSunday } from '@/features/setu/calendar/calendar';
 
 // markedByUid provenance sentinel for an attendance row created by a door
 // check-in (a teacher's mark carries their real uid). markedByMid: null also
@@ -57,7 +57,11 @@ export async function markDoorAttendance(params: {
   if (!oid) return { marked: 0, skipped: presentMids.length };
 
   const levels = await fetchEnabledLevelsForPid(oid);
-  const date = torontoToday(now);
+  // The class day the teacher's attendance page shows — its default date is
+  // mostRecentSunday(), NOT the raw calendar day. Marking torontoToday() lands on
+  // (e.g.) a Monday the teacher can never view, so the mark is invisible. Use the
+  // SAME class-day function so a door-marked row appears on the teacher's page.
+  const date = mostRecentSunday(now);
   const db = portalFirestore();
 
   // Read the members once to get each present child's type + grade for the match.
