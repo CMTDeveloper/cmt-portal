@@ -17,6 +17,16 @@ export function FamilyLookupForm() {
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
+  // Switching the Email/Phone tab starts a fresh lookup: clear the entered value
+  // and any prior result/error so stale data from the other tab never lingers.
+  function selectType(next: ContactType) {
+    if (next === type) return;
+    setType(next);
+    setValue('');
+    setResult(null);
+    setError(null);
+  }
+
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
@@ -50,7 +60,7 @@ export function FamilyLookupForm() {
           role="tab"
           type="button"
           aria-selected={type === 'email'}
-          onClick={() => setType('email')}
+          onClick={() => selectType('email')}
           className={`rounded px-3 py-1 text-sm ${type === 'email' ? 'bg-[hsl(var(--primary))] text-white' : ''}`}
         >
           Email
@@ -59,7 +69,7 @@ export function FamilyLookupForm() {
           role="tab"
           type="button"
           aria-selected={type === 'phone'}
-          onClick={() => setType('phone')}
+          onClick={() => selectType('phone')}
           className={`rounded px-3 py-1 text-sm ${type === 'phone' ? 'bg-[hsl(var(--primary))] text-white' : ''}`}
         >
           Phone

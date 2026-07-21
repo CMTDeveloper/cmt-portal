@@ -36,6 +36,24 @@ describe('FamilyLookupForm', () => {
     expect(await screen.findByText(/42/)).toBeInTheDocument();
   });
 
+  it('clears the entered value and prior result when switching tabs (Vaibhav)', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ familyId: '42' }),
+    } as Response);
+
+    render(<FamilyLookupForm />);
+    await user.type(screen.getByLabelText(/email/i), 'a@b.com');
+    await user.click(screen.getByRole('button', { name: /look up/i }));
+    expect(await screen.findByText(/42/)).toBeInTheDocument();
+
+    // Switching to Phone starts fresh: the input is empty and the old result is gone.
+    await user.click(screen.getByRole('tab', { name: /phone/i }));
+    expect(screen.getByLabelText(/phone/i)).toHaveValue('');
+    expect(screen.queryByText(/42/)).not.toBeInTheDocument();
+  });
+
   it('leads with the NEW Family ID and marks the legacy id as retiring (Vaibhav)', async () => {
     const user = userEvent.setup();
     vi.spyOn(global, 'fetch').mockResolvedValueOnce({
