@@ -42,17 +42,33 @@ export async function buildEnrollmentReport(params: ReportQuery): Promise<Enroll
   // All bulk reads up front (the enrollment kind aggregates ~800 families — never
   // per-family fan-out). families → legacyFid, donations → per-fid completed set;
   // both feed the issue #23 confirmed/registered split.
-  const [enrSnap, lvlSnap, famSnap, donSnap] = await Promise.all([
+  const [enrSnap, lvlSnap, famSnap, donSnap, offSnap] = await Promise.all([
     db.collectionGroup('enrollments').get(),
     db.collection('levels').get(),
     db.collection('families').get(),
     db.collectionGroup('donations').get(),
+    db.collection('offerings').get(),
   ]);
 
-  const levelName = new Map<string, { name: string; programKey: string }>();
+  // pid → {location, termLabel} so a level row can be disambiguated by its offering
+  // (same level NAME exists across locations/years).
+  const offMeta = new Map<string, { location: string | null; termLabel: string }>();
+  for (const d of offSnap.docs) {
+    const x = d.data() as { location?: unknown; termLabel?: unknown };
+    offMeta.set(d.id, {
+      location: typeof x.location === 'string' ? x.location : null,
+      termLabel: typeof x.termLabel === 'string' ? x.termLabel : '',
+    });
+  }
+
+  const levelName = new Map<string, { name: string; programKey: string; pid: string }>();
   for (const d of lvlSnap.docs) {
-    const x = d.data() as { levelName?: unknown; programKey?: unknown };
-    levelName.set(d.id, { name: typeof x.levelName === 'string' ? x.levelName : d.id, programKey: String(x.programKey ?? '') });
+    const x = d.data() as { levelName?: unknown; programKey?: unknown; pid?: unknown };
+    levelName.set(d.id, {
+      name: typeof x.levelName === 'string' ? x.levelName : d.id,
+      programKey: String(x.programKey ?? ''),
+      pid: String(x.pid ?? ''),
+    });
   }
 
   const byProgramFamilies = new Map<string, Set<string>>();
@@ -115,10 +131,17 @@ export async function buildEnrollmentReport(params: ReportQuery): Promise<Enroll
   const byLevel = [...byLevelMembers.keys()]
     .map((levelId) => {
       const meta = levelName.get(levelId);
-      return { levelId, levelName: meta?.name ?? levelId, programKey: meta?.programKey ?? '', members: byLevelMembers.get(levelId)!.size };
+      const off = meta?.pid ? offMeta.get(meta.pid) : undefined;
+      return {
+        levelId,
+        levelName: meta?.name ?? levelId,
+        programKey: meta?.programKey ?? '',
+        ...(off ? { location: off.location, termLabel: off.termLabel } : {}),
+        members: byLevelMembers.get(levelId)!.size,
+      };
     })
     .filter((l) => !params.program || l.programKey === params.program)
-    .sort((a, b) => a.levelName.localeCompare(b.levelName));
+    .sort((a, b) => a.levelName.localeCompare(b.levelName) || (a.termLabel ?? '').localeCompare(b.termLabel ?? ''));
 
   return { byProgram, byLevel, totalActiveEnrollments, totalMembers: allMembers.size };
 }

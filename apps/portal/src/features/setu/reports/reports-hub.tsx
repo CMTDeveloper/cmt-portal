@@ -43,6 +43,21 @@ function RateCell({ rate }: { rate: number }) {
   );
 }
 
+// A level name plus its disambiguating context ("Brampton · 2026-27") on a muted
+// second line — the same level name recurs across locations/years, so the bare
+// name alone reads as a confusing duplicate.
+function LevelNameCell({ row }: { row: Record<string, unknown> }) {
+  const meta = [row['location'], row['termLabel']]
+    .filter((x): x is string => typeof x === 'string' && x.length > 0)
+    .join(' · ');
+  return (
+    <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 1 }}>
+      <span>{String(row['levelName'] ?? '')}</span>
+      {meta && <span style={{ fontSize: 11, color: 'var(--muted)' }}>{meta}</span>}
+    </span>
+  );
+}
+
 // Generic compact summary table. Numeric columns right-align with tabular nums.
 type Col = { key: string; label: string; numeric?: boolean; render?: (row: Record<string, unknown>) => React.ReactNode };
 function SummaryTable({ caption, cols, rows }: { caption: string; cols: Col[]; rows: Array<Record<string, unknown>> }) {
@@ -213,10 +228,10 @@ function EnrollmentCard({ year }: { year?: string }) {
           <SummaryTable
             caption="By level"
             cols={[
-              { key: 'levelName', label: 'Level' },
+              { key: 'levelName', label: 'Level', render: (r) => <LevelNameCell row={r} /> },
               { key: 'members', label: 'Members', numeric: true },
             ]}
-            rows={data.byLevel.map((l) => ({ __key: l.levelId, levelName: l.levelName, members: l.members }))}
+            rows={data.byLevel.map((l) => ({ __key: l.levelId, levelName: l.levelName, location: l.location ?? null, termLabel: l.termLabel ?? '', members: l.members }))}
           />
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <ReportExportButton kind="enrollment" filename="enrollment-people" label="Export people CSV" {...(year ? { year } : {})} />
@@ -308,8 +323,8 @@ function AttendanceCard({ year }: { year?: string }) {
           </div>
           <SummaryTable
             caption="By level"
-            cols={[{ key: 'levelName', label: 'Level' }, ...attCols]}
-            rows={data.byLevel.map((l) => ({ __key: l.levelId, levelName: l.levelName, present: l.present, absent: l.absent, total: l.total, rate: l.rate }))}
+            cols={[{ key: 'levelName', label: 'Level', render: (r) => <LevelNameCell row={r} /> }, ...attCols]}
+            rows={data.byLevel.map((l) => ({ __key: l.levelId, levelName: l.levelName, location: l.location ?? null, termLabel: l.termLabel ?? '', present: l.present, absent: l.absent, total: l.total, rate: l.rate }))}
           />
           <SummaryTable
             caption="By program"

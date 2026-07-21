@@ -35,6 +35,10 @@ export const EnrollmentReportSchema = z.object({
   })),
   byLevel: z.array(z.object({
     levelId: z.string(), levelName: z.string(), programKey: z.string(),
+    // Disambiguating context from the level's offering: same level NAME ("Level 1")
+    // can exist across locations/years, so the UI shows "Level 1 · Brampton · 2026-27".
+    location: z.string().nullable().optional(),
+    termLabel: z.string().optional(),
     members: z.number().int().nonnegative(),
   })),
   totalActiveEnrollments: z.number().int().nonnegative(),
@@ -49,7 +53,14 @@ const AttendanceRowSchema = z.object({
   rate: z.number().min(0).max(1), // present / total
 });
 export const AttendanceReportSchema = z.object({
-  byLevel: z.array(AttendanceRowSchema.extend({ levelId: z.string(), levelName: z.string(), programKey: z.string() })),
+  byLevel: z.array(AttendanceRowSchema.extend({
+    levelId: z.string(), levelName: z.string(), programKey: z.string(),
+    // Same-named levels exist across locations/years (the report is unscoped for
+    // the live year); carry the offering's location + term so the UI can show
+    // "Level 1 · Brampton · 2026-27" instead of two indistinguishable "Level 1".
+    location: z.string().nullable().optional(),
+    termLabel: z.string().optional(),
+  })),
   byProgram: z.array(AttendanceRowSchema.extend({ programKey: z.string(), programLabel: z.string() })),
   from: z.string(), to: z.string(),
   totalEvents: z.number().int().nonnegative(),

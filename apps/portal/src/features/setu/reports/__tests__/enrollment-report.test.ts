@@ -14,7 +14,7 @@ interface Extra {
   families?: Array<{ id: string; legacyFid?: string | null }>;
   donations?: Array<{ fid: string; status: string; eid: string | null; amountCAD: number }>;
   attendance?: Array<{ pid: string; mid: string; status: string }>;
-  offerings?: Record<string, { paymentSource?: string }>;
+  offerings?: Record<string, { paymentSource?: string; location?: string | null; termLabel?: string }>;
 }
 
 // Chainable fake supporting: collectionGroup('enrollments'|'donations'),
@@ -53,7 +53,10 @@ function makeDb(enrollments: SeedDoc[], levels: SeedDoc[], extra: Extra = {}) {
         };
       }
       if (c === 'offerings') {
-        return { doc: (oid: string) => ({ __kind: 'offeringDoc' as const, oid }) };
+        return {
+          doc: (oid: string) => ({ __kind: 'offeringDoc' as const, oid }),
+          get: async () => ({ docs: Object.entries(offerings).map(([oid, o]) => ({ id: oid, data: () => o })) }),
+        };
       }
       throw new Error(`unexpected collection ${c}`);
     },
@@ -91,6 +94,22 @@ describe('buildEnrollmentReport', () => {
     expect(r.byProgram.find((p) => p.programKey === 'tabla')!.families).toBe(1);
     expect(r.byLevel.find((l) => l.levelId === 'l1')!.members).toBe(2); // F1-1, F2-1
     expect(r.totalActiveEnrollments).toBe(3);
+  });
+
+  it('carries the offering location + term on each level row (disambiguation)', async () => {
+    mockFs.mockReturnValue(makeDb([
+      { fid: 'F1', programKey: 'bala-vihar', programLabel: 'Bala Vihar', status: 'active', enrolledMids: ['F1-1'], levelSnapshots: { 'F1-1': { levelId: 'l1' } } },
+    ], [
+      // `id` keys the level doc in this mock's snap() helper (see makeDb).
+      { id: 'l1', levelId: 'l1', levelName: 'Level 1', programKey: 'bala-vihar', pid: 'p1' },
+    ], {
+      offerings: { p1: { location: 'Brampton', termLabel: '2026-27' } },
+    }) as never);
+
+    const r = await buildEnrollmentReport({ format: 'json' });
+    const l1 = r.byLevel.find((l) => l.levelId === 'l1')!;
+    expect(l1.location).toBe('Brampton');
+    expect(l1.termLabel).toBe('2026-27');
   });
 
   it('program filter narrows to one program', async () => {

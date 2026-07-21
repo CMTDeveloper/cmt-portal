@@ -23,15 +23,30 @@ function rate(t: Tally): { total: number; rate: number } {
 
 export async function buildAttendanceReport(params: ReportQuery & { from: string; to: string }): Promise<AttendanceReport> {
   const db = portalFirestore();
-  const [evSnap, lvlSnap] = await Promise.all([
+  const [evSnap, lvlSnap, offSnap] = await Promise.all([
     db.collection('attendanceEvents').where('date', '>=', params.from).where('date', '<=', params.to).get(),
     db.collection('levels').get(),
+    db.collection('offerings').get(),
   ]);
 
-  const levelMeta = new Map<string, { name: string; programKey: string }>();
+  // pid → {location, termLabel} so a level row can be disambiguated by its offering.
+  const offMeta = new Map<string, { location: string | null; termLabel: string }>();
+  for (const d of offSnap.docs) {
+    const x = d.data() as { location?: unknown; termLabel?: unknown };
+    offMeta.set(d.id, {
+      location: typeof x.location === 'string' ? x.location : null,
+      termLabel: typeof x.termLabel === 'string' ? x.termLabel : '',
+    });
+  }
+
+  const levelMeta = new Map<string, { name: string; programKey: string; pid: string }>();
   for (const d of lvlSnap.docs) {
-    const x = d.data() as { levelName?: unknown; programKey?: unknown };
-    levelMeta.set(d.id, { name: typeof x.levelName === 'string' ? x.levelName : d.id, programKey: String(x.programKey ?? '') });
+    const x = d.data() as { levelName?: unknown; programKey?: unknown; pid?: unknown };
+    levelMeta.set(d.id, {
+      name: typeof x.levelName === 'string' ? x.levelName : d.id,
+      programKey: String(x.programKey ?? ''),
+      pid: String(x.pid ?? ''),
+    });
   }
 
   const byLevel = new Map<string, Tally>();
@@ -62,8 +77,16 @@ export async function buildAttendanceReport(params: ReportQuery & { from: string
   return {
     byLevel: [...byLevel.entries()].map(([levelId, t]) => {
       const m = levelMeta.get(levelId);
-      return { levelId, levelName: m?.name ?? levelId, programKey: m?.programKey ?? '', ...t, ...rate(t) };
-    }).sort((a, b) => a.levelName.localeCompare(b.levelName)),
+      const off = m?.pid ? offMeta.get(m.pid) : undefined;
+      return {
+        levelId,
+        levelName: m?.name ?? levelId,
+        programKey: m?.programKey ?? '',
+        ...(off ? { location: off.location, termLabel: off.termLabel } : {}),
+        ...t,
+        ...rate(t),
+      };
+    }).sort((a, b) => a.levelName.localeCompare(b.levelName) || (a.termLabel ?? '').localeCompare(b.termLabel ?? '')),
     byProgram: [...byProgram.entries()].map(([programKey, t]) => ({
       programKey, programLabel: programLabel.get(programKey) ?? programKey, ...t, ...rate(t),
     })).sort((a, b) => a.programKey.localeCompare(b.programKey)),
