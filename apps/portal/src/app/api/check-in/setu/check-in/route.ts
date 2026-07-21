@@ -7,6 +7,7 @@ import {
   autoEnrollBalaVihar,
   type AutoEnrollResult,
 } from '@/features/setu/check-in/auto-enroll-bala-vihar';
+import { markDoorAttendance } from '@/features/setu/check-in/mark-door-attendance';
 
 // Auto-enroll is a best-effort ADDED step layered on the check-in write. When it
 // throws unexpectedly (offering-disabled/expired/not-found/family-not-found all
@@ -74,6 +75,26 @@ export async function POST(req: Request) {
     enroll = { enrolled: false, reason: 'error' };
   }
 
+  // Best-effort: mark each present child present in their Bala Vihar class
+  // attendance for today, so the teacher just verifies (the door is the first
+  // step). Present-only + create-only (never overrides a teacher's mark). Runs
+  // AFTER auto-enroll so the child is on the level roster. A failure must not
+  // fail a check-in that was already recorded.
+  let attendance = { marked: 0 };
+  try {
+    const presentMids = Object.entries(parsed.data.students)
+      .filter(([, isPresent]) => isPresent)
+      .map(([mid]) => mid);
+    const res = await markDoorAttendance({
+      fid: family.fid,
+      location: family.location,
+      presentMids,
+    });
+    attendance = { marked: res.marked };
+  } catch (e) {
+    console.error('[check-in/setu] door attendance failed (check-in already recorded)', e);
+  }
+
   return NextResponse.json({
     family: {
       fid: family.fid,
@@ -82,6 +103,7 @@ export async function POST(req: Request) {
       name: family.name,
     },
     enroll,
+    attendance,
     checkInIds,
   });
 }
