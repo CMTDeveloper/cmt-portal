@@ -251,4 +251,24 @@ describe('normalizeContactForKey', () => {
   it('phone: 11-digit with leading 1 strips the 1', () => {
     expect(normalizeContactForKey('phone', '14165552204')).toBe('+14165552204');
   });
+
+  it('phone: an explicit non-NANP country code is preserved as full E.164', () => {
+    // Some families have Indian (and other international) numbers. When the user
+    // types a leading '+' with a country code other than +1, keep it verbatim
+    // instead of corrupting it to a +1 North American key.
+    expect(normalizeContactForKey('phone', '+91 98765 43210')).toBe('+919876543210');
+    expect(normalizeContactForKey('phone', '+91-98765-43210')).toBe('+919876543210');
+    expect(normalizeContactForKey('phone', '+44 20 7946 0958')).toBe('+442079460958');
+  });
+
+  it('phone: existing NANP inputs are byte-identical (no key drift for current families)', () => {
+    // Every form a Canadian/US number could have been entered in must still map
+    // to the SAME +1XXXXXXXXXX key it produced before international support.
+    expect(normalizeContactForKey('phone', '4165552204')).toBe('+14165552204');
+    expect(normalizeContactForKey('phone', '(416) 555-2204')).toBe('+14165552204');
+    expect(normalizeContactForKey('phone', '416-555-2204')).toBe('+14165552204');
+    expect(normalizeContactForKey('phone', '14165552204')).toBe('+14165552204');
+    expect(normalizeContactForKey('phone', '+14165552204')).toBe('+14165552204');
+    expect(normalizeContactForKey('phone', '+1 (416) 555-2204')).toBe('+14165552204');
+  });
 });

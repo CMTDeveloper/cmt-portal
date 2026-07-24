@@ -55,7 +55,7 @@ function RegisterPrototype() {
       <div className="field" style={{ marginBottom: 16 }}>
         <label>Phone number <span className="req">·</span></label>
         <input className="input" type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="(416) 555-0000"/>
-        <div className="hint">Canadian phone numbers only at this time.</div>
+        <div className="hint">For a non-Canadian number, include the country code (e.g. +91 98765 43210).</div>
       </div>
 
       {state === 'match' && (
@@ -350,7 +350,7 @@ function RegisterReal() {
           autoComplete="tel"
           disabled={isLoading}
         />
-        <div className="hint">Canadian phone numbers only at this time.</div>
+        <div className="hint">For a non-Canadian number, include the country code (e.g. +91 98765 43210).</div>
       </div>
 
       {extraEmails.map((val, i) => (
