@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
+import { csvRow } from '@/lib/csv';
 
 
 type Kind = 'check-ins' | 'guests';
@@ -25,14 +26,6 @@ const SCHEMAS: Record<Kind, { collection: string; headers: string[]; orderBy: st
   },
 };
 
-function escapeField(v: unknown): string {
-  const s = v === undefined || v === null ? '' : String(v);
-  if (s.includes('"') || s.includes(',') || s.includes('\n')) {
-    return `"${s.replace(/"/g, '""')}"`;
-  }
-  return s;
-}
-
 export async function POST(
   _req: Request,
   { params }: { params: Promise<{ kind: string }> },
@@ -50,10 +43,10 @@ export async function POST(
     .get();
 
   const rows = snap.docs.map((d) => d.data() as Record<string, unknown>);
-  const header = schema.headers.join(',');
-  const body = rows
-    .map((row) => schema.headers.map((h) => escapeField(row[h])).join(','))
-    .join('\n');
+  // csvRow neutralizes spreadsheet formula injection (leading = + - @ / TAB / CR);
+  // guest firstName/lastName come from the public kiosk form (user-controlled).
+  const header = csvRow(schema.headers);
+  const body = rows.map((row) => csvRow(schema.headers.map((h) => row[h]))).join('\n');
   const csv = rows.length > 0 ? `${header}\n${body}` : header;
 
   return new NextResponse(csv, {

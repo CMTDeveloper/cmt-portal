@@ -26,4 +26,15 @@ describe('toCsv', () => {
     const csv = toCsv([]);
     expect(csv).toBe('date,classId,sid,firstName,lastName,status');
   });
+
+  it('neutralizes spreadsheet formula injection in user-entered names', () => {
+    const rows: CsvRow[] = [
+      { date: '2026-04-13', classId: 'K', sid: '1', firstName: '=1+2', lastName: '+cmd', status: 'present' },
+    ];
+    const csv = toCsv(rows);
+    // Leading = / + get an apostrophe prefix so the cell is literal text.
+    expect(csv).toContain("'=1+2");
+    expect(csv).toContain("'+cmd");
+    expect(csv).not.toContain(',=1+2,');
+  });
 });

@@ -1,4 +1,5 @@
 import type { TeacherReportEntry } from '@cmt/shared-domain/check-in';
+import { csvRow } from '@/lib/csv';
 
 export type CsvRow = TeacherReportEntry;
 
@@ -11,18 +12,11 @@ const HEADERS: Array<keyof CsvRow> = [
   'status',
 ];
 
-function escapeField(v: string): string {
-  if (v.includes('"') || v.includes(',') || v.includes('\n')) {
-    return `"${v.replace(/"/g, '""')}"`;
-  }
-  return v;
-}
-
 export function toCsv(rows: CsvRow[]): string {
-  const header = HEADERS.join(',');
+  // csvRow neutralizes spreadsheet formula injection (leading = + - @ / TAB / CR)
+  // in addition to CSV quoting — student names come from family-entered data.
+  const header = csvRow(HEADERS);
   if (rows.length === 0) return header;
-  const body = rows
-    .map((row) => HEADERS.map((h) => escapeField(String(row[h]))).join(','))
-    .join('\n');
+  const body = rows.map((row) => csvRow(HEADERS.map((h) => row[h]))).join('\n');
   return `${header}\n${body}`;
 }
