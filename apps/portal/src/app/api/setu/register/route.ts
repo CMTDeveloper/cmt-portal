@@ -37,7 +37,11 @@ const additionalMemberSchema = z.object({
 const bodySchema = z.object({
   email: z.string().email(),
   phone: z.string().min(7),
-  familyName: z.string().min(1),
+  // The family display name is no longer collected on the form — it's derived
+  // server-side from the manager's last name (see input build below). Kept
+  // optional so an older/mobile client that still sends it keeps working; a
+  // provided non-empty value wins over the derived default.
+  familyName: z.string().min(1).optional(),
   location: z.string().min(1),
   // Required family home address collected at registration. Flows through the
   // `input` spread of parsed.data into registerFamily.
@@ -184,7 +188,11 @@ export async function POST(req: Request) {
   if (parsed.data.manager.foodAllergies !== undefined) manager.foodAllergies = parsed.data.manager.foodAllergies;
   if (parsed.data.manager.volunteeringSkills !== undefined) manager.volunteeringSkills = parsed.data.manager.volunteeringSkills;
 
-  const input = { ...parsed.data, manager, additionalMembers };
+  // The family display name is derived from the manager's last name (the form no
+  // longer asks for it). A client that still sends a non-empty familyName keeps
+  // its explicit value.
+  const familyName = parsed.data.familyName?.trim() || parsed.data.manager.lastName.trim();
+  const input = { ...parsed.data, familyName, manager, additionalMembers };
 
   let result: { fid: string; mid: string };
   try {

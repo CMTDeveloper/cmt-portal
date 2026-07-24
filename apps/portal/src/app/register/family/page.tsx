@@ -56,12 +56,6 @@ function RegisterFamilyPrototype() {
       <h1 style={{ fontSize: 26, fontWeight: 400, marginTop: 18, marginBottom: 18 }}>Tell us about your family.</h1>
 
       <div className="field" style={{ marginBottom: 14 }}>
-        <label>Family name <span className="req">·</span></label>
-        <input className="input" type="text" defaultValue="Patel"/>
-        <div className="hint">Used in greetings — "The Patel Family"</div>
-      </div>
-
-      <div className="field" style={{ marginBottom: 14 }}>
         <label>Primary location <span className="req">·</span></label>
         <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
           {(['Brampton', 'Scarborough'] as const).map((l, i) => (
@@ -175,7 +169,6 @@ function RegisterFamilyReal() {
   const email = searchParams.get('email') ?? '';
   const phone = searchParams.get('phone') ?? '';
 
-  const [familyName, setFamilyName] = useState('');
   const [location, setLocation] = useState<Location | null>(null);
   // Location pills read the admin-managed centre list. Default to the seed pair
   // so the picker works pre-fetch; keep the default on fetch failure so a network
@@ -341,7 +334,6 @@ function RegisterFamilyReal() {
     }
 
     const errors: Record<string, string> = {};
-    if (!familyName.trim()) errors.familyName = 'Family name is required.';
     if (!location) errors.location = 'Please select a primary location.';
     // Required home address - block advancing to the OTP phase until it's valid.
     if (!street.trim()) errors.street = 'Street address is required.';
@@ -430,7 +422,6 @@ function RegisterFamilyReal() {
         body: JSON.stringify({
           email,
           phone,
-          familyName: familyName.trim(),
           location,
           familyAddress: {
             street: street.trim(),
@@ -511,22 +502,6 @@ function RegisterFamilyReal() {
     <>
       <StepHeader step={2} of={2} label="Family details"/>
       <h1 style={{ fontSize: 26, fontWeight: 400, marginTop: 18, marginBottom: 18 }}>Tell us about your family.</h1>
-
-      {/* Family name */}
-      <div className="field" style={{ marginBottom: 14 }}>
-        <label>Family name <span className="req">·</span></label>
-        <input
-          className="input"
-          type="text"
-          placeholder="e.g. Patel"
-          value={familyName}
-          onChange={e => setFamilyName(e.target.value)}
-          disabled={submitting}
-          aria-invalid={!!fieldErrors.familyName}
-        />
-        <div className="hint">Used in greetings — "The {familyName || 'Family'} Family"</div>
-        {fieldErrors.familyName && <div className="field-error" role="alert">{fieldErrors.familyName}</div>}
-      </div>
 
       {/* Location */}
       <div className="field" style={{ marginBottom: 14 }}>

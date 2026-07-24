@@ -128,17 +128,15 @@ function queueOtpThenRegister(register: Json) {
 
 async function fillForm(
   user: ReturnType<typeof userEvent.setup>,
-  opts: { family: string; location: string; first: string; last: string },
+  opts: { location: string; first: string; last: string },
 ) {
   // The form renders BOTH a mobile (block md:hidden) and desktop (hidden md:block)
   // tree, so every element is duplicated. Index [0] is the mobile copy; React
-  // state is shared, so filling the mobile copy updates both. The required home
-  // address adds 4 text inputs between family name and the manager block, so the
-  // mobile text-input order is now: [0]=familyName, [1]=street, [2]=unit,
-  // [3]=city, [4]=postalCode, [5]=managerFirst, [6]=managerLast,
-  // [7]=managerFoodAllergies.
+  // state is shared, so filling the mobile copy updates both. The family-name
+  // field was removed (the server derives it from the manager's last name), so
+  // the mobile text-input order is now: [0]=street, [1]=unit, [2]=city,
+  // [3]=postalCode, [4]=managerFirst, [5]=managerLast, [6]=managerFoodAllergies.
   const textInputs = document.querySelectorAll('input[type="text"]');
-  await user.type(textInputs[0] as HTMLElement, opts.family);
   // Location pills come from the mount /api/setu/locations fetch - await them.
   const locBtns = await screen.findAllByRole('button', { name: opts.location });
   await user.click(locBtns[0]!);
@@ -150,13 +148,13 @@ async function fillForm(
   await user.selectOptions(screen.getAllByLabelText('Province')[0]!, 'ON');
   await user.type(screen.getAllByLabelText('Postal code')[0]!, 'L6P 1A2');
 
-  await user.type(textInputs[5] as HTMLElement, opts.first);
-  await user.type(textInputs[6] as HTMLElement, opts.last);
+  await user.type(textInputs[4] as HTMLElement, opts.first);
+  await user.type(textInputs[5] as HTMLElement, opts.last);
 
   // Manager now requires gender + foodAllergies + >=1 volunteering skill before
   // submit is allowed. Fill them so the OTP flow can fire.
   await user.click(screen.getAllByRole('button', { name: 'Male' })[0]!);
-  await user.type(textInputs[7] as HTMLElement, 'None known');
+  await user.type(textInputs[6] as HTMLElement, 'None known');
   await user.click(screen.getAllByTestId('skills-add')[0]!);
 }
 
@@ -268,7 +266,9 @@ describe('RegisterFamilyPage — initial state (flag on)', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('RegisterFamilyPage — client-side validation', () => {
-  it('clicking submit without filling fields shows field error for family name', async () => {
+  it('clicking submit without filling fields shows a required-field error and fires no fetch', async () => {
+    // The family-name field was removed (server derives it), so location is now
+    // the first required field an empty submit surfaces.
     const user = userEvent.setup();
     render(<RegisterFamilyPage />);
 
@@ -276,7 +276,7 @@ describe('RegisterFamilyPage — client-side validation', () => {
     await user.click(submitBtns[0]!);
 
     await waitFor(() => {
-      expect(screen.getAllByText(/family name is required/i).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/please select a primary location/i).length).toBeGreaterThan(0);
     });
 
     // Validation failed → no submit fetch fired (only the mount locations fetch).
@@ -287,9 +287,9 @@ describe('RegisterFamilyPage — client-side validation', () => {
     const user = userEvent.setup();
     render(<RegisterFamilyPage />);
 
-    // Fill family name but not location or manager
+    // Fill the street (first text input) but not location or manager.
     const textInputs = document.querySelectorAll('input[type="text"]');
-    await user.type(textInputs[0] as HTMLElement, 'Sharma');
+    await user.type(textInputs[0] as HTMLElement, '12 Main St');
 
     const submitBtns = screen.getAllByRole('button', { name: /create family/i });
     await user.click(submitBtns[0]!);
@@ -310,7 +310,7 @@ describe('RegisterFamilyPage — successful submit (OTP-gated)', () => {
 
     const user = userEvent.setup();
     render(<RegisterFamilyPage />);
-    await fillForm(user, { family: 'Sharma', location: 'Mississauga', first: 'Priya', last: 'Sharma' });
+    await fillForm(user, { location: 'Mississauga', first: 'Priya', last: 'Sharma' });
 
     await submitToCodeStep(user);
     // Submit calls send-code - NOT register (the family isn't created yet).
@@ -332,7 +332,7 @@ describe('RegisterFamilyPage — successful submit (OTP-gated)', () => {
 
     const user = userEvent.setup();
     render(<RegisterFamilyPage />);
-    await fillForm(user, { family: 'Verma', location: 'Brampton', first: 'Amit', last: 'Verma' });
+    await fillForm(user, { location: 'Brampton', first: 'Amit', last: 'Verma' });
     await submitToCodeStep(user);
     await enterCodeAndCreate(user);
 
@@ -354,7 +354,7 @@ describe('RegisterFamilyPage — successful submit (OTP-gated)', () => {
 
     const user = userEvent.setup();
     render(<RegisterFamilyPage />);
-    await fillForm(user, { family: 'Sharma', location: 'Brampton', first: 'Priya', last: 'Sharma' });
+    await fillForm(user, { location: 'Brampton', first: 'Priya', last: 'Sharma' });
     await submitToCodeStep(user);
     await enterCodeAndCreate(user, '000000');
 
@@ -372,17 +372,17 @@ describe('RegisterFamilyPage — server validation errors (after OTP)', () => {
     queueOtpThenRegister({
       ok: false,
       status: 400,
-      json: async () => ({ error: 'validation-error', fields: { familyName: 'Family name already taken.' } }),
+      json: async () => ({ error: 'validation-error', fields: { location: 'That centre is full right now.' } }),
     });
 
     const user = userEvent.setup();
     render(<RegisterFamilyPage />);
-    await fillForm(user, { family: 'Patel', location: 'Brampton', first: 'Raj', last: 'Patel' });
+    await fillForm(user, { location: 'Brampton', first: 'Raj', last: 'Patel' });
     await submitToCodeStep(user);
     await enterCodeAndCreate(user);
 
     await waitFor(() => {
-      expect(screen.getAllByText(/family name already taken/i).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/that centre is full right now/i).length).toBeGreaterThan(0);
     });
   });
 
@@ -391,7 +391,7 @@ describe('RegisterFamilyPage — server validation errors (after OTP)', () => {
 
     const user = userEvent.setup();
     render(<RegisterFamilyPage />);
-    await fillForm(user, { family: 'Patel', location: 'Brampton', first: 'Raj', last: 'Patel' });
+    await fillForm(user, { location: 'Brampton', first: 'Raj', last: 'Patel' });
     await submitToCodeStep(user);
     await enterCodeAndCreate(user);
 
@@ -403,7 +403,7 @@ describe('RegisterFamilyPage — server validation errors (after OTP)', () => {
 
     const user = userEvent.setup();
     render(<RegisterFamilyPage />);
-    await fillForm(user, { family: 'Patel', location: 'Brampton', first: 'Raj', last: 'Patel' });
+    await fillForm(user, { location: 'Brampton', first: 'Raj', last: 'Patel' });
     await submitToCodeStep(user);
     await enterCodeAndCreate(user);
 
@@ -419,7 +419,7 @@ describe('RegisterFamilyPage — server validation errors (after OTP)', () => {
 
     const user = userEvent.setup();
     render(<RegisterFamilyPage />);
-    await fillForm(user, { family: 'Patel', location: 'Brampton', first: 'Raj', last: 'Patel' });
+    await fillForm(user, { location: 'Brampton', first: 'Raj', last: 'Patel' });
     await submitToCodeStep(user);
     await enterCodeAndCreate(user);
 
@@ -433,7 +433,7 @@ describe('RegisterFamilyPage — server validation errors (after OTP)', () => {
 
     const user = userEvent.setup();
     render(<RegisterFamilyPage />);
-    await fillForm(user, { family: 'Patel', location: 'Brampton', first: 'Raj', last: 'Patel' });
+    await fillForm(user, { location: 'Brampton', first: 'Raj', last: 'Patel' });
     await submitToCodeStep(user);
     await enterCodeAndCreate(user);
 
@@ -460,7 +460,6 @@ describe('RegisterFamilyPage — network error', () => {
     render(<RegisterFamilyPage />);
 
     const textInputs = document.querySelectorAll('input[type="text"]');
-    await user.type(textInputs[0] as HTMLElement, 'Iyer');
 
     const bBtn = await screen.findAllByRole('button', { name: 'Markham' });
     await user.click(bBtn[0]!);
@@ -471,15 +470,15 @@ describe('RegisterFamilyPage — network error', () => {
     await user.selectOptions(screen.getAllByLabelText('Province')[0]!, 'ON');
     await user.type(screen.getAllByLabelText('Postal code')[0]!, 'L3R 1A2');
 
-    // Manager text inputs sit after the 4 address text inputs: [5]=first,
-    // [6]=last, [7]=foodAllergies.
-    await user.type(textInputs[5] as HTMLElement, 'Ravi');
-    await user.type(textInputs[6] as HTMLElement, 'Iyer');
+    // Family name was removed, so the manager text inputs now sit right after the
+    // 4 address text inputs: [4]=first, [5]=last, [6]=foodAllergies.
+    await user.type(textInputs[4] as HTMLElement, 'Ravi');
+    await user.type(textInputs[5] as HTMLElement, 'Iyer');
 
     // Manager matrix: gender + foodAllergies + >=1 skill, so submit actually
     // fires the (rejected) send-code fetch.
     await user.click(screen.getAllByRole('button', { name: 'Male' })[0]!);
-    await user.type(textInputs[7] as HTMLElement, 'None known');
+    await user.type(textInputs[6] as HTMLElement, 'None known');
     await user.click(screen.getAllByTestId('skills-add')[0]!);
 
     const submitBtns = screen.getAllByRole('button', { name: /create family/i });
@@ -533,7 +532,7 @@ describe('RegisterFamilyPage — additional members', () => {
     const user = userEvent.setup();
     render(<RegisterFamilyPage />);
     await addChildMember(user, { first: 'Rahul', last: 'Gupta' });
-    await fillForm(user, { family: 'Gupta', location: 'Scarborough', first: 'Sunita', last: 'Gupta' });
+    await fillForm(user, { location: 'Scarborough', first: 'Sunita', last: 'Gupta' });
 
     await submitToCodeStep(user);
     await enterCodeAndCreate(user);
@@ -550,7 +549,7 @@ describe('RegisterFamilyPage — additional members', () => {
     queueOtpThenRegister({ ok: true, json: async () => ({ redirectTo: '/family' }) });
     const user = userEvent.setup();
     render(<RegisterFamilyPage />);
-    await fillForm(user, { family: 'Gupta', location: 'Scarborough', first: 'Sunita', last: 'Gupta' });
+    await fillForm(user, { location: 'Scarborough', first: 'Sunita', last: 'Gupta' });
 
     // Fill a COMPLETE child draft but do NOT click "Add member".
     await user.click(screen.getAllByRole('button', { name: /add another member/i })[0]!);
@@ -576,7 +575,7 @@ describe('RegisterFamilyPage — additional members', () => {
   it('blocks submit (no OTP) when an uncommitted member draft is incomplete', async () => {
     const user = userEvent.setup();
     render(<RegisterFamilyPage />);
-    await fillForm(user, { family: 'Gupta', location: 'Scarborough', first: 'Sunita', last: 'Gupta' });
+    await fillForm(user, { location: 'Scarborough', first: 'Sunita', last: 'Gupta' });
 
     // Start a member but leave it incomplete (only a first name).
     await user.click(screen.getAllByRole('button', { name: /add another member/i })[0]!);
@@ -608,7 +607,7 @@ describe('RegisterFamilyPage — additional members', () => {
     await user.click(screen.getAllByTestId('skills-add')[1]!);
     await user.click(screen.getAllByRole('button', { name: /^add member$/i })[0]!);
 
-    await fillForm(user, { family: 'Gupta', location: 'Brampton', first: 'Sunita', last: 'Gupta' });
+    await fillForm(user, { location: 'Brampton', first: 'Sunita', last: 'Gupta' });
     await submitToCodeStep(user);
     await enterCodeAndCreate(user);
 

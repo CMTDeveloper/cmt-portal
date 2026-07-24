@@ -139,11 +139,22 @@ describe('POST /api/setu/register', () => {
     expect(res.status).toBe(400);
   });
 
-  it('returns 400 on missing familyName', async () => {
+  it('derives familyName from the manager last name when omitted', async () => {
+    // The form no longer collects a family name; the server derives it.
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { familyName, ...rest } = validBody;
     const res = await POST(makeRequest(rest));
-    expect(res.status).toBe(400);
+    expect(res.status).not.toBe(400);
+    expect(registerFamily).toHaveBeenCalledWith(
+      expect.objectContaining({ familyName: 'Patel' }),
+    );
+  });
+
+  it('keeps an explicitly provided familyName (older/mobile client)', async () => {
+    await POST(makeRequest({ ...validBody, familyName: 'Sharma' }));
+    expect(registerFamily).toHaveBeenCalledWith(
+      expect.objectContaining({ familyName: 'Sharma' }),
+    );
   });
 
   it('returns 400 on invalid location', async () => {

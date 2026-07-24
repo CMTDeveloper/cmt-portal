@@ -22,6 +22,11 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
+## 2026-07-24 - POST /api/setu/register - `familyName` is now OPTIONAL (server derives it from the manager's last name)
+Per family feedback, the registration form no longer asks for a separate "Family name"; the family display name is derived server-side from the primary manager's last name.
+- **`POST /api/setu/register`** request body: **`familyName` changed from REQUIRED to OPTIONAL.** When omitted (or blank), the server sets the family display name to **`manager.lastName`**. When a non-empty `familyName` IS sent, that explicit value is kept unchanged. No response-shape or error-code change; every other field is unchanged.
+- **Mobile action:** if the mobile registration form collects a family name, it may drop that field and send no `familyName` (the server will derive it) - or keep sending one; both work. Make `familyName` optional in the register request schema so validation doesn't require it. Purely a relaxation - an older client that still sends `familyName` is unaffected.
+
 ## 2026-07-20 - kiosk staff login slice - NEW web-only POST /api/setu/auth/kiosk-sign-in; password-sign-in shape UNCHANGED - NO mobile action
 The door-tablet kiosk got a friendly staff login. This is a **web/kiosk-only** surface; the family mobile app does not (and must not) call it. Recorded here explicitly so the contract-sync cron does not read the silence as an oversight.
 - **NEW `POST /api/setu/auth/kiosk-sign-in`** (web-only) - shared-credential staff login for the door kiosk. Body `{ username, password }` (the friendly `sevak` username maps server-side to the kiosk account email); `200 { redirectTo }` + sets the `__session` cookie on success; `401 invalid-credentials`, `429 too-many-requests` (+ optional `resetAt`), `400 bad-request`, `403 forbidden`, `500 server-misconfigured`, `404 not-found` (auth flag off). **Mobile action: NONE** - the mobile app never signs into the kiosk; do not mirror this route.
