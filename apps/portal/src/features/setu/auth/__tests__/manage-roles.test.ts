@@ -7,6 +7,8 @@ const {
   mockFind,
   mockAddMemberRole,
   mockRemoveMemberRole,
+  mockRevokeMemberSessions,
+  mockRevokeUidSessions,
 } = vi.hoisted(() => ({
   mockGetUser: vi.fn(),
   mockCreateUser: vi.fn(),
@@ -14,6 +16,8 @@ const {
   mockFind: vi.fn(),
   mockAddMemberRole: vi.fn(),
   mockRemoveMemberRole: vi.fn(),
+  mockRevokeMemberSessions: vi.fn(),
+  mockRevokeUidSessions: vi.fn(),
 }));
 
 vi.mock('server-only', () => ({}));
@@ -33,6 +37,10 @@ vi.mock('../member-roles', () => ({
   addMemberRole: mockAddMemberRole,
   removeMemberRole: mockRemoveMemberRole,
 }));
+vi.mock('../revoke-sessions', () => ({
+  revokeMemberSessions: mockRevokeMemberSessions,
+  revokeUidSessions: mockRevokeUidSessions,
+}));
 
 import { grantRole, revokeRole } from '../manage-roles';
 
@@ -42,6 +50,7 @@ const SETU_FAMILY = {
   mid: 'CMT-FAM1-01',
   legacyFid: null,
   family: null,
+  member: { email: 'asha@example.com', phone: '+16135550100' },
 };
 
 const NO_FAMILY = {
@@ -58,6 +67,8 @@ beforeEach(() => {
   mockRemoveMemberRole.mockResolvedValue(undefined);
   mockSetCustomUserClaims.mockResolvedValue(undefined);
   mockCreateUser.mockResolvedValue(undefined);
+  mockRevokeMemberSessions.mockResolvedValue({ uids: [] });
+  mockRevokeUidSessions.mockResolvedValue(undefined);
 });
 
 describe('grantRole — family (roleAssignments) path', () => {
@@ -110,12 +121,19 @@ describe('grantRole — non-family (auth-claim) path', () => {
 });
 
 describe('revokeRole — family (roleAssignments) path', () => {
-  it('removes the role from the member assignment', async () => {
+  it('removes the role AND strips + revokes the member on both uids', async () => {
     mockFind.mockResolvedValue(SETU_FAMILY);
 
     const res = await revokeRole({ contact: 'asha@example.com', role: 'welcome-team' });
 
     expect(mockRemoveMemberRole).toHaveBeenCalledWith('CMT-FAM1-01', 'welcome-team');
+    // The mirrored capability must be stripped from the member's persisted claims
+    // and their sessions revoked, else re-sign-in re-grants the role.
+    expect(mockRevokeMemberSessions).toHaveBeenCalledWith({
+      email: 'asha@example.com',
+      phone: '+16135550100',
+      stripCaps: ['welcome-team'],
+    });
     expect(res).toEqual({ path: 'roleAssignments', revoked: true });
     expect(mockSetCustomUserClaims).not.toHaveBeenCalled();
   });
@@ -129,6 +147,8 @@ describe('revokeRole — non-family (auth-claim) path', () => {
     const res = await revokeRole({ contact: 'staff@example.com', role: 'admin' });
 
     expect(mockSetCustomUserClaims).toHaveBeenCalledTimes(1);
+    // Non-family path clears the single uid's claim then revokes its sessions.
+    expect(mockRevokeUidSessions).toHaveBeenCalledWith('uid-staff@example.com');
     expect(res).toEqual({ path: 'auth-claim', revoked: true });
   });
 

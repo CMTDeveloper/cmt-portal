@@ -13,6 +13,7 @@ import {
 } from '@/lib/auth/role-claims';
 import { findSetuFamilyByContact } from './find-family-by-contact';
 import { addMemberRole, removeMemberRole, listMembersWithRole } from './member-roles';
+import { revokeMemberSessions, revokeUidSessions } from './revoke-sessions';
 
 /**
  * Dual-path role management, extracted from scripts/grant-admin.ts and
@@ -100,6 +101,14 @@ export async function revokeRole(args: {
 
   if (result.source === 'setu' && result.mid) {
     await removeMemberRole(result.mid, args.role);
+    // Removal must take effect immediately AND survive re-sign-in. The member's
+    // existing session carries the stale capability for up to 14 days, and
+    // build-session-claims OR's the persisted extraRoles copy back in on next
+    // sign-in — so strip the mirrored capability from BOTH the member's auth
+    // uids (email + phone) and revoke their refresh tokens.
+    const email = typeof result.member?.email === 'string' ? result.member.email : null;
+    const phone = typeof result.member?.phone === 'string' ? result.member.phone : null;
+    await revokeMemberSessions({ email, phone, stripCaps: [args.role as Capability] });
     return { path: 'roleAssignments', revoked: true };
   }
 
@@ -111,6 +120,8 @@ export async function revokeRole(args: {
       return { path: 'auth-claim', revoked: false };
     }
     await auth.setCustomUserClaims(uid, removeCapability(existing, args.role as Capability));
+    // Force sign-out so the stale session cookie can't keep the capability.
+    await revokeUidSessions(uid);
     return { path: 'auth-claim', revoked: true };
   } catch (err) {
     if ((err as { code?: string }).code === 'auth/user-not-found') {
