@@ -22,4 +22,18 @@ describe('isSafeInternalPath', () => {
     expect(isSafeInternalPath(null)).toBe(false);
     expect(isSafeInternalPath(undefined)).toBe(false);
   });
+
+  it('rejects backslashes (browser/URL parser treat \\ as / in the authority)', () => {
+    // `/\evil.example` — the reported open-redirect vector; resolves cross-origin.
+    expect(isSafeInternalPath('/\\evil.example')).toBe(false);
+    expect(isSafeInternalPath('/\\/evil')).toBe(false);
+    expect(isSafeInternalPath('/\\\\evil')).toBe(false);
+    expect(isSafeInternalPath('/foo\\bar')).toBe(false);
+  });
+
+  it('rejects control characters (host smuggling)', () => {
+    for (const code of [0, 9, 10, 13, 31, 127]) {
+      expect(isSafeInternalPath('/' + String.fromCharCode(code) + 'evil')).toBe(false);
+    }
+  });
 });

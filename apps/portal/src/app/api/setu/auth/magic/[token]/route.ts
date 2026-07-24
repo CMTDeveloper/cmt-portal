@@ -11,14 +11,7 @@ import {
   hasSession,
   isPendingApproval,
 } from '@/features/setu/auth/build-session-claims';
-
-function safeFrom(from: string | null): string | null {
-  if (!from) return null;
-  if (!from.startsWith('/')) return null;
-  if (from.startsWith('//')) return null;
-  if (from.includes('://')) return null;
-  return from;
-}
+import { isSafeInternalPath } from '@cmt/shared-domain';
 
 export async function GET(
   req: Request,
@@ -62,7 +55,7 @@ export async function GET(
 
   const reqUrl = new URL(req.url);
   const fromParam = reqUrl.searchParams.get('from');
-  const redirectTo = safeFrom(fromParam) ?? baseRedirectTo;
+  const redirectTo = isSafeInternalPath(fromParam) ? fromParam : baseRedirectTo;
 
   const auth = portalAuth();
   await auth.setCustomUserClaims(uid, claims);

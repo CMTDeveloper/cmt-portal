@@ -16,6 +16,7 @@ import {
   isPendingApproval,
 } from '@/features/setu/auth/build-session-claims';
 import { issueRegistrationGrant } from '@/features/setu/registration/registration-grant';
+import { isSafeInternalPath } from '@cmt/shared-domain';
 
 
 const bodySchema = z.object({
@@ -89,7 +90,7 @@ export async function POST(req: Request) {
   // Honor same-origin `from=` param (e.g. set by invite-accept redirect).
   let redirectTo = baseRedirectTo;
   const fromParam = reqUrl.searchParams.get('from');
-  if (fromParam && fromParam.startsWith('/') && !fromParam.startsWith('//')) {
+  if (isSafeInternalPath(fromParam)) {
     redirectTo = fromParam;
   }
 
