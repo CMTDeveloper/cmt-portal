@@ -513,7 +513,7 @@ describe('DELETE /api/setu/members/[mid]', () => {
     expect(vi.mocked(revalidateTag)).toHaveBeenCalledWith('family-FAM001ABCD12', 'max');
   });
 
-  it('removes contactKey docs when member has email/phone', async () => {
+  it('removes contactKey docs the member OWNS (email/phone)', async () => {
     const memberWithContactSnap = {
       exists: true,
       data: () => ({
@@ -522,9 +522,13 @@ describe('DELETE /api/setu/members/[mid]', () => {
         phone: '4165559999',
       }),
     };
+    // targetMid FAM001ABCD12-02 owns both its contactKeys.
+    const ownedKey = { exists: true, data: () => ({ mid: 'FAM001ABCD12-02' }) };
     mockGet
       .mockResolvedValueOnce(familySnap)
-      .mockResolvedValueOnce(memberWithContactSnap);
+      .mockResolvedValueOnce(memberWithContactSnap)
+      .mockResolvedValueOnce(ownedKey) // email contactKey read
+      .mockResolvedValueOnce(ownedKey); // phone contactKey read
 
     await DELETE(makeRequest('DELETE', null, managerHeaders()), { params: Promise.resolve(params) });
     // mockTxnDelete called for member + email contactKey + phone contactKey
@@ -536,6 +540,32 @@ describe('DELETE /api/setu/members/[mid]', () => {
       phone: '4165559999',
       stripCaps: ['admin', 'welcome-team'],
     });
+  });
+
+  it('does NOT delete a contactKey owned by a relative (shared contact — lockout fix)', async () => {
+    // A child that shares the manager's email: the email contactKey is owned by
+    // the MANAGER (-01), not the deleted child (-02). Deleting the child must
+    // leave the manager's key intact or the manager can no longer sign in.
+    const childSharingManagerEmail = {
+      exists: true,
+      data: () => ({
+        ...memberSnap.data(),
+        mid: 'FAM001ABCD12-02',
+        email: 'manager@example.com',
+        phone: null,
+      }),
+    };
+    mockGet
+      .mockResolvedValueOnce(familySnap)
+      .mockResolvedValueOnce(childSharingManagerEmail)
+      .mockResolvedValueOnce({ exists: true, data: () => ({ mid: 'FAM001ABCD12-01' }) }); // owned by manager
+
+    const res = await DELETE(makeRequest('DELETE', null, managerHeaders()), {
+      params: Promise.resolve(params),
+    });
+    expect(res.status).toBe(200);
+    // Only the member doc is deleted — the manager-owned contactKey is preserved.
+    expect(mockTxnDelete).toHaveBeenCalledTimes(1);
   });
 
   it('removes family managers array entry when deleting a non-last manager', async () => {

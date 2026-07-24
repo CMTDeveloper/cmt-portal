@@ -430,19 +430,36 @@ export async function DELETE(_req: Request, ctx: RouteContext) {
       removedPhone = memberData.phone;
       const familyData = familySnap.data() as { managers: string[]; fid: string };
 
-      // Guard: cannot remove the last manager
+      // Guard: cannot remove the last manager (pure check — safe before writes)
       if (memberData.manager) {
         assertNotLastManager(familyData, targetMid, 'remove');
       }
 
-      // Remove contactKey docs
-      if (memberData.email) {
-        const hash = hashContactKey('email', memberData.email);
-        txn.delete(db.collection('contactKeys').doc(hash));
+      // Read the member's contactKey docs BEFORE any write (Firestore requires
+      // all reads first). We delete a key only when THIS member actually OWNS it
+      // (owner.mid === targetMid). A member that merely SHARED a relative's
+      // contact (owner decision #3 — e.g. a child on the manager's email) must
+      // NOT delete the key out from under its real owner, which would lock that
+      // relative out of family lookup + OTP sign-in.
+      const emailHash = memberData.email ? hashContactKey('email', memberData.email) : null;
+      const phoneHash = memberData.phone ? hashContactKey('phone', memberData.phone) : null;
+      const [emailKeySnap, phoneKeySnap] = await Promise.all([
+        emailHash ? txn.get(db.collection('contactKeys').doc(emailHash)) : Promise.resolve(null),
+        phoneHash ? txn.get(db.collection('contactKeys').doc(phoneHash)) : Promise.resolve(null),
+      ]);
+
+      // --- writes below (no reads past this point) ---
+      if (emailHash && emailKeySnap && emailKeySnap.exists) {
+        const owner = emailKeySnap.data() as { mid?: string } | undefined;
+        if (owner?.mid === targetMid) {
+          txn.delete(db.collection('contactKeys').doc(emailHash));
+        }
       }
-      if (memberData.phone) {
-        const hash = hashContactKey('phone', memberData.phone);
-        txn.delete(db.collection('contactKeys').doc(hash));
+      if (phoneHash && phoneKeySnap && phoneKeySnap.exists) {
+        const owner = phoneKeySnap.data() as { mid?: string } | undefined;
+        if (owner?.mid === targetMid) {
+          txn.delete(db.collection('contactKeys').doc(phoneHash));
+        }
       }
 
       // Update managers array on family doc if the deleted member was a manager
