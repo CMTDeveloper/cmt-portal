@@ -272,14 +272,6 @@ function KeepIdBanner() {
           Keep your Family ID handy. You&apos;ll need it for all future interactions with Bala Vihar.
         </span>
       </div>
-      <Link
-        href="/docs"
-        className="focus-ring"
-        style={{ fontSize: 13, fontWeight: 600, color: 'var(--info-deep)', textDecoration: 'none', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 4 }}
-      >
-        Learn more
-        <SetuIcon.chevron width={13} height={13} />
-      </Link>
     </div>
   );
 }
