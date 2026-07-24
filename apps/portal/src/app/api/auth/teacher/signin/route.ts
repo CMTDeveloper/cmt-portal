@@ -9,6 +9,11 @@ import {
   exchangeCustomTokenForIdToken,
   createPortalSessionCookie,
 } from '@cmt/firebase-shared/admin/session';
+import { flags } from '@/lib/flags';
+import {
+  checkAndRecordOtpRateLimit,
+  TEACHER_SIGNIN_RATE_LIMIT_MAX,
+} from '@/features/check-in/shared';
 
 
 const bodySchema = z.object({ passphrase: z.string().min(1) });
@@ -21,6 +26,12 @@ function constantTimeEquals(a: string, b: string): boolean {
 }
 
 export async function POST(req: Request) {
+  // Gate on the same flag as the teacher check-in UI/report routes — when the
+  // legacy teacher flow is disabled, this sign-in endpoint 404s with it.
+  if (!flags.checkInTeacher) {
+    return NextResponse.json({ error: 'not-found' }, { status: 404 });
+  }
+
   const raw = await req.json().catch(() => null);
   const parsed = bodySchema.safeParse(raw);
   if (!parsed.success) {
@@ -32,6 +43,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'misconfigured' }, { status: 500 });
   }
   if (!constantTimeEquals(parsed.data.passphrase, expected)) {
+    // Throttle brute force against the shared passphrase. Only FAILED guesses
+    // consume the per-IP budget, so a correct sign-in never counts and many
+    // legitimate teachers behind one venue NAT are not locked out.
+    const ip = req.headers.get('x-forwarded-for') ?? 'unknown';
+    const rate = await checkAndRecordOtpRateLimit(
+      `teacher-signin:${ip}`,
+      TEACHER_SIGNIN_RATE_LIMIT_MAX,
+    );
+    if (!rate.allowed) {
+      return NextResponse.json({ error: 'rate-limited', resetAt: rate.resetAt }, { status: 429 });
+    }
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 

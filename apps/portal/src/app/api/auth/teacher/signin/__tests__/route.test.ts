@@ -11,6 +11,15 @@ vi.mock('@cmt/firebase-shared/admin/session', () => ({
   createPortalSessionCookie: vi.fn(),
 }));
 
+const mockFlags = vi.hoisted(() => ({ checkInTeacher: true }));
+vi.mock('@/lib/flags', () => ({ flags: mockFlags }));
+
+const mockRateLimit = vi.hoisted(() => vi.fn());
+vi.mock('@/features/check-in/shared', () => ({
+  checkAndRecordOtpRateLimit: mockRateLimit,
+  TEACHER_SIGNIN_RATE_LIMIT_MAX: 10,
+}));
+
 import {
   getOrCreateSharedTeacherUser,
   createPortalCustomToken,
@@ -24,6 +33,8 @@ import * as appHandler from '../route';
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockFlags.checkInTeacher = true;
+  mockRateLimit.mockResolvedValue({ allowed: true });
   process.env.TEACHER_PASSPHRASE = 'TeacherOM!';
   process.env.SESSION_COOKIE_EXPIRES_DAYS = '5';
 });
@@ -56,6 +67,43 @@ describe('POST /api/auth/teacher/signin', () => {
       },
     });
     expect(getOrCreateSharedTeacherUser).not.toHaveBeenCalled();
+    // A failed guess consumes the per-IP throttle budget.
+    expect(mockRateLimit).toHaveBeenCalledWith(expect.stringContaining('teacher-signin:'), 10);
+  });
+
+  it('returns 404 when the teacher flag is off (no work done)', async () => {
+    mockFlags.checkInTeacher = false;
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        const res = await fetch({
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ passphrase: 'TeacherOM!' }),
+        });
+        expect(res.status).toBe(404);
+      },
+    });
+    expect(mockRateLimit).not.toHaveBeenCalled();
+    expect(getOrCreateSharedTeacherUser).not.toHaveBeenCalled();
+  });
+
+  it('returns 429 once the per-IP failure budget is exhausted', async () => {
+    mockRateLimit.mockResolvedValue({ allowed: false, resetAt: '2026-07-23T00:00:00.000Z' });
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        const res = await fetch({
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ passphrase: 'still-wrong' }),
+        });
+        expect(res.status).toBe(429);
+        const body = await res.json();
+        expect(body.error).toBe('rate-limited');
+      },
+    });
+    expect(getOrCreateSharedTeacherUser).not.toHaveBeenCalled();
   });
 
   it('returns 200 + session cookie on correct passphrase', async () => {
@@ -85,5 +133,7 @@ describe('POST /api/auth/teacher/signin', () => {
         expect(res.headers.get('set-cookie')).toMatch(/__session=sess-tok/);
       },
     });
+    // A correct sign-in must NOT consume the throttle budget (no venue lockout).
+    expect(mockRateLimit).not.toHaveBeenCalled();
   });
 });

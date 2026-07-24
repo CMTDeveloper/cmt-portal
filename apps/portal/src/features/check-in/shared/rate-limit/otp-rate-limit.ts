@@ -13,6 +13,12 @@ export const CONTACTS_SEND_PER_SENDER_MAX = 10;
 // + a Firebase Auth user). Bounds mass-registration / contact-squatting spam
 // while leaving headroom for a volunteer registering a few families at an event.
 export const REGISTER_RATE_LIMIT_MAX = 10;
+// Per-IP ceiling on FAILED shared-teacher-passphrase guesses. Only failures
+// consume the budget (a correct sign-in never counts), so many legitimate
+// teachers behind one venue NAT are never locked out, while an attacker gets
+// at most this many guesses per 15-min window per IP — far too slow to brute
+// force even a modest passphrase.
+export const TEACHER_SIGNIN_RATE_LIMIT_MAX = 10;
 export const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 
 export interface RateLimitResult {
