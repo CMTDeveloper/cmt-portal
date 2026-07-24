@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockLevelGet, mockReadGuests, mockListDetailed, mockUpsert, mockMarkGuest, contactKeyGet } = vi.hoisted(() => ({
+const { mockLevelGet, mockReadGuests, mockReadPortalGuests, mockListDetailed, mockUpsert, mockMarkGuest, contactKeyGet } = vi.hoisted(() => ({
   mockLevelGet: vi.fn(),
   mockReadGuests: vi.fn(),
+  mockReadPortalGuests: vi.fn(),
   mockListDetailed: vi.fn(),
   mockUpsert: vi.fn(),
   mockMarkGuest: vi.fn(),
@@ -16,7 +17,7 @@ vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
     },
   }),
 }));
-vi.mock('@/features/setu/attendance/check-in-attendance', () => ({ readDoorGuestCheckIns: mockReadGuests }));
+vi.mock('@/features/setu/attendance/check-in-attendance', () => ({ readDoorGuestCheckIns: mockReadGuests, readPortalGuestChildren: mockReadPortalGuests }));
 vi.mock('../guests', () => ({ listGuestsDetailed: mockListDetailed, markGuest: mockMarkGuest }));
 vi.mock('../pending-family', () => ({ upsertPendingFamilyChild: mockUpsert }));
 vi.mock('@/features/setu/registration/hash-contact-key', () => ({ hashContactKey: (t: string, v: string) => `hash:${t}:${v}` }));
@@ -29,6 +30,10 @@ beforeEach(() => {
     levelId: 'L', levelName: 'Level 1', ageLabel: 'Gr 1', location: 'Brampton',
     pid: 'o-bv', levelKind: 'level', gradeBand: ['1'],
   }) });
+  // Most tests only exercise the legacy door source; default the portal source
+  // to empty so it never interferes unless a test opts in.
+  mockReadGuests.mockResolvedValue([]);
+  mockReadPortalGuests.mockResolvedValue([]);
 });
 
 describe('guestMatchesLevel', () => {
@@ -54,6 +59,28 @@ describe('getLevelVisitorsView', () => {
       { name: 'Arjun X', grade: '1', parentEmail: 'mom@x.com', parentName: 'Mom', phone: '416', alreadyConfirmed: true },
     ]);
     expect(view!.confirmed).toEqual([{ mid: 'F-02', fid: 'CMT-F', firstName: 'Arjun', lastName: 'X', status: 'present' }]);
+  });
+
+  it('merges PORTAL guest children with legacy door guests and matches both by grade', async () => {
+    // Legacy standalone kiosk child (grade 1 → matches) + portal self-serve
+    // guest child (grade 1 → matches) + a portal child off-grade (excluded).
+    mockReadGuests.mockResolvedValue([
+      { name: 'Legacy Kid', grade: '1', parentEmail: 'legacy@x.com', parentName: 'Legacy Parent', phone: '416' },
+    ]);
+    mockReadPortalGuests.mockResolvedValue([
+      { name: 'Portal Kid', grade: '1', parentEmail: 'portal@x.com', parentName: 'Portal Parent', phone: '647' },
+      { name: 'Portal Teen', grade: '5', parentEmail: 'portal@x.com', parentName: 'Portal Parent', phone: '647' },
+    ]);
+    mockListDetailed.mockResolvedValue([]);
+    contactKeyGet.mockResolvedValue({ exists: false });
+
+    const view = await getLevelVisitorsView('L', '2026-01-04');
+    expect(view).not.toBeNull();
+    // Legacy first, then portal; the off-grade portal child is filtered out.
+    expect(view!.doorVisitors).toEqual([
+      { name: 'Legacy Kid', grade: '1', parentEmail: 'legacy@x.com', parentName: 'Legacy Parent', phone: '416', alreadyConfirmed: false },
+      { name: 'Portal Kid', grade: '1', parentEmail: 'portal@x.com', parentName: 'Portal Parent', phone: '647', alreadyConfirmed: false },
+    ]);
   });
 
   it('returns null when the level is missing', async () => {

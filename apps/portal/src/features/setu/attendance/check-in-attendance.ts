@@ -1,3 +1,4 @@
+import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { checkInSourceFirestore } from './check-in-source';
 
 /**
@@ -150,6 +151,52 @@ export async function readDoorGuestCheckIns(date: string): Promise<DoorGuestChil
       }
     }),
   );
+  return out;
+}
+
+/**
+ * READ-ONLY: every child from the PORTAL's own self-serve guest check-ins for a
+ * single date. This is the portal counterpart to `readDoorGuestCheckIns` (which
+ * reads the legacy standalone app's `guest-families`). The portal's guest kiosk
+ * writes `guest_check_ins/{id}` with `{ firstName, lastName, email, phone,
+ * children: [{name, grade}], date }`; here we flatten every doc's children into
+ * the same `DoorGuestChild` shape so the teacher visitors view can merge both
+ * sources and match by grade. Filters by the `date` field (single-field
+ * equality — Firestore auto-indexes it, no composite index needed). Tolerant:
+ * returns [] if the query fails so a portal-store hiccup never breaks the view.
+ */
+export async function readPortalGuestChildren(date: string): Promise<DoorGuestChild[]> {
+  const db = portalFirestore();
+  let docs: Array<{ data: () => Record<string, unknown> }>;
+  try {
+    const snap = await db.collection('guest_check_ins').where('date', '==', date).get();
+    docs = snap.docs;
+  } catch (err) {
+    console.error('[portal-guests] query failed for', date, err);
+    return [];
+  }
+
+  const out: DoorGuestChild[] = [];
+  for (const doc of docs) {
+    const data = (doc.data() ?? {}) as {
+      firstName?: string;
+      lastName?: string;
+      email?: string | null;
+      phone?: string | null;
+      children?: Array<{ name?: string; grade?: string | number }>;
+    };
+    const parentName = [data.firstName, data.lastName].filter(Boolean).join(' ').trim() || null;
+    const parentEmail = (data.email ?? '') || '';
+    for (const c of data.children ?? []) {
+      out.push({
+        name: String(c.name ?? '').trim(),
+        grade: c.grade == null ? '' : String(c.grade).trim(),
+        parentEmail,
+        parentName,
+        phone: data.phone ?? null,
+      });
+    }
+  }
   return out;
 }
 

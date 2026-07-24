@@ -4,13 +4,24 @@ import { flags } from '@/lib/flags';
 import { recordGuestCheckIn } from '@/features/check-in/shared';
 
 
+// One guest child: name + grade (a CHILD_GRADE_OPTIONS value) so a teacher can
+// match them to a class. Both required once a child row is added.
+const guestChildSchema = z.object({
+  name: z.string().min(1),
+  grade: z.string().min(1),
+});
+
 const bodySchema = z.object({
   firstName: z.string().min(1),
   lastName: z.string().min(1),
-  email: z.string().email().optional(),
-  phone: z.string().optional(),
+  // Email + phone are REQUIRED so a checked-in guest family is reachable and can
+  // later claim their account (Vaibhav). phone.min(7) mirrors registration.
+  email: z.string().email(),
+  phone: z.string().min(7),
   numberOfAdults: z.coerce.number().int().min(0),
-  numberOfChildren: z.coerce.number().int().min(0),
+  // Per-child name + grade (may be empty for an adults-only visit). The store
+  // derives numberOfChildren from this.
+  children: z.array(guestChildSchema).default([]),
   notes: z.string().optional(),
 });
 
@@ -23,11 +34,9 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: 'bad-request' }, { status: 400 });
   }
-  const { email, phone, notes, ...required } = parsed.data;
+  const { notes, ...rest } = parsed.data;
   const input = {
-    ...required,
-    ...(email !== undefined ? { email } : {}),
-    ...(phone !== undefined ? { phone } : {}),
+    ...rest,
     ...(notes !== undefined ? { notes } : {}),
   };
   const id = await recordGuestCheckIn(input);

@@ -1,7 +1,7 @@
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { levelGradeSummary, normalizeGrade, type LevelDoc, type LevelKind } from '@cmt/shared-domain';
 import { hashContactKey } from '@/features/setu/registration/hash-contact-key';
-import { readDoorGuestCheckIns } from '@/features/setu/attendance/check-in-attendance';
+import { readDoorGuestCheckIns, readPortalGuestChildren } from '@/features/setu/attendance/check-in-attendance';
 import { listGuestsDetailed, markGuest, type DetailedGuest } from './guests';
 import { upsertPendingFamilyChild } from './pending-family';
 
@@ -53,10 +53,15 @@ export async function getLevelVisitorsView(levelId: string, date: string): Promi
   if (!levelSnap.exists) return null;
   const level = levelSnap.data() as LevelDoc;
 
-  const [doorChildren, confirmed] = await Promise.all([
+  // Door guests come from BOTH the legacy standalone kiosk (`guest-families`)
+  // and the portal's own self-serve guest check-in (`guest_check_ins`). Merge
+  // them; each child is then matched to this level by grade below.
+  const [legacyDoor, portalDoor, confirmed] = await Promise.all([
     readDoorGuestCheckIns(date),
+    readPortalGuestChildren(date),
     listGuestsDetailed(levelId, date),
   ]);
+  const doorChildren = [...legacyDoor, ...portalDoor];
   const confirmedFids = new Set(confirmed.map((g) => g.fid));
 
   const matched = doorChildren.filter((c) => guestMatchesLevel(c, level));

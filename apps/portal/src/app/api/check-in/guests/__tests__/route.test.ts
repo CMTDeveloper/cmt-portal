@@ -19,8 +19,10 @@ beforeEach(() => {
 const validBody = {
   firstName: 'Jane',
   lastName: 'Doe',
+  email: 'jane@doe.com',
+  phone: '+16475550100',
   numberOfAdults: 1,
-  numberOfChildren: 2,
+  children: [{ name: 'Kid Doe', grade: '2' }],
 };
 
 describe('POST /api/check-in/guests', () => {
@@ -57,5 +59,54 @@ describe('POST /api/check-in/guests', () => {
       },
     });
     expect(recordGuestCheckIn).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns 400 and records nothing when email is missing (contact required)', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { email, ...rest } = validBody;
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        const res = await fetch({
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(rest),
+        });
+        expect(res.status).toBe(400);
+      },
+    });
+    expect(recordGuestCheckIn).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 and records nothing when phone is missing (contact required)', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { phone, ...rest } = validBody;
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        const res = await fetch({
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(rest),
+        });
+        expect(res.status).toBe(400);
+      },
+    });
+    expect(recordGuestCheckIn).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 when a child row is missing its grade', async () => {
+    await testApiHandler({
+      appHandler,
+      test: async ({ fetch }) => {
+        const res = await fetch({
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ ...validBody, children: [{ name: 'Kid Doe', grade: '' }] }),
+        });
+        expect(res.status).toBe(400);
+      },
+    });
+    expect(recordGuestCheckIn).not.toHaveBeenCalled();
   });
 });

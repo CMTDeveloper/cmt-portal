@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockGet, dayDocResolver, guestListResolver, guestDayResolver } = vi.hoisted(() => ({
+const { mockGet, dayDocResolver, guestListResolver, guestDayResolver, portalGuestResolver } = vi.hoisted(() => ({
   mockGet: vi.fn(),
   // Routes a `family-check-ins/{legacyFid}/checkIns/{date}.get()` read by the
   // captured legacyFid + date. Default: { exists: false }. Per-fid tests set it.
@@ -9,6 +9,18 @@ const { mockGet, dayDocResolver, guestListResolver, guestDayResolver } = vi.hois
   guestListResolver: { fn: () => ({ docs: [] as Array<{ id: string }> }) as unknown },
   // guest-families/{email}/checkIns/{date} day doc
   guestDayResolver: { fn: (_email: string, _date: string) => ({ exists: false }) as unknown },
+  // portal `guest_check_ins` where('date','==',date): returns docs [{ data() }]
+  portalGuestResolver: { fn: (_date: string) => ({ docs: [] as Array<{ data: () => Record<string, unknown> }> }) as unknown },
+}));
+vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
+  portalFirestore: () => ({
+    collection: (name: string) => {
+      if (name === 'guest_check_ins') {
+        return { where: (_f: string, _op: string, val: string) => ({ get: async () => portalGuestResolver.fn(val) }) };
+      }
+      return {};
+    },
+  }),
 }));
 vi.mock('../check-in-source', () => ({
   checkInSourceFirestore: () => ({
@@ -40,6 +52,7 @@ import {
   getCheckInAttendance,
   readDoorPresentSids,
   readDoorGuestCheckIns,
+  readPortalGuestChildren,
   summarizeFamilyCheckIns,
   summarizeMemberCheckIns,
   type CheckInRecord,
@@ -54,6 +67,7 @@ beforeEach(() => {
   dayDocResolver.fn = () => ({ exists: false });
   guestListResolver.fn = () => ({ docs: [] });
   guestDayResolver.fn = () => ({ exists: false });
+  portalGuestResolver.fn = () => ({ docs: [] });
 });
 
 describe('getCheckInAttendance', () => {
@@ -187,5 +201,38 @@ describe('readDoorGuestCheckIns', () => {
   it('returns [] when the guest-families list read fails', async () => {
     guestListResolver.fn = () => { throw new Error('list failed'); };
     expect(await readDoorGuestCheckIns('2026-01-04')).toEqual([]);
+  });
+});
+
+describe('readPortalGuestChildren', () => {
+  it('flattens every portal guest doc child for the date into DoorGuestChild rows', async () => {
+    portalGuestResolver.fn = (date) => {
+      if (date !== '2026-01-04') return { docs: [] };
+      return {
+        docs: [
+          { data: () => ({
+            firstName: 'Carol', lastName: 'Visitor', email: 'c@v.com', phone: '+16475550100',
+            children: [
+              { name: 'Aarav Visitor', grade: '2' },
+              { name: 'Diya Visitor', grade: 2 }, // numeric grade coerced to string
+            ],
+          }) },
+          { data: () => ({
+            firstName: 'Sam', lastName: 'Solo', email: 's@solo.com', phone: '+16475550111',
+            children: [], // adults-only visit contributes no children
+          }) },
+        ],
+      };
+    };
+    const out = await readPortalGuestChildren('2026-01-04');
+    expect(out).toEqual([
+      { name: 'Aarav Visitor', grade: '2', parentEmail: 'c@v.com', parentName: 'Carol Visitor', phone: '+16475550100' },
+      { name: 'Diya Visitor', grade: '2', parentEmail: 'c@v.com', parentName: 'Carol Visitor', phone: '+16475550100' },
+    ]);
+  });
+
+  it('returns [] (not throw) when the portal query fails', async () => {
+    portalGuestResolver.fn = () => { throw new Error('query failed'); };
+    expect(await readPortalGuestChildren('2026-01-04')).toEqual([]);
   });
 });
