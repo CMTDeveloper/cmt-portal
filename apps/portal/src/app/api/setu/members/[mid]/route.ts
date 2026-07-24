@@ -6,6 +6,7 @@ import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { assertNotLastManager, LastManagerError } from '@/features/setu/members';
 import { hashContactKey } from '@/features/setu/registration/hash-contact-key';
 import { syncActiveEnrollmentMemberships } from '@/features/setu/enrollment/sync-enrollment-members';
+import { revokeMemberSessions, RESURRECTABLE_SEVAK_CAPS } from '@/features/setu/auth/revoke-sessions';
 import { whatsMissingForMember, type MemberRequiredField } from '@cmt/shared-domain';
 
 
@@ -137,6 +138,12 @@ export async function PATCH(req: Request, ctx: RouteContext) {
 
   const db = portalFirestore();
 
+  // Captured inside the transaction so a demoted manager's sessions can be
+  // revoked AFTER commit (their family-manager claim persists for up to 14 days).
+  let demoted = false;
+  let demotedEmail: string | null = null;
+  let demotedPhone: string | null = null;
+
   try {
     await db.runTransaction(async (txn) => {
       const familyRef = db.collection('families').doc(fid);
@@ -205,6 +212,11 @@ export async function PATCH(req: Request, ctx: RouteContext) {
       if (data.manager === false && memberData.manager === true && familySnap.exists) {
         const familyData = familySnap.data() as { managers: string[] };
         assertNotLastManager(familyData, targetMid, 'demote');
+        // Reached only if the demote is allowed — mark it so the demoted
+        // member's stale family-manager session is revoked after commit.
+        demoted = true;
+        demotedEmail = memberData.email;
+        demotedPhone = memberData.phone;
       }
 
       // Before any contactKey writes, verify the new email/phone hash isn't
@@ -343,6 +355,18 @@ export async function PATCH(req: Request, ctx: RouteContext) {
     throw err;
   }
 
+  // A demoted manager keeps their family-manager session claim for up to 14 days.
+  // Revoke both of their auth uids' refresh tokens so the demotion takes effect
+  // immediately (they re-mint as family-member on next sign-in). Best-effort —
+  // the demote already committed; a revoke hiccup must not 500 the request.
+  if (demoted) {
+    try {
+      await revokeMemberSessions({ email: demotedEmail, phone: demotedPhone });
+    } catch (err) {
+      console.error('[members:demote] session revoke failed for', targetMid, err);
+    }
+  }
+
   // A member edit/removal can change eligibility (a child edited to Adult, or a
   // child deleted), so reconcile the family's active-enrollment rosters
   // (enrolledMids). Best-effort — the member write already committed; a sync
@@ -378,6 +402,11 @@ export async function DELETE(_req: Request, ctx: RouteContext) {
 
   const db = portalFirestore();
 
+  // Captured inside the transaction so the removed member's sessions can be
+  // revoked AFTER commit.
+  let removedEmail: string | null = null;
+  let removedPhone: string | null = null;
+
   try {
     await db.runTransaction(async (txn) => {
       const familyRef = db.collection('families').doc(fid);
@@ -397,6 +426,8 @@ export async function DELETE(_req: Request, ctx: RouteContext) {
         email: string | null;
         phone: string | null;
       };
+      removedEmail = memberData.email;
+      removedPhone = memberData.phone;
       const familyData = familySnap.data() as { managers: string[]; fid: string };
 
       // Guard: cannot remove the last manager
@@ -431,6 +462,21 @@ export async function DELETE(_req: Request, ctx: RouteContext) {
       return NextResponse.json({ error: 'last-manager' }, { status: 409 });
     }
     throw err;
+  }
+
+  // Force sign-out for the removed member: their session carries family (and
+  // possibly sevak) claims for up to 14 days, and a persisted admin/welcome-team
+  // capability would otherwise re-mint into a standalone sevak session on the
+  // next sign-in. Strip those caps from both auth uids and revoke their tokens.
+  // Best-effort — the delete already committed.
+  try {
+    await revokeMemberSessions({
+      email: removedEmail,
+      phone: removedPhone,
+      stripCaps: RESURRECTABLE_SEVAK_CAPS,
+    });
+  } catch (err) {
+    console.error('[members:delete] session revoke failed for', targetMid, err);
   }
 
   // A member edit/removal can change eligibility (a child edited to Adult, or a

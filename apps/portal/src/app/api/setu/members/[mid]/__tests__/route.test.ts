@@ -19,6 +19,12 @@ vi.mock('@/features/setu/registration/hash-contact-key', () => ({
   hashContactKey: vi.fn((type: string, value: string) => `hash:${type}:${value}`),
 }));
 
+const mockRevokeMemberSessions = vi.hoisted(() => vi.fn());
+vi.mock('@/features/setu/auth/revoke-sessions', () => ({
+  revokeMemberSessions: mockRevokeMemberSessions,
+  RESURRECTABLE_SEVAK_CAPS: ['admin', 'welcome-team'],
+}));
+
 import { PATCH, DELETE } from '../route';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { assertNotLastManager, LastManagerError } from '@/features/setu/members';
@@ -87,6 +93,7 @@ const params = { mid: 'FAM001ABCD12-02' };
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockRevokeMemberSessions.mockResolvedValue({ uids: [] });
 
   mockRunTransaction.mockImplementation(async (fn: (txn: unknown) => unknown) => {
     const txn = {
@@ -213,6 +220,43 @@ describe('PATCH /api/setu/members/[mid]', () => {
     expect(res.status).toBe(409);
     const body = await res.json();
     expect(body.error).toBe('last-manager');
+    // A blocked demote must NOT revoke anyone.
+    expect(mockRevokeMemberSessions).not.toHaveBeenCalled();
+  });
+
+  it('revokes the demoted manager sessions on a successful (non-last) demote', async () => {
+    const twoManagerFamilySnap = {
+      exists: true,
+      data: () => ({ fid: 'FAM001ABCD12', managers: ['FAM001ABCD12-01', 'FAM001ABCD12-02'] }),
+    };
+    const managerMemberSnap = {
+      exists: true,
+      data: () => ({
+        ...memberSnap.data(),
+        mid: 'FAM001ABCD12-02',
+        manager: true,
+        type: 'Adult',
+        foodAllergies: 'None',
+        email: 'demoted@example.com',
+        phone: '4165550002',
+        volunteeringSkills: ['Teaching / Facilitation'],
+      }),
+    };
+    mockGet
+      .mockResolvedValueOnce(twoManagerFamilySnap)
+      .mockResolvedValueOnce(managerMemberSnap);
+    (assertNotLastManager as ReturnType<typeof vi.fn>).mockReturnValue(undefined);
+
+    const res = await PATCH(makeRequest('PATCH', { manager: false }, managerHeaders()), {
+      params: Promise.resolve({ mid: 'FAM001ABCD12-02' }),
+    });
+    expect(res.status).toBe(200);
+    // No stripCaps — manager is a primary role re-derived from the member doc,
+    // not a persisted capability. Revoking both uids forces the re-mint.
+    expect(mockRevokeMemberSessions).toHaveBeenCalledWith({
+      email: 'demoted@example.com',
+      phone: '4165550002',
+    });
   });
 
   it('returns 404 when feature flag is off', async () => {
@@ -485,6 +529,13 @@ describe('DELETE /api/setu/members/[mid]', () => {
     await DELETE(makeRequest('DELETE', null, managerHeaders()), { params: Promise.resolve(params) });
     // mockTxnDelete called for member + email contactKey + phone contactKey
     expect(mockTxnDelete).toHaveBeenCalledTimes(3);
+    // The removed member's sessions are revoked and any persisted sevak caps
+    // stripped from both uids (else a deleted admin re-mints on next sign-in).
+    expect(mockRevokeMemberSessions).toHaveBeenCalledWith({
+      email: 'diya@example.com',
+      phone: '4165559999',
+      stripCaps: ['admin', 'welcome-team'],
+    });
   });
 
   it('removes family managers array entry when deleting a non-last manager', async () => {
