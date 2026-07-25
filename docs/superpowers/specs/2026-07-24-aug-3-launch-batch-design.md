@@ -20,9 +20,36 @@
 | Requirement 6 (turn off old portal) | **Owned by CMT Developer.** Out of scope for this spec, but sequenced against in §9. |
 | If it doesn't fit in 5 days | Plan the full batch; CMT Developer adds capacity. |
 
-### Honest sizing
+### Honest sizing (revised 2026-07-24 after measuring the real constraints)
 
-~12-16 focused engineering days of work against **5 working days** (Jul 27-31) plus two weekends. This spec plans the whole batch as instructed and sequences so that **the production cutover is never the thing that slips**. §10 marks what is cuttable if reality intervenes.
+An earlier draft of this spec said "12-16 engineering days". **That was wrong** - it was human-developer sizing applied to AI-authored code. Corrected:
+
+| Constraint | Reality |
+|---|---|
+| **Writing the code** | ~2-3 days. Mechanical against a fully mapped codebase: Coordinator's 14 touchpoints, the cross-family endpoints, the teacher table from a supplied sample, roster reset, phone gate. |
+| **Verification wall-clock** | Does **not** compress. Every push runs `typecheck && lint && test && build` on a Turborepo/Next monorepo, then a Vercel deploy, then Playwright against deployed UAT. The setu suite **cannot be run all at once** (OTP limiter cascade), so specs run serially. Deploy-bound calendar time. |
+| **External prerequisites** | Do not compress at all. Measured below in §1.8 - the result is better than feared. |
+| **Human launch decisions** | Two of them (§1.9) are worth more to a successful launch than any single feature. |
+
+**Conclusion: Aug 3 is achievable.** The binding constraints are verification cycles and the two launch decisions in §1.9, not engineering throughput.
+
+### 1.8 Measured external state (2026-07-24, read-only diagnostics)
+
+**AWS SES - production-ready.** `ca-central-1`, sending enabled, `Max24HourSend` 50,000, 14/s, **out of the sandbox**. Verified identities include the domain `chinmayatoronto.org` and the FROM address `bvregistration@chinmayatoronto.org`.
+
+**AWS SNS - NOT production-ready.** `ca-central-1`, **still IN SANDBOX**, `MonthlySpendLimit = $1`, **no origination numbers registered**, single sandbox-verified destination `+14379712609`.
+
+> Exiting the SNS sandbox, raising the spend limit, and registering a Canadian origination number are AWS support/carrier-review processes measured in **business days to weeks**. They cannot be completed by Aug 3 and no amount of engineering speed changes that.
+
+**Why this is survivable.** Measured against the legacy RTDB snapshot (`.rtdb-snapshot/roster.json`, captured 2026-06-10): **2,543 roster rows / 867 distinct families. 767 have both email and phone, 100 have email only, and ZERO are phone-only or contactless. 100% of families are reachable by email.**
+
+So SMS being unavailable **locks nobody out**. Email OTP - the channel that is production-ready - covers the entire roster. This is the single most important fact in this spec.
+
+### 1.9 The two decisions that outrank the features
+
+**D-A: Is the roster populated at launch?** Under the lazy-migration path (runbook §6 steps 2-5 skipped), a legacy family enters Setu only on first engagement, so **the welcome roster starts nearly empty**. Roster is precisely what requirement 1 (welcome-team) and requirement 2 (Coordinator) grant access to. Shipping both roles onto an empty roster makes them look broken on day one. Either bulk-migrate (runbook §6 step 2, ~864 families, ~15 min) or accept an empty launch roster - deliberately, not by omission.
+
+**D-B: Do teacher rosters start empty?** Runbook §6 step 8 **contradicts itself**: the step says the BV enrollment backfill is "**Recommended for launch**", and the 2026-07-20 note directly below says "**do NOT run this backfill**" because it recreates the "500 registrations" the rollover change deliberately removed. Unresolved, teacher rosters - including "Previous students" - start **EMPTY** on launch Sunday. This must be settled by a human before Aug 3, and the runbook must be corrected either way.
 
 ---
 
@@ -311,6 +338,16 @@ Two facts to carry into that work:
 
 ## 8. Requirement 7 - `+1`/NANP-only SMS at login
 
+### 8.0 Launch posture: SMS is undeliverable, so sign-in is email-only
+
+Per the measured state in §1.8, **SNS is in the sandbox with no origination number** - SMS OTP cannot reach any real family on Aug 3. A `+1` gate alone would therefore still leave every phone user on a screen waiting for a code that never arrives, which is exactly the silent failure this requirement exists to remove.
+
+**Launch behaviour: hide the Phone option on `/sign-in` behind a flag (`NEXT_PUBLIC_FEATURE_SMS_OTP`, default off) and present email as the sign-in channel.** This is safe because §1.8 measured **100% email coverage across all 867 families**.
+
+The `+1` gate below is still the correct code and should ship - it is what runs the day SNS is out of the sandbox and the flag flips on. It is written now, verified now, and dormant until then.
+
+Server-side, the country check stays enforced regardless of the UI flag, so the mobile app and any direct API caller get the same typed error rather than a silent 200.
+
 ### 8.1 Hard constraint
 
 **The gate goes in the route, never in `normalizeContactForKey`.** That function derives both the `contactKeys` doc ID and the Firebase Auth UID (§1.7). Changing it re-keys identities: sign-in misses the existing family and a brand-new auth user is created. `69132b1` was deliberately careful about this.
@@ -367,13 +404,16 @@ The **domain re-point**. `setu.chinmayatoronto.org` is currently served by a dif
 
 | Band | Items |
 |---|---|
-| **Must ship (cutover)** | Prod Firebase, family migration, indexes (no `--force`), SES/SNS prod, flag flips, domain re-point, prod smoke E2E |
-| **Must ship (small, low risk)** | Roster Reset (§6), `+1` login gate (§8), guest date-key fix D1 (§5.1) |
+| **Decide first (blocks everything)** | D-A roster population, D-B teacher-roster backfill (§1.9). Both are human calls; both change what the features are built against. |
+| **Must ship (cutover)** | Prod Firebase, indexes (no `--force`), **SES only** (SNS stays sandboxed - §1.8), flag flips, domain re-point, prod smoke E2E |
+| **Must ship (small, low risk)** | Roster Reset (§6), email-only sign-in posture + `+1` gate (§8.0/§8.2), guest date-key fix D1 (§5.1) |
 | **High value, medium risk** | Teacher attendance revamp (§4) |
 | **High value, highest risk** | welcome-team full family edit + audit (§2) |
 | **Cuttable to week 2** | Coordinator role (§3), `/welcome/visitors` (§5.2), guest→teacher E2E (§5.3) |
 
 The Coordinator role is the cleanest cut: it is additive, affects no existing user, and its absence blocks nobody on launch Sunday.
+
+**Not on the critical path, contrary to first appearances:** the SNS sandbox. It cannot be resolved by Aug 3, and it does not need to be - §1.8 measured 100% email coverage across all 867 families. Start the AWS sandbox-exit and origination-number requests now anyway, because they are long-lead and gate the eventual SMS flip.
 
 ---
 
@@ -401,8 +441,13 @@ Green `pnpm test` does **not** mean shipped working. Every item below is require
 
 | # | Item | Owner |
 |---|---|---|
+| **D-A** | **Bulk-migrate families or accept a near-empty launch roster (§1.9)** - decides whether requirements 1 and 2 have anything to show | **CMT Developer, before build starts** |
+| **D-B** | **Resolve the runbook §6 step 8 self-contradiction (§1.9)** - decides whether teacher rosters are empty on launch Sunday; correct the runbook either way | **CMT Developer, before build starts** |
 | O1 | Domain re-point rehearsal (§9) - no runbook entry exists | CMT Developer |
 | O2 | Requirement 6 old-portal shutdown (§7) | CMT Developer |
 | O3 | Count of pre-`69132b1` corrupted international phone keys (§8.5) | read-only scan during cutover |
+| O6 | Open AWS support cases now: SNS sandbox exit, spend-limit raise, Canadian origination number (§1.8). Long-lead; not Aug-3-blocking. | CMT Developer |
+| O7 | Confirm whether Stripe live mode is required at launch, or donations stay flag-off (`NEXT_PUBLIC_FEATURE_SETU_DONATIONS`). Not measured in this pass. | CMT Developer |
+| O8 | Promote the SES/SNS diagnostics into `scripts/` (an SES equivalent of `debug-sns-config.ts` did not exist; one was written ad hoc for this pass) | follow-up |
 | O4 | Confirm Reset leaves `?year=` untouched (§6) | CMT Developer - assumption stated |
 | O5 | Teacher-visible donation status + parent contact is a deliberate privacy call (§4.6) | recorded, not blocking |
