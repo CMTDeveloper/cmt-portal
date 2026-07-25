@@ -300,6 +300,7 @@ Coordinator sits **above** welcome-team. Granted:
 | **Roster** | `/welcome/roster` + `GET /api/welcome/roster/report` |
 | **Visitors** | `/welcome/visitors` (new, §5.2) + its read API |
 | **Programs** | `/admin/programs`, `/admin/programs/[key]`, `/api/admin/programs`, `/api/admin/programs/[key]` |
+| **Offerings + pricing** | `/api/admin/offerings`, `/api/admin/offerings/[oid]` - **added 2026-07-25.** Program *amounts* live in `offering.pricingTiers`, written through this API. Without it a coordinator sees the offerings panel and gets a **403 on save**. Required by the Adult Study Class spec §4.3b (coordinators set the class fee). |
 | **Levels** | `/admin/levels` (Level management) + `/api/admin/levels/*` |
 | **Teacher assignments** | `/api/admin/teacher-assignments/*`, `/api/admin/teachers/*`, `/api/admin/levels/[id]/teachers` |
 

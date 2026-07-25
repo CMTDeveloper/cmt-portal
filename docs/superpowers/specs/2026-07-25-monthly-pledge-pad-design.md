@@ -25,13 +25,16 @@ This distinction was settled by CMT Developer on 2026-07-25 and it drives every 
 | Status field | Existing donation status | **Its own separate status** |
 | Required? | Effectively, to enroll | Entirely optional |
 
-### 1.1 Open discrepancy with Vaibhav's written note
+### 1.1 RESOLVED - the pledge is separate from the Bala Vihar donation
 
-Vaibhav's 2026-07-25 note says *"**Regarding the $500 donation**, we are introducing a monthly pledge option"* and *"upon submission, **the Bala Vihar enrollment will be confirmed**, but the donation status will remain in a processing state."*
+Vaibhav's written note opened with *"Regarding the $500 donation, we are introducing a monthly pledge option"*, which read as though the pledge **were** the payment mechanism for the $500 (i.e. paying it in monthly instalments). That reading would have inverted §5 (placement) and §6 (enrollment linkage).
 
-Both statements only hold if the pledge **is** the payment mechanism for the $500 - i.e. paying it monthly instead of upfront. **CMT Developer's reading (2026-07-25) is that the pledge is separate and additional**, and this spec is built to that.
+**Confirmed with Vaibhav, 2026-07-25 (via CMT Developer): the "$500 donation" refers to the Bala Vihar donation, and the pledge is separate from it.** This spec's model is correct as written. No change required.
 
-> ⚠️ **These readings are not reconcilable and produce different features.** Confirm with Vaibhav before implementation starts. If he meant "families may pay their $500 in monthly instalments", this spec is the wrong feature and §5 (placement) and §6 (enrollment linkage) both invert.
+Consequences that now stand confirmed:
+- The pledge does **not** confirm Bala Vihar enrollment (the $500 does).
+- The pledge is offered **after** the Bala Vihar donation, never in competition with it (§5).
+- The pledge gates nothing, so it can slip without affecting the cutover (§9).
 
 ---
 
@@ -294,7 +297,7 @@ Does **not** depend on: file upload, Stripe changes, the donation-status model, 
 
 | # | Item | Owner |
 |---|---|---|
-| **O1** | **Confirm the §1.1 discrepancy with Vaibhav** - is the pledge extra support (this spec) or a monthly instalment plan for the $500 (a different feature)? Blocking. | CMT Developer |
+| ~~O1~~ | RESOLVED 2026-07-25 - Vaibhav confirmed the "$500 donation" is the **Bala Vihar** donation and the pledge is **separate** from it (§1.1). This spec's model stands. | done |
 | **O2** | Who may invoke confirm/cancel - **admin only** (assumed here, most conservative for a financial action), or admin + coordinator? | CMT Developer |
 | **O3** | Backstop sweep window - **90 days** assumed (§6.4). | CMT Developer |
 | **O4** | `PLEDGE_ENCRYPTION_KEY` generated, set on Vercel Production, added to `turbo.json` env passthrough, and **backed up** before the first real submission. | CMT Developer |
