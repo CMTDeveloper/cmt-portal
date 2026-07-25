@@ -349,21 +349,28 @@ Expected: FAIL on the granted cases - coordinator currently falls through to def
 
 - [ ] **Step 3: Add the grant clauses**
 
-In `packages/shared-domain/src/auth/can-access-route.ts`, import `isCoordinator` on line 3. Insert **immediately before** the `/admin` page catch-all at `:50`:
+In `packages/shared-domain/src/auth/can-access-route.ts`, import `isCoordinator` on line 3. **The two blocks below go in DIFFERENT places** - read the placement note for each.
+
+**Block A - the page clause. Insert immediately BEFORE the `/admin` page catch-all at `:50`:**
 
 ```ts
-  // Coordinator (2026-07-25): manages programs, their offerings/pricing, class
-  // levels and teacher assignments, plus everything welcome-team can see.
-  // Each grant is an EXPLICIT clause placed above the /admin/ catch-alls below.
-  // Never widen those catch-alls for this role: /api/admin/welcome-team* has no
-  // in-handler role check, so a prefix widening would let a coordinator grant
-  // the welcome-team role.
+  // Coordinator (2026-07-25): manages programs, their offerings/pricing and
+  // class levels. An EXPLICIT clause above the /admin/ catch-alls. Never widen
+  // those catch-alls for this role: /api/admin/welcome-team* has no in-handler
+  // role check, so a prefix widening would let a coordinator grant welcome-team.
   if (
     pathname === '/admin/programs' || pathname.startsWith('/admin/programs/') ||
     pathname === '/admin/levels' || pathname.startsWith('/admin/levels/')
   ) {
     return isAdmin(claims) || isCoordinator(claims);
   }
+```
+
+**Block B - the API clause. Insert AFTER the `/api/admin/levels/{id}/teachers` regex (ends `:74`) and BEFORE the `/api/admin/` catch-all at `:75`:**
+
+```ts
+  // Broad level/program/offering CRUD. MUST sit below the /teachers regex above,
+  // or it shadows it and welcome-team loses teacher assignment.
   if (
     pathname === '/api/admin/programs' || pathname.startsWith('/api/admin/programs/') ||
     pathname === '/api/admin/offerings' || pathname.startsWith('/api/admin/offerings/') ||
@@ -373,7 +380,13 @@ In `packages/shared-domain/src/auth/can-access-route.ts`, import `isCoordinator`
   }
 ```
 
-Then widen the four existing welcome-team clauses at `:51-73` to add `|| isCoordinator(claims)`.
+> **Placement is the whole ballgame here.** An earlier draft said to insert both blocks before `:50`, which would have put Block B above the `/api/admin/levels/{id}/teachers` regex at `:72-74` and **revoked welcome-team's teacher assignment** - a capability they have today. `canAccessRoute` returns at the first match, so narrow rules must always precede broad ones.
+
+Then widen **three** of the four existing welcome-team clauses to add `|| isCoordinator(claims)`:
+- teacher-assignments (`:53-58`) ✅
+- teachers/* (`:67-69`) ✅
+- levels/{id}/teachers (`:72-74`) ✅
+- **calendar (`:61-63`) - do NOT widen.** Spec §3.1's grant table does not list the class calendar, and publishing class dates is not part of the coordinator's remit.
 
 For the welcome surface, grant **only the specific paths** - roster and visitors - and insert them **above** the general `/welcome/*` rule at `:113`:
 
