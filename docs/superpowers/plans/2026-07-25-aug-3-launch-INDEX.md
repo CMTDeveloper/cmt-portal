@@ -16,7 +16,7 @@
 
 | # | Plan | Covers | Depends on |
 |---|---|---|---|
-| **P1** | `2026-07-25-launch-p1-roles-and-cross-family-edit.md` | `coordinator` role, `audit_log`, staff cross-family edit endpoints, welcome edit UI, MemberGradeEditor 403 fix | - |
+| **P1** | **`2026-07-25-launch-p1-roles-and-cross-family-edit-v2.md`** (v1 superseded, do not implement) | `coordinator` role across **all three** authorization gates, `audit_log`, staff cross-family edit endpoints, welcome edit UI, grade editor for welcome-team | - |
 | **P2** | `2026-07-25-launch-p2-teacher-visitors-roster.md` | Teacher attendance revamp, `/welcome/visitors`, visitor grade filter, roster Reset, guest date-key fix, roster-confirmation `fid` bug | - |
 | **P3** | `2026-07-25-launch-p3-ses-templates.md` | `sendTemplatedEmail`, `Sender` interface, code-template fallback, migrate 4 templates | - |
 | **P4** | `2026-07-25-launch-p4-adult-study-class.md` | Adult program, `$0`/`$101` fee rule, multi-select, `AdultClassGate` | P1 (coordinator offerings grant) |
@@ -74,6 +74,8 @@ If the week compresses, cut in this order. Nothing here blocks the cutover.
 1. **P5 monthly pledge** - gates nothing. Families can donate normally without it.
 2. **P4 adult study class** - additive; no existing user is affected by its absence.
 3. **P3 template migration** (the 4 existing emails only) - they work today as code. Keep the `sendTemplatedEmail` infrastructure if P5 is shipping.
-4. **P1 coordinator role** - additive; no existing user loses anything.
+4. **P1 Track A, the coordinator role** (v2 Tasks 1-6) - additive; no existing user loses anything. Cut it whole or not at all: a partially-shipped role that clears middleware but not the handler and layout gates looks granted and reaches nothing, which is worse than not shipping it.
 
-**Never cut:** P1's cross-family edit (it fixes a live 403), P2's `roster-confirmation` fid bug and guest date-key fix (both are live defects), and the cutover itself.
+**Never cut:** P2's `roster-confirmation` fid bug and guest date-key fix (both are live defects), and the cutover itself.
+
+> **Corrected 2026-07-25.** This section previously listed P1's cross-family edit under "never cut" because "it fixes a live 403." **There is no live 403** - `welcome/family/[fid]/members/[mid]/page.tsx:73` gates the grade editor on `admin &&`, so welcome-team never sees it. Staff cross-family edit (v2 Track B) is a **new capability**, which makes it cuttable on the same footing as the rest, not a defect fix that must ship.
