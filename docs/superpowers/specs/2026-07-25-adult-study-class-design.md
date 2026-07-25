@@ -16,18 +16,37 @@ From Vaibhav, 2026-07-25:
 
 ---
 
-## 2. BLOCKING question: is "must" enforced or encouraged?
+## 2. RESOLVED: enforced as a persistent prompt, never as a block
 
-**"All Bala Vihar families must have at least one parent enrolled in an adult class"** has two readings that produce completely different features:
+**Decision (CMT Developer, 2026-07-25):**
 
-| Reading | What it means | Risk |
-|---|---|---|
-| **Encouraged** (assumed here) | Adult Study Class is offered and promoted; families are prompted; nothing blocks | Low. Purely additive. |
-| **Enforced** | Bala Vihar enrollment is **blocked** until an adult is selected | **High.** Puts a new gate on the single most important flow, during cutover week, for ~867 families. |
+> Enforced, but do **not** block Bala Vihar enrollment - BV enrollment is already complete once the donation is paid. **After** the BV donation, the family must choose one adult. If they don't, **keep prompting them like the profile-completion logic** until they select an adult. The rule does not apply to teachers: if both parents teach, they are not required to attend, because they are busy in Bala Vihar classes.
 
-**This spec is built to "encouraged."** Enforcement would add a hard gate to Bala Vihar enrollment - the flow that gates a child's place in class - and shipping that in the same week as a production cutover is not a risk worth taking. If enforcement is genuinely required, it should be a **post-launch** slice once the adult program has real enrollments.
+This is the best of both readings. Nothing gates a child's place in class - by the time the prompt appears, enrollment and payment are already done. But the requirement is real and persistent rather than a one-time ask a family can dismiss forever.
 
-> ⚠️ **Confirm with Vaibhav before implementation.** O1.
+**Mechanically this is a fourth gate**, alongside the existing `ProfileCompletionGate` and `DisclaimerGate` in `app/family/layout.tsx`. That is a well-trodden pattern here - and one with specific, expensive failure modes this repo has already paid for (§5).
+
+### 2.1 Gate condition
+
+The gate fires when **all** of these hold:
+
+1. The viewer is a **family manager** (matching how the family-address gate is manager-scoped, `layout.tsx:55`).
+2. The family has an **active Bala Vihar enrollment**, selected by `programKey` via `selectBalaViharEnrollment` - never "the first active enrollment" (§5.2).
+3. That Bala Vihar donation is **paid**.
+4. The family has **no active Adult Study Class enrollment for the current term**.
+5. At least one adult in the family is **eligible to attend** (§4.4).
+
+### 2.2 Why "teachers are busy" reframes the exception cleanly
+
+The stated reason is **availability** - a teacher is running a class while the adult class meets. That is a better rule than "if both parents are teachers", and it generalizes correctly:
+
+> **Selectable adults = adults who are NOT teacher-assigned.**
+> - Both adults teach → selectable set is empty → **the gate never fires.** (Vaibhav's stated case, handled without a special case.)
+> - One teaches, one does not → the non-teacher is selectable and must be chosen. Correct: the teacher is unavailable, the other parent is not.
+> - Single adult who teaches → empty set → gate does not fire. Handles the single-parent edge that a literal "both parents" rule could not.
+> - Grandparent or other non-teaching adult → selectable, like any other adult.
+
+This dissolves three of the four policy edges that were open in §4.4, using one rule derived from the reason Vaibhav gave rather than from the letter of it.
 
 ---
 
@@ -163,14 +182,21 @@ It reads `teacherAssignments/{ref}.levelIds` and requires **non-empty** `levelId
 
 > **Do not use the `teachers` collection.** Per `teacher.ts:3-5`, a sevak who is also a parent has **no `teachers/` doc** - the capability attaches to their member `mid` via `teacherAssignments`. Since every "parent who teaches" is exactly that case, a `teachers/`-based lookup would find nobody and the rule would never fire.
 
-**Four policy edges the code cannot decide** (this is the part Vaibhav flagged as unfinalized - O2):
+**The rule (§2.2): selectable adults are adults who are NOT teacher-assigned.** An empty selectable set means the gate never fires. Expressed once, this handles the both-teachers case, the single-teaching-parent case, and the one-teaches-one-doesn't case without branching on any of them.
 
-1. **"Parent" is not modelled.** Only `type === 'Adult'` is durable. `FamilyDocSchema.managers` means *account manager*, not parent, and `FAMILY_RELATION_OPTIONS` (`family.ts:4-6`) is **not stored on the member doc**. A live-in grandparent counts as an adult today.
-2. **Single-adult families.** One adult who teaches - does "both parents are teachers" apply? Literally no; in spirit yes.
-3. **Pending co-manager invites.** `member.ts:39` `inviteStatus: 'pending'` - an adult who has not yet accepted. Counted or not?
-4. **A teacher with zero levels reads as a non-teacher** (`assignments.ts:30-33`). Someone between assignments would be treated as a regular parent.
+```ts
+const adults = members.filter(m => m.type === 'Adult');
+const teacherFlags = await Promise.all(adults.map(m => isTeacherAssigned(m.mid)));
+const selectable = adults.filter((_, i) => !teacherFlags[i]);
+// selectable.length === 0  →  gate does not fire
+```
 
-**Recommended v1** (smallest defensible rule): *if every `type === 'Adult'` member with a non-pending invite is teacher-assigned, skip auto-enrollment - but still let the family enrol manually if they want to.* Advisory, not a hard block. It is a minority case by Vaibhav's own account, and an advisory rule that is occasionally wrong costs far less than a hard rule that wrongly excludes a family.
+**Two edges that remain, and how they are handled:**
+
+1. **"Parent" is not modelled.** Only `type === 'Adult'` is durable. `FamilyDocSchema.managers` means *account manager*, not parent, and `FAMILY_RELATION_OPTIONS` (`family.ts:4-6`) is **not stored on the member doc**. So a live-in grandparent is selectable. **Accepted** - the requirement is that *an adult from the family* attends, and a grandparent attending satisfies that intent.
+2. **Pending co-manager invites.** `member.ts:39` `inviteStatus: 'pending'` - an adult who has not yet accepted their invite. **Excluded from selectable**, since they may never join the family, and an unaccepted invitee cannot meaningfully agree to attend a class.
+
+**One accepted imprecision:** a teacher between assignments has empty `levelIds` and so reads as a non-teacher (`assignments.ts:30-33`), making them selectable. This resolves itself the moment they are assigned to a level, and erring toward "asked unnecessarily" is far cheaper than erring toward "silently exempted".
 
 ### 4.5 Lifecycle edge cases
 
@@ -180,6 +206,28 @@ It reads `teacherAssignments/{ref}.levelIds` and requires **non-empty** `levelId
 | Family exempt via BV, then **cancels** BV | Override stays `0` - they keep the free class for the term. Recommended: the exemption was earned at enroll time and is not clawed back mid-term |
 | Selected parent is **removed** from the family | `sync-enrollment-members.ts` prunes them; enrollment survives with an empty `enrolledMids`. Should surface as a prompt to reselect (O5) |
 | Family wants to **change** which parent attends | Not in v1. Re-enrolment or staff edit. Adding a change flow is a small follow-up |
+
+---
+
+## 4.6 Implementing the gate - four rules this repo already paid for
+
+Gates in this codebase have failed in specific, expensive ways. Each rule below exists because something broke.
+
+**R1 - The selection screen MUST be a top-level route, outside `/family`.**
+Put it at `/adult-class`, a sibling of `/complete-profile` and `/acknowledgements`. Those two are top-level for exactly this reason, recorded in `layout.tsx:25-32`: a gated screen nested *inside* the gated layout inherits the gate, which then needs an exemption, which then loops under soft navigation. **Never `redirect()` from a layout keyed on a header pathname.** Redirect to a route the gate does not cover.
+
+**R2 - Leave the screen with a HARD navigation, never `router.push`.**
+Use `window.location.assign('/family')` after the selection saves. A soft push back into a `redirect()` gate re-reads a stale `use cache` value, bounces to the same route, and React *preserves component state* - which is how `/complete-profile` once stranded users on "Saving…" forever. A full load re-runs the gate server-side against fresh data.
+
+**R3 - Do not make a client decision from a read you just invalidated.**
+After enrolling the adult, trust the write. `revalidateTag` is background and stale-tolerant, so re-reading to decide "is the gate satisfied now?" can return the pre-write answer and bounce the family straight back.
+
+**R4 - Order the gates, and defer explicitly.**
+`ProfileCompletionGate` → `DisclaimerGate` → **`AdultClassGate`**. The new gate must return early while either earlier gate would fire, exactly as `DisclaimerGate` already guards on profile completeness (`layout.tsx:76`). Otherwise Suspense resolution order decides which screen a family lands on, and an incomplete profile could be asked to pick an adult first.
+
+### 4.6.1 Term scoping
+
+Condition 4 in §2.1 is **"no active enrollment for the current term"**, not "no enrollment ever". Adult Study Class offerings are per-term, so a family who selected an adult last year must be asked again this year. Checking for any historical enrollment would silently exempt every returning family after the first year.
 
 ---
 
@@ -219,8 +267,9 @@ Unrelated to the Adult Study Class, cheap, and it removes a visible inconsistenc
 
 | # | Item | Owner |
 |---|---|---|
-| **O1** | **BLOCKING - is "must have a parent enrolled" enforced or encouraged (§2)?** This spec assumes encouraged. Enforcement puts a new gate on Bala Vihar enrollment during cutover week. | Vaibhav / CMT Developer |
-| **O2** | Finalize the both-parents-teachers rule (§4.4) - the four policy edges: grandparents, single-adult families, pending invites, zero-level teachers. Vaibhav flagged this as unfinished. | Vaibhav |
+| ~~O1~~ | RESOLVED 2026-07-25 - **enforced as a persistent post-donation prompt, never a block** (§2). Implemented as a fourth gate after profile-completion and disclaimers. | done |
+| ~~O2~~ | RESOLVED 2026-07-25 - **selectable adults are non-teacher-assigned adults; an empty set means the gate never fires** (§2.2, §4.4). Derived from Vaibhav's stated reason (teachers are busy in BV classes), which handles the both-teachers, single-teacher, and mixed cases with one rule. | done |
+| **O7** | Gate copy: what the family sees on `/adult-class`, and how the requirement is explained. Needs Vaibhav's wording. | Vaibhav |
 | **O3** | Adult-class-first then Bala Vihar: retroactive exemption or not (§4.5)? | CMT Developer |
 | **O4** | Does Adult Study Class need attendance tracking (`attendanceMode`) and levels? Assumed **no** for v1 - it is a donation + enrollment record only. | Vaibhav |
 | **O5** | UX when the selected parent is removed from the family (§4.5). | CMT Developer |

@@ -60,22 +60,35 @@ Five templates exist, all TypeScript functions returning `{subject, text, html}`
 
 ---
 
-## 4. The risk, and the recommended sequencing
+## 4. Migrate everything for Aug 3, with a code fallback
 
-**Migrating a working email can only break it.** There is no upside to moving `setu-invite` beyond consistency, and a variable-name mismatch between Vaibhav's SES template and the calling code **fails at send time, not at build time** - nothing catches it until an invite silently does not arrive.
+**Decision (CMT Developer, 2026-07-25):**
 
-Invites are load-bearing for launch: families invite co-managers, and a broken invite email during cutover week is a support problem with no workaround.
+> Migrate everything for Aug 3. For every scenario, an SES template must be present - **if it is not, fall back to the existing code email.**
 
-**Recommended split:**
+That fallback is what makes a full Aug-3 migration safe. My earlier concern was that migrating working emails could only break them, and that a variable-name mismatch **fails at send time, not build time** - nobody notices until an invite silently fails to arrive. With a fallback, a missing or misnamed template degrades to today's behaviour instead of to silence.
 
-| Phase | Scope | When |
-|---|---|---|
-| **A - infrastructure + new email** | `sendTemplatedEmail`, `Sender` interface, mock support, and the **pledge activation** email (SES from birth - nothing to break) | **Aug 3 batch** |
-| **B - migrate the four existing** | `payment-reminder`, `donation-thank-you`, `setu-invite`, `setu-join-request` | **After launch** |
+### 4.1 Fallback semantics - narrow, loud, and never silent
 
-Phase A is required anyway by the pledge spec, carries no regression risk, and proves the whole mechanism on a brand-new email. Phase B then moves working emails one at a time on a calm week, each verified in UAT before the TS template is deleted.
+The fallback exists to survive a **missing** template. It must not paper over a broken one.
 
-> If Vaibhav authors all five SES templates now, that is fine - Phase B becomes a fast sequence of small changes. The recommendation is about **when the switchover lands in production**, not when the templates get written.
+| Condition | Behaviour |
+|---|---|
+| No SES template name configured for this email | Use the code template. Log at info - an expected state during rollout. |
+| SES rejects the send with **template-not-found** | Use the code template. **Log at error** - this is a misconfiguration, not a design state. |
+| SES send fails any other way (throttle, auth, network, bad data) | **Do NOT fall back.** Fail as the caller would today. A fallback here would mask real delivery failures and send the same mail twice on a partial failure. |
+
+The distinction matters: falling back on *every* error turns "our email is misconfigured" into a permanently invisible condition, and the code templates would quietly become the real system while everyone believes SES is live.
+
+### 4.2 What this implies
+
+- **The code templates are kept, not deleted.** They become the fallback layer. §3 item 5 is amended: no template file is removed in this batch.
+- **A missing template is therefore never fatal**, which removes the launch-week risk that motivated the earlier phased recommendation.
+- **Rollout can be incremental at runtime, not in code.** Vaibhav creates SES templates one at a time; each one starts being used the moment it exists, with no deploy.
+- **`renderEmailTemplate` stays** (§3 item 6 is deferred) - it is the fallback dispatcher now, not dead weight.
+- **The error-level log is the migration checklist.** Anything still logging template-not-found after launch is an SES template that has not been created yet.
+
+> One risk survives and should be watched: if a template exists but its **variable names** are wrong, SES may accept the send and render an email with blanks where the family's name or amount should be. That is not a fallback case - it is a bad template, and only the per-template variable-contract test (§6.2) and a real UAT send will catch it.
 
 ---
 
@@ -97,6 +110,11 @@ Phase A is required anyway by the pledge spec, carries no regression risk, and p
 3. **`resolveSender()` still governs**: assert templated sends honour the allowlist and redirect branches, and that mocks intercept them in tests.
 4. **OTP untouched**: assert `otp-code` still renders in-process and never calls SES templates. This is the guard against a well-meaning future migration.
 5. **Failure mode**: with a deliberately wrong template name, assert the caller degrades as designed - the pledge stays active and the error is logged, never a rolled-back transaction or a 500 to the family.
+6. **Fallback matrix (§4.1)** - one test per row:
+   - no template configured → code template used, info logged
+   - template-not-found → code template used, **error** logged
+   - any other SES failure → **no fallback**, error propagates as it does today, and the mail is **not** sent twice
+7. **OTP never touches the templated path** even if someone creates an `otp-code` template in SES. The exemption is enforced in code, not by the absence of a template.
 
 ---
 
@@ -104,7 +122,7 @@ Phase A is required anyway by the pledge spec, carries no regression risk, and p
 
 | # | Item | Owner |
 |---|---|---|
-| **O1** | Approve the Phase A / Phase B split (§4), or direct that all four migrate for Aug 3. | CMT Developer |
+| ~~O1~~ | RESOLVED 2026-07-25 - **migrate everything for Aug 3, with a code fallback when an SES template is absent** (§4). Code templates are retained as the fallback layer rather than deleted. | done |
 | **O2** | Vaibhav creates the SES templates in `ca-central-1` and supplies **template names + exact variable names** per template. | Vaibhav |
 | **O3** | Confirm UAT and production share one AWS account/region for SES (§5). | CMT Developer |
 | **O4** | Decide whether `renderEmailTemplate` is retired or narrowed to OTP-only once Phase B completes, and fix its `as any` consumer (`send-email-service.ts:13`). | CMT Developer |
