@@ -1,4 +1,4 @@
-# Admin-managed Locations + Level Management Revamp — Implementation Plan
+# Admin-managed Locations + Level Management Revamp - Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -13,18 +13,18 @@
 
 ## Global Constraints
 
-- **UAT only** — all DB ops target `chinmaya-setu-uat`; never touch prod `715b8`; never `--force` an index deploy.
+- **UAT only** - all DB ops target `chinmaya-setu-uat`; never touch prod `715b8`; never `--force` an index deploy.
 - **Never** bypass the pre-push hook with `--no-verify`; fix the code, not the hook.
 - **Never** use the em dash character; use a plain hyphen `-`.
-- **`exactOptionalPropertyTypes` is enabled** — never assign `undefined` to an optional; omit the key or use `null`.
-- **Doc-schema location fields relax to `z.string().min(1)`** (read-validation discipline — doc schemas validate on READ; never over-tighten). Enforce membership/required-ness at write routes + forms.
-- **`leadTeacherRef` on a doc schema is `z.string().nullable().optional()`** — never `.min(1)` required on a read-validated doc field.
+- **`exactOptionalPropertyTypes` is enabled** - never assign `undefined` to an optional; omit the key or use `null`.
+- **Doc-schema location fields relax to `z.string().min(1)`** (read-validation discipline - doc schemas validate on READ; never over-tighten). Enforce membership/required-ness at write routes + forms.
+- **`leadTeacherRef` on a doc schema is `z.string().nullable().optional()`** - never `.min(1)` required on a read-validated doc field.
 - **A public `/api/setu/*` route needs BOTH** an entry in `public-routes.ts` AND a `canAccessRoute` clause.
 - **Any `/api/setu/**` request/response shape change → append a dated, SHA-keyed entry to `apps/portal/docs/MOBILE_API_CHANGELOG.md`.**
 - **Bulk `collectionGroup` reads**, never per-family fan-out.
-- **Never declare function components inside components** — hoist render helpers or call as plain functions (`teacherCell(l)`).
+- **Never declare function components inside components** - hoist render helpers or call as plain functions (`teacherCell(l)`).
 - **Every user-facing route gets a deployed-UAT Playwright E2E** with a realistic, multi-instance, active-state fixture; password sign-in; run vs `https://cmt-setu.vercel.app`; self-cleaning.
-- **Run the FULL vitest suite** (`pnpm --filter @cmt/portal test`) before pushing shared route/schema changes — integration tests live in separate dirs and targeted globs miss them.
+- **Run the FULL vitest suite** (`pnpm --filter @cmt/portal test`) before pushing shared route/schema changes - integration tests live in separate dirs and targeted globs miss them.
 - Commit author is the repo-local `CMT Developer <developer@chinmayatoronto.org>`; do NOT add any agent co-author.
 - Keep `docs/runbooks/production-cutover-checklist.md` §14 current for any UAT DB op.
 
@@ -40,12 +40,12 @@
 
 ## File Structure
 
-**Slice 1 — Foundation (locations as config):**
-- Create `apps/portal/src/lib/locations.ts` — config lib (`DEFAULT_LOCATIONS`, `getLocationOptions`, `setLocationOptions`).
+**Slice 1 - Foundation (locations as config):**
+- Create `apps/portal/src/lib/locations.ts` - config lib (`DEFAULT_LOCATIONS`, `getLocationOptions`, `setLocationOptions`).
 - Create `apps/portal/src/lib/__tests__/locations.test.ts`.
-- Modify 7 shared-domain schema files — relax `z.enum(LOCATIONS)` → `z.string().min(1)`; reduce `LOCATIONS` const + `type Location = string`.
+- Modify 7 shared-domain schema files - relax `z.enum(LOCATIONS)` → `z.string().min(1)`; reduce `LOCATIONS` const + `type Location = string`.
 - Create `apps/portal/src/app/api/admin/locations/route.ts` (GET + PUT with referential guard) + its `__tests__/route.test.ts`.
-- Create `apps/portal/src/features/setu/locations/referenced-locations.ts` — helper counting references for the guard + its test.
+- Create `apps/portal/src/features/setu/locations/referenced-locations.ts` - helper counting references for the guard + its test.
 - Create `apps/portal/src/app/admin/locations/page.tsx` + `apps/portal/src/features/admin/locations/locations-editor.tsx`.
 - Modify admin nav: `app/admin/page.tsx`, `features/admin/components/admin-sidebar.tsx`, `features/admin/components/admin-mobile-nav.tsx`.
 - Create `apps/portal/src/app/api/setu/locations/route.ts` (public GET) + its test.
@@ -54,7 +54,7 @@
 - Modify UI pickers to read the dynamic list: `app/register/family/page.tsx`, `app/admin/calendar/page.tsx`, `features/admin/programs/{program-form,offerings-panel,programs-table}.tsx`, `features/setu/roster/roster-browser.tsx`.
 - Modify `apps/portal/docs/MOBILE_API_CHANGELOG.md`, `docs/runbooks/production-cutover-checklist.md`.
 
-**Slice 2 — Level Management redesign:**
+**Slice 2 - Level Management redesign:**
 - Modify `packages/shared-domain/src/setu/schemas/level.ts` (add `leadTeacherRef`).
 - Modify `app/api/admin/levels/[levelId]/route.ts` (PATCH sets/validates lead), `app/api/admin/levels/[levelId]/teachers/route.ts` (DELETE clears lead on removal).
 - Modify `app/admin/levels/page.tsx` (carry `leadTeacherRef` through the field mapper).
@@ -65,7 +65,7 @@
 
 ---
 
-## SLICE 1 — Locations as admin-managed config
+## SLICE 1 - Locations as admin-managed config
 
 ### Task 1: Locations config lib
 
@@ -74,7 +74,7 @@
 - Test: `apps/portal/src/lib/__tests__/locations.test.ts`
 
 **Interfaces:**
-- Consumes: `LOCATIONS` from `@cmt/shared-domain` (still the 4-value const at this point; Task 2 reduces it — either order compiles because `[...LOCATIONS]` just spreads whatever is there).
+- Consumes: `LOCATIONS` from `@cmt/shared-domain` (still the 4-value const at this point; Task 2 reduces it - either order compiles because `[...LOCATIONS]` just spreads whatever is there).
 - Produces: `DEFAULT_LOCATIONS: readonly string[]`, `getLocationOptions(): Promise<string[]>`, `setLocationOptions(options: string[]): Promise<void>`.
 
 - [ ] **Step 1: Write the failing test** (clone `apps/portal/src/lib/__tests__/volunteering-skills.test.ts`)
@@ -133,7 +133,7 @@ describe('setLocationOptions', () => {
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm --filter @cmt/portal exec vitest run src/lib/__tests__/locations.test.ts`
-Expected: FAIL — `Cannot find module '../locations'`.
+Expected: FAIL - `Cannot find module '../locations'`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -208,7 +208,7 @@ git commit -m "feat(locations): add app_config-backed locations config lib"
 **Interfaces:**
 - Produces: `LOCATIONS = ['Brampton', 'Scarborough'] as const` (default seed, no longer the closed universe); `type Location = string`. All the above `location` fields become `z.string().min(1)` (preserving `.nullable()` / `z.array(...)` wrappers).
 
-- [ ] **Step 1: Write/adjust the failing test** — prove a non-default centre now validates. Add to `packages/shared-domain/src/setu/schemas/__tests__/family.test.ts`:
+- [ ] **Step 1: Write/adjust the failing test** - prove a non-default centre now validates. Add to `packages/shared-domain/src/setu/schemas/__tests__/family.test.ts`:
 
 ```ts
 it('accepts an admin-added centre not in the default set (location is dynamic)', () => {
@@ -223,7 +223,7 @@ it('accepts an admin-added centre not in the default set (location is dynamic)',
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `pnpm --filter @cmt/shared-domain exec vitest run src/setu/schemas/__tests__/family.test.ts`
-Expected: FAIL — `Invalid enum value. Expected 'Brampton' | 'Mississauga' | ...` for `'Oakville'`.
+Expected: FAIL - `Invalid enum value. Expected 'Brampton' | 'Mississauga' | ...` for `'Oakville'`.
 
 - [ ] **Step 3: Make the changes**
 
@@ -272,7 +272,7 @@ In `family.ts`:
 - [ ] **Step 4: Run the shared-domain suite**
 
 Run: `pnpm --filter @cmt/shared-domain test`
-Expected: PASS. Fix any test that hardcoded the 4-value enum expectation (e.g. an assertion that `'Oakville'` is rejected) — update it to reflect the dynamic string field. Do NOT weaken assertions that check `.min(1)` rejects an empty string.
+Expected: PASS. Fix any test that hardcoded the 4-value enum expectation (e.g. an assertion that `'Oakville'` is rejected) - update it to reflect the dynamic string field. Do NOT weaken assertions that check `.min(1)` rejects an empty string.
 
 - [ ] **Step 5: Typecheck the portal** (the `Location` widening can surface literal-typed assignments)
 
@@ -295,7 +295,7 @@ git commit -m "refactor(locations): relax location schema fields from enum to st
 - Test: `apps/portal/src/features/setu/locations/__tests__/referenced-locations.test.ts`
 
 **Interfaces:**
-- Produces: `async function countLocationReferences(location: string): Promise<number>` — total docs across `families`, `offerings`, `levels`, `enrollments` (collectionGroup) whose `location === location`. Uses `.count()` aggregation so it never streams docs. `enrollments` is a collectionGroup (enrollments live under families); the others are top-level collections.
+- Produces: `async function countLocationReferences(location: string): Promise<number>` - total docs across `families`, `offerings`, `levels`, `enrollments` (collectionGroup) whose `location === location`. Uses `.count()` aggregation so it never streams docs. `enrollments` is a collectionGroup (enrollments live under families); the others are top-level collections.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -336,7 +336,7 @@ it('sums references across families, offerings, levels, enrollments', async () =
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `pnpm --filter @cmt/portal exec vitest run src/features/setu/locations/__tests__/referenced-locations.test.ts`
-Expected: FAIL — module not found.
+Expected: FAIL - module not found.
 
 - [ ] **Step 3: Implement**
 
@@ -388,7 +388,7 @@ git commit -m "feat(locations): add referenced-locations count helper for the re
 
 **Interfaces:**
 - Consumes: `getLocationOptions`, `setLocationOptions` (Task 1); `countLocationReferences` (Task 3); `isAdmin` from `@cmt/shared-domain`; `readSessionFromHeaders` from `@/lib/auth/headers`.
-- Produces: `GET` → `{ options }` (admin-only); `PUT` → `{ options }` on success, `{ error: 'location-in-use', location, count }` (409) when a removed centre is still referenced, `{ error: 'empty-list' }` (400) when the resulting list is empty. No new `canAccessRoute` rule needed — `/api/admin/*` is already admin-only (can-access-route.ts L60).
+- Produces: `GET` → `{ options }` (admin-only); `PUT` → `{ options }` on success, `{ error: 'location-in-use', location, count }` (409) when a removed centre is still referenced, `{ error: 'empty-list' }` (400) when the resulting list is empty. No new `canAccessRoute` rule needed - `/api/admin/*` is already admin-only (can-access-route.ts L60).
 
 - [ ] **Step 1: Write the failing test** (clone the volunteering-skills route test; `x-portal-role` header drives the session role)
 
@@ -472,7 +472,7 @@ describe('PUT /api/admin/locations', () => {
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `pnpm --filter @cmt/portal exec vitest run src/app/api/admin/locations/__tests__/route.test.ts`
-Expected: FAIL — module not found.
+Expected: FAIL - module not found.
 
 - [ ] **Step 3: Implement**
 
@@ -601,7 +601,7 @@ export default async function AdminLocationsPage() {
 }
 ```
 
-- [ ] **Step 2: Build the client editor** — clone `features/admin/volunteering-skills/skills-editor.tsx` (read it first for the exact list/add/remove/reorder markup and toast usage). Key differences: PUT to `/api/admin/locations`; surface the `location-in-use` 409 as a specific toast.
+- [ ] **Step 2: Build the client editor** - clone `features/admin/volunteering-skills/skills-editor.tsx` (read it first for the exact list/add/remove/reorder markup and toast usage). Key differences: PUT to `/api/admin/locations`; surface the `location-in-use` 409 as a specific toast.
 
 ```tsx
 // apps/portal/src/features/admin/locations/locations-editor.tsx
@@ -746,7 +746,7 @@ it('allows anonymous GET /api/setu/locations (public)', () => {
 - [ ] **Step 3: Run both tests to verify they fail**
 
 Run: `pnpm --filter @cmt/portal exec vitest run src/app/api/setu/locations && pnpm --filter @cmt/shared-domain exec vitest run src/auth`
-Expected: FAIL — route module missing; canAccessRoute returns false for the new path.
+Expected: FAIL - route module missing; canAccessRoute returns false for the new path.
 
 - [ ] **Step 4: Implement the handler** (mirrors `api/setu/volunteering-skills/route.ts`)
 
@@ -775,7 +775,7 @@ if (pathname === '/api/setu/locations' || pathname.startsWith('/api/setu/locatio
 }
 ```
 
-- [ ] **Step 6: Add the MOBILE_API_CHANGELOG entry** — append a dated entry documenting the new `GET /api/setu/locations` (mobile should fetch the centre list here instead of hardcoding four). Key it with the commit SHA after committing (or a placeholder to update).
+- [ ] **Step 6: Add the MOBILE_API_CHANGELOG entry** - append a dated entry documenting the new `GET /api/setu/locations` (mobile should fetch the centre list here instead of hardcoding four). Key it with the commit SHA after committing (or a placeholder to update).
 
 - [ ] **Step 7: Run both suites to verify they pass**
 
@@ -805,7 +805,7 @@ git commit -m "feat(locations): public GET /api/setu/locations + public-route wi
 - Consumes: `getLocationOptions` (Task 1).
 - Produces: register + calendar routes accept any centre in the dynamic list and reject one that is not, returning `{ error: 'invalid-location' }` (400).
 
-- [ ] **Step 1: Add/adjust the register test** — a location outside the config list is rejected:
+- [ ] **Step 1: Add/adjust the register test** - a location outside the config list is rejected:
 
 ```ts
 // In the register route test, with getLocationOptions mocked to ['Brampton','Scarborough']:
@@ -824,7 +824,7 @@ it('accepts a configured centre', async () => {
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `pnpm --filter @cmt/portal exec vitest run src/app/api/setu/register`
-Expected: FAIL — currently the inline enum rejects `'Nowhere'` with a zod issue (not `invalid-location`), and `'Scarborough'` already passes; adjust after impl.
+Expected: FAIL - currently the inline enum rejects `'Nowhere'` with a zod issue (not `invalid-location`), and `'Scarborough'` already passes; adjust after impl.
 
 - [ ] **Step 3: Relax the register schema + add the membership check**
 
@@ -843,7 +843,7 @@ if (!allowedLocations.includes(parsed.data.location)) {
 }
 ```
 
-- [ ] **Step 4: Relax the three calendar validators** — replace `(LOCATIONS as readonly string[]).includes(location)` with a check against `await getLocationOptions()` in each of `admin/calendar/route.ts`, `admin/calendar/weekly/route.ts`, `setu/calendar/route.ts`, and drop the now-unused `LOCATIONS` import. Example:
+- [ ] **Step 4: Relax the three calendar validators** - replace `(LOCATIONS as readonly string[]).includes(location)` with a check against `await getLocationOptions()` in each of `admin/calendar/route.ts`, `admin/calendar/weekly/route.ts`, `setu/calendar/route.ts`, and drop the now-unused `LOCATIONS` import. Example:
 ```ts
 import { getLocationOptions } from '@/lib/locations';
 // ...
@@ -854,7 +854,7 @@ if (!location || !locations.includes(location)) {
 ```
 (Keep each route's existing error shape/status if it already returns a specific code; only swap the membership source.)
 
-- [ ] **Step 5: Add the MOBILE_API_CHANGELOG entry** — `/api/setu/register` `location` changed from a 4-value enum to a dynamic string validated against `/api/setu/locations`; mobile should send a value from that endpoint.
+- [ ] **Step 5: Add the MOBILE_API_CHANGELOG entry** - `/api/setu/register` `location` changed from a 4-value enum to a dynamic string validated against `/api/setu/locations`; mobile should send a value from that endpoint.
 
 - [ ] **Step 6: Run the register suite to verify it passes**
 
@@ -930,7 +930,7 @@ git commit -m "feat(locations): location pickers read the dynamic admin-managed 
 Run: `pnpm --filter @cmt/shared-domain test && pnpm --filter @cmt/portal test`
 Expected: PASS. Fix any fixture that hardcoded a removed centre or a `locationOptions`-less render.
 
-- [ ] **Step 2: Add the runbook entry** — §14 dated 2026-07-12: `app_config/locations` lazy-defaults to Brampton + Scarborough (no seed script); going-forward the centre set is admin-managed; standing pre-prod check "confirm no family/offering/level/enrollment references a centre outside the config set" (UAT verified clean 2026-07-12); add a §10 table row for the config doc. Do NOT run any prod write.
+- [ ] **Step 2: Add the runbook entry** - §14 dated 2026-07-12: `app_config/locations` lazy-defaults to Brampton + Scarborough (no seed script); going-forward the centre set is admin-managed; standing pre-prod check "confirm no family/offering/level/enrollment references a centre outside the config set" (UAT verified clean 2026-07-12); add a §10 table row for the config doc. Do NOT run any prod write.
 
 - [ ] **Step 3: Commit**
 
@@ -941,7 +941,7 @@ git commit -m "docs(runbook): record admin-managed locations config (UAT)"
 
 ---
 
-## SLICE 2 — Level Management redesign
+## SLICE 2 - Level Management redesign
 
 ### Task 10: `leadTeacherRef` data model + write path
 
@@ -956,7 +956,7 @@ git commit -m "docs(runbook): record admin-managed locations config (UAT)"
 **Interfaces:**
 - Produces: `LevelDoc.leadTeacherRef?: string | null`; `UpdateLevelInput.leadTeacherRef?: string | null`; PATCH enforces `leadTeacherRef ∈ teacherRefs` (else `{ error: 'lead-not-a-teacher' }` 400); DELETE-teacher clears `leadTeacherRef` when removing the lead; `setLevelLeadTeacherClient(levelId, mid: string | null): Promise<void>`.
 
-- [ ] **Step 1: Schema test** — add to `level-schemas.test.ts`:
+- [ ] **Step 1: Schema test** - add to `level-schemas.test.ts`:
 
 ```ts
 it('LevelDocSchema accepts an omitted, null, or string leadTeacherRef', () => {
@@ -976,7 +976,7 @@ it('UpdateLevelSchema accepts leadTeacherRef null|string', () => {
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `pnpm --filter @cmt/shared-domain exec vitest run src/setu/__tests__/level-schemas.test.ts`
-Expected: FAIL — `leadTeacherRef` stripped/unknown.
+Expected: FAIL - `leadTeacherRef` stripped/unknown.
 
 - [ ] **Step 3: Add the schema fields.** In `level.ts`:
 ```ts
@@ -1022,7 +1022,7 @@ export async function setLevelLeadTeacherClient(levelId: string, mid: string | n
 Run: `pnpm --filter @cmt/shared-domain exec vitest run src/setu/__tests__/level-schemas.test.ts && pnpm --filter @cmt/portal exec vitest run src/app/api/admin/levels`
 Expected: PASS.
 
-- [ ] **Step 9: MOBILE_API_CHANGELOG?** `/api/admin/*` is NOT part of the mobile `/api/setu/*` contract — no changelog entry needed. (Confirm the teacher route path is `/api/admin/...`, which it is.)
+- [ ] **Step 9: MOBILE_API_CHANGELOG?** `/api/admin/*` is NOT part of the mobile `/api/setu/*` contract - no changelog entry needed. (Confirm the teacher route path is `/api/admin/...`, which it is.)
 
 - [ ] **Step 10: Commit**
 
@@ -1037,7 +1037,7 @@ git commit -m "feat(levels): add leadTeacherRef (one Lead per level) with write 
 
 **Files:**
 - Modify: `apps/portal/src/features/admin/levels/levels-management.tsx` (owns filter state + selection + stat cards + renders master list + detail panel)
-- Modify: `apps/portal/src/features/admin/levels/levels-table.tsx` (becomes the master LIST: selectable rows; teacher-management markup extracted to the panel in Task 12 — for this task, keep the existing inline teacher cell working)
+- Modify: `apps/portal/src/features/admin/levels/levels-table.tsx` (becomes the master LIST: selectable rows; teacher-management markup extracted to the panel in Task 12 - for this task, keep the existing inline teacher cell working)
 - Modify: `apps/portal/src/app/admin/levels/page.tsx` (pass `locationOptions` from `getLocationOptions()`)
 
 **Interfaces:**
@@ -1117,7 +1117,7 @@ git commit -m "feat(levels): master-detail shell with always-one location filter
 
 **Interfaces:**
 - Consumes: `searchTeachersClient`, `addLevelTeacherClient`, `removeLevelTeacherClient`, `setLevelLeadTeacherClient` (Task 10), `TeacherHit`, `LevelTeacher`.
-- Produces: `LevelDetailPanel` — shows the selected level's grades/curriculum/status and its teachers as pills with a Lead/Assistant badge, an add-teacher search (reuse `AssignTeacherPopover` markup), remove buttons, and a "Make Lead" control per teacher. Emits changes up so `LevelsManagement` keeps `levels[]` (`teacherRefs`, `leadTeacherRef`) in sync.
+- Produces: `LevelDetailPanel` - shows the selected level's grades/curriculum/status and its teachers as pills with a Lead/Assistant badge, an add-teacher search (reuse `AssignTeacherPopover` markup), remove buttons, and a "Make Lead" control per teacher. Emits changes up so `LevelsManagement` keeps `levels[]` (`teacherRefs`, `leadTeacherRef`) in sync.
 
 - [ ] **Step 1: Panel test** (jsdom). Render `LevelDetailPanel` for a level with 2 teachers, one of which is the lead:
 ```tsx
@@ -1130,7 +1130,7 @@ Mock `./assign-teacher-client` (all four fns). Follow the existing `AssignTeache
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `pnpm --filter @cmt/portal exec vitest run src/features/admin/levels/__tests__/level-detail-panel.test.tsx`
-Expected: FAIL — module missing.
+Expected: FAIL - module missing.
 
 - [ ] **Step 3: Build `LevelDetailPanel`.** Props:
 ```tsx
@@ -1214,10 +1214,10 @@ git commit -m "test(e2e): deployed-UAT specs for locations editor + levels redes
 
 ---
 
-## Self-Review (author checklist — completed)
+## Self-Review (author checklist - completed)
 
 **Spec coverage:** Part A (config lib T1, schema relax T2, membership validation T7, public endpoint T6, dynamic pickers T8) ✓; Part B (editor + guard T3/T4/T5) ✓; Part C (leadTeacherRef T10, master-detail + always-one filter + stat cards T11, teacher panel with many-teachers/one-Lead T12) ✓; testing/rollout (T9 full-suite+runbook, T13 E2E, changelog in T6/T7) ✓; two ordered sub-slices ✓.
 
-**Type consistency:** `getLocationOptions/setLocationOptions/DEFAULT_LOCATIONS` (T1) used identically in T4–T8. `countLocationReferences` (T3) → T4. `leadTeacherRef: string | null` consistent across schema (T10), mapper (T10), PATCH (T10), panel (T12). `setLevelLeadTeacherClient(levelId, mid|null)` (T10) → T12. `locationOptions: string[]` prop name consistent T8/T11. Segmented control is always-one-selected (no "All") per spec.
+**Type consistency:** `getLocationOptions/setLocationOptions/DEFAULT_LOCATIONS` (T1) used identically in T4-T8. `countLocationReferences` (T3) → T4. `leadTeacherRef: string | null` consistent across schema (T10), mapper (T10), PATCH (T10), panel (T12). `setLevelLeadTeacherClient(levelId, mid|null)` (T10) → T12. `locationOptions: string[]` prop name consistent T8/T11. Segmented control is always-one-selected (no "All") per spec.
 
-**No placeholders:** every code step shows real code; the two spots that say "mirror the existing markup" (LocationsEditor JSX from skills-editor; LevelsTable row markup) point at exact template files with line ranges in the digest, because transcribing 600 lines of existing JSX verbatim is not additive — the structural logic, props, handlers, and tests are all specified.
+**No placeholders:** every code step shows real code; the two spots that say "mirror the existing markup" (LocationsEditor JSX from skills-editor; LevelsTable row markup) point at exact template files with line ranges in the digest, because transcribing 600 lines of existing JSX verbatim is not additive - the structural logic, props, handlers, and tests are all specified.

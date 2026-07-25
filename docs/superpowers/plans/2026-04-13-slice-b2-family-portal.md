@@ -1,12 +1,12 @@
-# Slice B2 — Family Portal Implementation Plan
+# Slice B2 - Family Portal Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Ship the family self-service portal: passwordless OTP login (email or phone) via a mock sender (real AWS arrives in B5), a family dashboard that reads kids from master RTDB and check-in history from portal Firestore, and a family self-check-in page that writes check-in events with `checkedInBy: 'family'`. All endpoints support dual-mode auth (web cookie + mobile Bearer).
 
-**Architecture:** The family login replaces B0's `FamilyLoginForm` scaffold with a two-step form: contact entry → OTP code entry. The server stores hashed verification codes in Firestore with a 10-minute TTL and rate-limits sends per-contact. Successful verification creates a Firebase user keyed on `sha256(normalizedContact)` so the same contact via email and phone converges to one user. The family dashboard renders server-side using headers-attached claims from the B0 middleware. Notifications call an in-process mock sender in B2 — B5 swaps the wiring to real AWS SES/SNS.
+**Architecture:** The family login replaces B0's `FamilyLoginForm` scaffold with a two-step form: contact entry → OTP code entry. The server stores hashed verification codes in Firestore with a 10-minute TTL and rate-limits sends per-contact. Successful verification creates a Firebase user keyed on `sha256(normalizedContact)` so the same contact via email and phone converges to one user. The family dashboard renders server-side using headers-attached claims from the B0 middleware. Notifications call an in-process mock sender in B2 - B5 swaps the wiring to real AWS SES/SNS.
 
-**Tech Stack:** Builds on B0's `@cmt/firebase-shared/admin/*` and `@cmt/shared-domain/auth/*`. Adds `@cmt/shared-domain/check-in/{family,check-in,api}` domain types. Shadcn primitives from `@cmt/ui`. No `headlessui`, no `react-phone-number-input` — native phone input + country-code dropdown.
+**Tech Stack:** Builds on B0's `@cmt/firebase-shared/admin/*` and `@cmt/shared-domain/auth/*`. Adds `@cmt/shared-domain/check-in/{family,check-in,api}` domain types. Shadcn primitives from `@cmt/ui`. No `headlessui`, no `react-phone-number-input` - native phone input + country-code dropdown.
 
 **Spec:** `docs/superpowers/specs/2026-04-13-slice-b-family-check-in-port-design.md` §10 (B2 detail)
 
@@ -24,7 +24,7 @@
 test -f apps/portal/src/middleware.ts && \
 test -f packages/firebase-shared/src/admin/session.ts && \
 test -f packages/shared-domain/src/auth/can-access-route.ts && \
-echo "B0 present" || echo "B0 MISSING — ship B0 first"
+echo "B0 present" || echo "B0 MISSING - ship B0 first"
 ```
 
 Expected: `B0 present`.
@@ -268,7 +268,7 @@ export interface CheckInHistoryEntry {
 import type { Family, Student, PaymentStatus } from './family';
 import type { CheckInHistoryEntry } from './check-in';
 
-// Auth — family OTP
+// Auth - family OTP
 export interface SendCodeRequest {
   type: 'email' | 'phone';
   value: string;
@@ -346,7 +346,7 @@ git commit -m "feat(shared-domain): add check-in domain types (family, check-in 
 
 ---
 
-## Task 2: `features/check-in/shared/rtdb/family-lookup.ts` — RTDB family reader
+## Task 2: `features/check-in/shared/rtdb/family-lookup.ts` - RTDB family reader
 
 Wraps `readRtdb<Family>('/families/{fid}')` and provides a contact-lookup helper. Lives under `shared/` because B1 kiosk, B2 family portal, and B3 teacher portal all need it.
 
@@ -396,7 +396,7 @@ describe('findFamilyById', () => {
   });
 });
 
-describe('findFamilyByContact — email', () => {
+describe('findFamilyByContact - email', () => {
   it('scans /families index and matches lowercased email', async () => {
     const all = {
       '42': {
@@ -426,7 +426,7 @@ describe('findFamilyByContact — email', () => {
   });
 });
 
-describe('findFamilyByContact — phone', () => {
+describe('findFamilyByContact - phone', () => {
   it('matches by digits-only phone comparison', async () => {
     (readRtdb as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       '42': {
@@ -511,7 +511,7 @@ git commit -m "feat(portal): add shared family-lookup helper (findFamilyById, fi
 
 ---
 
-## Task 3: `features/check-in/shared/firestore/verification-codes.ts` — OTP storage
+## Task 3: `features/check-in/shared/firestore/verification-codes.ts` - OTP storage
 
 Stores and verifies 6-digit codes in Firestore with a TTL. Uses `portalFirestore()` from B0.
 
@@ -683,7 +683,7 @@ git commit -m "feat(portal): add verification-codes Firestore helper (store, ver
 
 ---
 
-## Task 4: `features/check-in/shared/notifications/mock-sender.ts` — noop notification sender
+## Task 4: `features/check-in/shared/notifications/mock-sender.ts` - noop notification sender
 
 The notification sender interface used by B2/B1/B4. In B2 it's a mock that logs the code. B5 replaces this wiring with real AWS SES/SNS.
 
@@ -786,7 +786,7 @@ git commit -m "feat(portal): add mock NotificationSender (B5 replaces with real 
 
 ---
 
-## Task 5: `features/check-in/shared/rate-limit/otp-rate-limit.ts` — OTP send rate limiter
+## Task 5: `features/check-in/shared/rate-limit/otp-rate-limit.ts` - OTP send rate limiter
 
 Max 5 send-code calls per contact per 15-minute window, persisted in Firestore `otp_rate_limit/{hash}`.
 
@@ -935,7 +935,7 @@ git commit -m "feat(portal): add OTP rate limiter (5 per contact per 15-min wind
 
 ## Task 6: Shared contact helpers + shared barrel
 
-`normalizeContact` already exists in the family-lookup module — move/re-export it here so it's the canonical location. Create the shared barrel index.
+`normalizeContact` already exists in the family-lookup module - move/re-export it here so it's the canonical location. Create the shared barrel index.
 
 **Files:**
 - Create: `apps/portal/src/features/check-in/shared/contact/normalize.ts`
@@ -1023,7 +1023,7 @@ git commit -m "feat(portal): add shared contact normalizers + barrel export for 
 
 ---
 
-## Task 7: `POST /api/auth/family/send-code` — send OTP
+## Task 7: `POST /api/auth/family/send-code` - send OTP
 
 Validates family exists in RTDB, generates 6-digit code, stores it, calls mock sender, respects rate limit.
 
@@ -1252,7 +1252,7 @@ git commit -m "feat(portal): POST /api/auth/family/send-code with rate limit, fa
 
 ---
 
-## Task 8: `POST /api/auth/family/verify-code` — verify + create session
+## Task 8: `POST /api/auth/family/verify-code` - verify + create session
 
 Verifies code, creates/reuses Firebase user keyed on hashed contact, sets claims, creates session cookie (web) or returns custom token (mobile).
 
@@ -1539,7 +1539,7 @@ beforeEach(() => {
   vi.stubGlobal('location', { assign: vi.fn(), href: '' });
 });
 
-describe('FamilyLoginForm — contact step', () => {
+describe('FamilyLoginForm - contact step', () => {
   it('renders email and phone tabs', () => {
     render(<FamilyLoginForm />);
     expect(screen.getByRole('tab', { name: /email/i })).toBeInTheDocument();
@@ -1603,7 +1603,7 @@ describe('FamilyLoginForm — contact step', () => {
   });
 });
 
-describe('FamilyLoginForm — OTP step', () => {
+describe('FamilyLoginForm - OTP step', () => {
   async function reachOtpStep() {
     const user = userEvent.setup();
     vi.spyOn(global, 'fetch').mockResolvedValueOnce({
@@ -1838,7 +1838,7 @@ export { OtpCodeInput } from './otp-code-input';
 ```tsx
 import { FamilyLoginForm } from '@/features/check-in/family';
 
-export const metadata = { title: 'Family sign in — CMT Portal' };
+export const metadata = { title: 'Family sign in - CMT Portal' };
 
 export default function FamilyLoginPage() {
   return (
@@ -1881,7 +1881,7 @@ git commit -m "feat(portal): real FamilyLoginForm with email/phone tabs + OTP st
 
 ---
 
-## Task 10: `GET /api/check-in/family/dashboard` — family dashboard data
+## Task 10: `GET /api/check-in/family/dashboard` - family dashboard data
 
 Reads family from RTDB, recent check-ins from Firestore, returns combined payload. Auth-gated (`family` role).
 
@@ -2247,7 +2247,7 @@ import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { flags } from '@/lib/flags';
 import type { FamilyDashboardResponse, CheckInHistoryEntry } from '@cmt/shared-domain/check-in';
 
-export const metadata = { title: 'My family — CMT Portal' };
+export const metadata = { title: 'My family - CMT Portal' };
 export const dynamic = 'force-dynamic';
 
 export default async function FamilyDashboardPage() {
@@ -2336,13 +2336,13 @@ git commit -m "feat(portal): /check-in/family dashboard page with family data, s
 
 ---
 
-## Task 12: Placeholder kept at Task 10 — skipped
+## Task 12: Placeholder kept at Task 10 - skipped
 
-(Task 10 is the dashboard API route; Task 11 wired the SSR page. Tasks renumbered only — no work here.)
+(Task 10 is the dashboard API route; Task 11 wired the SSR page. Tasks renumbered only - no work here.)
 
 Actually we're not skipping. Let me re-map. Task 12 in this plan was originally "GET /api/check-in/family/dashboard" but that's covered by Task 10. Re-purposing Task 12 to the **self check-in API route**.
 
-## Task 12: `POST /api/check-in/family/self-check-in` — family self-service write
+## Task 12: `POST /api/check-in/family/self-check-in` - family self-service write
 
 **Files:**
 - Create: `apps/portal/src/app/api/check-in/family/self-check-in/route.ts`
@@ -2686,7 +2686,7 @@ import { findFamilyById } from '@/features/check-in/shared';
 import { StudentCheckInList } from '@/features/check-in/family/student-check-in-list';
 import { flags } from '@/lib/flags';
 
-export const metadata = { title: 'Check in my kids — CMT Portal' };
+export const metadata = { title: 'Check in my kids - CMT Portal' };
 export const dynamic = 'force-dynamic';
 
 export default async function FamilySelfCheckInPage() {
@@ -2752,7 +2752,7 @@ git commit -m "feat(portal): /check-in/family/check-in page with student list + 
 
 ## Task 14: Full-suite test run (checkpoint before e2e)
 
-**Files:** none — verification step.
+**Files:** none - verification step.
 
 - [ ] **Step 1: Run all workspace tests**
 
@@ -2784,7 +2784,7 @@ pnpm --filter @cmt/portal dev
 
 Open `http://localhost:3000/login/family`. Confirm the two-step form renders. Type a known UAT family email, hit Send code. Check the terminal for the `[mock-email]` log line with the 6-digit code. Enter it in the next step. Confirm redirect to `/check-in/family` dashboard. Stop the server (`Ctrl+C`).
 
-(This is a manual verification — no commit.)
+(This is a manual verification - no commit.)
 
 ---
 
@@ -2802,7 +2802,7 @@ import { test, expect } from './fixtures';
 const E2E_FAMILY_EMAIL = process.env.E2E_FAMILY_EMAIL;
 const E2E_FAMILY_FID = process.env.E2E_FAMILY_FID;
 
-test.describe('B2 — family portal', () => {
+test.describe('B2 - family portal', () => {
   test('family login page renders contact form with tabs', async ({ page }) => {
     await page.goto('/login/family');
     await expect(page.getByRole('heading', { name: /family sign in/i })).toBeVisible();
@@ -2847,7 +2847,7 @@ Expected: zero errors.
 
 ```sh
 git add apps/portal/e2e/b2-family.spec.ts
-git commit -m "test(portal): add b2-family.spec.ts — login form + unauthenticated redirect (full OTP e2e skip-guarded)"
+git commit -m "test(portal): add b2-family.spec.ts - login form + unauthenticated redirect (full OTP e2e skip-guarded)"
 ```
 
 ---
@@ -2863,13 +2863,13 @@ git commit -m "test(portal): add b2-family.spec.ts — login form + unauthentica
 Add a B2 progress marker:
 
 ```markdown
-- **Slice B** — 🚧 In progress —
-  - B0 ✅ — Portal auth foundation
-  - B2 ✅ — Family portal (OTP login, dashboard, self-check-in)
-  - B3 — Teacher portal (next)
-  - B1 — Kiosk port
-  - B4 — Admin dashboard
-  - B5 — Notifications & cron
+- **Slice B** - 🚧 In progress -
+  - B0 ✅ - Portal auth foundation
+  - B2 ✅ - Family portal (OTP login, dashboard, self-check-in)
+  - B3 - Teacher portal (next)
+  - B1 - Kiosk port
+  - B4 - Admin dashboard
+  - B5 - Notifications & cron
 ```
 
 - [ ] **Step 2: Update CLAUDE.md to reflect B2 shipped**

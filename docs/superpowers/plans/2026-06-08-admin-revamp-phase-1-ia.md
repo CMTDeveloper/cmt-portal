@@ -1,10 +1,10 @@
-# Admin Revamp — Phase 1: IA Restructure — Implementation Plan
+# Admin Revamp - Phase 1: IA Restructure - Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make the admin area legible at a glance — group the 13 flat tiles into four labelled sections (People & access · Bala Vihar · Reports · Legacy · door app), mirror that grouping in the desktop sidebar and mobile nav, and rename "Levels & teachers" → "Level management". No new routes; no behavior change.
+**Goal:** Make the admin area legible at a glance - group the 13 flat tiles into four labelled sections (People & access · Bala Vihar · Reports · Legacy · door app), mirror that grouping in the desktop sidebar and mobile nav, and rename "Levels & teachers" → "Level management". No new routes; no behavior change.
 
-**Architecture:** Pure presentation/IA refactor of three client/server components. The three tools that get *replaced* in later phases (Welcome-team grants → Users & roles, Family search → Roster, legacy Reports → Reports hub) keep their **current routes and labels** in Phase 1 — each later phase re-points its own entry and adds a redirect, so there are never dead links.
+**Architecture:** Pure presentation/IA refactor of three client/server components. The three tools that get *replaced* in later phases (Welcome-team grants → Users & roles, Family search → Roster, legacy Reports → Reports hub) keep their **current routes and labels** in Phase 1 - each later phase re-points its own entry and adds a redirect, so there are never dead links.
 
 **Tech Stack:** Next.js 16 App Router, React, Setu `.csp` brand tokens, Vitest + Testing Library (jsdom project for `*.test.tsx`).
 
@@ -23,7 +23,7 @@
 | `apps/portal/src/features/admin/components/admin-sidebar.tsx` | Desktop admin sidebar nav | Flat `ADMIN_NAV` → grouped sections with headers; rename Levels; map `/admin/school-year` active |
 | `apps/portal/src/features/admin/components/__tests__/admin-sidebar.test.tsx` | Sidebar tests | Update label + school-year active assertions; add group-header assertions |
 | `apps/portal/src/features/admin/components/admin-mobile-nav.tsx` | Admin mobile bottom nav + "More" sheet | Align sheet grouping/labels with the rename; verify parity |
-| `apps/portal/src/app/admin/__tests__/page.test.tsx` (new) | Dashboard structure test | New — assert the 4 section headings render |
+| `apps/portal/src/app/admin/__tests__/page.test.tsx` (new) | Dashboard structure test | New - assert the 4 section headings render |
 
 ---
 
@@ -35,7 +35,7 @@
 - Modify: `apps/portal/src/app/admin/page.tsx:56-60` (tile title + sub)
 - Test: `apps/portal/src/features/admin/components/__tests__/admin-sidebar.test.tsx`
 
-- [ ] **Step 1: Write the failing test** — add to the `AdminSidebar` describe block in `admin-sidebar.test.tsx`:
+- [ ] **Step 1: Write the failing test** - add to the `AdminSidebar` describe block in `admin-sidebar.test.tsx`:
 
 ```tsx
   it('renders the renamed "Level management" nav item at /admin/levels', () => {
@@ -49,18 +49,18 @@
 - [ ] **Step 2: Run it, verify it fails**
 
 Run: `pnpm --filter @cmt/portal exec vitest run src/features/admin/components/__tests__/admin-sidebar.test.tsx`
-Expected: FAIL — no link named "Level management".
+Expected: FAIL - no link named "Level management".
 
-- [ ] **Step 3: Rename in `admin-sidebar.tsx`** — line 21, in `ADMIN_NAV` (this array is replaced wholesale in Task 3, but rename here first so Task 1 is independently correct):
+- [ ] **Step 3: Rename in `admin-sidebar.tsx`** - line 21, in `ADMIN_NAV` (this array is replaced wholesale in Task 3, but rename here first so Task 1 is independently correct):
 
 ```tsx
   { label: 'Level management', href: '/admin/levels' },
 ```
 
-- [ ] **Step 4: Rename in `admin/levels/page.tsx`** — metadata (line 10) and heading (line 71), and tighten the body copy so it reads as level config, not teacher HR:
+- [ ] **Step 4: Rename in `admin/levels/page.tsx`** - metadata (line 10) and heading (line 71), and tighten the body copy so it reads as level config, not teacher HR:
 
 ```tsx
-export const metadata = { title: 'Level management — CMT Portal admin' };
+export const metadata = { title: 'Level management - CMT Portal admin' };
 ```
 ```tsx
         <p style={{ fontSize: 11, letterSpacing: '.16em', textTransform: 'uppercase', color: 'var(--muted)' }}>Admin · Bala Vihar</p>
@@ -68,12 +68,12 @@ export const metadata = { title: 'Level management — CMT Portal admin' };
         <p style={{ fontSize: 14, color: 'var(--body-text)', marginTop: 10, maxWidth: 660, lineHeight: 1.55 }}>
           A level is a Bala Vihar class for a location + period. Level names and grade-bands differ by
           location, so the same grade maps to a different level at a different centre. Configure levels
-          below, and assign the teachers who cover each one — the teacher capability takes effect on
+          below, and assign the teachers who cover each one - the teacher capability takes effect on
           their next sign-in.
         </p>
 ```
 
-- [ ] **Step 5: Rename the dashboard tile in `admin/page.tsx`** — lines 55-61:
+- [ ] **Step 5: Rename the dashboard tile in `admin/page.tsx`** - lines 55-61:
 
 ```tsx
         <Tile
@@ -105,13 +105,13 @@ git commit -m "refactor(admin): rename 'Levels & teachers' → 'Level management
 - Modify: `apps/portal/src/app/admin/page.tsx` (the tile grid → grouped sections)
 - Test: `apps/portal/src/app/admin/__tests__/page.test.tsx` (new)
 
-**Section assignment (existing routes only — no new routes in Phase 1):**
-- **People & access** — Family search (`/welcome`), Welcome-team grants (`/admin/welcome-team`)
-- **Bala Vihar** — Programs (`/admin/programs`), Level management (`/admin/levels`), Class calendar (`/admin/calendar`), School year rollover (`/admin/school-year`), Volunteering skills (`/admin/volunteering-skills`), Seva (`/welcome/seva`)
-- **Reports** — Reports (`/check-in/admin/reports`, legacy tone)
-- **Legacy · door app** — Check-in dashboard (`/check-in/admin`), Guests (`/check-in/admin/guests`), Unpaid families (`/check-in/admin/unpaid`), Admin users (`/check-in/admin/users`), Donation periods (`/admin/donation-periods`)
+**Section assignment (existing routes only - no new routes in Phase 1):**
+- **People & access** - Family search (`/welcome`), Welcome-team grants (`/admin/welcome-team`)
+- **Bala Vihar** - Programs (`/admin/programs`), Level management (`/admin/levels`), Class calendar (`/admin/calendar`), School year rollover (`/admin/school-year`), Volunteering skills (`/admin/volunteering-skills`), Seva (`/welcome/seva`)
+- **Reports** - Reports (`/check-in/admin/reports`, legacy tone)
+- **Legacy · door app** - Check-in dashboard (`/check-in/admin`), Guests (`/check-in/admin/guests`), Unpaid families (`/check-in/admin/unpaid`), Admin users (`/check-in/admin/users`), Donation periods (`/admin/donation-periods`)
 
-- [ ] **Step 1: Write the failing structure test** — new file `apps/portal/src/app/admin/__tests__/page.test.tsx`:
+- [ ] **Step 1: Write the failing structure test** - new file `apps/portal/src/app/admin/__tests__/page.test.tsx`:
 
 ```tsx
 import { describe, it, expect } from 'vitest';
@@ -140,9 +140,9 @@ describe('AdminPage dashboard', () => {
 - [ ] **Step 2: Run it, verify it fails**
 
 Run: `pnpm --filter @cmt/portal exec vitest run src/app/admin/__tests__/page.test.tsx`
-Expected: FAIL — no section headings.
+Expected: FAIL - no section headings.
 
-- [ ] **Step 3: Restructure `admin/page.tsx`** — keep the existing `Tile` component as-is; replace the single flat `<div grid>` with a `Section` helper + a `GROUPS` data array. Implementation guidance (the designer subagent owns final visual polish; this is the structure to hit):
+- [ ] **Step 3: Restructure `admin/page.tsx`** - keep the existing `Tile` component as-is; replace the single flat `<div grid>` with a `Section` helper + a `GROUPS` data array. Implementation guidance (the designer subagent owns final visual polish; this is the structure to hit):
 
 ```tsx
 // Group data drives the render. tone 'legacy' keeps the muted treatment + badge.
@@ -164,7 +164,7 @@ const GROUPS: Array<{
       { href: '/admin/programs', title: 'Programs', icon: 'people', tone: 'primary', sub: 'Manage programs (Bala Vihar, Tabla, etc.), their offerings per term, eligibility, and capabilities.' },
       { href: '/admin/levels', title: 'Level management', icon: 'check', tone: 'primary', sub: 'Configure Bala Vihar levels per location + period, set grade-bands, and assign the teachers who cover each one.' },
       { href: '/admin/calendar', title: 'Class calendar', icon: 'calendar', tone: 'primary', sub: 'Publish the school-year Sunday schedule + weekly times. Families see it on their dashboard.' },
-      { href: '/admin/school-year', title: 'School year rollover', icon: 'check', tone: 'primary', sub: 'Promote Bala Vihar families to the next school year — advance grades, re-assign levels, keep history.' },
+      { href: '/admin/school-year', title: 'School year rollover', icon: 'check', tone: 'primary', sub: 'Promote Bala Vihar families to the next school year - advance grades, re-assign levels, keep history.' },
       { href: '/admin/volunteering-skills', title: 'Volunteering skills', icon: 'check', tone: 'primary', sub: 'Manage the list of volunteering skills families choose from for adult members.' },
       { href: '/welcome/seva', title: 'Seva', icon: 'heart', tone: 'primary', sub: 'Manage seva opportunities and review volunteer signups.' },
     ],
@@ -210,7 +210,7 @@ Render: keep the existing `<header>` (update the intro copy to mention "grouped 
 Run: `pnpm --filter @cmt/portal exec vitest run src/app/admin/__tests__/page.test.tsx`
 Expected: PASS.
 
-- [ ] **Step 5: Designer + mobile pass** (dispatched as a designer review after implementation — see execution notes): verify the grouped grid is visually balanced on desktop AND that on a 375px mobile viewport sections stack cleanly, headings are legible, tiles are full-width and tappable (≥44px), and `.csp` tokens resolve (admin layout already wraps in `CspRoot`). Fix any spacing/wrapping issues.
+- [ ] **Step 5: Designer + mobile pass** (dispatched as a designer review after implementation - see execution notes): verify the grouped grid is visually balanced on desktop AND that on a 375px mobile viewport sections stack cleanly, headings are legible, tiles are full-width and tappable (≥44px), and `.csp` tokens resolve (admin layout already wraps in `CspRoot`). Fix any spacing/wrapping issues.
 
 - [ ] **Step 6: Commit**
 
@@ -227,7 +227,7 @@ git commit -m "refactor(admin): group admin dashboard into 4 labelled sections"
 - Modify: `apps/portal/src/features/admin/components/admin-sidebar.tsx`
 - Modify: `apps/portal/src/features/admin/components/__tests__/admin-sidebar.test.tsx`
 
-- [ ] **Step 1: Write/adjust the failing tests** — in `admin-sidebar.test.tsx`:
+- [ ] **Step 1: Write/adjust the failing tests** - in `admin-sidebar.test.tsx`:
   - Update the school-year expectation (it now appears in the nav). Replace the existing test `does not highlight Dashboard for /admin/school-year (no nav item)` with:
 
 ```tsx
@@ -245,12 +245,12 @@ git commit -m "refactor(admin): group admin dashboard into 4 labelled sections"
     }
   });
 ```
-  (Keep the existing tests for Dashboard / Family search / Seva hrefs and the Level management test from Task 1 — they still hold.)
+  (Keep the existing tests for Dashboard / Family search / Seva hrefs and the Level management test from Task 1 - they still hold.)
 
 - [ ] **Step 2: Run, verify the new/changed tests fail**
 
 Run: `pnpm --filter @cmt/portal exec vitest run src/features/admin/components/__tests__/admin-sidebar.test.tsx`
-Expected: FAIL — no section headers; school-year still returns ''.
+Expected: FAIL - no section headers; school-year still returns ''.
 
 - [ ] **Step 3: Replace flat `ADMIN_NAV` with grouped sections.** Keep "Dashboard" (`/admin`) as a standalone top item above the groups. New data + render:
 
@@ -282,7 +282,7 @@ const NAV_GROUPS: Array<{ heading: string; items: Array<{ label: string; href: s
 
   - Render a "Dashboard" link first (active when `active === '/admin'`), then map `NAV_GROUPS` → a group header `<div>` (uppercase muted, same style as the dashboard `Section` heading) followed by the group's item links. Reuse the existing per-item `<Link>` styling (active = `var(--accentSoft)` bg + `var(--accentDeep)` + `aria-current="page"`; legacy badge). Keep the top "Back to my family" / "Teacher" cross-links and the bottom user/sign-out card unchanged.
 
-- [ ] **Step 4: Extend `deriveAdminActive`** — add mappings for the routes now in the nav (before the final `/admin` check):
+- [ ] **Step 4: Extend `deriveAdminActive`** - add mappings for the routes now in the nav (before the final `/admin` check):
 
 ```tsx
   if (pathname.startsWith('/admin/school-year')) return '/admin/school-year';
@@ -299,7 +299,7 @@ const NAV_GROUPS: Array<{ heading: string; items: Array<{ label: string; href: s
 Run: `pnpm --filter @cmt/portal exec vitest run src/features/admin/components/__tests__/admin-sidebar.test.tsx`
 Expected: PASS (all, including the unchanged Dashboard/Family search/Seva tests).
 
-- [ ] **Step 6: Designer + mobile pass** — confirm the grouped sidebar reads cleanly on desktop (header rhythm, active highlight still obvious), and that nothing about the change regresses the narrow-but-present sidebar. (Sidebar is desktop-only via `hidden md:flex` in the layout, so mobile is Task 4.)
+- [ ] **Step 6: Designer + mobile pass** - confirm the grouped sidebar reads cleanly on desktop (header rhythm, active highlight still obvious), and that nothing about the change regresses the narrow-but-present sidebar. (Sidebar is desktop-only via `hidden md:flex` in the layout, so mobile is Task 4.)
 
 - [ ] **Step 7: Commit**
 
@@ -336,7 +336,7 @@ const MORE_LEGACY: { label: string; href: string }[] = [
   { label: 'Check-in dashboard', href: '/check-in/admin' },
 ];
 ```
-  (The bottom tab labelled "Levels" stays — it's a short tab label, not the page title; no rename needed there. Optionally relabel the tab "Levels" → keep, since space is tight.)
+  (The bottom tab labelled "Levels" stays - it's a short tab label, not the page title; no rename needed there. Optionally relabel the tab "Levels" → keep, since space is tight.)
 
 - [ ] **Step 2: Mobile-viewport verification (designer-owned).** On a 375×812 viewport, confirm: bottom nav doesn't overlap content (pages already pad for it), the More sheet scrolls, group headers are legible, every link is ≥44px tap height and dismisses the sheet, safe-area padding holds, `.csp` tokens resolve (the nav already sets `className="csp"`). Fix any overlap/contrast/tap-target issues.
 
@@ -357,7 +357,7 @@ git commit -m "refactor(admin): align admin mobile 'More' sheet with grouped IA"
 
 - [ ] Full suite green: `pnpm --filter @cmt/portal test` (or rely on the pre-push gate).
 - [ ] `pnpm typecheck && pnpm lint && pnpm build` clean (pre-push runs these).
-- [ ] **Mock-free walkthrough (note: requires admin OTP sign-in — operator step):** open `/admin` on desktop → see 4 grouped sections; open the sidebar → grouped nav with active highlight; shrink to mobile → bottom nav + grouped More sheet; open `/admin/levels` → title reads "Level management". Distinguish "tests pass" from "verified in UAT" in the summary.
+- [ ] **Mock-free walkthrough (note: requires admin OTP sign-in - operator step):** open `/admin` on desktop → see 4 grouped sections; open the sidebar → grouped nav with active highlight; shrink to mobile → bottom nav + grouped More sheet; open `/admin/levels` → title reads "Level management". Distinguish "tests pass" from "verified in UAT" in the summary.
 - [ ] `git push` (pre-push gate enforces typecheck/lint/test/build).
 
 ## Notes for later phases (do NOT do in Phase 1)

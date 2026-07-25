@@ -1,4 +1,4 @@
-# Academic School-Year Context — Phase 2 Implementation Plan
+# Academic School-Year Context - Phase 2 Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -13,31 +13,31 @@
 ## File structure
 
 **Create**
-- `apps/portal/src/features/setu/rollover/view-year.ts` — `listKnownSchoolYears(db)` + `resolveViewYear(years, liveYear, rawParam)` → `{ year, status }`.
-- `apps/portal/src/features/setu/rollover/components/school-year-switcher.tsx` — client dropdown (years + Preparing/Past strip), sets `?year=`.
-- `apps/portal/src/features/setu/rollover/clone-prasad-config.ts` — `clonePrasadConfig(db, {fromYear,toYear,dryRun})`.
-- `apps/portal/src/features/setu/rollover/copy-seva-opportunities.ts` — `copySevaOpportunities(db, {fromYear,toYear,oppIds,decideLater,actorMid})`.
-- `apps/portal/src/features/setu/rollover/prefill-teachers.ts` — `prefillTeachers(db, {fromYear,toYear,dryRun})`.
-- `apps/portal/src/features/setu/rollover/assert-live-year.ts` — `assertLiveYear(db, year)` guard (throws on non-live).
-- `apps/portal/src/app/api/admin/school-year/copy-prasad/route.ts`, `.../copy-seva/route.ts`, `.../copy-teachers/route.ts` — POST (admin-only).
-- `apps/portal/e2e/setu/admin/year-switcher.spec.ts` — deployed-UAT E2E.
-- `apps/portal/scripts/seed-year-switcher-fixture.ts` — UAT-only multi-year fixture.
+- `apps/portal/src/features/setu/rollover/view-year.ts` - `listKnownSchoolYears(db)` + `resolveViewYear(years, liveYear, rawParam)` → `{ year, status }`.
+- `apps/portal/src/features/setu/rollover/components/school-year-switcher.tsx` - client dropdown (years + Preparing/Past strip), sets `?year=`.
+- `apps/portal/src/features/setu/rollover/clone-prasad-config.ts` - `clonePrasadConfig(db, {fromYear,toYear,dryRun})`.
+- `apps/portal/src/features/setu/rollover/copy-seva-opportunities.ts` - `copySevaOpportunities(db, {fromYear,toYear,oppIds,decideLater,actorMid})`.
+- `apps/portal/src/features/setu/rollover/prefill-teachers.ts` - `prefillTeachers(db, {fromYear,toYear,dryRun})`.
+- `apps/portal/src/features/setu/rollover/assert-live-year.ts` - `assertLiveYear(db, year)` guard (throws on non-live).
+- `apps/portal/src/app/api/admin/school-year/copy-prasad/route.ts`, `.../copy-seva/route.ts`, `.../copy-teachers/route.ts` - POST (admin-only).
+- `apps/portal/e2e/setu/admin/year-switcher.spec.ts` - deployed-UAT E2E.
+- `apps/portal/scripts/seed-year-switcher-fixture.ts` - UAT-only multi-year fixture.
 
 **Modify**
-- `apps/portal/src/components/chrome/school-year-badge.tsx` — extract the pill so the switcher can reuse it (keep `SchoolYearBadge` for family/teacher).
-- `apps/portal/src/features/admin/components/admin-sidebar.tsx` (+ `app/admin/layout.tsx`, `app/welcome/layout.tsx`) — render the switcher (admin/welcome) instead of the static badge.
-- `apps/portal/src/app/admin/levels/page.tsx`, `app/admin/calendar/page.tsx`, `app/admin/prasad/page.tsx`, `app/welcome/seva/page.tsx`, `app/welcome/reports/page.tsx`, `app/welcome/roster/page.tsx` — read `?year=` and scope reads.
-- `apps/portal/src/features/setu/calendar/calendar.ts` — live-year lower bound in `getPublishedCalendar`/`getUpcoming`/`getClassDatesHeld`.
-- `apps/portal/src/app/api/setu/dashboard/route.ts` — add `schoolYear`.
-- `apps/portal/src/features/setu/seva/get-family-seva-view.ts` — exclude `status:'draft'`.
-- `apps/portal/src/features/setu/rollover/rollover-client.ts` + `components/year-readiness-checklist.tsx` + `components/rollover-page.tsx` — copy-prasad/seva/teachers buttons.
-- The BV write routes (`/api/admin/levels`, `/api/admin/calendar`, `/api/admin/prasad/*`, seva opportunity create, `/api/admin/teacher-assignments`) — `assertLiveYear` guard.
-- `apps/portal/docs/MOBILE_API_CHANGELOG.md` — two entries (dashboard `schoolYear`, calendar scoping, seva `draft`).
-- `apps/portal/package.json` — `seed:year-switcher-fixture` alias; `apps/portal/e2e/_helpers.ts` — creds if needed (reuse admin).
-- `docs/runbooks/production-cutover-checklist.md` — §14 entry.
+- `apps/portal/src/components/chrome/school-year-badge.tsx` - extract the pill so the switcher can reuse it (keep `SchoolYearBadge` for family/teacher).
+- `apps/portal/src/features/admin/components/admin-sidebar.tsx` (+ `app/admin/layout.tsx`, `app/welcome/layout.tsx`) - render the switcher (admin/welcome) instead of the static badge.
+- `apps/portal/src/app/admin/levels/page.tsx`, `app/admin/calendar/page.tsx`, `app/admin/prasad/page.tsx`, `app/welcome/seva/page.tsx`, `app/welcome/reports/page.tsx`, `app/welcome/roster/page.tsx` - read `?year=` and scope reads.
+- `apps/portal/src/features/setu/calendar/calendar.ts` - live-year lower bound in `getPublishedCalendar`/`getUpcoming`/`getClassDatesHeld`.
+- `apps/portal/src/app/api/setu/dashboard/route.ts` - add `schoolYear`.
+- `apps/portal/src/features/setu/seva/get-family-seva-view.ts` - exclude `status:'draft'`.
+- `apps/portal/src/features/setu/rollover/rollover-client.ts` + `components/year-readiness-checklist.tsx` + `components/rollover-page.tsx` - copy-prasad/seva/teachers buttons.
+- The BV write routes (`/api/admin/levels`, `/api/admin/calendar`, `/api/admin/prasad/*`, seva opportunity create, `/api/admin/teacher-assignments`) - `assertLiveYear` guard.
+- `apps/portal/docs/MOBILE_API_CHANGELOG.md` - two entries (dashboard `schoolYear`, calendar scoping, seva `draft`).
+- `apps/portal/package.json` - `seed:year-switcher-fixture` alias; `apps/portal/e2e/_helpers.ts` - creds if needed (reuse admin).
+- `docs/runbooks/production-cutover-checklist.md` - §14 entry.
 
 **Shared-domain (Modify)**
-- `packages/shared-domain/src/setu/schemas/seva.ts` — add `'draft'` to `SevaOpportunityStatus` (additive); export a `SchoolYearStatus` type if useful.
+- `packages/shared-domain/src/setu/schemas/seva.ts` - add `'draft'` to `SevaOpportunityStatus` (additive); export a `SchoolYearStatus` type if useful.
 
 ---
 
@@ -69,7 +69,7 @@ describe('resolveViewYear', () => {
 });
 ```
 
-- [ ] **Step 2: Run it — expect FAIL.** `pnpm --filter @cmt/portal exec vitest run src/features/setu/rollover/__tests__/view-year.test.ts`
+- [ ] **Step 2: Run it - expect FAIL.** `pnpm --filter @cmt/portal exec vitest run src/features/setu/rollover/__tests__/view-year.test.ts`
 
 - [ ] **Step 3: Implement `view-year.ts`**
 ```ts
@@ -99,7 +99,7 @@ export function resolveViewYear(years: string[], liveYear: string, raw: string |
 }
 ```
 
-- [ ] **Step 4: Run it — expect PASS.**
+- [ ] **Step 4: Run it - expect PASS.**
 
 - [ ] **Step 5: Commit**
 ```bash
@@ -117,7 +117,7 @@ git commit -m "feat(rollover): resolveViewYear + listKnownSchoolYears (?year= ca
 
 > The switcher is a **client** component (uses `useRouter`/`usePathname`/`useSearchParams`). It receives the known `years` + `liveYear` from a server parent; it reads the current `?year=` itself and, on change, pushes the same path with the new `?year=`. The `.csp`-scoped pill styling mirrors the Phase-1 `SchoolYearBadge`.
 
-- [ ] **Step 1: Write the failing test** (`school-year-switcher.test.tsx`) — mock `next/navigation`:
+- [ ] **Step 1: Write the failing test** (`school-year-switcher.test.tsx`) - mock `next/navigation`:
 ```tsx
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
@@ -144,7 +144,7 @@ it('shows the live year and the Preparing strip after switching', async () => {
 });
 ```
 
-- [ ] **Step 2: Run it — expect FAIL.**
+- [ ] **Step 2: Run it - expect FAIL.**
 
 - [ ] **Step 3: Implement `school-year-switcher.tsx`**
 ```tsx
@@ -189,7 +189,7 @@ export function SchoolYearSwitcher({ years, liveYear }: Props) {
       </span>
       {status !== 'live' && (
         <span style={{ fontSize: 11, fontWeight: 600, color: status === 'preparing' ? 'var(--accentDeep)' : 'var(--muted)' }}>
-          {status === 'preparing' ? `Preparing ${selected} — not live yet` : `Past year — read-only`}
+          {status === 'preparing' ? `Preparing ${selected} - not live yet` : `Past year - read-only`}
         </span>
       )}
     </span>
@@ -197,7 +197,7 @@ export function SchoolYearSwitcher({ years, liveYear }: Props) {
 }
 ```
 
-- [ ] **Step 4: Run it — expect PASS.**
+- [ ] **Step 4: Run it - expect PASS.**
 
 - [ ] **Step 5: Commit**
 ```bash
@@ -211,7 +211,7 @@ git commit -m "feat(rollover): SchoolYearSwitcher (?year= dropdown + Preparing/P
 
 **Files (Modify):** `apps/portal/src/app/admin/layout.tsx`, `apps/portal/src/app/welcome/layout.tsx`, `apps/portal/src/features/admin/components/admin-sidebar.tsx`
 
-> The admin/welcome shells render the static `SchoolYearBadge` today (Phase 1). Replace it (for these two shells only) with `<SchoolYearSwitcher years={...} liveYear={...} />`. The server layout computes `years`/`liveYear` and passes them into the client switcher (the switcher is already a client component — pass plain props, not a server element). Family/teacher shells keep the read-only `SchoolYearBadge` (live-year label) unchanged.
+> The admin/welcome shells render the static `SchoolYearBadge` today (Phase 1). Replace it (for these two shells only) with `<SchoolYearSwitcher years={...} liveYear={...} />`. The server layout computes `years`/`liveYear` and passes them into the client switcher (the switcher is already a client component - pass plain props, not a server element). Family/teacher shells keep the read-only `SchoolYearBadge` (live-year label) unchanged.
 
 - [ ] **Step 1:** In the admin server layout's chrome component (the async one that already passes `yearBadge`), compute:
 ```ts
@@ -223,9 +223,9 @@ import { SchoolYearSwitcher } from '@/features/setu/rollover/components/school-y
 const liveYear = await getLiveSchoolYearCached();
 const years = await listKnownSchoolYears(portalFirestore(), liveYear);
 ```
-and pass `yearBadge={<SchoolYearSwitcher years={years} liveYear={liveYear} />}` (replacing `<SchoolYearBadge admin />`). `listKnownSchoolYears` is uncached — that's fine inside the already-dynamic, Suspense-wrapped chrome (it's one small offerings read). Do the same in `welcome/layout.tsx`.
+and pass `yearBadge={<SchoolYearSwitcher years={years} liveYear={liveYear} />}` (replacing `<SchoolYearBadge admin />`). `listKnownSchoolYears` is uncached - that's fine inside the already-dynamic, Suspense-wrapped chrome (it's one small offerings read). Do the same in `welcome/layout.tsx`.
 
-- [ ] **Step 2: Manual check** — `pnpm --filter @cmt/portal build` succeeds. No new unit test (placement; the switcher behavior is unit-tested in Task 2, the E2E asserts it in Task 15).
+- [ ] **Step 2: Manual check** - `pnpm --filter @cmt/portal build` succeeds. No new unit test (placement; the switcher behavior is unit-tested in Task 2, the E2E asserts it in Task 15).
 
 - [ ] **Step 3: Commit**
 ```bash
@@ -239,7 +239,7 @@ git commit -m "feat(chrome): year switcher in admin/welcome shells (family/teach
 
 **Files (Modify):** `apps/portal/src/app/admin/levels/page.tsx`
 
-> This page is `async function LevelsPage()` and currently reads **all** levels (`db.collection('levels').orderBy('location').orderBy('order').get()`). It does NOT receive `searchParams`. Add the `searchParams` prop, resolve the view year, and **filter levels to that year** (`periodLabel === viewYear.year`) in memory (cheap — ≤ ~36 BV levels; avoids a new composite index). This is the worked example; Tasks 5–7 follow the same shape.
+> This page is `async function LevelsPage()` and currently reads **all** levels (`db.collection('levels').orderBy('location').orderBy('order').get()`). It does NOT receive `searchParams`. Add the `searchParams` prop, resolve the view year, and **filter levels to that year** (`periodLabel === viewYear.year`) in memory (cheap - ≤ ~36 BV levels; avoids a new composite index). This is the worked example; Tasks 5-7 follow the same shape.
 
 - [ ] **Step 1:** Change the signature + reads:
 ```ts
@@ -257,9 +257,9 @@ export default async function LevelsPage({ searchParams }: { searchParams: Promi
     .map((d) => /* existing mapping */)
     .filter((l) => l.periodLabel === view.year);
 ```
-(Keep the rest of the page; pass `view` down only if the page needs to show a "read-only — past year" banner — optional in v1, the shell strip already signals it.)
+(Keep the rest of the page; pass `view` down only if the page needs to show a "read-only - past year" banner - optional in v1, the shell strip already signals it.)
 
-- [ ] **Step 2: Run** `pnpm --filter @cmt/portal exec tsc --noEmit` (Next 16 `searchParams` is a Promise — confirm the await). Build check is in the final gate.
+- [ ] **Step 2: Run** `pnpm --filter @cmt/portal exec tsc --noEmit` (Next 16 `searchParams` is a Promise - confirm the await). Build check is in the final gate.
 
 - [ ] **Step 3: Commit**
 ```bash
@@ -273,7 +273,7 @@ git commit -m "feat(admin): Level management reads ?year= (scopes levels to the 
 
 **Files (Modify):** `apps/portal/src/app/admin/calendar/page.tsx`
 
-- [ ] **Step 1:** READ the page first to see how it derives location/year today. Add `searchParams`, resolve `view` (as in Task 4), and scope the admin calendar read to `schoolYearDateRange(view.year)` (the admin read is `getCalendarSerialized(location)` — extend it or filter the returned entries to the year's date window). If the admin calendar read needs a new `(location, date)`-range query, audit `firestore.indexes.json` (the `(location, programKey, date)` + `(location, date)` indexes already exist) — prefer the existing index or in-memory date filter.
+- [ ] **Step 1:** READ the page first to see how it derives location/year today. Add `searchParams`, resolve `view` (as in Task 4), and scope the admin calendar read to `schoolYearDateRange(view.year)` (the admin read is `getCalendarSerialized(location)` - extend it or filter the returned entries to the year's date window). If the admin calendar read needs a new `(location, date)`-range query, audit `firestore.indexes.json` (the `(location, programKey, date)` + `(location, date)` indexes already exist) - prefer the existing index or in-memory date filter.
 
 - [ ] **Step 2: Commit**
 ```bash
@@ -303,7 +303,7 @@ git commit -m "feat(admin): Prasad + Seva surfaces read ?year="
 
 **Files (Modify):** `apps/portal/src/app/welcome/reports/page.tsx`, `apps/portal/src/app/welcome/roster/page.tsx`
 
-- [ ] **Step 1:** READ both pages. Add `searchParams`; thread `view.year` into the existing year-scoped report/roster reads (enrollment headcounts, attendance, donations by period — replace the live-year default with `view.year`). Roster: scope the enrollment/program reads to the selected year's oids. Audit any new compound query against `firestore.indexes.json` (UAT-only deploy).
+- [ ] **Step 1:** READ both pages. Add `searchParams`; thread `view.year` into the existing year-scoped report/roster reads (enrollment headcounts, attendance, donations by period - replace the live-year default with `view.year`). Roster: scope the enrollment/program reads to the selected year's oids. Audit any new compound query against `firestore.indexes.json` (UAT-only deploy).
 
 - [ ] **Step 2: Commit**
 ```bash
@@ -320,24 +320,24 @@ git commit -m "feat(welcome): Reports + roster read ?year="
 - Test: `apps/portal/src/features/setu/calendar/__tests__/calendar.test.ts` (add cases)
 - Modify: `apps/portal/docs/MOBILE_API_CHANGELOG.md`
 
-> `getPublishedCalendar`/`getUpcoming`/`getClassDatesHeld` currently return all enabled entries for a (location, program) regardless of year. Add a **live-year lower bound** so preparing-year (future) Sundays stay hidden until Activate. `getCalendar` reads all (admin chain) — leave it; scope the **published** family/teacher helpers.
+> `getPublishedCalendar`/`getUpcoming`/`getClassDatesHeld` currently return all enabled entries for a (location, program) regardless of year. Add a **live-year lower bound** so preparing-year (future) Sundays stay hidden until Activate. `getCalendar` reads all (admin chain) - leave it; scope the **published** family/teacher helpers.
 
-- [ ] **Step 1: Write the failing test** — seed two school years of enabled BV entries (e.g. `2025-09-07` and the +364d `2026-09-06`); with `liveYear='2025-26'` assert `getPublishedCalendar` returns only the 2025-26-window entry. (Use the file's existing test fake/mocking pattern — READ the existing calendar test first.)
+- [ ] **Step 1: Write the failing test** - seed two school years of enabled BV entries (e.g. `2025-09-07` and the +364d `2026-09-06`); with `liveYear='2025-26'` assert `getPublishedCalendar` returns only the 2025-26-window entry. (Use the file's existing test fake/mocking pattern - READ the existing calendar test first.)
 
-- [ ] **Step 2: Implement** — add an optional `liveYear` arg (resolved by the caller via `getLiveSchoolYearCached`), and filter `entries` to `e.date >= schoolYearDateRange(liveYear).start`:
+- [ ] **Step 2: Implement** - add an optional `liveYear` arg (resolved by the caller via `getLiveSchoolYearCached`), and filter `entries` to `e.date >= schoolYearDateRange(liveYear).start`:
 ```ts
 import { schoolYearDateRange } from '@/features/setu/rollover/school-year';
 // in getPublishedCalendar(location, programKey, liveYear):
 const { start } = schoolYearDateRange(liveYear);
 return entries.filter((e) => e.enabled && e.date >= start);
 ```
-Thread `liveYear` through `getUpcoming`/`getClassDatesHeld` and their callers (`/api/setu/calendar`, the dashboard `loadFamilyDashboard`, attendance). `getClassDatesHeld` keeps its `date <= today` upper bound — so it now returns `[start, today]`, which is correct (this year's held Sundays only).
+Thread `liveYear` through `getUpcoming`/`getClassDatesHeld` and their callers (`/api/setu/calendar`, the dashboard `loadFamilyDashboard`, attendance). `getClassDatesHeld` keeps its `date <= today` upper bound - so it now returns `[start, today]`, which is correct (this year's held Sundays only).
 
-- [ ] **Step 3: Run** the calendar + dashboard + attendance tests — fix fallout (callers now pass `liveYear`).
+- [ ] **Step 3: Run** the calendar + dashboard + attendance tests - fix fallout (callers now pass `liveYear`).
 
-- [ ] **Step 4: Index audit** — these are post-read in-memory filters (no new query) → no index. Confirm.
+- [ ] **Step 4: Index audit** - these are post-read in-memory filters (no new query) → no index. Confirm.
 
-- [ ] **Step 5: MOBILE_API_CHANGELOG entry** (newest-first, SHA-keyed — fill the SHA after committing): `GET /api/setu/calendar` now returns only live-school-year-onward entries (prior-year + next-year-prep Sundays excluded). Mobile: the calendar/upcoming list will no longer include other-year dates — update fixtures/expectations; no shape change.
+- [ ] **Step 5: MOBILE_API_CHANGELOG entry** (newest-first, SHA-keyed - fill the SHA after committing): `GET /api/setu/calendar` now returns only live-school-year-onward entries (prior-year + next-year-prep Sundays excluded). Mobile: the calendar/upcoming list will no longer include other-year dates - update fixtures/expectations; no shape change.
 
 - [ ] **Step 6: Commit**
 ```bash
@@ -393,7 +393,7 @@ export async function clonePrasadConfig(
 ```
 > Verify the real `prasadConfig` doc fields against `features/setu/prasad/publish-assignments.ts` and match them exactly.
 
-- [ ] **Step 3: Implement the route** (`copy-prasad/route.ts`) — admin-only (`readSessionFromHeaders` + `isAdmin` → 403); derive `fromYear=currentYear`, `toYear=deriveNextSchoolYear`; call `clonePrasadConfig(db, {...,dryRun:false, actorMid})`; return the result. (Mirror the Phase-1 `copy-calendar/route.ts`.) Add a 403-non-admin + happy-path test.
+- [ ] **Step 3: Implement the route** (`copy-prasad/route.ts`) - admin-only (`readSessionFromHeaders` + `isAdmin` → 403); derive `fromYear=currentYear`, `toYear=deriveNextSchoolYear`; call `clonePrasadConfig(db, {...,dryRun:false, actorMid})`; return the result. (Mirror the Phase-1 `copy-calendar/route.ts`.) Add a 403-non-admin + happy-path test.
 
 - [ ] **Step 4: Run + commit**
 ```bash
@@ -415,7 +415,7 @@ git commit -m "feat(rollover): optional copy prasad config from last year"
 
 > Selective: the route takes `oppIds` (which of last year's to copy). Each copied opp goes into the new `sevaYear`; if `decideLater` is false the `date` shifts **+364 days** (same weekday) and `status:'open'`; if `decideLater` is true the copy is `status:'draft'` (families never see it) keeping the +364d placeholder date until the admin schedules + opens it. New `oppId` is a fresh id; idempotent on a deterministic `${sourceOppId}-${toYear}` target id.
 
-- [ ] **Step 1: shared-domain** — `export const SevaOpportunityStatus = z.enum(['open', 'closed', 'draft']);` (additive — existing docs still validate). Build shared-domain if prebuilt.
+- [ ] **Step 1: shared-domain** - `export const SevaOpportunityStatus = z.enum(['open', 'closed', 'draft']);` (additive - existing docs still validate). Build shared-domain if prebuilt.
 
 - [ ] **Step 2: Write the failing test** (inline fake-firestore + `vi.mock` FieldValue): seed two `seva_opportunities` in 2025-26; copy only one with `decideLater:false` → asserts one new doc in 2026-27 with date +364 days + `status:'open'`; copy the other with `decideLater:true` → `status:'draft'`. Re-run creates 0.
 
@@ -459,11 +459,11 @@ export async function copySevaOpportunities(
 }
 ```
 
-- [ ] **Step 4: Exclude drafts from families** — READ `get-family-seva-view.ts`; ensure the opportunities it surfaces filter `status !== 'draft'` (or `status === 'open'`). Add/extend a test asserting a `draft` opp is not returned.
+- [ ] **Step 4: Exclude drafts from families** - READ `get-family-seva-view.ts`; ensure the opportunities it surfaces filter `status !== 'draft'` (or `status === 'open'`). Add/extend a test asserting a `draft` opp is not returned.
 
-- [ ] **Step 5: Route** (`copy-seva/route.ts`) — admin-only; body `{ oppIds: string[], decideLater?: boolean }` (Zod-validated); `fromYear=currentYear`, `toYear=next`; call the helper; return the result. 403 + happy-path tests.
+- [ ] **Step 5: Route** (`copy-seva/route.ts`) - admin-only; body `{ oppIds: string[], decideLater?: boolean }` (Zod-validated); `fromYear=currentYear`, `toYear=next`; call the helper; return the result. 403 + happy-path tests.
 
-- [ ] **Step 6: MOBILE_API_CHANGELOG entry** — `SevaOpportunityStatus` gains `'draft'` (additive); `GET /api/setu/seva/opportunities` excludes drafts (families never see unscheduled copies). Mobile: add `'draft'` to the status enum; ensure the seva list filters it out.
+- [ ] **Step 6: MOBILE_API_CHANGELOG entry** - `SevaOpportunityStatus` gains `'draft'` (additive); `GET /api/setu/seva/opportunities` excludes drafts (families never see unscheduled copies). Mobile: add `'draft'` to the status enum; ensure the seva list filters it out.
 
 - [ ] **Step 7: Run + commit**
 ```bash
@@ -522,7 +522,7 @@ export async function prefillTeachers(
 }
 ```
 
-- [ ] **Step 3: Route** (`copy-teachers/route.ts`) — admin-only; `fromYear=currentYear`, `toYear=next`; call the helper; return the result. 403 + happy-path tests. **Index note:** `where('pid','in',[...])` is single-field → no composite.
+- [ ] **Step 3: Route** (`copy-teachers/route.ts`) - admin-only; `fromYear=currentYear`, `toYear=next`; call the helper; return the result. 403 + happy-path tests. **Index note:** `where('pid','in',[...])` is single-field → no composite.
 
 - [ ] **Step 4: Run + commit**
 ```bash
@@ -536,11 +536,11 @@ git commit -m "feat(rollover): optional teacher pre-fill (carry last year's teac
 
 **Files (Modify):** `apps/portal/src/features/setu/rollover/rollover-client.ts`, `components/year-readiness-checklist.tsx`, `components/rollover-page.tsx`
 
-- [ ] **Step 1: Client fns** — append to `rollover-client.ts` (mirror `copyCalendarFromLastYearClient`): `copyPrasadFromLastYearClient()`, `copyTeachersFromLastYearClient()`, and `copySevaFromLastYearClient(oppIds, decideLater)` (each parses its result schema; reuse the enhanced `sendJson`).
+- [ ] **Step 1: Client fns** - append to `rollover-client.ts` (mirror `copyCalendarFromLastYearClient`): `copyPrasadFromLastYearClient()`, `copyTeachersFromLastYearClient()`, and `copySevaFromLastYearClient(oppIds, decideLater)` (each parses its result schema; reuse the enhanced `sendJson`).
 
-- [ ] **Step 2: Checklist rows** — in `year-readiness-checklist.tsx`, add a "Copy from last year" action to the **Prasad** and **Teachers** rows (like the Calendar row), each with a busy state. Seva is selective — its row links to a small picker (or a "Copy seva from last year…" affordance that opens the opp list); for v1 a "Copy all open seva" + "decide dates later" checkbox is acceptable if the full picker is deferred (note it).
+- [ ] **Step 2: Checklist rows** - in `year-readiness-checklist.tsx`, add a "Copy from last year" action to the **Prasad** and **Teachers** rows (like the Calendar row), each with a busy state. Seva is selective - its row links to a small picker (or a "Copy seva from last year…" affordance that opens the opp list); for v1 a "Copy all open seva" + "decide dates later" checkbox is acceptable if the full picker is deferred (note it).
 
-- [ ] **Step 3: rollover-page handlers** — add `copyPrasad`/`copyTeachers`/`copySeva` handlers (mirror `copyCalendar`: busy state, toast, `router.refresh()`). Make every copy **opt-in** (no auto-run); the page makes clear the admin can run none.
+- [ ] **Step 3: rollover-page handlers** - add `copyPrasad`/`copyTeachers`/`copySeva` handlers (mirror `copyCalendar`: busy state, toast, `router.refresh()`). Make every copy **opt-in** (no auto-run); the page makes clear the admin can run none.
 
 - [ ] **Step 4: Run** `pnpm --filter @cmt/portal exec vitest run src/features/setu/rollover` + commit
 ```bash
@@ -559,7 +559,7 @@ git commit -m "feat(rollover): Year-center optional copy buttons (prasad/seva/te
 
 > A shared guard so a write targeting a non-live year is rejected (defense-in-depth behind the UI read-only state). The guard reads the live year and throws/returns an error when the target year ≠ live.
 
-- [ ] **Step 1: Write the failing test** — `assertLiveYear(db, '2024-25')` with live `'2025-26'` rejects; `assertLiveYear(db, '2025-26')` resolves. (Mock `getSchoolYearConfig` → live year.)
+- [ ] **Step 1: Write the failing test** - `assertLiveYear(db, '2024-25')` with live `'2025-26'` rejects; `assertLiveYear(db, '2025-26')` resolves. (Mock `getSchoolYearConfig` → live year.)
 
 - [ ] **Step 2: Implement `assert-live-year.ts`**
 ```ts
@@ -573,9 +573,9 @@ export async function assertLiveYear(db: Db, year: string): Promise<void> {
 }
 ```
 
-- [ ] **Step 3: Apply at the write routes** — for each BV mutation route that targets a year (derive the target year from the route's payload/path: an offering oid → its termLabel, a level pid → its periodLabel, a calendar entry date → its school year, a seva opp → its sevaYear), call `assertLiveYear` and return `409 { error: 'non-live-year', year, liveYear }` on `NonLiveYearError`. READ each route to find where its target year is known. Add a test per route asserting a past-year write → 409.
+- [ ] **Step 3: Apply at the write routes** - for each BV mutation route that targets a year (derive the target year from the route's payload/path: an offering oid → its termLabel, a level pid → its periodLabel, a calendar entry date → its school year, a seva opp → its sevaYear), call `assertLiveYear` and return `409 { error: 'non-live-year', year, liveYear }` on `NonLiveYearError`. READ each route to find where its target year is known. Add a test per route asserting a past-year write → 409.
 
-- [ ] **Step 4: Read-only UI** — on the year-scoped surfaces, when `view.status !== 'live'` hide/disable the mutate controls (the shell strip already labels it; this prevents the action). Minimal: pass `view.status` to the management component and gate its write buttons.
+- [ ] **Step 4: Read-only UI** - on the year-scoped surfaces, when `view.status !== 'live'` hide/disable the mutate controls (the shell strip already labels it; this prevents the action). Minimal: pass `view.status` to the management component and gate its write buttons.
 
 - [ ] **Step 5: Run + commit**
 ```bash
@@ -592,11 +592,11 @@ git commit -m "feat(rollover): reject non-live-year writes (assertLiveYear) + re
 - Test: `apps/portal/src/app/api/setu/dashboard/__tests__/route.test.ts` (add/extend)
 - Modify: `apps/portal/docs/MOBILE_API_CHANGELOG.md`
 
-- [ ] **Step 1: Write the failing test** — assert `GET /api/setu/dashboard` response includes a top-level `schoolYear` matching the live year (mock `getLiveSchoolYearCached` → `'2025-26'`). READ the existing dashboard test for its mocking setup.
+- [ ] **Step 1: Write the failing test** - assert `GET /api/setu/dashboard` response includes a top-level `schoolYear` matching the live year (mock `getLiveSchoolYearCached` → `'2025-26'`). READ the existing dashboard test for its mocking setup.
 
-- [ ] **Step 2: Implement** — in the route, `const schoolYear = await getLiveSchoolYearCached();` and add `schoolYear` to the top level of the JSON (alongside `family`). (`balaVihar.termLabel` stays the family's enrollment period — `schoolYear` is the live operating year.)
+- [ ] **Step 2: Implement** - in the route, `const schoolYear = await getLiveSchoolYearCached();` and add `schoolYear` to the top level of the JSON (alongside `family`). (`balaVihar.termLabel` stays the family's enrollment period - `schoolYear` is the live operating year.)
 
-- [ ] **Step 3: MOBILE_API_CHANGELOG entry** — `GET /api/setu/dashboard` adds top-level `schoolYear: string` (the live school year). Mobile: add `schoolYear` to the dashboard response schema; render the live-year label on the home screen.
+- [ ] **Step 3: MOBILE_API_CHANGELOG entry** - `GET /api/setu/dashboard` adds top-level `schoolYear: string` (the live school year). Mobile: add `schoolYear` to the dashboard response schema; render the live-year label on the home screen.
 
 - [ ] **Step 4: Run + commit**
 ```bash
@@ -612,15 +612,15 @@ git commit -m "feat(api): GET /api/setu/dashboard exposes the live schoolYear (m
 - Create: `apps/portal/scripts/seed-year-switcher-fixture.ts`, `apps/portal/e2e/setu/admin/year-switcher.spec.ts`
 - Modify: `apps/portal/package.json`, `docs/runbooks/production-cutover-checklist.md`
 
-> Per `verifying-setu-changes-in-uat`: a realistic multi-year fixture + a deployed-UAT walkthrough. **Non-destructive** re: `app_config` — the spec forbids Activate in the E2E (keeps the clean rollover state). The fixture seeds a Preparing + Past year's data (offerings/levels/calendar/seva) under `_test` ids so the switcher has ≥3 selectable years without flipping the live year.
+> Per `verifying-setu-changes-in-uat`: a realistic multi-year fixture + a deployed-UAT walkthrough. **Non-destructive** re: `app_config` - the spec forbids Activate in the E2E (keeps the clean rollover state). The fixture seeds a Preparing + Past year's data (offerings/levels/calendar/seva) under `_test` ids so the switcher has ≥3 selectable years without flipping the live year.
 
 - [ ] **Step 1: Fixture** (`seed-year-switcher-fixture.ts`, UAT-guarded, idempotent): ensure a Past (`2024-25`) + Preparing (`2026-27`) BV offering+levels (+ a seva opp, a calendar entry) exist alongside the live year, so `listKnownSchoolYears` returns ≥3. Reuse the existing engine helpers; refuse unless `PORTAL_FIREBASE_PROJECT_ID==='chinmaya-setu-uat'`.
 
-- [ ] **Step 2: Spec** (`year-switcher.spec.ts`, project `setu`, reuse storageState admin auth, `test.skip(!hasFamilyCreds)`): (1) `/admin/levels` → the switcher lists ≥3 years; (2) select Preparing → URL gains `?year=2026-27`, the "Preparing — not live yet" strip shows, the levels list reflects that year; (3) select Past → "read-only" strip, a mutate control is absent/disabled; (4) GET `/api/setu/calendar` does NOT include a preparing-year date; (5) GET `/api/setu/dashboard` has `schoolYear` = live year. **No Activate, no copy that mutates shared live data** (run copies only against the `_test` preparing year, or assert the buttons exist without clicking destructive ones).
+- [ ] **Step 2: Spec** (`year-switcher.spec.ts`, project `setu`, reuse storageState admin auth, `test.skip(!hasFamilyCreds)`): (1) `/admin/levels` → the switcher lists ≥3 years; (2) select Preparing → URL gains `?year=2026-27`, the "Preparing - not live yet" strip shows, the levels list reflects that year; (3) select Past → "read-only" strip, a mutate control is absent/disabled; (4) GET `/api/setu/calendar` does NOT include a preparing-year date; (5) GET `/api/setu/dashboard` has `schoolYear` = live year. **No Activate, no copy that mutates shared live data** (run copies only against the `_test` preparing year, or assert the buttons exist without clicking destructive ones).
 
 - [ ] **Step 3: Run vs deployed UAT** (after deploy in the gate): `PLAYWRIGHT_BASE_URL=https://cmt-setu.vercel.app pnpm --filter @cmt/portal exec playwright test e2e/setu/admin/year-switcher.spec.ts --project=setu` → green.
 
-- [ ] **Step 4: Runbook §14 entry** — new copy-* routes, the seva `draft` status, dashboard `schoolYear`, calendar scoping, any new index; deploy order for prod (indexes first, no `--force` on 715b8, then code). Commit.
+- [ ] **Step 4: Runbook §14 entry** - new copy-* routes, the seva `draft` status, dashboard `schoolYear`, calendar scoping, any new index; deploy order for prod (indexes first, no `--force` on 715b8, then code). Commit.
 ```bash
 git add apps/portal/scripts/seed-year-switcher-fixture.ts apps/portal/package.json apps/portal/e2e docs/runbooks/production-cutover-checklist.md
 git commit -m "test(rollover): deployed-UAT E2E for the year switcher + multi-year fixture"
@@ -633,21 +633,21 @@ git commit -m "test(rollover): deployed-UAT E2E for the year switcher + multi-ye
 - [ ] Full gate: `pnpm typecheck && pnpm lint && pnpm test && pnpm build` (all green).
 - [ ] Deploy any new index to UAT only (`--project chinmaya-setu-uat`, never `--force`, never prod).
 - [ ] Push (pre-push hook re-runs the gate) → Vercel deploys.
-- [ ] Run the year-switcher E2E against deployed UAT — green.
+- [ ] Run the year-switcher E2E against deployed UAT - green.
 - [ ] Opus code review in a separate lane before sign-off.
-- [ ] Confirm MOBILE_API_CHANGELOG has entries for: calendar scoping (Task 8), seva `draft` (Task 10), dashboard `schoolYear` (Task 14) — each SHA-keyed to its commit.
+- [ ] Confirm MOBILE_API_CHANGELOG has entries for: calendar scoping (Task 8), seva `draft` (Task 10), dashboard `schoolYear` (Task 14) - each SHA-keyed to its commit.
 
 ---
 
 ## Self-review (plan vs spec)
 
 - **Spec §model / carrier** → Task 1 (`resolveViewYear`, `?year=`, derive-from-termLabels). ✓
-- **Spec §1 switcher** → Tasks 2–3. ✓
-- **Spec §2 year-scoped surfaces** → Tasks 4–7 (Level/Calendar/Prasad/Seva/Reports/roster). ✓
+- **Spec §1 switcher** → Tasks 2-3. ✓
+- **Spec §2 year-scoped surfaces** → Tasks 4-7 (Level/Calendar/Prasad/Seva/Reports/roster). ✓
 - **Spec §3 calendar fix (mobile)** → Task 8 (+ changelog). ✓
-- **Spec §4 copy-from-last-year, ALL OPTIONAL** → Tasks 9–12 (prasad/seva/teachers, opt-in buttons; Start/Copy-calendar already exist). ✓
+- **Spec §4 copy-from-last-year, ALL OPTIONAL** → Tasks 9-12 (prasad/seva/teachers, opt-in buttons; Start/Copy-calendar already exist). ✓
 - **Spec §5 past-year read-only + assertLiveYear** → Task 13. ✓
 - **Spec §6 mobile** → Task 8 (calendar) + Task 10 (seva draft) + Task 14 (dashboard schoolYear), each with a changelog entry. ✓
 - **Spec testing** → Task 15 (deployed-UAT, non-destructive, multi-year fixture). ✓
 - **Disciplines** → index audits (Tasks 5/7/8/11 call them out), role helpers (Tasks 9/11/13 use isAdmin), canAccessRoute admin catch-all (copy-* routes), MOBILE_API_CHANGELOG (Tasks 8/10/14), full vitest (Final gate), exactOptional/noUnchecked (throughout). ✓
-- **Open items the executor must verify (not placeholders — real lookups, each task says where):** the calendar page's current year/location derivation (T5); the prasad + seva + reports + roster pages' current reads (T6–T7); `prasadConfig` real fields (T9); `get-family-seva-view` draft-exclusion point (T10); each write route's target-year derivation for `assertLiveYear` (T13); the existing dashboard/calendar test mocking setup (T8/T14).
+- **Open items the executor must verify (not placeholders - real lookups, each task says where):** the calendar page's current year/location derivation (T5); the prasad + seva + reports + roster pages' current reads (T6-T7); `prasadConfig` real fields (T9); `get-family-seva-view` draft-exclusion point (T10); each write route's target-year derivation for `assertLiveYear` (T13); the existing dashboard/calendar test mocking setup (T8/T14).

@@ -1,12 +1,12 @@
-# Slice B1 — Kiosk 1:1 Port Implementation Plan
+# Slice B1 - Kiosk 1:1 Port Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Port the physical ashram kiosk flows from the standalone `chinmaya-family-check-in` app into the portal as **public** routes under `/check-in/*`: `/check-in` (family ID lookup + student roster + check-in), `/check-in/guest` (new visitor guest check-in), `/check-in/lookup` (phone/email → family ID lookup). All three routes are feature-flagged OFF in production (`NEXT_PUBLIC_FEATURE_CHECK_IN_KIOSK=false`) because the standalone app continues to serve the physical terminal — the portal kiosk is dark-launched until an explicit cutover decision.
+**Goal:** Port the physical ashram kiosk flows from the standalone `chinmaya-family-check-in` app into the portal as **public** routes under `/check-in/*`: `/check-in` (family ID lookup + student roster + check-in), `/check-in/guest` (new visitor guest check-in), `/check-in/lookup` (phone/email → family ID lookup). All three routes are feature-flagged OFF in production (`NEXT_PUBLIC_FEATURE_CHECK_IN_KIOSK=false`) because the standalone app continues to serve the physical terminal - the portal kiosk is dark-launched until an explicit cutover decision.
 
-**Architecture:** Kiosk routes are fully public (no auth). They live under `features/check-in/kiosk/*` and reuse the shared `family-lookup` helper from B2. Check-in writes go to Firestore with `checkedInBy: 'sevak'` (the kiosk operator's role, not to be confused with admin). Guest check-ins create anonymous guest records. No `react-datepicker`, no `react-hot-toast`, no `react-phone-number-input`, no `xlsx`, no `redis`, no `headlessui`, and no webpack fallbacks for Node modules — this slice audits and eliminates all of them from any code it ports.
+**Architecture:** Kiosk routes are fully public (no auth). They live under `features/check-in/kiosk/*` and reuse the shared `family-lookup` helper from B2. Check-in writes go to Firestore with `checkedInBy: 'sevak'` (the kiosk operator's role, not to be confused with admin). Guest check-ins create anonymous guest records. No `react-datepicker`, no `react-hot-toast`, no `react-phone-number-input`, no `xlsx`, no `redis`, no `headlessui`, and no webpack fallbacks for Node modules - this slice audits and eliminates all of them from any code it ports.
 
-**Tech Stack:** Builds on B0 middleware (which allows the kiosk routes through the public-route whitelist), B2's `@cmt/shared-domain/check-in/*` types, and B2's `features/check-in/shared/*` modules. Uses `@cmt/ui` shadcn primitives for forms and toasts. The notification layer calls B2's `mockSender` for "check-in successful" side effects — real SES/SNS arrives in B5.
+**Tech Stack:** Builds on B0 middleware (which allows the kiosk routes through the public-route whitelist), B2's `@cmt/shared-domain/check-in/*` types, and B2's `features/check-in/shared/*` modules. Uses `@cmt/ui` shadcn primitives for forms and toasts. The notification layer calls B2's `mockSender` for "check-in successful" side effects - real SES/SNS arrives in B5.
 
 **Spec:** `docs/superpowers/specs/2026-04-13-slice-b-family-check-in-port-design.md` §12 (B1 detail)
 
@@ -27,9 +27,9 @@ grep -q "/check-in" packages/shared-domain/src/auth/public-routes.ts && \
 echo "OK" || echo "MISSING prerequisite"
 ```
 
-**Feature flag:** Keep `NEXT_PUBLIC_FEATURE_CHECK_IN_KIOSK=false` in `.env.local` during development until the final task (where it flips to `true` locally). **In the Vercel production environment, it stays `false`** — the kiosk is dark-launched in prod until a cutover decision.
+**Feature flag:** Keep `NEXT_PUBLIC_FEATURE_CHECK_IN_KIOSK=false` in `.env.local` during development until the final task (where it flips to `true` locally). **In the Vercel production environment, it stays `false`** - the kiosk is dark-launched in prod until a cutover decision.
 
-**Standalone app source:** `/Users/dineshmatta/projects/chinmaya-family-check-in` — reference only. Do not modify.
+**Standalone app source:** `/Users/dineshmatta/projects/chinmaya-family-check-in` - reference only. Do not modify.
 
 ---
 
@@ -81,7 +81,7 @@ CLAUDE.md                                                    [Task 13]
 
 ---
 
-## Task 1: `GET /api/check-in/families/:familyId` — public family read
+## Task 1: `GET /api/check-in/families/:familyId` - public family read
 
 **Files:**
 - Create: `apps/portal/src/app/api/check-in/families/[familyId]/route.ts`
@@ -141,7 +141,7 @@ describe('GET /api/check-in/families/:familyId', () => {
 });
 ```
 
-- [ ] **Step 2: Run — expect failure**
+- [ ] **Step 2: Run - expect failure**
 
 ```sh
 pnpm --filter @cmt/portal test -- src/app/api/check-in/families/\[familyId\]/__tests__/families.test.ts
@@ -169,7 +169,7 @@ export async function GET(
 }
 ```
 
-- [ ] **Step 4: Run — expect pass**
+- [ ] **Step 4: Run - expect pass**
 
 - [ ] **Step 5: Commit**
 
@@ -180,7 +180,7 @@ git commit -m "feat(portal): public GET /api/check-in/families/:familyId for kio
 
 ---
 
-## Task 2: `POST /api/check-in/families/:familyId/check-in` — kiosk check-in write
+## Task 2: `POST /api/check-in/families/:familyId/check-in` - kiosk check-in write
 
 **Files:**
 - Create: `apps/portal/src/app/api/check-in/families/[familyId]/check-in/route.ts`
@@ -321,7 +321,7 @@ describe('POST /api/check-in/families/:familyId/check-in', () => {
 });
 ```
 
-- [ ] **Step 2: Run — expect failure**
+- [ ] **Step 2: Run - expect failure**
 
 - [ ] **Step 3: Create `apps/portal/src/app/api/check-in/families/[familyId]/check-in/route.ts`**
 
@@ -375,7 +375,7 @@ export async function POST(
     if (email) {
       await mockSender.sendEmail({
         to: email,
-        subject: 'Payment reminder — Chinmaya Mission Toronto',
+        subject: 'Payment reminder - Chinmaya Mission Toronto',
         text: `Hari OM ${family.name}, your family check-in was recorded. Please see a sevak to settle your outstanding payment.`,
       });
     }
@@ -385,7 +385,7 @@ export async function POST(
 }
 ```
 
-- [ ] **Step 4: Run — expect pass**
+- [ ] **Step 4: Run - expect pass**
 
 - [ ] **Step 5: Commit**
 
@@ -465,7 +465,7 @@ describe('FamilyIdLookupForm', () => {
 });
 ```
 
-- [ ] **Step 2: Run — expect failure**
+- [ ] **Step 2: Run - expect failure**
 
 - [ ] **Step 3: Create `apps/portal/src/features/check-in/kiosk/family-id-lookup-form.tsx`**
 
@@ -592,7 +592,7 @@ export { KioskCheckInPanel } from './kiosk-check-in-panel';
 
 Note: `KioskCheckInPanel` is created in Task 5.
 
-- [ ] **Step 6: Run test — expect pass** (for `family-id-lookup-form.test.tsx` specifically; `kiosk-home.tsx` won't compile yet because it imports a module that doesn't exist — see next task)
+- [ ] **Step 6: Run test - expect pass** (for `family-id-lookup-form.test.tsx` specifically; `kiosk-home.tsx` won't compile yet because it imports a module that doesn't exist - see next task)
 
 Skip running the full test now; Task 4 wires the page, Task 5 creates `KioskCheckInPanel`. Commit this task and move on.
 
@@ -618,7 +618,7 @@ import { notFound } from 'next/navigation';
 import { KioskHome } from '@/features/check-in/kiosk';
 import { flags } from '@/lib/flags';
 
-export const metadata = { title: 'Check in — CMT Portal' };
+export const metadata = { title: 'Check in - CMT Portal' };
 export const dynamic = 'force-dynamic';
 
 export default function CheckInKioskPage() {
@@ -655,7 +655,7 @@ describe('/check-in page flag gate', () => {
 });
 ```
 
-- [ ] **Step 3: Run test — expect pass**
+- [ ] **Step 3: Run test - expect pass**
 
 ```sh
 pnpm --filter @cmt/portal test -- src/app/check-in/__tests__/page.test.tsx
@@ -670,7 +670,7 @@ git commit -m "feat(portal): replace /check-in ComingSoon stub with flag-gated K
 
 ---
 
-## Task 5: `KioskCheckInPanel` — student roster + submit
+## Task 5: `KioskCheckInPanel` - student roster + submit
 
 **Files:**
 - Create: `apps/portal/src/features/check-in/kiosk/kiosk-check-in-panel.tsx`
@@ -752,7 +752,7 @@ describe('KioskCheckInPanel', () => {
 });
 ```
 
-- [ ] **Step 2: Run — expect failure**
+- [ ] **Step 2: Run - expect failure**
 
 - [ ] **Step 3: Create `apps/portal/src/features/check-in/kiosk/kiosk-check-in-panel.tsx`**
 
@@ -844,7 +844,7 @@ export function KioskCheckInPanel({ family, onDone }: Props) {
 }
 ```
 
-- [ ] **Step 4: Run test — expect pass**
+- [ ] **Step 4: Run test - expect pass**
 
 ```sh
 pnpm --filter @cmt/portal test -- src/features/check-in/kiosk/__tests__/
@@ -903,7 +903,7 @@ describe('recordGuestCheckIn', () => {
 });
 ```
 
-- [ ] **Step 2: Run — expect failure**
+- [ ] **Step 2: Run - expect failure**
 
 - [ ] **Step 3: Create `apps/portal/src/features/check-in/shared/firestore/guest-check-ins.ts`**
 
@@ -932,7 +932,7 @@ export async function recordGuestCheckIn(input: GuestCheckInInput): Promise<stri
 - [ ] **Step 4: Add to shared barrel**
 
 ```ts
-// apps/portal/src/features/check-in/shared/index.ts — append
+// apps/portal/src/features/check-in/shared/index.ts - append
 export * from './firestore/guest-check-ins';
 ```
 
@@ -967,7 +967,7 @@ export async function POST(req: Request) {
 }
 ```
 
-- [ ] **Step 6: Run test — expect pass**
+- [ ] **Step 6: Run test - expect pass**
 
 - [ ] **Step 7: Commit**
 
@@ -1052,7 +1052,7 @@ describe('GuestCheckInForm', () => {
 });
 ```
 
-- [ ] **Step 2: Run — expect failure**
+- [ ] **Step 2: Run - expect failure**
 
 - [ ] **Step 3: Create `apps/portal/src/features/check-in/kiosk/guest-check-in-form.tsx`**
 
@@ -1153,7 +1153,7 @@ export function GuestCheckInForm() {
 }
 ```
 
-- [ ] **Step 4: Run test — expect pass**
+- [ ] **Step 4: Run test - expect pass**
 
 - [ ] **Step 5: Commit**
 
@@ -1178,7 +1178,7 @@ import Link from 'next/link';
 import { GuestCheckInForm } from '@/features/check-in/kiosk/guest-check-in-form';
 import { flags } from '@/lib/flags';
 
-export const metadata = { title: 'Guest check-in — CMT Portal' };
+export const metadata = { title: 'Guest check-in - CMT Portal' };
 
 export default function GuestCheckInPage() {
   if (!flags.checkInKiosk) notFound();
@@ -1285,7 +1285,7 @@ describe('FamilyLookupForm', () => {
 });
 ```
 
-- [ ] **Step 2: Run — expect failure**
+- [ ] **Step 2: Run - expect failure**
 
 - [ ] **Step 3: Create `apps/portal/src/features/check-in/kiosk/family-lookup-form.tsx`**
 
@@ -1411,7 +1411,7 @@ export async function POST(req: Request) {
 }
 ```
 
-- [ ] **Step 5: Run test — expect pass**
+- [ ] **Step 5: Run test - expect pass**
 
 - [ ] **Step 6: Commit**
 
@@ -1437,7 +1437,7 @@ import Link from 'next/link';
 import { FamilyLookupForm } from '@/features/check-in/kiosk/family-lookup-form';
 import { flags } from '@/lib/flags';
 
-export const metadata = { title: 'Find your family ID — CMT Portal' };
+export const metadata = { title: 'Find your family ID - CMT Portal' };
 
 export default function LookupPage() {
   if (!flags.checkInKiosk) notFound();
@@ -1489,7 +1489,7 @@ git commit -m "feat(portal): /check-in/lookup page flag-gated behind checkInKios
 
 ## Task 11: Audit client bundle for forbidden deps
 
-**Files:** none — verification step.
+**Files:** none - verification step.
 
 - [ ] **Step 1: Grep for forbidden imports**
 
@@ -1533,7 +1533,7 @@ Expected: build succeeds, output summary shows `/check-in` route build without w
 // apps/portal/e2e/b1-kiosk.spec.ts
 import { test, expect } from './fixtures';
 
-test.describe('B1 — kiosk', () => {
+test.describe('B1 - kiosk', () => {
   test('/check-in is 404 when feature flag is off', async ({ page }) => {
     test.skip(
       process.env.NEXT_PUBLIC_FEATURE_CHECK_IN_KIOSK === 'true',
@@ -1595,20 +1595,20 @@ git commit -m "test(portal): add b1-kiosk.spec.ts with flag on/off variants"
 - [ ] **Step 1: Update README slice-B progress tracker**
 
 ```markdown
-- **Slice B** — 🚧 In progress —
-  - B0 ✅ — Portal auth foundation
-  - B2 ✅ — Family portal
-  - B3 ✅ — Teacher portal
-  - B1 ✅ — Kiosk 1:1 port (dark-launched in prod)
-  - B4 — Admin dashboard (next)
-  - B5 — Notifications & cron
+- **Slice B** - 🚧 In progress -
+  - B0 ✅ - Portal auth foundation
+  - B2 ✅ - Family portal
+  - B3 ✅ - Teacher portal
+  - B1 ✅ - Kiosk 1:1 port (dark-launched in prod)
+  - B4 - Admin dashboard (next)
+  - B5 - Notifications & cron
 ```
 
 - [ ] **Step 2: Update CLAUDE.md "Slice B status"**
 
 ```markdown
 **Slice B status:** In progress. B0 + B2 + B3 + B1 shipped. B4 (admin dashboard) is next.
-Kiosk is dark-launched in production — standalone app still serves the physical kiosk.
+Kiosk is dark-launched in production - standalone app still serves the physical kiosk.
 ```
 
 - [ ] **Step 3: Flip `NEXT_PUBLIC_FEATURE_CHECK_IN_KIOSK=true` in local `.env.local` ONLY (not in Vercel prod)**

@@ -1,4 +1,4 @@
-# Seva Hours — Slice B (Family browse + sign-up) Implementation Plan
+# Seva Hours - Slice B (Family browse + sign-up) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax.
 
@@ -6,10 +6,10 @@
 
 **Architecture:** New `seva_signups` collection (deterministic id `${oppId}__${fid}`, one per family per opportunity). Family-facing `/api/setu/seva/*` routes (mobile-ready, gated `isSetuFamily`). A shared `getFamilySevaView(fid)` join (open opportunities + this family's signup status + spots-left) used by both the page and the GET endpoints. Themed `/family/seva` page.
 
-**Tech Stack / strict flags / conventions:** identical to Slice A — see `docs/superpowers/plans/2026-06-05-seva-hours-slice-a.md`, especially its **"Design system / UX requirements"** and **"Mobile-app readiness"** sections, which apply verbatim here. Spec: `docs/superpowers/specs/2026-06-05-seva-hours-design.md`.
+**Tech Stack / strict flags / conventions:** identical to Slice A - see `docs/superpowers/plans/2026-06-05-seva-hours-slice-a.md`, especially its **"Design system / UX requirements"** and **"Mobile-app readiness"** sections, which apply verbatim here. Spec: `docs/superpowers/specs/2026-06-05-seva-hours-design.md`.
 
-## Cross-cutting (REPEAT of the hard rules — do not skip)
-- **Mobile-app readiness:** EVERY `/api/setu/seva/*` handler derives identity from `readSessionFromHeaders(req)` → `session.fid` / `session.mid` (works for web cookie AND Bearer-token mobile clients). **NEVER `getCurrentFamily()` / `cookies()` in an API handler.** (The `/family/seva` *page* is a server component and MAY use `getCurrentFamily()` — that's web-only rendering, fine.) Responses: JSON, ISO-string dates (use `serializeOpportunity`/`serializeSignup`), numbers as numbers, consistent `{ ... }`/`{ error }` envelope.
+## Cross-cutting (REPEAT of the hard rules - do not skip)
+- **Mobile-app readiness:** EVERY `/api/setu/seva/*` handler derives identity from `readSessionFromHeaders(req)` → `session.fid` / `session.mid` (works for web cookie AND Bearer-token mobile clients). **NEVER `getCurrentFamily()` / `cookies()` in an API handler.** (The `/family/seva` *page* is a server component and MAY use `getCurrentFamily()` - that's web-only rendering, fine.) Responses: JSON, ISO-string dates (use `serializeOpportunity`/`serializeSignup`), numbers as numbers, consistent `{ ... }`/`{ error }` envelope.
 - **Modern on-theme UX:** Cool-Mist tokens, `CspRoot`/`.csp` scoping, real mobile (`block md:hidden`) + desktop (`hidden md:block`) layouts, designer pass. Mirror the existing family pages (`apps/portal/src/app/family/page.tsx`, `apps/portal/src/app/family/members/page.tsx`) and the Slice-A `SevaManager`.
 
 ---
@@ -17,24 +17,24 @@
 ## File structure
 
 **Create:**
-- (modify) `packages/shared-domain/src/setu/schemas/seva.ts` — add `SevaSignupStatus`, `SevaSignupDocSchema`, `CreateSevaSignupSchema` + types.
-- `apps/portal/src/features/setu/seva/get-signups.ts` — signup readers + helpers (`listFamilySignups`, `listSignupsForOpp`, `getSignup`, `serializeSignup`, `signupDocId`, `isActiveSignup`).
-- `apps/portal/src/features/setu/seva/get-family-seva-view.ts` — `getFamilySevaView(fid)`.
-- `apps/portal/src/app/api/setu/seva/opportunities/route.ts` — GET (family).
-- `apps/portal/src/app/api/setu/seva/my/route.ts` — GET (family signups).
-- `apps/portal/src/app/api/setu/seva/signups/route.ts` — POST (sign up).
-- `apps/portal/src/app/api/setu/seva/signups/[signupId]/cancel/route.ts` — POST (cancel).
-- `apps/portal/src/features/setu/seva/seva-browser-client.ts` — client wrappers.
-- `apps/portal/src/features/setu/seva/seva-browser.tsx` — family client UI.
-- `apps/portal/src/app/family/seva/page.tsx` — server page.
+- (modify) `packages/shared-domain/src/setu/schemas/seva.ts` - add `SevaSignupStatus`, `SevaSignupDocSchema`, `CreateSevaSignupSchema` + types.
+- `apps/portal/src/features/setu/seva/get-signups.ts` - signup readers + helpers (`listFamilySignups`, `listSignupsForOpp`, `getSignup`, `serializeSignup`, `signupDocId`, `isActiveSignup`).
+- `apps/portal/src/features/setu/seva/get-family-seva-view.ts` - `getFamilySevaView(fid)`.
+- `apps/portal/src/app/api/setu/seva/opportunities/route.ts` - GET (family).
+- `apps/portal/src/app/api/setu/seva/my/route.ts` - GET (family signups).
+- `apps/portal/src/app/api/setu/seva/signups/route.ts` - POST (sign up).
+- `apps/portal/src/app/api/setu/seva/signups/[signupId]/cancel/route.ts` - POST (cancel).
+- `apps/portal/src/features/setu/seva/seva-browser-client.ts` - client wrappers.
+- `apps/portal/src/features/setu/seva/seva-browser.tsx` - family client UI.
+- `apps/portal/src/app/family/seva/page.tsx` - server page.
 - Tests alongside each.
 
 **Modify:**
-- `packages/shared-domain/src/auth/can-access-route.ts` (+ test) — `/api/setu/seva/*` → `isSetuFamily`.
-- `apps/portal/src/features/family/components/desktop-sidebar.tsx` — add a `'seva'` entry to `FAMILY_NAV_ITEMS` + `/family/seva` → `'seva'` in `deriveActiveFromPathname`.
-- `apps/portal/src/features/family/components/mobile-bottom-nav.tsx` — add a Seva entry.
+- `packages/shared-domain/src/auth/can-access-route.ts` (+ test) - `/api/setu/seva/*` → `isSetuFamily`.
+- `apps/portal/src/features/family/components/desktop-sidebar.tsx` - add a `'seva'` entry to `FAMILY_NAV_ITEMS` + `/family/seva` → `'seva'` in `deriveActiveFromPathname`.
+- `apps/portal/src/features/family/components/mobile-bottom-nav.tsx` - add a Seva entry.
 
-> **Index note:** Slice B queries `seva_signups` only by SINGLE fields (`where('fid','==')`, `where('oppId','==')`, `where('sevaYear','==')`) with no `orderBy`, so they run on Firestore's automatic single-field indexes — **no composite index in Slice B.** The composite signups indexes land in Slice C/D when the roster (`oppId,status`) and yearly-total (`fid,sevaYear,status`) queries are written.
+> **Index note:** Slice B queries `seva_signups` only by SINGLE fields (`where('fid','==')`, `where('oppId','==')`, `where('sevaYear','==')`) with no `orderBy`, so they run on Firestore's automatic single-field indexes - **no composite index in Slice B.** The composite signups indexes land in Slice C/D when the roster (`oppId,status`) and yearly-total (`fid,sevaYear,status`) queries are written.
 
 ---
 
@@ -42,7 +42,7 @@
 
 **Files:** modify `packages/shared-domain/src/setu/schemas/seva.ts`; create `__tests__/seva-signup.test.ts` (or extend the existing `seva.test.ts`).
 
-- [ ] **Step 1 — failing test** (new `seva-signup.test.ts`):
+- [ ] **Step 1 - failing test** (new `seva-signup.test.ts`):
 ```ts
 import { describe, it, expect } from 'vitest';
 import { SevaSignupDocSchema, CreateSevaSignupSchema } from '../seva';
@@ -80,9 +80,9 @@ describe('CreateSevaSignupSchema', () => {
 });
 ```
 
-- [ ] **Step 2 — run, confirm fail:** `pnpm --filter @cmt/shared-domain exec vitest run src/setu/schemas/__tests__/seva-signup.test.ts`
+- [ ] **Step 2 - run, confirm fail:** `pnpm --filter @cmt/shared-domain exec vitest run src/setu/schemas/__tests__/seva-signup.test.ts`
 
-- [ ] **Step 3 — implement** (append to `seva.ts`):
+- [ ] **Step 3 - implement** (append to `seva.ts`):
 ```ts
 export const SevaSignupStatus = z.enum(['signed-up', 'completed', 'no-show', 'cancelled']);
 export type SevaSignupStatusType = z.infer<typeof SevaSignupStatus>;
@@ -110,7 +110,7 @@ export type CreateSevaSignupInput = z.infer<typeof CreateSevaSignupSchema>;
 ```
 (The barrel already does `export * from './schemas/seva'`, so no barrel change.)
 
-- [ ] **Step 4 — run the seva tests + full shared-domain suite + typecheck → green. Step 5 — commit:** `feat(seva): seva_signups schema`.
+- [ ] **Step 4 - run the seva tests + full shared-domain suite + typecheck → green. Step 5 - commit:** `feat(seva): seva_signups schema`.
 
 ---
 
@@ -118,10 +118,10 @@ export type CreateSevaSignupInput = z.infer<typeof CreateSevaSignupSchema>;
 
 **Files:** create `apps/portal/src/features/setu/seva/get-signups.ts` + `__tests__/get-signups.test.ts`.
 
-- [ ] **Step 1 — failing test:** mock `portalFirestore` (mirror `get-opportunities.test.ts`). Assert `listFamilySignups('F')` calls `.where('fid','==','F')` and maps Timestamps→Date; `listSignupsForOpp('o1')` calls `.where('oppId','==','o1')`; `getSignup` returns null when `!exists`; `serializeSignup` ISO-stringifies `signedUpAt` and (when present) `confirmedAt`; `signupDocId('o1','F')` === `'o1__F'`; `isActiveSignup` true for signed-up/completed, false for cancelled/no-show.
+- [ ] **Step 1 - failing test:** mock `portalFirestore` (mirror `get-opportunities.test.ts`). Assert `listFamilySignups('F')` calls `.where('fid','==','F')` and maps Timestamps→Date; `listSignupsForOpp('o1')` calls `.where('oppId','==','o1')`; `getSignup` returns null when `!exists`; `serializeSignup` ISO-stringifies `signedUpAt` and (when present) `confirmedAt`; `signupDocId('o1','F')` === `'o1__F'`; `isActiveSignup` true for signed-up/completed, false for cancelled/no-show.
 
-- [ ] **Step 2 — confirm fail.**
-- [ ] **Step 3 — implement:**
+- [ ] **Step 2 - confirm fail.**
+- [ ] **Step 3 - implement:**
 ```ts
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import type { SevaSignupDoc } from '@cmt/shared-domain';
@@ -168,7 +168,7 @@ export function serializeSignup(s: SevaSignupDoc) {
   };
 }
 ```
-- [ ] **Step 4 — run + typecheck → green. Step 5 — commit:** `feat(seva): signup readers + helpers`.
+- [ ] **Step 4 - run + typecheck → green. Step 5 - commit:** `feat(seva): signup readers + helpers`.
 
 ---
 
@@ -176,13 +176,13 @@ export function serializeSignup(s: SevaSignupDoc) {
 
 **Files:** create `apps/portal/src/features/setu/seva/get-family-seva-view.ts` + `__tests__/get-family-seva-view.test.ts`.
 
-- [ ] **Step 1 — failing test:** mock `@/lib/seva-requirement` (`getSevaRequirement`), `./get-opportunities` (`listOpportunities`, `serializeOpportunity` identity), `./get-signups` (`listFamilySignups`, `listSignupsForOpp` unused here, `serializeSignup` identity, `isActiveSignup` real or stubbed). Assert:
+- [ ] **Step 1 - failing test:** mock `@/lib/seva-requirement` (`getSevaRequirement`), `./get-opportunities` (`listOpportunities`, `serializeOpportunity` identity), `./get-signups` (`listFamilySignups`, `listSignupsForOpp` unused here, `serializeSignup` identity, `isActiveSignup` real or stubbed). Assert:
   - when `currentSevaYear` is null → `{ currentSevaYear: null, opportunities: [], mySignups: [] }`.
   - opportunities get `mySignupStatus` from the family's matching signup (else null) and `spotsLeft = capacity - activeCount` (null when capacity null, floored at 0).
   - `mySignups` excludes `cancelled` and joins the opportunity summary.
 
-- [ ] **Step 2 — confirm fail.**
-- [ ] **Step 3 — implement:**
+- [ ] **Step 2 - confirm fail.**
+- [ ] **Step 3 - implement:**
 ```ts
 import { getSevaRequirement } from '@/lib/seva-requirement';
 import { listOpportunities, serializeOpportunity } from './get-opportunities';
@@ -232,7 +232,7 @@ export async function getFamilySevaView(fid: string) {
 ```
 > Known limitation (acceptable for B; note in code comment): a signup for an opportunity that has since been **closed** won't find its summary in the open-only `opps` list → `opportunity: null`; the UI renders a minimal row. Slice C/D can fetch closed opps for the my-signups join.
 
-- [ ] **Step 4 — run + typecheck → green. Step 5 — commit:** `feat(seva): family seva view (opps + signup status + spots-left)`.
+- [ ] **Step 4 - run + typecheck → green. Step 5 - commit:** `feat(seva): family seva view (opps + signup status + spots-left)`.
 
 ---
 
@@ -242,9 +242,9 @@ export async function getFamilySevaView(fid: string) {
 
 Mobile-ready: auth via `readSessionFromHeaders`. Mirror `apps/portal/src/app/api/setu/programs/route.ts`.
 
-- [ ] **Step 1 — failing tests** — mock `@/features/setu/seva/get-family-seva-view` (`getFamilySevaView`). For opportunities GET: 401 no session; 200 returns `{ opportunities, currentSevaYear, hoursPerYear }` from the view; family-member role allowed. For my GET: 401 no session; 200 returns `{ mySignups }`.
-- [ ] **Step 2 — confirm fail.**
-- [ ] **Step 3 — implement** (`opportunities/route.ts`):
+- [ ] **Step 1 - failing tests** - mock `@/features/setu/seva/get-family-seva-view` (`getFamilySevaView`). For opportunities GET: 401 no session; 200 returns `{ opportunities, currentSevaYear, hoursPerYear }` from the view; family-member role allowed. For my GET: 401 no session; 200 returns `{ mySignups }`.
+- [ ] **Step 2 - confirm fail.**
+- [ ] **Step 3 - implement** (`opportunities/route.ts`):
 ```ts
 import { NextResponse } from 'next/server';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
@@ -260,7 +260,7 @@ export async function GET(req: Request) {
 ```
 (`my/route.ts`): same auth; `const view = await getFamilySevaView(session.fid); return NextResponse.json({ mySignups: view.mySignups });` (no-fid → `{ mySignups: [] }`).
 
-- [ ] **Step 4 — run + typecheck → green. Step 5 — commit:** `feat(seva): family GET opportunities + my-signups APIs`.
+- [ ] **Step 4 - run + typecheck → green. Step 5 - commit:** `feat(seva): family GET opportunities + my-signups APIs`.
 
 ---
 
@@ -268,7 +268,7 @@ export async function GET(req: Request) {
 
 **Files:** create `apps/portal/src/app/api/setu/seva/signups/route.ts` (POST) + `__tests__`, `apps/portal/src/app/api/setu/seva/signups/[signupId]/cancel/route.ts` (POST) + `__tests__`.
 
-- [ ] **Step 1 — failing tests** (POST signups) — mock `@/features/setu/seva/get-opportunities` (`getOpportunity`), `@/features/setu/seva/get-signups` (`getSignup`, `listSignupsForOpp`, `signupDocId`, `isActiveSignup` real), `@cmt/firebase-shared/admin/firestore` (portalFirestore set + FieldValue). Cases:
+- [ ] **Step 1 - failing tests** (POST signups) - mock `@/features/setu/seva/get-opportunities` (`getOpportunity`), `@/features/setu/seva/get-signups` (`getSignup`, `listSignupsForOpp`, `signupDocId`, `isActiveSignup` real), `@cmt/firebase-shared/admin/firestore` (portalFirestore set + FieldValue). Cases:
   - 401 no session; 400 when `session.fid` missing; 400 bad body (no oppId);
   - 404 when opportunity missing; 409 `not-open` when opportunity `status:'closed'`;
   - 400 `invalid-member` when `mid` doesn't start with `${fid}-`;
@@ -276,10 +276,10 @@ export async function GET(req: Request) {
   - 409 `opportunity-full` when capacity reached (mock `listSignupsForOpp` → capacity active signups, excluding the caller's own id);
   - 201 success: writes the signup with `status:'signed-up'`, `hoursAwarded:0`, `sevaYear` from the opp, `fid` from session, `mid` from body, `signedUpByMid` from session.mid.
 
-  (cancel) — mock `getSignup` + firestore set. Cases: 401; 404 missing; 403 when `signup.fid !== session.fid`; 409 `not-cancellable` when status not `signed-up`; 200 sets `status:'cancelled'` (merge).
+  (cancel) - mock `getSignup` + firestore set. Cases: 401; 404 missing; 403 when `signup.fid !== session.fid`; 409 `not-cancellable` when status not `signed-up`; 200 sets `status:'cancelled'` (merge).
 
-- [ ] **Step 2 — confirm fail.**
-- [ ] **Step 3 — implement** (`signups/route.ts`):
+- [ ] **Step 2 - confirm fail.**
+- [ ] **Step 3 - implement** (`signups/route.ts`):
 ```ts
 import { NextResponse } from 'next/server';
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
@@ -345,7 +345,7 @@ export async function POST(req: Request, ctx: Ctx) {
   return NextResponse.json({ ok: true });
 }
 ```
-- [ ] **Step 4 — run both → green; typecheck. Step 5 — commit:** `feat(seva): family sign-up + cancel APIs`.
+- [ ] **Step 4 - run both → green; typecheck. Step 5 - commit:** `feat(seva): family sign-up + cancel APIs`.
 
 ---
 
@@ -353,9 +353,9 @@ export async function POST(req: Request, ctx: Ctx) {
 
 **Files:** modify `packages/shared-domain/src/auth/can-access-route.ts` + test.
 
-- [ ] **Step 1 — failing test:**
+- [ ] **Step 1 - failing test:**
 ```ts
-describe('canAccessRoute — /api/setu/seva/* — any setu family', () => {
+describe('canAccessRoute - /api/setu/seva/* - any setu family', () => {
   it('allows family-manager and family-member', () => {
     expect(canAccessRoute(manager, '/api/setu/seva/opportunities', 'GET')).toBe(true);
     expect(canAccessRoute(member, '/api/setu/seva/signups', 'POST')).toBe(true);
@@ -367,16 +367,16 @@ describe('canAccessRoute — /api/setu/seva/* — any setu family', () => {
   });
 });
 ```
-- [ ] **Step 2 — confirm fail.**
-- [ ] **Step 3 — implement** — add BEFORE the manager-only `/api/setu/*` catch-all (e.g. right after the volunteering-skills block):
+- [ ] **Step 2 - confirm fail.**
+- [ ] **Step 3 - implement** - add BEFORE the manager-only `/api/setu/*` catch-all (e.g. right after the volunteering-skills block):
 ```ts
-  // Setu API — seva: browse opportunities + sign up + cancel. Any signed-in
+  // Setu API - seva: browse opportunities + sign up + cancel. Any signed-in
   // setu family (route handlers bind fid from the session and verify ownership).
   if (pathname === '/api/setu/seva' || pathname.startsWith('/api/setu/seva/')) {
     return isSetuFamily(claims);
   }
 ```
-- [ ] **Step 4 — run shared-domain suite → green. Step 5 — commit:** `feat(seva): canAccessRoute for /api/setu/seva/*`.
+- [ ] **Step 4 - run shared-domain suite → green. Step 5 - commit:** `feat(seva): canAccessRoute for /api/setu/seva/*`.
 
 ---
 
@@ -386,7 +386,7 @@ describe('canAccessRoute — /api/setu/seva/* — any setu family', () => {
 
 Read Slice A's "Design system" section + `SevaManager` + `apps/portal/src/app/family/page.tsx` first.
 
-- [ ] **Step 1 — client wrappers** (`seva-browser-client.ts`):
+- [ ] **Step 1 - client wrappers** (`seva-browser-client.ts`):
 ```ts
 export interface SevaOppView {
   oppId: string; title: string; description: string; date: string; location: string;
@@ -399,22 +399,22 @@ export interface SevaMySignup {
 }
 export async function fetchOpportunities(): Promise<{ opportunities: SevaOppView[]; currentSevaYear: string | null; hoursPerYear: number }> { /* GET /api/setu/seva/opportunities */ }
 export async function fetchMySignups(): Promise<SevaMySignup[]> { /* GET /api/setu/seva/my → data.mySignups ?? [] */ }
-export async function signUp(oppId: string, mid: string | null): Promise<{ ok: boolean; error?: string }> { /* POST /api/setu/seva/signups body { oppId, mid: mid ?? undefined } — OMIT mid when null */ }
+export async function signUp(oppId: string, mid: string | null): Promise<{ ok: boolean; error?: string }> { /* POST /api/setu/seva/signups body { oppId, mid: mid ?? undefined } - OMIT mid when null */ }
 export async function cancelSignup(signupId: string): Promise<{ ok: boolean; error?: string }> { /* POST /api/setu/seva/signups/{signupId}/cancel */ }
 ```
-All `fetch(... credentials:'same-origin')`; on `!res.ok` return `{ ok:false, error: body.error }`. For `signUp`, build the body conditionally so `mid` is omitted when null (exactOptionalPropertyTypes — never send `undefined` as a value you assigned).
+All `fetch(... credentials:'same-origin')`; on `!res.ok` return `{ ok:false, error: body.error }`. For `signUp`, build the body conditionally so `mid` is omitted when null (exactOptionalPropertyTypes - never send `undefined` as a value you assigned).
 
-- [ ] **Step 2 — component test** (`seva-browser.test.tsx`) — mock `@cmt/ui` + `../seva-browser-client`. Assert: renders the goal header (`{hoursPerYear} hrs`); renders an open opportunity title from `initialOpportunities`; clicking "Sign up" (then confirming, with the optional member dropdown defaulting to "Whole family") calls `signUp(oppId, null)`; an opportunity with `mySignupStatus:'signed-up'` shows a "Signed up" state + a "Cancel" action that calls `cancelSignup`; an opportunity with `spotsLeft:0` shows "Full" and its Sign-up is disabled; the `seva-year-not-set`/empty (`currentSevaYear:null`) state shows a friendly "No seva opportunities yet" message.
+- [ ] **Step 2 - component test** (`seva-browser.test.tsx`) - mock `@cmt/ui` + `../seva-browser-client`. Assert: renders the goal header (`{hoursPerYear} hrs`); renders an open opportunity title from `initialOpportunities`; clicking "Sign up" (then confirming, with the optional member dropdown defaulting to "Whole family") calls `signUp(oppId, null)`; an opportunity with `mySignupStatus:'signed-up'` shows a "Signed up" state + a "Cancel" action that calls `cancelSignup`; an opportunity with `spotsLeft:0` shows "Full" and its Sign-up is disabled; the `seva-year-not-set`/empty (`currentSevaYear:null`) state shows a friendly "No seva opportunities yet" message.
 
-- [ ] **Step 3 — implement `SevaBrowser`** (client). Props:
+- [ ] **Step 3 - implement `SevaBrowser`** (client). Props:
 ```ts
 { currentSevaYear: string | null; hoursPerYear: number;
   initialOpportunities: SevaOppView[]; initialMySignups: SevaMySignup[];
   members: { mid: string; name: string }[] }
 ```
 Structure (themed, responsive, mobile + desktop blocks):
-- **Header:** eyebrow "Seva" + `<h1>` "Seva opportunities" + a line: "Lend a hand — our family goal is {hoursPerYear} hours of seva this year." (Hours progress bar is Slice D; show the goal as text now.)
-- **Empty state** (when `currentSevaYear == null` OR no opportunities): a warm branded card "No seva opportunities posted yet — check back soon."
+- **Header:** eyebrow "Seva" + `<h1>` "Seva opportunities" + a line: "Lend a hand - our family goal is {hoursPerYear} hours of seva this year." (Hours progress bar is Slice D; show the goal as text now.)
+- **Empty state** (when `currentSevaYear == null` OR no opportunities): a warm branded card "No seva opportunities posted yet - check back soon."
 - **Opportunities list:** each `card` → title, Toronto date, hours, location, `spotsLeft` ("{n} spots left" / "Full" / no badge when unlimited), description. Action area:
   - if `mySignupStatus === 'signed-up'`: a "Signed up ✓" `pill` + a **Cancel** ghost button (confirm) → `cancelSignup` → refetch.
   - else if `spotsLeft === 0`: a disabled "Full" button.
@@ -422,7 +422,7 @@ Structure (themed, responsive, mobile + desktop blocks):
 - **My signups** section: list the family's active signups (title, date, member credited if any, hours-when-confirmed later) + Cancel for `signed-up` ones.
 - Manage refetch via `fetchOpportunities()` + `fetchMySignups()` after each mutation; hold lists in `useState`. No nested component declarations; use a render helper if needed.
 
-- [ ] **Step 4 — implement the page** (`app/family/seva/page.tsx`):
+- [ ] **Step 4 - implement the page** (`app/family/seva/page.tsx`):
 ```tsx
 import { connection } from 'next/server';
 import { redirect } from 'next/navigation';
@@ -430,7 +430,7 @@ import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 import { getFamilySevaView } from '@/features/setu/seva/get-family-seva-view';
 import { SevaBrowser } from '@/features/setu/seva/seva-browser';
 
-export const metadata = { title: 'Seva — CMT Portal' };
+export const metadata = { title: 'Seva - CMT Portal' };
 
 export default async function FamilySevaPage() {
   await connection();
@@ -449,9 +449,9 @@ export default async function FamilySevaPage() {
   );
 }
 ```
-- [ ] **Step 5 — run component test → PASS; `tsc --noEmit` → clean.**
-- [ ] **Step 6 — designer pass:** dispatch `oh-my-claudecode:designer` (opus) to elevate `seva-browser.tsx` visuals (cards, sign-up affordance, "signed up" state, spots-left, member-credit control, empty state) against the tokens + ensure the mobile experience is excellent — WITHOUT changing behavior or breaking the tests. Re-run test + typecheck.
-- [ ] **Step 7 — commit:** `feat(seva): themed /family/seva browse + sign-up UI`.
+- [ ] **Step 5 - run component test → PASS; `tsc --noEmit` → clean.**
+- [ ] **Step 6 - designer pass:** dispatch `oh-my-claudecode:designer` (opus) to elevate `seva-browser.tsx` visuals (cards, sign-up affordance, "signed up" state, spots-left, member-credit control, empty state) against the tokens + ensure the mobile experience is excellent - WITHOUT changing behavior or breaking the tests. Re-run test + typecheck.
+- [ ] **Step 7 - commit:** `feat(seva): themed /family/seva browse + sign-up UI`.
 
 ---
 
@@ -459,8 +459,8 @@ export default async function FamilySevaPage() {
 
 **Files:** modify `apps/portal/src/features/family/components/desktop-sidebar.tsx` + `apps/portal/src/features/family/components/mobile-bottom-nav.tsx`.
 
-- [ ] **Step 1** — in `desktop-sidebar.tsx`: add a `'seva'` item to `FAMILY_NAV_ITEMS` (e.g. after Programs): `['seva', 'Seva', 'heart', '/family/seva']` (`'seva'` is already in the `SidebarTab` union + `SetuIcon.heart` exists). Add to `deriveActiveFromPathname`: `if (pathname.startsWith('/family/seva')) return 'seva';` (place before any generic `/family` fallback). In `mobile-bottom-nav.tsx`: add a Seva tab/More entry → `/family/seva` (match the file's pattern; if it's a fixed 4-5 tab bar, add Seva where it fits or to its overflow). If a nav test asserts the family item list, update it.
-- [ ] **Step 2** — run touched nav tests + `tsc --noEmit`. **Step 3 — commit:** `feat(seva): family nav entry for /family/seva`.
+- [ ] **Step 1** - in `desktop-sidebar.tsx`: add a `'seva'` item to `FAMILY_NAV_ITEMS` (e.g. after Programs): `['seva', 'Seva', 'heart', '/family/seva']` (`'seva'` is already in the `SidebarTab` union + `SetuIcon.heart` exists). Add to `deriveActiveFromPathname`: `if (pathname.startsWith('/family/seva')) return 'seva';` (place before any generic `/family` fallback). In `mobile-bottom-nav.tsx`: add a Seva tab/More entry → `/family/seva` (match the file's pattern; if it's a fixed 4-5 tab bar, add Seva where it fits or to its overflow). If a nav test asserts the family item list, update it.
+- [ ] **Step 2** - run touched nav tests + `tsc --noEmit`. **Step 3 - commit:** `feat(seva): family nav entry for /family/seva`.
 
 ---
 

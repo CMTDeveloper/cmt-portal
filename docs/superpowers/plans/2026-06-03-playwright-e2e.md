@@ -1,10 +1,10 @@
-# Playwright E2E for Setu Family/Admin Flows — Implementation Plan
+# Playwright E2E for Setu Family/Admin Flows - Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** A browser-level regression net over the new Setu family/admin flows (dashboard attendance, enroll wording, programs state, admin calendar), authenticating without OTP via the existing password-sign-in route.
 
-**Architecture:** Reuse the existing `apps/portal/playwright.config.ts`. A UAT-guarded seed script creates one persistent `_test` family (manager + child, a Bala Vihar + a no-donation enrollment, and a few `family-check-ins` so attendance is deterministic) and sets a Firebase Auth password on it. A Playwright `setup` project logs in via `POST /api/setu/auth/password-sign-in` and saves the `__session` cookie to `storageState`; all other specs reuse it. v1 specs are **read/render-only** (no DB mutations, no payment completion). On-demand only — not in the pre-push gate.
+**Architecture:** Reuse the existing `apps/portal/playwright.config.ts`. A UAT-guarded seed script creates one persistent `_test` family (manager + child, a Bala Vihar + a no-donation enrollment, and a few `family-check-ins` so attendance is deterministic) and sets a Firebase Auth password on it. A Playwright `setup` project logs in via `POST /api/setu/auth/password-sign-in` and saves the `__session` cookie to `storageState`; all other specs reuse it. v1 specs are **read/render-only** (no DB mutations, no payment completion). On-demand only - not in the pre-push gate.
 
 **Tech Stack:** Playwright `@playwright/test ^1.50`, Next.js 16 dev server on port 3001, Firebase Admin (UAT `chinmaya-setu-uat`), `tsx` for the seed script.
 
@@ -15,7 +15,7 @@
 ## Conventions every task must follow
 
 - **UAT only.** The seed and the running dev server read `.env.local` (`PORTAL_FIREBASE_PROJECT_ID=chinmaya-setu-uat`). Never target prod `715b8`.
-- **Mobile+desktop dual-render gotcha.** Family pages render BOTH a mobile block (`block md:hidden`, first in DOM) and a desktop block (`hidden md:block`). At the Desktop-Chrome viewport only the desktop block is visible, but BOTH exist in the DOM — so a plain `getByText(...)` matches 2 nodes (strict-mode error) and `.first()` is the *hidden* mobile one. **Always select the visible instance:** `page.getByText(/…/).filter({ visible: true })`. Define this once (see Task 3 `e2e/_helpers.ts`).
+- **Mobile+desktop dual-render gotcha.** Family pages render BOTH a mobile block (`block md:hidden`, first in DOM) and a desktop block (`hidden md:block`). At the Desktop-Chrome viewport only the desktop block is visible, but BOTH exist in the DOM - so a plain `getByText(...)` matches 2 nodes (strict-mode error) and `.first()` is the *hidden* mobile one. **Always select the visible instance:** `page.getByText(/…/).filter({ visible: true })`. Define this once (see Task 3 `e2e/_helpers.ts`).
 - **Secrets/env.** Required in `apps/portal/.env.local`: UAT `PORTAL_FIREBASE_*`, `NEXT_PUBLIC_PORTAL_FIREBASE_API_KEY`, plus `E2E_FAMILY_EMAIL` and `E2E_FAMILY_PASSWORD`. Setup/specs **self-skip** when these are absent.
 - **Commit after each task.** Branch is `main` (solo-dev). Do NOT add any of this to the pre-push gate.
 
@@ -41,7 +41,7 @@
 
 ---
 
-## Task 1: Housekeeping — fix the `test:e2e` clash, gitignore, move legacy specs
+## Task 1: Housekeeping - fix the `test:e2e` clash, gitignore, move legacy specs
 
 **Files:**
 - Modify: `apps/portal/package.json`
@@ -62,7 +62,7 @@ Change the line `"test:e2e": "vitest run --config vitest.e2e.config.ts",` to:
 
 - [ ] **Step 2: Update the CLAUDE.md reference**
 
-In `CLAUDE.md`, the bullet that documents `**`pnpm test:e2e`**` as the vitest UAT suite: change the command name to `**`pnpm --filter @cmt/portal test:integration`**` and add a sentence: "Browser E2E (Playwright) is the separate root `pnpm test:e2e` — see `apps/portal/e2e/README.md`."
+In `CLAUDE.md`, the bullet that documents `**`pnpm test:e2e`**` as the vitest UAT suite: change the command name to `**`pnpm --filter @cmt/portal test:integration`**` and add a sentence: "Browser E2E (Playwright) is the separate root `pnpm test:e2e` - see `apps/portal/e2e/README.md`."
 
 - [ ] **Step 3: Ignore the auth storageState dir**
 
@@ -91,7 +91,7 @@ Expected after fixing: `ok`.
 - [ ] **Step 5: Sanity-check Playwright still discovers tests**
 
 Run: `pnpm --filter @cmt/portal exec playwright test --list 2>&1 | tail -20`
-Expected: it lists the `e2e/legacy/*` specs without import errors (the new setu specs don't exist yet — fine).
+Expected: it lists the `e2e/legacy/*` specs without import errors (the new setu specs don't exist yet - fine).
 
 - [ ] **Step 6: Commit**
 
@@ -102,18 +102,18 @@ git commit -m "chore(e2e): rename vitest test:e2e→test:integration, move legac
 
 ---
 
-## Task 2: Seed script — one persistent `_test` family with attendance
+## Task 2: Seed script - one persistent `_test` family with attendance
 
 **Files:**
 - Create: `apps/portal/scripts/seed-e2e-family.ts`
 - (alias already added in Task 1)
 
-**Read first (authoritative shapes — do not guess):**
-- `apps/portal/src/__tests__/e2e/helpers/fixtures.ts` — `createTestFamily({name,email,phone,location})` → `{fid,mid}` (uses `registerFamily`, tags `_test:true`).
-- `apps/portal/src/features/setu/auth/build-session-claims.ts:60-70` — how the family **uid** is derived: `sha256Hex(canonicalContact)` where `canonicalContact = normalizeContact('email', value)` (no type prefix). Reuse the SAME normalization + `sha256Hex` import (`@/features/check-in/shared`).
-- `apps/portal/src/features/setu/auth/find-family-by-contact.ts` — to look up an existing family for the email (idempotency).
-- `apps/portal/src/features/setu/enrollment/enroll-family.ts:1-40` — `EnrollFamilyParams` shape for `enrollFamily(params)`.
-- `packages/shared-domain/src/setu/schemas/member.ts` (or wherever `MemberDoc` lives) — the child member doc shape.
+**Read first (authoritative shapes - do not guess):**
+- `apps/portal/src/__tests__/e2e/helpers/fixtures.ts` - `createTestFamily({name,email,phone,location})` → `{fid,mid}` (uses `registerFamily`, tags `_test:true`).
+- `apps/portal/src/features/setu/auth/build-session-claims.ts:60-70` - how the family **uid** is derived: `sha256Hex(canonicalContact)` where `canonicalContact = normalizeContact('email', value)` (no type prefix). Reuse the SAME normalization + `sha256Hex` import (`@/features/check-in/shared`).
+- `apps/portal/src/features/setu/auth/find-family-by-contact.ts` - to look up an existing family for the email (idempotency).
+- `apps/portal/src/features/setu/enrollment/enroll-family.ts:1-40` - `EnrollFamilyParams` shape for `enrollFamily(params)`.
+- `packages/shared-domain/src/setu/schemas/member.ts` (or wherever `MemberDoc` lives) - the child member doc shape.
 - Existing offerings in UAT (confirmed present): BV `bv-brampton-2025-26` (window 2025-09-07→2026-06-15, enabled), no-donation `om-chanting-all-2026-summer-om-chanting`.
 
 - [ ] **Step 1: Write the seed script**
@@ -148,7 +148,7 @@ const CHECKIN_DATES = ['2025-10-05', '2026-01-11', '2026-03-08']; // inside BV w
 
 async function main(): Promise<void> {
   const projectId = process.env['PORTAL_FIREBASE_PROJECT_ID'];
-  console.log(`\n=== seed-e2e-family — project: ${projectId} ===\n`);
+  console.log(`\n=== seed-e2e-family - project: ${projectId} ===\n`);
   if (projectId !== 'chinmaya-setu-uat') {
     console.error('REFUSING: PORTAL_FIREBASE_PROJECT_ID is not chinmaya-setu-uat.');
     process.exit(1);
@@ -225,14 +225,14 @@ async function main(): Promise<void> {
   );
   console.log(`child member ${childMid} ensured`);
 
-  // 5) Enrollments — BV + no-donation. enrollFamily enrolls eligible members
+  // 5) Enrollments - BV + no-donation. enrollFamily enrolls eligible members
   // into an offering; idempotent if already enrolled (catch + log).
   for (const oid of [BV_OID, NODON_OID]) {
     try {
       await enrollFamily({ fid, oid, enrolledByMid: managerMid /* confirm param names */ });
       console.log(`enrolled ${fid} in ${oid}`);
     } catch (e) {
-      console.log(`enroll ${oid}: ${(e as Error).message} (likely already enrolled — ok)`);
+      console.log(`enroll ${oid}: ${(e as Error).message} (likely already enrolled - ok)`);
     }
   }
 
@@ -275,7 +275,7 @@ Expected: logs "created family CMT-…", "auth user … password set", "enrolled
 - [ ] **Step 4: Re-run to prove idempotency**
 
 Run: `pnpm --filter @cmt/portal seed:e2e-family`
-Expected: "reusing existing family …", enroll lines say "(likely already enrolled — ok)", exit 0. No duplicate family.
+Expected: "reusing existing family …", enroll lines say "(likely already enrolled - ok)", exit 0. No duplicate family.
 
 - [ ] **Step 5: Verify the data with the existing diagnostic**
 
@@ -288,7 +288,7 @@ git add apps/portal/scripts/seed-e2e-family.ts
 git commit -m "feat(e2e): UAT-only idempotent seed for the Playwright E2E family"
 ```
 
-(Do NOT commit `.env.local` — it is gitignored.)
+(Do NOT commit `.env.local` - it is gitignored.)
 
 ---
 
@@ -394,7 +394,7 @@ test -f apps/portal/e2e/.auth/family.json && grep -q "__session" apps/portal/e2e
 ```
 Expected: `storageState OK`.
 
-> If `password-sign-in` returns 401, re-run the Task 2 seed (password not set) or verify `NEXT_PUBLIC_PORTAL_FIREBASE_API_KEY` is present in `.env.local`. If it returns `{redirectTo:'/register'}` (no family), the contact didn't resolve to the seeded family — recheck the seed email matches `E2E_FAMILY_EMAIL`.
+> If `password-sign-in` returns 401, re-run the Task 2 seed (password not set) or verify `NEXT_PUBLIC_PORTAL_FIREBASE_API_KEY` is present in `.env.local`. If it returns `{redirectTo:'/register'}` (no family), the contact didn't resolve to the seeded family - recheck the seed email matches `E2E_FAMILY_EMAIL`.
 
 - [ ] **Step 5: Commit**
 
@@ -405,7 +405,7 @@ git commit -m "feat(e2e): playwright projects + password-sign-in auth setup (sto
 
 ---
 
-## Task 4: `dashboard.spec.ts` — attendance + enrolled state (guards the hijack bug)
+## Task 4: `dashboard.spec.ts` - attendance + enrolled state (guards the hijack bug)
 
 **Files:**
 - Create: `apps/portal/e2e/setu/dashboard.spec.ts`
@@ -429,7 +429,7 @@ test.describe('family dashboard', () => {
     await expect(visibleText(page, /Bala Vihar/i).first()).toBeVisible();
     await expect(visibleText(page, /Enrolled/i).first()).toBeVisible();
 
-    // Attendance rendered from the seeded check-ins — the regression guard.
+    // Attendance rendered from the seeded check-ins - the regression guard.
     // The bespoke BV card reads "Attended X of N class Sundays this year."
     await expect(visibleText(page, /Attended \d+ of \d+ class Sundays/i)).toBeVisible();
     // And the empty state must NOT be shown.
@@ -449,7 +449,7 @@ test.describe('family dashboard', () => {
 Run: `pnpm --filter @cmt/portal exec playwright test --project=setu dashboard`
 Expected: 2 passed. (Playwright auto-starts the dev server on :3001.)
 
-> If the attendance assertion fails with the empty state visible, the seeded check-ins aren't inside the active BV offering window, OR the dashboard selected a non-BV active enrollment — confirm `bv-brampton-2025-26` is the seeded BV oid and the check-in dates fall in its window. On failure, inspect `playwright-report/` (trace + screenshot).
+> If the attendance assertion fails with the empty state visible, the seeded check-ins aren't inside the active BV offering window, OR the dashboard selected a non-BV active enrollment - confirm `bv-brampton-2025-26` is the seeded BV oid and the check-in dates fall in its window. On failure, inspect `playwright-report/` (trace + screenshot).
 
 - [ ] **Step 3: Commit**
 
@@ -460,7 +460,7 @@ git commit -m "test(e2e): dashboard shows BV enrolled + real attendance"
 
 ---
 
-## Task 5: `enroll-wording.spec.ts` — donation vs no-donation copy
+## Task 5: `enroll-wording.spec.ts` - donation vs no-donation copy
 
 **Files:**
 - Create: `apps/portal/e2e/setu/enroll-wording.spec.ts`
@@ -503,12 +503,12 @@ Expected: 2 passed.
 
 ```bash
 git add apps/portal/e2e/setu/enroll-wording.spec.ts
-git commit -m "test(e2e): enroll wording — donation vs no-donation program"
+git commit -m "test(e2e): enroll wording - donation vs no-donation program"
 ```
 
 ---
 
-## Task 6: `programs.spec.ts` — `/family/programs` enrolled state
+## Task 6: `programs.spec.ts` - `/family/programs` enrolled state
 
 **Files:**
 - Create: `apps/portal/e2e/setu/programs.spec.ts`
@@ -544,10 +544,10 @@ git commit -m "test(e2e): /family/programs shows enrolled state"
 
 ---
 
-## Task 7: `unauth.spec.ts` — redirect when not signed in
+## Task 7: `unauth.spec.ts` - redirect when not signed in
 
 **Files:**
-- Create: `apps/portal/e2e/unauth.spec.ts` (NOT under `e2e/setu/` — see Task 3 Step 1 note)
+- Create: `apps/portal/e2e/unauth.spec.ts` (NOT under `e2e/setu/` - see Task 3 Step 1 note)
 
 - [ ] **Step 1: Write the spec**
 
@@ -566,7 +566,7 @@ test('unauthenticated /family redirects to /sign-in', async ({ page }) => {
 Run: `pnpm --filter @cmt/portal exec playwright test --project=unauthenticated`
 Expected: 1 passed.
 
-> If it lands on `/family` instead of redirecting, the middleware unauth redirect for `/family/*` isn't firing — verify `apps/portal/src/middleware.ts` redirects `/family` → `/sign-in` for no-session. (This is shipped behavior; the spec just guards it.)
+> If it lands on `/family` instead of redirecting, the middleware unauth redirect for `/family/*` isn't firing - verify `apps/portal/src/middleware.ts` redirects `/family` → `/sign-in` for no-session. (This is shipped behavior; the spec just guards it.)
 
 - [ ] **Step 3: Commit**
 
@@ -596,18 +596,18 @@ Browser-level regression net for the Setu family/admin flows. On-demand only
 2. Seed the test family (UAT, idempotent): `pnpm --filter @cmt/portal seed:e2e-family`
 
 ## Run
-- All: `pnpm test:e2e` (root) — auto-starts `pnpm dev` on :3001.
+- All: `pnpm test:e2e` (root) - auto-starts `pnpm dev` on :3001.
 - Against a deployed UAT/preview URL: `PLAYWRIGHT_BASE_URL=https://… pnpm test:e2e`
 - One project: `pnpm --filter @cmt/portal exec playwright test --project=setu dashboard`
 - Report on failure: `pnpm --filter @cmt/portal exec playwright show-report`
 
 ## Layout
-- `auth.setup.ts` — logs in once, saves `e2e/.auth/family.json` (gitignored).
-- `setu/*.spec.ts` — authenticated read/render specs.
-- `unauth.spec.ts` — redirect spec (no storageState).
-- `legacy/*.spec.ts` — stale Slice-B check-in specs (kept, skip-guarded).
+- `auth.setup.ts` - logs in once, saves `e2e/.auth/family.json` (gitignored).
+- `setu/*.spec.ts` - authenticated read/render specs.
+- `unauth.spec.ts` - redirect spec (no storageState).
+- `legacy/*.spec.ts` - stale Slice-B check-in specs (kept, skip-guarded).
 
-v1 is read/render-only — no DB mutations, no payment completion. The vitest
+v1 is read/render-only - no DB mutations, no payment completion. The vitest
 server-integration suite is the separate `pnpm --filter @cmt/portal test:integration`.
 ```
 
@@ -628,5 +628,5 @@ git commit -m "docs(e2e): Playwright setu suite README"
 ## Out of scope (future iterations)
 
 - Mutating specs (submit enroll, complete a Stripe-test donation) + `_test` cleanup in a global-teardown.
-- `admin-calendar.spec.ts` (2nd-program shared date → no 409; list filters by program) — add once an admin storageState setup is wired.
+- `admin-calendar.spec.ts` (2nd-program shared date → no 409; list filters by program) - add once an admin storageState setup is wired.
 - CI integration; mobile-viewport variants; reviving the legacy specs.

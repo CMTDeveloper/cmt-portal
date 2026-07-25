@@ -1,8 +1,8 @@
-# Admin Revamp — Phase 3: Roster — Implementation Plan
+# Admin Revamp - Phase 3: Roster - Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace the single-shot welcome-team "Family search" with a browsable, filterable **Roster** at `/welcome/roster` (welcome-team + admin) — browse all Setu families, search-as-filter, location/program filters, payment chip, drill into the existing family-detail page, flat one-row-per-person CSV export, and a read-only migration-completeness check against the legacy 715b8 RTDB roster.
+**Goal:** Replace the single-shot welcome-team "Family search" with a browsable, filterable **Roster** at `/welcome/roster` (welcome-team + admin) - browse all Setu families, search-as-filter, location/program filters, payment chip, drill into the existing family-detail page, flat one-row-per-person CSV export, and a read-only migration-completeness check against the legacy 715b8 RTDB roster.
 
 **Architecture:** A new mobile-ready JSON API `GET /api/welcome/families` (auth via `readSessionFromHeaders` + `isWelcomeTeam`) backs both the desktop and mobile roster screens. Browse is cursor-paginated over the Setu `families` collection ordered by `name`; the cursor is the last family's `fid` (stable via Firestore's implicit `__name__` tiebreaker). Search delegates to the existing `searchFamilies(q)`. The program filter resolves an fid-set from `collectionGroup('enrollments')` and intersects in memory. A separate `GET /api/welcome/families/migration-status` reads the legacy roster (715b8, read-only) and diffs against `families.legacyFid`, surfaced as a small client-fetched strip so the browse page is never blocked by the ~864-family RTDB read. All Firebase reads run inside `<Suspense>` after `await connection()` so PPR does not execute them at build time.
 
@@ -12,47 +12,47 @@
 
 ## Spec
 
-`docs/superpowers/specs/2026-06-08-admin-section-revamp-design.md` → "Phase 3 — Roster (item 4)". Decisions D2 (Setu `families` data source + migration-completeness check), D3 (families list → drill to detail; search is a filter; CSV = flat people list).
+`docs/superpowers/specs/2026-06-08-admin-section-revamp-design.md` → "Phase 3 - Roster (item 4)". Decisions D2 (Setu `families` data source + migration-completeness check), D3 (families list → drill to detail; search is a filter; CSV = flat people list).
 
-## Standing constraints (NON-NEGOTIABLE — every task)
+## Standing constraints (NON-NEGOTIABLE - every task)
 
 - **UAT-only DB writes** (`chinmaya-setu-uat`). The legacy 715b8 RTDB roster + door collections are **READ-ONLY** (and `masterRtdb()` exposes no write helpers, by design). Never write 715b8. Never `--force` an index deploy.
-- **Roles via helpers** — `isAdmin` / `isWelcomeTeam` / `isTeacher`, never strict equality.
+- **Roles via helpers** - `isAdmin` / `isWelcomeTeam` / `isTeacher`, never strict equality.
 - **New `/api/welcome/*` paths need explicit `canAccessRoute` rules** (the `/api/setu/*` catch-all does NOT cover `/api/welcome/*`). Add the rule **and its `can-access-route.test.ts` cases in the same commit** as the route.
 - **Mobile-ready**: every screen has a real `block md:hidden` layout; the data source is a JSON API authed via `readSessionFromHeaders` (Bearer + cookie) returning ISO-string JSON; shared request/response shapes live in `@cmt/shared-domain`.
-- **PPR build safety**: any page that reads Firebase must `await connection()` and wrap the dynamic read in `<Suspense>` (mirror `welcome/family/[fid]/page.tsx`) — otherwise "Collecting page data" runs the live read at build and can crash the worker.
-- **`.csp` token scoping** — anything rendered outside a `CspRoot` (fixed bars, sheets) needs `className="csp"`.
-- **N=2 discipline** — every read/aggregate is tested with two of the thing (a family with two active enrollments must appear once; a program-filtered family with two enrollments must not duplicate).
+- **PPR build safety**: any page that reads Firebase must `await connection()` and wrap the dynamic read in `<Suspense>` (mirror `welcome/family/[fid]/page.tsx`) - otherwise "Collecting page data" runs the live read at build and can crash the worker.
+- **`.csp` token scoping** - anything rendered outside a `CspRoot` (fixed bars, sheets) needs `className="csp"`.
+- **N=2 discipline** - every read/aggregate is tested with two of the thing (a family with two active enrollments must appear once; a program-filtered family with two enrollments must not duplicate).
 - **TDD** (failing test → implement → green), tests in the **same commit** as the code, **frequent commits**, `git push` after every authorized commit (pre-push hook is the gate), **never `--no-verify`**.
 - Commit author is the repo default (`CMT Developer <developer@chinmayatoronto.org>`). Co-author trailer per session rules.
 
 ## File structure (created / modified)
 
 **Created:**
-- `packages/shared-domain/src/setu/roster.ts` — shared roster request/response Zod schemas + types.
-- `apps/portal/src/features/setu/roster/list-families.ts` — browse + filter query → `RosterListResponse`.
-- `apps/portal/src/features/setu/roster/payment.ts` — `deriveFamilyPayment(fid)` → `'paid'|'outstanding'|'unknown'` (fail-safe).
-- `apps/portal/src/features/setu/roster/roster-csv.ts` — flat one-row-per-person CSV builder.
-- `apps/portal/src/features/setu/roster/expand-people.ts` — families → flat `RosterPersonCsvRow[]` (members join).
-- `apps/portal/src/features/setu/roster/reconcile-migration.ts` — `getMigrationStatus()` (715b8 read-only diff).
-- `apps/portal/src/features/setu/roster/roster-client.ts` — client fetch wrappers (throw on non-OK).
-- `apps/portal/src/features/setu/roster/roster-browser.tsx` — `'use client'` browse UI (desktop + mobile).
-- `apps/portal/src/features/setu/roster/migration-strip.tsx` — `'use client'` migration-status strip.
-- `apps/portal/src/features/setu/roster/roster-export-button.tsx` — `'use client'` CSV export (fetch→blob→download).
-- `apps/portal/src/features/setu/roster/__tests__/*.test.ts(x)` — unit/component tests.
-- `apps/portal/src/app/welcome/roster/page.tsx` + `error.tsx` — the Roster screen.
-- `apps/portal/src/app/api/welcome/families/route.ts` — browse/filter/CSV API.
-- `apps/portal/src/app/api/welcome/families/migration-status/route.ts` — reconciliation API.
-- `apps/portal/e2e/setu/admin/roster.spec.ts` — Playwright headless E2E.
+- `packages/shared-domain/src/setu/roster.ts` - shared roster request/response Zod schemas + types.
+- `apps/portal/src/features/setu/roster/list-families.ts` - browse + filter query → `RosterListResponse`.
+- `apps/portal/src/features/setu/roster/payment.ts` - `deriveFamilyPayment(fid)` → `'paid'|'outstanding'|'unknown'` (fail-safe).
+- `apps/portal/src/features/setu/roster/roster-csv.ts` - flat one-row-per-person CSV builder.
+- `apps/portal/src/features/setu/roster/expand-people.ts` - families → flat `RosterPersonCsvRow[]` (members join).
+- `apps/portal/src/features/setu/roster/reconcile-migration.ts` - `getMigrationStatus()` (715b8 read-only diff).
+- `apps/portal/src/features/setu/roster/roster-client.ts` - client fetch wrappers (throw on non-OK).
+- `apps/portal/src/features/setu/roster/roster-browser.tsx` - `'use client'` browse UI (desktop + mobile).
+- `apps/portal/src/features/setu/roster/migration-strip.tsx` - `'use client'` migration-status strip.
+- `apps/portal/src/features/setu/roster/roster-export-button.tsx` - `'use client'` CSV export (fetch→blob→download).
+- `apps/portal/src/features/setu/roster/__tests__/*.test.ts(x)` - unit/component tests.
+- `apps/portal/src/app/welcome/roster/page.tsx` + `error.tsx` - the Roster screen.
+- `apps/portal/src/app/api/welcome/families/route.ts` - browse/filter/CSV API.
+- `apps/portal/src/app/api/welcome/families/migration-status/route.ts` - reconciliation API.
+- `apps/portal/e2e/setu/admin/roster.spec.ts` - Playwright headless E2E.
 
 **Modified:**
-- `firestore.indexes.json` — add `enrollments (programKey, status)` COLLECTION_GROUP + `families (location, name)` COLLECTION composite indexes.
-- `packages/shared-domain/src/setu/index.ts` (and/or the package root `index.ts`) — export the new roster types.
-- `packages/shared-domain/src/auth/can-access-route.ts` + `packages/shared-domain/src/__tests__/can-access-route.test.ts` — `/api/welcome/families*` rule + tests.
-- `apps/portal/src/app/welcome/page.tsx` — redirect to `/welcome/roster`.
-- `apps/portal/src/app/welcome/welcome-search.tsx` + `__tests__/welcome-search.test.tsx` + `apps/portal/src/app/welcome/__tests__/page.test.tsx` + `apps/portal/src/__tests__/e2e/welcome-search.e2e.test.ts` — delete/repoint (search now lives on the roster screen).
-- `apps/portal/src/features/family/components/welcome-mobile-nav.tsx` — "Search"→"Roster" tab (`/welcome/roster`).
-- `docs/runbooks/production-cutover-checklist.md` — §14 change-log entry for the new indexes + the new prod-deploy TODO.
+- `firestore.indexes.json` - add `enrollments (programKey, status)` COLLECTION_GROUP + `families (location, name)` COLLECTION composite indexes.
+- `packages/shared-domain/src/setu/index.ts` (and/or the package root `index.ts`) - export the new roster types.
+- `packages/shared-domain/src/auth/can-access-route.ts` + `packages/shared-domain/src/__tests__/can-access-route.test.ts` - `/api/welcome/families*` rule + tests.
+- `apps/portal/src/app/welcome/page.tsx` - redirect to `/welcome/roster`.
+- `apps/portal/src/app/welcome/welcome-search.tsx` + `__tests__/welcome-search.test.tsx` + `apps/portal/src/app/welcome/__tests__/page.test.tsx` + `apps/portal/src/__tests__/e2e/welcome-search.e2e.test.ts` - delete/repoint (search now lives on the roster screen).
+- `apps/portal/src/features/family/components/welcome-mobile-nav.tsx` - "Search"→"Roster" tab (`/welcome/roster`).
+- `docs/runbooks/production-cutover-checklist.md` - §14 change-log entry for the new indexes + the new prod-deploy TODO.
 
 ---
 
@@ -122,7 +122,7 @@ describe('roster schemas', () => {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `pnpm --filter @cmt/shared-domain test -- roster`
-Expected: FAIL — `Cannot find module '../roster'`.
+Expected: FAIL - `Cannot find module '../roster'`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -210,7 +210,7 @@ A roster row shows a payment chip. Derive it per family from active enrollments 
 - Create: `apps/portal/src/features/setu/roster/payment.ts`
 - Test: `apps/portal/src/features/setu/roster/__tests__/payment.test.ts`
 
-Before writing, open `apps/portal/src/features/setu/enrollment/get-enrollments.ts` (already read — returns `EnrollmentWithOffering[]` with `effectiveSuggestedAmount`) and find how donations are read for a family. Search: `grep -rn "collection('donations')\|getDonations\|status.*completed" apps/portal/src/features/setu/donations`. Reuse the existing donations reader if one exists; otherwise query `db.collection('donations').where('fid','==',fid).where('status','==','completed')` directly (confirm the field name via the `DonationDoc` schema in `packages/shared-domain/src/setu/schemas/`).
+Before writing, open `apps/portal/src/features/setu/enrollment/get-enrollments.ts` (already read - returns `EnrollmentWithOffering[]` with `effectiveSuggestedAmount`) and find how donations are read for a family. Search: `grep -rn "collection('donations')\|getDonations\|status.*completed" apps/portal/src/features/setu/donations`. Reuse the existing donations reader if one exists; otherwise query `db.collection('donations').where('fid','==',fid).where('status','==','completed')` directly (confirm the field name via the `DonationDoc` schema in `packages/shared-domain/src/setu/schemas/`).
 
 - [ ] **Step 1: Write the failing test** (mock `getEnrollments` + the donations read)
 
@@ -234,7 +234,7 @@ describe('deriveFamilyPayment', () => {
     expect(await deriveFamilyPayment('CMT-X')).toBe('unknown');
   });
 
-  it("sums ALL active enrollments (N=2) — outstanding when donations < total expected", async () => {
+  it("sums ALL active enrollments (N=2) - outstanding when donations < total expected", async () => {
     getEnrollments.mockResolvedValue([
       { status: 'active', effectiveSuggestedAmount: 100 },
       { status: 'active', effectiveSuggestedAmount: 150 },
@@ -262,7 +262,7 @@ describe('deriveFamilyPayment', () => {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `pnpm --filter @cmt/portal test -- roster/__tests__/payment`
-Expected: FAIL — `Cannot find module '../payment'` / `'../donations-sum'`.
+Expected: FAIL - `Cannot find module '../payment'` / `'../donations-sum'`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -293,7 +293,7 @@ import type { RosterPayment } from '@cmt/shared-domain/setu';
 import { sumCompletedDonations } from './donations-sum';
 
 /**
- * Best-effort payment status for a family. NEVER throws — a derivation failure
+ * Best-effort payment status for a family. NEVER throws - a derivation failure
  * for one family must not break the roster page (returns 'unknown').
  *  - no active enrollments        → 'unknown'
  *  - completed donations >= total → 'paid'
@@ -339,7 +339,7 @@ git push
 
 Use the project's fake-firestore test helper. Find it first: `grep -rln "fake-firestore\|createFakeFirestore\|makeFirestore" apps/portal/src/features/setu --include=*.ts | head`. Match the existing pattern used by `search-families` / `get-enrollments` tests. Mock `deriveFamilyPayment` so this task's tests stay focused on the query/pagination/intersect logic.
 
-**Cursor model:** the cursor is the **last family's `fid`**. To resume, fetch that doc (`familiesCol.doc(cursor).get()`) and `startAfter(docSnap)` — this uses every `orderBy` field plus Firestore's implicit `__name__` tiebreaker, so it is stable even when two families share a `name`. For the in-memory program-filtered path, slice the sorted array after the element whose `fid === cursor`.
+**Cursor model:** the cursor is the **last family's `fid`**. To resume, fetch that doc (`familiesCol.doc(cursor).get()`) and `startAfter(docSnap)` - this uses every `orderBy` field plus Firestore's implicit `__name__` tiebreaker, so it is stable even when two families share a `name`. For the in-memory program-filtered path, slice the sorted array after the element whose `fid === cursor`.
 
 **Query strategy:**
 - **No program filter** → Firestore query: `orderBy('name')` (+ `where('location','==',loc)` when set) `.startAfter(curDoc?)` `.limit(limit + 1)`. Fetch `limit+1` to compute `nextCursor`.
@@ -402,7 +402,7 @@ describe('listRosterFamilies', () => {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `pnpm --filter @cmt/portal test -- roster/__tests__/list-families`
-Expected: FAIL — `Cannot find module '../list-families'`.
+Expected: FAIL - `Cannot find module '../list-families'`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -495,7 +495,7 @@ export async function listRosterFamilies(params: RosterQuery): Promise<RosterLis
   // --- No program filter: Firestore-ordered cursor path ---
   let query = familiesCol.orderBy('name');
   if (params.location) query = query.where('location', '==', params.location).orderBy('name');
-  // (Firestore allows where + orderBy on the same composite index — see Task 8.)
+  // (Firestore allows where + orderBy on the same composite index - see Task 8.)
   if (params.cursor) {
     const curDoc = await familiesCol.doc(params.cursor).get();
     if (curDoc.exists) query = query.startAfter(curDoc);
@@ -539,7 +539,7 @@ git push
 - Create: `apps/portal/src/features/setu/roster/roster-csv.ts`
 - Test: `apps/portal/src/features/setu/roster/__tests__/roster-csv.test.ts`
 
-`expand-people.ts` turns matched families into one `RosterPersonCsvRow` per member; `roster-csv.ts` serializes (its own escaping — the existing `toCsv` is hardwired to teacher columns, so do not reuse it). The export reads ALL matching families (not a page) up to a hard cap; if capped, `console.warn` the dropped count (no silent caps).
+`expand-people.ts` turns matched families into one `RosterPersonCsvRow` per member; `roster-csv.ts` serializes (its own escaping - the existing `toCsv` is hardwired to teacher columns, so do not reuse it). The export reads ALL matching families (not a page) up to a hard cap; if capped, `console.warn` the dropped count (no silent caps).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -577,7 +577,7 @@ describe('rosterToCsv', () => {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `pnpm --filter @cmt/portal test -- roster/__tests__/roster-csv`
-Expected: FAIL — `Cannot find module '../roster-csv'`.
+Expected: FAIL - `Cannot find module '../roster-csv'`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -660,7 +660,7 @@ git push
 - Create: `apps/portal/src/features/setu/roster/reconcile-migration.ts`
 - Test: `apps/portal/src/features/setu/roster/__tests__/reconcile-migration.test.ts`
 
-`getMigrationStatus()` reads the legacy family ids from the 715b8 RTDB roster via the existing `listAllFamilies()` (read-only — `masterRtdb()` exposes no write helpers) and diffs against the set of `families.legacyFid` already in Setu. It returns counts + a capped sample of missing fids. The timestamp is passed in (NOT `new Date()` inside — keep the function pure-ish and testable; the route stamps `checkedAt`).
+`getMigrationStatus()` reads the legacy family ids from the 715b8 RTDB roster via the existing `listAllFamilies()` (read-only - `masterRtdb()` exposes no write helpers) and diffs against the set of `families.legacyFid` already in Setu. It returns counts + a capped sample of missing fids. The timestamp is passed in (NOT `new Date()` inside - keep the function pure-ish and testable; the route stamps `checkedAt`).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -702,7 +702,7 @@ describe('getMigrationStatus', () => {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `pnpm --filter @cmt/portal test -- roster/__tests__/reconcile-migration`
-Expected: FAIL — `Cannot find module '../reconcile-migration'` / `'../setu-legacy-fids'`.
+Expected: FAIL - `Cannot find module '../reconcile-migration'` / `'../setu-legacy-fids'`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -801,19 +801,19 @@ describe('roster API (/api/welcome/families)', () => {
 });
 ```
 
-(Use the test file's existing `SessionClaims` import/builders — match how other welcome cases are constructed; `extraRoles` may be required by the type.)
+(Use the test file's existing `SessionClaims` import/builders - match how other welcome cases are constructed; `extraRoles` may be required by the type.)
 
 - [ ] **Step 2: Run to verify it fails**
 
 Run: `pnpm --filter @cmt/shared-domain test -- can-access-route`
-Expected: FAIL — `/api/welcome/families` falls through to `return false`.
+Expected: FAIL - `/api/welcome/families` falls through to `return false`.
 
 - [ ] **Step 3: Add the `canAccessRoute` rule**
 
 In `packages/shared-domain/src/auth/can-access-route.ts`, **before** the existing `/api/welcome/enrollments` block (any order among the welcome rules is fine, but keep it grouped with the other `/api/welcome/*` rules), add:
 
 ```ts
-  // Welcome-team API — roster browse/filter/CSV + migration reconciliation.
+  // Welcome-team API - roster browse/filter/CSV + migration reconciliation.
   if (pathname === '/api/welcome/families' || pathname.startsWith('/api/welcome/families/')) {
     return isWelcomeTeam(claims);
   }
@@ -877,7 +877,7 @@ describe('GET /api/welcome/families', () => {
 - [ ] **Step 5: Run to verify it fails**
 
 Run: `pnpm --filter @cmt/portal test -- api/welcome/families`
-Expected: FAIL — `Cannot find module '../route'`.
+Expected: FAIL - `Cannot find module '../route'`.
 
 - [ ] **Step 6: Write the routes**
 
@@ -997,15 +997,15 @@ The program filter needs an `enrollments (programKey, status)` COLLECTION_GROUP 
 - [ ] **Step 2: Deploy to UAT only (NEVER `--force`, NEVER prod)**
 
 Run: `firebase deploy --only firestore:indexes --project chinmaya-setu-uat`
-Expected: "✔ Deploy complete!" (the CLI may warn about "extra" indexes present in UAT but not in the file — leave them alone, do not `--force`).
+Expected: "✔ Deploy complete!" (the CLI may warn about "extra" indexes present in UAT but not in the file - leave them alone, do not `--force`).
 
 - [ ] **Step 3: Poll until both indexes report READY**
 
-Run: `firebase firestore:indexes --project chinmaya-setu-uat` (repeat until the two new composite/group indexes show state READY, ~1–5 min).
+Run: `firebase firestore:indexes --project chinmaya-setu-uat` (repeat until the two new composite/group indexes show state READY, ~1-5 min).
 
 - [ ] **Step 4: Update the cutover runbook (same turn)**
 
-Append to `docs/runbooks/production-cutover-checklist.md` §14 change-log a dated 2026-06-09 entry: the two new indexes deployed to UAT, and a **prod TODO** — "deploy `enrollments (programKey,status)` + `families (location,name)` to prod 715b8 **without `--force`** at cutover". Mirror the existing §14 entry format.
+Append to `docs/runbooks/production-cutover-checklist.md` §14 change-log a dated 2026-06-09 entry: the two new indexes deployed to UAT, and a **prod TODO** - "deploy `enrollments (programKey,status)` + `families (location,name)` to prod 715b8 **without `--force`** at cutover". Mirror the existing §14 entry format.
 
 - [ ] **Step 5: Commit**
 
@@ -1028,7 +1028,7 @@ git push
 - Create: `apps/portal/src/app/welcome/roster/error.tsx`
 - Test: `apps/portal/src/features/setu/roster/__tests__/roster-browser.test.tsx`
 
-**Client wrappers** (`roster-client.ts`) — throw on non-OK (so the UI fires its error state, per `searchFamiliesClient`):
+**Client wrappers** (`roster-client.ts`) - throw on non-OK (so the UI fires its error state, per `searchFamiliesClient`):
 
 ```ts
 // apps/portal/src/features/setu/roster/roster-client.ts
@@ -1053,9 +1053,9 @@ export async function fetchMigrationStatusClient(): Promise<MigrationStatusRespo
 }
 ```
 
-**Search-as-filter:** when the search box is non-empty, call `searchFamiliesClient(q)` (existing) and render its `FamilySearchHit[]` as cards (no payment/program — search hits don't carry them; that's acceptable, label them "search results"). When empty, show the browse list from `fetchRosterClient`. This matches the spec: "when the search box is non-empty, show search hits instead of the browse page."
+**Search-as-filter:** when the search box is non-empty, call `searchFamiliesClient(q)` (existing) and render its `FamilySearchHit[]` as cards (no payment/program - search hits don't carry them; that's acceptable, label them "search results"). When empty, show the browse list from `fetchRosterClient`. This matches the spec: "when the search box is non-empty, show search hits instead of the browse page."
 
-**`roster-browser.tsx`** (`'use client'`) — the core screen. Requirements:
+**`roster-browser.tsx`** (`'use client'`) - the core screen. Requirements:
 - Desktop layout uses the welcome `layout.tsx` `<main>` wrapper (do NOT add another sidebar). Mobile layout is a separate `block md:hidden` branch with its own `CspRoot` + bottom padding (90px) for the fixed mobile nav, mirroring `welcome/page.tsx`.
 - A search input (reuse the debounce + stale-sequence pattern from `welcome-search.tsx`).
 - Location filter: a row of chips (All · Brampton · Mississauga · Scarborough · Markham) from `LOCATIONS`. Program filter: chips for the known program keys (import the program-key list / labels; if a label map isn't readily exported, use the keys with title-case). Selecting a chip refetches from page 1.
@@ -1063,15 +1063,15 @@ export async function fetchMigrationStatusClient(): Promise<MigrationStatusRespo
 - "Load more" button when `nextCursor` is non-null (appends the next page; passes `cursor`).
 - A header count: "N families" from `total` (browse mode only).
 - The `<RosterExportButton/>` (Task: below) and `<MigrationStrip/>` near the top.
-- All inline-styled with brand tokens (`var(--ink)`, `var(--muted)`, `var(--surface)`, `var(--line)`, `var(--accent)`), matching the welcome/admin screens. Tap targets ≥44px on mobile (`minHeight: 44`). Min 44px is a designer blocker from Phase 1 — honor it.
+- All inline-styled with brand tokens (`var(--ink)`, `var(--muted)`, `var(--surface)`, `var(--line)`, `var(--accent)`), matching the welcome/admin screens. Tap targets ≥44px on mobile (`minHeight: 44`). Min 44px is a designer blocker from Phase 1 - honor it.
 
-**`migration-strip.tsx`** (`'use client'`) — on mount, `fetchMigrationStatusClient()`; render a compact strip: "Migration status · {migrated} of {legacyTotal} legacy families migrated · {missing} not yet in portal". When `missing > 0`, an expander lists `missingFids`. Fail quietly (render nothing or a muted "couldn't check" line) on error — it must never block the roster. Because it fires the ~864-family 715b8 read, it loads independently (its own fetch), so the browse list is never blocked.
+**`migration-strip.tsx`** (`'use client'`) - on mount, `fetchMigrationStatusClient()`; render a compact strip: "Migration status · {migrated} of {legacyTotal} legacy families migrated · {missing} not yet in portal". When `missing > 0`, an expander lists `missingFids`. Fail quietly (render nothing or a muted "couldn't check" line) on error - it must never block the roster. Because it fires the ~864-family 715b8 read, it loads independently (its own fetch), so the browse list is never blocked.
 
-**`roster-export-button.tsx`** (`'use client'`) — reuse the fetch→blob→`a.download` pattern from `report-export-button.tsx`, but GET `/api/welcome/families?{currentFilters}&format=csv`; filename `roster.csv`. Takes the current `{q, location, program}` as props so the export matches what's on screen.
+**`roster-export-button.tsx`** (`'use client'`) - reuse the fetch→blob→`a.download` pattern from `report-export-button.tsx`, but GET `/api/welcome/families?{currentFilters}&format=csv`; filename `roster.csv`. Takes the current `{q, location, program}` as props so the export matches what's on screen.
 
-**`page.tsx`** — server component. Mirror `welcome/family/[fid]/page.tsx`: a thin default export wrapping the body in `<Suspense>`; `await connection()` at the top of the body (the screen itself fetches client-side, but `connection()` keeps PPR from trying to prerender any incidental dynamic access). Render `<RosterBrowser/>` inside both the mobile and desktop branches (the component owns both via its internal `block md:hidden` / `hidden md:block`). `metadata.title = 'Roster · Setu'`.
+**`page.tsx`** - server component. Mirror `welcome/family/[fid]/page.tsx`: a thin default export wrapping the body in `<Suspense>`; `await connection()` at the top of the body (the screen itself fetches client-side, but `connection()` keeps PPR from trying to prerender any incidental dynamic access). Render `<RosterBrowser/>` inside both the mobile and desktop branches (the component owns both via its internal `block md:hidden` / `hidden md:block`). `metadata.title = 'Roster · Setu'`.
 
-**`error.tsx`** — standard per-segment error boundary (copy `welcome/family/[fid]/error.tsx`).
+**`error.tsx`** - standard per-segment error boundary (copy `welcome/family/[fid]/error.tsx`).
 
 - [ ] **Step 1: Write the failing component test** (mock the client wrappers)
 
@@ -1127,7 +1127,7 @@ describe('RosterBrowser', () => {
 - [ ] **Step 2: Run to verify it fails**
 
 Run: `pnpm --filter @cmt/portal test -- roster/__tests__/roster-browser`
-Expected: FAIL — `Cannot find module '../roster-browser'`.
+Expected: FAIL - `Cannot find module '../roster-browser'`.
 
 - [ ] **Step 3: Implement** the client wrappers, `roster-browser.tsx`, `migration-strip.tsx`, `roster-export-button.tsx`, `page.tsx`, `error.tsx` per the requirements above. Keep the debounce/stale-sequence search logic from `welcome-search.tsx`. Use `data-testid="roster-search-input"` on the search field.
 
@@ -1139,7 +1139,7 @@ Expected: PASS (3 tests).
 - [ ] **Step 5: Typecheck + lint the new screen**
 
 Run: `pnpm --filter @cmt/portal typecheck && pnpm --filter @cmt/portal lint`
-Expected: clean (watch for `exactOptionalPropertyTypes` on the filter params — use conditional spreads, never assign `undefined`).
+Expected: clean (watch for `exactOptionalPropertyTypes` on the filter params - use conditional spreads, never assign `undefined`).
 
 - [ ] **Step 6: Commit**
 
@@ -1172,7 +1172,7 @@ export default function WelcomeIndexPage() {
 }
 ```
 
-- [ ] **Step 2: Update the mobile nav** — in `welcome-mobile-nav.tsx`, change the first item to point at `/welcome/roster` with the label "Roster" and rename `isSearchActive` → `isRosterActive` (active when not levels/seva; also active on `/welcome` and `/welcome/roster` and `/welcome/family`):
+- [ ] **Step 2: Update the mobile nav** - in `welcome-mobile-nav.tsx`, change the first item to point at `/welcome/roster` with the label "Roster" and rename `isSearchActive` → `isRosterActive` (active when not levels/seva; also active on `/welcome` and `/welcome/roster` and `/welcome/family`):
 
 ```tsx
 function isRosterActive(pathname: string): boolean {
@@ -1192,12 +1192,12 @@ git rm apps/portal/src/app/welcome/welcome-search.tsx \
        apps/portal/src/__tests__/e2e/welcome-search.e2e.test.ts
 ```
 
-- [ ] **Step 4: Fix/replace `welcome/__tests__/page.test.tsx`** — it currently asserts the search hero. Replace with a redirect assertion (mock `next/navigation`'s `redirect` and assert it's called with `/welcome/roster`), or delete the file if it has no other coverage. Confirm no other test imports `WelcomeSearch` (`grep -rn "welcome-search\|WelcomeSearch" apps/portal/src`).
+- [ ] **Step 4: Fix/replace `welcome/__tests__/page.test.tsx`** - it currently asserts the search hero. Replace with a redirect assertion (mock `next/navigation`'s `redirect` and assert it's called with `/welcome/roster`), or delete the file if it has no other coverage. Confirm no other test imports `WelcomeSearch` (`grep -rn "welcome-search\|WelcomeSearch" apps/portal/src`).
 
 - [ ] **Step 5: Run the affected tests**
 
 Run: `pnpm --filter @cmt/portal test -- welcome`
-Expected: PASS — no references to the deleted hero remain.
+Expected: PASS - no references to the deleted hero remain.
 
 - [ ] **Step 6: Commit**
 
@@ -1216,7 +1216,7 @@ git push
 - [ ] **Step 1: Run the full gate exactly as the pre-push hook does**
 
 Run: `pnpm typecheck && pnpm lint && pnpm test && pnpm build`
-Expected: all green. If "Collecting page data" fails on `/welcome/roster`, the page is doing a live Firebase read at build — ensure the data fetch is client-side and the server page only does `await connection()` inside a `<Suspense>` body (do NOT fetch roster data in the server component).
+Expected: all green. If "Collecting page data" fails on `/welcome/roster`, the page is doing a live Firebase read at build - ensure the data fetch is client-side and the server page only does `await connection()` inside a `<Suspense>` body (do NOT fetch roster data in the server component).
 
 - [ ] **Step 2: Fix any failures at the root cause** (never `--no-verify`). Re-run until green.
 
@@ -1229,9 +1229,9 @@ Expected: all green. If "Collecting page data" fails on `/welcome/roster`, the p
 **Files:**
 - Create: `apps/portal/e2e/setu/admin/roster.spec.ts`
 
-Per the standing rule: log in via the password-sign-in route (the `setu` project's saved storageState — the single UAT test user is family-manager **+ admin**, so it passes the welcome-team gate), run headless against the **deployed UAT app**. Roster is read-only, so **no mutations / no cleanup** needed. The spec can only go green after Tasks 1–9 are pushed AND Vercel has deployed.
+Per the standing rule: log in via the password-sign-in route (the `setu` project's saved storageState - the single UAT test user is family-manager **+ admin**, so it passes the welcome-team gate), run headless against the **deployed UAT app**. Roster is read-only, so **no mutations / no cleanup** needed. The spec can only go green after Tasks 1-9 are pushed AND Vercel has deployed.
 
-Screens render both desktop and mobile blocks in the DOM — filter to visible elements (`.filter({ visible: true })` or target the desktop block) to avoid strict-mode "resolved to 2 elements" failures.
+Screens render both desktop and mobile blocks in the DOM - filter to visible elements (`.filter({ visible: true })` or target the desktop block) to avoid strict-mode "resolved to 2 elements" failures.
 
 - [ ] **Step 1: Write the spec**
 
@@ -1241,7 +1241,7 @@ import { test, expect } from '../../fixtures';
 
 const hasFamilyCreds = Boolean(process.env.E2E_FAMILY_EMAIL && process.env.E2E_FAMILY_PASSWORD);
 
-test.describe('Phase 3 — Roster (/welcome/roster)', () => {
+test.describe('Phase 3 - Roster (/welcome/roster)', () => {
   test.skip(!hasFamilyCreds, 'requires E2E_FAMILY_EMAIL / E2E_FAMILY_PASSWORD');
 
   test('browse → search-as-filter → drill to family detail', async ({ page }) => {
@@ -1276,17 +1276,17 @@ test.describe('Phase 3 — Roster (/welcome/roster)', () => {
 });
 ```
 
-> Add `data-testid="roster-results"` to the results container in `roster-browser.tsx` (Task 8) so the spec can scope to it. If the seeded family's display name isn't literally "E2E …", adjust the search term to match the seed (`E2E_FAMILY_EMAIL`'s resolved family — check `scripts/seed-e2e-family.ts` for the family `name`). The family detail URL is `/welcome/family/CMT-…`.
+> Add `data-testid="roster-results"` to the results container in `roster-browser.tsx` (Task 8) so the spec can scope to it. If the seeded family's display name isn't literally "E2E …", adjust the search term to match the seed (`E2E_FAMILY_EMAIL`'s resolved family - check `scripts/seed-e2e-family.ts` for the family `name`). The family detail URL is `/welcome/family/CMT-…`.
 
 - [ ] **Step 2: Re-seed the UAT test user** (the integration suite's `_test:true` sweep may have removed it)
 
 Run: `pnpm --filter @cmt/portal seed:e2e-family`
-Expected: idempotent — resolves/ensures the family-manager+admin UAT user.
+Expected: idempotent - resolves/ensures the family-manager+admin UAT user.
 
-- [ ] **Step 3: Run the spec against deployed UAT** (only after Tasks 1–9 are pushed and Vercel has finished deploying)
+- [ ] **Step 3: Run the spec against deployed UAT** (only after Tasks 1-9 are pushed and Vercel has finished deploying)
 
 Run: `PLAYWRIGHT_BASE_URL=https://cmt-setu.vercel.app pnpm --filter @cmt/portal exec playwright test --project=setu roster`
-Expected: PASS (3 tests). If a card-name assertion fails because the seed family's name differs, fix the search term to match the seed and re-run — do NOT loosen the assertion to always-pass.
+Expected: PASS (3 tests). If a card-name assertion fails because the seed family's name differs, fix the search term to match the seed and re-run - do NOT loosen the assertion to always-pass.
 
 - [ ] **Step 4: Run the full setu E2E suite to confirm no regressions**
 
@@ -1324,7 +1324,7 @@ git push
 
 ## Self-review (against the spec, done while writing)
 
-- **Spec coverage:** browse query (T3) ✓; search-as-filter reuses `searchFamilies` (T8) ✓; location filter (T3+T7) ✓; program filter via collectionGroup intersect (T3+T7) ✓; payment chip (T2+T3) ✓ — shipped as display chip (server `?payment=` filter intentionally deferred per spec "MVP may ship location+program first"; document in T8/T12); family detail reuse (T8) ✓; flat people CSV (T4+T6) ✓; migration-completeness (T5+T6+T8) ✓; `/api/welcome/families` + canAccessRoute rule + tests same commit (T6) ✓; mobile layout + mobile-ready API (T6+T8) ✓; N=2 (T3 program dup test) ✓; index deploy UAT + runbook (T7) ✓; Playwright E2E (T11) ✓.
+- **Spec coverage:** browse query (T3) ✓; search-as-filter reuses `searchFamilies` (T8) ✓; location filter (T3+T7) ✓; program filter via collectionGroup intersect (T3+T7) ✓; payment chip (T2+T3) ✓ - shipped as display chip (server `?payment=` filter intentionally deferred per spec "MVP may ship location+program first"; document in T8/T12); family detail reuse (T8) ✓; flat people CSV (T4+T6) ✓; migration-completeness (T5+T6+T8) ✓; `/api/welcome/families` + canAccessRoute rule + tests same commit (T6) ✓; mobile layout + mobile-ready API (T6+T8) ✓; N=2 (T3 program dup test) ✓; index deploy UAT + runbook (T7) ✓; Playwright E2E (T11) ✓.
 - **Deviation flagged:** the spec lists `?payment=` as a filter param; this plan ships payment as a **display chip only** for MVP (a server payment filter breaks name-cursor pagination, and the spec explicitly allows deferring it). Recorded in T8/T12. If the team wants the filter, it becomes a fast follow.
 - **Type consistency:** `RosterQuery`/`RosterFamilyRow`/`RosterListResponse`/`RosterPersonCsvRow`/`MigrationStatusResponse` defined in T1 and used verbatim in T3/T4/T5/T6/T8. `deriveFamilyPayment` (T2) consumed by T3. `listRosterFamilies` (T3) consumed by T6/T8-via-API. `expandPeople`+`rosterToCsv` (T4) consumed by T6. `getMigrationStatus` (T5) consumed by T6.
 - **No placeholders:** every code step has real code; every run step has a command + expected result.

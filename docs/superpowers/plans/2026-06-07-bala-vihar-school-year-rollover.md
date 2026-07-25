@@ -1,8 +1,8 @@
-# Bala Vihar School-Year Rollover — Implementation Plan
+# Bala Vihar School-Year Rollover - Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship admin-driven, one-click promotion of every Bala Vihar child to the next school year — advance each child one grade, re-derive their level from the grade band, close the old enrollment with a per-child history snapshot, create the new-year enrollment — plus a "Start new year" clone of levels + offerings, with web + mobile UI and mobile-app-ready APIs.
+**Goal:** Ship admin-driven, one-click promotion of every Bala Vihar child to the next school year - advance each child one grade, re-derive their level from the grade band, close the old enrollment with a per-child history snapshot, create the new-year enrollment - plus a "Start new year" clone of levels + offerings, with web + mobile UI and mobile-app-ready APIs.
 
 **Architecture:** Pure domain logic in `@cmt/shared-domain` (grade ladder + schemas), two engines in `apps/portal/src/features/setu/rollover/` (`startNewYear`, `promoteFamilies`) injected with a Firestore handle so the same code backs both an admin API route and a CLI script. A guided two-step admin page calls the routes via thin `-client` wrappers. History surfaces as a "Bala Vihar journey" strip on the child profile, read from `levelSnapshots` on enrollments.
 
@@ -15,20 +15,20 @@
 ## File Structure
 
 **Shared domain** (`packages/shared-domain/src/setu/`):
-- `grade-ladder.ts` (NEW) — `GRADE_LADDER`, `PromotionOutcome`, `decidePromotion`. Pure, web+mobile.
+- `grade-ladder.ts` (NEW) - `GRADE_LADDER`, `PromotionOutcome`, `decidePromotion`. Pure, web+mobile.
 - `grade-ladder.test.ts` (NEW)
-- `schemas/enrollment.ts` (MODIFY) — `LevelSnapshotSchema`, `pid`, `levelSnapshots`, `'promotion'` in `enrolledVia`.
-- `schemas/rollover.ts` (NEW) — `StartYearResultSchema`, `RolloverReportSchema`, `PromotionRowSchema` + request-body schemas (shared web↔native).
-- `index.ts` (MODIFY) — export the two new modules.
+- `schemas/enrollment.ts` (MODIFY) - `LevelSnapshotSchema`, `pid`, `levelSnapshots`, `'promotion'` in `enrolledVia`.
+- `schemas/rollover.ts` (NEW) - `StartYearResultSchema`, `RolloverReportSchema`, `PromotionRowSchema` + request-body schemas (shared web↔native).
+- `index.ts` (MODIFY) - export the two new modules.
 
 **Portal feature** (`apps/portal/src/features/setu/rollover/`):
-- `school-year.ts` (NEW) — `deriveSchoolYears`, `targetOidOf`, `BV_SOURCE_OIDS`, `loadLevelsByPid`, `buildLevelSnapshot`.
+- `school-year.ts` (NEW) - `deriveSchoolYears`, `targetOidOf`, `BV_SOURCE_OIDS`, `loadLevelsByPid`, `buildLevelSnapshot`.
 - `start-new-year.ts` (NEW) + `__tests__/start-new-year.test.ts`
 - `plan-family-promotion.ts` (NEW, pure planner) + `__tests__/plan-family-promotion.test.ts`
 - `promote-families.ts` (NEW, applier/engine) + `__tests__/promote-families.test.ts`
-- `rollover-client.ts` (NEW) — `startNewYearClient`, `previewPromotionClient`, `commitPromotionClient`.
+- `rollover-client.ts` (NEW) - `startNewYearClient`, `previewPromotionClient`, `commitPromotionClient`.
 - `components/rollover-page.tsx`, `components/start-step.tsx`, `components/promote-step.tsx`, `components/promotion-preview.tsx`, `components/confirm-dialog.tsx` (NEW) + `__tests__/`
-- `get-child-journey.ts` (NEW) — read `levelSnapshots` across a child's enrollments.
+- `get-child-journey.ts` (NEW) - read `levelSnapshots` across a child's enrollments.
 - `components/journey-strip.tsx` (NEW) + test
 
 **API** (`apps/portal/src/app/api/admin/school-year/`):
@@ -53,7 +53,7 @@
 - Create: `packages/shared-domain/src/setu/schemas/__tests__/rollover.test.ts`
 - Modify: `packages/shared-domain/src/setu/index.ts`
 
-- [ ] **Step 1: Write the failing test** — `schemas/__tests__/rollover.test.ts`:
+- [ ] **Step 1: Write the failing test** - `schemas/__tests__/rollover.test.ts`:
 
 ```ts
 import { describe, it, expect } from 'vitest';
@@ -64,7 +64,7 @@ import {
   StartYearResultSchema,
 } from '../../index';
 
-describe('enrollment schema — rollover extensions', () => {
+describe('enrollment schema - rollover extensions', () => {
   const base = {
     eid: 'F1-bv-brampton-2026-27', fid: 'F1', oid: 'bv-brampton-2026-27',
     programKey: 'bala-vihar', programLabel: 'Bala Vihar', termLabel: '2026-27',
@@ -190,7 +190,7 @@ export const PromoteBodySchema = z.object({
 });
 ```
 
-- [ ] **Step 4: Export from `index.ts`** — add `export * from './schemas/rollover';` and `export * from './grade-ladder';` (the ladder lands in Task 2; adding the export now is harmless — if Task 2 isn't done yet, remove the grade-ladder line and re-add in Task 2). Prefer: add only the `rollover` export here; add the `grade-ladder` export in Task 2.
+- [ ] **Step 4: Export from `index.ts`** - add `export * from './schemas/rollover';` and `export * from './grade-ladder';` (the ladder lands in Task 2; adding the export now is harmless - if Task 2 isn't done yet, remove the grade-ladder line and re-add in Task 2). Prefer: add only the `rollover` export here; add the `grade-ladder` export in Task 2.
 
 - [ ] **Step 5: Run** `pnpm --filter @cmt/shared-domain exec vitest run src/setu/schemas/__tests__/rollover.test.ts` → PASS. Then `pnpm --filter @cmt/shared-domain exec tsc --noEmit`.
 
@@ -205,7 +205,7 @@ export const PromoteBodySchema = z.object({
 - Create: `packages/shared-domain/src/setu/__tests__/grade-ladder.test.ts`
 - Modify: `packages/shared-domain/src/setu/index.ts` (add `export * from './grade-ladder';`)
 
-- [ ] **Step 1: Write the failing test** — `__tests__/grade-ladder.test.ts`:
+- [ ] **Step 1: Write the failing test** - `__tests__/grade-ladder.test.ts`:
 
 ```ts
 import { describe, it, expect } from 'vitest';
@@ -289,7 +289,7 @@ function ageInMonths(birthMonthYear: string, now: Date): number | null {
 
 /**
  * Decide a child's promotion outcome from their member fields. Single source of
- * truth — used by both the dry-run preview and the commit engine.
+ * truth - used by both the dry-run preview and the commit engine.
  */
 export function decidePromotion(
   member: { schoolGrade: string | null; birthMonthYear: string | null },
@@ -308,7 +308,7 @@ export function decidePromotion(
   if (months == null) return { kind: 'needs-grade' };
   if (months >= SHISHU_MIN_MONTHS && months < SHISHU_MAX_MONTHS) return { kind: 'shishu-stays' };
   if (months >= SHISHU_MAX_MONTHS) return { kind: 'shishu-aged-out' };
-  return { kind: 'needs-grade' }; // younger than shishu window — unusual; flag
+  return { kind: 'needs-grade' }; // younger than shishu window - unusual; flag
 }
 ```
 
@@ -417,7 +417,7 @@ Clone 2025-26 levels → 2026-27 (empty teachers), ensure 2026-27 offerings + do
 - Create: `apps/portal/src/features/setu/rollover/start-new-year.ts`
 - Create: `apps/portal/src/features/setu/rollover/__tests__/start-new-year.test.ts`
 
-- [ ] **Step 1: Write the failing test** (fake-firestore — mirror the helper used in `roster.test.ts`/`promote` tests). Seed one source offering `bv-brampton-2025-26` + two source levels (`Level 1` band `['1']`, `Shishu Vihar`). Assert after `startNewYear(db, { fromYear:'2025-26', toYear:'2026-27', actorMid:'A1', dryRun:false })`:
+- [ ] **Step 1: Write the failing test** (fake-firestore - mirror the helper used in `roster.test.ts`/`promote` tests). Seed one source offering `bv-brampton-2025-26` + two source levels (`Level 1` band `['1']`, `Shishu Vihar`). Assert after `startNewYear(db, { fromYear:'2025-26', toYear:'2026-27', actorMid:'A1', dryRun:false })`:
   - target offering `bv-brampton-2026-27` created with `termLabel:'2026-27'`, `paymentSource:'portal'`.
   - target levels created: `levelId` ends with `-bv-brampton-2026-27`, `pid==='bv-brampton-2026-27'`, `periodLabel==='2026-27'`, `gradeBand` preserved, `teacherRefs: []`.
   - `donationPeriods/bv-brampton-2026-27` created.
@@ -446,7 +446,7 @@ export async function startNewYear(db: Db, args: StartArgs): Promise<StartYearRe
   //     startDate/endDate = source + 1 year). Mirror a donationPeriods/{targetOid} doc.
   // 3. Discover source levels (where pid==sourceOid). For each, compute
   //    newLevelId = `${location}-${levelSlug(levelName)}-${targetOid}` (lowercased
-  //    location to match existing ids — verify against a seeded level id). If the
+  //    location to match existing ids - verify against a seeded level id). If the
   //    target level exists → push to levelsExisting (DO NOT overwrite teacherRefs).
   //    Else create copying levelName/levelKind/order/gradeBand/ageLabel/curriculum,
   //    teacherRefs:[], pid:targetOid, periodLabel:toYear, enabled:true,
@@ -457,9 +457,9 @@ export async function startNewYear(db: Db, args: StartArgs): Promise<StartYearRe
 ```
 
 Implementation notes:
-- Use a Firestore `WriteBatch` (or sequential `set` with `create`-if-missing reads) — keep idempotency by reading existence first.
+- Use a Firestore `WriteBatch` (or sequential `set` with `create`-if-missing reads) - keep idempotency by reading existence first.
 - `location` in the levelId: derive from the source level's `levelId` prefix (split on the source slug) rather than re-slugging, to guarantee the new id matches the established scheme. Simpler+safer: `newLevelId = sourceLevelId.replace(sourceOid, targetOid)`. Use that.
-- For `startDate`/`endDate` + 1 year: construct `new Date(Date.UTC(y+1, ...))` from the source dates. (Date.now is fine here — engine runs server-side, not in a workflow script.)
+- For `startDate`/`endDate` + 1 year: construct `new Date(Date.UTC(y+1, ...))` from the source dates. (Date.now is fine here - engine runs server-side, not in a workflow script.)
 
 - [ ] **Step 3: Run** the test → PASS. tsc.
 - [ ] **Step 4: Commit** `feat(rollover): startNewYear clones levels + ensures offerings (idempotent, teachers preserved)`.
@@ -468,13 +468,13 @@ Implementation notes:
 
 ## Task 5: `planFamilyPromotion` (pure planner)
 
-The testable crux: given a family's enrollment + members + source/target levels, compute the promotion plan. NO Firestore — pure.
+The testable crux: given a family's enrollment + members + source/target levels, compute the promotion plan. NO Firestore - pure.
 
 **Files:**
 - Create: `apps/portal/src/features/setu/rollover/plan-family-promotion.ts`
 - Create: `apps/portal/src/features/setu/rollover/__tests__/plan-family-promotion.test.ts`
 
-- [ ] **Step 1: Write the failing test** — the **N=2 case** is mandatory:
+- [ ] **Step 1: Write the failing test** - the **N=2 case** is mandatory:
 
 ```ts
 import { describe, it, expect } from 'vitest';
@@ -637,7 +637,7 @@ export async function promoteFamilies(db: Db, args: PromoteArgs): Promise<Rollov
   //      - close source: txn.set(srcEnrollRef, { status:'cancelled', cancelledAt: serverTimestamp(), cancelledReason:`promoted-${toYear}`, levelSnapshots: sourceSnapshots }, { merge:true }).
   //      - if promotedMids.length: txn.set(tgtEnrollRef, { ...full doc..., pid: targetOid, enrolledVia:'promotion', enrolledMids: promotedMids, levelSnapshots: targetSnapshots, status:'active', enrolledAt: serverTimestamp(), suggestedAmountSnapshot: resolveSuggestedAmount(offering, now), suggestedAmountOverride:null, cancelledAt:null, cancelledReason:null, programKey, programLabel, termLabel: toYear, location, fid, oid: targetOid, eid: tgtEid, enrolledByMid: args.actorMid ?? null }).
   // 4. Aggregate report: promoted = sum promotedMids; advanced = rows advance; shishuStayed = rows shishu-stays;
-  //    graduated = rows graduate; needsAttention = rows shishu-aged-out + needs-grade; byTransition grouped by `${fromLevelName ?? '—'} → ${toLevelName ?? (kind)}`.
+  //    graduated = rows graduate; needsAttention = rows shishu-aged-out + needs-grade; byTransition grouped by `${fromLevelName ?? '-'} → ${toLevelName ?? (kind)}`.
   //    graduates = rows graduate; attention = rows shishu-aged-out|needs-grade; rows = full (dry-run) / capped (commit, e.g. first 500).
 }
 ```
@@ -650,7 +650,7 @@ Implementation notes:
 - `exactOptionalPropertyTypes`: when building the target doc, always include every field (no conditional-undefined). `enrolledByMid: args.actorMid ?? null`.
 
 - [ ] **Step 3: Run** the test → PASS. tsc + `pnpm --filter @cmt/portal exec vitest run src/features/setu/rollover`.
-- [ ] **Step 4: Commit** `feat(rollover): promoteFamilies engine — per-family txn, idempotent, history-preserving`.
+- [ ] **Step 4: Commit** `feat(rollover): promoteFamilies engine - per-family txn, idempotent, history-preserving`.
 
 ---
 
@@ -661,20 +661,20 @@ Implementation notes:
 - Modify/Create the matching test (find the existing enroll-family test; if none, create `__tests__/enroll-family.test.ts`).
 
 - [ ] **Step 1: Add/adjust a test** asserting the written enrollment doc includes `pid: oid` (use the existing test harness/mocks for this module if present; otherwise a fake-firestore test seeding an offering + family + a child member, then asserting the doc).
-- [ ] **Step 2: Implement** — in the `txn.set(enrollmentRef, { … })` object (`enroll-family.ts:129`), add `pid: oid,` right after `oid,`.
+- [ ] **Step 2: Implement** - in the `txn.set(enrollmentRef, { … })` object (`enroll-family.ts:129`), add `pid: oid,` right after `oid,`.
 - [ ] **Step 3: Run** the enroll-family + enrollment-route tests → PASS. tsc.
 - [ ] **Step 4: Commit** `fix(enrollment): write pid:oid so portal-initiated enrollments appear on teacher rosters`.
 
 ---
 
-## Task 8: API routes — `POST /api/admin/school-year/{start,promote}`
+## Task 8: API routes - `POST /api/admin/school-year/{start,promote}`
 
 **Files:**
 - Create: `apps/portal/src/app/api/admin/school-year/start/route.ts`
 - Create: `apps/portal/src/app/api/admin/school-year/promote/route.ts`
 - Create: `apps/portal/src/app/api/admin/school-year/__tests__/routes.test.ts`
 
-- [ ] **Step 1: Write failing route tests** — mock `next/cache` `revalidateTag` (known harness quirk), mock the engine module + session reader. Assert: non-admin → 403; admin + `start` → calls `startNewYear`, returns `StartYearResult` JSON; admin + `promote {dryRun:true}` → calls `promoteFamilies({dryRun:true})`, returns report; bad body → 400. Run → FAIL.
+- [ ] **Step 1: Write failing route tests** - mock `next/cache` `revalidateTag` (known harness quirk), mock the engine module + session reader. Assert: non-admin → 403; admin + `start` → calls `startNewYear`, returns `StartYearResult` JSON; admin + `promote {dryRun:true}` → calls `promoteFamilies({dryRun:true})`, returns report; bad body → 400. Run → FAIL.
 
 - [ ] **Step 2: Implement** both routes. Pattern (mirror an existing `/api/admin/*` route, e.g. `offerings/route.ts`):
 
@@ -698,8 +698,8 @@ export async function POST(req: Request) {
 }
 ```
 
-- `promote/route.ts`: same shape with `PromoteBodySchema`; on `dryRun:false` also `revalidateTag` enrollment/roster/dashboard tags (grep existing tag names — e.g. `enrollments`, `teacher-roster`). Verify the exact `readSessionFromHeaders` import + `session.claims` shape against an existing admin route; use `isAdmin` helper (never `=== 'admin'`).
-- `canAccessRoute`: `/api/admin/` catch-all already gates admin-only — **verify** in `can-access-route.ts` and add a test asserting a non-admin family role is denied `/api/admin/school-year/promote` (middleware-level), if that suite exists.
+- `promote/route.ts`: same shape with `PromoteBodySchema`; on `dryRun:false` also `revalidateTag` enrollment/roster/dashboard tags (grep existing tag names - e.g. `enrollments`, `teacher-roster`). Verify the exact `readSessionFromHeaders` import + `session.claims` shape against an existing admin route; use `isAdmin` helper (never `=== 'admin'`).
+- `canAccessRoute`: `/api/admin/` catch-all already gates admin-only - **verify** in `can-access-route.ts` and add a test asserting a non-admin family role is denied `/api/admin/school-year/promote` (middleware-level), if that suite exists.
 
 - [ ] **Step 3: Run** route tests → PASS. tsc + lint.
 - [ ] **Step 4: Commit** `feat(api): admin school-year start + promote routes (admin-gated, mobile-ready JSON)`.
@@ -739,10 +739,10 @@ export async function commitPromotionClient(): Promise<RolloverReport> {
 
 ## Task 10: Admin rollover page UI + tile (designer pass required)
 
-Build the guided two-step page from spec §8.2 — web **and** real mobile layout. Use Setu `.csp` tokens; this is a polished, intuitive surface.
+Build the guided two-step page from spec §8.2 - web **and** real mobile layout. Use Setu `.csp` tokens; this is a polished, intuitive surface.
 
 **Files:**
-- Create: `apps/portal/src/app/admin/school-year/page.tsx` (server: reads current state — does the target year exist? — and renders the client `RolloverPage`)
+- Create: `apps/portal/src/app/admin/school-year/page.tsx` (server: reads current state - does the target year exist? - and renders the client `RolloverPage`)
 - Create: `apps/portal/src/app/admin/school-year/error.tsx`
 - Create: `apps/portal/src/features/setu/rollover/components/rollover-page.tsx` (client; owns step state + toasts)
 - Create: `start-step.tsx`, `promote-step.tsx`, `promotion-preview.tsx`, `confirm-dialog.tsx`
@@ -753,18 +753,18 @@ Build the guided two-step page from spec §8.2 — web **and** real mobile layou
 
 - [ ] **Step 2: Implement the page + components.** Requirements (match the wireframes in spec §8.2 + §8.3):
   - **Header**: "School Year Rollover" + an Active-year → Next-year status row (Next year shows ● Not started / ● Ready).
-  - **Step 1 card** (`start-step.tsx`): explainer copy + counts ("18 levels, 2 offerings to create" — derive from a server prop) + "Start 2026-27" button → `startNewYearClient`; success flips to a green confirmed state + "Re-sync" link; on success, unlock Step 2.
+  - **Step 1 card** (`start-step.tsx`): explainer copy + counts ("18 levels, 2 offerings to create" - derive from a server prop) + "Start 2026-27" button → `startNewYearClient`; success flips to a green confirmed state + "Re-sync" link; on success, unlock Step 2.
   - **Step 2 card** (`promote-step.tsx`): locked (greyed, explanatory) until `nextYearReady`. "Preview run" → `previewPromotionClient` → render `promotion-preview.tsx`.
   - **`promotion-preview.tsx`**: three big stat cards (moving up / graduate / need attention) with a `(incl. N Shishu continuing)` subnote; a "Where students move" list from `byTransition` (label + count + a proportional bar); collapsible **Graduating** + **Need attention** sections; each attention row links `Fix →` to the child edit screen. A primary "Promote N students →" button opens `confirm-dialog.tsx`.
-  - **`confirm-dialog.tsx`**: `.csp`-scoped (it's an overlay — must carry the class or be inside CspRoot), copy from spec, Confirm → `commitPromotionClient` → result state ("N promoted · M graduated · K skipped" + "View 2026-27 rosters →" + "Re-run preview").
+  - **`confirm-dialog.tsx`**: `.csp`-scoped (it's an overlay - must carry the class or be inside CspRoot), copy from spec, Confirm → `commitPromotionClient` → result state ("N promoted · M graduated · K skipped" + "View 2026-27 rosters →" + "Re-run preview").
   - **Toasts** via the existing Sonner setup for success/error (throw-on-non-OK from the client).
-  - **Mobile**: a genuine `block md:hidden` layout — cards stack, stat trio fits without horizontal scroll, transition list becomes stacked rows, buttons full-width. Do not ship a desktop-only grid.
-  - **Tile**: add to `admin/page.tsx` a `<Tile href="/admin/school-year" title="School year rollover" icon="check" sub="Promote Bala Vihar families to the next school year — advance grades, re-assign levels, keep each child's history." tone="primary" />` (pick an existing icon name).
+  - **Mobile**: a genuine `block md:hidden` layout - cards stack, stat trio fits without horizontal scroll, transition list becomes stacked rows, buttons full-width. Do not ship a desktop-only grid.
+  - **Tile**: add to `admin/page.tsx` a `<Tile href="/admin/school-year" title="School year rollover" icon="check" sub="Promote Bala Vihar families to the next school year - advance grades, re-assign levels, keep each child's history." tone="primary" />` (pick an existing icon name).
   - Reuse existing Setu primitives (buttons, cards) rather than new ones; match `/admin/levels` / welcome dashboard styling.
 
 - [ ] **Step 3: Run** the UI tests → PASS. tsc + lint + `pnpm --filter @cmt/portal exec vitest run src/features/setu/rollover`.
-- [ ] **Step 4: Designer pass** — dispatch the designer agent (Opus) to refine spacing, hierarchy, color, motion, and the mobile layout against the spec wireframes; apply its changes; re-run tests.
-- [ ] **Step 5: Commit** `feat(admin): school-year rollover page — guided 2-step flow + dry-run preview (web+mobile)`.
+- [ ] **Step 4: Designer pass** - dispatch the designer agent (Opus) to refine spacing, hierarchy, color, motion, and the mobile layout against the spec wireframes; apply its changes; re-run tests.
+- [ ] **Step 5: Commit** `feat(admin): school-year rollover page - guided 2-step flow + dry-run preview (web+mobile)`.
 
 ---
 
@@ -777,7 +777,7 @@ Build the guided two-step page from spec §8.2 — web **and** real mobile layou
 - Modify: the welcome read-only child detail page (find it: `apps/portal/src/app/welcome/family/[fid]/...`).
 
 - [ ] **Step 1: Write the failing test** for `get-child-journey.ts`: given a child's enrollments (each with `termLabel` + `levelSnapshots[mid]` + `status`), returns rows sorted by `termLabel` **desc** with `{ termLabel, schoolGrade, levelName, active }` (active = `status==='active'`). Include an N=2 case (two years) and a graduate (latest year cancelled, no active). Run → FAIL.
-- [ ] **Step 2: Implement** `get-child-journey.ts` — read `families/{fid}/enrollments` where `enrolledMids` array-contains `mid` (or filter in memory), map each to a journey row from `levelSnapshots[mid]`, sort desc by `termLabel`. (No index needed if filtering the family's own enrollments subcollection in memory.)
+- [ ] **Step 2: Implement** `get-child-journey.ts` - read `families/{fid}/enrollments` where `enrolledMids` array-contains `mid` (or filter in memory), map each to a journey row from `levelSnapshots[mid]`, sort desc by `termLabel`. (No index needed if filtering the family's own enrollments subcollection in memory.)
 - [ ] **Step 3: Implement** `journey-strip.tsx` (spec §8.3 wireframe): a compact themed list, "Active" vs "Completed" badge, empty state ("No Bala Vihar history yet"). Mobile-friendly (stacks naturally). Add a component test.
 - [ ] **Step 4: Wire** into the member page + welcome detail (pass `fid` + `mid`; render under the existing profile sections). Keep the welcome detail's defensive role re-check intact.
 - [ ] **Step 5: Run** tests → PASS. tsc + lint.
@@ -792,13 +792,13 @@ Build the guided two-step page from spec §8.2 — web **and** real mobile layou
 - Create: `apps/portal/scripts/promote-families.ts`
 - Modify: `apps/portal/package.json` (aliases)
 
-- [ ] **Step 1: Implement** both scripts mirroring `backfill-bv-enrollments.ts` structure exactly: arg parser (`--dry-run`, `--from`, `--to`, `--limit`, `--fid`, `--allow-prod`), the **UAT guard** (refuse unless `PORTAL_FIREBASE_PROJECT_ID === 'chinmaya-setu-uat'` without `--allow-prod`), call `startNewYear` / `promoteFamilies` with `portalFirestore()`, print a readable summary (counts, per-transition, attention list). `promote-families.ts` honors `--dry-run` → `promoteFamilies({ dryRun:true })`. `--limit`/`--fid` filter the families processed (pass through to the engine or filter the collectionGroup result — simplest: add optional `limit`/`fidFilter` to the engine args).
+- [ ] **Step 1: Implement** both scripts mirroring `backfill-bv-enrollments.ts` structure exactly: arg parser (`--dry-run`, `--from`, `--to`, `--limit`, `--fid`, `--allow-prod`), the **UAT guard** (refuse unless `PORTAL_FIREBASE_PROJECT_ID === 'chinmaya-setu-uat'` without `--allow-prod`), call `startNewYear` / `promoteFamilies` with `portalFirestore()`, print a readable summary (counts, per-transition, attention list). `promote-families.ts` honors `--dry-run` → `promoteFamilies({ dryRun:true })`. `--limit`/`--fid` filter the families processed (pass through to the engine or filter the collectionGroup result - simplest: add optional `limit`/`fidFilter` to the engine args).
 - [ ] **Step 2: Add aliases** to `apps/portal/package.json` scripts:
 ```json
 "school-year:start": "tsx --env-file=.env.local scripts/start-new-year.ts",
 "school-year:promote": "tsx --env-file=.env.local scripts/promote-families.ts",
 ```
-- [ ] **Step 3:** Isolated tsc for the scripts (`pnpm --filter @cmt/portal exec tsc --noEmit`) + lint. **Do NOT run them** (they hit UAT) — leave execution to the controller's verification step.
+- [ ] **Step 3:** Isolated tsc for the scripts (`pnpm --filter @cmt/portal exec tsc --noEmit`) + lint. **Do NOT run them** (they hit UAT) - leave execution to the controller's verification step.
 - [ ] **Step 4: Commit** `feat(scripts): school-year:start + school-year:promote CLI (UAT-guarded, dry-run)`.
 
 ---
@@ -822,7 +822,7 @@ Build the guided two-step page from spec §8.2 — web **and** real mobile layou
 (Match the file's existing array shape/placement.)
 - [ ] **Step 2:** Validate JSON (`node -e "JSON.parse(require('fs').readFileSync('firestore.indexes.json','utf8'))"`).
 - [ ] **Step 3: Commit** `chore(firestore): collectionGroup index enrollments(oid,status) for rollover`.
-- [ ] **Step 4 (controller, deploy):** `firebase deploy --only firestore:indexes --project chinmaya-setu-uat` — **NO `--force`**, **UAT only** (never prod `chinmaya-setu-715b8`).
+- [ ] **Step 4 (controller, deploy):** `firebase deploy --only firestore:indexes --project chinmaya-setu-uat` - **NO `--force`**, **UAT only** (never prod `chinmaya-setu-715b8`).
 
 ---
 
@@ -840,7 +840,7 @@ Build the guided two-step page from spec §8.2 — web **and** real mobile layou
 
 **Spec coverage:** ✅ Start-new-year (T4) · grade ladder & two-grades-per-level (T2/T5) · history snapshots (T1/T5/T11) · one-click + dry-run + confirm UI (T10) · mobile + API-first (T8/T9/T10/T11) · graduate/shishu/needs-grade edges (T2/T5) · `pid` invariant (T1/T6/T7) · index (T13) · CLI parity (T12) · child-profile journey (T11).
 
-**Placeholder scan:** Engine bodies in T4/T6 are given as annotated algorithm comments rather than full line-by-line code — deliberate, because the load-bearing logic (ladder, planner, snapshot) is fully written in T2/T3/T5 and the engines are mechanical Firestore plumbing over those pure functions. Implementers have the backfill (`enroll-family.ts` + `backfill-bv-enrollments.ts`) as verbatim patterns. Acceptable for subagent-driven execution; not a vague "add error handling".
+**Placeholder scan:** Engine bodies in T4/T6 are given as annotated algorithm comments rather than full line-by-line code - deliberate, because the load-bearing logic (ladder, planner, snapshot) is fully written in T2/T3/T5 and the engines are mechanical Firestore plumbing over those pure functions. Implementers have the backfill (`enroll-family.ts` + `backfill-bv-enrollments.ts`) as verbatim patterns. Acceptable for subagent-driven execution; not a vague "add error handling".
 
 **Type consistency:** `RolloverReport`/`StartYearResult`/`PromotionRow`/`LevelSnapshot` defined once in T1, imported everywhere. `decidePromotion` outcome kinds match across ladder (T2), planner (T5), engine aggregation (T6), and UI (T10). `targetOidOf`/`buildLevelSnapshot` signatures stable T3→T5→T6.
 

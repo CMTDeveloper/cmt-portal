@@ -1,4 +1,4 @@
-# Slice 2 — Family Disclaimers Implementation Plan
+# Slice 2 - Family Disclaimers Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -16,10 +16,10 @@
 - **Accept scope = per family, MANAGER accepts.** The gate runs for the family-manager only; family-members are not gated. Acceptance stored once per family on `families/{fid}.disclaimersAccepted`.
 - **Version model = school-year + content version.** Accepted iff `saved.schoolYear === currentYear && saved.version >= config.version`. School-year label format is `YYYY-YY` (e.g. `2026-27`) from `app_config/school_year.currentYear`. Content `version` is a positive int bumped on each admin publish that changes content.
 - **UAT only** (`chinmaya-setu-uat`); never prod `715b8`. **No new Firestore composite index** (all reads are single-doc). **Never bypass `--no-verify`.** **Push after the batch** (single push after Task 11, before the owner E2E gate).
-- **`exactOptionalPropertyTypes` is on** — never assign `undefined` to an optional; omit the key or use `null`.
+- **`exactOptionalPropertyTypes` is on** - never assign `undefined` to an optional; omit the key or use `null`.
 - **Doc read-schemas: no `.min(1)` on content fields.** Non-empty titles/bodies are enforced at the admin write route + editor form, NOT the read schema.
-- **`@cmt/shared-domain` stays pure** — no React/Next/Firestore imports there.
-- **Leave `/disclaimers` via a HARD nav** — the accept button POSTs then calls `navigateTo('/family')` (`window.location.assign`), never `router.push`.
+- **`@cmt/shared-domain` stays pure** - no React/Next/Firestore imports there.
+- **Leave `/disclaimers` via a HARD nav** - the accept button POSTs then calls `navigateTo('/family')` (`window.location.assign`), never `router.push`.
 - **All subagents run on Opus.**
 
 ---
@@ -87,7 +87,7 @@ describe('isDisclaimerAccepted', () => {
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm --filter @cmt/shared-domain exec vitest run src/setu/__tests__/disclaimers.test.ts`
-Expected: FAIL — cannot resolve `../disclaimers`.
+Expected: FAIL - cannot resolve `../disclaimers`.
 
 - [ ] **Step 3: Create the schemas file**
 
@@ -96,7 +96,7 @@ Create `packages/shared-domain/src/setu/schemas/disclaimers.ts`:
 ```ts
 import { z } from 'zod';
 
-// One disclaimer section. Read-schema — NO .min() on title/body (doc schemas
+// One disclaimer section. Read-schema - NO .min() on title/body (doc schemas
 // validate on READ; non-empty is enforced at the admin write route + editor).
 export const DisclaimerSectionSchema = z.object({
   id: z.string(),
@@ -118,7 +118,7 @@ export type DisclaimersConfig = z.infer<typeof DisclaimersConfigSchema>;
 
 // The per-family acceptance record surfaced on the FamilyDoc. acceptedAt (a
 // Firestore Timestamp) is written by the record helper but intentionally NOT
-// surfaced here — the predicate only needs schoolYear + version.
+// surfaced here - the predicate only needs schoolYear + version.
 export const DisclaimerAcceptanceSchema = z.object({
   schoolYear: z.string(),
   version: z.number().int(),
@@ -135,7 +135,7 @@ Create `packages/shared-domain/src/setu/disclaimers.ts`:
 import type { DisclaimersConfig } from './schemas/disclaimers';
 
 // Seed content shown before any admin edit (getDisclaimersConfig falls back to
-// this when app_config/disclaimers is absent). DRAFT copy — admin-editable at
+// this when app_config/disclaimers is absent). DRAFT copy - admin-editable at
 // /admin/disclaimers. Section ids are stable and must not change.
 export const DEFAULT_DISCLAIMERS_CONFIG: DisclaimersConfig = {
   version: 1,
@@ -156,7 +156,7 @@ export const DEFAULT_DISCLAIMERS_CONFIG: DisclaimersConfig = {
       id: 'community-values',
       title: 'Community Values',
       body:
-        'Our community runs on seva (selfless service). Each family commits to contributing at least 20 hours of seva per school year — helping with events, classes, kitchen, setup, or other needs — and to participating in the life of the Mission beyond the classroom.',
+        'Our community runs on seva (selfless service). Each family commits to contributing at least 20 hours of seva per school year - helping with events, classes, kitchen, setup, or other needs - and to participating in the life of the Mission beyond the classroom.',
     },
     {
       id: 'chinmaya-values',
@@ -170,7 +170,7 @@ export const DEFAULT_DISCLAIMERS_CONFIG: DisclaimersConfig = {
 /**
  * True when a family's stored acceptance is current: same school year AND a
  * version at least the current content version. Absent/stale ⇒ must re-accept.
- * Pure — shared by the /family gate, GET /api/setu/disclaimers, and the mobile
+ * Pure - shared by the /family gate, GET /api/setu/disclaimers, and the mobile
  * dashboard so they never diverge.
  */
 export function isDisclaimerAccepted(
@@ -202,7 +202,7 @@ export const FamilyDocSchema = z.object({
   searchKeys: z.array(z.string()),
   publicFid: z.string().nullable().optional(),
   // Slice 2: version-tracked disclaimer acceptance (per-family; the manager
-  // accepts). Optional + nullable — absence reads as "never accepted".
+  // accepts). Optional + nullable - absence reads as "never accepted".
   disclaimersAccepted: DisclaimerAcceptanceSchema.nullable().optional(),
 });
 
@@ -277,14 +277,14 @@ describe('flags.setuDisclaimers', () => {
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm --filter @cmt/portal exec vitest run src/lib/__tests__/flags-disclaimers.test.ts`
-Expected: FAIL — `flags.setuDisclaimers` is `undefined`, not `false`/`true`.
+Expected: FAIL - `flags.setuDisclaimers` is `undefined`, not `false`/`true`.
 
 - [ ] **Step 3: Add the flag**
 
 In `apps/portal/src/lib/flags.ts`, add inside the `flags` object after the `setuPrasad` line:
 
 ```ts
-  // Slice 2 (2026-07-03): family disclaimers accept-all gate. OFF by default —
+  // Slice 2 (2026-07-03): family disclaimers accept-all gate. OFF by default -
   // ships dark; flip on at launch. Gates the /family DisclaimerGate, the
   // /disclaimers route, and the dashboard disclaimersPending field. The
   // /admin/disclaimers editor is admin-only and available regardless of this flag.
@@ -318,8 +318,8 @@ git commit -m "feat(disclaimers): add setuDisclaimers flag (OFF default) + turbo
 **Interfaces:**
 - Consumes: `DisclaimersConfigSchema`, `DEFAULT_DISCLAIMERS_CONFIG`, `DisclaimerSection` (Task 1); `FieldValue` from `@cmt/firebase-shared/admin/firestore`.
 - Produces:
-  - `getDisclaimersConfig(db: FirebaseFirestore.Firestore): Promise<DisclaimersConfig>` — reads `app_config/disclaimers`, safeParse → data or `DEFAULT_DISCLAIMERS_CONFIG`.
-  - `setDisclaimersConfig(db, sections: DisclaimerSection[], actorMid: string): Promise<DisclaimersConfig>` — in a transaction, bump `version` (+1) and write when `sections` differ from current; no-op (return current) when identical.
+  - `getDisclaimersConfig(db: FirebaseFirestore.Firestore): Promise<DisclaimersConfig>` - reads `app_config/disclaimers`, safeParse → data or `DEFAULT_DISCLAIMERS_CONFIG`.
+  - `setDisclaimersConfig(db, sections: DisclaimerSection[], actorMid: string): Promise<DisclaimersConfig>` - in a transaction, bump `version` (+1) and write when `sections` differ from current; no-op (return current) when identical.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -408,7 +408,7 @@ describe('setDisclaimersConfig', () => {
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm --filter @cmt/portal exec vitest run src/features/setu/disclaimers/__tests__/config.test.ts`
-Expected: FAIL — cannot resolve `../config`.
+Expected: FAIL - cannot resolve `../config`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -437,7 +437,7 @@ export async function getDisclaimersConfig(db: Db): Promise<DisclaimersConfig> {
   return parsed.success ? parsed.data : { ...DEFAULT_DISCLAIMERS_CONFIG };
 }
 
-// Compare only the content (id/title/body) — bookkeeping fields never trigger a
+// Compare only the content (id/title/body) - bookkeeping fields never trigger a
 // version bump.
 function sameSections(a: DisclaimerSection[], b: DisclaimerSection[]): boolean {
   const norm = (xs: DisclaimerSection[]) =>
@@ -584,7 +584,7 @@ describe('recordDisclaimerAcceptance', () => {
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm --filter @cmt/portal exec vitest run src/features/setu/disclaimers/__tests__/acceptance.test.ts`
-Expected: FAIL — cannot resolve `../acceptance`.
+Expected: FAIL - cannot resolve `../acceptance`.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -651,7 +651,7 @@ export async function recordDisclaimerAcceptance(
 
 - [ ] **Step 4: Surface `disclaimersAccepted` on the family read**
 
-In `apps/portal/src/features/setu/members/get-family-by-fid.ts`, add the field to the hand-mapped `FamilyDoc` object (after `searchKeys: familyData.searchKeys ?? [],`). This is REQUIRED — `getFamilyByFid` constructs the `FamilyDoc` field-by-field (it does NOT spread `familyData`), so without this line the gate would never see the acceptance:
+In `apps/portal/src/features/setu/members/get-family-by-fid.ts`, add the field to the hand-mapped `FamilyDoc` object (after `searchKeys: familyData.searchKeys ?? [],`). This is REQUIRED - `getFamilyByFid` constructs the `FamilyDoc` field-by-field (it does NOT spread `familyData`), so without this line the gate would never see the acceptance:
 
 ```ts
     searchKeys: familyData.searchKeys ?? [],
@@ -705,7 +705,7 @@ const member = { role: 'family-member', fid: 'CMT-1', mid: 'm2' } as unknown as 
 const admin = { role: 'admin', uid: 'u-admin' } as unknown as SessionClaims;
 const welcome = { role: 'welcome-team', uid: 'u-w' } as unknown as SessionClaims;
 
-describe('canAccessRoute — disclaimers', () => {
+describe('canAccessRoute - disclaimers', () => {
   it('GET /api/setu/disclaimers is any setu family', () => {
     expect(canAccessRoute(manager, '/api/setu/disclaimers', 'GET')).toBe(true);
     expect(canAccessRoute(member, '/api/setu/disclaimers', 'GET')).toBe(true);
@@ -731,7 +731,7 @@ describe('canAccessRoute — disclaimers', () => {
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm --filter @cmt/shared-domain exec vitest run src/__tests__/can-access-route-disclaimers.test.ts`
-Expected: FAIL — POST accept currently falls to the manager+welcome+admin catch-all (welcome would pass) / member GET currently blocked by the manager-only catch-all.
+Expected: FAIL - POST accept currently falls to the manager+welcome+admin catch-all (welcome would pass) / member GET currently blocked by the manager-only catch-all.
 
 - [ ] **Step 3: Add the canAccessRoute rules**
 
@@ -749,7 +749,7 @@ In `packages/shared-domain/src/auth/can-access-route.ts`, add BEFORE the final `
 And add the page rule next to the `/complete-profile` page rule:
 
 ```ts
-  // Disclaimers accept screen — a top-level route (NOT under /family, to avoid the
+  // Disclaimers accept screen - a top-level route (NOT under /family, to avoid the
   // gate redirect loop) that the /family gate sends a not-yet-accepted manager to.
   if (pathname === '/disclaimers' || pathname.startsWith('/disclaimers/')) {
     return isSetuFamily(claims);
@@ -913,7 +913,7 @@ describe('PUT /api/admin/disclaimers', () => {
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `pnpm --filter @cmt/portal exec vitest run src/app/api/setu/disclaimers src/app/api/admin/disclaimers`
-Expected: FAIL — routes don't exist.
+Expected: FAIL - routes don't exist.
 
 - [ ] **Step 3: Write the setu GET route**
 
@@ -926,7 +926,7 @@ import { readSessionFromHeaders } from '@/lib/auth/headers';
 import { getFamilyByFid } from '@/features/setu/members/get-family-by-fid';
 import { getDisclaimerStateForFamily } from '@/features/setu/disclaimers/acceptance';
 
-/** GET /api/setu/disclaimers — the signed-in family's disclaimer state
+/** GET /api/setu/disclaimers - the signed-in family's disclaimer state
  *  (current content + whether their acceptance is current). Mobile reads this. */
 export async function GET(req: Request) {
   const session = readSessionFromHeaders(req);
@@ -954,7 +954,7 @@ import { getSchoolYearConfig } from '@/features/setu/rollover/school-year-config
 import { getDisclaimersConfig } from '@/features/setu/disclaimers/config';
 import { recordDisclaimerAcceptance } from '@/features/setu/disclaimers/acceptance';
 
-/** POST /api/setu/disclaimers/accept — record the family's acceptance of the
+/** POST /api/setu/disclaimers/accept - record the family's acceptance of the
  *  CURRENT content version + school year (server-authoritative; any client-sent
  *  version is ignored). Manager-only (enforced by canAccessRoute). */
 export async function POST(req: Request) {
@@ -1010,7 +1010,7 @@ const PutSchema = z.object({
     .max(8),
 });
 
-/** GET /api/admin/disclaimers — current editable content (admin only). */
+/** GET /api/admin/disclaimers - current editable content (admin only). */
 export async function GET(req: Request) {
   const session = readSessionFromHeaders(req);
   if (!session) return NextResponse.json({ error: 'no-session' }, { status: 401 });
@@ -1020,7 +1020,7 @@ export async function GET(req: Request) {
   return NextResponse.json({ version: config.version, sections: config.sections }, { status: 200 });
 }
 
-/** PUT /api/admin/disclaimers — publish edited content; bumps the version when
+/** PUT /api/admin/disclaimers - publish edited content; bumps the version when
  *  content changed (⇒ all families re-accept on next visit). Admin only. */
 export async function PUT(req: Request) {
   const session = readSessionFromHeaders(req);
@@ -1127,7 +1127,7 @@ describe('DisclaimerAcceptForm', () => {
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm --filter @cmt/portal exec vitest run src/features/setu/disclaimers/__tests__/disclaimer-accept-form.test.tsx`
-Expected: FAIL — modules don't exist.
+Expected: FAIL - modules don't exist.
 
 - [ ] **Step 3: Write the client wrapper**
 
@@ -1274,7 +1274,7 @@ import { DisclaimerAcceptForm } from '@/features/setu/disclaimers/components/dis
 export const metadata = { title: 'Family agreement' };
 
 // Top-level route, OUTSIDE the /family layout (mirrors /complete-profile) so the
-// /family DisclaimerGate never re-runs here — nothing to loop.
+// /family DisclaimerGate never re-runs here - nothing to loop.
 export default async function DisclaimersPage() {
   await connection();
   if (!flags.setuDisclaimers) redirect('/family');
@@ -1282,7 +1282,7 @@ export default async function DisclaimersPage() {
   const data = await getCurrentFamily();
   if (!data) redirect('/sign-in');
   // Per-family: only the manager accepts. A non-manager who lands here directly
-  // is not required — send them on.
+  // is not required - send them on.
   if (!data.isManager) redirect('/family');
 
   const state = await getDisclaimerStateForFamily(portalFirestore(), data.family);
@@ -1383,7 +1383,7 @@ describe('DisclaimersEditor', () => {
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm --filter @cmt/portal exec vitest run src/features/admin/disclaimers/__tests__/disclaimers-editor.test.tsx`
-Expected: FAIL — module doesn't exist.
+Expected: FAIL - module doesn't exist.
 
 - [ ] **Step 3: Write the editor**
 
@@ -1422,7 +1422,7 @@ export function DisclaimersEditor({
     try {
       const next = await saveDisclaimersClient(sections);
       setVersion(next);
-      toast.success(`Published — version ${next}. Families will re-accept on their next visit.`);
+      toast.success(`Published - version ${next}. Families will re-accept on their next visit.`);
     } catch {
       toast.error('Could not publish. Please check the fields and try again.');
     } finally {
@@ -1575,7 +1575,7 @@ git commit -m "feat(disclaimers): admin editor page + dashboard tile"
 
 **Interfaces:**
 - Consumes: `flags.setuDisclaimers`; `getCurrentFamily`; `incompleteMembers` from `@cmt/shared-domain`; `getDisclaimerStateForFamily` (Task 4); `portalFirestore`; `redirect`.
-- Produces: `export async function DisclaimerGate(): Promise<null>` — redirects a not-yet-accepted manager to `/disclaimers`.
+- Produces: `export async function DisclaimerGate(): Promise<null>` - redirects a not-yet-accepted manager to `/disclaimers`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1679,7 +1679,7 @@ describe('DisclaimerGate', () => {
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm --filter @cmt/portal exec vitest run src/app/family/__tests__/disclaimer-gate.test.tsx`
-Expected: FAIL — `DisclaimerGate` is not exported.
+Expected: FAIL - `DisclaimerGate` is not exported.
 
 - [ ] **Step 3: Add the gate to the layout**
 
@@ -1705,7 +1705,7 @@ export async function DisclaimerGate() {
   if (!flags.setuDisclaimers) return null;
 
   const data = await getCurrentFamily();
-  if (!data) return null; // unauthenticated — middleware handles it
+  if (!data) return null; // unauthenticated - middleware handles it
   if (!data.isManager) return null; // per-family: members aren't gated
   // Defer to ProfileCompletionGate if the profile is still incomplete.
   if (incompleteMembers(data.members).length > 0) return null;
@@ -1752,7 +1752,7 @@ git commit -m "feat(disclaimers): DisclaimerGate in the /family layout (manager,
 
 **Interfaces:**
 - Consumes: `flags.setuDisclaimers`; `getDisclaimerStateForFamily` (Task 4); `portalFirestore`; the existing `getSessionFamily(req)`.
-- Produces: additive top-level `disclaimersPending: boolean` on the dashboard payload — `flags.setuDisclaimers && isManager && !accepted`; computed fail-soft (any error ⇒ `false`). Computed in the ROUTE (which already has `fam.isManager` + `fam.family`), NOT in `loadFamilyDashboard` (kept untouched — it's the verified Slice 1 loader).
+- Produces: additive top-level `disclaimersPending: boolean` on the dashboard payload - `flags.setuDisclaimers && isManager && !accepted`; computed fail-soft (any error ⇒ `false`). Computed in the ROUTE (which already has `fam.isManager` + `fam.family`), NOT in `loadFamilyDashboard` (kept untouched - it's the verified Slice 1 loader).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1778,7 +1778,7 @@ Follow the file's existing session/family mock setup for the arrange step (it al
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm --filter @cmt/portal exec vitest run src/app/api/setu/dashboard/__tests__/route.test.ts`
-Expected: FAIL — `disclaimersPending` is missing from the payload.
+Expected: FAIL - `disclaimersPending` is missing from the payload.
 
 - [ ] **Step 3: Add the field to the route**
 
@@ -1793,7 +1793,7 @@ After the `loadFamilyDashboard` call, compute the flag fail-soft:
 
 ```ts
   // Slice 2: mobile gate signal. Only meaningful for a manager (per-family
-  // acceptance). Fail-soft — a config hiccup must never 500 the mobile home.
+  // acceptance). Fail-soft - a config hiccup must never 500 the mobile home.
   let disclaimersPending = false;
   if (flags.setuDisclaimers && fam.isManager) {
     try {
@@ -1818,18 +1818,18 @@ Add `disclaimersPending` to the returned JSON object (next to `actionItems`):
 
 - [ ] **Step 4: Add the MOBILE_API_CHANGELOG entry**
 
-Append a dated, SHA-keyed entry to `apps/portal/docs/MOBILE_API_CHANGELOG.md` (use `<SHA>` and backfill the real commit hash after committing — the final review checks for this):
+Append a dated, SHA-keyed entry to `apps/portal/docs/MOBILE_API_CHANGELOG.md` (use `<SHA>` and backfill the real commit hash after committing - the final review checks for this):
 
 ```markdown
-## `<SHA>` · 2026-07-03 — Disclaimers (Slice 2)
+## `<SHA>` · 2026-07-03 - Disclaimers (Slice 2)
 
-**New — `GET /api/setu/disclaimers`** → `{ version:number, schoolYear:string, sections:{id,title,body}[], accepted:boolean }`. The signed-in family's disclaimer state. Any family role.
+**New - `GET /api/setu/disclaimers`** → `{ version:number, schoolYear:string, sections:{id,title,body}[], accepted:boolean }`. The signed-in family's disclaimer state. Any family role.
 
-**New — `POST /api/setu/disclaimers/accept`** (no body) → `{ ok:true, version:number }`. Records acceptance of the CURRENT version + school year. **Manager-only** (a family-member gets 401/`unauthorized`). Server-authoritative version.
+**New - `POST /api/setu/disclaimers/accept`** (no body) → `{ ok:true, version:number }`. Records acceptance of the CURRENT version + school year. **Manager-only** (a family-member gets 401/`unauthorized`). Server-authoritative version.
 
-**Changed — `GET /api/setu/dashboard`** gains additive top-level **`disclaimersPending: boolean`** — true when this (manager) family must accept before using the portal; false for a family-member, when the feature flag is off, or on a read error.
+**Changed - `GET /api/setu/dashboard`** gains additive top-level **`disclaimersPending: boolean`** - true when this (manager) family must accept before using the portal; false for a family-member, when the feature flag is off, or on a read error.
 
-**Mobile action:** on launch, a manager session should check `disclaimersPending` (or `GET /api/setu/disclaimers`); if pending, show the accept screen (render `sections`, one required checkbox each) and `POST …/accept` before proceeding. Acceptance is per-family (manager); a stale version or new `schoolYear` re-prompts. Flag `NEXT_PUBLIC_FEATURE_SETU_DISCLAIMERS` gates the web gate — until it's on in an environment, `disclaimersPending` is always false there.
+**Mobile action:** on launch, a manager session should check `disclaimersPending` (or `GET /api/setu/disclaimers`); if pending, show the accept screen (render `sections`, one required checkbox each) and `POST …/accept` before proceeding. Acceptance is per-family (manager); a stale version or new `schoolYear` re-prompts. Flag `NEXT_PUBLIC_FEATURE_SETU_DISCLAIMERS` gates the web gate - until it's on in an environment, `disclaimersPending` is always false there.
 ```
 
 - [ ] **Step 5: Run the test to verify it passes**
@@ -1846,7 +1846,7 @@ git commit -m "feat(disclaimers): additive dashboard disclaimersPending + mobile
 
 ---
 
-### Task 11: E2E seed control + deployed-UAT E2E (WRITE ONLY — run at the owner gate)
+### Task 11: E2E seed control + deployed-UAT E2E (WRITE ONLY - run at the owner gate)
 
 **Files:**
 - Modify: `apps/portal/scripts/seed-e2e-family.ts` (add `--disclaimers <accepted|pending>`, default `accepted`)
@@ -1882,7 +1882,7 @@ import { getDisclaimersConfig } from '@/features/setu/disclaimers/config';
 import { getSchoolYearConfig } from '@/features/setu/rollover/school-year-config';
 ```
 
-The file ALREADY imports `{ portalFirestore, FieldValue }` from `@cmt/firebase-shared/admin/firestore` — reuse that `FieldValue` (including `FieldValue.delete()` and `FieldValue.serverTimestamp()`); do NOT add a second import of it.
+The file ALREADY imports `{ portalFirestore, FieldValue }` from `@cmt/firebase-shared/admin/firestore` - reuse that `FieldValue` (including `FieldValue.delete()` and `FieldValue.serverTimestamp()`); do NOT add a second import of it.
 
 Near the end of `main()` (after the enrollment/donation section, before the final `done` log), write/clear the acceptance:
 
@@ -1986,9 +1986,9 @@ test.afterAll(async () => {
 });
 ```
 
-> Adapt `E2E_BASE_URL` / `E2E_FAMILY_*` imports to the actual exports in `e2e/_helpers.ts` (the Slice 1 specs import `E2E_FAMILY_EMAIL`/`E2E_FAMILY_PASSWORD` from there; use the same base-URL constant those specs use). Do NOT run OTP; use the password-sign-in helper. `reseed()` is a documentation stub — the spec drives state through the real APIs, so it never shells out to the seed mid-run.
+> Adapt `E2E_BASE_URL` / `E2E_FAMILY_*` imports to the actual exports in `e2e/_helpers.ts` (the Slice 1 specs import `E2E_FAMILY_EMAIL`/`E2E_FAMILY_PASSWORD` from there; use the same base-URL constant those specs use). Do NOT run OTP; use the password-sign-in helper. `reseed()` is a documentation stub - the spec drives state through the real APIs, so it never shells out to the seed mid-run.
 
-- [ ] **Step 3: Typecheck only — DO NOT run the E2E (owner gate)**
+- [ ] **Step 3: Typecheck only - DO NOT run the E2E (owner gate)**
 
 Run: `pnpm --filter @cmt/portal typecheck`
 Expected: no errors.
@@ -2016,7 +2016,7 @@ git commit -m "test(disclaimers): seed --disclaimers control + deployed-UAT E2E 
 Add a dated entry to §14 of `docs/runbooks/production-cutover-checklist.md` capturing Slice 2:
 
 ```markdown
-### 2026-07-03 — Slice 2: Family disclaimers
+### 2026-07-03 - Slice 2: Family disclaimers
 
 - **New flag `NEXT_PUBLIC_FEATURE_SETU_DISCLAIMERS`** (OFF by default). Gates the
   /family DisclaimerGate, the /disclaimers route, and the dashboard
@@ -2051,13 +2051,13 @@ git commit -m "docs(disclaimers): runbook §14 entry for Slice 2"
 
 ## Post-task close-out (controller, after Task 12)
 
-1. **Full local gate:** `pnpm typecheck && pnpm lint && pnpm test && pnpm build` — all green.
+1. **Full local gate:** `pnpm typecheck && pnpm lint && pnpm test && pnpm build` - all green.
 2. **Final whole-branch review** (Opus, most-capable) over the whole range; dispatch ONE fix subagent for any Critical/Important findings.
 3. **Batch push** to `main` (single push; the pre-push hook re-runs the gate). Backfill the `<SHA>` in MOBILE_API_CHANGELOG.md to the Task 10 commit (or merge SHA).
-4. **Owner UAT E2E gate (PAUSE before this):** set `NEXT_PUBLIC_FEATURE_SETU_DISCLAIMERS=true` in the UAT Vercel env, seed `pnpm --filter @cmt/portal seed:e2e-family` (writes `--disclaimers accepted`), then run the disclaimers E2E against `https://cmt-setu.vercel.app`. Confirm the sibling Slice 1 specs (`dashboard-slice1`, `enrollment-state`) still pass with the flag ON (they should — the fixture is seeded accepted).
+4. **Owner UAT E2E gate (PAUSE before this):** set `NEXT_PUBLIC_FEATURE_SETU_DISCLAIMERS=true` in the UAT Vercel env, seed `pnpm --filter @cmt/portal seed:e2e-family` (writes `--disclaimers accepted`), then run the disclaimers E2E against `https://cmt-setu.vercel.app`. Confirm the sibling Slice 1 specs (`dashboard-slice1`, `enrollment-state`) still pass with the flag ON (they should - the fixture is seeded accepted).
 
 ## Self-review notes
 
 - **Spec coverage:** content doc (T3) · acceptance record + predicate (T1/T4) · gate (T9) · /disclaimers accept screen (T7) · admin editor (T8) · APIs + authz (T5/T6) · mobile parity + changelog (T10) · flag (T2) · E2E + seed (T11) · runbook (T12). All spec sections map to a task.
-- **Type consistency:** `DisclaimerSection`/`DisclaimersConfig`/`DisclaimerAcceptance` defined in T1 and consumed unchanged in T3–T11; `getDisclaimerStateForFamily` signature is stable across T4 (def), T6/T9/T10 (use); `isDisclaimerAccepted(accepted, config, currentYear)` stable across T1 (def) and T4 (use). School-year label format is `YYYY-YY` (`2026-27`) everywhere.
+- **Type consistency:** `DisclaimerSection`/`DisclaimersConfig`/`DisclaimerAcceptance` defined in T1 and consumed unchanged in T3-T11; `getDisclaimerStateForFamily` signature is stable across T4 (def), T6/T9/T10 (use); `isDisclaimerAccepted(accepted, config, currentYear)` stable across T1 (def) and T4 (use). School-year label format is `YYYY-YY` (`2026-27`) everywhere.
 - **No placeholders:** every code step has complete code; the only `<SHA>` is the changelog key, explicitly backfilled in close-out (matches the Slice 1 process).

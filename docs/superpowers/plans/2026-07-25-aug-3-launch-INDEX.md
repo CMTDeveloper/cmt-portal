@@ -21,9 +21,12 @@
 | **P3** | `2026-07-25-launch-p3-ses-templates.md` | `sendTemplatedEmail`, `Sender` interface, code-template fallback, migrate 4 templates | - |
 | **P4** | `2026-07-25-launch-p4-adult-study-class.md` | Adult program, `$0`/`$101` fee rule, multi-select, `AdultClassGate` | P1 (coordinator offerings grant) |
 | **P5** | `2026-07-25-launch-p5-monthly-pledge.md` | Pledge capture, AES-256-GCM at rest, confirm/cancel + purge, status card | P1 (`audit_log`), P3 (`sendTemplatedEmail`) |
+| **P6** | `2026-07-25-launch-p6-migration-dormant-and-centre.md` | Dormant-family skip in the bulk migration, `locationNeedsConfirmation` centre prompt | - |
 | **P0** | `docs/runbooks/production-cutover-checklist.md` | The cutover itself. **Already written and current** - not restated here. | all code merged |
 
-P1, P2, P3 are mutually independent and can run in parallel. P4 and P5 must wait on their dependencies.
+P1, P2, P3 and P6 are mutually independent and can run in parallel. P4 and P5 must wait on their dependencies.
+
+> **P6 was added after a coverage review** found that launch-batch spec §1.9b (dormant-family skip) and §1.9c (unknown-centre prompt) were implemented by none of P1-P5. Both are **cutover-blocking**: §1.9b changes what the production migration imports, and §1.9c is the only thing preventing an unknown-centre family from being silently assigned to Brampton forever.
 
 ---
 

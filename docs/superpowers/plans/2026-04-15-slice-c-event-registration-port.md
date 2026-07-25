@@ -1,4 +1,4 @@
-# Slice C — Event Registration Port Implementation Plan
+# Slice C - Event Registration Port Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -124,7 +124,7 @@ chinmaya-mission-portal/
 
 ---
 
-## Task 1: `@cmt/shared-domain/events` — types, pricing, API contracts
+## Task 1: `@cmt/shared-domain/events` - types, pricing, API contracts
 
 **Files:**
 - Create: `packages/shared-domain/src/events/registration.ts`
@@ -493,7 +493,7 @@ describe('webhookPaymentStatusRequestSchema', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests — expect failure**
+- [ ] **Step 2: Run tests - expect failure**
 
 ```sh
 pnpm --filter @cmt/shared-domain test -- src/events/__tests__/pricing.test.ts
@@ -672,7 +672,7 @@ export * from './pricing';
 export * from './api-contracts';
 ```
 
-- [ ] **Step 7: Modify `packages/shared-domain/src/index.ts` — add events barrel**
+- [ ] **Step 7: Modify `packages/shared-domain/src/index.ts` - add events barrel**
 
 Add to the existing barrel:
 
@@ -688,7 +688,7 @@ export * from './check-in';
 export * from './events';
 ```
 
-- [ ] **Step 8: Run tests — expect pass**
+- [ ] **Step 8: Run tests - expect pass**
 
 ```sh
 pnpm --filter @cmt/shared-domain test -- src/events/__tests__/pricing.test.ts
@@ -741,11 +741,11 @@ export type FeatureFlags = typeof flags;
 Add the following fields to `portalEnvSchema` (inside the `z.object({...})`), after the existing feature flags block:
 
 ```ts
-  // Feature flags — events
+  // Feature flags - events
   NEXT_PUBLIC_FEATURE_EVENTS: flagString,
   NEXT_PUBLIC_FEATURE_EVENTS_REGISTER: flagString,
 
-  // Events — public
+  // Events - public
   NEXT_PUBLIC_EVENT_CAMPAIGN: z.string().default('2026MothersDay'),
   NEXT_PUBLIC_EVENT_DISPLAY_NAME: z.string().optional(),
   NEXT_PUBLIC_PRICE_PER_PERSON: z.coerce.number().int().min(1).default(10),
@@ -754,7 +754,7 @@ Add the following fields to `portalEnvSchema` (inside the `z.object({...})`), af
   NEXT_PUBLIC_ETRANSFER_EMAIL: z.string().email().optional(),
   NEXT_PUBLIC_GOOGLE_SHEET_URL: z.string().url().optional(),
 
-  // Events — server-only
+  // Events - server-only
   STRIPE_CHECKOUT_URL: z.string().url().optional(),
   STRIPE_API_KEY: z.string().min(1).optional(),
   WEBHOOK_API_KEY: z.string().min(1).optional(),
@@ -798,7 +798,7 @@ Note: `.env.local` is gitignored, so it is not committed.
 
 ---
 
-## Task 3: `features/events/shared/` helpers — bv-contacts, firestore-adapter, google-sheets-sender, rate-limiter
+## Task 3: `features/events/shared/` helpers - bv-contacts, firestore-adapter, google-sheets-sender, rate-limiter
 
 **Files:**
 - Create: `apps/portal/src/features/events/shared/bv-contacts.ts`
@@ -1090,7 +1090,7 @@ describe('sendToGoogleSheet', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests — expect failure**
+- [ ] **Step 2: Run tests - expect failure**
 
 ```sh
 pnpm --filter @cmt/portal test -- src/features/events/shared/__tests__/bv-contacts.test.ts
@@ -1199,7 +1199,7 @@ export function registrationsCollection(
 ```ts
 /**
  * Fire-and-forget helper to POST payload to the Google Apps Script endpoint.
- * Failures are logged but never thrown — Google Sheet is a backup, not primary.
+ * Failures are logged but never thrown - Google Sheet is a backup, not primary.
  */
 export async function sendToGoogleSheet(
   url: string,
@@ -1278,7 +1278,7 @@ export async function checkIpRateLimit(
 }
 ```
 
-- [ ] **Step 7: Run tests — expect pass**
+- [ ] **Step 7: Run tests - expect pass**
 
 ```sh
 pnpm --filter @cmt/portal test -- src/features/events/shared/__tests__/bv-contacts.test.ts
@@ -1290,7 +1290,7 @@ pnpm --filter @cmt/portal test -- src/features/events/shared/__tests__/google-sh
 
 ```sh
 git add apps/portal/src/features/events/shared/
-git commit -m "feat(portal): events shared helpers — bv-contacts, firestore-adapter, google-sheets-sender, rate-limiter"
+git commit -m "feat(portal): events shared helpers - bv-contacts, firestore-adapter, google-sheets-sender, rate-limiter"
 ```
 
 ---
@@ -1485,7 +1485,7 @@ describe('POST /api/events/check-bv-status', () => {
 });
 ```
 
-- [ ] **Step 2: Run test — expect failure**
+- [ ] **Step 2: Run test - expect failure**
 
 ```sh
 pnpm --filter @cmt/portal test -- src/app/api/events/check-bv-status/__tests__/route.test.ts
@@ -1571,7 +1571,7 @@ export async function POST(req: Request) {
 }
 ```
 
-- [ ] **Step 4: Run test — expect pass**
+- [ ] **Step 4: Run test - expect pass**
 
 ```sh
 pnpm --filter @cmt/portal test -- src/app/api/events/check-bv-status/__tests__/route.test.ts
@@ -1778,7 +1778,7 @@ describe('POST /api/events/register', () => {
 });
 ```
 
-- [ ] **Step 2: Run test — expect failure**
+- [ ] **Step 2: Run test - expect failure**
 
 ```sh
 pnpm --filter @cmt/portal test -- src/app/api/events/register/__tests__/route.test.ts
@@ -1878,7 +1878,7 @@ export async function POST(req: Request) {
 }
 ```
 
-- [ ] **Step 4: Run test — expect pass**
+- [ ] **Step 4: Run test - expect pass**
 
 - [ ] **Step 5: Commit**
 
@@ -1915,7 +1915,7 @@ The full test code follows the same structure as the standalone `lookup/route.te
 - Wrap each test in `testApiHandler({ appHandler, test: async ({ fetch }) => { ... } })`
 - Add `vi.mock('@/lib/flags', () => ({ flags: { eventsRegister: true } }));`
 
-- [ ] **Step 2: Run test — expect failure**
+- [ ] **Step 2: Run test - expect failure**
 
 ```sh
 pnpm --filter @cmt/portal test -- src/app/api/events/lookup/__tests__/route.test.ts
@@ -2001,7 +2001,7 @@ export async function POST(req: Request) {
 }
 ```
 
-- [ ] **Step 4: Run test — expect pass**
+- [ ] **Step 4: Run test - expect pass**
 
 - [ ] **Step 5: Commit**
 
@@ -2048,7 +2048,7 @@ Include these test cases:
 - Returns 502 when Stripe returns error (no details leaked)
 - Returns 429 when rate limited
 
-- [ ] **Step 2: Run test — expect failure**
+- [ ] **Step 2: Run test - expect failure**
 
 ```sh
 pnpm --filter @cmt/portal test -- src/app/api/events/create-checkout/__tests__/route.test.ts
@@ -2170,7 +2170,7 @@ export async function POST(req: Request) {
 }
 ```
 
-- [ ] **Step 4: Run test — expect pass**
+- [ ] **Step 4: Run test - expect pass**
 
 - [ ] **Step 5: Commit**
 
@@ -2205,7 +2205,7 @@ The test structure follows the standalone file (`/Users/dineshmatta/projects/chi
 - Add `vi.mock('@/lib/flags', ...)`
 - Wrap in `testApiHandler`
 
-- [ ] **Step 2: Run test — expect failure**
+- [ ] **Step 2: Run test - expect failure**
 
 ```sh
 pnpm --filter @cmt/portal test -- src/app/api/events/update-reference/__tests__/route.test.ts
@@ -2277,7 +2277,7 @@ export async function POST(req: Request) {
 }
 ```
 
-- [ ] **Step 4: Run test — expect pass**
+- [ ] **Step 4: Run test - expect pass**
 
 - [ ] **Step 5: Commit**
 
@@ -2315,7 +2315,7 @@ Mock changes from standalone:
 - `@/features/events/shared/google-sheets-sender` for Google Sheet writes
 - Add `vi.mock('@/lib/flags', ...)`
 
-- [ ] **Step 2: Run test — expect failure**
+- [ ] **Step 2: Run test - expect failure**
 
 ```sh
 pnpm --filter @cmt/portal test -- src/app/api/events/update-payment-status/__tests__/route.test.ts
@@ -2393,7 +2393,7 @@ export async function POST(req: Request) {
 }
 ```
 
-- [ ] **Step 4: Run test — expect pass**
+- [ ] **Step 4: Run test - expect pass**
 
 - [ ] **Step 5: Commit**
 
@@ -2434,9 +2434,9 @@ Port all tests from `/Users/dineshmatta/projects/chinmaya-event-registration/src
 Mock changes from standalone:
 - `@/features/events/shared/firestore-adapter` instead of `@/lib/firebase-admin`
 - `@/features/events/shared/google-sheets-sender` for Google Sheet writes
-- No `vi.mock('@/lib/flags')` needed — this route is not flag-gated
+- No `vi.mock('@/lib/flags')` needed - this route is not flag-gated
 
-- [ ] **Step 2: Run test — expect failure**
+- [ ] **Step 2: Run test - expect failure**
 
 ```sh
 pnpm --filter @cmt/portal test -- src/app/api/events/webhooks/payment-status/__tests__/route.test.ts
@@ -2519,7 +2519,7 @@ export async function POST(req: Request) {
 }
 ```
 
-- [ ] **Step 4: Run test — expect pass**
+- [ ] **Step 4: Run test - expect pass**
 
 - [ ] **Step 5: Commit**
 
@@ -2530,7 +2530,7 @@ git commit -m "feat(portal): POST /api/events/webhooks/payment-status with timin
 
 ---
 
-## Task 11: UI components — CounterInput, StepIndicator, OrderSummary, SuccessBanner, CancelBanner
+## Task 11: UI components - CounterInput, StepIndicator, OrderSummary, SuccessBanner, CancelBanner
 
 **Files:**
 - Create: `apps/portal/src/features/events/counter-input.tsx`
@@ -2730,7 +2730,7 @@ describe('CancelBanner', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests — expect failure**
+- [ ] **Step 2: Run tests - expect failure**
 
 ```sh
 pnpm --filter @cmt/portal test -- src/features/events/__tests__/counter-input.test.tsx
@@ -2946,7 +2946,7 @@ export { SuccessBanner } from './success-banner';
 export { CancelBanner } from './cancel-banner';
 ```
 
-- [ ] **Step 9: Run tests — expect pass**
+- [ ] **Step 9: Run tests - expect pass**
 
 ```sh
 pnpm --filter @cmt/portal test -- src/features/events/__tests__/
@@ -2956,7 +2956,7 @@ pnpm --filter @cmt/portal test -- src/features/events/__tests__/
 
 ```sh
 git add apps/portal/src/features/events/counter-input.tsx apps/portal/src/features/events/step-indicator.tsx apps/portal/src/features/events/order-summary.tsx apps/portal/src/features/events/success-banner.tsx apps/portal/src/features/events/cancel-banner.tsx apps/portal/src/features/events/index.ts apps/portal/src/features/events/__tests__/
-git commit -m "feat(portal): events UI components — CounterInput, StepIndicator, OrderSummary, SuccessBanner, CancelBanner"
+git commit -m "feat(portal): events UI components - CounterInput, StepIndicator, OrderSummary, SuccessBanner, CancelBanner"
 ```
 
 ---
@@ -3068,7 +3068,7 @@ Port from `/Users/dineshmatta/projects/chinmaya-event-registration/src/app/page.
 ```tsx
 import { RegistrationFormShell } from '@/features/events/registration-form-shell';
 
-export const metadata = { title: 'Register — CMT Portal' };
+export const metadata = { title: 'Register - CMT Portal' };
 export const dynamic = 'force-dynamic';
 
 export default function EventsRegisterPage() {
@@ -3120,7 +3120,7 @@ pnpm --filter @cmt/portal build
 
 ```sh
 git add apps/portal/src/features/events/registration-form.tsx apps/portal/src/features/events/registration-form-shell.tsx apps/portal/src/features/events/index.ts apps/portal/src/app/events/register/
-git commit -m "feat(portal): /events/register page with EventRegistrationForm — BV verify, lookup, submit flows"
+git commit -m "feat(portal): /events/register page with EventRegistrationForm - BV verify, lookup, submit flows"
 ```
 
 ---
@@ -3172,7 +3172,7 @@ export default function EventsPaymentPage() {
 }
 ```
 
-Note: This is a client page because it reads sessionStorage in useEffect. The flag gate is implicit — the user can only reach this page after a successful registration which requires the flag to be on.
+Note: This is a client page because it reads sessionStorage in useEffect. The flag gate is implicit - the user can only reach this page after a successful registration which requires the flag to be on.
 
 - [ ] **Step 3: Create `apps/portal/src/app/events/register/payment/error.tsx`**
 
@@ -3231,7 +3231,7 @@ Port from standalone `success/page.tsx`. Apply these SPECIFIC changes:
 
 6. **Use `<SuccessBanner>` component** instead of inline success banner JSX.
 
-7. **Event display name:** Read from `process.env.NEXT_PUBLIC_EVENT_DISPLAY_NAME` (same as standalone — this is a `NEXT_PUBLIC_` var so it's available in client components).
+7. **Event display name:** Read from `process.env.NEXT_PUBLIC_EVENT_DISPLAY_NAME` (same as standalone - this is a `NEXT_PUBLIC_` var so it's available in client components).
 
 - [ ] **Step 2: Create `apps/portal/src/app/events/register/success/error.tsx`**
 
@@ -3352,7 +3352,7 @@ Only commit if there were actual fixes. Skip if everything passed clean.
 ```ts
 import { test, expect } from '@playwright/test';
 
-test.describe('Slice C — Event Registration (flag OFF)', () => {
+test.describe('Slice C - Event Registration (flag OFF)', () => {
   // These tests run against the default env where NEXT_PUBLIC_FEATURE_EVENTS_REGISTER=false
   // in CI/production. They verify the flag gate works.
 
@@ -3385,7 +3385,7 @@ test.describe('Slice C — Event Registration (flag OFF)', () => {
   });
 });
 
-test.describe('Slice C — Event Registration (flag ON)', () => {
+test.describe('Slice C - Event Registration (flag ON)', () => {
   // These tests require NEXT_PUBLIC_FEATURE_EVENTS_REGISTER=true in the test environment.
   // They verify the registration form renders and basic interactions work.
 
@@ -3449,7 +3449,7 @@ Add a new "C notes" section after the "B2 notes" section:
 
 3. **Stripe:** `NEXT_PUBLIC_ENABLE_STRIPE=false` in Vercel Production until the Cloud Run proxy allowlist is updated to include portal domains. e-Transfer works from day one.
 
-4. **Session storage key:** `cmtEventRegistration` (different from standalone's `cmt_registration`) — the two apps' sessions are independent.
+4. **Session storage key:** `cmtEventRegistration` (different from standalone's `cmt_registration`) - the two apps' sessions are independent.
 
 5. **Rate limiter:** Events API routes use a Firestore-backed IP rate limiter (`event_rate_limit` collection), same pattern as the OTP rate limiter from slice B2 (`otp_rate_limit` collection). No in-memory rate limiting (serverless-safe).
 ```

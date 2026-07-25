@@ -1,10 +1,10 @@
-# Admin Revamp — Phase 4: Reports Hub — Implementation Plan
+# Admin Revamp - Phase 4: Reports Hub - Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build a consolidated **Reports hub** at `/welcome/reports` (welcome-team + admin) with four report cards — enrollment/roster headcounts, attendance summary, donations summary (admin-only), and the legacy check-in CSVs — each rendering an on-screen summary table **and** a CSV export, mobile-ready and backed by a mobile-ready JSON API.
+**Goal:** Build a consolidated **Reports hub** at `/welcome/reports` (welcome-team + admin) with four report cards - enrollment/roster headcounts, attendance summary, donations summary (admin-only), and the legacy check-in CSVs - each rendering an on-screen summary table **and** a CSV export, mobile-ready and backed by a mobile-ready JSON API.
 
-**Architecture:** A unified `GET /api/welcome/reports/[kind]` (kind ∈ `enrollment | attendance | donations`) authed via `readSessionFromHeaders` + `isWelcomeTeam`, with `donations` further gated to `isAdmin` at BOTH `canAccessRoute` (path rule) and the handler/UI (defense in depth). Aggregations use **bulk reads joined in memory** (unfiltered `collectionGroup('enrollments')`, top-level `attendanceEvents` by date range, top-level `donations`) — no per-entity fan-out and **no new Firestore indexes**. The legacy check-in/guest CSVs reuse the existing `POST /api/check-in/admin/reports/[kind]` route directly (admin-only) — no new proxy. All Firebase reads run inside `<Suspense>` after `await connection()` so PPR never executes them at build.
+**Architecture:** A unified `GET /api/welcome/reports/[kind]` (kind ∈ `enrollment | attendance | donations`) authed via `readSessionFromHeaders` + `isWelcomeTeam`, with `donations` further gated to `isAdmin` at BOTH `canAccessRoute` (path rule) and the handler/UI (defense in depth). Aggregations use **bulk reads joined in memory** (unfiltered `collectionGroup('enrollments')`, top-level `attendanceEvents` by date range, top-level `donations`) - no per-entity fan-out and **no new Firestore indexes**. The legacy check-in/guest CSVs reuse the existing `POST /api/check-in/admin/reports/[kind]` route directly (admin-only) - no new proxy. All Firebase reads run inside `<Suspense>` after `await connection()` so PPR never executes them at build.
 
 **Tech Stack:** Next.js 16 (App Router, Cache Components/PPR), TypeScript (`exactOptionalPropertyTypes` + `noUncheckedIndexedAccess` ON), Firestore Admin SDK, Zod schemas in `@cmt/shared-domain`, Vitest + Testing Library, Playwright (headless, deployed-UAT).
 
@@ -12,63 +12,63 @@
 
 ## Spec
 
-`docs/superpowers/specs/2026-06-08-admin-section-revamp-design.md` → "Phase 4 — Reports hub (item 5)". Decisions D4 (all four reports v1), D5 (donations report **admin-only**; roster/enrollment + attendance are welcome-team + admin).
+`docs/superpowers/specs/2026-06-08-admin-section-revamp-design.md` → "Phase 4 - Reports hub (item 5)". Decisions D4 (all four reports v1), D5 (donations report **admin-only**; roster/enrollment + attendance are welcome-team + admin).
 
-## Standing constraints (NON-NEGOTIABLE — every task)
+## Standing constraints (NON-NEGOTIABLE - every task)
 
 - **UAT-only DB writes** (`chinmaya-setu-uat`). All Phase 4 work is **read-only** against Firestore (reports aggregate; they never write). Never write prod 715b8; never `--force` index deploys.
-- **Roles via helpers** — `isAdmin` / `isWelcomeTeam`, never strict equality.
+- **Roles via helpers** - `isAdmin` / `isWelcomeTeam`, never strict equality.
 - **New `/api/welcome/*` paths need explicit `canAccessRoute` rules** + their `can-access-route.test.ts` cases **in the same commit**. The `/api/welcome/reports/donations` rule (`isAdmin`) must be checked BEFORE the general `/api/welcome/reports` rule (`isWelcomeTeam`).
 - **Mobile-ready**: every card/screen has a real `block md:hidden` layout; the API is JSON authed via `readSessionFromHeaders` (Bearer + cookie), ISO-string JSON; shared shapes in `@cmt/shared-domain`.
-- **PPR build safety**: the page reads no Firebase in the server component — `await connection()` + client-side fetch (mirror `/welcome/roster/page.tsx`).
-- **`.csp` token scoping** — anything outside a `CspRoot` needs `className="csp"`.
-- **N=2 discipline** — every aggregate is tested with two of the thing (two programs, two levels, two periods, two attendance statuses) so there is no "first-only" bug.
+- **PPR build safety**: the page reads no Firebase in the server component - `await connection()` + client-side fetch (mirror `/welcome/roster/page.tsx`).
+- **`.csp` token scoping** - anything outside a `CspRoot` needs `className="csp"`.
+- **N=2 discipline** - every aggregate is tested with two of the thing (two programs, two levels, two periods, two attendance statuses) so there is no "first-only" bug.
 - **Bulk reads, never per-entity fan-out** (see memory `feedback_bulk_collectiongroup_over_per_family_fanout`): aggregate with a handful of collection/collectionGroup reads joined in memory.
 - **TDD**, tests in the **same commit** as the code, **frequent commits**, `git push` after every authorized commit (pre-push gate), **never `--no-verify`**.
-- **UI/UX top-notch** — designer pass on the hub screen; matches the Setu brand tokens + the Phase 3 roster screen's quality; ≥44px tap targets on mobile.
+- **UI/UX top-notch** - designer pass on the hub screen; matches the Setu brand tokens + the Phase 3 roster screen's quality; ≥44px tap targets on mobile.
 - Commit author is the repo default. Co-author trailer per session rules.
 
-## Confirmed facts (verified against the codebase — don't re-derive)
+## Confirmed facts (verified against the codebase - don't re-derive)
 
 - `attendanceEvents` is a **top-level** collection (`AttendanceEventDoc`: `aid, levelId, mid, fid, pid, date (YYYY-MM-DD), status ∈ present|absent|late, isGuest, markedAt`). Indexes exist for `(levelId,date)`, `(mid,date)`, `(fid,date)` (COLLECTION). A `where('date','>=',from).where('date','<=',to)` single-field range uses the automatic index → **no new index**.
 - `donations` is a **top-level** collection (`DonationDoc`: `fid, amountCAD (int $), status ∈ redirected|completed|abandoned, type ∈ enrollment|general, programKey|null, programLabel|null, pid|null, label, createdAt`). `getDonations(fid)` reads `db.collection('donations').where('fid','==',fid)`.
 - `enrollments` is a **subcollection** under `families/{fid}/enrollments`, read via `collectionGroup('enrollments')`. `EnrollmentDoc`: `eid, fid, oid, programKey, programLabel, status ∈ active|cancelled, pid?, enrolledMids: string[], levelSnapshots?: Record<mid,{schoolGrade,levelId,levelName}>, suggestedAmountSnapshot, suggestedAmountOverride`.
-- `levels` (`LevelDoc`: `levelId, programKey, location, levelName, levelKind, pid, periodLabel, …`) — read via `db.collection('levels')` for level names.
+- `levels` (`LevelDoc`: `levelId, programKey, location, levelName, levelKind, pid, periodLabel, …`) - read via `db.collection('levels')` for level names.
 - Legacy check-in CSV: `POST /api/check-in/admin/reports/[kind]` (kind ∈ `check-ins | guests`), admin-only via the `/api/check-in/admin/` `canAccessRoute` rule. Reuse as-is.
 - `ReportExportButton` (`features/check-in/admin/report-export-button.tsx`) POSTs `/api/check-in/admin/reports/${kind}` → blob download. Reuse for 4d.
 - `readSessionFromHeaders(req)` → `{ uid, role, extraRoles, fid, mid } | null` (`@/lib/auth/headers`). Gate with `isWelcomeTeam({role, extraRoles})` / `isAdmin({role, extraRoles})`.
 - `flags.setuAuth` gates new routes (404 when off).
-- Phase 3's `buildRosterCsvRows({location?,program?})` (`features/setu/roster/build-csv-rows.ts`) + `rosterToCsv` produce the flat family/member CSV — reuse for the enrollment report's family/member CSV.
+- Phase 3's `buildRosterCsvRows({location?,program?})` (`features/setu/roster/build-csv-rows.ts`) + `rosterToCsv` produce the flat family/member CSV - reuse for the enrollment report's family/member CSV.
 - Welcome layout (`app/welcome/layout.tsx`) gates `/welcome/*` for welcome-team + admin; admins keep the admin sidebar. Mobile nav: `welcome-mobile-nav.tsx`. Desktop welcome sidebar nav: `WELCOME_NAV_ITEMS` in `features/family/components/desktop-sidebar.tsx`.
 - Reports is currently wired to the legacy route in three places: `app/admin/page.tsx:37`, `admin-sidebar.tsx:30` + `deriveAdminActive` (`:59`), `admin-mobile-nav.tsx:28`.
 
 ## File structure (created / modified)
 
 **Created:**
-- `packages/shared-domain/src/setu/reports.ts` — report request/response Zod schemas + types.
-- `apps/portal/src/features/setu/reports/enrollment-report.ts` — enrollment headcounts aggregation.
-- `apps/portal/src/features/setu/reports/attendance-report.ts` — attendance rollup aggregation.
-- `apps/portal/src/features/setu/reports/donations-report.ts` — donations summary aggregation (admin).
-- `apps/portal/src/features/setu/reports/report-csv.ts` — per-report CSV serializers.
-- `apps/portal/src/features/setu/reports/reports-client.ts` — client fetch wrappers (throw on non-OK).
-- `apps/portal/src/features/setu/reports/reports-hub.tsx` — `'use client'` hub UI (desktop + mobile).
-- `apps/portal/src/features/setu/reports/report-export-button.tsx` — `'use client'` CSV export for the native reports.
-- `apps/portal/src/features/setu/reports/__tests__/*.test.ts(x)` — unit/component tests.
-- `apps/portal/src/app/welcome/reports/page.tsx` + `error.tsx` — the hub screen.
-- `apps/portal/src/app/api/welcome/reports/[kind]/route.ts` — unified reports API.
-- `apps/portal/e2e/setu/admin/reports.spec.ts` — Playwright headless E2E.
+- `packages/shared-domain/src/setu/reports.ts` - report request/response Zod schemas + types.
+- `apps/portal/src/features/setu/reports/enrollment-report.ts` - enrollment headcounts aggregation.
+- `apps/portal/src/features/setu/reports/attendance-report.ts` - attendance rollup aggregation.
+- `apps/portal/src/features/setu/reports/donations-report.ts` - donations summary aggregation (admin).
+- `apps/portal/src/features/setu/reports/report-csv.ts` - per-report CSV serializers.
+- `apps/portal/src/features/setu/reports/reports-client.ts` - client fetch wrappers (throw on non-OK).
+- `apps/portal/src/features/setu/reports/reports-hub.tsx` - `'use client'` hub UI (desktop + mobile).
+- `apps/portal/src/features/setu/reports/report-export-button.tsx` - `'use client'` CSV export for the native reports.
+- `apps/portal/src/features/setu/reports/__tests__/*.test.ts(x)` - unit/component tests.
+- `apps/portal/src/app/welcome/reports/page.tsx` + `error.tsx` - the hub screen.
+- `apps/portal/src/app/api/welcome/reports/[kind]/route.ts` - unified reports API.
+- `apps/portal/e2e/setu/admin/reports.spec.ts` - Playwright headless E2E.
 
 **Modified:**
-- `packages/shared-domain/src/setu/index.ts` — `export * from './reports';`
-- `packages/shared-domain/src/auth/can-access-route.ts` + `__tests__/can-access-route.test.ts` — `/api/welcome/reports/donations` (admin) + `/api/welcome/reports*` (welcome-team) rules + tests.
-- `apps/portal/src/app/admin/page.tsx` — Reports tile → `/welcome/reports` (de-legacy it).
-- `apps/portal/src/features/admin/components/admin-sidebar.tsx` — Reports nav → `/welcome/reports` + `deriveAdminActive` maps it.
-- `apps/portal/src/features/admin/components/admin-mobile-nav.tsx` — Reports → `/welcome/reports`.
-- `apps/portal/src/features/family/components/desktop-sidebar.tsx` — add "Reports" to `WELCOME_NAV_ITEMS`.
-- `apps/portal/src/features/family/components/welcome-mobile-nav.tsx` — add a Reports tab.
-- `apps/portal/src/app/check-in/admin/reports/page.tsx` — redirect to `/welcome/reports`.
-- `docs/runbooks/production-cutover-checklist.md` — §14 entry (no new indexes; new read-only report routes).
-- `CLAUDE.md` — mark Phase 4 shipped.
+- `packages/shared-domain/src/setu/index.ts` - `export * from './reports';`
+- `packages/shared-domain/src/auth/can-access-route.ts` + `__tests__/can-access-route.test.ts` - `/api/welcome/reports/donations` (admin) + `/api/welcome/reports*` (welcome-team) rules + tests.
+- `apps/portal/src/app/admin/page.tsx` - Reports tile → `/welcome/reports` (de-legacy it).
+- `apps/portal/src/features/admin/components/admin-sidebar.tsx` - Reports nav → `/welcome/reports` + `deriveAdminActive` maps it.
+- `apps/portal/src/features/admin/components/admin-mobile-nav.tsx` - Reports → `/welcome/reports`.
+- `apps/portal/src/features/family/components/desktop-sidebar.tsx` - add "Reports" to `WELCOME_NAV_ITEMS`.
+- `apps/portal/src/features/family/components/welcome-mobile-nav.tsx` - add a Reports tab.
+- `apps/portal/src/app/check-in/admin/reports/page.tsx` - redirect to `/welcome/reports`.
+- `docs/runbooks/production-cutover-checklist.md` - §14 entry (no new indexes; new read-only report routes).
+- `CLAUDE.md` - mark Phase 4 shipped.
 
 ---
 
@@ -122,7 +122,7 @@ describe('report schemas', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails** — `pnpm --filter @cmt/shared-domain test -- reports` → FAIL (module missing).
+- [ ] **Step 2: Run to verify it fails** - `pnpm --filter @cmt/shared-domain test -- reports` → FAIL (module missing).
 
 - [ ] **Step 3: Implement**
 
@@ -192,7 +192,7 @@ export type DonationsReport = z.infer<typeof DonationsReportSchema>;
 
 Add `export * from './reports';` to `packages/shared-domain/src/setu/index.ts` (next to `export * from './roster';`).
 
-- [ ] **Step 4: Run to verify pass** — `pnpm --filter @cmt/shared-domain test -- reports` → PASS.
+- [ ] **Step 4: Run to verify pass** - `pnpm --filter @cmt/shared-domain test -- reports` → PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
@@ -213,7 +213,7 @@ git push
 
 Bulk approach (no fan-out, no new index): unfiltered `collectionGroup('enrollments').get()` → keep `status==='active'`; `db.collection('levels').get()` for level names. Per-program: count distinct fids (families) + distinct mids (members) from `enrolledMids`. Per-level: count members whose `levelSnapshots[mid].levelId === levelId`. Honor optional `program`/`location` filters in memory.
 
-- [ ] **Step 1: Write the failing test** (hand-mock `portalFirestore`; mirror the `list-families.test.ts` mock style — `collectionGroup('enrollments').get()` + `collection('levels').get()`)
+- [ ] **Step 1: Write the failing test** (hand-mock `portalFirestore`; mirror the `list-families.test.ts` mock style - `collectionGroup('enrollments').get()` + `collection('levels').get()`)
 
 ```ts
 // apps/portal/src/features/setu/reports/__tests__/enrollment-report.test.ts
@@ -266,7 +266,7 @@ describe('buildEnrollmentReport', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify fail** — `pnpm --filter @cmt/portal test -- reports/__tests__/enrollment-report` → FAIL.
+- [ ] **Step 2: Run to verify fail** - `pnpm --filter @cmt/portal test -- reports/__tests__/enrollment-report` → FAIL.
 
 - [ ] **Step 3: Implement**
 
@@ -343,7 +343,7 @@ export async function buildEnrollmentReport(params: ReportQuery): Promise<Enroll
 }
 ```
 
-- [ ] **Step 4: Run to verify pass.** — `pnpm --filter @cmt/portal test -- reports/__tests__/enrollment-report` → PASS.
+- [ ] **Step 4: Run to verify pass.** - `pnpm --filter @cmt/portal test -- reports/__tests__/enrollment-report` → PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
@@ -362,7 +362,7 @@ git push
 - Create: `apps/portal/src/features/setu/reports/attendance-report.ts`
 - Test: `apps/portal/src/features/setu/reports/__tests__/attendance-report.test.ts`
 
-Read `attendanceEvents` for a date window (default: a wide window if none given — e.g. last 365 days computed by the CALLER and passed in via `from`/`to`; the function requires `from`/`to` and the route fills defaults). Group by `levelId` (join `levels` for name + programKey) and by `programKey`. `rate = (present + late) / total`. Honor optional `program` filter in memory.
+Read `attendanceEvents` for a date window (default: a wide window if none given - e.g. last 365 days computed by the CALLER and passed in via `from`/`to`; the function requires `from`/`to` and the route fills defaults). Group by `levelId` (join `levels` for name + programKey) and by `programKey`. `rate = (present + late) / total`. Honor optional `program` filter in memory.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -482,7 +482,7 @@ export async function buildAttendanceReport(params: ReportQuery & { from: string
 }
 ```
 
-> Program labels for attendance come from `programKey` (levels don't store a program label). If a nicer label is wanted, the route may join the program list, but the key is acceptable for v1 — note it in the UI.
+> Program labels for attendance come from `programKey` (levels don't store a program label). If a nicer label is wanted, the route may join the program list, but the key is acceptable for v1 - note it in the UI.
 
 - [ ] **Step 4: Run to verify pass.**
 - [ ] **Step 5: Commit**
@@ -503,7 +503,7 @@ git push
 - Create: `apps/portal/src/features/setu/reports/donations-report.ts`
 - Test: `apps/portal/src/features/setu/reports/__tests__/donations-report.test.ts`
 
-Read top-level `donations` (all; group by `pid` + `programKey`, sum `amountCAD` for `status==='completed'`). Paid-vs-outstanding families: reuse the bulk pattern — active enrollments (collectionGroup, expected via `suggestedAmountOverride ?? suggestedAmountSnapshot`) vs completed donations per fid → `paymentFromAmounts` (Phase 3 helper). Keep it bulk (no fan-out).
+Read top-level `donations` (all; group by `pid` + `programKey`, sum `amountCAD` for `status==='completed'`). Paid-vs-outstanding families: reuse the bulk pattern - active enrollments (collectionGroup, expected via `suggestedAmountOverride ?? suggestedAmountSnapshot`) vs completed donations per fid → `paymentFromAmounts` (Phase 3 helper). Keep it bulk (no fan-out).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -548,7 +548,7 @@ describe('buildDonationsReport', () => {
 
 - [ ] **Step 2: Run to verify fail.**
 
-- [ ] **Step 3: Implement** — read donations + active enrollments in bulk; reuse `paymentFromAmounts` from `@/features/setu/roster/payment`. (NOTE: for `expected` use `suggestedAmountOverride ?? suggestedAmountSnapshot` — the bulk report does NOT do the live offering recompute, matching the Phase 3 CSV builder's bulk approximation; document it.)
+- [ ] **Step 3: Implement** - read donations + active enrollments in bulk; reuse `paymentFromAmounts` from `@/features/setu/roster/payment`. (NOTE: for `expected` use `suggestedAmountOverride ?? suggestedAmountSnapshot` - the bulk report does NOT do the live offering recompute, matching the Phase 3 CSV builder's bulk approximation; document it.)
 
 ```ts
 // apps/portal/src/features/setu/reports/donations-report.ts
@@ -640,7 +640,7 @@ git push
 - Create: `apps/portal/src/features/setu/reports/report-csv.ts`
 - Test: `apps/portal/src/features/setu/reports/__tests__/report-csv.test.ts`
 
-Three small serializers (`enrollmentReportToCsv`, `attendanceReportToCsv`, `donationsReportToCsv`) emitting one CSV per report's primary table (header + rows, with RFC-4180 escaping — reuse the same `escapeField` regex). The enrollment report's **family/member** CSV is NOT here — that reuses Phase 3's `/api/welcome/families?format=csv` (the route delegates; see Task 6). These serializers cover the on-screen summary tables' export.
+Three small serializers (`enrollmentReportToCsv`, `attendanceReportToCsv`, `donationsReportToCsv`) emitting one CSV per report's primary table (header + rows, with RFC-4180 escaping - reuse the same `escapeField` regex). The enrollment report's **family/member** CSV is NOT here - that reuses Phase 3's `/api/welcome/families?format=csv` (the route delegates; see Task 6). These serializers cover the on-screen summary tables' export.
 
 - [ ] **Step 1: Write the failing test** (header + a row for each; escaping). 
 - [ ] **Step 2: Run to verify fail.**
@@ -701,7 +701,7 @@ git push
 - Test: `apps/portal/src/app/api/welcome/reports/__tests__/route.test.ts`
 - Test: `packages/shared-domain/src/__tests__/can-access-route.test.ts` (add cases)
 
-`GET /api/welcome/reports/[kind]`: flag-gate (404 if `!flags.setuAuth`); `readSessionFromHeaders` → 401 if null; gate (`donations` → `isAdmin`, else `isWelcomeTeam`) → 403; parse `ReportQuerySchema` → 400; dispatch to the aggregation; `format=csv` → text/csv via the matching serializer (enrollment csv = delegate to Phase 3 `buildRosterCsvRows`+`rosterToCsv` for the family/member flat export — that's the spec's "same flat export as Phase 3's roster CSV"); else JSON. Attendance fills default `from`/`to` (e.g. `to=today`, `from=today−365d`) when absent — compute from `new Date()` in the route (server time).
+`GET /api/welcome/reports/[kind]`: flag-gate (404 if `!flags.setuAuth`); `readSessionFromHeaders` → 401 if null; gate (`donations` → `isAdmin`, else `isWelcomeTeam`) → 403; parse `ReportQuerySchema` → 400; dispatch to the aggregation; `format=csv` → text/csv via the matching serializer (enrollment csv = delegate to Phase 3 `buildRosterCsvRows`+`rosterToCsv` for the family/member flat export - that's the spec's "same flat export as Phase 3's roster CSV"); else JSON. Attendance fills default `from`/`to` (e.g. `to=today`, `from=today−365d`) when absent - compute from `new Date()` in the route (server time).
 
 - [ ] **Step 1: Write the failing `canAccessRoute` cases first**
 
@@ -731,7 +731,7 @@ describe('reports API (/api/welcome/reports)', () => {
 - [ ] **Step 3: Add the `canAccessRoute` rules** (donations BEFORE the general reports rule; place with the other `/api/welcome/*` rules):
 
 ```ts
-  // Welcome-team API — reports hub. Donations report is ADMIN-ONLY (D5); it must
+  // Welcome-team API - reports hub. Donations report is ADMIN-ONLY (D5); it must
   // be checked before the general reports rule.
   if (pathname === '/api/welcome/reports/donations') {
     return isAdmin(claims);
@@ -804,7 +804,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
 }
 ```
 
-- [ ] **Step 7: Run both test files green** — `pnpm --filter @cmt/shared-domain test -- can-access-route && pnpm --filter @cmt/portal test -- api/welcome/reports`.
+- [ ] **Step 7: Run both test files green** - `pnpm --filter @cmt/shared-domain test -- can-access-route && pnpm --filter @cmt/portal test -- api/welcome/reports`.
 - [ ] **Step 8: Commit**
 
 ```bash
@@ -817,7 +817,7 @@ git push
 
 ---
 
-### Task 7: Reports hub screen (`/welcome/reports`) — desktop + mobile (designer)
+### Task 7: Reports hub screen (`/welcome/reports`) - desktop + mobile (designer)
 
 **Files:**
 - Create: `apps/portal/src/features/setu/reports/reports-client.ts`
@@ -826,19 +826,19 @@ git push
 - Create: `apps/portal/src/app/welcome/reports/page.tsx` + `error.tsx`
 - Test: `apps/portal/src/features/setu/reports/__tests__/reports-hub.test.tsx`
 
-**`reports-client.ts`** — `fetchReport(kind, params)` → typed report (throw on non-OK, like the roster client). One function per kind or a generic with a kind param.
+**`reports-client.ts`** - `fetchReport(kind, params)` → typed report (throw on non-OK, like the roster client). One function per kind or a generic with a kind param.
 
-**`report-export-button.tsx`** — GET `/api/welcome/reports/${kind}?…&format=csv` → blob download; error feedback on `!res.ok` (mirror the Phase 3 roster export button, which surfaces "Export failed — try again"). Reusable across cards (kind + filters as props).
+**`report-export-button.tsx`** - GET `/api/welcome/reports/${kind}?…&format=csv` → blob download; error feedback on `!res.ok` (mirror the Phase 3 roster export button, which surfaces "Export failed - try again"). Reusable across cards (kind + filters as props).
 
-**`reports-hub.tsx`** (`'use client'`) — four cards, each: title, on-screen summary table (compact), an export button, and (attendance) a simple date-range control. Cards:
+**`reports-hub.tsx`** (`'use client'`) - four cards, each: title, on-screen summary table (compact), an export button, and (attendance) a simple date-range control. Cards:
 - **Enrollment** (welcome-team + admin): byProgram table (program · families · members) + byLevel table (level · members); total chips; "Export people CSV" (`format=csv` → roster people) + the summary loads from `/api/welcome/reports/enrollment` (json).
 - **Attendance** (welcome-team + admin): byLevel + byProgram tables (present/absent/late/total/rate%); from/to inputs (default last 12 months); "Export CSV".
-- **Donations** (ADMIN ONLY — render only when `isAdmin` prop true): byPeriod + byProgram tables (completed $ + count), paid/outstanding family chips; "Export CSV". Add a muted caveat: "accounting@ remains the settlement source of truth (no Stripe webhook)."
+- **Donations** (ADMIN ONLY - render only when `isAdmin` prop true): byPeriod + byProgram tables (completed $ + count), paid/outstanding family chips; "Export CSV". Add a muted caveat: "accounting@ remains the settlement source of truth (no Stripe webhook)."
 - **Legacy check-in** (admin only): two `ReportExportButton`s (kind `check-ins`, `guests`) reusing `features/check-in/admin/report-export-button.tsx` (hits the existing admin route). A muted "Legacy door-app exports" label.
 
 The hub receives `isAdmin: boolean` from the page (so it knows whether to render the donations + legacy cards). Desktop (`hidden md:block`, in the welcome `<main>`) + mobile (`block md:hidden`, own CspRoot, 90px bottom padding). Brand tokens; ≥44px tap targets. Each card fetches its own data on mount and fails gracefully (a card error must not blank the hub).
 
-**`page.tsx`** — server component: resolve `isAdmin` from the session cookie (mirror `welcome/layout.tsx`'s `verifyPortalSessionCookie` + `isAdmin`), `await connection()`, render `<ReportsHub isAdmin={admin} />` inside `<Suspense>`. `metadata.title = 'Reports · Setu'`. **error.tsx** copies the roster one.
+**`page.tsx`** - server component: resolve `isAdmin` from the session cookie (mirror `welcome/layout.tsx`'s `verifyPortalSessionCookie` + `isAdmin`), `await connection()`, render `<ReportsHub isAdmin={admin} />` inside `<Suspense>`. `metadata.title = 'Reports · Setu'`. **error.tsx** copies the roster one.
 
 E2E hooks: `data-testid="report-card-enrollment"`, `report-card-attendance`, `report-card-donations`, `report-card-legacy` on the card containers.
 
@@ -846,12 +846,12 @@ E2E hooks: `data-testid="report-card-enrollment"`, `report-card-attendance`, `re
 - [ ] **Step 2: Run to verify fail.**
 - [ ] **Step 3: Implement** all files per the requirements (designer-quality UI, mobile-perfect). Reuse the Phase 3 roster screen's visual language (cards, chips, tables).
 - [ ] **Step 4: Run component test green.**
-- [ ] **Step 5: Typecheck + lint** — `pnpm --filter @cmt/portal typecheck && pnpm --filter @cmt/portal lint` (watch `exactOptionalPropertyTypes` on the client param spreads; do NOT declare nested function components).
+- [ ] **Step 5: Typecheck + lint** - `pnpm --filter @cmt/portal typecheck && pnpm --filter @cmt/portal lint` (watch `exactOptionalPropertyTypes` on the client param spreads; do NOT declare nested function components).
 - [ ] **Step 6: Commit**
 
 ```bash
 git add apps/portal/src/features/setu/reports/reports-client.ts apps/portal/src/features/setu/reports/report-export-button.tsx apps/portal/src/features/setu/reports/reports-hub.tsx apps/portal/src/app/welcome/reports/ apps/portal/src/features/setu/reports/__tests__/reports-hub.test.tsx
-git commit -m "feat(reports): /welcome/reports hub — enrollment/attendance/donations/legacy cards (Phase 4 Task 7)
+git commit -m "feat(reports): /welcome/reports hub - enrollment/attendance/donations/legacy cards (Phase 4 Task 7)
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 git push
@@ -865,7 +865,7 @@ git push
 - Modify: `apps/portal/src/app/admin/page.tsx` (Reports tile → `/welcome/reports`, drop the `legacy` tone + "coming" copy)
 - Modify: `apps/portal/src/features/admin/components/admin-sidebar.tsx` (Reports nav → `/welcome/reports`; `deriveAdminActive` maps `/welcome/reports`)
 - Modify: `apps/portal/src/features/admin/components/admin-mobile-nav.tsx` (Reports → `/welcome/reports`)
-- Modify: `apps/portal/src/features/family/components/desktop-sidebar.tsx` (`WELCOME_NAV_ITEMS` add `['reports', 'Reports', 'info', '/welcome/reports']`; ensure `deriveActiveFromPathname` maps `/welcome/reports` → `'reports'` — add a branch before the `/welcome` catch-all)
+- Modify: `apps/portal/src/features/family/components/desktop-sidebar.tsx` (`WELCOME_NAV_ITEMS` add `['reports', 'Reports', 'info', '/welcome/reports']`; ensure `deriveActiveFromPathname` maps `/welcome/reports` → `'reports'` - add a branch before the `/welcome` catch-all)
 - Modify: `apps/portal/src/features/family/components/welcome-mobile-nav.tsx` (add a Reports tab; ensure `isRosterActive` excludes `/welcome/reports` so Roster doesn't also light up)
 - Modify: `apps/portal/src/app/check-in/admin/reports/page.tsx` (`redirect('/welcome/reports')`)
 
@@ -873,7 +873,7 @@ Confirm `SidebarTab` type includes a `'reports'` member (add it if the union is 
 
 - [ ] **Step 1:** Make the edits. For the welcome desktop sidebar, add a `'reports'` tab to the `SidebarTab` union (find its definition) and a `deriveActiveFromPathname` branch `if (pathname.startsWith('/welcome/reports')) return 'reports';` placed before `if (pathname.startsWith('/welcome')) return 'home';`. In `welcome-mobile-nav.tsx`, update `isRosterActive` to also exclude `/welcome/reports`.
 - [ ] **Step 2:** Update/add tests: `deriveAdminActive` maps `/welcome/reports`; the `check-in/admin/reports` page redirects (mock `redirect`). Confirm no existing test asserts the old Reports href.
-- [ ] **Step 3: Run** — `pnpm --filter @cmt/portal test -- admin reports welcome desktop-sidebar` green.
+- [ ] **Step 3: Run** - `pnpm --filter @cmt/portal test -- admin reports welcome desktop-sidebar` green.
 - [ ] **Step 4: Commit**
 
 ```bash
@@ -888,10 +888,10 @@ git push
 
 ### Task 9: Full pre-push gate (whole repo)
 
-- [ ] **Step 1:** `pnpm typecheck && pnpm lint && pnpm test && pnpm build` — all green. If "Collecting page data" fails on `/welcome/reports`, the page is reading Firebase at build — ensure all data is client-fetched and the server page only does `await connection()` + session `isAdmin` resolution inside `<Suspense>`.
+- [ ] **Step 1:** `pnpm typecheck && pnpm lint && pnpm test && pnpm build` - all green. If "Collecting page data" fails on `/welcome/reports`, the page is reading Firebase at build - ensure all data is client-fetched and the server page only does `await connection()` + session `isAdmin` resolution inside `<Suspense>`.
 - [ ] **Step 2:** Fix any failure at root cause (never `--no-verify`); re-run until green. Commit + push only if a fix was needed.
 
-> Expectation: **no new Firestore indexes** (enrollment uses unfiltered collectionGroup; attendance uses single-field `date` range; donations uses the top-level collection). If a query unexpectedly throws `FAILED_PRECONDITION` during E2E (Task 10), add the minimal index to `firestore.indexes.json`, deploy to **UAT only** (no `--force`), and add a §14 runbook entry — but the design avoids this.
+> Expectation: **no new Firestore indexes** (enrollment uses unfiltered collectionGroup; attendance uses single-field `date` range; donations uses the top-level collection). If a query unexpectedly throws `FAILED_PRECONDITION` during E2E (Task 10), add the minimal index to `firestore.indexes.json`, deploy to **UAT only** (no `--force`), and add a §14 runbook entry - but the design avoids this.
 
 ---
 
@@ -900,7 +900,7 @@ git push
 **Files:**
 - Create: `apps/portal/e2e/setu/admin/reports.spec.ts`
 
-The single UAT test user is family-manager **+ admin**, so it sees ALL cards (incl. donations + legacy). Read-only — no mutations/cleanup. Runs against deployed UAT after Tasks 1–8 are pushed + Vercel deploys. Screens render mobile+desktop blocks → filter visible. The **welcome-team-denied-donations** path is covered by the unit/route test (Task 6), not the browser (no welcome-team-only seeded user).
+The single UAT test user is family-manager **+ admin**, so it sees ALL cards (incl. donations + legacy). Read-only - no mutations/cleanup. Runs against deployed UAT after Tasks 1-8 are pushed + Vercel deploys. Screens render mobile+desktop blocks → filter visible. The **welcome-team-denied-donations** path is covered by the unit/route test (Task 6), not the browser (no welcome-team-only seeded user).
 
 - [ ] **Step 1: Write the spec**
 
@@ -909,7 +909,7 @@ The single UAT test user is family-manager **+ admin**, so it sees ALL cards (in
 import { test, expect } from '@playwright/test';
 import { hasFamilyCreds } from '../../_helpers';
 
-test.describe('Phase 4 — Reports hub (/welcome/reports)', () => {
+test.describe('Phase 4 - Reports hub (/welcome/reports)', () => {
   test.skip(!hasFamilyCreds, 'E2E_FAMILY_EMAIL / E2E_FAMILY_PASSWORD required');
 
   test('hub renders enrollment + attendance + donations cards for an admin', async ({ page }) => {
@@ -942,11 +942,11 @@ test.describe('Phase 4 — Reports hub (/welcome/reports)', () => {
 });
 ```
 
-- [ ] **Step 2: Re-seed the UAT test user** — `pnpm --filter @cmt/portal seed:e2e-family`.
-- [ ] **Step 3: Run against deployed UAT** (after Tasks 1–8 pushed + Vercel deployed; confirm the deploy is live by hitting `/api/welcome/reports/enrollment` and seeing 200/401 not 404):
+- [ ] **Step 2: Re-seed the UAT test user** - `pnpm --filter @cmt/portal seed:e2e-family`.
+- [ ] **Step 3: Run against deployed UAT** (after Tasks 1-8 pushed + Vercel deployed; confirm the deploy is live by hitting `/api/welcome/reports/enrollment` and seeing 200/401 not 404):
   `PLAYWRIGHT_BASE_URL=https://cmt-setu.vercel.app pnpm --filter @cmt/portal exec playwright test --project=setu --project=setup reports`
-  Expected: all green. The enrollment endpoint reads ~800 active enrollments + levels (one collectionGroup get) — fast. Attendance reads the `attendanceEvents` date window. Donations reads `donations` + enrollments. If any is slow (>30s), apply the bulk-read discipline / raise the test timeout, but the bulk design should keep them at a few seconds.
-- [ ] **Step 4: Full suite regression** — `PLAYWRIGHT_BASE_URL=https://cmt-setu.vercel.app pnpm test:e2e 2>&1 | tail -15` → all prior + new green.
+  Expected: all green. The enrollment endpoint reads ~800 active enrollments + levels (one collectionGroup get) - fast. Attendance reads the `attendanceEvents` date window. Donations reads `donations` + enrollments. If any is slow (>30s), apply the bulk-read discipline / raise the test timeout, but the bulk design should keep them at a few seconds.
+- [ ] **Step 4: Full suite regression** - `PLAYWRIGHT_BASE_URL=https://cmt-setu.vercel.app pnpm test:e2e 2>&1 | tail -15` → all prior + new green.
 - [ ] **Step 5: Commit**
 
 ```bash
@@ -982,8 +982,8 @@ git push
 
 ## Self-review (against the spec)
 
-- **Spec coverage:** 4a enrollment headcounts (T2) + family/member CSV reuses Phase 3 roster export (T6) ✓; 4b attendance summary per level + program with date range (T3) ✓; 4c donations summary admin-only — byPeriod/byProgram + paid/outstanding (T4), gated at canAccessRoute + handler + hub (T6/T7) ✓; 4d legacy check-in CSV reuses existing route via a card + legacy page redirect (T7/T8) ✓; unified `GET /api/welcome/reports/[kind]` json|csv (T6) ✓; canAccessRoute donations-admin/others-welcome-team + tests same commit (T6) ✓; mobile + mobile-API (T6/T7) ✓; N=2 (T2 two programs/levels, T3 two levels/statuses, T4 two periods) ✓; Playwright E2E (T10) ✓.
-- **Deviations (documented):** (1) checkins/guests are NOT new kinds of the unified API — the legacy card reuses the existing `/api/check-in/admin/reports/[kind]` directly (DRY, admin-only, avoids re-implementing door-collection reads). (2) Attendance program label = `programKey` (levels carry no program label); acceptable for v1. (3) Donations "expected" uses snapshot/override (no live offering recompute), matching the Phase 3 bulk CSV approximation; documented in the UI caveat. (4) Donations-denied-for-welcome-team is covered by the route unit test, not the browser E2E (no welcome-team-only seeded user).
+- **Spec coverage:** 4a enrollment headcounts (T2) + family/member CSV reuses Phase 3 roster export (T6) ✓; 4b attendance summary per level + program with date range (T3) ✓; 4c donations summary admin-only - byPeriod/byProgram + paid/outstanding (T4), gated at canAccessRoute + handler + hub (T6/T7) ✓; 4d legacy check-in CSV reuses existing route via a card + legacy page redirect (T7/T8) ✓; unified `GET /api/welcome/reports/[kind]` json|csv (T6) ✓; canAccessRoute donations-admin/others-welcome-team + tests same commit (T6) ✓; mobile + mobile-API (T6/T7) ✓; N=2 (T2 two programs/levels, T3 two levels/statuses, T4 two periods) ✓; Playwright E2E (T10) ✓.
+- **Deviations (documented):** (1) checkins/guests are NOT new kinds of the unified API - the legacy card reuses the existing `/api/check-in/admin/reports/[kind]` directly (DRY, admin-only, avoids re-implementing door-collection reads). (2) Attendance program label = `programKey` (levels carry no program label); acceptable for v1. (3) Donations "expected" uses snapshot/override (no live offering recompute), matching the Phase 3 bulk CSV approximation; documented in the UI caveat. (4) Donations-denied-for-welcome-team is covered by the route unit test, not the browser E2E (no welcome-team-only seeded user).
 - **No new indexes:** enrollment = unfiltered `collectionGroup('enrollments')`; attendance = single-field `date` range (auto index); donations = top-level `donations`. Confirmed in T9 expectation + T10 runtime check.
-- **Type consistency:** `ReportQuery`/`EnrollmentReport`/`AttendanceReport`/`DonationsReport` defined in T1, consumed verbatim in T2–T7. `paymentFromAmounts` (Phase 3) reused in T4. `buildRosterCsvRows`+`rosterToCsv` (Phase 3) reused in T6.
+- **Type consistency:** `ReportQuery`/`EnrollmentReport`/`AttendanceReport`/`DonationsReport` defined in T1, consumed verbatim in T2-T7. `paymentFromAmounts` (Phase 3) reused in T4. `buildRosterCsvRows`+`rosterToCsv` (Phase 3) reused in T6.
 - **No placeholders:** every code step has real code; every run step has a command + expected result.

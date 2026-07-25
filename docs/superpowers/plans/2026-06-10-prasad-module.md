@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** One prasad Sunday per family per school year — auto-assigned around the youngest child's birthday month, self-serve movable, reminded by email+SMS — replacing the weekly signup sheet.
+**Goal:** One prasad Sunday per family per school year - auto-assigned around the youngest child's birthday month, self-serve movable, reminded by email+SMS - replacing the weekly signup sheet.
 
 **Architecture:** Rollover-pattern: a pure deterministic engine in `@cmt/shared-domain` (`proposePrasadAssignments`, mirroring `decidePromotion`), a top-level `prasadAssignments` Firestore collection (deterministic id `{pid}-{fid}`, idempotent re-publish), `/admin/prasad` preview→publish screen, family dashboard card + `/family/prasad` move flow, daily reminder cron via the existing SES/SNS `resolveSender()` pipeline.
 
@@ -12,19 +12,19 @@
 
 ---
 
-## Standing constraints (read first — violations have bitten before)
+## Standing constraints (read first - violations have bitten before)
 
 - **UAT only** for all DB writes/scripts/index deploys (`chinmaya-setu-uat`). NEVER write prod `chinmaya-setu-715b8`. Index deploys to UAT: `firebase deploy --only firestore:indexes --project chinmaya-setu-uat` (no `--force` needed on UAT, but NEVER `--force` on prod).
-- **Legacy RTDB reads come from the local snapshot** — `RTDB_SNAPSHOT_DIR=.rtdb-snapshot` is set in `apps/portal/.env.local`; `readRtdb()` resolves locally. Never remove that var to "test live".
-- `exactOptionalPropertyTypes` + `noUncheckedIndexedAccess` are ON — never assign `undefined` to an optional; use conditional spread.
+- **Legacy RTDB reads come from the local snapshot** - `RTDB_SNAPSHOT_DIR=.rtdb-snapshot` is set in `apps/portal/.env.local`; `readRtdb()` resolves locally. Never remove that var to "test live".
+- `exactOptionalPropertyTypes` + `noUncheckedIndexedAccess` are ON - never assign `undefined` to an optional; use conditional spread.
 - **Zod schemas must include every new field** or `safeParse` silently strips it.
 - New `/api/setu/*` and `/api/welcome/*` paths need explicit `canAccessRoute` rules BEFORE the `/api/setu/` manager-only catch-all (`packages/shared-domain/src/auth/can-access-route.ts:199-203`).
-- Role checks via `isAdmin`/`isWelcomeTeam`/`isSetuFamily`/`isSetuManager` helpers — never `claims.role === '...'`.
+- Role checks via `isAdmin`/`isWelcomeTeam`/`isSetuFamily`/`isSetuManager` helpers - never `claims.role === '...'`.
 - Every screen needs a real mobile branch (`block md:hidden` + `hidden md:block`); anything rendered outside a `CspRoot` ancestor needs `className="csp"` for brand tokens.
-- Never declare a function component inside another component (remount/focus-loss) — hoist to module scope.
+- Never declare a function component inside another component (remount/focus-loss) - hoist to module scope.
 - Tests ship in the SAME commit as the branching logic they cover.
 - After any authorized commit: `git push` in the same turn (pre-push hook = typecheck/lint/test/build gate). Commit author is already configured; end commit messages with the Co-Authored-By trailer used in recent history.
-- After the UAT index deploy + backfill run, update `docs/runbooks/production-cutover-checklist.md` §10/§14 in the same turn (Task 14 covers this — don't skip).
+- After the UAT index deploy + backfill run, update `docs/runbooks/production-cutover-checklist.md` §10/§14 in the same turn (Task 14 covers this - don't skip).
 
 ## Conscious deviations from the spec (approved scope cuts)
 
@@ -119,7 +119,7 @@ describe('prasad schemas', () => {
 });
 ```
 
-- [ ] **Step 2: Run it — expect FAIL** (`Cannot find module '../prasad'`)
+- [ ] **Step 2: Run it - expect FAIL** (`Cannot find module '../prasad'`)
 
 Run: `pnpm --filter @cmt/shared-domain exec vitest run src/setu/__tests__/prasad-schemas.test.ts`
 
@@ -136,7 +136,7 @@ export const PRASAD_REASONS = ['birthday-month', 'spill', 'no-birth-month'] as c
 export const PRASAD_SOURCES = ['auto', 'family-move', 'admin'] as const;
 export const PRASAD_STATUSES = ['assigned', 'cancelled'] as const;
 
-/** prasadAssignments/{paid} — one doc per family per period; paid = `${pid}-${fid}`. */
+/** prasadAssignments/{paid} - one doc per family per period; paid = `${pid}-${fid}`. */
 export const PrasadAssignmentDocSchema = z.object({
   paid: z.string().min(1),
   pid: z.string().min(1),
@@ -161,7 +161,7 @@ export const PrasadAssignmentDocSchema = z.object({
 });
 export type PrasadAssignmentDoc = z.infer<typeof PrasadAssignmentDocSchema>;
 
-/** prasadConfig/{pid} — the cap the admin published with (move dialog enforces it). */
+/** prasadConfig/{pid} - the cap the admin published with (move dialog enforces it). */
 export const PrasadConfigDocSchema = z.object({
   pid: z.string().min(1),
   capPerSunday: z.number().int().min(1),
@@ -191,16 +191,16 @@ export type PrasadMoveBody = z.infer<typeof PrasadMoveBodySchema>;
 export type PrasadAdminReassignBody = z.infer<typeof PrasadAdminReassignBodySchema>;
 ```
 
-- [ ] **Step 4: Export from the barrel** — in `packages/shared-domain/src/setu/index.ts`, next to the `export * from './set-grade';` line add:
+- [ ] **Step 4: Export from the barrel** - in `packages/shared-domain/src/setu/index.ts`, next to the `export * from './set-grade';` line add:
 
 ```ts
 export * from './prasad';
 export * from './prasad-engine';
 ```
 
-(`prasad-engine` doesn't exist until Task 2 — add only `export * from './prasad';` now, the engine export in Task 2.)
+(`prasad-engine` doesn't exist until Task 2 - add only `export * from './prasad';` now, the engine export in Task 2.)
 
-- [ ] **Step 5: Run test — expect PASS**, then commit
+- [ ] **Step 5: Run test - expect PASS**, then commit
 
 ```bash
 git add packages/shared-domain/src/setu/prasad.ts packages/shared-domain/src/setu/index.ts packages/shared-domain/src/setu/__tests__/prasad-schemas.test.ts
@@ -209,14 +209,14 @@ git commit -m "feat(prasad): shared assignment/config schemas + request bodies"
 
 ---
 
-### Task 2: Pure assignment engine (TDD — the heart of the module)
+### Task 2: Pure assignment engine (TDD - the heart of the module)
 
 **Files:**
 - Create: `packages/shared-domain/src/setu/prasad-engine.ts`
 - Modify: `packages/shared-domain/src/setu/index.ts` (add `export * from './prasad-engine';`)
 - Test: `packages/shared-domain/src/setu/__tests__/prasad-engine.test.ts`
 
-- [ ] **Step 1: Write the failing tests** — these encode every rule from the spec:
+- [ ] **Step 1: Write the failing tests** - these encode every rule from the spec:
 
 ```ts
 // packages/shared-domain/src/setu/__tests__/prasad-engine.test.ts
@@ -351,7 +351,7 @@ describe('proposePrasadAssignments', () => {
 });
 ```
 
-- [ ] **Step 2: Run — expect FAIL** (`Cannot find module '../prasad-engine'`)
+- [ ] **Step 2: Run - expect FAIL** (`Cannot find module '../prasad-engine'`)
 
 Run: `pnpm --filter @cmt/shared-domain exec vitest run src/setu/__tests__/prasad-engine.test.ts`
 
@@ -381,7 +381,7 @@ export interface PrasadEngineInput {
   pid: string;
   location: string;
   cap: number;
-  /** Eligible class Sundays (kind=class, enabled, prasadNeeded, future-only) — caller filters. */
+  /** Eligible class Sundays (kind=class, enabled, prasadNeeded, future-only) - caller filters. */
   sundays: Array<{ date: string }>;
   families: PrasadEngineFamily[];
 }
@@ -427,7 +427,7 @@ function pickTarget(children: PrasadEngineChild[]): { youngest: PrasadEngineChil
 
 export function proposePrasadAssignments(input: PrasadEngineInput): PrasadProposal {
   // seats[date] = remaining capacity. Existing assignments consume seats first
-  // (even if their date is no longer in `sundays`, they are kept — just not counted
+  // (even if their date is no longer in `sundays`, they are kept - just not counted
   // against a seat map entry that doesn't exist).
   const seats = new Map<string, number>(input.sundays.map((s) => [s.date, input.cap]));
   const counts = new Map<string, number>(input.sundays.map((s) => [s.date, 0]));
@@ -492,7 +492,7 @@ export function proposePrasadAssignments(input: PrasadEngineInput): PrasadPropos
     });
   };
 
-  // Pass 1 — birthday-month families.
+  // Pass 1 - birthday-month families.
   for (const { f, t } of withMonth) {
     const inMonth = ordered(allDates.filter((d) => monthOf(d) === t.birthMonth && seats.get(d)! > 0));
     if (inMonth.length > 0) {
@@ -521,7 +521,7 @@ export function proposePrasadAssignments(input: PrasadEngineInput): PrasadPropos
     place(f, t, candidates[0], 'spill');
   }
 
-  // Pass 2 — no-birth-month families → emptiest Sundays.
+  // Pass 2 - no-birth-month families → emptiest Sundays.
   for (const { f, t } of withoutMonth) {
     const open = ordered(allDates.filter((d) => seats.get(d)! > 0));
     place(f, t, open[0], 'no-birth-month');
@@ -543,7 +543,7 @@ export function proposePrasadAssignments(input: PrasadEngineInput): PrasadPropos
 }
 ```
 
-- [ ] **Step 4: Run tests — expect PASS.** If the spill test fails on anchor choice, the test is the contract — fix the engine, not the test.
+- [ ] **Step 4: Run tests - expect PASS.** If the spill test fails on anchor choice, the test is the contract - fix the engine, not the test.
 
 - [ ] **Step 5: Add the barrel export** (`export * from './prasad-engine';` in `setu/index.ts`), run `pnpm --filter @cmt/shared-domain test` (all green), commit:
 
@@ -563,17 +563,17 @@ git commit -m "feat(prasad): pure deterministic assignment engine (birthday-mont
 - Modify: `apps/portal/src/features/setu/registration/lazy-migrate.ts` (write `birthMonth` on child member docs)
 - Tests: existing legacy-parser + members-route test files (add cases in the same files)
 
-- [ ] **Step 1: Schema** — in `MemberDocSchema` directly under `birthMonthYear: z.string().nullable(),` add:
+- [ ] **Step 1: Schema** - in `MemberDocSchema` directly under `birthMonthYear: z.string().nullable(),` add:
 
 ```ts
-  // Birth month only (1-12), no year — the legacy roster's `dob_m`. Used by the
+  // Birth month only (1-12), no year - the legacy roster's `dob_m`. Used by the
   // prasad assigner. Derived from birthMonthYear when that exists.
   birthMonth: z.number().int().min(1).max(12).nullable().optional(),
 ```
 
-- [ ] **Step 2: Members API** — in `apps/portal/src/app/api/setu/members/route.ts`, POST body schema (near line 33) add `birthMonth: z.number().int().min(1).max(12).nullish(),` and in the member-doc construction (near line 126) add `birthMonth: data.birthMonth ?? null,`. Mirror the exact `birthMonthYear` handling on the PATCH path if the PATCH schema lists fields individually.
+- [ ] **Step 2: Members API** - in `apps/portal/src/app/api/setu/members/route.ts`, POST body schema (near line 33) add `birthMonth: z.number().int().min(1).max(12).nullish(),` and in the member-doc construction (near line 126) add `birthMonth: data.birthMonth ?? null,`. Mirror the exact `birthMonthYear` handling on the PATCH path if the PATCH schema lists fields individually.
 
-- [ ] **Step 3: Legacy parser** — in `legacy-parser.ts`: add `dob_m?: number | string;` to the roster-row interface; in the child-mapping code (where `schoolGrade`/`legacySid` are produced) add:
+- [ ] **Step 3: Legacy parser** - in `legacy-parser.ts`: add `dob_m?: number | string;` to the roster-row interface; in the child-mapping code (where `schoolGrade`/`legacySid` are produced) add:
 
 ```ts
 const dobM = Number(row.dob_m);
@@ -582,15 +582,15 @@ const birthMonth = Number.isFinite(dobM) && dobM >= 1 && dobM <= 12 ? dobM : nul
 
 and carry `birthMonth` on the returned child object (extend the child type).
 
-- [ ] **Step 4: Lazy migrate** — in `lazy-migrate.ts`, where child member docs are constructed from parsed children, add `birthMonth: child.birthMonth ?? null,`.
+- [ ] **Step 4: Lazy migrate** - in `lazy-migrate.ts`, where child member docs are constructed from parsed children, add `birthMonth: child.birthMonth ?? null,`.
 
-- [ ] **Step 5: Tests in the same commit** — extend the existing legacy-parser test file with: a row carrying `dob_m: 9` → child `birthMonth === 9`; `dob_m: 'NULL'` → `null`; `dob_m: 0` → `null`. Extend the members-route test with a POST carrying `birthMonth: 5` asserting the written doc got it (follow that file's existing mock conventions).
+- [ ] **Step 5: Tests in the same commit** - extend the existing legacy-parser test file with: a row carrying `dob_m: 9` → child `birthMonth === 9`; `dob_m: 'NULL'` → `null`; `dob_m: 0` → `null`. Extend the members-route test with a POST carrying `birthMonth: 5` asserting the written doc got it (follow that file's existing mock conventions).
 
-- [ ] **Step 6: Run** `pnpm --filter @cmt/portal test` + `pnpm --filter @cmt/shared-domain test` — green. Commit:
+- [ ] **Step 6: Run** `pnpm --filter @cmt/portal test` + `pnpm --filter @cmt/shared-domain test` - green. Commit:
 
 ```bash
 git add packages/shared-domain/src/setu/schemas/member.ts apps/portal/src/app/api/setu/members/route.ts apps/portal/src/features/setu/registration/legacy-parser.ts apps/portal/src/features/setu/registration/lazy-migrate.ts <touched test files>
-git commit -m "feat(prasad): member.birthMonth (1-12) — schema, members API, legacy dob_m mapping"
+git commit -m "feat(prasad): member.birthMonth (1-12) - schema, members API, legacy dob_m mapping"
 ```
 
 ---
@@ -601,13 +601,13 @@ git commit -m "feat(prasad): member.birthMonth (1-12) — schema, members API, l
 - Create: `apps/portal/scripts/backfill-birth-months.ts`
 - Modify: `apps/portal/package.json` (alias `"backfill:birth-months": "tsx --env-file=.env.local scripts/backfill-birth-months.ts"`)
 
-- [ ] **Step 1: Write the script** (reads `/roster` ONCE via `readRtdb` — resolves from the local snapshot because `.env.local` sets `RTDB_SNAPSHOT_DIR`):
+- [ ] **Step 1: Write the script** (reads `/roster` ONCE via `readRtdb` - resolves from the local snapshot because `.env.local` sets `RTDB_SNAPSHOT_DIR`):
 
 ```ts
 // apps/portal/scripts/backfill-birth-months.ts
 /**
  * Backfill members.birthMonth (1-12) from the legacy roster's dob_m, matched
- * via members.legacySid. Reads /roster once through readRtdb (local snapshot —
+ * via members.legacySid. Reads /roster once through readRtdb (local snapshot -
  * zero RTDB downloads). UAT-guarded; idempotent (skips members whose stored
  * birthMonth already equals the roster value).
  *
@@ -710,9 +710,9 @@ async function togglePrasadNeeded(row: EntryRow) {
 }
 ```
 
-and render a pill button beside the Published/Draft pill in BOTH the mobile card branch (~line 229) and the desktop table branch (~line 266): label `Prasad` / `No prasad`, same pill style with `background: e.prasadNeeded ? 'var(--accentSoft)' : 'var(--surface2)'`. Only render it on `kind === 'class'` rows. Verify the `[entryId]` PATCH route validates with `UpdateCalendarEntrySchema` (it does — passthrough is automatic once the schema has the field).
+and render a pill button beside the Published/Draft pill in BOTH the mobile card branch (~line 229) and the desktop table branch (~line 266): label `Prasad` / `No prasad`, same pill style with `background: e.prasadNeeded ? 'var(--accentSoft)' : 'var(--surface2)'`. Only render it on `kind === 'class'` rows. Verify the `[entryId]` PATCH route validates with `UpdateCalendarEntrySchema` (it does - passthrough is automatic once the schema has the field).
 
-- [ ] **Step 3: Feature constants** — `apps/portal/src/features/setu/prasad/constants.ts`:
+- [ ] **Step 3: Feature constants** - `apps/portal/src/features/setu/prasad/constants.ts`:
 
 ```ts
 // Active prasad periods per location. Bump both to the new year's pids when
@@ -724,7 +724,7 @@ export const CURRENT_PRASAD_PIDS = [
 
 export const MOVE_LOCK_DAYS = 7;
 
-/** Toronto-local YYYY-MM-DD for "today" — all date math is calendar-day based. */
+/** Toronto-local YYYY-MM-DD for "today" - all date math is calendar-day based. */
 export function torontoToday(now: Date = new Date()): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Toronto' }).format(now);
 }
@@ -735,7 +735,7 @@ export function daysUntil(ymd: string, todayYmd: string): number {
 }
 ```
 
-- [ ] **Step 4: Engine-input loader** — `load-engine-input.ts`. Mirrors `deriveRoster`'s read pattern (`apps/portal/src/features/setu/teacher/roster.ts:109-163`):
+- [ ] **Step 4: Engine-input loader** - `load-engine-input.ts`. Mirrors `deriveRoster`'s read pattern (`apps/portal/src/features/setu/teacher/roster.ts:109-163`):
 
 ```ts
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
@@ -795,7 +795,7 @@ export async function loadEngineInput(pid: string, location: string, cap?: numbe
     if (a.status === 'assigned') existingByFid.set(a.fid, { date: a.date });
   }
 
-  // 4) Family + member docs (bulk per family — same shape as deriveRoster).
+  // 4) Family + member docs (bulk per family - same shape as deriveRoster).
   const fids = [...enrolledMidsByFid.keys()];
   const families: PrasadEngineFamily[] = await Promise.all(fids.map(async (fid) => {
     const [famDoc, memSnap] = await Promise.all([
@@ -829,7 +829,7 @@ export async function loadEngineInput(pid: string, location: string, cap?: numbe
 }
 ```
 
-- [ ] **Step 5: Preview + publish** — `publish-assignments.ts`:
+- [ ] **Step 5: Preview + publish** - `publish-assignments.ts`:
 
 ```ts
 import { FieldValue } from '@cmt/firebase-shared/admin/firestore';
@@ -878,7 +878,7 @@ export async function publishAssignments(pid: string, location: string, cap: num
 }
 ```
 
-- [ ] **Step 6: Tests** — `__tests__/publish-assignments.test.ts` with the repo's chainable Firestore mock convention (copy the mock scaffold style from `apps/portal/src/features/setu/roster/__tests__/list-families.test.ts`): seed calendar entries (one `prasadNeeded:false` — assert it's excluded; one past-dated — excluded), two enrolled families, run `previewAssignments` → rows for both; run `publishAssignments` → assert `set` called with `paid` ids + config doc write. Cap default math: 2 families / 2 Sundays → 1.
+- [ ] **Step 6: Tests** - `__tests__/publish-assignments.test.ts` with the repo's chainable Firestore mock convention (copy the mock scaffold style from `apps/portal/src/features/setu/roster/__tests__/list-families.test.ts`): seed calendar entries (one `prasadNeeded:false` - assert it's excluded; one past-dated - excluded), two enrolled families, run `previewAssignments` → rows for both; run `publishAssignments` → assert `set` called with `paid` ids + config doc write. Cap default math: 2 families / 2 Sundays → 1.
 
 - [ ] **Step 7: Run portal + shared-domain tests, commit:**
 
@@ -909,7 +909,7 @@ All four routes copy the exact gate stack of `apps/portal/src/app/api/admin/scho
 
 Deploy: `firebase deploy --only firestore:indexes --project chinmaya-setu-uat` (NEVER prod here).
 
-- [ ] **Step 2: Preview route** — `preview/route.ts`:
+- [ ] **Step 2: Preview route** - `preview/route.ts`:
 
 ```ts
 import { NextResponse } from 'next/server';
@@ -935,13 +935,13 @@ export async function POST(req: Request) {
 }
 ```
 
-- [ ] **Step 3: Publish route** — same stack, `PrasadPublishBodySchema`, calls `publishAssignments(period.pid, period.location, parsed.data.cap, session.mid ?? session.uid ?? 'admin')`.
+- [ ] **Step 3: Publish route** - same stack, `PrasadPublishBodySchema`, calls `publishAssignments(period.pid, period.location, parsed.data.cap, session.mid ?? session.uid ?? 'admin')`.
 
-- [ ] **Step 4: List route** — `route.ts` GET with `?pid=...&date=...` (date optional): query `prasadAssignments` `where('pid','==',pid)` + optional `where('date','==',date)`, order in memory by date then familyName, serialize timestamps to ISO strings (`.toDate().toISOString()`); return `{ assignments: [...] }`.
+- [ ] **Step 4: List route** - `route.ts` GET with `?pid=...&date=...` (date optional): query `prasadAssignments` `where('pid','==',pid)` + optional `where('date','==',date)`, order in memory by date then familyName, serialize timestamps to ISO strings (`.toDate().toISOString()`); return `{ assignments: [...] }`.
 
-- [ ] **Step 5: Assignment PATCH** — `assignment/route.ts` with `PrasadAdminReassignBodySchema`: load `doc(paid)`; 404 if missing; if `cancel` → `update({ status: 'cancelled' })`; else if `date` → `update({ date, movedFrom: <old date>, movedAt: FieldValue.serverTimestamp(), movedBy: <actor>, source: 'admin' })` (admin bypasses cap + lock — front-desk judgment); return `{ ok: true }`.
+- [ ] **Step 5: Assignment PATCH** - `assignment/route.ts` with `PrasadAdminReassignBodySchema`: load `doc(paid)`; 404 if missing; if `cancel` → `update({ status: 'cancelled' })`; else if `date` → `update({ date, movedFrom: <old date>, movedAt: FieldValue.serverTimestamp(), movedBy: <actor>, source: 'admin' })` (admin bypasses cap + lock - front-desk judgment); return `{ ok: true }`.
 
-- [ ] **Step 6: Route tests** — one file covering: 401 no session, 403 non-admin, 400 bad body, preview 200 shape, publish writes (mock `publishAssignments`), PATCH cancel + reassign + 404. Mock `@/features/setu/prasad/publish-assignments` and Firestore per the conventions in `apps/portal/src/app/api/admin/school-year/__tests__` (if that dir exists, mirror it; otherwise mirror `apps/portal/src/app/api/welcome/reports/__tests__`).
+- [ ] **Step 6: Route tests** - one file covering: 401 no session, 403 non-admin, 400 bad body, preview 200 shape, publish writes (mock `publishAssignments`), PATCH cancel + reassign + 404. Mock `@/features/setu/prasad/publish-assignments` and Firestore per the conventions in `apps/portal/src/app/api/admin/school-year/__tests__` (if that dir exists, mirror it; otherwise mirror `apps/portal/src/app/api/welcome/reports/__tests__`).
 
 - [ ] **Step 7: Test green → commit:**
 
@@ -1053,7 +1053,7 @@ export async function moveAssignment(fid: string, targetDate: string, actorMid: 
 }
 ```
 
-- [ ] **Step 2: Tests** (chainable mock; mirror `list-families.test.ts` scaffolding): assignment found/not-found/cancelled-skipped; `movable:false` inside lock window (freeze "today" by mocking `constants.torontoToday`? No — pass through real dates far in the future in fixtures instead: fixture date = today+30d → movable; today+3d → locked); options exclude current date, locked dates, `prasadNeeded:false`, full dates; move happy path calls `tx.update` with `source:'family-move'`; move into full target → `'target-full'`.
+- [ ] **Step 2: Tests** (chainable mock; mirror `list-families.test.ts` scaffolding): assignment found/not-found/cancelled-skipped; `movable:false` inside lock window (freeze "today" by mocking `constants.torontoToday`? No - pass through real dates far in the future in fixtures instead: fixture date = today+30d → movable; today+3d → locked); options exclude current date, locked dates, `prasadNeeded:false`, full dates; move happy path calls `tx.update` with `source:'family-move'`; move into full target → `'target-full'`.
 
 - [ ] **Step 3: Green → commit:**
 
@@ -1071,10 +1071,10 @@ git commit -m "feat(prasad): family assignment read + move options + transaction
 - Modify: `packages/shared-domain/src/auth/can-access-route.ts` (insert BEFORE the `/api/setu/` catch-all at line ~199)
 - Tests: `packages/shared-domain/src/auth/__tests__/can-access-route.test.ts` (extend existing file), `apps/portal/src/app/api/setu/prasad/__tests__/routes.test.ts`
 
-- [ ] **Step 1: canAccessRoute rules** — insert above the `// Setu API — remaining paths` catch-all:
+- [ ] **Step 1: canAccessRoute rules** - insert above the `// Setu API - remaining paths` catch-all:
 
 ```ts
-  // Setu API — prasad: any family role may view their assignment/options;
+  // Setu API - prasad: any family role may view their assignment/options;
   // the move POST is manager-only. Must precede the manager-only catch-all.
   if (pathname === '/api/setu/prasad' || pathname.startsWith('/api/setu/prasad/')) {
     if (!isSetuFamily(claims)) return false;
@@ -1085,7 +1085,7 @@ git commit -m "feat(prasad): family assignment read + move options + transaction
 
 Extend the canAccessRoute test file: family-member GET `/api/setu/prasad` → true; family-member POST `/api/setu/prasad/move` → false; manager POST → true; teacher-only → false.
 
-- [ ] **Step 2: Routes.** All three resolve `fid` from the session (mirror how `/api/setu/family` handlers bind `session.fid` — never trust a body fid). GET `route.ts`:
+- [ ] **Step 2: Routes.** All three resolve `fid` from the session (mirror how `/api/setu/family` handlers bind `session.fid` - never trust a body fid). GET `route.ts`:
 
 ```ts
 import { NextResponse } from 'next/server';
@@ -1176,14 +1176,14 @@ export async function publishPrasad(pid: string, cap: number): Promise<PrasadPre
 **Files:**
 - Create: `apps/portal/src/app/admin/prasad/page.tsx`, `error.tsx`
 - Create: `apps/portal/src/features/setu/prasad/admin-prasad-screen.tsx`
-- Modify: `apps/portal/src/app/admin/page.tsx` (Bala Vihar group card), `apps/portal/src/features/admin/components/admin-sidebar.tsx` + `admin-mobile-nav.tsx` (mirror the "School year" / "Level management" entries exactly — find them with `grep -n "school-year" <file>`)
+- Modify: `apps/portal/src/app/admin/page.tsx` (Bala Vihar group card), `apps/portal/src/features/admin/components/admin-sidebar.tsx` + `admin-mobile-nav.tsx` (mirror the "School year" / "Level management" entries exactly - find them with `grep -n "school-year" <file>`)
 - Test: `apps/portal/src/features/setu/prasad/__tests__/admin-prasad-screen.test.tsx`
 
-- [ ] **Step 1: Page** (server component, same scaffold as `/admin/school-year/page.tsx` — copy its flag/session handling). It renders `<AdminPrasadScreen />`. `error.tsx` copies the segment-error convention of `apps/portal/src/app/admin/school-year/error.tsx`.
+- [ ] **Step 1: Page** (server component, same scaffold as `/admin/school-year/page.tsx` - copy its flag/session handling). It renders `<AdminPrasadScreen />`. `error.tsx` copies the segment-error convention of `apps/portal/src/app/admin/school-year/error.tsx`.
 
-- [ ] **Step 2: Screen** (`'use client'`, module-scope subcomponents only). State machine per location tab (Brampton default): on mount → `fetchPrasadPreview(pid)` → render: stats strip (`families / keptExisting / birthdayMonth / spill / noBirthMonth / unplaced`), cap input (`defaultValue={defaultCap}`, re-preview on change), proposed list grouped by Sunday (date heading + per-family rows with reason chip; chips: birthday-month → `var(--accentSoft)`, spill → `var(--setu-warn-soft)`, no-birth-month → `var(--surface2)`), `perSunday` bar list. Empty-calendar state: `eligibleSundayCount === 0` → "Publish the {location} class calendar first — the prasad rotation needs class Sundays." with a link to `/admin/calendar`. Publish button → `publishPrasad(pid, cap)` → success toast → re-preview (now mostly `keptExisting`). Unplaced > 0 → publish disabled with warn text "Raise the cap — {n} families don't fit." Already-published management: below the preview, a "Published assignments" section driven by `GET /api/admin/prasad?pid=...` listing per-Sunday groups with per-row actions (Reassign → date `<select>` of eligible Sundays + Save → PATCH; Cancel → PATCH `{cancel:true}` with `confirm()`). Keep every interactive control ≥44px; testids: `prasad-preview`, `prasad-publish`, `prasad-cap-input`, `prasad-sunday-group`.
+- [ ] **Step 2: Screen** (`'use client'`, module-scope subcomponents only). State machine per location tab (Brampton default): on mount → `fetchPrasadPreview(pid)` → render: stats strip (`families / keptExisting / birthdayMonth / spill / noBirthMonth / unplaced`), cap input (`defaultValue={defaultCap}`, re-preview on change), proposed list grouped by Sunday (date heading + per-family rows with reason chip; chips: birthday-month → `var(--accentSoft)`, spill → `var(--setu-warn-soft)`, no-birth-month → `var(--surface2)`), `perSunday` bar list. Empty-calendar state: `eligibleSundayCount === 0` → "Publish the {location} class calendar first - the prasad rotation needs class Sundays." with a link to `/admin/calendar`. Publish button → `publishPrasad(pid, cap)` → success toast → re-preview (now mostly `keptExisting`). Unplaced > 0 → publish disabled with warn text "Raise the cap - {n} families don't fit." Already-published management: below the preview, a "Published assignments" section driven by `GET /api/admin/prasad?pid=...` listing per-Sunday groups with per-row actions (Reassign → date `<select>` of eligible Sundays + Save → PATCH; Cancel → PATCH `{cancel:true}` with `confirm()`). Keep every interactive control ≥44px; testids: `prasad-preview`, `prasad-publish`, `prasad-cap-input`, `prasad-sunday-group`.
 
-- [ ] **Step 3: Nav wiring.** Admin dashboard: add a card "Prasad rotation — assign and manage prasad Sundays" linking `/admin/prasad` inside the Bala Vihar group (copy the School-year card JSX shape). Sidebar + mobile nav: add entry with the same icon component family the School-year entry uses.
+- [ ] **Step 3: Nav wiring.** Admin dashboard: add a card "Prasad rotation - assign and manage prasad Sundays" linking `/admin/prasad` inside the Bala Vihar group (copy the School-year card JSX shape). Sidebar + mobile nav: add entry with the same icon component family the School-year entry uses.
 
 - [ ] **Step 4: Component test** (rtl, mock `prasad-client`): renders stats from a mocked preview; publish disabled when `unplaced > 0`; empty-calendar message when `eligibleSundayCount === 0`. Use `getAllBy*` dual-branch convention if the screen renders mobile+desktop branches.
 
@@ -1196,12 +1196,12 @@ export async function publishPrasad(pid: string, cap: number): Promise<PrasadPre
 **Files:**
 - Create: `apps/portal/src/features/setu/prasad/family-prasad-card.tsx`
 - Create: `apps/portal/src/app/family/prasad/page.tsx`, `error.tsx`
-- Modify: `apps/portal/src/app/family/page.tsx` (render the card; server-fetch via `getFamilyAssignment` next to the existing `getEnrollments`/`getDonations` calls — see imports at lines 13-20)
+- Modify: `apps/portal/src/app/family/page.tsx` (render the card; server-fetch via `getFamilyAssignment` next to the existing `getEnrollments`/`getDonations` calls - see imports at lines 13-20)
 - Test: `apps/portal/src/features/setu/prasad/__tests__/family-prasad-card.test.tsx`
 
-- [ ] **Step 1: Server read on the dashboard.** In `apps/portal/src/app/family/page.tsx`, fetch `const prasad = await getFamilyAssignment(fid)` alongside the other awaited reads (inside the existing Suspense'd server component — the page already does `await connection()`); render `<FamilyPrasadCard assignment={prasad} />` in BOTH the mobile and desktop layout branches, after the attendance/seva cards.
+- [ ] **Step 1: Server read on the dashboard.** In `apps/portal/src/app/family/page.tsx`, fetch `const prasad = await getFamilyAssignment(fid)` alongside the other awaited reads (inside the existing Suspense'd server component - the page already does `await connection()`); render `<FamilyPrasadCard assignment={prasad} />` in BOTH the mobile and desktop layout branches, after the attendance/seva cards.
 
-- [ ] **Step 2: Card + move dialog** (`'use client'`, receives the server-fetched assignment as prop). Renders null when `assignment == null` (families in locations without a published rotation see nothing). Display: "Your prasad Sunday" + `formatYmdToronto(date)` (e.g. "Sun, Mar 22") + subline `Why this date: {youngestName}'s birthday month` (reason `birthday-month`) / "Assigned by the team" otherwise + blurb "Bring prasad for the assembly — enough to share. Thank you for serving!". Move flow: "Can't make it? Move my date" button (hidden when `!assignment.movable`, replaced by "Date locked — within a week of your Sunday") → fixed-position sheet (wrap in `CspRoot`/`className="csp"` — token scoping) listing `fetchMoveOptions()` dates as ≥44px radio rows with `{seatsLeft} spots left` badge → Confirm → `movePrasad(date)` → success toast + `router.refresh()`; 409 errors toast specific copy: `target-full` → "That Sunday just filled up — pick another", `locked` → "Too close to your date to move it online — contact the welcome team."
+- [ ] **Step 2: Card + move dialog** (`'use client'`, receives the server-fetched assignment as prop). Renders null when `assignment == null` (families in locations without a published rotation see nothing). Display: "Your prasad Sunday" + `formatYmdToronto(date)` (e.g. "Sun, Mar 22") + subline `Why this date: {youngestName}'s birthday month` (reason `birthday-month`) / "Assigned by the team" otherwise + blurb "Bring prasad for the assembly - enough to share. Thank you for serving!". Move flow: "Can't make it? Move my date" button (hidden when `!assignment.movable`, replaced by "Date locked - within a week of your Sunday") → fixed-position sheet (wrap in `CspRoot`/`className="csp"` - token scoping) listing `fetchMoveOptions()` dates as ≥44px radio rows with `{seatsLeft} spots left` badge → Confirm → `movePrasad(date)` → success toast + `router.refresh()`; 409 errors toast specific copy: `target-full` → "That Sunday just filled up - pick another", `locked` → "Too close to your date to move it online - contact the welcome team."
 
 - [ ] **Step 3: `/family/prasad` page**: server component fetching the same view + the card expanded full-page (mobile + desktop branches), so the dashboard card can `Link` to it ("View details →"). Copy the page scaffold (flags/session/connection/Suspense) from `apps/portal/src/app/family/donations/page.tsx`.
 
@@ -1211,7 +1211,7 @@ export async function publishPrasad(pid: string, cap: number): Promise<PrasadPre
 
 ---
 
-### Task 12: Reminders — service + daily cron + vercel.ts
+### Task 12: Reminders - service + daily cron + vercel.ts
 
 **Files:**
 - Create: `apps/portal/src/features/setu/prasad/reminder-service.ts`
@@ -1267,8 +1267,8 @@ export async function sendDuePrasadReminders(now: Date = new Date()): Promise<Re
     const lead = kind === 'weekBefore' ? 'is one week away' : 'is this Sunday';
     for (const m of managersSnap.docs) {
       const mem = m.data() as { email?: string | null; phone?: string | null; firstName?: string };
-      const msg = `Namaste ${mem.firstName ?? ''}! Your family's Bala Vihar prasad day ${lead} — ${when}. Please bring prasad for the assembly. — Chinmaya Mission Toronto`;
-      if (mem.email) await sender.sendEmail({ to: mem.email, subject: `Prasad reminder — ${when}`, text: msg });
+      const msg = `Namaste ${mem.firstName ?? ''}! Your family's Bala Vihar prasad day ${lead} - ${when}. Please bring prasad for the assembly. - Chinmaya Mission Toronto`;
+      if (mem.email) await sender.sendEmail({ to: mem.email, subject: `Prasad reminder - ${when}`, text: msg });
       if (mem.phone) await sender.sendSMS({ phone: mem.phone, message: msg });
     }
     await doc.ref.set({ remindedAt: { [kind]: FieldValue.serverTimestamp() } }, { merge: true });
@@ -1284,15 +1284,15 @@ function addDays(ymd: string, days: number): string {
 }
 ```
 
-- [ ] **Step 2: Cron route** — copy `send-weekly-payment-reminders/route.ts`'s `verifyCronAuth` (timing-safe `CRON_SECRET` bearer) verbatim; kill switch `PRASAD_REMINDER_CRON_ENABLED !== 'true'` → `{ success: true, disabled: true }`; else `const result = await sendDuePrasadReminders()` → `{ success: true, ...result }`.
+- [ ] **Step 2: Cron route** - copy `send-weekly-payment-reminders/route.ts`'s `verifyCronAuth` (timing-safe `CRON_SECRET` bearer) verbatim; kill switch `PRASAD_REMINDER_CRON_ENABLED !== 'true'` → `{ success: true, disabled: true }`; else `const result = await sendDuePrasadReminders()` → `{ success: true, ...result }`.
 
-- [ ] **Step 3: vercel.ts** — add `{ path: '/api/cron/send-prasad-reminders', schedule: '0 14 * * *' }` (daily 14:00 UTC ≈ 9/10am Toronto) to the crons array.
+- [ ] **Step 3: vercel.ts** - add `{ path: '/api/cron/send-prasad-reminders', schedule: '0 14 * * *' }` (daily 14:00 UTC ≈ 9/10am Toronto) to the crons array.
 
 - [ ] **Step 4: Tests.** Service: fixture assignments at today+7 / today+2 / today+7-already-stamped → exactly 2 sends, stamped doc skipped, `set` called with the right `remindedAt` key, email AND SMS attempted for a manager carrying both (mock `resolveSender` + Firestore). Cron route: 401 without bearer; disabled without the env flag; calls service with flag on (mirror the existing cron route test file's mocking).
 
 - [ ] **Step 5: Green → commit** `feat(prasad): 7d/2d email+SMS reminders via daily cron (idempotent stamps)`.
 
-**Vercel env note (manual, after deploy):** set `CRON_SECRET` already exists; add `PRASAD_REMINDER_CRON_ENABLED=true` to UAT via `vercel env add PRASAD_REMINDER_CRON_ENABLED production --value "true" --no-sensitive --force --yes` when ready to go live — leave unset until then (cron returns disabled).
+**Vercel env note (manual, after deploy):** set `CRON_SECRET` already exists; add `PRASAD_REMINDER_CRON_ENABLED=true` to UAT via `vercel env add PRASAD_REMINDER_CRON_ENABLED production --value "true" --no-sensitive --force --yes` when ready to go live - leave unset until then (cron returns disabled).
 
 ---
 
@@ -1305,10 +1305,10 @@ function addDays(ymd: string, days: number): string {
 - Modify: welcome nav (`apps/portal/src/features/family/components/desktop-sidebar.tsx` welcome-team tabs + `welcome-mobile-nav`): add "Prasad" entry mirroring the "Roster" entry
 - Test: route test alongside the other welcome route tests
 
-- [ ] **Step 1: canAccessRoute** — add with the other welcome rules:
+- [ ] **Step 1: canAccessRoute** - add with the other welcome rules:
 
 ```ts
-  // Welcome-team API — prasad day-of lists (read-only).
+  // Welcome-team API - prasad day-of lists (read-only).
   if (pathname === '/api/welcome/prasad' || pathname.startsWith('/api/welcome/prasad/')) {
     return isWelcomeTeam(claims);
   }
@@ -1316,11 +1316,11 @@ function addDays(ymd: string, days: number): string {
 
 + test cases (welcome-team true, family-manager false).
 
-- [ ] **Step 2: Upcoming route** — GET: for each `CURRENT_PRASAD_PIDS`, query `prasadAssignments` `where('pid','==',pid).where('date','>=',torontoToday())` ordered by date (backed by the `(pid,date)` index), `limit(60)`; join manager contact info per family (members where `manager==true` → name + phone + email); group by date; return `{ locations: [{ location, sundays: [{ date, families: [{ fid, familyName, contacts }] }] }] }` with ISO-string dates.
+- [ ] **Step 2: Upcoming route** - GET: for each `CURRENT_PRASAD_PIDS`, query `prasadAssignments` `where('pid','==',pid).where('date','>=',torontoToday())` ordered by date (backed by the `(pid,date)` index), `limit(60)`; join manager contact info per family (members where `manager==true` → name + phone + email); group by date; return `{ locations: [{ location, sundays: [{ date, families: [{ fid, familyName, contacts }] }] }] }` with ISO-string dates.
 
-- [ ] **Step 3: Page** — server component (welcome layout already re-verifies the role; copy the defensive re-check from `/welcome/family/[fid]/page.tsx`): renders the next 4 Sundays per location as cards — family name + manager contact line, count badge per Sunday ("8 families"), location tabs. Mobile + desktop branches.
+- [ ] **Step 3: Page** - server component (welcome layout already re-verifies the role; copy the defensive re-check from `/welcome/family/[fid]/page.tsx`): renders the next 4 Sundays per location as cards - family name + manager contact line, count badge per Sunday ("8 families"), location tabs. Mobile + desktop branches.
 
-- [ ] **Step 4: Nav** — "Prasad" entry in the welcome sidebar/mobile nav linking `/welcome/prasad`.
+- [ ] **Step 4: Nav** - "Prasad" entry in the welcome sidebar/mobile nav linking `/welcome/prasad`.
 
 - [ ] **Step 5: Tests green → commit** `feat(prasad): welcome-team upcoming prasad view`.
 
@@ -1383,14 +1383,14 @@ test.describe('Prasad module', () => {
     expect(optsRes.status()).toBe(200);
     const { options } = await optsRes.json();
     if (options.length === 0) {
-      test.info().annotations.push({ type: 'note', description: 'No open future Sundays in UAT — move round-trip skipped.' });
+      test.info().annotations.push({ type: 'note', description: 'No open future Sundays in UAT - move round-trip skipped.' });
       return;
     }
     const original = (await (await page.request.get('/api/setu/prasad')).json()).assignment.date;
     const target = options[0].date;
     const move = await page.request.post('/api/setu/prasad/move', { data: { date: target } });
     expect(move.status()).toBe(200);
-    // revert (seed value) — keeps the fixture stable for the next run
+    // revert (seed value) - keeps the fixture stable for the next run
     const revert = await page.request.post('/api/setu/prasad/move', { data: { date: original } });
     // revert can 409 if original is now locked/full; re-seed restores it regardless
     expect([200, 409]).toContain(revert.status());
@@ -1404,7 +1404,7 @@ test.describe('Prasad module', () => {
 });
 ```
 
-- [ ] **Step 3: Push, wait for the Vercel deploy, run** `pnpm test:e2e -- e2e/setu/admin/prasad.spec.ts` against `https://cmt-setu.vercel.app` — all green (or annotated skips).
+- [ ] **Step 3: Push, wait for the Vercel deploy, run** `pnpm test:e2e -- e2e/setu/admin/prasad.spec.ts` against `https://cmt-setu.vercel.app` - all green (or annotated skips).
 
 - [ ] **Step 4: Docs.** Runbook §10: add `backfill:birth-months` row (snapshot-fed, idempotent, `--allow-prod` at cutover). Runbook §14 entry (same turn as the UAT index deploy + backfill run): indexes deployed (×2), backfill run counts, new collections `prasadAssignments`/`prasadConfig`, new env `PRASAD_REMINDER_CRON_ENABLED`, new cron path, prod TODO (deploy indexes no `--force`, run backfill `--allow-prod`, seed Scarborough calendar, publish from `/admin/prasad`, set the cron env). CLAUDE.md: add a "Prasad module" status line near the admin-revamp block.
 

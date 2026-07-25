@@ -1,10 +1,10 @@
-# Seva Hours — Slice A (Foundation + Opportunity Management) Implementation Plan
+# Seva Hours - Slice A (Foundation + Opportunity Management) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Admin & welcome-team can set the seva year + 20-hour target and create/edit/close **seva opportunities**, on a modern, on-theme management screen.
 
-**Architecture:** Greenfield `seva` domain. Pure Zod schemas in `@cmt/shared-domain`; a config read/write lib + an opportunities server reader in the portal; `/api/welcome/seva/*` (welcome+admin) and `/api/admin/seva/requirement` (admin) routes mirroring the existing programs routes; a themed `/welcome/seva` management page. UAT-only Firestore indexes. No signup/hours logic yet — that's Slice B/C.
+**Architecture:** Greenfield `seva` domain. Pure Zod schemas in `@cmt/shared-domain`; a config read/write lib + an opportunities server reader in the portal; `/api/welcome/seva/*` (welcome+admin) and `/api/admin/seva/requirement` (admin) routes mirroring the existing programs routes; a themed `/welcome/seva` management page. UAT-only Firestore indexes. No signup/hours logic yet - that's Slice B/C.
 
 **Tech Stack:** Next.js 16 App Router (Cache Components), TypeScript (`exactOptionalPropertyTypes` + `noUncheckedIndexedAccess`), Zod, Firebase Admin (UAT `chinmaya-setu-uat`), Vitest + Testing Library.
 
@@ -16,52 +16,52 @@
 
 The management UI must look **modern and match the Setu theme** (Cool Mist + orange CTA). Non-negotiables:
 
-- **Brand-token scoping:** brand tokens only resolve inside a `CspRoot`/`.csp` subtree (see memory `feedback_csp_token_scoping`). The `/welcome/*` layout already wraps children in `CspRoot`, so page content inherits tokens — but any `position:fixed`/overlay/modal rendered outside that subtree MUST add `className="csp"` or be wrapped in `CspRoot`, or it renders unstyled.
+- **Brand-token scoping:** brand tokens only resolve inside a `CspRoot`/`.csp` subtree (see memory `feedback_csp_token_scoping`). The `/welcome/*` layout already wraps children in `CspRoot`, so page content inherits tokens - but any `position:fixed`/overlay/modal rendered outside that subtree MUST add `className="csp"` or be wrapped in `CspRoot`, or it renders unstyled.
 - **Tokens (use these, never hardcoded hex):** `--accent` (orange CTA), `--accentSoft`, `--accentDeep`, `--bg`, `--surface`, `--surface2`, `--line`, `--line2`, `--muted`, `--ink`, `--body-text`, `--radius`, `--radiusSm`, `--err`.
 - **Classes:** `card`, `btn btn--p` (primary/orange), `btn--s` (secondary), `btn--g` (ghost), `btn--block`, `input`, `field`, `row`, `col`, `between`, `pill`, `focus-ring`. Headings use the light-weight large style (see existing admin pages); script-accent via `<em className="sa">`.
 - **Components:** import `SetuIcon`, `SetuLogo`, `toast`, `Rosette` from `@cmt/ui`; `CspRoot`, `SectionLabel`, `FieldError` from `@/features/family/components/atoms`.
 - **Responsive:** every page renders a mobile block (`className="block md:hidden"`) and a desktop block (`className="hidden md:block"`), mirroring `apps/portal/src/app/admin/programs/page.tsx` + `apps/portal/src/features/admin/programs/programs-table.tsx` / `offerings-panel.tsx`. The `/welcome` layout owns the sidebar/mobile-nav chrome; pages render content only.
 - **Accessibility:** real `<button>`/`<label>`/`aria-*`; focus-visible via `focus-ring`; dialogs get `role="dialog" aria-modal`.
-- **Visual pass:** after the structure + tests are in place for the UI tasks (A8), dispatch the **`oh-my-claudecode:designer`** agent (model: opus) to refine spacing, hierarchy, empty states, and micro-interactions against these tokens — do NOT invent a new visual language; match `/admin/programs` and `/welcome`.
+- **Visual pass:** after the structure + tests are in place for the UI tasks (A8), dispatch the **`oh-my-claudecode:designer`** agent (model: opus) to refine spacing, hierarchy, empty states, and micro-interactions against these tokens - do NOT invent a new visual language; match `/admin/programs` and `/welcome`.
 
 Reference implementations to mirror (read before building UI): `apps/portal/src/app/admin/programs/page.tsx`, `apps/portal/src/features/admin/programs/{programs-table,program-form,offerings-panel}.tsx`, `apps/portal/src/app/welcome/page.tsx`, `apps/portal/src/app/welcome/layout.tsx`.
 
 ---
 
-## Mobile-app readiness (REQUIRED — applies to every API + every screen in this slice and all later slices)
+## Mobile-app readiness (REQUIRED - applies to every API + every screen in this slice and all later slices)
 
 A native mobile app will consume these APIs later, so build them mobile-consumable from day one:
 
-- **Auth via the header session, NOT cookies.** The middleware already accepts EITHER the `__session` cookie OR an `Authorization: Bearer <Firebase ID token>` (`middleware.ts:85`), verifies it, and injects `x-portal-role/uid/fid/mid/extra-roles` request headers; it also runs `applyCors`. **Every API handler MUST derive identity from `readSessionFromHeaders(req)`** (which reads those injected headers) — NEVER from `getCurrentFamily()` / `cookies()` directly, because the Bearer path sets no cookie and those return null for a mobile client. All Slice A routes already use `readSessionFromHeaders` — keep it that way. (Critical for Slice B: the family signup route must bind `fid`/`mid` from `readSessionFromHeaders(req)`, not `getCurrentFamily()`.)
-- **CORS / cross-origin.** `/api/welcome/seva/*` and `/api/setu/seva/*` must stay reachable cross-origin like the other `/api/*` routes — don't add handler logic that breaks preflight or assumes same-origin. The middleware's `applyCors` covers it; just don't fight it.
-- **JSON-only, fully serializable payloads.** Consistent envelope — `{ opportunities }` / `{ requirement }` / `{ oppId }` on success, `{ error, issues? }` on failure. **All dates as ISO strings** (`serializeOpportunity` already does this) — never raw Firestore `Timestamp` or `Date` instances in a response. Numbers stay numbers (hours/capacity), not strings.
-- **No web-only assumptions in handlers.** No reliance on `Referer`, redirects, or HTML responses — these are pure data endpoints a mobile client calls. (Server-internal concerns like `revalidateTag` are fine.)
+- **Auth via the header session, NOT cookies.** The middleware already accepts EITHER the `__session` cookie OR an `Authorization: Bearer <Firebase ID token>` (`middleware.ts:85`), verifies it, and injects `x-portal-role/uid/fid/mid/extra-roles` request headers; it also runs `applyCors`. **Every API handler MUST derive identity from `readSessionFromHeaders(req)`** (which reads those injected headers) - NEVER from `getCurrentFamily()` / `cookies()` directly, because the Bearer path sets no cookie and those return null for a mobile client. All Slice A routes already use `readSessionFromHeaders` - keep it that way. (Critical for Slice B: the family signup route must bind `fid`/`mid` from `readSessionFromHeaders(req)`, not `getCurrentFamily()`.)
+- **CORS / cross-origin.** `/api/welcome/seva/*` and `/api/setu/seva/*` must stay reachable cross-origin like the other `/api/*` routes - don't add handler logic that breaks preflight or assumes same-origin. The middleware's `applyCors` covers it; just don't fight it.
+- **JSON-only, fully serializable payloads.** Consistent envelope - `{ opportunities }` / `{ requirement }` / `{ oppId }` on success, `{ error, issues? }` on failure. **All dates as ISO strings** (`serializeOpportunity` already does this) - never raw Firestore `Timestamp` or `Date` instances in a response. Numbers stay numbers (hours/capacity), not strings.
+- **No web-only assumptions in handlers.** No reliance on `Referer`, redirects, or HTML responses - these are pure data endpoints a mobile client calls. (Server-internal concerns like `revalidateTag` are fine.)
 - **One shared contract.** Request/response shapes live in the Zod schemas in `@cmt/shared-domain` (single source of truth) so web + mobile import the same types; field names match the schema (`oppId`, `defaultHours`, `sevaYear`, `status`, …).
 
-**Mobile view (UI):** every screen ships a *real* mobile layout (`block md:hidden`) alongside desktop (`hidden md:block`) — not a desktop layout crammed onto a phone. Verify both at ~375px and desktop widths; primary actions reachable with a thumb, no horizontal scroll.
+**Mobile view (UI):** every screen ships a *real* mobile layout (`block md:hidden`) alongside desktop (`hidden md:block`) - not a desktop layout crammed onto a phone. Verify both at ~375px and desktop widths; primary actions reachable with a thumb, no horizontal scroll.
 
 ---
 
 ## File structure
 
 **Create:**
-- `packages/shared-domain/src/setu/schemas/seva.ts` — `SevaRequirementConfigSchema`, `SevaOpportunityDocSchema`, `SevaOpportunityStatus`, `CreateSevaOpportunitySchema`, `UpdateSevaOpportunitySchema` + types.
-- `apps/portal/src/lib/seva-requirement.ts` — `getSevaRequirement()`, `setSevaRequirement()`, `DEFAULT_SEVA_REQUIREMENT`.
-- `apps/portal/src/features/setu/seva/get-opportunities.ts` — `listOpportunities()`, `getOpportunity(oppId)`, `serializeOpportunity()`.
-- `apps/portal/src/app/api/admin/seva/requirement/route.ts` — `GET`/`PUT` (admin).
-- `apps/portal/src/app/api/welcome/seva/opportunities/route.ts` — `GET`/`POST` (welcome+admin).
-- `apps/portal/src/app/api/welcome/seva/opportunities/[oppId]/route.ts` — `PATCH` (welcome+admin).
-- `apps/portal/src/features/admin/seva/opportunities-client.ts` — client fetch wrappers.
-- `apps/portal/src/features/admin/seva/seva-manager.tsx` — client management UI (config panel + opportunity list + create/edit form).
-- `apps/portal/src/app/welcome/seva/page.tsx` — themed server page.
+- `packages/shared-domain/src/setu/schemas/seva.ts` - `SevaRequirementConfigSchema`, `SevaOpportunityDocSchema`, `SevaOpportunityStatus`, `CreateSevaOpportunitySchema`, `UpdateSevaOpportunitySchema` + types.
+- `apps/portal/src/lib/seva-requirement.ts` - `getSevaRequirement()`, `setSevaRequirement()`, `DEFAULT_SEVA_REQUIREMENT`.
+- `apps/portal/src/features/setu/seva/get-opportunities.ts` - `listOpportunities()`, `getOpportunity(oppId)`, `serializeOpportunity()`.
+- `apps/portal/src/app/api/admin/seva/requirement/route.ts` - `GET`/`PUT` (admin).
+- `apps/portal/src/app/api/welcome/seva/opportunities/route.ts` - `GET`/`POST` (welcome+admin).
+- `apps/portal/src/app/api/welcome/seva/opportunities/[oppId]/route.ts` - `PATCH` (welcome+admin).
+- `apps/portal/src/features/admin/seva/opportunities-client.ts` - client fetch wrappers.
+- `apps/portal/src/features/admin/seva/seva-manager.tsx` - client management UI (config panel + opportunity list + create/edit form).
+- `apps/portal/src/app/welcome/seva/page.tsx` - themed server page.
 - Tests alongside each (`__tests__/`).
 
 **Modify:**
-- `packages/shared-domain/src/setu/index.ts` (or schema barrel) — export the seva schemas/types.
-- `packages/shared-domain/src/auth/can-access-route.ts` — add `/api/welcome/seva/*` → `isWelcomeTeam`.
-- `packages/shared-domain/src/__tests__/can-access-route.test.ts` — assertions.
-- `firestore.indexes.json` — `seva_opportunities (sevaYear, status, date)` index.
-- Welcome nav + admin sidebar — add a **Seva** entry (`apps/portal/src/app/admin/layout.tsx`, the welcome layout/sidebar, and the relevant mobile navs).
+- `packages/shared-domain/src/setu/index.ts` (or schema barrel) - export the seva schemas/types.
+- `packages/shared-domain/src/auth/can-access-route.ts` - add `/api/welcome/seva/*` → `isWelcomeTeam`.
+- `packages/shared-domain/src/__tests__/can-access-route.test.ts` - assertions.
+- `firestore.indexes.json` - `seva_opportunities (sevaYear, status, date)` index.
+- Welcome nav + admin sidebar - add a **Seva** entry (`apps/portal/src/app/admin/layout.tsx`, the welcome layout/sidebar, and the relevant mobile navs).
 
 ---
 
@@ -70,7 +70,7 @@ A native mobile app will consume these APIs later, so build them mobile-consumab
 **Files:**
 - Create: `packages/shared-domain/src/setu/schemas/seva.ts`
 - Create: `packages/shared-domain/src/setu/schemas/__tests__/seva.test.ts`
-- Modify: the setu schema barrel that re-exports schemas (follow how `member.ts`/`offering.ts` are exported — check `packages/shared-domain/src/setu/index.ts` and `packages/shared-domain/src/index.ts`).
+- Modify: the setu schema barrel that re-exports schemas (follow how `member.ts`/`offering.ts` are exported - check `packages/shared-domain/src/setu/index.ts` and `packages/shared-domain/src/index.ts`).
 
 - [ ] **Step 1: Write the failing test** (`seva.test.ts`)
 
@@ -130,7 +130,7 @@ describe('UpdateSevaOpportunitySchema', () => {
 });
 ```
 
-- [ ] **Step 2: Run it, confirm failure** — `pnpm --filter @cmt/shared-domain exec vitest run src/setu/schemas/__tests__/seva.test.ts` → FAIL (module not found).
+- [ ] **Step 2: Run it, confirm failure** - `pnpm --filter @cmt/shared-domain exec vitest run src/setu/schemas/__tests__/seva.test.ts` → FAIL (module not found).
 
 - [ ] **Step 3: Implement** (`seva.ts`)
 
@@ -188,11 +188,11 @@ export const UpdateSevaOpportunitySchema = z
 export type UpdateSevaOpportunityInput = z.infer<typeof UpdateSevaOpportunitySchema>;
 ```
 
-- [ ] **Step 4: Export from the barrel(s)** — add `export * from './schemas/seva';` where `member`/`offering` are exported (match the existing pattern; verify `@cmt/shared-domain` and `@cmt/shared-domain/setu` both surface the new symbols). Add a line to `packages/shared-domain/src/__tests__/index.test.ts` if it asserts the export surface.
+- [ ] **Step 4: Export from the barrel(s)** - add `export * from './schemas/seva';` where `member`/`offering` are exported (match the existing pattern; verify `@cmt/shared-domain` and `@cmt/shared-domain/setu` both surface the new symbols). Add a line to `packages/shared-domain/src/__tests__/index.test.ts` if it asserts the export surface.
 
 - [ ] **Step 5: Run tests** → PASS. Run `pnpm --filter @cmt/shared-domain exec vitest run`.
 
-- [ ] **Step 6: Commit** — `feat(seva): schemas for requirement config + opportunities`
+- [ ] **Step 6: Commit** - `feat(seva): schemas for requirement config + opportunities`
 
 ---
 
@@ -248,7 +248,7 @@ describe('setSevaRequirement', () => {
 });
 ```
 
-- [ ] **Step 2: Run, confirm fail** — `pnpm --filter @cmt/portal exec vitest run src/lib/__tests__/seva-requirement.test.ts`.
+- [ ] **Step 2: Run, confirm fail** - `pnpm --filter @cmt/portal exec vitest run src/lib/__tests__/seva-requirement.test.ts`.
 
 - [ ] **Step 3: Implement**
 
@@ -277,7 +277,7 @@ export async function setSevaRequirement(config: SevaRequirementConfig): Promise
 }
 ```
 
-- [ ] **Step 4: Run** → PASS. **Step 5: Commit** — `feat(seva): requirement config read/write lib`.
+- [ ] **Step 4: Run** → PASS. **Step 5: Commit** - `feat(seva): requirement config read/write lib`.
 
 ---
 
@@ -287,7 +287,7 @@ export async function setSevaRequirement(config: SevaRequirementConfig): Promise
 - Create: `apps/portal/src/features/setu/seva/get-opportunities.ts`
 - Create: `apps/portal/src/features/setu/seva/__tests__/get-opportunities.test.ts`
 
-- [ ] **Step 1: Failing test** — mock `portalFirestore`; assert `listOpportunities()` maps docs (Timestamp→Date) and supports `{ sevaYear, status }` filters; `serializeOpportunity` returns ISO strings for `date/createdAt/updatedAt`.
+- [ ] **Step 1: Failing test** - mock `portalFirestore`; assert `listOpportunities()` maps docs (Timestamp→Date) and supports `{ sevaYear, status }` filters; `serializeOpportunity` returns ISO strings for `date/createdAt/updatedAt`.
 
 ```ts
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -345,8 +345,8 @@ describe('serializeOpportunity', () => {
 ```
 
 - [ ] **Step 2: Confirm fail.**
-- [ ] **Step 3: Implement** — `listOpportunities(filters?)` builds `collection('seva_opportunities')`, chains `.where('sevaYear','==',…)` / `.where('status','==',…)` when provided, `.orderBy('date','asc')`, maps each doc's Timestamps to `Date` into a `SevaOpportunityDoc`. `getOpportunity(oppId)` reads the doc, returns mapped doc or null. `serializeOpportunity(o)` → `{ ...o, date: o.date.toISOString(), createdAt: …, updatedAt: … }`. (Mirror `apps/portal/src/app/api/setu/programs/route.ts`'s serialize + `get-programs`.)
-- [ ] **Step 4: Run → PASS. Step 5: Commit** — `feat(seva): opportunities server reader`.
+- [ ] **Step 3: Implement** - `listOpportunities(filters?)` builds `collection('seva_opportunities')`, chains `.where('sevaYear','==',…)` / `.where('status','==',…)` when provided, `.orderBy('date','asc')`, maps each doc's Timestamps to `Date` into a `SevaOpportunityDoc`. `getOpportunity(oppId)` reads the doc, returns mapped doc or null. `serializeOpportunity(o)` → `{ ...o, date: o.date.toISOString(), createdAt: …, updatedAt: … }`. (Mirror `apps/portal/src/app/api/setu/programs/route.ts`'s serialize + `get-programs`.)
+- [ ] **Step 4: Run → PASS. Step 5: Commit** - `feat(seva): opportunities server reader`.
 
 ---
 
@@ -358,7 +358,7 @@ describe('serializeOpportunity', () => {
 
 Mirror `apps/portal/src/app/api/admin/programs/route.ts` auth (readSessionFromHeaders → isAdmin) and `/api/admin/volunteering-skills` shape.
 
-- [ ] **Step 1: Failing test** — GET: 401 no session, 403 non-admin, 200 returns config (mock `@/lib/seva-requirement`). PUT: 403 non-admin, 400 bad body (e.g. `hoursPerYear: 0`), 200 persists (`setSevaRequirement` called with parsed body). Mock `next/cache` is NOT needed (no revalidateTag) — but if you add one, mock it.
+- [ ] **Step 1: Failing test** - GET: 401 no session, 403 non-admin, 200 returns config (mock `@/lib/seva-requirement`). PUT: 403 non-admin, 400 bad body (e.g. `hoursPerYear: 0`), 200 persists (`setSevaRequirement` called with parsed body). Mock `next/cache` is NOT needed (no revalidateTag) - but if you add one, mock it.
 - [ ] **Step 2: Confirm fail.**
 - [ ] **Step 3: Implement**
 
@@ -389,7 +389,7 @@ export async function PUT(req: Request) {
 }
 ```
 
-- [ ] **Step 4: Run → PASS. Step 5: Commit** — `feat(seva): admin requirement-config API`.
+- [ ] **Step 4: Run → PASS. Step 5: Commit** - `feat(seva): admin requirement-config API`.
 
 ---
 
@@ -402,7 +402,7 @@ export async function PUT(req: Request) {
 
 Auth: `readSessionFromHeaders` → `isWelcomeTeam(session)` (admin inherits welcome-team). Mirror programs route for the create/serialize shape; mock `next/cache` in tests if you call `revalidateTag` (use tag `seva-opportunities`).
 
-- [ ] **Step 1: Failing tests** — GET: 401, 403 (non-welcome e.g. `family-manager`), 200 list. POST: 403 non-welcome; 400 invalid body; **409/400 when `currentSevaYear` is null** (must set the year first → error `seva-year-not-set`); 201 with `oppId` on success, stamping `sevaYear` from `getSevaRequirement()` and `status:'open'`, `defaultHours`/`capacity` persisted. PATCH: 403 non-welcome; 404 when missing; 200 on edit; 200 on `{status:'closed'}`.
+- [ ] **Step 1: Failing tests** - GET: 401, 403 (non-welcome e.g. `family-manager`), 200 list. POST: 403 non-welcome; 400 invalid body; **409/400 when `currentSevaYear` is null** (must set the year first → error `seva-year-not-set`); 201 with `oppId` on success, stamping `sevaYear` from `getSevaRequirement()` and `status:'open'`, `defaultHours`/`capacity` persisted. PATCH: 403 non-welcome; 404 when missing; 200 on edit; 200 on `{status:'closed'}`.
 - [ ] **Step 2: Confirm fail.**
 - [ ] **Step 3: Implement POST/GET** (`opportunities/route.ts`)
 
@@ -464,11 +464,11 @@ export async function POST(req: Request) {
 }
 ```
 
-> Note `randomUUID` from `node:crypto` is fine in a route handler. If you prefer the `CMT-`/slug style used elsewhere, mirror `register-family`'s id generator — but a UUID is acceptable for an internal opportunity id.
+> Note `randomUUID` from `node:crypto` is fine in a route handler. If you prefer the `CMT-`/slug style used elsewhere, mirror `register-family`'s id generator - but a UUID is acceptable for an internal opportunity id.
 
-- [ ] **Step 4: Implement PATCH** (`[oppId]/route.ts`) — `readSessionFromHeaders` → `isWelcomeTeam`; `await ctx.params` for `oppId`; `UpdateSevaOpportunitySchema.safeParse`; read the doc (404 if missing); build `updates` from provided fields (convert `date` string → `Date` when present); `txn`/`set(...,{merge:true})` with `updatedAt`/`updatedBy`; `revalidateTag('seva-opportunities','max')`; 200. (Mirror `apps/portal/src/app/api/admin/programs/[key]/route.ts`.)
+- [ ] **Step 4: Implement PATCH** (`[oppId]/route.ts`) - `readSessionFromHeaders` → `isWelcomeTeam`; `await ctx.params` for `oppId`; `UpdateSevaOpportunitySchema.safeParse`; read the doc (404 if missing); build `updates` from provided fields (convert `date` string → `Date` when present); `txn`/`set(...,{merge:true})` with `updatedAt`/`updatedBy`; `revalidateTag('seva-opportunities','max')`; 200. (Mirror `apps/portal/src/app/api/admin/programs/[key]/route.ts`.)
 
-- [ ] **Step 5: Run both test files → PASS. Step 6: Commit** — `feat(seva): management opportunities API (welcome + admin)`.
+- [ ] **Step 5: Run both test files → PASS. Step 6: Commit** - `feat(seva): management opportunities API (welcome + admin)`.
 
 ---
 
@@ -478,10 +478,10 @@ export async function POST(req: Request) {
 - Modify: `packages/shared-domain/src/auth/can-access-route.ts`
 - Modify: `packages/shared-domain/src/__tests__/can-access-route.test.ts`
 
-- [ ] **Step 1: Failing test** — add a describe block:
+- [ ] **Step 1: Failing test** - add a describe block:
 
 ```ts
-describe('canAccessRoute — /api/welcome/seva/* — welcome-team + admin', () => {
+describe('canAccessRoute - /api/welcome/seva/* - welcome-team + admin', () => {
   it('allows welcome-team and admin', () => {
     expect(canAccessRoute(welcomeTeam, '/api/welcome/seva/opportunities', 'POST')).toBe(true);
     expect(canAccessRoute(admin, '/api/welcome/seva/opportunities', 'GET')).toBe(true);
@@ -493,7 +493,7 @@ describe('canAccessRoute — /api/welcome/seva/* — welcome-team + admin', () =
     expect(canAccessRoute(teacher, '/api/welcome/seva/opportunities', 'GET')).toBe(false);
   });
 });
-describe('canAccessRoute — /api/admin/seva/requirement — admin only', () => {
+describe('canAccessRoute - /api/admin/seva/requirement - admin only', () => {
   it('allows admin, denies welcome-team', () => {
     expect(canAccessRoute(admin, '/api/admin/seva/requirement', 'PUT')).toBe(true);
     expect(canAccessRoute(welcomeTeam, '/api/admin/seva/requirement', 'PUT')).toBe(false);
@@ -502,10 +502,10 @@ describe('canAccessRoute — /api/admin/seva/requirement — admin only', () => 
 ```
 
 - [ ] **Step 2: Confirm fail** (the welcome/seva path currently default-denies).
-- [ ] **Step 3: Implement** — in `can-access-route.ts`, alongside the other `/api/welcome/*` rules (near the `/api/welcome/enrollments` block), add:
+- [ ] **Step 3: Implement** - in `can-access-route.ts`, alongside the other `/api/welcome/*` rules (near the `/api/welcome/enrollments` block), add:
 
 ```ts
-  // Seva management — opportunities + signup rosters + confirmations: admin + welcome-team.
+  // Seva management - opportunities + signup rosters + confirmations: admin + welcome-team.
   if (pathname === '/api/welcome/seva' || pathname.startsWith('/api/welcome/seva/')) {
     return isWelcomeTeam(claims);
   }
@@ -513,7 +513,7 @@ describe('canAccessRoute — /api/admin/seva/requirement — admin only', () => 
 
 (`/api/admin/seva/requirement` is already covered by the generic `/api/admin/*` → `isAdmin` rule; the test just locks that in. `/welcome/seva` *pages* are already covered by `/welcome/*` → `isWelcomeTeam`.)
 
-- [ ] **Step 4: Run** `pnpm --filter @cmt/shared-domain exec vitest run src/__tests__/can-access-route.test.ts` → PASS. **Step 5: Commit** — `feat(seva): canAccessRoute for /api/welcome/seva/*`.
+- [ ] **Step 4: Run** `pnpm --filter @cmt/shared-domain exec vitest run src/__tests__/can-access-route.test.ts` → PASS. **Step 5: Commit** - `feat(seva): canAccessRoute for /api/welcome/seva/*`.
 
 ---
 
@@ -522,7 +522,7 @@ describe('canAccessRoute — /api/admin/seva/requirement — admin only', () => 
 **Files:**
 - Modify: `firestore.indexes.json`
 
-- [ ] **Step 1** — add a composite index for `seva_opportunities`:
+- [ ] **Step 1** - add a composite index for `seva_opportunities`:
 
 ```json
 { "collectionGroup": "seva_opportunities", "queryScope": "COLLECTION",
@@ -533,14 +533,14 @@ describe('canAccessRoute — /api/admin/seva/requirement — admin only', () => 
   ] }
 ```
 
-- [ ] **Step 2** — deploy to **UAT only**: `firebase deploy --only firestore:indexes --project chinmaya-setu-uat` (NEVER `--force`, NEVER against prod `715b8` — see CLAUDE.md + memory). Leave the CLI's "extra indexes" warning alone.
-- [ ] **Step 3: Commit** — `chore(seva): seva_opportunities composite index (UAT)`.
+- [ ] **Step 2** - deploy to **UAT only**: `firebase deploy --only firestore:indexes --project chinmaya-setu-uat` (NEVER `--force`, NEVER against prod `715b8` - see CLAUDE.md + memory). Leave the CLI's "extra indexes" warning alone.
+- [ ] **Step 3: Commit** - `chore(seva): seva_opportunities composite index (UAT)`.
 
 > The `seva_signups` indexes land in Slice B/C when that collection is first queried.
 
 ---
 
-## Task A8: Management UI — `/welcome/seva` (themed, responsive)
+## Task A8: Management UI - `/welcome/seva` (themed, responsive)
 
 **Files:**
 - Create: `apps/portal/src/features/admin/seva/opportunities-client.ts`
@@ -550,17 +550,17 @@ describe('canAccessRoute — /api/admin/seva/requirement — admin only', () => 
 
 Read the **Design system / UX requirements** section above first. Mirror `admin/programs/page.tsx` (server page → client table/manager) and the offerings-panel form patterns.
 
-- [ ] **Step 1: Client wrappers** (`opportunities-client.ts`) — `listOpportunities()` (GET), `createOpportunity(input)` (POST), `updateOpportunity(oppId, patch)` (PATCH), `getRequirement()`/`saveRequirement(cfg)` (the admin requirement GET/PUT). Each returns `{ ok, ... }` and is the thing component tests mock (route handlers are server-only).
+- [ ] **Step 1: Client wrappers** (`opportunities-client.ts`) - `listOpportunities()` (GET), `createOpportunity(input)` (POST), `updateOpportunity(oppId, patch)` (PATCH), `getRequirement()`/`saveRequirement(cfg)` (the admin requirement GET/PUT). Each returns `{ ok, ... }` and is the thing component tests mock (route handlers are server-only).
 
-- [ ] **Step 2: Write the SevaManager component test** (`seva-manager.test.tsx`) — mock `@cmt/ui` (`toast`, `SetuIcon`) and `../opportunities-client`. Assert: renders the current seva-year + target; renders an opportunity row from `initialOpportunities`; "New opportunity" opens the form; submitting valid fields calls `createOpportunity` with the typed values; "Close" calls `updateOpportunity(oppId,{status:'closed'})`; the requirement panel's Save (admin-only) calls `saveRequirement`. Keep assertions behavior-level.
+- [ ] **Step 2: Write the SevaManager component test** (`seva-manager.test.tsx`) - mock `@cmt/ui` (`toast`, `SetuIcon`) and `../opportunities-client`. Assert: renders the current seva-year + target; renders an opportunity row from `initialOpportunities`; "New opportunity" opens the form; submitting valid fields calls `createOpportunity` with the typed values; "Close" calls `updateOpportunity(oppId,{status:'closed'})`; the requirement panel's Save (admin-only) calls `saveRequirement`. Keep assertions behavior-level.
 
-- [ ] **Step 3: Implement `SevaManager`** (client) — props `{ initialRequirement, initialOpportunities, canEditRequirement }` (the page passes `canEditRequirement` = viewer is admin). Structure:
-  - **Seva-year panel** (`card`): shows `currentSevaYear` (or a "No seva year set — set one to start posting opportunities" callout in `--accentSoft`) + `hoursPerYear`. If `canEditRequirement`, an inline edit (year text input like `2025-26` + hours number) → `saveRequirement`. If not admin, read-only.
-  - **Opportunities section:** a "New opportunity" `btn btn--p` opens a themed form (inline panel or a `CspRoot`/`csp`-wrapped dialog — remember token scoping). Fields: title, date (`<input type="date">`), defaultHours (number), capacity (number, blank=unlimited), location, description (`<textarea className="input">`). Submit → `createOpportunity` → toast + refresh list. Each opportunity renders as a `card` row: title, date (America/Toronto), `defaultHours` + capacity, a status `pill` (`open` = accentSoft/accentDeep; `closed` = surface2/muted), and Edit / Close actions.
+- [ ] **Step 3: Implement `SevaManager`** (client) - props `{ initialRequirement, initialOpportunities, canEditRequirement }` (the page passes `canEditRequirement` = viewer is admin). Structure:
+  - **Seva-year panel** (`card`): shows `currentSevaYear` (or a "No seva year set - set one to start posting opportunities" callout in `--accentSoft`) + `hoursPerYear`. If `canEditRequirement`, an inline edit (year text input like `2025-26` + hours number) → `saveRequirement`. If not admin, read-only.
+  - **Opportunities section:** a "New opportunity" `btn btn--p` opens a themed form (inline panel or a `CspRoot`/`csp`-wrapped dialog - remember token scoping). Fields: title, date (`<input type="date">`), defaultHours (number), capacity (number, blank=unlimited), location, description (`<textarea className="input">`). Submit → `createOpportunity` → toast + refresh list. Each opportunity renders as a `card` row: title, date (America/Toronto), `defaultHours` + capacity, a status `pill` (`open` = accentSoft/accentDeep; `closed` = surface2/muted), and Edit / Close actions.
   - All buttons real `<button>`; CTA = `btn--p` (orange); secondary = `btn--s`; destructive-ish Close = `btn--g` or a bordered `--err` button. Use `toast` for success/error.
   - Render a **mobile block + desktop block** per the UX rules.
 
-- [ ] **Step 4: Implement the page** (`app/welcome/seva/page.tsx`) — server component:
+- [ ] **Step 4: Implement the page** (`app/welcome/seva/page.tsx`) - server component:
 
 ```tsx
 import { connection } from 'next/server';
@@ -571,7 +571,7 @@ import { getSevaRequirement } from '@/lib/seva-requirement';
 import { listOpportunities, serializeOpportunity } from '@/features/setu/seva/get-opportunities';
 import { SevaManager } from '@/features/admin/seva/seva-manager';
 
-export const metadata = { title: 'Seva — CMT Portal' };
+export const metadata = { title: 'Seva - CMT Portal' };
 
 export default async function WelcomeSevaPage() {
   await connection();
@@ -594,20 +594,20 @@ export default async function WelcomeSevaPage() {
 ```
 
 - [ ] **Step 5: Run the component test → PASS**, then `pnpm --filter @cmt/portal exec tsc --noEmit`.
-- [ ] **Step 6: Designer pass** — dispatch `oh-my-claudecode:designer` (model opus) to refine `seva-manager.tsx` spacing/hierarchy/empty-states against the tokens, **without** changing behavior or breaking the tests. Re-run the component test + typecheck after.
-- [ ] **Step 7: Commit** — `feat(seva): themed /welcome/seva opportunity management UI`.
+- [ ] **Step 6: Designer pass** - dispatch `oh-my-claudecode:designer` (model opus) to refine `seva-manager.tsx` spacing/hierarchy/empty-states against the tokens, **without** changing behavior or breaking the tests. Re-run the component test + typecheck after.
+- [ ] **Step 7: Commit** - `feat(seva): themed /welcome/seva opportunity management UI`.
 
 ---
 
 ## Task A9: Navigation entries
 
 **Files:**
-- Modify: the welcome layout/sidebar (find it: `apps/portal/src/app/welcome/layout.tsx` and any `DesktopSidebar`/welcome mobile nav) — add **Seva** → `/welcome/seva`.
-- Modify: `apps/portal/src/app/admin/layout.tsx` — add **Seva** (`/welcome/seva`) to the admin sidebar (admins manage seva there too); and `apps/portal/src/features/admin/components/admin-mobile-nav.tsx` MORE list.
+- Modify: the welcome layout/sidebar (find it: `apps/portal/src/app/welcome/layout.tsx` and any `DesktopSidebar`/welcome mobile nav) - add **Seva** → `/welcome/seva`.
+- Modify: `apps/portal/src/app/admin/layout.tsx` - add **Seva** (`/welcome/seva`) to the admin sidebar (admins manage seva there too); and `apps/portal/src/features/admin/components/admin-mobile-nav.tsx` MORE list.
 
-- [ ] **Step 1** — add the nav links (match each file's existing item shape; pick an existing `SetuIcon` key such as `people`/`check`). If a nav test asserts the item list, update it in the same commit.
-- [ ] **Step 2** — `pnpm --filter @cmt/portal exec vitest run` for any touched nav tests; `tsc --noEmit`.
-- [ ] **Step 3: Commit** — `feat(seva): nav entries for /welcome/seva`.
+- [ ] **Step 1** - add the nav links (match each file's existing item shape; pick an existing `SetuIcon` key such as `people`/`check`). If a nav test asserts the item list, update it in the same commit.
+- [ ] **Step 2** - `pnpm --filter @cmt/portal exec vitest run` for any touched nav tests; `tsc --noEmit`.
+- [ ] **Step 3: Commit** - `feat(seva): nav entries for /welcome/seva`.
 
 ---
 

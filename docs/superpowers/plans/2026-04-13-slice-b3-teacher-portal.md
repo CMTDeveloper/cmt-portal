@@ -1,10 +1,10 @@
-# Slice B3 — Teacher Portal Implementation Plan
+# Slice B3 - Teacher Portal Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Ship the teacher attendance workflow: teacher dashboard listing classes from RTDB, attendance marking page with `{present, absent, late, uninformed}` per student, attendance report with date-range filter and CSV export, and an "uninformed absentees" list across classes for follow-up. Teacher login already works from B0 (shared `TEACHER_PASSPHRASE`); this slice wires the pages, APIs, and components behind it. Dual-mode auth (cookie + Bearer) on every endpoint.
 
-**Architecture:** Every teacher session is the deterministic shared user `teacher-shared-v1` (limitation accepted per spec §4 and §7.6 risk #3 — no per-teacher audit trail). Pages under `/check-in/teacher/*` render server components that fetch class rosters from RTDB through the shared `family-lookup` helper evolved with class APIs. Attendance writes go to `attendance/{yyyy-mm-dd}/{classId}/{sid}` in portal Firestore. The report endpoint serializes to JSON by default or streams CSV when `Accept: text/csv`. All components use `@cmt/ui` shadcn primitives — no `react-datepicker`.
+**Architecture:** Every teacher session is the deterministic shared user `teacher-shared-v1` (limitation accepted per spec §4 and §7.6 risk #3 - no per-teacher audit trail). Pages under `/check-in/teacher/*` render server components that fetch class rosters from RTDB through the shared `family-lookup` helper evolved with class APIs. Attendance writes go to `attendance/{yyyy-mm-dd}/{classId}/{sid}` in portal Firestore. The report endpoint serializes to JSON by default or streams CSV when `Accept: text/csv`. All components use `@cmt/ui` shadcn primitives - no `react-datepicker`.
 
 **Tech Stack:** Builds on B0 session infrastructure and B2's `features/check-in/shared/*` modules. Adds `features/check-in/teacher/*` with attendance marker + CSV serializer. Extends `@cmt/shared-domain/check-in/*` with `AttendanceRecord`, `ClassRoster`, `AttendanceStatus` types.
 
@@ -162,7 +162,7 @@ describe('TeacherAttendanceRequest', () => {
 });
 ```
 
-- [ ] **Step 2: Run test — expect failure**
+- [ ] **Step 2: Run test - expect failure**
 
 ```sh
 pnpm --filter @cmt/shared-domain test -- src/__tests__/attendance-types.test.ts
@@ -231,9 +231,9 @@ export interface TeacherUninformedResponse {
 }
 ```
 
-- [ ] **Step 4: Modify `packages/shared-domain/src/check-in/index.ts` — add `export * from './attendance';`**
+- [ ] **Step 4: Modify `packages/shared-domain/src/check-in/index.ts` - add `export * from './attendance';`**
 
-- [ ] **Step 5: Run test — expect pass**
+- [ ] **Step 5: Run test - expect pass**
 
 ```sh
 pnpm --filter @cmt/shared-domain test -- src/__tests__/attendance-types.test.ts
@@ -248,7 +248,7 @@ git commit -m "feat(shared-domain): add attendance types (AttendanceStatus, Atte
 
 ---
 
-## Task 2: `features/check-in/shared/rtdb/classlist.ts` — class/roster reader
+## Task 2: `features/check-in/shared/rtdb/classlist.ts` - class/roster reader
 
 RTDB master data exposes classes under `/classes/{classId}` with a student-id list. Reuses `readRtdb` + `findFamilyById`-style pattern.
 
@@ -330,7 +330,7 @@ describe('getRosterForClass', () => {
 });
 ```
 
-- [ ] **Step 2: Run test — expect failure**
+- [ ] **Step 2: Run test - expect failure**
 
 ```sh
 pnpm --filter @cmt/portal test -- src/features/check-in/shared/__tests__/classlist.test.ts
@@ -374,11 +374,11 @@ export async function getRosterForClass(classId: string): Promise<ClassRoster | 
 - [ ] **Step 4: Add the exports to the shared barrel**
 
 ```ts
-// apps/portal/src/features/check-in/shared/index.ts — append
+// apps/portal/src/features/check-in/shared/index.ts - append
 export * from './rtdb/classlist';
 ```
 
-- [ ] **Step 5: Run test — expect pass**
+- [ ] **Step 5: Run test - expect pass**
 
 ```sh
 pnpm --filter @cmt/portal test -- src/features/check-in/shared/__tests__/classlist.test.ts
@@ -455,7 +455,7 @@ describe('TeacherDashboard', () => {
 });
 ```
 
-- [ ] **Step 2: Run test — expect failure**
+- [ ] **Step 2: Run test - expect failure**
 
 ```sh
 pnpm --filter @cmt/portal test -- src/features/check-in/teacher/__tests__/teacher-dashboard.test.tsx
@@ -555,7 +555,7 @@ import { TeacherDashboard } from '@/features/check-in/teacher';
 import { listClasses } from '@/features/check-in/shared';
 import { flags } from '@/lib/flags';
 
-export const metadata = { title: 'Teacher — CMT Portal' };
+export const metadata = { title: 'Teacher - CMT Portal' };
 export const dynamic = 'force-dynamic';
 
 export default async function TeacherDashboardPage() {
@@ -587,7 +587,7 @@ export default function TeacherLoading() {
 }
 ```
 
-- [ ] **Step 8: Run tests — expect pass**
+- [ ] **Step 8: Run tests - expect pass**
 
 ```sh
 pnpm --filter @cmt/portal test -- src/features/check-in/teacher/__tests__/teacher-dashboard.test.tsx
@@ -636,7 +636,7 @@ describe('AttendanceStatusBadge', () => {
 });
 ```
 
-- [ ] **Step 2: Run — expect failure**
+- [ ] **Step 2: Run - expect failure**
 
 ```sh
 pnpm --filter @cmt/portal test -- src/features/check-in/teacher/__tests__/attendance-status-badge.test.tsx
@@ -681,7 +681,7 @@ export { ClassListCard } from './class-list-card';
 export { AttendanceStatusBadge } from './attendance-status-badge';
 ```
 
-- [ ] **Step 5: Run test — expect pass**
+- [ ] **Step 5: Run test - expect pass**
 
 - [ ] **Step 6: Commit**
 
@@ -782,7 +782,7 @@ describe('AttendanceMarker', () => {
 });
 ```
 
-- [ ] **Step 2: Run — expect failure**
+- [ ] **Step 2: Run - expect failure**
 
 ```sh
 pnpm --filter @cmt/portal test -- src/features/check-in/teacher/__tests__/attendance-marker.test.tsx
@@ -901,7 +901,7 @@ import { getRosterForClass } from '@/features/check-in/shared';
 import { AttendanceMarker } from '@/features/check-in/teacher/attendance-marker';
 import { flags } from '@/lib/flags';
 
-export const metadata = { title: 'Mark attendance — CMT Portal' };
+export const metadata = { title: 'Mark attendance - CMT Portal' };
 export const dynamic = 'force-dynamic';
 
 interface Props {
@@ -945,7 +945,7 @@ export { AttendanceStatusBadge } from './attendance-status-badge';
 export { AttendanceMarker } from './attendance-marker';
 ```
 
-- [ ] **Step 7: Run test — expect pass**
+- [ ] **Step 7: Run test - expect pass**
 
 - [ ] **Step 8: Commit**
 
@@ -1035,7 +1035,7 @@ describe('GET /api/check-in/teacher/roster/:classId', () => {
 });
 ```
 
-- [ ] **Step 2: Run — expect failure**
+- [ ] **Step 2: Run - expect failure**
 
 ```sh
 pnpm --filter @cmt/portal test -- src/app/api/check-in/teacher/__tests__/classlist.test.ts
@@ -1080,7 +1080,7 @@ export async function GET(
 }
 ```
 
-- [ ] **Step 5: Run tests — expect pass**
+- [ ] **Step 5: Run tests - expect pass**
 
 - [ ] **Step 6: Commit**
 
@@ -1134,7 +1134,7 @@ describe('toCsv', () => {
 });
 ```
 
-- [ ] **Step 2: Run — expect failure**
+- [ ] **Step 2: Run - expect failure**
 
 - [ ] **Step 3: Create `apps/portal/src/features/check-in/teacher/csv.ts`**
 
@@ -1169,7 +1169,7 @@ export function toCsv(rows: CsvRow[]): string {
 }
 ```
 
-- [ ] **Step 4: Run — expect pass**
+- [ ] **Step 4: Run - expect pass**
 
 - [ ] **Step 5: Commit**
 
@@ -1180,7 +1180,7 @@ git commit -m "feat(portal): add CSV serializer for teacher attendance exports"
 
 ---
 
-## Task 8: `POST /api/check-in/teacher/attendance` — write attendance records
+## Task 8: `POST /api/check-in/teacher/attendance` - write attendance records
 
 **Files:**
 - Create: `apps/portal/src/app/api/check-in/teacher/attendance/route.ts`
@@ -1284,7 +1284,7 @@ describe('POST /api/check-in/teacher/attendance', () => {
 });
 ```
 
-- [ ] **Step 2: Run — expect failure**
+- [ ] **Step 2: Run - expect failure**
 
 - [ ] **Step 3: Create `apps/portal/src/app/api/check-in/teacher/attendance/route.ts`**
 
@@ -1341,7 +1341,7 @@ export async function POST(req: Request) {
 }
 ```
 
-- [ ] **Step 4: Run — expect pass**
+- [ ] **Step 4: Run - expect pass**
 
 - [ ] **Step 5: Commit**
 
@@ -1477,7 +1477,7 @@ describe('AttendanceReportTable', () => {
 });
 ```
 
-- [ ] **Step 2: Run — expect failures**
+- [ ] **Step 2: Run - expect failures**
 
 - [ ] **Step 3: Create `apps/portal/src/app/api/check-in/teacher/report/route.ts`**
 
@@ -1603,7 +1603,7 @@ import { getRosterForClass } from '@/features/check-in/shared';
 import { flags } from '@/lib/flags';
 import type { AttendanceStatus, TeacherReportEntry } from '@cmt/shared-domain/check-in';
 
-export const metadata = { title: 'Attendance report — CMT Portal' };
+export const metadata = { title: 'Attendance report - CMT Portal' };
 export const dynamic = 'force-dynamic';
 
 interface Props {
@@ -1699,7 +1699,7 @@ export { AttendanceMarker } from './attendance-marker';
 export { AttendanceReportTable } from './attendance-report-table';
 ```
 
-- [ ] **Step 8: Run tests — expect pass**
+- [ ] **Step 8: Run tests - expect pass**
 
 - [ ] **Step 9: Commit**
 
@@ -1712,7 +1712,7 @@ git commit -m "feat(portal): /check-in/teacher/report + GET /api/check-in/teache
 
 ## Task 10: Skipped (the CSV download link is inline in Task 9's page)
 
-No separate component — the report page embeds a `<a href="...">Download CSV</a>` link that triggers the Accept: text/csv branch of Task 9's endpoint. Task count reduces — renumber remaining tasks below.
+No separate component - the report page embeds a `<a href="...">Download CSV</a>` link that triggers the Accept: text/csv branch of Task 9's endpoint. Task count reduces - renumber remaining tasks below.
 
 ---
 
@@ -1786,7 +1786,7 @@ describe('GET /api/check-in/teacher/uninformed', () => {
 });
 ```
 
-- [ ] **Step 2: Run — expect failure**
+- [ ] **Step 2: Run - expect failure**
 
 - [ ] **Step 3: Create `apps/portal/src/app/api/check-in/teacher/uninformed/route.ts`**
 
@@ -1854,7 +1854,7 @@ import { AttendanceReportTable } from '@/features/check-in/teacher/attendance-re
 import { flags } from '@/lib/flags';
 import type { AttendanceStatus, TeacherReportEntry } from '@cmt/shared-domain/check-in';
 
-export const metadata = { title: 'Uninformed absentees — CMT Portal' };
+export const metadata = { title: 'Uninformed absentees - CMT Portal' };
 export const dynamic = 'force-dynamic';
 
 export default async function UninformedPage() {
@@ -1909,7 +1909,7 @@ export default function UninformedError({ error, reset }: { error: Error; reset:
 }
 ```
 
-- [ ] **Step 6: Run test — expect pass**
+- [ ] **Step 6: Run test - expect pass**
 
 - [ ] **Step 7: Commit**
 
@@ -1922,7 +1922,7 @@ git commit -m "feat(portal): /check-in/teacher/uninformed page + GET endpoint fi
 
 ## Task 12: Full-suite checkpoint
 
-**Files:** none — verification step.
+**Files:** none - verification step.
 
 - [ ] **Step 1: Run all workspaces**
 
@@ -1947,7 +1947,7 @@ import { test, expect } from './fixtures';
 
 const PASSPHRASE = process.env.E2E_TEACHER_PASSPHRASE ?? process.env.TEACHER_PASSPHRASE ?? '';
 
-test.describe('B3 — teacher portal', () => {
+test.describe('B3 - teacher portal', () => {
   test('teacher login → dashboard flow', async ({ page }) => {
     test.skip(!PASSPHRASE, 'TEACHER_PASSPHRASE not available');
     await page.goto('/login/teacher');
@@ -1987,13 +1987,13 @@ git commit -m "test(portal): add b3-teacher.spec.ts covering login + dashboard s
 - [ ] **Step 1: Update README slice-B progress tracker**
 
 ```markdown
-- **Slice B** — 🚧 In progress —
-  - B0 ✅ — Portal auth foundation
-  - B2 ✅ — Family portal
-  - B3 ✅ — Teacher portal (attendance, report, uninformed)
-  - B1 — Kiosk port (next)
-  - B4 — Admin dashboard
-  - B5 — Notifications & cron
+- **Slice B** - 🚧 In progress -
+  - B0 ✅ - Portal auth foundation
+  - B2 ✅ - Family portal
+  - B3 ✅ - Teacher portal (attendance, report, uninformed)
+  - B1 - Kiosk port (next)
+  - B4 - Admin dashboard
+  - B5 - Notifications & cron
 ```
 
 - [ ] **Step 2: Update CLAUDE.md "Slice B status"**

@@ -1,8 +1,8 @@
-# Rollover "Set grade" — Implementation Plan
+# Rollover "Set grade" - Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development. Steps use checkbox (`- [ ]`) syntax.
 
-**Goal:** Let an admin resolve a "needs‑grade" child during the school‑year rollover without leaving the flow — (1) an inline **Set grade** control on each *need‑attention* row of the rollover preview, and (2) make the **"Review →"** target (the welcome member detail page) actually editable by an admin for the child's grade. Both write through one new admin endpoint.
+**Goal:** Let an admin resolve a "needs‑grade" child during the school‑year rollover without leaving the flow - (1) an inline **Set grade** control on each *need‑attention* row of the rollover preview, and (2) make the **"Review →"** target (the welcome member detail page) actually editable by an admin for the child's grade. Both write through one new admin endpoint.
 
 **Architecture:** A new admin-only `POST /api/admin/school-year/set-grade` (covered by the existing `/api/admin/*` canAccessRoute catch-all) writes `families/{fid}/members/{mid}.schoolGrade` via a shared `setMemberGrade()` server helper. The rollover preview's need‑attention rows (which already carry `fid` + `mid`) gain an inline grade picker that calls it, then re-runs the dry‑run preview. The welcome member detail page gains an admin‑gated grade editor that calls the same endpoint. No schema change (`schoolGrade` already exists), no new index.
 
@@ -10,7 +10,7 @@
 
 ## Standing constraints
 - UAT-only DB writes; never prod 715b8; never `--force` indexes; never `--no-verify`; `git push` after each commit (pre-push gate).
-- Roles via `isAdmin` helper. New `/api/admin/*` path is admin-only via the catch-all — still add a canAccessRoute test for it.
+- Roles via `isAdmin` helper. New `/api/admin/*` path is admin-only via the catch-all - still add a canAccessRoute test for it.
 - Grade values are the canonical `GRADE_LADDER` (`JK, SK, 1…12`) from `@cmt/shared-domain`.
 - Mobile-ready (the inline control must work in the rollover screen's mobile layout); `.csp` token scoping; ≥44px tap targets.
 - TDD; tests in the same commit; designer-quality UI on the two interactive surfaces.
@@ -22,7 +22,7 @@
 - Member doc write: `families/{fid}/members/{mid}`, field `schoolGrade`. `portalFirestore()` from `@cmt/firebase-shared/admin/firestore`.
 - The welcome member detail page is `apps/portal/src/app/welcome/family/[fid]/members/[mid]/page.tsx` (currently read-only; admins reach it because they inherit welcome-team). The "Review →" link already points here.
 - `/api/admin/*` is admin-only (can-access-route.ts:42). `readSessionFromHeaders` (`@/lib/auth/headers`) for API auth.
-- Seed E2E child: `fid=CMT-FSWEDU2X`, child `mid=CMT-FSWEDU2X-02`, `schoolGrade='Grade 4'` — usable for a set→revert E2E.
+- Seed E2E child: `fid=CMT-FSWEDU2X`, child `mid=CMT-FSWEDU2X-02`, `schoolGrade='Grade 4'` - usable for a set→revert E2E.
 
 ---
 
@@ -117,7 +117,7 @@ it('set-grade is admin only', () => {
   expect(canAccessRoute({ role: 'welcome-team' } as SessionClaims, '/api/admin/school-year/set-grade', 'POST')).toBe(false);
 });
 ```
-(This passes via the existing `/api/admin/*` catch-all — the test just locks it in; no rule change needed.)
+(This passes via the existing `/api/admin/*` catch-all - the test just locks it in; no rule change needed.)
 
 - [ ] **Step 3: failing route test** (mock `setMemberGrade` + `flags`)
 
@@ -167,10 +167,10 @@ git push
 
 - **Client:** `setGradeClient({fid,mid,schoolGrade})` → `POST /api/admin/school-year/set-grade`, throw on non-OK (toast on failure, like other clients).
 - **Inline control:** on each need-attention `<li>`, render a compact grade `<select>` (the `GRADE_LADDER` options, placeholder "Set grade") + a "Save" button (≥44px, brand tokens). On save → `setGradeClient` → toast success → call `onResolved()` (re-runs the dry-run preview so the row leaves *need attention*). Keep the existing "Review →" link too. Disable the row while saving.
-- **Refresh wiring:** find where `previewPromotion()` result is held; expose a `refresh()` that re-fetches it and pass it to `<PromotionPreview onResolved={refresh} … />`. (The page already has a "Refresh preview" affordance — reuse that handler.)
+- **Refresh wiring:** find where `previewPromotion()` result is held; expose a `refresh()` that re-fetches it and pass it to `<PromotionPreview onResolved={refresh} … />`. (The page already has a "Refresh preview" affordance - reuse that handler.)
 - Per the avoid-nested-component rule, keep any new row component module-scope.
 
-- [ ] **Step 1:** failing component test — render `PromotionPreview` with a `needs-grade` attention row + a mocked `setGradeClient`/`onResolved`; select a grade, click Save, assert `setGradeClient` called with the row's fid/mid + grade and `onResolved` fired.
+- [ ] **Step 1:** failing component test - render `PromotionPreview` with a `needs-grade` attention row + a mocked `setGradeClient`/`onResolved`; select a grade, click Save, assert `setGradeClient` called with the row's fid/mid + grade and `onResolved` fired.
 - [ ] **Step 2:** run → fail.
 - [ ] **Step 3:** implement client + inline control + refresh wiring.
 - [ ] **Step 4:** run component test green; `pnpm --filter @cmt/portal typecheck && lint`.
@@ -193,9 +193,9 @@ git push
 - The editor: shows the current grade + a `GRADE_LADDER` `<select>` + "Save" (admin only). On save → `setGradeClient({ fid, mid, grade })` → toast → refresh the page data (router.refresh()).
 - Keep it minimal: grade only (not a full member edit).
 
-- [ ] **Step 1:** failing render test — the member detail body renders the grade editor when `isAdmin` and not when not. (Mock the client.)
+- [ ] **Step 1:** failing render test - the member detail body renders the grade editor when `isAdmin` and not when not. (Mock the client.)
 - [ ] **Step 2:** run → fail.
-- [ ] **Step 3:** implement (gate on `isAdmin`; the page already resolves the session — add `isAdmin` if not present).
+- [ ] **Step 3:** implement (gate on `isAdmin`; the page already resolves the session - add `isAdmin` if not present).
 - [ ] **Step 4:** run test green; typecheck + lint.
 - [ ] **Step 5: commit**
 
@@ -215,11 +215,11 @@ git push
 
 - [ ] **Step 1: full gate** `pnpm typecheck && lint && test && build` (each push already ran it; confirm once more).
 - [ ] **Step 2: re-seed** `pnpm --filter @cmt/portal seed:e2e-family`.
-- [ ] **Step 3: write the spec** — as admin (setu storageState), against deployed UAT:
+- [ ] **Step 3: write the spec** - as admin (setu storageState), against deployed UAT:
   - **set-grade endpoint round-trip (mutation + revert):** `POST /api/admin/school-year/set-grade {fid:'CMT-FSWEDU2X', mid:'CMT-FSWEDU2X-02', schoolGrade:'5'}` → 200; then revert `→ '4'` → 200 (the seed child is normally 'Grade 4'; re-seed restores it). Also assert `{schoolGrade:'13'}` → 400 and a non-existent mid → 404.
   - **rollover screen renders the inline control:** go to `/admin/school-year`; if the need-attention disclosure is open with rows, assert a visible grade `<select>` / "Save" within a need-attention row (skip the assertion gracefully if UAT currently has 0 need-attention rows).
   - **member detail admin editor:** go to `/welcome/family/CMT-FSWEDU2X/members/CMT-FSWEDU2X-02`; assert the admin grade editor renders.
-- [ ] **Step 4: run** `PLAYWRIGHT_BASE_URL=https://cmt-setu.vercel.app pnpm --filter @cmt/portal exec playwright test --project=setu --project=setup rollover-set-grade` → green (after Tasks 1–4 deployed). Then full suite regression: `PLAYWRIGHT_BASE_URL=… pnpm test:e2e | tail`.
+- [ ] **Step 4: run** `PLAYWRIGHT_BASE_URL=https://cmt-setu.vercel.app pnpm --filter @cmt/portal exec playwright test --project=setu --project=setup rollover-set-grade` → green (after Tasks 1-4 deployed). Then full suite regression: `PLAYWRIGHT_BASE_URL=… pnpm test:e2e | tail`.
 - [ ] **Step 5: commit**
 
 ```bash
@@ -234,7 +234,7 @@ git push
 
 ### Task 6: Runbook + final review
 
-- [ ] **Step 1:** runbook §14 note — new admin route `POST /api/admin/school-year/set-grade` (admin-only); members' `schoolGrade` is now admin-settable from the rollover screen + the welcome member detail; no schema/index change; UAT writes are feature writes (not a migration).
+- [ ] **Step 1:** runbook §14 note - new admin route `POST /api/admin/school-year/set-grade` (admin-only); members' `schoolGrade` is now admin-settable from the rollover screen + the welcome member detail; no schema/index change; UAT writes are feature writes (not a migration).
 - [ ] **Step 2:** final code review (UI + endpoint); address findings; commit.
 
 ```bash

@@ -1,12 +1,12 @@
-# Slice B5 — Notifications & Cron Implementation Plan
+# Slice B5 - Notifications & Cron Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace the B2/B1/B4 mock notification sender with real AWS SES/SNS-backed senders. Add email templates as TSX components rendered server-side. Wire Vercel Cron via `vercel.ts` to run a daily cache-reset job and a weekly unpaid-family reminder job. Every send is idempotent via a `lastSentAt` marker in Firestore so duplicate cron firings don't spam users.
 
-**Architecture:** Real AWS senders live in `apps/portal/src/lib/aws/*` as server-only modules (`import 'server-only'` at the top). Templates live in `apps/portal/src/lib/aws/templates/*.tsx` and are rendered to HTML via a small server-side renderer. The existing `mockSender` in `features/check-in/shared/notifications/mock-sender.ts` stays — it's used in Vitest tests and when `NEXT_PUBLIC_FEATURE_CHECK_IN_NOTIFY=false` (the production path delegates to a `resolveSender()` function that picks mock vs real based on the flag). Cron handlers live under `/api/cron/*` and validate an `authorization: Bearer <CRON_SECRET>` header.
+**Architecture:** Real AWS senders live in `apps/portal/src/lib/aws/*` as server-only modules (`import 'server-only'` at the top). Templates live in `apps/portal/src/lib/aws/templates/*.tsx` and are rendered to HTML via a small server-side renderer. The existing `mockSender` in `features/check-in/shared/notifications/mock-sender.ts` stays - it's used in Vitest tests and when `NEXT_PUBLIC_FEATURE_CHECK_IN_NOTIFY=false` (the production path delegates to a `resolveSender()` function that picks mock vs real based on the flag). Cron handlers live under `/api/cron/*` and validate an `authorization: Bearer <CRON_SECRET>` header.
 
-**Tech Stack:** Adds `@aws-sdk/client-ses@^3.700`, `@aws-sdk/client-sns@^3.700`, `@aws-sdk/client-mock@^4.0` (test-only), `@vercel/config@latest` (for `vercel.ts`). Uses Node 22 LTS. No `@react-email/render` dependency — we write a tiny in-repo renderer for the handful of templates (YAGNI, keeps the bundle small).
+**Tech Stack:** Adds `@aws-sdk/client-ses@^3.700`, `@aws-sdk/client-sns@^3.700`, `@aws-sdk/client-mock@^4.0` (test-only), `@vercel/config@latest` (for `vercel.ts`). Uses Node 22 LTS. No `@react-email/render` dependency - we write a tiny in-repo renderer for the handful of templates (YAGNI, keeps the bundle small).
 
 **Spec:** `docs/superpowers/specs/2026-04-13-slice-b-family-check-in-port-design.md` §14 (B5 detail)
 
@@ -33,7 +33,7 @@ echo "OK" || echo "MISSING prerequisite"
 ```
 AWS_SES_REGION=ca-central-1
 AWS_SNS_REGION=us-east-1
-AWS_ACCESS_KEY_ID=...        # UAT/dev creds — can be a stub; never called in dev because NOTIFY=false
+AWS_ACCESS_KEY_ID=...        # UAT/dev creds - can be a stub; never called in dev because NOTIFY=false
 AWS_SECRET_ACCESS_KEY=...
 AWS_SES_FROM_EMAIL=bvregistration@chinmayatoronto.org
 AWS_SNS_TOPIC_ARN=arn:aws:sns:ca-central-1:...:family-checkin-sms
@@ -140,7 +140,7 @@ describe('snsRegion', () => {
 });
 ```
 
-- [ ] **Step 3: Run — expect failure**
+- [ ] **Step 3: Run - expect failure**
 
 - [ ] **Step 4: Create `apps/portal/src/lib/aws/region.ts`**
 
@@ -156,7 +156,7 @@ export function snsRegion(): string {
 }
 ```
 
-- [ ] **Step 5: Run — expect pass**
+- [ ] **Step 5: Run - expect pass**
 
 - [ ] **Step 6: Commit**
 
@@ -167,7 +167,7 @@ git commit -m "feat(portal): install AWS SDK + region helpers (ses=ca-central-1,
 
 ---
 
-## Task 2: `apps/portal/src/lib/aws/ses.ts` — real SES sender
+## Task 2: `apps/portal/src/lib/aws/ses.ts` - real SES sender
 
 **Files:**
 - Create: `apps/portal/src/lib/aws/ses.ts`
@@ -228,7 +228,7 @@ Install `aws-sdk-client-mock` if not already added:
 pnpm --filter @cmt/portal add -D aws-sdk-client-mock@^4.0.0
 ```
 
-- [ ] **Step 2: Run — expect failure**
+- [ ] **Step 2: Run - expect failure**
 
 - [ ] **Step 3: Create `apps/portal/src/lib/aws/ses.ts`**
 
@@ -272,7 +272,7 @@ export async function sendEmail(args: SendEmailArgs): Promise<void> {
 }
 ```
 
-- [ ] **Step 4: Run — expect pass**
+- [ ] **Step 4: Run - expect pass**
 
 - [ ] **Step 5: Commit**
 
@@ -283,7 +283,7 @@ git commit -m "feat(portal): add SES sendEmail wrapper (server-only, singleton c
 
 ---
 
-## Task 3: `apps/portal/src/lib/aws/sns.ts` — real SNS sender
+## Task 3: `apps/portal/src/lib/aws/sns.ts` - real SNS sender
 
 **Files:**
 - Create: `apps/portal/src/lib/aws/sns.ts`
@@ -325,7 +325,7 @@ describe('sendSMS', () => {
 });
 ```
 
-- [ ] **Step 2: Run — expect failure**
+- [ ] **Step 2: Run - expect failure**
 
 - [ ] **Step 3: Create `apps/portal/src/lib/aws/sns.ts`**
 
@@ -357,7 +357,7 @@ export async function sendSMS(args: SendSMSArgs): Promise<void> {
 }
 ```
 
-- [ ] **Step 4: Run — expect pass**
+- [ ] **Step 4: Run - expect pass**
 
 - [ ] **Step 5: Commit**
 
@@ -419,7 +419,7 @@ describe('renderEmailTemplate', () => {
 });
 ```
 
-- [ ] **Step 2: Run — expect failure**
+- [ ] **Step 2: Run - expect failure**
 
 - [ ] **Step 3: Create the three templates**
 
@@ -457,7 +457,7 @@ export interface PaymentReminderProps {
 
 export function paymentReminderEmail({ familyName }: PaymentReminderProps) {
   return {
-    subject: 'Payment reminder — Chinmaya Mission Toronto',
+    subject: 'Payment reminder - Chinmaya Mission Toronto',
     text: `Hari OM ${familyName}! Your family check-in has been recorded. Please see a sevak at your next visit to settle your outstanding payment. Thank you for your seva.`,
     html: `<!doctype html>
 <html><body style="font-family: system-ui, sans-serif; color: #214a54">
@@ -540,9 +540,9 @@ export function renderEmailTemplate(name: TemplateName, props: unknown): Rendere
 }
 ```
 
-Note: the templates don't actually use JSX runtime — they return plain HTML strings. The `.tsx` extension is kept for future migration to a real JSX renderer. If the linter complains about the extension, rename the three template files to `.ts` and drop the JSX.
+Note: the templates don't actually use JSX runtime - they return plain HTML strings. The `.tsx` extension is kept for future migration to a real JSX renderer. If the linter complains about the extension, rename the three template files to `.ts` and drop the JSX.
 
-- [ ] **Step 5: Run test — expect pass**
+- [ ] **Step 5: Run test - expect pass**
 
 - [ ] **Step 6: Commit**
 
@@ -553,7 +553,7 @@ git commit -m "feat(portal): add email templates (otp-code, payment-reminder, do
 
 ---
 
-## Task 5: `resolve-sender.ts` — flag-based mock/real switch
+## Task 5: `resolve-sender.ts` - flag-based mock/real switch
 
 **Files:**
 - Create: `apps/portal/src/lib/aws/resolve-sender.ts`
@@ -613,7 +613,7 @@ describe('resolveSender', () => {
 });
 ```
 
-- [ ] **Step 2: Run — expect failure**
+- [ ] **Step 2: Run - expect failure**
 
 - [ ] **Step 3: Create `apps/portal/src/lib/aws/resolve-sender.ts`**
 
@@ -637,7 +637,7 @@ export function resolveSender(): ResolvedSender {
 }
 ```
 
-- [ ] **Step 4: Run — expect pass**
+- [ ] **Step 4: Run - expect pass**
 
 - [ ] **Step 5: Commit**
 
@@ -648,7 +648,7 @@ git commit -m "feat(portal): resolveSender picks real AWS vs mockSender based on
 
 ---
 
-## Task 6: `POST /api/check-in/notifications/send-email` — generic send-email route
+## Task 6: `POST /api/check-in/notifications/send-email` - generic send-email route
 
 Renders a template, resolves the sender, dispatches the email.
 
@@ -758,7 +758,7 @@ describe('POST /api/check-in/notifications/send-email', () => {
 });
 ```
 
-- [ ] **Step 2: Run — expect failures**
+- [ ] **Step 2: Run - expect failures**
 
 - [ ] **Step 3: Create `apps/portal/src/features/check-in/notifications/send-email-service.ts`**
 
@@ -817,7 +817,7 @@ export async function POST(req: Request) {
 }
 ```
 
-- [ ] **Step 5: Run tests — expect pass**
+- [ ] **Step 5: Run tests - expect pass**
 
 - [ ] **Step 6: Commit**
 
@@ -828,7 +828,7 @@ git commit -m "feat(portal): POST /api/check-in/notifications/send-email wrappin
 
 ---
 
-## Task 7: `POST /api/check-in/notifications/payment-reminder` — idempotent reminder
+## Task 7: `POST /api/check-in/notifications/payment-reminder` - idempotent reminder
 
 Sends the payment reminder to one family. Writes `families/{fid}/lastReminderSentAt` in Firestore and skips if sent within the last 24 hours.
 
@@ -1010,7 +1010,7 @@ describe('POST /api/check-in/notifications/payment-reminder', () => {
 });
 ```
 
-- [ ] **Step 2: Run — expect failures**
+- [ ] **Step 2: Run - expect failures**
 
 - [ ] **Step 3: Create `apps/portal/src/features/check-in/notifications/payment-reminder-service.ts`**
 
@@ -1081,7 +1081,7 @@ export async function POST(req: Request) {
 }
 ```
 
-- [ ] **Step 5: Run tests — expect pass**
+- [ ] **Step 5: Run tests - expect pass**
 
 - [ ] **Step 6: Commit**
 
@@ -1178,7 +1178,7 @@ it('calls sendPaymentReminder for unpaid families', async () => {
 });
 ```
 
-- [ ] **Step 3: Run the updated test — expect pass**
+- [ ] **Step 3: Run the updated test - expect pass**
 
 ```sh
 pnpm --filter @cmt/portal test -- src/app/api/check-in/families/
@@ -1193,7 +1193,7 @@ git commit -m "refactor(portal): B1 kiosk check-in route delegates unpaid remind
 
 ---
 
-## Task 9: `POST /api/cron/reset-cache` — cron stub
+## Task 9: `POST /api/cron/reset-cache` - cron stub
 
 The standalone app's `reset-cache` is a no-op in the portal (no Redis) but the endpoint exists as a placeholder for future cache-layer work.
 
@@ -1254,7 +1254,7 @@ describe('POST /api/cron/reset-cache', () => {
 });
 ```
 
-- [ ] **Step 2: Run — expect failure**
+- [ ] **Step 2: Run - expect failure**
 
 - [ ] **Step 3: Create `apps/portal/src/app/api/cron/reset-cache/route.ts`**
 
@@ -1285,7 +1285,7 @@ export async function POST(req: Request) {
 }
 ```
 
-- [ ] **Step 4: Run — expect pass**
+- [ ] **Step 4: Run - expect pass**
 
 - [ ] **Step 5: Commit**
 
@@ -1296,7 +1296,7 @@ git commit -m "feat(portal): POST /api/cron/reset-cache with CRON_SECRET bearer 
 
 ---
 
-## Task 10: `POST /api/cron/send-weekly-payment-reminders` — weekly sweep
+## Task 10: `POST /api/cron/send-weekly-payment-reminders` - weekly sweep
 
 Iterates unpaid families and calls `sendPaymentReminder` for each.
 
@@ -1369,7 +1369,7 @@ describe('POST /api/cron/send-weekly-payment-reminders', () => {
 });
 ```
 
-- [ ] **Step 2: Run — expect failure**
+- [ ] **Step 2: Run - expect failure**
 
 - [ ] **Step 3: Create `apps/portal/src/app/api/cron/send-weekly-payment-reminders/route.ts`**
 
@@ -1417,7 +1417,7 @@ export async function POST(req: Request) {
 }
 ```
 
-- [ ] **Step 4: Run — expect pass**
+- [ ] **Step 4: Run - expect pass**
 
 - [ ] **Step 5: Commit**
 
@@ -1428,7 +1428,7 @@ git commit -m "feat(portal): weekly payment-reminder cron handler with CRON_SECR
 
 ---
 
-## Task 11: `vercel.ts` at repo root — Vercel Cron declaration
+## Task 11: `vercel.ts` at repo root - Vercel Cron declaration
 
 First and only use of `vercel.ts` in the slice (targeted exception from slice A non-goal #10).
 
@@ -1452,7 +1452,7 @@ export const config: VercelConfig = {
   crons: [
     // Daily cache reset at 00:00 UTC (parity with standalone app)
     { path: '/api/cron/reset-cache', schedule: '0 0 * * *' },
-    // Weekly unpaid-family reminder sweep — Sundays 14:00 UTC
+    // Weekly unpaid-family reminder sweep - Sundays 14:00 UTC
     { path: '/api/cron/send-weekly-payment-reminders', schedule: '0 14 * * 0' },
   ],
 };
@@ -1464,7 +1464,7 @@ export const config: VercelConfig = {
 pnpm --filter @cmt/portal typecheck && pnpm build
 ```
 
-Expected: `vercel.ts` compiles. If `@vercel/config/v1` resolves differently for your installed version, adapt the import accordingly — the only requirement is the `crons` field shape.
+Expected: `vercel.ts` compiles. If `@vercel/config/v1` resolves differently for your installed version, adapt the import accordingly - the only requirement is the `crons` field shape.
 
 - [ ] **Step 4: Commit**
 
@@ -1488,7 +1488,7 @@ import { test, expect } from './fixtures';
 
 const CRON_SECRET = process.env.CRON_SECRET ?? '';
 
-test.describe('B5 — notifications & cron', () => {
+test.describe('B5 - notifications & cron', () => {
   test('cron endpoints reject missing secret', async ({ request }) => {
     const reset = await request.post('/api/cron/reset-cache');
     expect(reset.status()).toBe(401);
@@ -1524,27 +1524,27 @@ git commit -m "test(portal): add b5-notifications.spec.ts covering cron auth"
 **Files:**
 - Modify: `README.md`, `CLAUDE.md`
 
-- [ ] **Step 1: Update README — mark slice B shipped**
+- [ ] **Step 1: Update README - mark slice B shipped**
 
 ```markdown
-- **Slice A** — ✅ **Shipped** — Monorepo scaffold + portal app shell + 4 shared packages
-- **Slice B** — ✅ **Shipped** — Family-check-in port + portal auth foundation
+- **Slice A** - ✅ **Shipped** - Monorepo scaffold + portal app shell + 4 shared packages
+- **Slice B** - ✅ **Shipped** - Family-check-in port + portal auth foundation
   - B0 ✅ Portal auth foundation
   - B2 ✅ Family portal
   - B3 ✅ Teacher portal
   - B1 ✅ Kiosk 1:1 port (dark-launched)
   - B4 ✅ Admin dashboard + provisioning
   - B5 ✅ Notifications & cron
-- **Slice C** — Port `chinmaya-event-registration` into `/events/*` (next)
-- **Slice E+** — Future modules
+- **Slice C** - Port `chinmaya-event-registration` into `/events/*` (next)
+- **Slice E+** - Future modules
 ```
 
 - [ ] **Step 2: Update CLAUDE.md**
 
 ```markdown
 **Slice A status:** ✅ Shipped.
-**Slice B status:** ✅ Shipped. Spec: `docs/superpowers/specs/2026-04-13-slice-b-family-check-in-port-design.md`. Six sub-slices B0–B5 delivered. Slice D struck from roadmap — B0 absorbed it.
-**Next slice:** C — port `chinmaya-event-registration` into `apps/portal/src/app/events/*`. Spec pending.
+**Slice B status:** ✅ Shipped. Spec: `docs/superpowers/specs/2026-04-13-slice-b-family-check-in-port-design.md`. Six sub-slices B0-B5 delivered. Slice D struck from roadmap - B0 absorbed it.
+**Next slice:** C - port `chinmaya-event-registration` into `apps/portal/src/app/events/*`. Spec pending.
 ```
 
 - [ ] **Step 3: Full pre-push**

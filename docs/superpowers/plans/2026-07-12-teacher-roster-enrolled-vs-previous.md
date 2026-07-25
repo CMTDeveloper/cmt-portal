@@ -1,4 +1,4 @@
-# Teacher roster: Enrolled vs Previous students — Implementation Plan
+# Teacher roster: Enrolled vs Previous students - Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- **Never use the em dash character `—`; use a plain hyphen `-`.** (Applies to all code, comments, copy, commit messages.)
+- **Never use the em dash character `-`; use a plain hyphen `-`.** (Applies to all code, comments, copy, commit messages.)
 - **UAT only.** All DB ops (E2E, index deploys) target `chinmaya-setu-uat`. Never touch prod `chinmaya-setu-715b8`. Never `--force` an index deploy.
 - **No schema change, no data migration, no rollover change, no new Firestore index.** This is a read-model + presentation change. The plan still runs the index audit (project rule #8) before ship.
 - `exactOptionalPropertyTypes` is enabled - never assign `undefined` to an optional; omit the key or use `null`.
@@ -165,7 +165,7 @@ describe('deriveConfirmedFidsForLevel', () => {
 });
 ```
 
-- [ ] **Step 2: Run it to verify it fails** — `pnpm --filter @cmt/portal exec vitest run src/features/setu/teacher/__tests__/roster-confirmation.test.ts` → FAIL (module not found).
+- [ ] **Step 2: Run it to verify it fails** - `pnpm --filter @cmt/portal exec vitest run src/features/setu/teacher/__tests__/roster-confirmation.test.ts` → FAIL (module not found).
 
 - [ ] **Step 3: Implement `roster-confirmation.ts`**
 
@@ -245,9 +245,9 @@ export async function deriveConfirmedFidsForLevel(
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass** — same command → PASS (3 tests). Also `pnpm --filter @cmt/portal typecheck`.
+- [ ] **Step 4: Run tests to verify they pass** - same command → PASS (3 tests). Also `pnpm --filter @cmt/portal typecheck`.
 
-- [ ] **Step 5: Commit** — `git add` the two files; `git commit -m "feat(teacher): per-level confirmed-fid helper reusing isEnrollmentConfirmed"`.
+- [ ] **Step 5: Commit** - `git add` the two files; `git commit -m "feat(teacher): per-level confirmed-fid helper reusing isEnrollmentConfirmed"`.
 
 ---
 
@@ -300,7 +300,7 @@ describe('buildRoster split: enrolled vs previous', () => {
 
 Also update the existing `buildRoster(...)` calls in this file to pass a `confirmedFids` set that confirms every family (e.g. `new Set(families.map((f) => f.fid))`) so the prior assertions (which expect everyone in `members`) still hold.
 
-- [ ] **Step 2: Run it to verify it fails** — `pnpm --filter @cmt/portal exec vitest run src/features/setu/teacher/__tests__/roster.test.ts` → FAIL (`buildRoster` takes 5 args / no `previousStudents`).
+- [ ] **Step 2: Run it to verify it fails** - `pnpm --filter @cmt/portal exec vitest run src/features/setu/teacher/__tests__/roster.test.ts` → FAIL (`buildRoster` takes 5 args / no `previousStudents`).
 
 - [ ] **Step 3: Implement the split.** Add to `RosterResult`:
 
@@ -414,9 +414,9 @@ Then after `families` are loaded (they carry `legacyFid`), compute the confirmed
 
 Add imports at the top of `roster.ts`: `import { deriveConfirmedFidsForLevel, type LevelEnrollment } from './roster-confirmation';`.
 
-- [ ] **Step 4: Run tests to verify they pass** — the roster test file → PASS. `pnpm --filter @cmt/portal typecheck`.
+- [ ] **Step 4: Run tests to verify they pass** - the roster test file → PASS. `pnpm --filter @cmt/portal typecheck`.
 
-- [ ] **Step 5: Commit** — `git commit -m "feat(teacher): split roster into confirmed members + previous students"`.
+- [ ] **Step 5: Commit** - `git commit -m "feat(teacher): split roster into confirmed members + previous students"`.
 
 ---
 
@@ -434,15 +434,15 @@ Add imports at the top of `roster.ts`: `import { deriveConfirmedFidsForLevel, ty
   - `level-attendance-view.test.ts`: extend the first test's mocked `deriveRoster` return to include `previousStudents: [{ mid: 'P-02', fid: 'P', firstName: 'Prev', lastName: 'One', type: 'Child', schoolGrade: 'Grade 1', hasSafetyInfo: false, status: 'unaccounted', legacyFid: null, legacySid: null }], previousTotal: 1`, and assert `expect(view!.previousCount).toBe(1);`. Add `previousStudents: [], previousTotal: 0` to the other two mocked returns so they typecheck.
   - `save-attendance.test.ts`: add a test that `saveAttendance` is invoked with `withConfirmation: true` and that a mark for a mid NOT in the (confirmed) `members` is skipped. Extend the existing mocked `deriveRoster` return there to include `previousStudents: [{ mid: 'PREV-02', ... }], previousTotal: 1` and assert that posting `marks: { 'PREV-02': 'present' }` lands `PREV-02` in `result.skipped` (it is not on the confirmed roster). If the existing test already mocks `deriveRoster`, extend its return; otherwise mirror the mock harness in `level-attendance-view.test.ts`.
 
-- [ ] **Step 2: Run to verify they fail** — `pnpm --filter @cmt/portal exec vitest run src/features/setu/teacher/__tests__/level-attendance-view.test.ts src/features/setu/teacher/__tests__/save-attendance.test.ts` → FAIL.
+- [ ] **Step 2: Run to verify they fail** - `pnpm --filter @cmt/portal exec vitest run src/features/setu/teacher/__tests__/level-attendance-view.test.ts src/features/setu/teacher/__tests__/save-attendance.test.ts` → FAIL.
 
 - [ ] **Step 3: Implement**
   - `level-attendance-view.ts`: change `const roster = await deriveRoster(levelId, date);` to `const roster = await deriveRoster(levelId, date, undefined, { withConfirmation: true });`. Add `previousCount: number;` to the `AttendanceView` interface and `previousCount: roster.previousStudents.length,` to the returned object.
   - `save-attendance.ts`: change `const roster = await deriveRoster(levelId, date, params.now);` to `const roster = await deriveRoster(levelId, date, params.now, { withConfirmation: true });`. No other change - the existing gate (`fidByMid` from `roster.members`, `skipped` for misses) now scopes both the accepted marks AND the absent-sweep to confirmed students.
 
-- [ ] **Step 4: Run tests to verify they pass** — both test files → PASS. `pnpm --filter @cmt/portal typecheck`.
+- [ ] **Step 4: Run tests to verify they pass** - both test files → PASS. `pnpm --filter @cmt/portal typecheck`.
 
-- [ ] **Step 5: Commit** — `git commit -m "feat(teacher): confirmation-scoped roster for attendance view + save"`.
+- [ ] **Step 5: Commit** - `git commit -m "feat(teacher): confirmation-scoped roster for attendance view + save"`.
 
 ---
 
@@ -491,7 +491,7 @@ it('returns null when the level is missing', async () => {
 });
 ```
 
-- [ ] **Step 2: Run it to verify it fails** — FAIL (module not found).
+- [ ] **Step 2: Run it to verify it fails** - FAIL (module not found).
 
 - [ ] **Step 3: Implement**
 
@@ -518,9 +518,9 @@ export async function getLevelPreviousStudentsView(levelId: string, date: string
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass** — PASS.
+- [ ] **Step 4: Run tests to verify they pass** - PASS.
 
-- [ ] **Step 5: Commit** — `git commit -m "feat(teacher): previous-students read model"`.
+- [ ] **Step 5: Commit** - `git commit -m "feat(teacher): previous-students read model"`.
 
 ---
 
@@ -589,7 +589,7 @@ it('returns level-not-found when the roster is null', async () => {
 });
 ```
 
-- [ ] **Step 2: Run it to verify it fails** — FAIL (module not found).
+- [ ] **Step 2: Run it to verify it fails** - FAIL (module not found).
 
 - [ ] **Step 3: Implement**
 
@@ -635,9 +635,9 @@ export async function confirmPreviousStudent(params: ConfirmPreviousParams): Pro
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass** — PASS (3 tests). `pnpm --filter @cmt/portal typecheck`.
+- [ ] **Step 4: Run tests to verify they pass** - PASS (3 tests). `pnpm --filter @cmt/portal typecheck`.
 
-- [ ] **Step 5: Commit** — `git commit -m "feat(teacher): confirmPreviousStudent writes a single present mark"`.
+- [ ] **Step 5: Commit** - `git commit -m "feat(teacher): confirmPreviousStudent writes a single present mark"`.
 
 ---
 
@@ -649,9 +649,9 @@ export async function confirmPreviousStudent(params: ConfirmPreviousParams): Pro
 
 **Interfaces:** Request body `{ levelId: string; mid: string; date: string }`. Auth mirrors the existing attendance route: `readSessionFromHeaders` + `isTeacher` (403 `teacher-required`) + `canTeachLevel` (404 `not-found` / 403 `not-your-class`). Success `{ ok: true, fid }`; `not-a-previous-student` → 400.
 
-- [ ] **Step 1: Write the failing test** — mock `@/lib/auth/headers` (`readSessionFromHeaders`), `@cmt/shared-domain` (`isTeacher`), `@/features/setu/teacher/guard` (`canTeachLevel`), and `@/features/setu/teacher/confirm-previous` (`confirmPreviousStudent`). Assert: non-teacher → 403; `canTeachLevel='forbidden'` → 403 `not-your-class`; happy path returns 200 `{ ok: true, fid: 'C' }`; a bad body (missing `mid`) → 400. Follow the shape of the existing attendance route test if present; otherwise construct `new Request('http://x', { method: 'POST', body: JSON.stringify({...}), headers: { 'Content-Type': 'application/json' } })`.
+- [ ] **Step 1: Write the failing test** - mock `@/lib/auth/headers` (`readSessionFromHeaders`), `@cmt/shared-domain` (`isTeacher`), `@/features/setu/teacher/guard` (`canTeachLevel`), and `@/features/setu/teacher/confirm-previous` (`confirmPreviousStudent`). Assert: non-teacher → 403; `canTeachLevel='forbidden'` → 403 `not-your-class`; happy path returns 200 `{ ok: true, fid: 'C' }`; a bad body (missing `mid`) → 400. Follow the shape of the existing attendance route test if present; otherwise construct `new Request('http://x', { method: 'POST', body: JSON.stringify({...}), headers: { 'Content-Type': 'application/json' } })`.
 
-- [ ] **Step 2: Run it to verify it fails** — FAIL (route module not found).
+- [ ] **Step 2: Run it to verify it fails** - FAIL (route module not found).
 
 - [ ] **Step 3: Implement**
 
@@ -692,9 +692,9 @@ export async function POST(req: Request) {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass** — PASS. `pnpm --filter @cmt/portal typecheck`.
+- [ ] **Step 4: Run tests to verify they pass** - PASS. `pnpm --filter @cmt/portal typecheck`.
 
-- [ ] **Step 5: Commit** — `git commit -m "feat(teacher): POST confirm-previous route (teacher-gated)"`.
+- [ ] **Step 5: Commit** - `git commit -m "feat(teacher): POST confirm-previous route (teacher-gated)"`.
 
 ---
 
@@ -735,9 +735,9 @@ describe('AttendanceMarker previous-students entry point', () => {
 });
 ```
 
-- [ ] **Step 2: Run it to verify it fails** — `pnpm --filter @cmt/portal exec vitest run src/features/setu/teacher/components/__tests__/attendance-marker.test.tsx` → FAIL (`previousCount` not a prop / button absent).
+- [ ] **Step 2: Run it to verify it fails** - `pnpm --filter @cmt/portal exec vitest run src/features/setu/teacher/components/__tests__/attendance-marker.test.tsx` → FAIL (`previousCount` not a prop / button absent).
 
-- [ ] **Step 3: Implement** — add `previousCount` to `AttendanceMarkerProps` and destructure it in the component signature. In the header nav row, wrap the existing "Visitors →" link and a new conditional link in a flex container:
+- [ ] **Step 3: Implement** - add `previousCount` to `AttendanceMarkerProps` and destructure it in the component signature. In the header nav row, wrap the existing "Visitors →" link and a new conditional link in a flex container:
 
 ```tsx
 <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
@@ -763,11 +763,11 @@ Add the "Enrolled students (N)" heading just above the roster list (after the fi
 </h2>
 ```
 
-- [ ] **Step 4: Wire the attendance page** — in `apps/portal/src/app/teacher/levels/[levelId]/attendance/page.tsx`, add `previousCount={view.previousCount}` to the `<AttendanceMarker .../>` props (alongside the existing `rows`/`total` props).
+- [ ] **Step 4: Wire the attendance page** - in `apps/portal/src/app/teacher/levels/[levelId]/attendance/page.tsx`, add `previousCount={view.previousCount}` to the `<AttendanceMarker .../>` props (alongside the existing `rows`/`total` props).
 
-- [ ] **Step 5: Run tests + typecheck** — the marker test → PASS; `pnpm --filter @cmt/portal typecheck` → clean (the required prop is now supplied by the only caller).
+- [ ] **Step 5: Run tests + typecheck** - the marker test → PASS; `pnpm --filter @cmt/portal typecheck` → clean (the required prop is now supplied by the only caller).
 
-- [ ] **Step 6: Commit** — `git commit -m "feat(teacher): Enrolled-students heading + Previous-students button on the marker"`.
+- [ ] **Step 6: Commit** - `git commit -m "feat(teacher): Enrolled-students heading + Previous-students button on the marker"`.
 
 ---
 
@@ -820,7 +820,7 @@ it('renders the empty state when there are no previous students', () => {
 });
 ```
 
-- [ ] **Step 2: Run it to verify it fails** — FAIL (module not found).
+- [ ] **Step 2: Run it to verify it fails** - FAIL (module not found).
 
 - [ ] **Step 3: Implement the panel** (`'use client'`; model styling on `visitors-panel.tsx` rows). Core logic:
 
@@ -895,7 +895,7 @@ export default async function PreviousStudentsPage({ params, searchParams }: { p
 }
 ```
 
-- [ ] **Step 5: Run tests to verify they pass** — the panel test → PASS. `pnpm --filter @cmt/portal typecheck`. **Commit** — `git commit -m "feat(teacher): Previous students panel + page"`.
+- [ ] **Step 5: Run tests to verify they pass** - the panel test → PASS. `pnpm --filter @cmt/portal typecheck`. **Commit** - `git commit -m "feat(teacher): Previous students panel + page"`.
 
 ---
 
@@ -909,7 +909,7 @@ export default async function PreviousStudentsPage({ params, searchParams }: { p
 
 - [ ] **Step 2:** Add a dated §14 entry to the runbook: teacher-roster semantics change (Enrolled = confirmed via issue #23 rule; Previous = unconfirmed carry-forwards). **No DB op, no index, no migration.** Record that this is presentation/read-model only.
 
-- [ ] **Step 3: Commit** — `git commit -m "docs(teacher): MOBILE_API_CHANGELOG + runbook for Enrolled/Previous split"`.
+- [ ] **Step 3: Commit** - `git commit -m "docs(teacher): MOBILE_API_CHANGELOG + runbook for Enrolled/Previous split"`.
 
 ---
 
@@ -932,9 +932,9 @@ Seed via the existing E2E seed helpers; the spec cleans up what it creates (`_te
   4. Reload `/attendance` → the marked student appears in the main Enrolled list (present); the Enrolled count incremented by the family's members in THIS level; Previous count decremented.
   5. Save attendance normally, then assert the remaining previous students were NOT written Absent (query their attendance for the date is absent-of-record, or assert via the student/report surface that they have no absent mark).
 
-- [ ] **Step 2: Run against deployed UAT** — after the code is deployed (push triggers Vercel). `PLAYWRIGHT_BASE_URL=https://cmt-setu.vercel.app pnpm --filter @cmt/portal test:e2e -- e2e/setu/teacher/previous-students.spec.ts` → all green. If a Firestore index error surfaces (rule #8), audit and deploy to UAT only (never `--force`, never prod).
+- [ ] **Step 2: Run against deployed UAT** - after the code is deployed (push triggers Vercel). `PLAYWRIGHT_BASE_URL=https://cmt-setu.vercel.app pnpm --filter @cmt/portal test:e2e -- e2e/setu/teacher/previous-students.spec.ts` → all green. If a Firestore index error surfaces (rule #8), audit and deploy to UAT only (never `--force`, never prod).
 
-- [ ] **Step 3: Commit** — `git commit -m "test(teacher): deployed-UAT E2E for Enrolled vs Previous students"`.
+- [ ] **Step 3: Commit** - `git commit -m "test(teacher): deployed-UAT E2E for Enrolled vs Previous students"`.
 
 ---
 

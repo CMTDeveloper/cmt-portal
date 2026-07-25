@@ -1,8 +1,8 @@
-# Slice 3 — Admin / Teacher Polish Implementation Plan
+# Slice 3 - Admin / Teacher Polish Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Polish the Bala Vihar admin/teacher surfaces — grade dropdowns from one canonical source, per-level inline teacher assignment, binary Present/Absent attendance, guest-add grade dropdown, and a rollover teacher-carry-forward fix.
+**Goal:** Polish the Bala Vihar admin/teacher surfaces - grade dropdowns from one canonical source, per-level inline teacher assignment, binary Present/Absent attendance, guest-add grade dropdown, and a rollover teacher-carry-forward fix.
 
 **Architecture:** Refinements to existing Next.js 16 App Router screens + `/api/admin/*` and `/api/setu/*` route handlers, backed by pure `@cmt/shared-domain` helpers. One new canonical grade source in shared-domain feeds every grade `<select>`. Two bug fixes (level-name collision, rollover-empty teachers) begin with a read-only UAT reproduction. No new Firestore composite indexes; no new feature flag.
 
@@ -12,18 +12,18 @@
 
 ## Global Constraints
 
-- **UAT only** — all DB ops / index checks / E2E target `chinmaya-setu-uat`; never touch prod `715b8`; never `--force` an index deploy.
-- **`@cmt/shared-domain` stays pure** — no React/Next/Firestore imports; new grade consts + `levelGradeSummary()` live there as pure TS.
-- **`exactOptionalPropertyTypes` is ON** — never assign `undefined` to an optional; omit the key or use `null`.
-- **Doc-read schemas validate on read** — never narrow a stored-doc field's enum in a way that rejects historical values (`late`, `uninformed`); enforce narrowing only at write routes/forms.
-- **Role checks via helpers** — `isAdmin` / `isWelcomeTeam` / `isTeacher`, never `role === …`.
-- **canAccessRoute** — every new `/api/**` path gets an explicit rule; new `/api/admin/*` teacher rules go BEFORE the `/api/admin/` admin-only catch-all (line ~42).
-- **No new Firestore composite indexes** — bulk `collectionGroup` reads + in-memory joins/filters.
-- **Mobile contract** — any `/api/setu/**` request/response/enum change appends a dated, SHA-keyed `apps/portal/docs/MOBILE_API_CHANGELOG.md` entry. `/api/admin/*` is NOT part of the mobile contract.
-- **Every user-facing surface gets a deployed-UAT Playwright E2E** (Task 13) — WRITE the specs here; RUN them at the owner UAT gate after deploy.
-- **Runbook** — Task 13 adds a dated §14 entry for any UAT-visible behavior change.
-- **Canonical grade set (owner table 2026-07-03):** Shishu (age 1.5–4, age-based) · Pre-Level = JK/SK · Levels 1–7 = Gr 1…12 · Parents = All Adults. Grade tokens = `GRADE_LADDER = [JK, SK, 1…12]` + `Shishu`. **No `3K`.** `GRADE_LADDER` and promotion are untouched.
-- **N=2 discipline** — exercise every one→many read (multiple teachers per level, multiple levels per teacher, a historical `late` event) with two instances.
+- **UAT only** - all DB ops / index checks / E2E target `chinmaya-setu-uat`; never touch prod `715b8`; never `--force` an index deploy.
+- **`@cmt/shared-domain` stays pure** - no React/Next/Firestore imports; new grade consts + `levelGradeSummary()` live there as pure TS.
+- **`exactOptionalPropertyTypes` is ON** - never assign `undefined` to an optional; omit the key or use `null`.
+- **Doc-read schemas validate on read** - never narrow a stored-doc field's enum in a way that rejects historical values (`late`, `uninformed`); enforce narrowing only at write routes/forms.
+- **Role checks via helpers** - `isAdmin` / `isWelcomeTeam` / `isTeacher`, never `role === …`.
+- **canAccessRoute** - every new `/api/**` path gets an explicit rule; new `/api/admin/*` teacher rules go BEFORE the `/api/admin/` admin-only catch-all (line ~42).
+- **No new Firestore composite indexes** - bulk `collectionGroup` reads + in-memory joins/filters.
+- **Mobile contract** - any `/api/setu/**` request/response/enum change appends a dated, SHA-keyed `apps/portal/docs/MOBILE_API_CHANGELOG.md` entry. `/api/admin/*` is NOT part of the mobile contract.
+- **Every user-facing surface gets a deployed-UAT Playwright E2E** (Task 13) - WRITE the specs here; RUN them at the owner UAT gate after deploy.
+- **Runbook** - Task 13 adds a dated §14 entry for any UAT-visible behavior change.
+- **Canonical grade set (owner table 2026-07-03):** Shishu (age 1.5-4, age-based) · Pre-Level = JK/SK · Levels 1-7 = Gr 1…12 · Parents = All Adults. Grade tokens = `GRADE_LADDER = [JK, SK, 1…12]` + `Shishu`. **No `3K`.** `GRADE_LADDER` and promotion are untouched.
+- **N=2 discipline** - exercise every one→many read (multiple teachers per level, multiple levels per teacher, a historical `late` event) with two instances.
 - **Commit author** is `CMT Developer <developer@chinmayatoronto.org>` (local git config). Never `--no-verify`.
 
 ---
@@ -34,13 +34,13 @@
 - Create: `packages/shared-domain/src/setu/grades.ts`
 - Create: `packages/shared-domain/src/setu/__tests__/grades.test.ts`
 - Modify: `packages/shared-domain/src/setu/schemas/level.ts` (add `levelGradeSummary`; make `ageLabel` optional in `LevelDocSchema`/`CreateLevelSchema`/`UpdateLevelSchema`)
-- Modify: `packages/shared-domain/src/setu/schemas/__tests__/level.test.ts` (or the nearest existing level test file — add `levelGradeSummary` cases)
-- Modify: `packages/shared-domain/src/index.ts` (export the new module — confirm the barrel path used by `@cmt/shared-domain`)
+- Modify: `packages/shared-domain/src/setu/schemas/__tests__/level.test.ts` (or the nearest existing level test file - add `levelGradeSummary` cases)
+- Modify: `packages/shared-domain/src/index.ts` (export the new module - confirm the barrel path used by `@cmt/shared-domain`)
 
 **Interfaces:**
 - Produces:
-  - `GRADE_BAND_OPTIONS: readonly {value:string;label:string}[]` — `[{JK},{SK},{Grade 1}…{Grade 12}]`
-  - `CHILD_GRADE_OPTIONS: readonly {value:string;label:string}[]` — `[{Shishu…}, ...GRADE_BAND_OPTIONS]`
+  - `GRADE_BAND_OPTIONS: readonly {value:string;label:string}[]` - `[{JK},{SK},{Grade 1}…{Grade 12}]`
+  - `CHILD_GRADE_OPTIONS: readonly {value:string;label:string}[]` - `[{Shishu…}, ...GRADE_BAND_OPTIONS]`
   - `levelGradeSummary(level: Pick<LevelDoc,'levelKind'|'gradeBand'>): string`
   - `LevelDoc.ageLabel` becomes `string | undefined` (optional).
 
@@ -71,7 +71,7 @@ describe('grade options', () => {
 - [ ] **Step 2: Run it to confirm it fails**
 
 Run: `pnpm --filter @cmt/shared-domain test -- grades`
-Expected: FAIL — cannot find module `../grades`.
+Expected: FAIL - cannot find module `../grades`.
 
 - [ ] **Step 3: Create the grades module**
 
@@ -88,7 +88,7 @@ import { GRADE_LADDER } from './grade-ladder';
 export const GRADE_BAND_OPTIONS: readonly { value: string; label: string }[] =
   GRADE_LADDER.map((g) => ({ value: g, label: /^\d/.test(g) ? `Grade ${g}` : g }));
 
-/** Grades a CHILD can be in — the band tokens plus the age-based Shishu bucket
+/** Grades a CHILD can be in - the band tokens plus the age-based Shishu bucket
  *  (younger than JK). Used by the child profile + guest-add pickers. */
 export const CHILD_GRADE_OPTIONS: readonly { value: string; label: string }[] = [
   { value: 'Shishu', label: 'Shishu (younger than JK)' },
@@ -108,7 +108,7 @@ Add to the level schema test file (`packages/shared-domain/src/setu/schemas/__te
 ```ts
 import { levelGradeSummary } from '../level';
 
-describe('levelGradeSummary — reproduces the table AGE/GRADE column', () => {
+describe('levelGradeSummary - reproduces the table AGE/GRADE column', () => {
   it('shishu → fixed age range', () => {
     expect(levelGradeSummary({ levelKind: 'shishu', gradeBand: [] })).toBe('1.5 to 4 years');
   });
@@ -139,19 +139,19 @@ describe('levelGradeSummary — reproduces the table AGE/GRADE column', () => {
 - [ ] **Step 6: Run it to confirm it fails**
 
 Run: `pnpm --filter @cmt/shared-domain test -- level`
-Expected: FAIL — `levelGradeSummary` is not exported.
+Expected: FAIL - `levelGradeSummary` is not exported.
 
 - [ ] **Step 7: Implement `levelGradeSummary` in `schemas/level.ts`**
 
 Add to `packages/shared-domain/src/setu/schemas/level.ts` (after `normalizeGrade`), using the existing `GRADE_LADDER` order for contiguity. Import `GRADE_LADDER` at the top (note: `grade-ladder.ts` imports from `./schemas/level`, so to avoid a circular import, inline the ladder order here rather than importing it):
 
 ```ts
-// Ladder order for grade-band summaries (JK, SK, 1..12) — inlined to avoid a
+// Ladder order for grade-band summaries (JK, SK, 1..12) - inlined to avoid a
 // cycle with grade-ladder.ts (which imports from this file).
 const GRADE_ORDER = ['JK', 'SK', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'];
 
 /**
- * Human display label for a level, derived from kind + gradeBand — reproduces the
+ * Human display label for a level, derived from kind + gradeBand - reproduces the
  * owner's Bala Vihar AGE/GRADE column and replaces the removed free-text ageLabel.
  *   shishu → "1.5 to 4 years"   parents → "All Adults"
  *   pre-level → "JK / SK"       level → "Gr 1" | "Gr 2 & 3" | "Gr 9 to 12" | "Gr 2, 5"
@@ -180,7 +180,7 @@ export function levelGradeSummary(level: Pick<LevelDoc, 'levelKind' | 'gradeBand
 In `packages/shared-domain/src/setu/schemas/level.ts`:
 - `LevelDocSchema`: change `ageLabel: z.string().min(1),` → `ageLabel: z.string().min(1).optional(),`
 - `CreateLevelSchema`: change `ageLabel: z.string().min(1),` → `ageLabel: z.string().min(1).optional(),`
-- `UpdateLevelSchema`: `ageLabel` is already `.optional()` — leave it.
+- `UpdateLevelSchema`: `ageLabel` is already `.optional()` - leave it.
 
 - [ ] **Step 9: Run the full shared-domain suite**
 
@@ -197,12 +197,12 @@ git commit -m "feat(slice3): canonical grade options + levelGradeSummary; ageLab
 
 ---
 
-## Task 2: Level modal — grade multi-select dropdown; remove age field; child form single-source
+## Task 2: Level modal - grade multi-select dropdown; remove age field; child form single-source
 
 **Files:**
 - Modify: `apps/portal/src/features/admin/levels/levels-table.tsx` (the `LevelModal`)
 - Modify: `apps/portal/src/features/setu/members/complete-profile-form.tsx` (delete local `GRADE_OPTIONS`, import `CHILD_GRADE_OPTIONS`)
-- Modify: `apps/portal/src/features/admin/levels/__tests__/*` (adjust any modal test asserting the ageLabel input / free-text grade — align to the new controls)
+- Modify: `apps/portal/src/features/admin/levels/__tests__/*` (adjust any modal test asserting the ageLabel input / free-text grade - align to the new controls)
 
 **Interfaces:**
 - Consumes: `GRADE_BAND_OPTIONS`, `CHILD_GRADE_OPTIONS` (Task 1).
@@ -216,7 +216,7 @@ In `levels-table.tsx`, import at top: add `GRADE_BAND_OPTIONS` to the `@cmt/shar
   → `const [gradeBand, setGradeBand] = useState<string[]>(editing?.gradeBand ?? []);`
 - Replace `const band = bandNeedsGrades(levelKind) ? parseBand(gradeBand) : [];` (in `handleSubmit`)
   → `const band = bandNeedsGrades(levelKind) ? gradeBand : [];`
-- Replace the diff-check `if (JSON.stringify(band) !== JSON.stringify(editing.gradeBand)) body.gradeBand = band;` — unchanged (still compares arrays).
+- Replace the diff-check `if (JSON.stringify(band) !== JSON.stringify(editing.gradeBand)) body.gradeBand = band;` - unchanged (still compares arrays).
 - Replace the validation `if (bandNeedsGrades(levelKind) && parseBand(gradeBand).length === 0)` → `if (bandNeedsGrades(levelKind) && gradeBand.length === 0)`.
 - Delete the now-unused `parseBand` helper.
 - Replace the grade `<label>…<input …/></label>` JSX with:
@@ -254,10 +254,10 @@ In `levels-table.tsx`:
 - Delete the validation line `if (!ageLabel.trim()) e.ageLabel = 'Required';`
 - Delete the update-diff line `if (ageLabel !== editing.ageLabel) body.ageLabel = ageLabel;`
 - In the create `body: CreateLevelInput`, delete the `ageLabel,` field.
-- In the `onSaved({...})` call, delete `ageLabel,` (the `LevelRow` `ageLabel` becomes derived — see Task 3; set it to `undefined` there is not allowed under exactOptionalPropertyTypes, so simply OMIT the key).
+- In the `onSaved({...})` call, delete `ageLabel,` (the `LevelRow` `ageLabel` becomes derived - see Task 3; set it to `undefined` there is not allowed under exactOptionalPropertyTypes, so simply OMIT the key).
 - Delete the entire `<label>Age / grade label …</label>` JSX block (the input with `placeholder="Grade 2 & 3"`).
 
-Note: `LevelRow = Omit<LevelDoc,'createdAt'|'updatedAt'> & {…}` — since `LevelDoc.ageLabel` is now optional, `LevelRow.ageLabel?` is optional; omitting it in `onSaved` is valid.
+Note: `LevelRow = Omit<LevelDoc,'createdAt'|'updatedAt'> & {…}` - since `LevelDoc.ageLabel` is now optional, `LevelRow.ageLabel?` is optional; omitting it in `onSaved` is valid.
 
 - [ ] **Step 3: Point the child profile form at the single source**
 
@@ -284,7 +284,7 @@ git commit -m "feat(slice3): level grade multi-select dropdown; remove free-text
 ## Task 3: Derive the level display label via `levelGradeSummary` everywhere `ageLabel` was shown
 
 **Files:**
-- Modify: `apps/portal/src/features/setu/teacher/roster.ts` (`buildRoster` — derive `ageLabel`)
+- Modify: `apps/portal/src/features/setu/teacher/roster.ts` (`buildRoster` - derive `ageLabel`)
 - Modify: `apps/portal/src/features/setu/teacher/visitors.ts:89`
 - Modify: `apps/portal/src/app/teacher/page.tsx:45`
 - Modify: `apps/portal/src/app/welcome/levels/page.tsx:45`
@@ -312,17 +312,17 @@ Expected: PASS.
 
 - [ ] **Step 4: Derive at the other display/producer sites**
 
-- `visitors.ts:89` — add `levelGradeSummary` import; change `ageLabel: level.ageLabel,` → `ageLabel: levelGradeSummary(level),`.
-- `app/teacher/page.tsx:45` — add `import { levelGradeSummary } from '@cmt/shared-domain';`; change `{l.location} · {l.ageLabel} · {l.curriculum}` → `{l.location} · {levelGradeSummary(l)} · {l.curriculum}`.
-- `app/welcome/levels/page.tsx:45` — same import; change `{l.ageLabel} · {l.curriculum} · …` → `{levelGradeSummary(l)} · {l.curriculum} · …`.
-- `levels-table.tsx` — the desktop table + mobile card currently render `l.gradeBand.join(', ')` under "Grades". Leave those (they show the raw band). No ageLabel column exists in the table, so nothing else to change here for display.
+- `visitors.ts:89` - add `levelGradeSummary` import; change `ageLabel: level.ageLabel,` → `ageLabel: levelGradeSummary(level),`.
+- `app/teacher/page.tsx:45` - add `import { levelGradeSummary } from '@cmt/shared-domain';`; change `{l.location} · {l.ageLabel} · {l.curriculum}` → `{l.location} · {levelGradeSummary(l)} · {l.curriculum}`.
+- `app/welcome/levels/page.tsx:45` - same import; change `{l.ageLabel} · {l.curriculum} · …` → `{levelGradeSummary(l)} · {l.curriculum} · …`.
+- `levels-table.tsx` - the desktop table + mobile card currently render `l.gradeBand.join(', ')` under "Grades". Leave those (they show the raw band). No ageLabel column exists in the table, so nothing else to change here for display.
 
-(The `welcome/levels/[levelId]/page.tsx:39` reads `roster.ageLabel`, which is now the derived value from Step 1 — no change needed. `level-attendance-view.ts:75` passes through `roster.ageLabel` — no change. The Setu attendance-marker header shows the passed `ageLabel` prop — now derived — no change.)
+(The `welcome/levels/[levelId]/page.tsx:39` reads `roster.ageLabel`, which is now the derived value from Step 1 - no change needed. `level-attendance-view.ts:75` passes through `roster.ageLabel` - no change. The Setu attendance-marker header shows the passed `ageLabel` prop - now derived - no change.)
 
 - [ ] **Step 5: Run the teacher/welcome tests + typecheck**
 
 Run: `pnpm --filter @cmt/portal test -- roster visitors && pnpm --filter @cmt/portal typecheck`
-Expected: PASS. `buildRoster` callers no longer pass `ageLabel` — confirm `deriveRoster` (same file) still compiles (it passes the full `level` object, which satisfies the narrowed Pick).
+Expected: PASS. `buildRoster` callers no longer pass `ageLabel` - confirm `deriveRoster` (same file) still compiles (it passes the full `level` object, which satisfies the narrowed Pick).
 
 - [ ] **Step 6: Commit**
 
@@ -336,16 +336,16 @@ git commit -m "feat(slice3): derive level age/grade label via levelGradeSummary 
 ## Task 4: Fix the level-name collision bug (reproduce first)
 
 **Files:**
-- Modify: `apps/portal/src/app/api/admin/levels/route.ts` (POST — name uniqueness within location+pid)
-- Modify: `apps/portal/src/app/api/admin/levels/[levelId]/route.ts` (PATCH — reject rename that collides)
+- Modify: `apps/portal/src/app/api/admin/levels/route.ts` (POST - name uniqueness within location+pid)
+- Modify: `apps/portal/src/app/api/admin/levels/[levelId]/route.ts` (PATCH - reject rename that collides)
 - Create: `apps/portal/src/features/setu/teacher/level-name-conflict.ts` (shared helper)
 - Create: `apps/portal/src/features/setu/teacher/__tests__/level-name-conflict.test.ts`
 - Test: `apps/portal/src/app/api/admin/levels/__tests__/route.test.ts` + `[levelId]/__tests__/route.test.ts` (collision cases)
 
 **Interfaces:**
-- Produces: `async function findNameConflict(db, { location, pid, normalizedName, exceptLevelId? }): Promise<string | null>` — returns the conflicting `levelId` or `null`. Uses a single `where('pid','==',pid)` read (no composite index) + in-memory location + normalized-name compare.
+- Produces: `async function findNameConflict(db, { location, pid, normalizedName, exceptLevelId? }): Promise<string | null>` - returns the conflicting `levelId` or `null`. Uses a single `where('pid','==',pid)` read (no composite index) + in-memory location + normalized-name compare.
 
-- [ ] **Step 1: REPRODUCE in UAT (read-only) — confirm the symptom**
+- [ ] **Step 1: REPRODUCE in UAT (read-only) - confirm the symptom**
 
 Per the firm project directive and `reproducing-setu-bugs-in-uat` skill, before writing the fix: read the two admin level routes and confirm the exact collision the owner hit. Write a throwaway script that lists UAT levels for a location+pid and checks for two docs whose `levelName` normalizes equal (the frozen-doc-id rename case), OR attempts the reported action:
 
@@ -386,7 +386,7 @@ describe('findNameConflict', () => {
 - [ ] **Step 3: Run it to confirm it fails**
 
 Run: `pnpm --filter @cmt/portal test -- level-name-conflict`
-Expected: FAIL — module not found.
+Expected: FAIL - module not found.
 
 - [ ] **Step 4: Implement `findNameConflict`**
 
@@ -481,7 +481,7 @@ Expected: PASS.
 
 ```bash
 git add apps/portal/src/features/setu/teacher/level-name-conflict.ts apps/portal/src/features/setu/teacher/__tests__/level-name-conflict.test.ts apps/portal/src/app/api/admin/levels/route.ts apps/portal/src/app/api/admin/levels/[levelId]/route.ts apps/portal/src/app/api/admin/levels/__tests__ apps/portal/src/app/api/admin/levels/[levelId]/__tests__
-git commit -m "fix(slice3): level-name collision — enforce normalized-name uniqueness within (location, period) on create + rename"
+git commit -m "fix(slice3): level-name collision - enforce normalized-name uniqueness within (location, period) on create + rename"
 ```
 
 ---
@@ -493,7 +493,7 @@ git commit -m "fix(slice3): level-name collision — enforce normalized-name uni
 - Test: `apps/portal/src/features/setu/teacher/components/__tests__/*` (if a visitors-panel test exists; else add a focused render test)
 
 **Interfaces:**
-- Consumes: `CHILD_GRADE_OPTIONS` (Task 1). `AddVisitorSchema.schoolGrade` stays `nullable` — blank stays `null`.
+- Consumes: `CHILD_GRADE_OPTIONS` (Task 1). `AddVisitorSchema.schoolGrade` stays `nullable` - blank stays `null`.
 
 - [ ] **Step 1: Replace the free-text Grade input with a select**
 
@@ -579,14 +579,14 @@ describe('attendance write statuses are binary', () => {
 - [ ] **Step 2: Run it to confirm it fails**
 
 Run: `pnpm --filter @cmt/shared-domain test -- attendance-schemas`
-Expected: FAIL — `SETU_ATTENDANCE_WRITE_STATUSES` undefined; late marks currently accepted.
+Expected: FAIL - `SETU_ATTENDANCE_WRITE_STATUSES` undefined; late marks currently accepted.
 
 - [ ] **Step 3: Implement the write-status set**
 
 In `packages/shared-domain/src/setu/schemas/attendance.ts`:
 - Add after the existing `SETU_ATTENDANCE_STATUSES`:
   ```ts
-  // Statuses a teacher can WRITE going forward — binary Present/Absent (Late is
+  // Statuses a teacher can WRITE going forward - binary Present/Absent (Late is
   // retired). AttendanceEventDoc.status stays the wider SETU_ATTENDANCE_STATUSES
   // so historical 'late' events remain valid on read.
   export const SETU_ATTENDANCE_WRITE_STATUSES = ['present', 'absent'] as const;
@@ -603,14 +603,14 @@ Expected: PASS.
 
 - [ ] **Step 5: Confirm the portal write paths still typecheck**
 
-`save-attendance.ts` and `guests.ts` type their status params as `SetuAttendanceStatus` (a superset) — assigning a write-status value is assignable, so no change needed. Run: `pnpm --filter @cmt/portal typecheck`. If a caller now needs the narrower type, adjust to `SetuAttendanceWriteStatus`.
+`save-attendance.ts` and `guests.ts` type their status params as `SetuAttendanceStatus` (a superset) - assigning a write-status value is assignable, so no change needed. Run: `pnpm --filter @cmt/portal typecheck`. If a caller now needs the narrower type, adjust to `SetuAttendanceWriteStatus`.
 
 - [ ] **Step 6: Append the mobile changelog entry**
 
 Add a dated entry to `apps/portal/docs/MOBILE_API_CHANGELOG.md` keyed `<SHA>` (backfill the SHA after commit):
 
 ```markdown
-## 2026-07-03 — `<SHA>` — Attendance is Present/Absent only (Late retired)
+## 2026-07-03 - `<SHA>` - Attendance is Present/Absent only (Late retired)
 `POST /api/setu/teacher/attendance` (`marks`) and `POST /api/setu/teacher/guests` (`status`) now accept only `present` | `absent`. Sending `late` → 400 `bad-request`. Reads are unchanged (historical `late` events still returned). **Mobile:** drop `late` from the attendance marker UI and never send it; render any historical `late` in read views as needed.
 ```
 
@@ -627,10 +627,10 @@ git commit --amend --no-edit apps/portal/docs/MOBILE_API_CHANGELOG.md
 
 ---
 
-## Task 7: Reports — fold Late into Present, drop the Late column
+## Task 7: Reports - fold Late into Present, drop the Late column
 
 **Files:**
-- Modify: `packages/shared-domain/src/setu/reports.ts` (`AttendanceRowSchema` — remove `late`)
+- Modify: `packages/shared-domain/src/setu/reports.ts` (`AttendanceRowSchema` - remove `late`)
 - Modify: `apps/portal/src/features/setu/reports/attendance-report.ts` (Tally + fold)
 - Modify: `apps/portal/src/features/setu/reports/report-csv.ts` (drop late column)
 - Modify: `apps/portal/src/features/setu/reports/reports-hub.tsx` (drop late column)
@@ -646,7 +646,7 @@ In `attendance-report.test.ts`, seed `attendanceEvents` for a level with **2 pre
 - [ ] **Step 2: Run it to confirm it fails**
 
 Run: `pnpm --filter @cmt/portal test -- attendance-report`
-Expected: FAIL — current code reports `present:2, late:1`.
+Expected: FAIL - current code reports `present:2, late:1`.
 
 - [ ] **Step 3: Fold late→present in `attendance-report.ts`**
 
@@ -658,7 +658,7 @@ Expected: FAIL — current code reports `present:2, late:1`.
   const status = raw === 'present' || raw === 'late' ? 'present' : raw === 'absent' ? 'absent' : null;
   if (!levelId || !status) continue;
   ```
-  (Everything else — `byLevel.get(levelId)![status]++` etc. — is unchanged; `status` is now only 'present'|'absent'.)
+  (Everything else - `byLevel.get(levelId)![status]++` etc. - is unchanged; `status` is now only 'present'|'absent'.)
 
 - [ ] **Step 4: Remove `late` from the report schema**
 
@@ -672,7 +672,7 @@ In `packages/shared-domain/src/setu/reports.ts`, in `AttendanceRowSchema`, delet
 - [ ] **Step 6: Run report tests + typecheck**
 
 Run: `pnpm --filter @cmt/portal test -- reports && pnpm --filter @cmt/shared-domain test -- reports && pnpm --filter @cmt/portal typecheck`
-Expected: PASS. (`enrollment-report.ts` still references `late` in its own present-or-late engagement check — leave it; new data has no late, so behavior is unchanged.)
+Expected: PASS. (`enrollment-report.ts` still references `late` in its own present-or-late engagement check - leave it; new data has no late, so behavior is unchanged.)
 
 - [ ] **Step 7: Commit**
 
@@ -699,14 +699,14 @@ In the legacy attendance-marker test, assert the header renders exactly two stat
 - [ ] **Step 2: Run it to confirm it fails**
 
 Run: `pnpm --filter @cmt/portal test -- check-in/teacher`
-Expected: FAIL — 4 columns currently render.
+Expected: FAIL - 4 columns currently render.
 
 - [ ] **Step 3: Restrict the marker to present/absent**
 
 In `apps/portal/src/features/check-in/teacher/attendance-marker.tsx`:
 - Add a module-local `const WRITE_STATUSES = ['present', 'absent'] as const;`
 - Replace both `ATTENDANCE_STATUSES.map(...)` usages (the `<thead>` columns and the per-student radio cells) with `WRITE_STATUSES.map(...)`.
-- Keep the `AttendanceStatus` type import for the state type; the default seed `'present'` is unchanged. The POST body still targets `/api/check-in/teacher/attendance`, whose schema accepts the wider enum — sending only present/absent is valid.
+- Keep the `AttendanceStatus` type import for the state type; the default seed `'present'` is unchanged. The POST body still targets `/api/check-in/teacher/attendance`, whose schema accepts the wider enum - sending only present/absent is valid.
 
 - [ ] **Step 4: Run it (green) + typecheck**
 
@@ -742,7 +742,7 @@ Create `search-teachers.test.ts`: seed a family "Sharma" (searchKeys `['sharma']
 - [ ] **Step 2: Run it to confirm it fails**
 
 Run: `pnpm --filter @cmt/portal test -- search-teachers`
-Expected: FAIL — module not found.
+Expected: FAIL - module not found.
 
 - [ ] **Step 3: Implement `searchTeachers`**
 
@@ -763,7 +763,7 @@ export interface TeacherSearchHit {
 
 /**
  * Search assignable teachers by name/email/phone. Reuses the family search
- * (searchKeys array-contains — existing index), then surfaces each matched
+ * (searchKeys array-contains - existing index), then surfaces each matched
  * family's ADULT members (a teacher is an adult) as {mid,name,email}. Bounded:
  * searchFamilies caps at 20 families; we read their members subcollections and
  * cap the result at 15 hits. Read-only. No new index.
@@ -807,7 +807,7 @@ Expected: PASS.
 In `can-access-route.test.ts`, assert `/api/admin/teachers/search` is allowed for admin and welcome-team, denied for a plain family. Run to confirm it fails, then in `can-access-route.ts`, BEFORE the `if (pathname.startsWith('/api/admin/')) return isAdmin(claims);` line, add:
 
 ```ts
-// Teacher name-search — front-desk (welcome-team) may assign teachers too.
+// Teacher name-search - front-desk (welcome-team) may assign teachers too.
 if (pathname === '/api/admin/teachers/search' || pathname.startsWith('/api/admin/teachers/')) {
   return isAdmin(claims) || isWelcomeTeam(claims);
 }
@@ -867,7 +867,7 @@ Create the route test: seed a level in a live-year pid + a teacher mid. `POST {m
 - [ ] **Step 2: Run it to confirm it fails**
 
 Run: `pnpm --filter @cmt/portal test -- levels/[levelId]/teachers`
-Expected: FAIL — route not found.
+Expected: FAIL - route not found.
 
 - [ ] **Step 3: Implement the route**
 
@@ -934,7 +934,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ level
 In `can-access-route.test.ts`, assert `/api/admin/levels/brampton-level-2-bv-brampton-2025-26/teachers` is allowed for admin + welcome-team, denied for a plain family, while `/api/admin/levels/<id>` (CRUD) stays admin-only. Run red, then in `can-access-route.ts` BEFORE the `/api/admin/` catch-all add:
 
 ```ts
-// Per-level teacher add/remove — admin + welcome-team (front-desk). Only the
+// Per-level teacher add/remove - admin + welcome-team (front-desk). Only the
 // `/teachers` sub-path opens up; level CRUD stays admin-only via the catch-all.
 if (/^\/api\/admin\/levels\/[^/]+\/teachers\/?$/.test(pathname)) {
   return isAdmin(claims) || isWelcomeTeam(claims);
@@ -955,7 +955,7 @@ git commit -m "feat(slice3): per-level teacher add/remove endpoints (sync teache
 
 ---
 
-## Task 11: Inline per-level teacher assignment UI — pills + search popover; delete the tab
+## Task 11: Inline per-level teacher assignment UI - pills + search popover; delete the tab
 
 **Files:**
 - Modify: `apps/portal/src/app/admin/levels/page.tsx` (resolve teacher names, pass to table)
@@ -1044,7 +1044,7 @@ In `levels-table.tsx`:
 </div>
 ```
 
-- Add `handleAddTeacher(levelId, hit)` and `handleRemoveTeacher(levelId, mid)` that call the client wrappers, update `teachers` state + the parent via `onAssignmentSaved`, and `toast.success/error`. Render an `AssignTeacherPopover` (a small inline component in this file) when `assigning === l.levelId`: a search input (debounced or on-submit) calling `searchTeachersClient`, showing results as `name — email` rows; clicking a row calls `handleAddTeacher` then closes. Guard against adding a mid already present.
+- Add `handleAddTeacher(levelId, hit)` and `handleRemoveTeacher(levelId, mid)` that call the client wrappers, update `teachers` state + the parent via `onAssignmentSaved`, and `toast.success/error`. Render an `AssignTeacherPopover` (a small inline component in this file) when `assigning === l.levelId`: a search input (debounced or on-submit) calling `searchTeachersClient`, showing results as `name - email` rows; clicking a row calls `handleAddTeacher` then closes. Guard against adding a mid already present.
 
 - [ ] **Step 5: Delete the old tab form**
 
@@ -1078,9 +1078,9 @@ git commit -m "feat(slice3): inline per-level teacher pills + name-search assign
 **Interfaces:**
 - Consumes: `assignTeacher` (`@/features/setu/teacher/assignments`). After prefill, for every carried-forward ref, BOTH `levels/{target}.teacherRefs` AND `teacherAssignments/{ref}.levelIds` contain the target levelId.
 
-- [ ] **Step 1: REPRODUCE in UAT (read-only) — confirm the symptom**
+- [ ] **Step 1: REPRODUCE in UAT (read-only) - confirm the symptom**
 
-Per the firm directive + `reproducing-setu-bugs-in-uat`: on deployed UAT, inspect a rolled-over year. Script (throwaway) that, for a source teacher ref, prints (a) `levels` where `teacherRefs array-contains <ref>` (their "my classes" source), and (b) `teacherAssignments/{ref}.levelIds`. Confirm the asymmetry — after `copy-teachers`, target levels carry the ref but `teacherAssignments.levelIds` still lists only source-year levelIds (or the classes list is empty because copy-teachers was never run). Capture the ACTUAL state:
+Per the firm directive + `reproducing-setu-bugs-in-uat`: on deployed UAT, inspect a rolled-over year. Script (throwaway) that, for a source teacher ref, prints (a) `levels` where `teacherRefs array-contains <ref>` (their "my classes" source), and (b) `teacherAssignments/{ref}.levelIds`. Confirm the asymmetry - after `copy-teachers`, target levels carry the ref but `teacherAssignments.levelIds` still lists only source-year levelIds (or the classes list is empty because copy-teachers was never run). Capture the ACTUAL state:
 
 ```bash
 pnpm --filter @cmt/portal exec tsx --env-file=.env.local /tmp/repro-rollover-teachers.ts <teacher-mid>
@@ -1094,7 +1094,7 @@ In `prefill-teachers.test.ts`, seed a source level with `teacherRefs:['mid-a','m
 - [ ] **Step 3: Run it to confirm it fails**
 
 Run: `pnpm --filter @cmt/portal test -- prefill-teachers`
-Expected: FAIL — `teacherAssignments` not updated by current prefill.
+Expected: FAIL - `teacherAssignments` not updated by current prefill.
 
 - [ ] **Step 4: Sync `teacherAssignments` in `prefillTeachers`**
 
@@ -1115,7 +1115,7 @@ if (!args.dryRun) {
 }
 ```
 
-This removes the need for the standalone `targetRef.set({ teacherRefs })` — `assignTeacher` arrayUnions each ref onto `levels/{targetId}.teacherRefs`. Confirm the `updatedAt/updatedBy` on the target level is still acceptable (assignTeacher writes `teacherRefs` via merge; the level's `updatedAt` isn't touched by assignTeacher — if the test asserts it, set it separately, otherwise leave it).
+This removes the need for the standalone `targetRef.set({ teacherRefs })` - `assignTeacher` arrayUnions each ref onto `levels/{targetId}.teacherRefs`. Confirm the `updatedAt/updatedBy` on the target level is still acceptable (assignTeacher writes `teacherRefs` via merge; the level's `updatedAt` isn't touched by assignTeacher - if the test asserts it, set it separately, otherwise leave it).
 
 - [ ] **Step 5: Run it (green) + the rollover suite**
 
@@ -1136,11 +1136,11 @@ git commit -m "fix(slice3): rollover teacher carry-forward syncs teacherAssignme
 **Files:**
 - Create/Modify: `apps/portal/e2e/setu/admin/level-management.spec.ts`
 - Create/Modify: `apps/portal/e2e/setu/teacher/attendance-binary.spec.ts`
-- Modify: `apps/portal/scripts/seed-e2e-family.ts` (ensure the fixture has a teacher member + a level to assign, and a historical `late` event for the reports fold — only if needed by the specs)
+- Modify: `apps/portal/scripts/seed-e2e-family.ts` (ensure the fixture has a teacher member + a level to assign, and a historical `late` event for the reports fold - only if needed by the specs)
 - Modify: `docs/runbooks/production-cutover-checklist.md` (§14 dated entry)
 
 **Interfaces:**
-- Consumes the seeded UAT fixture (`e2e-family@chinmayatoronto.org`, admin role). Specs run against `https://cmt-setu.vercel.app` at the owner gate — NOT in the pre-push hook.
+- Consumes the seeded UAT fixture (`e2e-family@chinmayatoronto.org`, admin role). Specs run against `https://cmt-setu.vercel.app` at the owner gate - NOT in the pre-push hook.
 
 - [ ] **Step 1: Write the level-management E2E**
 
@@ -1157,7 +1157,7 @@ Only if the specs require data the fixture lacks: in `seed-e2e-family.ts`, ensur
 - [ ] **Step 4: Local dry-run of the spec files (compile only)**
 
 Run: `pnpm --filter @cmt/portal exec playwright test --project=setu level-management attendance-binary --list`
-Expected: the specs are discovered and list their tests (no execution against UAT yet — that happens at the owner gate).
+Expected: the specs are discovered and list their tests (no execution against UAT yet - that happens at the owner gate).
 
 - [ ] **Step 5: Runbook §14 entry**
 
@@ -1196,4 +1196,4 @@ git commit -m "test(slice3): deployed-UAT E2E specs for level management + binar
 
 **2. Placeholder scan:** No "TBD/TODO". Bug-fix Tasks 4 & 12 intentionally begin with a reproduction step (a project requirement), then contain complete fix code. UI edits give exact old→new blocks against the current code.
 
-**3. Type consistency:** `levelGradeSummary(Pick<LevelDoc,'levelKind'|'gradeBand'>)`, `GRADE_BAND_OPTIONS`/`CHILD_GRADE_OPTIONS`, `SETU_ATTENDANCE_WRITE_STATUSES`, `findNameConflict`/`normalizeLevelName`, `searchTeachers`/`TeacherSearchHit`, per-level route body `{mid}`, `teachersByLevel: Record<string,{mid,name}[]>`, and `assignTeacher({ref,levelIds,byUid})` are used consistently across tasks. `ageLabel` optional in Task 1 is respected by Tasks 2–4 (omit key, never assign `undefined`).
+**3. Type consistency:** `levelGradeSummary(Pick<LevelDoc,'levelKind'|'gradeBand'>)`, `GRADE_BAND_OPTIONS`/`CHILD_GRADE_OPTIONS`, `SETU_ATTENDANCE_WRITE_STATUSES`, `findNameConflict`/`normalizeLevelName`, `searchTeachers`/`TeacherSearchHit`, per-level route body `{mid}`, `teachersByLevel: Record<string,{mid,name}[]>`, and `assignTeacher({ref,levelIds,byUid})` are used consistently across tasks. `ageLabel` optional in Task 1 is respected by Tasks 2-4 (omit key, never assign `undefined`).

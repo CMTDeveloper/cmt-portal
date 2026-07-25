@@ -1,23 +1,23 @@
-# Slice 1 — Family Dashboard Simplification + Enrollment Triggers Implementation Plan
+# Slice 1 - Family Dashboard Simplification + Enrollment Triggers Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Reduce the `/family` dashboard to three stacked blocks (Family · Action Items · one Bala Vihar section), amend the enrollment-confirmation rule so a deliberate Enroll click (or first attendance) counts as "Enrolled", hide Seva/Prasad/calendar from families, surface profile-completeness on the member pages, and mirror the new data additively in the mobile dashboard API.
 
-**Architecture:** All BV/donation derivation stays in the pure `buildFamilyDashboardModel` (unit-tested with multi-enrollment fixtures); new per-child assembly (attendance ratios, class assignments, family counts) is composed in `loadFamilyDashboard` — the single loader shared verbatim by the `/family` server page AND `GET /api/setu/dashboard`, so web and mobile never drift. The `/family/page.tsx` is rebuilt to render only the three blocks; Seva/Prasad hide behind OFF-by-default `flags.ts` feature flags following the literal-`process.env` pattern.
+**Architecture:** All BV/donation derivation stays in the pure `buildFamilyDashboardModel` (unit-tested with multi-enrollment fixtures); new per-child assembly (attendance ratios, class assignments, family counts) is composed in `loadFamilyDashboard` - the single loader shared verbatim by the `/family` server page AND `GET /api/setu/dashboard`, so web and mobile never drift. The `/family/page.tsx` is rebuilt to render only the three blocks; Seva/Prasad hide behind OFF-by-default `flags.ts` feature flags following the literal-`process.env` pattern.
 
 **Tech Stack:** Next.js 16 App Router (Server Components, `connection()`, `use cache`), TypeScript with `exactOptionalPropertyTypes`, Firebase Admin (Firestore), Zod (read-validated doc schemas), Vitest (unit), Playwright (deployed-UAT E2E, `setu` project). Design spec: `docs/superpowers/specs/2026-07-06-slice1-dashboard-simplification-and-enrollment-triggers-design.md`.
 
 ## Global Constraints
 
 - **UAT only.** Every DB/index/seed/E2E op targets `chinmaya-setu-uat`. Never write to prod `chinmaya-setu-715b8`; never `--force` an index deploy.
-- **`@cmt/shared-domain` stays pure** — no React/Next/DOM imports; enforced by lint.
-- **`exactOptionalPropertyTypes` is on** — never assign `undefined` to an optional; omit the key or use `null`.
-- **`NEXT_PUBLIC_*` flags must be literal `process.env.NEXT_PUBLIC_FOO`** access in `flags.ts` — never dynamic indexing (it doesn't inline into the client bundle).
+- **`@cmt/shared-domain` stays pure** - no React/Next/DOM imports; enforced by lint.
+- **`exactOptionalPropertyTypes` is on** - never assign `undefined` to an optional; omit the key or use `null`.
+- **`NEXT_PUBLIC_*` flags must be literal `process.env.NEXT_PUBLIC_FOO`** access in `flags.ts` - never dynamic indexing (it doesn't inline into the client bundle).
 - **Every new `NEXT_PUBLIC_*` env var must be added to `turbo.json`'s `globalEnv`/`env` array** or the Vercel build sandbox strips it (local passes, Vercel fails).
 - **Bulk collectionGroup reads, never per-family fan-out.**
 - **Any `/api/setu/**` request/response shape change (or a `@cmt/shared-domain` schema it uses) needs a dated, SHA-keyed entry in `apps/portal/docs/MOBILE_API_CHANGELOG.md`.**
-- **Amount is irrelevant to confirmation** — donations are suggestions, not fees. Donation status (Pending/Complete/Off-portal) is tracked **independently** of enrollment state.
+- **Amount is irrelevant to confirmation** - donations are suggestions, not fees. Donation status (Pending/Complete/Off-portal) is tracked **independently** of enrollment state.
 - **Never bypass `--no-verify`.** The pre-push hook (`typecheck && lint && test && build`) is the gate.
 - **Commit author** is already `CMT Developer <developer@chinmayatoronto.org>` in local `.git/config`.
 - Run unit tests with `pnpm --filter @cmt/portal test`. The deployed-UAT E2E is the separate `pnpm --filter @cmt/portal test:e2e` (Playwright) against `PLAYWRIGHT_BASE_URL=https://cmt-setu.vercel.app`.
@@ -26,7 +26,7 @@
 
 ### Task 1: Enrollment-trigger amendment (Part A)
 
-Widen the pure confirmation predicate so a deliberate Enroll click (`enrolledVia: 'family-initiated'`) or an auto-enroll from a kid's first attendance (`enrolledVia: 'first-attendance'`) both confirm enrollment on their own — in addition to the existing attendance/donation/legacy-paid triggers. "Registered" then only survives for `promotion`/`welcome-team` enrollments with zero engagement.
+Widen the pure confirmation predicate so a deliberate Enroll click (`enrolledVia: 'family-initiated'`) or an auto-enroll from a kid's first attendance (`enrolledVia: 'first-attendance'`) both confirm enrollment on their own - in addition to the existing attendance/donation/legacy-paid triggers. "Registered" then only survives for `promotion`/`welcome-team` enrollments with zero engagement.
 
 **Files:**
 - Modify: `apps/portal/src/app/family/_helpers/enrollment-confirmation.ts`
@@ -34,11 +34,11 @@ Widen the pure confirmation predicate so a deliberate Enroll click (`enrolledVia
 
 **Interfaces:**
 - Consumes: `EnrollmentWithOffering` from `@/features/setu/enrollment/get-enrollments` (has `enrolledVia: 'family-initiated' | 'first-attendance' | 'welcome-team' | 'promotion'`); `DonationDoc` from `@cmt/shared-domain`.
-- Produces: `isEnrollmentConfirmed(enrollment: Pick<EnrollmentWithOffering, 'eid' | 'enrolledVia'>, inputs: ConfirmationInputs): boolean`. **The param type widens from `Pick<…, 'eid'>` to `Pick<…, 'eid' | 'enrolledVia'>`** — every caller already passes a full `EnrollmentWithOffering` (`dashboard-model.ts:132` passes `bv`), so this is source-compatible.
+- Produces: `isEnrollmentConfirmed(enrollment: Pick<EnrollmentWithOffering, 'eid' | 'enrolledVia'>, inputs: ConfirmationInputs): boolean`. **The param type widens from `Pick<…, 'eid'>` to `Pick<…, 'eid' | 'enrolledVia'>`** - every caller already passes a full `EnrollmentWithOffering` (`dashboard-model.ts:132` passes `bv`), so this is source-compatible.
 
 - [ ] **Step 1: Extend the test with the two new confirming triggers and a still-Registered case**
 
-Add these cases inside the existing `describe('isEnrollmentConfirmed', …)` block in `apps/portal/src/app/family/__tests__/enrollment-confirmation.test.ts`. The existing `bv` fixture is `{ eid: 'FAM1-bv-brampton-2026-27' }` — update it to also carry `enrolledVia`, and add per-case overrides:
+Add these cases inside the existing `describe('isEnrollmentConfirmed', …)` block in `apps/portal/src/app/family/__tests__/enrollment-confirmation.test.ts`. The existing `bv` fixture is `{ eid: 'FAM1-bv-brampton-2026-27' }` - update it to also carry `enrolledVia`, and add per-case overrides:
 
 ```ts
 // Replace the module-level fixture at the top of the file:
@@ -93,7 +93,7 @@ export function isEnrollmentConfirmed(
 }
 ```
 
-Also update the JSDoc block above the function to note the Slice-1 amendment (keep the issue #23 history, add: "Slice 1 2026-07-06 — 'family-initiated'/'first-attendance' confirm on their own; only 'promotion'/'welcome-team' still require engagement").
+Also update the JSDoc block above the function to note the Slice-1 amendment (keep the issue #23 history, add: "Slice 1 2026-07-06 - 'family-initiated'/'first-attendance' confirm on their own; only 'promotion'/'welcome-team' still require engagement").
 
 - [ ] **Step 4: Run the test to verify all pass**
 
@@ -103,7 +103,7 @@ Expected: PASS (all cases green).
 - [ ] **Step 5: Run the model test (it consumes the predicate)**
 
 Run: `pnpm --filter @cmt/portal test -- dashboard-model`
-Expected: PASS. If any fixture used `enrolledVia: 'family-initiated'` with a Registered expectation, flip that fixture to `enrolledVia: 'promotion'` (the `makeEnrollment` default at `dashboard-model.test.ts:59` is `'family-initiated'` — any test asserting `bvState: 'registered'` must set `enrolledVia: 'promotion'` and zero engagement). Fix such fixtures inline and re-run.
+Expected: PASS. If any fixture used `enrolledVia: 'family-initiated'` with a Registered expectation, flip that fixture to `enrolledVia: 'promotion'` (the `makeEnrollment` default at `dashboard-model.test.ts:59` is `'family-initiated'` - any test asserting `bvState: 'registered'` must set `enrolledVia: 'promotion'` and zero engagement). Fix such fixtures inline and re-run.
 
 - [ ] **Step 6: Commit**
 
@@ -150,7 +150,7 @@ describe('flags', () => {
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm --filter @cmt/portal test -- lib/__tests__/flags`
-Expected: FAIL — `Property 'setuSeva' does not exist on type` (typecheck) or `undefined` at runtime.
+Expected: FAIL - `Property 'setuSeva' does not exist on type` (typecheck) or `undefined` at runtime.
 
 - [ ] **Step 3: Add the flags**
 
@@ -160,7 +160,7 @@ In `apps/portal/src/lib/flags.ts`, add inside the `flags` object (after `setuTea
   // Slice 1 (2026-07-06): Seva + Prasad are hidden from FAMILIES entirely
   // (dashboard card, left-nav item, and the /family/seva|prasad routes) until the
   // owner decides to re-surface them. OFF by default. Admin/welcome Seva+Prasad
-  // config is untouched — this only gates the family-facing surfaces.
+  // config is untouched - this only gates the family-facing surfaces.
   setuSeva: process.env.NEXT_PUBLIC_FEATURE_SETU_SEVA === 'true',
   setuPrasad: process.env.NEXT_PUBLIC_FEATURE_SETU_PRASAD === 'true',
 ```
@@ -193,7 +193,7 @@ git commit -m "feat(flags): add OFF-by-default setuSeva/setuPrasad + calendar-ur
 
 ### Task 3: Per-child Bala Vihar attendance helper
 
-The dashboard's BV section shows each enrolled child's own attendance ratio (e.g. "Aarav 4/5"). The existing `getFamilyBalaViharAttendance` folds across children into ONE family summary — it can't answer per-child. Add a per-child helper that resolves each child independently and returns `{ present, total }` per mid.
+The dashboard's BV section shows each enrolled child's own attendance ratio (e.g. "Aarav 4/5"). The existing `getFamilyBalaViharAttendance` folds across children into ONE family summary - it can't answer per-child. Add a per-child helper that resolves each child independently and returns `{ present, total }` per mid.
 
 **Files:**
 - Create: `apps/portal/src/features/setu/attendance/get-per-child-attendance.ts`
@@ -201,11 +201,11 @@ The dashboard's BV section shows each enrolled child's own attendance ratio (e.g
 
 **Interfaces:**
 - Consumes: `getAttendanceForFamily` from `@/features/setu/teacher/get-attendance`; `getCheckInAttendance`, `summarizeMemberCheckIns` from `./check-in-attendance`; `resolveMemberAttendance`, `summarizeResolvedMarks` from `./resolve-attendance`; the `FamilyBvAttendanceArgs` shape (fid, legacyFid, oid, windowStart, windowEnd, children:{mid,legacySid}[]) from `./get-family-attendance`.
-- Produces: `getPerChildBalaViharAttendance(args: FamilyBvAttendanceArgs): Promise<Map<string, { present: number; total: number }>>` — keyed by mid. `present` counts present+late (matches the family "attended" semantics); `total` is that child's resolved mark count in-window. A child with no marks maps to `{ present: 0, total: 0 }`.
+- Produces: `getPerChildBalaViharAttendance(args: FamilyBvAttendanceArgs): Promise<Map<string, { present: number; total: number }>>` - keyed by mid. `present` counts present+late (matches the family "attended" semantics); `total` is that child's resolved mark count in-window. A child with no marks maps to `{ present: 0, total: 0 }`.
 
 - [ ] **Step 1: Write the failing test**
 
-Create `apps/portal/src/features/setu/attendance/__tests__/get-per-child-attendance.test.ts`. Mock the two read modules so the test is pure (mirror the mocking style already used in `get-family-attendance`'s tests — check that file's `__tests__` sibling for the exact `vi.mock` targets and adapt):
+Create `apps/portal/src/features/setu/attendance/__tests__/get-per-child-attendance.test.ts`. Mock the two read modules so the test is pure (mirror the mocking style already used in `get-family-attendance`'s tests - check that file's `__tests__` sibling for the exact `vi.mock` targets and adapt):
 
 ```ts
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -279,7 +279,7 @@ import type { FamilyBvAttendanceArgs } from './get-family-attendance';
  *
  * Unlike `getFamilyBalaViharAttendance` (which folds every child into ONE family
  * summary answering "did ANY child attend that Sunday?"), this resolves each
- * child INDEPENDENTLY — a sibling's absence never touches another child's ratio —
+ * child INDEPENDENTLY - a sibling's absence never touches another child's ratio -
  * and returns `{ present, total }` per mid, so the UI can render "Aarav 4/5".
  * `present` counts present+late (same "attended" semantics as the family count).
  * Door records are window-scoped (door has no offering link); portal teacher
@@ -311,7 +311,7 @@ export async function getPerChildBalaViharAttendance(
 }
 ```
 
-**Note:** confirm the exact field names on the teacher-event shape (`mid`, `pid`, `date`, `status`) by reading `get-family-attendance.ts:43-45` (this file mirrors that filter). If the door-mark helper signature differs, match `get-family-attendance.ts` exactly — this helper is a per-child de-fold of that same logic.
+**Note:** confirm the exact field names on the teacher-event shape (`mid`, `pid`, `date`, `status`) by reading `get-family-attendance.ts:43-45` (this file mirrors that filter). If the door-mark helper signature differs, match `get-family-attendance.ts` exactly - this helper is a per-child de-fold of that same logic.
 
 - [ ] **Step 4: Run the test to verify it passes**
 
@@ -329,15 +329,15 @@ git commit -m "feat(attendance): per-child BV attendance ratios helper (Slice 1)
 
 ### Task 4: Bala Vihar teacher-name resolver (class assignments)
 
-The BV section's "Class Assignments" shows each enrolled child's level **name** (already denormalized free on the enrollment as `levelSnapshots[mid].levelName` — no read) plus their **teacher name(s)**. Teacher names require resolving `level.teacherRefs` (mids) → member display names via a bulk collection-group read. This task delivers ONLY the teacher-name resolver; the loader (Task 5) merges it with the free level name. **This task is independently droppable** — if deferred, the loader passes an empty teacher map and the UI renders level name with no teacher line.
+The BV section's "Class Assignments" shows each enrolled child's level **name** (already denormalized free on the enrollment as `levelSnapshots[mid].levelName` - no read) plus their **teacher name(s)**. Teacher names require resolving `level.teacherRefs` (mids) → member display names via a bulk collection-group read. This task delivers ONLY the teacher-name resolver; the loader (Task 5) merges it with the free level name. **This task is independently droppable** - if deferred, the loader passes an empty teacher map and the UI renders level name with no teacher line.
 
 **Files:**
 - Create: `apps/portal/src/features/setu/attendance/get-bv-teacher-names.ts`
 - Test: `apps/portal/src/features/setu/attendance/__tests__/get-bv-teacher-names.test.ts`
 
 **Interfaces:**
-- Consumes: `portalFirestore` from `@cmt/firebase-shared/admin/firestore`; `LevelDoc.teacherRefs` (array of mids) via `levels/{levelId}`; member display names via `collectionGroup('members').where('mid', 'in', mids)` (the `members.mid` collection-group field-override index is already UAT-deployed — CLAUDE.md Phase 2). Firestore `in` caps at 30 values; teacher counts are tiny, but chunk defensively.
-- Produces: `getBvTeacherNames(levelIds: string[]): Promise<Map<string, string[]>>` — keyed by `levelId`, value = display names (`"First Last"`) of that level's `teacherRefs`, in `teacherRefs` order, missing members skipped. Unknown/blank levelIds are absent from the map.
+- Consumes: `portalFirestore` from `@cmt/firebase-shared/admin/firestore`; `LevelDoc.teacherRefs` (array of mids) via `levels/{levelId}`; member display names via `collectionGroup('members').where('mid', 'in', mids)` (the `members.mid` collection-group field-override index is already UAT-deployed - CLAUDE.md Phase 2). Firestore `in` caps at 30 values; teacher counts are tiny, but chunk defensively.
+- Produces: `getBvTeacherNames(levelIds: string[]): Promise<Map<string, string[]>>` - keyed by `levelId`, value = display names (`"First Last"`) of that level's `teacherRefs`, in `teacherRefs` order, missing members skipped. Unknown/blank levelIds are absent from the map.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -397,7 +397,7 @@ describe('getBvTeacherNames', () => {
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm --filter @cmt/portal test -- get-bv-teacher-names`
-Expected: FAIL — module not found.
+Expected: FAIL - module not found.
 
 - [ ] **Step 3: Implement the resolver**
 
@@ -417,7 +417,7 @@ function chunk<T>(xs: T[], n: number): T[][] {
  * Resolve each Bala Vihar level's assigned teacher display names for the family
  * dashboard's "Class Assignments" line. `teacherRefs` on a level are mids; the
  * teachers are members of (possibly other) families, so names come from a bulk
- * `collectionGroup('members').where('mid','in', …)` read — never a per-family
+ * `collectionGroup('members').where('mid','in', …)` read - never a per-family
  * fan-out. The `members.mid` collection-group index is already UAT-deployed.
  *
  * Returns a Map keyed by levelId → display names in teacherRefs order. Missing
@@ -477,9 +477,9 @@ git commit -m "feat(attendance): resolve BV level teacher names via bulk collect
 
 ---
 
-### Task 5: Dashboard model + loader — actionItems, familyCounts, bvChildren
+### Task 5: Dashboard model + loader - actionItems, familyCounts, bvChildren
 
-Extend the pure model with an `actionItems` array (derived from existing donation/enrollment fields), and extend the shared loader to assemble per-child `bvChildren` (level name + teacher names + attendance ratio) and `familyCounts` (children/adults). Keeping `bvChildren`/`familyCounts` on the loader's `FamilyDashboardData` (siblings of `upcoming`/`seva`/`prasad`) — NOT the pure model — keeps the model builder free of async assembly while still feeding both the web page and the mobile API from one place.
+Extend the pure model with an `actionItems` array (derived from existing donation/enrollment fields), and extend the shared loader to assemble per-child `bvChildren` (level name + teacher names + attendance ratio) and `familyCounts` (children/adults). Keeping `bvChildren`/`familyCounts` on the loader's `FamilyDashboardData` (siblings of `upcoming`/`seva`/`prasad`) - NOT the pure model - keeps the model builder free of async assembly while still feeding both the web page and the mobile API from one place.
 
 **Files:**
 - Modify: `apps/portal/src/app/family/_helpers/dashboard-model.ts`
@@ -527,12 +527,12 @@ describe('actionItems', () => {
 });
 ```
 
-(If `BV_ENROLLMENT`'s suggested amount makes `donationComplete` true at `givenForPeriod: 0`, it won't — `effectiveSuggestedAmount: 200 > 0` and `givenForPeriod 0 < 200` ⇒ incomplete ⇒ item present. Good.)
+(If `BV_ENROLLMENT`'s suggested amount makes `donationComplete` true at `givenForPeriod: 0`, it won't - `effectiveSuggestedAmount: 200 > 0` and `givenForPeriod 0 < 200` ⇒ incomplete ⇒ item present. Good.)
 
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm --filter @cmt/portal test -- dashboard-model`
-Expected: FAIL — `model.actionItems` is `undefined`.
+Expected: FAIL - `model.actionItems` is `undefined`.
 
 - [ ] **Step 3: Add `actionItems` to the model**
 
@@ -615,7 +615,7 @@ Extend the SECOND `Promise.all` (the one already gated on `bv`) to also compute 
   const [legacyPaymentStatus, bvAttendedCount, perChildAttendance, teacherNamesByLevel] =
     await Promise.all([
       isLegacyBvPeriod(enrollments) ? getLegacyPaymentStatus(family.legacyFid) : Promise.resolve(null),
-      // (existing bvAttendedCount IIFE — leave it exactly as-is)
+      // (existing bvAttendedCount IIFE - leave it exactly as-is)
       (async (): Promise<number> => { /* …unchanged existing body… */ })(),
       // Per-child attendance ratios for the BV section. Fail-soft to an empty map.
       (async (): Promise<Map<string, { present: number; total: number }>> => {
@@ -632,7 +632,7 @@ Extend the SECOND `Promise.all` (the one already gated on `bv`) to also compute 
             children,
           });
         } catch (err) {
-          console.warn('[load-dashboard] per-child BV attendance read failed — treating as empty', err);
+          console.warn('[load-dashboard] per-child BV attendance read failed - treating as empty', err);
           return new Map();
         }
       })(),
@@ -647,7 +647,7 @@ Extend the SECOND `Promise.all` (the one already gated on `bv`) to also compute 
             .filter((id): id is string => !!id);
           return await getBvTeacherNames(levelIds);
         } catch (err) {
-          console.warn('[load-dashboard] BV teacher-name read failed — omitting teacher names', err);
+          console.warn('[load-dashboard] BV teacher-name read failed - omitting teacher names', err);
           return new Map();
         }
       })(),
@@ -677,7 +677,7 @@ Return `{ model, upcoming, seva, prasad, bvChildren, familyCounts }`.
 - [ ] **Step 6: Run the full family + attendance test suites**
 
 Run: `pnpm --filter @cmt/portal test -- family/__tests__ features/setu/attendance`
-Expected: PASS. Then `pnpm --filter @cmt/portal typecheck` — Expected: PASS.
+Expected: PASS. Then `pnpm --filter @cmt/portal typecheck` - Expected: PASS.
 
 - [ ] **Step 7: Commit**
 
@@ -724,7 +724,7 @@ import {
  *  noImplicitReturns as new ActionItem kinds are added in Slice 2. */
 function actionHref(item: ActionItem, model: FamilyDashboardModel): string {
   if (item.kind === 'donation') return model.donateUrl;
-  return model.donateUrl; // fallback — unreachable today (donation is the only kind)
+  return model.donateUrl; // fallback - unreachable today (donation is the only kind)
 }
 
 export default async function FamilyDashboardPage() {
@@ -774,7 +774,7 @@ export default async function FamilyDashboardPage() {
   const bvSection = (
     <>
       <div className="row" style={{ gap: 18, flexWrap: 'wrap', marginBottom: 16 }}>
-        <Stat label="Academic year" value={enrollPeriodLabel ?? '—'} />
+        <Stat label="Academic year" value={enrollPeriodLabel ?? '-'} />
         <Stat label="Registration" value={model.bvState === 'enrolled' ? 'Enrolled' : model.bvState === 'registered' ? 'Registered' : 'Not enrolled'} />
         <Stat label="Donation" value={donationStatus} />
       </div>
@@ -796,7 +796,7 @@ export default async function FamilyDashboardPage() {
                 </div>
               </div>
               <div style={{ fontSize: 13, fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: 'var(--accentDeep)' }}>
-                {c.attendance.total > 0 ? `${c.attendance.present}/${c.attendance.total}` : '—'}
+                {c.attendance.total > 0 ? `${c.attendance.present}/${c.attendance.total}` : '-'}
               </div>
             </div>
           ))}
@@ -827,7 +827,7 @@ export default async function FamilyDashboardPage() {
               </h1>
             </div>
 
-            {/* Block 1 — Family */}
+            {/* Block 1 - Family */}
             <div className="card" style={{ padding: 16, marginBottom: 12 }}>
               <div className="between" style={{ marginBottom: 12 }}>
                 <span style={{ fontSize: 12, fontWeight: 600 }}>Family · {familyCounts.children} {familyCounts.children === 1 ? 'child' : 'children'} · {familyCounts.adults} {familyCounts.adults === 1 ? 'adult' : 'adults'}</span>
@@ -845,7 +845,7 @@ export default async function FamilyDashboardPage() {
               </div>
             </div>
 
-            {/* Block 2 — Action Items */}
+            {/* Block 2 - Action Items */}
             {hasActions && (
               <div style={{ marginBottom: 12 }}>
                 {isManager && <PendingJoinRequestsPanel compact />}
@@ -858,7 +858,7 @@ export default async function FamilyDashboardPage() {
               </div>
             )}
 
-            {/* Block 3 — Bala Vihar */}
+            {/* Block 3 - Bala Vihar */}
             <div className="card" style={{ padding: 16 }}>
               <div className="between" style={{ marginBottom: 14 }}>
                 <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink)' }}><em className="sa">Bala Vihar</em></span>
@@ -870,7 +870,7 @@ export default async function FamilyDashboardPage() {
         </CspRoot>
       </div>
 
-      {/* Desktop — layout.tsx owns sidebar + main wrapper */}
+      {/* Desktop - layout.tsx owns sidebar + main wrapper */}
       <div className="hidden md:block">
         <header className="between" style={{ marginBottom: 28 }}>
           <div>
@@ -879,7 +879,7 @@ export default async function FamilyDashboardPage() {
           </div>
         </header>
 
-        {/* Block 1 — Family */}
+        {/* Block 1 - Family */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 14, marginBottom: 18 }}>
           <MetricCard label="Children" value={String(familyCounts.children)} sub={`${familyCounts.adults} adult${familyCounts.adults !== 1 ? 's' : ''}`} />
           <MetricCard label="Bala Vihar" value={model.bvState === 'enrolled' ? 'Enrolled' : model.bvState === 'registered' ? 'Registered' : 'Not yet'} sub={enrollPeriodLabel ?? 'no active period'} />
@@ -892,7 +892,7 @@ export default async function FamilyDashboardPage() {
           </div>
         </div>
 
-        {/* Block 2 — Action Items */}
+        {/* Block 2 - Action Items */}
         {hasActions && (
           <div style={{ marginBottom: 18 }}>
             {isManager && <PendingJoinRequestsPanel />}
@@ -912,7 +912,7 @@ export default async function FamilyDashboardPage() {
           </div>
         )}
 
-        {/* Block 3 — Bala Vihar */}
+        {/* Block 3 - Bala Vihar */}
         <div className="card" style={{ padding: 24 }}>
           <div className="between" style={{ marginBottom: 18 }}>
             <h3 style={{ fontSize: 14, fontWeight: 600 }}><em className="sa">Bala Vihar</em>{enrollPeriodLabel ? ` · ${enrollPeriodLabel}` : ''}</h3>
@@ -929,7 +929,7 @@ export default async function FamilyDashboardPage() {
 - [ ] **Step 2: Typecheck + lint (catches unused imports and boundary violations)**
 
 Run: `pnpm --filter @cmt/portal typecheck && pnpm --filter @cmt/portal lint`
-Expected: PASS. If lint flags a now-unused helper import (`should-show-contacts-nudge`, `deriveSevaCardView`, etc.), it's because the rewrite dropped them — that's intended; the removed imports are gone from the new file. Leave the underlying helper FILES in place (do not delete) — only the page stops importing them.
+Expected: PASS. If lint flags a now-unused helper import (`should-show-contacts-nudge`, `deriveSevaCardView`, etc.), it's because the rewrite dropped them - that's intended; the removed imports are gone from the new file. Leave the underlying helper FILES in place (do not delete) - only the page stops importing them.
 
 - [ ] **Step 3: Run the family page-adjacent tests**
 
@@ -940,7 +940,7 @@ Expected: PASS. (There is no direct render test for `page.tsx`; the model/loader
 
 ```bash
 git add apps/portal/src/app/family/page.tsx
-git commit -m "feat(family): rebuild dashboard to 3 blocks — Family, Action Items, Bala Vihar (Slice 1 Part B)"
+git commit -m "feat(family): rebuild dashboard to 3 blocks - Family, Action Items, Bala Vihar (Slice 1 Part B)"
 ```
 
 ---
@@ -954,7 +954,7 @@ Guard `/family/seva` and `/family/prasad` behind their flags (redirect to `/fami
 - Modify: `apps/portal/src/app/family/prasad/page.tsx`
 - Modify: `apps/portal/src/features/family/components/desktop-sidebar.tsx`
 - Modify: `apps/portal/src/features/family/components/mobile-bottom-nav.tsx`
-- Test: `apps/portal/src/features/family/components/__tests__/nav-programs.test.tsx` (extend — it already tests family nav items)
+- Test: `apps/portal/src/features/family/components/__tests__/nav-programs.test.tsx` (extend - it already tests family nav items)
 
 **Interfaces:**
 - Consumes: `flags.setuSeva`, `flags.setuPrasad` (Task 2); `process.env.NEXT_PUBLIC_FAMILY_CALENDAR_URL` (literal access).
@@ -1111,7 +1111,7 @@ describe('memberToDisplay missingCount', () => {
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm --filter @cmt/portal test -- member-display`
-Expected: FAIL — `missingCount` is `undefined`.
+Expected: FAIL - `missingCount` is `undefined`.
 
 - [ ] **Step 3: Add `missingCount` to `memberToDisplay`**
 
@@ -1124,7 +1124,7 @@ Expected: PASS.
 
 - [ ] **Step 5: Render the chip on the roster page**
 
-In `apps/portal/src/app/family/members/page.tsx`, add a small "Missing info" chip on each member card (both mobile and desktop branches) when `m.missingCount > 0`, linking to that member's edit screen. Mobile — inside the member `<Link>`'s text column, after the `m.type` line:
+In `apps/portal/src/app/family/members/page.tsx`, add a small "Missing info" chip on each member card (both mobile and desktop branches) when `m.missingCount > 0`, linking to that member's edit screen. Mobile - inside the member `<Link>`'s text column, after the `m.type` line:
 
 ```tsx
 {m.missingCount > 0 && (
@@ -1134,7 +1134,7 @@ In `apps/portal/src/app/family/members/page.tsx`, add a small "Missing info" chi
 )}
 ```
 
-Desktop — add a chip next to the member's name/type, before the action buttons:
+Desktop - add a chip next to the member's name/type, before the action buttons:
 
 ```tsx
 {m.missingCount > 0 && (
@@ -1144,7 +1144,7 @@ Desktop — add a chip next to the member's name/type, before the action buttons
 )}
 ```
 
-The mock-path members (non-setuAuth) set `missingCount: 0` — add `missingCount: 0` to the mock mapping at `members/page.tsx:16-29` so the type is satisfied.
+The mock-path members (non-setuAuth) set `missingCount: 0` - add `missingCount: 0` to the mock mapping at `members/page.tsx:16-29` so the type is satisfied.
 
 - [ ] **Step 6: Typecheck + lint + commit**
 
@@ -1160,7 +1160,7 @@ git commit -m "feat(family): show per-member 'missing info' completeness chip (S
 
 ### Task 9: Mobile API parity + changelog (Part E)
 
-Serialize the new dashboard data (`bvChildren`, `familyCounts`, `actionItems`) additively in `GET /api/setu/dashboard`, and append the SHA-keyed `MOBILE_API_CHANGELOG.md` entry. `bvState` semantics widen (Part A) — call that out too.
+Serialize the new dashboard data (`bvChildren`, `familyCounts`, `actionItems`) additively in `GET /api/setu/dashboard`, and append the SHA-keyed `MOBILE_API_CHANGELOG.md` entry. `bvState` semantics widen (Part A) - call that out too.
 
 **Files:**
 - Modify: `apps/portal/src/app/api/setu/dashboard/route.ts`
@@ -1179,11 +1179,11 @@ In `apps/portal/src/app/api/setu/dashboard/route.ts`, destructure the new loader
 - add `children: bvChildren,` inside the `balaVihar: { … }` object;
 - add a top-level `actionItems: model.actionItems,` (alongside `otherPrograms`).
 
-`bvChildren` and `actionItems` are already plain-serializable (no Date, no CSS). Confirm no field is a `Map` (they aren't — `bvChildren` is an array, `actionItems` is an array).
+`bvChildren` and `actionItems` are already plain-serializable (no Date, no CSS). Confirm no field is a `Map` (they aren't - `bvChildren` is an array, `actionItems` is an array).
 
 - [ ] **Step 2: Add/extend a route test asserting the new fields (N=2 children)**
 
-If `apps/portal/src/app/api/setu/dashboard/__tests__/route.test.ts` exists, extend it; else create it mocking `flags.setuAuth = true`, `getSessionFamily`, and `loadFamilyDashboard` to return a 2-child `bvChildren` + a donation `actionItems`. Assert the response JSON includes `body.family.counts`, `body.balaVihar.children.length === 2`, and `body.actionItems[0].kind === 'donation'`. Follow the mocking pattern of the nearest existing `api/setu/**/__tests__/route.test.ts`. **Remember to mock `next/cache` `revalidateTag`** if the route or its deps touch it (they don't here, but the loader's deps might) — see the E2E/route testing memory.
+If `apps/portal/src/app/api/setu/dashboard/__tests__/route.test.ts` exists, extend it; else create it mocking `flags.setuAuth = true`, `getSessionFamily`, and `loadFamilyDashboard` to return a 2-child `bvChildren` + a donation `actionItems`. Assert the response JSON includes `body.family.counts`, `body.balaVihar.children.length === 2`, and `body.actionItems[0].kind === 'donation'`. Follow the mocking pattern of the nearest existing `api/setu/**/__tests__/route.test.ts`. **Remember to mock `next/cache` `revalidateTag`** if the route or its deps touch it (they don't here, but the loader's deps might) - see the E2E/route testing memory.
 
 - [ ] **Step 3: Run the route test + typecheck**
 
@@ -1192,17 +1192,17 @@ Expected: PASS.
 
 - [ ] **Step 4: Append the MOBILE_API_CHANGELOG entry**
 
-Prepend a new entry at the top of the change list in `apps/portal/docs/MOBILE_API_CHANGELOG.md` (newest first, after the intro block). Use the pending commit SHA placeholder `<SHA>` — it will be filled with the actual commit hash (leave a note to update it post-commit, matching the file's convention):
+Prepend a new entry at the top of the change list in `apps/portal/docs/MOBILE_API_CHANGELOG.md` (newest first, after the intro block). Use the pending commit SHA placeholder `<SHA>` - it will be filled with the actual commit hash (leave a note to update it post-commit, matching the file's convention):
 
 ```markdown
 ## `<SHA>` · 2026-07-06 · dashboard gains per-child BV assignments/attendance, family counts, action items; bvState semantics widen (Slice 1)
-- **GET `/api/setu/dashboard`** — additive fields:
-  - `family.counts: { children: number; adults: number }` — the family's child/adult split.
-  - `balaVihar.children: Array<{ mid, firstName, levelName: string | null, teacherNames: string[], attendance: { present: number; total: number } }>` — per enrolled child, their level name, assigned teacher name(s), and Sunday attendance ratio (present+late over total in-window).
-  - `actionItems: Array<{ kind: 'donation'; title: string; ctaLabel: string }>` — the family's outstanding actions (donation only today; more `kind`s coming in Slice 2). No web paths — the client builds its own navigation from `kind`.
+- **GET `/api/setu/dashboard`** - additive fields:
+  - `family.counts: { children: number; adults: number }` - the family's child/adult split.
+  - `balaVihar.children: Array<{ mid, firstName, levelName: string | null, teacherNames: string[], attendance: { present: number; total: number } }>` - per enrolled child, their level name, assigned teacher name(s), and Sunday attendance ratio (present+late over total in-window).
+  - `actionItems: Array<{ kind: 'donation'; title: string; ctaLabel: string }>` - the family's outstanding actions (donation only today; more `kind`s coming in Slice 2). No web paths - the client builds its own navigation from `kind`.
   - **`balaVihar.bvState` semantics WIDEN** (Part A): `'enrolled'` now also covers a `family-initiated` (clicked Enroll, even $0) or `first-attendance` (teacher auto-enrolled) enrollment, in addition to the prior engaged/donated/legacy-paid triggers. Values unchanged (`'enrolled' | 'registered' | 'none'`); only more families read `'enrolled'`. `'registered'` now only occurs for `promotion`/`welcome-team` carry-forwards with zero engagement.
-  - **All additive** — no existing field changed; `isEnrolled` unchanged.
-  - **Mobile:** add `family.counts`, `balaVihar.children`, and `actionItems` to the dashboard schema. Render the 3-block layout (Family · Action Items · Bala Vihar). Drive the BV pill from `bvState` (green Enrolled / amber Registered / grey Not enrolled) — no code change needed for the widened semantics, but the amber "Registered" state will now appear for fewer families.
+  - **All additive** - no existing field changed; `isEnrolled` unchanged.
+  - **Mobile:** add `family.counts`, `balaVihar.children`, and `actionItems` to the dashboard schema. Render the 3-block layout (Family · Action Items · Bala Vihar). Drive the BV pill from `bvState` (green Enrolled / amber Registered / grey Not enrolled) - no code change needed for the widened semantics, but the amber "Registered" state will now appear for fewer families.
 ```
 
 - [ ] **Step 5: Commit**
@@ -1223,23 +1223,23 @@ git commit --amend --no-edit
 
 ---
 
-### Task 10: Deployed-UAT E2E (verification gate — DO NOT run until the owner resumes)
+### Task 10: Deployed-UAT E2E (verification gate - DO NOT run until the owner resumes)
 
 Write the Playwright spec that exercises the rebuilt dashboard against real deployed UAT: a `family-initiated` (clicked-Enroll, $0) family reads **Enrolled** with donation **Pending** and a **Complete donation** button in the BV section; the dashboard shows the Family card + Manage family and does NOT render Seva/Prasad/programs/calendar cards or the email/phone nudge; a `promotion`-only family still reads **Registered**. Reuse the issue #23 seed fixture, extended for `enrolledVia` + a level/teacher assignment.
 
-**This task's spec is WRITTEN now but RUN at the resume gate** — per the session rhythm (same as issue #23), pause before live-UAT verification and let the owner trigger the run.
+**This task's spec is WRITTEN now but RUN at the resume gate** - per the session rhythm (same as issue #23), pause before live-UAT verification and let the owner trigger the run.
 
 **Files:**
 - Modify: `apps/portal/scripts/seed-e2e-family.ts` (add an `--enrolled-via <mode>` flag + optional level assignment)
 - Create: `apps/portal/e2e/setu/dashboard-slice1.spec.ts`
-- Reference: `apps/portal/e2e/setu/enrollment-state.spec.ts` (issue #23 — the sibling pattern), `apps/portal/e2e/auth-helpers.ts` (post-reseed re-auth).
+- Reference: `apps/portal/e2e/setu/enrollment-state.spec.ts` (issue #23 - the sibling pattern), `apps/portal/e2e/auth-helpers.ts` (post-reseed re-auth).
 
 **Interfaces:**
-- Consumes: the `setu` Playwright project, `PLAYWRIGHT_BASE_URL=https://cmt-setu.vercel.app`, password sign-in, `_test:true` fixtures; `signInFamilyAndSaveStorage` from `e2e/auth-helpers.ts` after any mid-suite reseed (a reseed bumps `tokensValidAfterTime` and kills the session — memory `feedback_e2e_reseed_invalidates_session`).
+- Consumes: the `setu` Playwright project, `PLAYWRIGHT_BASE_URL=https://cmt-setu.vercel.app`, password sign-in, `_test:true` fixtures; `signInFamilyAndSaveStorage` from `e2e/auth-helpers.ts` after any mid-suite reseed (a reseed bumps `tokensValidAfterTime` and kills the session - memory `feedback_e2e_reseed_invalidates_session`).
 
 - [ ] **Step 1: Add an `--enrolled-via` flag (+ optional level snapshot) to the seed**
 
-In `apps/portal/scripts/seed-e2e-family.ts`, read `--enrolled-via` from `process.argv` (values `family-initiated | promotion`, default the existing `promotion` for the active BV — line ~309) and thread it into the active-BV `ensureEnrollment` call. Also write a `levelSnapshots[childMid] = { schoolGrade, levelId, levelName }` on the active BV enrollment so the "Class Assignments" line has data (pick a real UAT level for the seed's location, or a synthetic `levelName: 'Level 2'` with `levelId: null` — `null` levelId means no teacher lookup, which still renders the level name). Keep it idempotent.
+In `apps/portal/scripts/seed-e2e-family.ts`, read `--enrolled-via` from `process.argv` (values `family-initiated | promotion`, default the existing `promotion` for the active BV - line ~309) and thread it into the active-BV `ensureEnrollment` call. Also write a `levelSnapshots[childMid] = { schoolGrade, levelId, levelName }` on the active BV enrollment so the "Class Assignments" line has data (pick a real UAT level for the seed's location, or a synthetic `levelName: 'Level 2'` with `levelId: null` - `null` levelId means no teacher lookup, which still renders the level name). Keep it idempotent.
 
 - [ ] **Step 2: Write the E2E spec**
 
@@ -1292,19 +1292,19 @@ test.describe.serial('Slice 1 dashboard', () => {
 });
 ```
 
-Adjust selectors to the actual rendered text/roles from Task 6 (the `getByText('Seva')` guard passes because the flag is OFF in UAT unless `NEXT_PUBLIC_FEATURE_SETU_SEVA=true` is set there — confirm it is NOT set in the UAT Vercel env before relying on the assertion; if Seva is somehow on in UAT, scope the assertion to the dashboard region).
+Adjust selectors to the actual rendered text/roles from Task 6 (the `getByText('Seva')` guard passes because the flag is OFF in UAT unless `NEXT_PUBLIC_FEATURE_SETU_SEVA=true` is set there - confirm it is NOT set in the UAT Vercel env before relying on the assertion; if Seva is somehow on in UAT, scope the assertion to the dashboard region).
 
 - [ ] **Step 3: Typecheck the spec (do NOT run the suite yet)**
 
 Run: `pnpm --filter @cmt/portal typecheck`
-Expected: PASS. **Stop here — do not run `test:e2e`.** Commit the spec + seed change:
+Expected: PASS. **Stop here - do not run `test:e2e`.** Commit the spec + seed change:
 
 ```bash
 git add apps/portal/scripts/seed-e2e-family.ts apps/portal/e2e/setu/dashboard-slice1.spec.ts
-git commit -m "test(e2e): Slice 1 dashboard — Enrolled-on-click, hides, family card (write-only, run at gate)"
+git commit -m "test(e2e): Slice 1 dashboard - Enrolled-on-click, hides, family card (write-only, run at gate)"
 ```
 
-- [ ] **Step 4: PAUSE — hand back to the owner for the live-UAT verification gate**
+- [ ] **Step 4: PAUSE - hand back to the owner for the live-UAT verification gate**
 
 Report: plan complete, all unit tests green, E2E written but not run. Ask the owner to confirm before running the deployed-UAT E2E (`pnpm --filter @cmt/portal test:e2e -- dashboard-slice1` with `PLAYWRIGHT_BASE_URL=https://cmt-setu.vercel.app`), because it seeds/mutates UAT and shares the 5-per-15-min sign-in limiter. This is the issue-#23 rhythm: **pause before live-UAT verify.**
 
@@ -1320,6 +1320,6 @@ Report: plan complete, all unit tests green, E2E written but not run. Ask the ow
 
 - **Teacher names (Task 4) are droppable.** If the reviewer or a UAT surprise makes the level/member reads too heavy for the dashboard, ship level-name-only: the loader already fails-soft to an empty teacher map, so removing the Task-4 wiring leaves the UI rendering level names with no teacher line and nothing else breaks.
 - **Calendar external link** activates only when `NEXT_PUBLIC_FAMILY_CALENDAR_URL` is set; until the owner provides the PDF URL, the nav Calendar entry keeps its in-portal route (the dashboard calendar card is removed regardless).
-- **Action Items is thin** until Slice 2 adds the disclaimer item — acceptable (donation is the main one). The `ActionItem` union is built to extend.
+- **Action Items is thin** until Slice 2 adds the disclaimer item - acceptable (donation is the main one). The `ActionItem` union is built to extend.
 - **Seva/Prasad reads still run in the loader** (the API keeps returning `seva`/`prasad`/`upcoming` additively for mobile); only the web dashboard stops rendering them. Trim later if the extra latency matters.
 ```

@@ -1,17 +1,17 @@
-# Teacher Attendance T5 — Rollout Implementation Plan
+# Teacher Attendance T5 - Rollout Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development for the code tasks (T5.1, T5.2, T5.3). The controller owns the operational steps (T5.4 infra probe run, T5.5 flag flip) since they touch prod env / IAM.
 
-**Goal:** Take the teacher-attendance feature (T1–T4) live: harden teacher-assignment validation, confirm the door-data infra prerequisite, document the rollout, then flip `NEXT_PUBLIC_FEATURE_SETU_TEACHER=true`.
+**Goal:** Take the teacher-attendance feature (T1-T4) live: harden teacher-assignment validation, confirm the door-data infra prerequisite, document the rollout, then flip `NEXT_PUBLIC_FEATURE_SETU_TEACHER=true`.
 
-**Architecture:** Gating already exists and is correct — middleware hard-gates `/teacher/*` + `/api/setu/teacher/*` on `NEXT_PUBLIC_FEATURE_SETU_TEACHER !== 'true'` (404 API / redirect page), and `TeacherGate` re-checks `isTeacher`. T4's family union readers degrade gracefully if the door read fails (`getCheckInAttendance` try/catch → `[]`), so a missing infra perm never crashes a page — it only omits door data. The only code change T5 needs is closing a teacher-assignment validation gap; the rest is one read-only infra probe, a runbook, and the env flip.
+**Architecture:** Gating already exists and is correct - middleware hard-gates `/teacher/*` + `/api/setu/teacher/*` on `NEXT_PUBLIC_FEATURE_SETU_TEACHER !== 'true'` (404 API / redirect page), and `TeacherGate` re-checks `isTeacher`. T4's family union readers degrade gracefully if the door read fails (`getCheckInAttendance` try/catch → `[]`), so a missing infra perm never crashes a page - it only omits door data. The only code change T5 needs is closing a teacher-assignment validation gap; the rest is one read-only infra probe, a runbook, and the env flip.
 
 **Tech Stack:** Next.js 16, TypeScript (`exactOptionalPropertyTypes`), Vitest, Firebase Admin, Vercel env + redeploy.
 
 ---
 
 ## Standing constraints
-- Portal writes UAT only. The infra probe is **read-only** against prod `715b8` (exactly what the deployed app does by design) — it must NEVER write. No `--force` index deploys, ever.
+- Portal writes UAT only. The infra probe is **read-only** against prod `715b8` (exactly what the deployed app does by design) - it must NEVER write. No `--force` index deploys, ever.
 - Role checks via helpers. New validation must not regress the existing admin/welcome gate on the assign route.
 - Run the FULL `pnpm --filter @cmt/portal lint` before each commit; pre-push hook gates `typecheck && lint && test && build`; never `--no-verify`.
 - Spawn subagents on Opus.
@@ -20,14 +20,14 @@
 
 ## Task T5.1: validate level existence on teacher assignment
 
-**Why:** `assignTeacher` does `batch.set(db.collection('levels').doc(levelId), { teacherRefs: arrayUnion(ref) }, { merge: true })` for each added level. If `levelId` doesn't exist, this **creates a phantom level doc** containing only `teacherRefs` (no `levelName`/`programKey`/`enabled`…) — corrupting `getLevels()` / admin views. The POST route validates only the Zod shape (`ref` non-empty, `levelIds` string[]), not that the levels exist. Close the gap at the route.
+**Why:** `assignTeacher` does `batch.set(db.collection('levels').doc(levelId), { teacherRefs: arrayUnion(ref) }, { merge: true })` for each added level. If `levelId` doesn't exist, this **creates a phantom level doc** containing only `teacherRefs` (no `levelName`/`programKey`/`enabled`…) - corrupting `getLevels()` / admin views. The POST route validates only the Zod shape (`ref` non-empty, `levelIds` string[]), not that the levels exist. Close the gap at the route.
 
 **Files:**
-- Modify: `apps/portal/src/features/setu/teacher/levels.ts` — add `findMissingLevelIds`.
-- Modify: `apps/portal/src/app/api/admin/teacher-assignments/route.ts` — 400 on unknown levels.
+- Modify: `apps/portal/src/features/setu/teacher/levels.ts` - add `findMissingLevelIds`.
+- Modify: `apps/portal/src/app/api/admin/teacher-assignments/route.ts` - 400 on unknown levels.
 - Test: `apps/portal/src/app/api/admin/teacher-assignments/__tests__/route.test.ts` (create if absent) and/or a `levels.ts` unit test.
 
-- [ ] **Step 1: Write the failing test** for `findMissingLevelIds` (in `apps/portal/src/features/setu/teacher/__tests__/levels.test.ts` — create if absent; mirror the repo's firestore-mock style used in sibling teacher tests):
+- [ ] **Step 1: Write the failing test** for `findMissingLevelIds` (in `apps/portal/src/features/setu/teacher/__tests__/levels.test.ts` - create if absent; mirror the repo's firestore-mock style used in sibling teacher tests):
 
 ```ts
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -63,7 +63,7 @@ describe('findMissingLevelIds', () => {
 - [ ] **Step 2: Run to confirm it fails**
 
 Run: `pnpm --filter @cmt/portal exec vitest run src/features/setu/teacher/__tests__/levels.test.ts`
-Expected: FAIL — `findMissingLevelIds` not exported.
+Expected: FAIL - `findMissingLevelIds` not exported.
 
 - [ ] **Step 3: Implement `findMissingLevelIds`** (append to `levels.ts`)
 
@@ -83,14 +83,14 @@ export async function findMissingLevelIds(levelIds: string[]): Promise<string[]>
   return unique.filter((_, i) => !snaps[i]!.exists);
 }
 ```
-(Ensure `portalFirestore` is imported at the top of `levels.ts` — it already imports the admin firestore for `getMyLevels`.)
+(Ensure `portalFirestore` is imported at the top of `levels.ts` - it already imports the admin firestore for `getMyLevels`.)
 
 - [ ] **Step 4: Run to verify it passes**
 
 Run: `pnpm --filter @cmt/portal exec vitest run src/features/setu/teacher/__tests__/levels.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Wire it into the route** (`api/admin/teacher-assignments/route.ts`) — after the Zod parse, before `assignTeacher`:
+- [ ] **Step 5: Wire it into the route** (`api/admin/teacher-assignments/route.ts`) - after the Zod parse, before `assignTeacher`:
 
 ```ts
   const { ref, levelIds } = parsed.data;
@@ -104,7 +104,7 @@ Expected: PASS.
 ```
 Add the import: `import { findMissingLevelIds } from '@/features/setu/teacher/levels';`
 
-- [ ] **Step 6: Write/extend the route test** — assert a 400 `unknown-levels` when a levelId doesn't exist, and a 200 when all exist (mock `findMissingLevelIds` + `assignTeacher`). If a route test file exists, extend it; else create `apps/portal/src/app/api/admin/teacher-assignments/__tests__/route.test.ts`:
+- [ ] **Step 6: Write/extend the route test** - assert a 400 `unknown-levels` when a levelId doesn't exist, and a 200 when all exist (mock `findMissingLevelIds` + `assignTeacher`). If a route test file exists, extend it; else create `apps/portal/src/app/api/admin/teacher-assignments/__tests__/route.test.ts`:
 
 ```ts
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -166,21 +166,21 @@ git commit -m "fix(teacher): reject teacher assignment to non-existent levels (T
 
 ## Task T5.2: read-only door-Firestore infra probe
 
-**Why:** The whole feature reads the door app's `family-check-ins` / `guest-families` from prod `715b8` via the master service account. The spec flags this perm as **unconfirmed** ("the bridge today only does RTDB"). A read-only probe gives a definitive yes/no before go-live. (If the perm is missing, the feature degrades silently to no-door-data — no crash — but the door-union value is lost.)
+**Why:** The whole feature reads the door app's `family-check-ins` / `guest-families` from prod `715b8` via the master service account. The spec flags this perm as **unconfirmed** ("the bridge today only does RTDB"). A read-only probe gives a definitive yes/no before go-live. (If the perm is missing, the feature degrades silently to no-door-data - no crash - but the door-union value is lost.)
 
 **Files:**
 - Create: `apps/portal/scripts/check-door-firestore-access.ts`
-- Modify: `apps/portal/package.json` — add a pnpm alias.
+- Modify: `apps/portal/package.json` - add a pnpm alias.
 
-- [ ] **Step 1: Implement the probe** (`scripts/check-door-firestore-access.ts`) — mirror the existing read-only diagnostic scripts (e.g. `scripts/check-uat-migrations.ts`). It must use the SAME seam the app uses (`checkInSourceFirestore()`), do `.limit(1).get()` on both collections, and NEVER write:
+- [ ] **Step 1: Implement the probe** (`scripts/check-door-firestore-access.ts`) - mirror the existing read-only diagnostic scripts (e.g. `scripts/check-uat-migrations.ts`). It must use the SAME seam the app uses (`checkInSourceFirestore()`), do `.limit(1).get()` on both collections, and NEVER write:
 
 ```ts
 /**
  * READ-ONLY probe: can the portal read the door app's Firestore collections via
- * the master service account? The teacher-attendance feature (T1–T4) reads
+ * the master service account? The teacher-attendance feature (T1-T4) reads
  * `family-check-ins` / `guest-families` from prod 715b8 through
  * checkInSourceFirestore(). This confirms the master SA actually has Firestore
- * READ on 715b8 before go-live. It performs ONLY `.limit(1).get()` reads — no
+ * READ on 715b8 before go-live. It performs ONLY `.limit(1).get()` reads - no
  * writes, ever. Run: `pnpm --filter @cmt/portal check:door-access`.
  */
 import { checkInSourceFirestore } from '../src/features/setu/attendance/check-in-source';
@@ -215,9 +215,9 @@ async function main() {
   }
   console.log('');
   if (allOk) {
-    console.log('PASS — the master service account can read the door collections. Door data will appear in prod.');
+    console.log('PASS - the master service account can read the door collections. Door data will appear in prod.');
   } else {
-    console.log('FAIL — grant the master service account Cloud Firestore READ (roles/datastore.viewer)');
+    console.log('FAIL - grant the master service account Cloud Firestore READ (roles/datastore.viewer)');
     console.log('on the prod project (chinmaya-setu-715b8). Until then teacher/family screens degrade to no-door-data (no crash).');
     process.exitCode = 1;
   }
@@ -233,7 +233,7 @@ void main();
 ```
 (Match the exact tsx invocation the sibling `check:migrations`/`check:*` scripts use in this package.json.)
 
-- [ ] **Step 3: Typecheck the script** (do NOT run it against prod here — the controller runs it)
+- [ ] **Step 3: Typecheck the script** (do NOT run it against prod here - the controller runs it)
 
 Run: `pnpm --filter @cmt/portal exec tsc --noEmit`
 Expected: clean.
@@ -255,15 +255,15 @@ git commit -m "chore(teacher): read-only door-Firestore access probe for rollout
 - [ ] **Step 1: Write the runbook** capturing the go-live procedure (verbatim, no placeholders):
 
 ```markdown
-# Teacher Attendance — Rollout Runbook (Slice 4 / T1–T5)
+# Teacher Attendance - Rollout Runbook (Slice 4 / T1-T5)
 
 The portal-native teacher-attendance feature is built and merged behind the
 `NEXT_PUBLIC_FEATURE_SETU_TEACHER` flag (default OFF). This is the go-live
 checklist.
 
 ## 0. Pre-flight
-- All of T1–T5 merged to `main`, pre-push gate green.
-- T4 (family union) is ALREADY live for families on every deploy — it reads door
+- All of T1-T5 merged to `main`, pre-push gate green.
+- T4 (family union) is ALREADY live for families on every deploy - it reads door
   check-ins via the read-only bridge and degrades to teacher-only data if the
   bridge can't read (no crash). The flag only controls the **teacher** screens.
 
@@ -283,7 +283,7 @@ account**. Confirm that SA has Cloud Firestore READ there:
 As admin (or welcome-team), open `/admin/levels` → "Assign teacher": enter the
 teacher's member `mid` (or standalone `tid`) and tick their level(s). The
 `teacher` capability is computed from `teacherAssignments/{ref}` at the person's
-NEXT sign-in. (Assignment to a non-existent level is now rejected — T5.1.)
+NEXT sign-in. (Assignment to a non-existent level is now rejected - T5.1.)
 
 ## 3. Flip the flag
 Set on the Vercel project (Production), then redeploy (NEXT_PUBLIC_* is build-time
@@ -292,15 +292,15 @@ inlined, so a redeploy is required):
     vercel env add NEXT_PUBLIC_FEATURE_SETU_TEACHER production
     # value: true
 
-Redeploy by pushing an empty commit (or `git push` any change) — the GitHub
+Redeploy by pushing an empty commit (or `git push` any change) - the GitHub
 integration auto-deploys. Verify the var landed with `vercel env pull`.
 
-## 4. UAT walkthrough (manual — needs OTP sign-in)
+## 4. UAT walkthrough (manual - needs OTP sign-in)
 - As the assigned teacher: `/teacher` lists "My classes"; open a class →
   `/teacher/levels/[id]/attendance`. Roster opens all-present; door self-check-ins
   show a `· door` badge; flag late/absent; Save; reopen shows saved marks; prev/
   next Sunday nav works.
-- Visitors: `/teacher/levels/[id]/visitors` — door guests matched by grade show;
+- Visitors: `/teacher/levels/[id]/visitors` - door guests matched by grade show;
   Confirm one; quick-add a name-only walk-in; both become guests.
 - As that teacher's family: the dashboard BV card, the child profile, and the
   member-detail page show the UNION (a teacher-marked Sunday with no door
@@ -324,19 +324,19 @@ git commit -m "docs(teacher): rollout runbook (T5)"
 
 ## Controller-owned operational steps (NOT subagent tasks)
 
-### T5.4 — run the infra probe
+### T5.4 - run the infra probe
 After T5.2 lands, the controller runs `pnpm --filter @cmt/portal check:door-access` (read-only) and records the result. This determines whether the flag flip delivers door data or silently degrades.
 
-### T5.5 — flag flip (gated)
-- The full code + runbook ship first (push T5.1–T5.3 through the pre-push gate).
+### T5.5 - flag flip (gated)
+- The full code + runbook ship first (push T5.1-T5.3 through the pre-push gate).
 - The actual production flag flip + redeploy is the go-live moment. Because it is outward-facing and its timing depends on (a) the infra probe result and (b) a teacher being assigned, the controller surfaces it to CMT Developer with the probe result rather than flipping silently. If directed to proceed, flip via the runbook's §3 and verify with `vercel env pull` + a redeploy.
 
 ---
 
 ## Self-review (controller)
-- **Gating verified** (middleware + TeacherGate) — no code change needed; ✓.
-- **Validation gap closed** (phantom level docs) — T5.1; ✓.
-- **Infra prerequisite** made checkable + non-fatal (graceful degrade already in the readers) — T5.2; ✓.
-- **Runbook** covers infra → assign → flip → walkthrough → rollback — T5.3; ✓.
-- **Flag flip** is the one outward-facing step — controller-gated on the probe + assignment; ✓.
+- **Gating verified** (middleware + TeacherGate) - no code change needed; ✓.
+- **Validation gap closed** (phantom level docs) - T5.1; ✓.
+- **Infra prerequisite** made checkable + non-fatal (graceful degrade already in the readers) - T5.2; ✓.
+- **Runbook** covers infra → assign → flip → walkthrough → rollback - T5.3; ✓.
+- **Flag flip** is the one outward-facing step - controller-gated on the probe + assignment; ✓.
 ```

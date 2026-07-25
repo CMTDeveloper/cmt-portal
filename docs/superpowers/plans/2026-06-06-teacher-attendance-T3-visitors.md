@@ -1,8 +1,8 @@
-# Teacher Attendance T3 — Visitors Implementation Plan
+# Teacher Attendance T3 - Visitors Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Give a Bala Vihar teacher, inside the redesigned level-attendance flow, a **Visitors** screen that (a) surfaces the day's door guest-check-in children matched to this level by grade, and (b) lets the teacher add a walk-in in seconds (name required; grade + parent email/phone optional) — each confirm/add creating a pending family + a guest `attendanceEvents` mark.
+**Goal:** Give a Bala Vihar teacher, inside the redesigned level-attendance flow, a **Visitors** screen that (a) surfaces the day's door guest-check-in children matched to this level by grade, and (b) lets the teacher add a walk-in in seconds (name required; grade + parent email/phone optional) - each confirm/add creating a pending family + a guest `attendanceEvents` mark.
 
 **Architecture:** A new read-only door reader `readDoorGuestCheckIns(date)` (mirrors `readDoorPresentSids`, index-free list+point-read) feeds a pure grade matcher and a server view model `getLevelVisitorsView(levelId, date)`. A shared `upsertPendingFamilyChild()` core (extracted from the existing `addStudentOnPrompt`) backs a new **email-optional** `addVisitorOnPrompt()`; the existing `addStudentOnPrompt` is refactored to delegate to the same core (behavior preserved). New `GET/POST /api/setu/teacher/visitors` routes drive a new mobile-first `visitors-panel.tsx` island at `/teacher/levels/[levelId]/visitors`, replacing the legacy `/guests` page + `guest-list.tsx`. The two "Visitors →" links in `attendance-marker.tsx` repoint to `/visitors`.
 
@@ -12,38 +12,38 @@
 
 ## Standing constraints (do not violate)
 
-- **Read-only door bridge.** All door reads go through `checkInSourceFirestore()`. NEVER write `family-check-ins` / `guest-families`. NEVER touch prod `715b8` for writes or index deploys. NEVER add a Firestore composite index that would target `715b8` — the door guest reader MUST be index-free (list the collection + point-read the date doc, exactly as the door app itself does).
+- **Read-only door bridge.** All door reads go through `checkInSourceFirestore()`. NEVER write `family-check-ins` / `guest-families`. NEVER touch prod `715b8` for writes or index deploys. NEVER add a Firestore composite index that would target `715b8` - the door guest reader MUST be index-free (list the collection + point-read the date doc, exactly as the door app itself does).
 - **Portal writes target UAT only** (`chinmaya-setu-uat`).
-- **Role checks via helpers** (`isTeacher`, never strict equality). New `/api/setu/teacher/*` paths are auto-covered by the `canAccessRoute` teacher catch-all — confirm with a test, do not add a rule.
+- **Role checks via helpers** (`isTeacher`, never strict equality). New `/api/setu/teacher/*` paths are auto-covered by the `canAccessRoute` teacher catch-all - confirm with a test, do not add a rule.
 - **Mobile-app-ready APIs**: every handler uses `readSessionFromHeaders` (cookie OR Bearer), ISO/JSON only, shared `@cmt/shared-domain` Zod schemas.
-- **Mobile-first UI**: the Visitors panel matches the just-shipped `attendance-marker.tsx` (T2) — fluid single column, 48px touch targets, `.csp` tokens, `env(safe-area-inset-bottom)`. A designer pass (Task 8) enforces excellence on phone AND desktop.
+- **Mobile-first UI**: the Visitors panel matches the just-shipped `attendance-marker.tsx` (T2) - fluid single column, 48px touch targets, `.csp` tokens, `env(safe-area-inset-bottom)`. A designer pass (Task 8) enforces excellence on phone AND desktop.
 - **`exactOptionalPropertyTypes`**: never assign `undefined` to an optional field; use `null` or conditional spread.
-- **Run the FULL `pnpm --filter @cmt/portal lint`** before any commit (not just per-file eslint) — drop unused `describe`/imports. The pre-push hook runs `typecheck && lint && test && build`; never `--no-verify`.
+- **Run the FULL `pnpm --filter @cmt/portal lint`** before any commit (not just per-file eslint) - drop unused `describe`/imports. The pre-push hook runs `typecheck && lint && test && build`; never `--no-verify`.
 - **Spawn all implementer/reviewer subagents on Opus** (`model:'opus'`).
 
 ## File structure
 
 **Create:**
-- `apps/portal/src/features/setu/teacher/pending-family.ts` — shared `upsertPendingFamilyChild()` txn core (pending family + child member upsert).
-- `apps/portal/src/features/setu/teacher/visitors.ts` — `guestMatchesLevel()` pure matcher, `addVisitorOnPrompt()`, `getLevelVisitorsView()`, view types.
-- `apps/portal/src/app/api/setu/teacher/visitors/route.ts` — GET (view) + POST (confirm/add).
-- `apps/portal/src/features/setu/teacher/components/visitors-panel.tsx` — `'use client'` island.
-- `apps/portal/src/app/teacher/levels/[levelId]/visitors/page.tsx` — server page.
+- `apps/portal/src/features/setu/teacher/pending-family.ts` - shared `upsertPendingFamilyChild()` txn core (pending family + child member upsert).
+- `apps/portal/src/features/setu/teacher/visitors.ts` - `guestMatchesLevel()` pure matcher, `addVisitorOnPrompt()`, `getLevelVisitorsView()`, view types.
+- `apps/portal/src/app/api/setu/teacher/visitors/route.ts` - GET (view) + POST (confirm/add).
+- `apps/portal/src/features/setu/teacher/components/visitors-panel.tsx` - `'use client'` island.
+- `apps/portal/src/app/teacher/levels/[levelId]/visitors/page.tsx` - server page.
 - Test files (colocated `__tests__/`): `pending-family.test.ts`, `visitors.test.ts`, `visitors-route.test.ts` (under the route dir or `teacher/__tests__/`), `visitors-panel.test.tsx`, and additions to `check-in-attendance.test.ts`, `add-student.test.ts`, `guests.test.ts`, `can-access-route.test.ts`.
 
 **Modify:**
-- `apps/portal/src/features/setu/attendance/check-in-attendance.ts` — add `readDoorGuestCheckIns(date)` + `DoorGuestChild`.
-- `packages/shared-domain/src/setu/schemas/attendance.ts` — add `AddVisitorSchema` + `AddVisitorInput` (auto-barreled via `setu/index.ts`).
-- `apps/portal/src/features/setu/teacher/add-student.ts` — refactor `addStudentOnPrompt` to delegate to `upsertPendingFamilyChild` (behavior preserved).
-- `apps/portal/src/features/setu/teacher/guests.ts` — add `listGuestsDetailed(levelId, date)` (name-enriched guest list).
-- `apps/portal/src/features/setu/teacher/components/attendance-marker.tsx` — repoint both `/guests?date=` links → `/visitors?date=`.
+- `apps/portal/src/features/setu/attendance/check-in-attendance.ts` - add `readDoorGuestCheckIns(date)` + `DoorGuestChild`.
+- `packages/shared-domain/src/setu/schemas/attendance.ts` - add `AddVisitorSchema` + `AddVisitorInput` (auto-barreled via `setu/index.ts`).
+- `apps/portal/src/features/setu/teacher/add-student.ts` - refactor `addStudentOnPrompt` to delegate to `upsertPendingFamilyChild` (behavior preserved).
+- `apps/portal/src/features/setu/teacher/guests.ts` - add `listGuestsDetailed(levelId, date)` (name-enriched guest list).
+- `apps/portal/src/features/setu/teacher/components/attendance-marker.tsx` - repoint both `/guests?date=` links → `/visitors?date=`.
 
 **Delete (after links repointed):**
 - `apps/portal/src/app/teacher/levels/[levelId]/guests/page.tsx`
 - `apps/portal/src/features/setu/teacher/components/guest-list.tsx`
 - their test(s) if any (`guest-list.test.tsx`).
 
-> Note: KEEP `apps/portal/src/app/api/setu/teacher/guests/route.ts`, `guests.ts` (`markGuest`/`listGuests`), `add-student/route.ts`, and `add-student.ts` — they remain load-bearing (reused by the view + as the mobile/legacy API surface).
+> Note: KEEP `apps/portal/src/app/api/setu/teacher/guests/route.ts`, `guests.ts` (`markGuest`/`listGuests`), `add-student/route.ts`, and `add-student.ts` - they remain load-bearing (reused by the view + as the mobile/legacy API surface).
 
 ---
 
@@ -169,12 +169,12 @@ describe('readDoorGuestCheckIns', () => {
 - [ ] **Step 2: Run the test to confirm it fails**
 
 Run: `pnpm --filter @cmt/portal exec vitest run src/features/setu/attendance/__tests__/check-in-attendance.test.ts`
-Expected: FAIL — `readDoorGuestCheckIns is not a function` (and existing tests still pass against the superset mock).
+Expected: FAIL - `readDoorGuestCheckIns is not a function` (and existing tests still pass against the superset mock).
 
 - [ ] **Step 3: Implement `readDoorGuestCheckIns`** (append to `check-in-attendance.ts`, after `readDoorPresentSids`)
 
 ```ts
-/** One door guest check-in child for a date (no portal id — door has none). */
+/** One door guest check-in child for a date (no portal id - door has none). */
 export interface DoorGuestChild {
   name: string;
   grade: string; // door stores string|number; normalized to string here
@@ -186,7 +186,7 @@ export interface DoorGuestChild {
 /**
  * READ-ONLY: every checked-in guest child at the door for a single date, across
  * all guest families. Mirrors the door app's own read (list `guest-families`,
- * then point-read each family's `checkIns/{date}`) — deliberately INDEX-FREE so
+ * then point-read each family's `checkIns/{date}`) - deliberately INDEX-FREE so
  * it never needs a composite index in prod 715b8. Tolerates missing day-docs and
  * per-family read errors; returns [] if the collection list itself fails.
  */
@@ -299,7 +299,7 @@ describe('AddVisitorSchema', () => {
 - [ ] **Step 2: Run the test to confirm it fails**
 
 Run: `pnpm --filter @cmt/shared-domain exec vitest run src/setu/schemas/__tests__/attendance.test.ts`
-Expected: FAIL — `AddVisitorSchema` is not exported.
+Expected: FAIL - `AddVisitorSchema` is not exported.
 
 - [ ] **Step 3: Implement `AddVisitorSchema`** (append to `attendance.ts`, after `AddStudentSchema`)
 
@@ -307,7 +307,7 @@ Expected: FAIL — `AddVisitorSchema` is not exported.
 // Empty string → null, so the in-class quick-add can send optional fields blank.
 const emptyToNull = (v: unknown) => (typeof v === 'string' && v.trim() === '' ? null : v);
 
-// POST /api/setu/teacher/visitors — a teacher confirms a door guest or adds a
+// POST /api/setu/teacher/visitors - a teacher confirms a door guest or adds a
 // walk-in. Name required (firstName); EVERYTHING else optional (T3 relaxes the
 // add-student email requirement). With no email/phone the family is created
 // un-claimable until contact is added later (design §"Visitor handling").
@@ -334,7 +334,7 @@ Expected: PASS. (`AddVisitorSchema` is auto-exported via `setu/index.ts` → `ex
 
 ```bash
 git add packages/shared-domain/src/setu/schemas/attendance.ts packages/shared-domain/src/setu/schemas/__tests__/attendance.test.ts
-git commit -m "feat(shared-domain): AddVisitorSchema — email-optional visitor quick-add (T3)"
+git commit -m "feat(shared-domain): AddVisitorSchema - email-optional visitor quick-add (T3)"
 ```
 
 ---
@@ -399,7 +399,7 @@ describe('upsertPendingFamilyChild', () => {
     const r = await upsertPendingFamilyChild(db, { ...P, parentEmail: null, parentPhone: null });
     expect(r).toEqual({ fid: 'CMT-NEW1', childMid: 'CMT-NEW1-02', createdFamily: true });
     expect(txnGet).not.toHaveBeenCalled(); // no claim key → no lookup
-    expect(txnSet).toHaveBeenCalledTimes(3); // family, manager, child — no contactKey
+    expect(txnSet).toHaveBeenCalledTimes(3); // family, manager, child - no contactKey
   });
 
   it('with phone only (no email), looks up + writes the phone contactKey', async () => {
@@ -414,7 +414,7 @@ describe('upsertPendingFamilyChild', () => {
 - [ ] **Step 2: Run the test to confirm it fails**
 
 Run: `pnpm --filter @cmt/portal exec vitest run src/features/setu/teacher/__tests__/pending-family.test.ts`
-Expected: FAIL — module `../pending-family` not found.
+Expected: FAIL - module `../pending-family` not found.
 
 - [ ] **Step 3: Implement the core** (`pending-family.ts`)
 
@@ -467,7 +467,7 @@ function baseMemberFields(now: FirebaseFirestore.FieldValue) {
  *  - Else → create a new pending family whose MANAGER is the parent. Write a
  *    contactKey for each contact present (email and/or phone) so the parent
  *    claims the family on their next OTP sign-in. With NO contact at all, the
- *    family is created un-claimable (no contactKey) — contact can be added later.
+ *    family is created un-claimable (no contactKey) - contact can be added later.
  * Pure of side effects beyond the Firestore txn; does NOT mark attendance (the
  * caller does that after commit).
  */
@@ -558,7 +558,7 @@ export async function upsertPendingFamilyChild(db: Db, params: PendingChildParam
 }
 ```
 
-> If `import('...').Firestore` typing is awkward, type `Db` simply as `ReturnType<typeof import('@cmt/firebase-shared/admin/firestore').portalFirestore>` (the portal has no direct `firebase-admin` dep — match the `check-in-source.ts` pattern: `type Firestore = ReturnType<typeof portalFirestore>`).
+> If `import('...').Firestore` typing is awkward, type `Db` simply as `ReturnType<typeof import('@cmt/firebase-shared/admin/firestore').portalFirestore>` (the portal has no direct `firebase-admin` dep - match the `check-in-source.ts` pattern: `type Firestore = ReturnType<typeof portalFirestore>`).
 
 - [ ] **Step 4: Run the core test to verify it passes**
 
@@ -592,7 +592,7 @@ export type AddStudentResult =
 
 /**
  * Add an unregistered child on the spot, keyed by the parent's email
- * (always present here — the visitor flow relaxes that; see addVisitorOnPrompt).
+ * (always present here - the visitor flow relaxes that; see addVisitorOnPrompt).
  * Delegates the family/child upsert to the shared pending-family core, then
  * marks the child present as a guest (auto-enrolls for the level's period).
  */
@@ -628,9 +628,9 @@ export async function addStudentOnPrompt(params: AddStudentParams): Promise<AddS
 - [ ] **Step 6: Run the add-student regression test (must stay green, unchanged)**
 
 Run: `pnpm --filter @cmt/portal exec vitest run src/features/setu/teacher/__tests__/add-student.test.ts`
-Expected: PASS — all 4 cases (level-not-found, new family = 4 sets, +phone = 5 sets, existing family = 1 set). The email-first single-read sequence is preserved.
+Expected: PASS - all 4 cases (level-not-found, new family = 4 sets, +phone = 5 sets, existing family = 1 set). The email-first single-read sequence is preserved.
 
-> If any add-student case fails on call-count, do NOT change the test — the core must match the legacy sequence. Re-check that the email branch does exactly one `txn.get` for the email contactKey before the members read.
+> If any add-student case fails on call-count, do NOT change the test - the core must match the legacy sequence. Re-check that the email branch does exactly one `txn.get` for the email contactKey before the members read.
 
 - [ ] **Step 7: Commit**
 
@@ -689,7 +689,7 @@ describe('listGuestsDetailed', () => {
 - [ ] **Step 2: Run to confirm it fails**
 
 Run: `pnpm --filter @cmt/portal exec vitest run src/features/setu/teacher/__tests__/guests.test.ts`
-Expected: FAIL — `listGuestsDetailed` not exported.
+Expected: FAIL - `listGuestsDetailed` not exported.
 
 - [ ] **Step 3: Implement `listGuestsDetailed`** (append to `guests.ts`)
 
@@ -719,7 +719,7 @@ export async function listGuestsDetailed(levelId: string, date: string): Promise
           lastName = md.lastName ?? '';
         }
       } catch {
-        // tolerate a missing member — show the mid-less row rather than failing the view
+        // tolerate a missing member - show the mid-less row rather than failing the view
       }
       return { mid: e.mid, fid: e.fid, firstName, lastName, status: e.status as SetuAttendanceStatus };
     }),
@@ -842,7 +842,7 @@ describe('addVisitorOnPrompt', () => {
 - [ ] **Step 2: Run to confirm it fails**
 
 Run: `pnpm --filter @cmt/portal exec vitest run src/features/setu/teacher/__tests__/visitors.test.ts`
-Expected: FAIL — module `../visitors` not found.
+Expected: FAIL - module `../visitors` not found.
 
 - [ ] **Step 3: Implement `visitors.ts`**
 
@@ -856,7 +856,7 @@ import { upsertPendingFamilyChild } from './pending-family';
 
 /**
  * Does a door guest child belong on this level? Door guests carry only a grade
- * (no birthMonthYear), so only `level`/`pre-level` can match — by normalized
+ * (no birthMonthYear), so only `level`/`pre-level` can match - by normalized
  * grade ∈ gradeBand. shishu/parents never auto-match a door guest (documented:
  * those visitors come in via the in-class quick-add). A blank grade never
  * matches; the teacher quick-adds it instead.
@@ -919,7 +919,7 @@ export async function getLevelVisitorsView(levelId: string, date: string): Promi
           alreadyConfirmed = !!fid && confirmedFids.has(fid);
         }
       } catch {
-        // a contactKey read miss just means "not yet confirmed" — never fail the view
+        // a contactKey read miss just means "not yet confirmed" - never fail the view
       }
       return {
         name: c.name,
@@ -964,7 +964,7 @@ export type AddVisitorResult =
  * Confirm a door guest or add a walk-in: upsert the pending family/child (shared
  * core; email/phone optional) then mark the child present as a guest (auto-
  * enrolls the family for the level's offering). `claimable` is false when no
- * contact was provided — the family exists but the parent can't claim it until a
+ * contact was provided - the family exists but the parent can't claim it until a
  * contact is added later.
  */
 export async function addVisitorOnPrompt(params: AddVisitorParams): Promise<AddVisitorResult> {
@@ -1101,7 +1101,7 @@ describe('POST /api/setu/teacher/visitors', () => {
 - [ ] **Step 2: Run to confirm it fails**
 
 Run: `pnpm --filter @cmt/portal exec vitest run "src/app/api/setu/teacher/visitors/__tests__/route.test.ts"`
-Expected: FAIL — `../route` not found.
+Expected: FAIL - `../route` not found.
 
 - [ ] **Step 3: Implement the route**
 
@@ -1112,7 +1112,7 @@ import { readSessionFromHeaders } from '@/lib/auth/headers';
 import { canTeachLevel } from '@/features/setu/teacher/guard';
 import { getLevelVisitorsView, addVisitorOnPrompt } from '@/features/setu/teacher/visitors';
 
-// GET ?levelId=&date= — door guests matched to the level + confirmed guests.
+// GET ?levelId=&date= - door guests matched to the level + confirmed guests.
 export async function GET(req: Request) {
   const session = readSessionFromHeaders(req);
   if (!session || !isTeacher(session)) {
@@ -1133,7 +1133,7 @@ export async function GET(req: Request) {
   return NextResponse.json({ view });
 }
 
-// POST — confirm a door guest / add a walk-in: pending family + guest mark.
+// POST - confirm a door guest / add a walk-in: pending family + guest mark.
 export async function POST(req: Request) {
   const session = readSessionFromHeaders(req);
   if (!session || !session.uid || !isTeacher(session)) {
@@ -1180,7 +1180,7 @@ export async function POST(req: Request) {
 Run: `pnpm --filter @cmt/portal exec vitest run "src/app/api/setu/teacher/visitors/__tests__/route.test.ts"`
 Expected: PASS.
 
-- [ ] **Step 5: Add the canAccessRoute coverage test** (proves the new path is gated by the teacher catch-all — no rule change)
+- [ ] **Step 5: Add the canAccessRoute coverage test** (proves the new path is gated by the teacher catch-all - no rule change)
 
 In `packages/shared-domain/src/auth/__tests__/can-access-route.test.ts`, add:
 
@@ -1289,7 +1289,7 @@ describe('VisitorsPanel', () => {
 - [ ] **Step 2: Run to confirm it fails**
 
 Run: `pnpm --filter @cmt/portal exec vitest run "src/features/setu/teacher/components/__tests__/visitors-panel.test.tsx"`
-Expected: FAIL — `../visitors-panel` not found.
+Expected: FAIL - `../visitors-panel` not found.
 
 - [ ] **Step 3: Implement `visitors-panel.tsx`** (mobile-first; matches `attendance-marker.tsx` tokens/structure; designer refines in Task 8)
 
@@ -1403,7 +1403,7 @@ export function VisitorsPanel({ levelId, levelName, date }: VisitorsPanelProps) 
         setFirst(''); setLast(''); setGrade(''); setEmail(''); setPhone('');
         await load();
       } catch {
-        toast.error('Network error — please try again.');
+        toast.error('Network error - please try again.');
       }
     });
   }
@@ -1524,7 +1524,7 @@ export function VisitorsPanel({ levelId, levelName, date }: VisitorsPanelProps) 
 Run: `pnpm --filter @cmt/portal exec vitest run "src/features/setu/teacher/components/__tests__/visitors-panel.test.tsx"`
 Expected: PASS.
 
-- [ ] **Step 5: Create the page** (`apps/portal/src/app/teacher/levels/[levelId]/visitors/page.tsx`) — mirror the `guests/page.tsx` auth pattern, using `getLevelVisitorsView` only for `levelName`/date defaults:
+- [ ] **Step 5: Create the page** (`apps/portal/src/app/teacher/levels/[levelId]/visitors/page.tsx`) - mirror the `guests/page.tsx` auth pattern, using `getLevelVisitorsView` only for `levelName`/date defaults:
 
 ```tsx
 import { cookies } from 'next/headers';
@@ -1535,7 +1535,7 @@ import { getLevelVisitorsView } from '@/features/setu/teacher/visitors';
 import { mostRecentSunday } from '@/features/setu/calendar/calendar';
 import { VisitorsPanel } from '@/features/setu/teacher/components/visitors-panel';
 
-export const metadata = { title: 'Visitors — CMT Teacher' };
+export const metadata = { title: 'Visitors - CMT Teacher' };
 
 export default async function VisitorsPage({
   params,
@@ -1606,7 +1606,7 @@ git commit -m "feat(teacher-attendance): Visitors screen replaces the legacy gue
 
 ## Task 8: Designer pass + final review
 
-- [ ] **Step 1: Designer pass** — dispatch the `oh-my-claudecode:designer` subagent (model: opus) on `visitors-panel.tsx` to make it mobile-first excellent AND desktop-clean, consistent with the just-shipped `attendance-marker.tsx`: traffic-signal/confirm affordances, 48px touch targets, clear "checked in at door" vs "added" states, a tidy quick-add card, generous spacing, `.csp` Cool-Mist tokens only (no invented tokens), `env(safe-area-inset-bottom)` if a fixed action is added. Constraint: keep the `data`/test hooks and the POST/GET contract intact so `visitors-panel.test.tsx` stays green. Verify every token used exists and is `.csp`-scoped.
+- [ ] **Step 1: Designer pass** - dispatch the `oh-my-claudecode:designer` subagent (model: opus) on `visitors-panel.tsx` to make it mobile-first excellent AND desktop-clean, consistent with the just-shipped `attendance-marker.tsx`: traffic-signal/confirm affordances, 48px touch targets, clear "checked in at door" vs "added" states, a tidy quick-add card, generous spacing, `.csp` Cool-Mist tokens only (no invented tokens), `env(safe-area-inset-bottom)` if a fixed action is added. Constraint: keep the `data`/test hooks and the POST/GET contract intact so `visitors-panel.test.tsx` stays green. Verify every token used exists and is `.csp`-scoped.
 
 - [ ] **Step 2: Re-run the component test after the designer pass**
 
@@ -1632,7 +1632,7 @@ git commit -m "style(teacher-attendance): designer pass on the Visitors screen (
 git push
 ```
 
-- [ ] **Step 5: Final cross-slice code review** — dispatch `oh-my-claudecode:code-reviewer` (model: opus) over the T3 diff (Tasks 1–8). Confirm: read-only door access (no `715b8` writes, no new `715b8` index), `addStudentOnPrompt` behavior preserved, email-optional add semantics correct, role gating intact, N=2/idempotency notes documented, tokens valid. Address any HIGH/MEDIUM findings with the implementer subagent, then re-run the gate.
+- [ ] **Step 5: Final cross-slice code review** - dispatch `oh-my-claudecode:code-reviewer` (model: opus) over the T3 diff (Tasks 1-8). Confirm: read-only door access (no `715b8` writes, no new `715b8` index), `addStudentOnPrompt` behavior preserved, email-optional add semantics correct, role gating intact, N=2/idempotency notes documented, tokens valid. Address any HIGH/MEDIUM findings with the implementer subagent, then re-run the gate.
 
 ---
 
@@ -1657,5 +1657,5 @@ git push
 
 ## Known follow-ups (not this slice)
 - Converge the legacy `add-student` route/UI fully into `/visitors` once proven (then delete `add-student.ts` + route + `AddStudentSchema`).
-- T4 — family-facing union (dashboard + child profile read the unified resolver).
+- T4 - family-facing union (dashboard + child profile read the unified resolver).
 - Manual UAT walkthrough (agent can't OTP sign-in): teacher opens `/teacher/levels/[id]/visitors`, sees door guests matched by grade, confirms one, quick-adds a name-only walk-in, verifies both land as guests + the family is created/claimable as expected.

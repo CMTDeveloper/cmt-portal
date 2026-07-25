@@ -1,10 +1,10 @@
-# Teacher Attendance T4 — Family-facing attendance union Implementation Plan
+# Teacher Attendance T4 - Family-facing attendance union Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make the three family-facing Bala Vihar attendance surfaces (the child profile per-program attendance, the family-dashboard BV card, the member-detail page) show the **union** of teacher-marked `attendanceEvents` (authoritative) and door self-check-ins — instead of door-only today — using the T1 resolver, while preserving the `selectBalaViharEnrollment`/programKey N=2 safety.
+**Goal:** Make the three family-facing Bala Vihar attendance surfaces (the child profile per-program attendance, the family-dashboard BV card, the member-detail page) show the **union** of teacher-marked `attendanceEvents` (authoritative) and door self-check-ins - instead of door-only today - using the T1 resolver, while preserving the `selectBalaViharEnrollment`/programKey N=2 safety.
 
-**Architecture:** BV keeps `attendanceMode: 'check-in'` (a flip to `'teacher'` would *drop* door check-ins). The pure `resolveMemberAttendance` (T1) merges per-member portal marks (win) with door check-ins. Per-member surfaces (child profile, member detail) resolve a single member. The **family** dashboard is "did any enrolled child attend that Sunday" — so a new family reader resolves **per child, then folds by date (best status across children)**, which avoids the cross-child overwrite trap (child A teacher-absent must not erase child B door-present). All three surfaces keep their existing offering-window scoping (door has no offering link) and their existing UI; only the data source changes.
+**Architecture:** BV keeps `attendanceMode: 'check-in'` (a flip to `'teacher'` would *drop* door check-ins). The pure `resolveMemberAttendance` (T1) merges per-member portal marks (win) with door check-ins. Per-member surfaces (child profile, member detail) resolve a single member. The **family** dashboard is "did any enrolled child attend that Sunday" - so a new family reader resolves **per child, then folds by date (best status across children)**, which avoids the cross-child overwrite trap (child A teacher-absent must not erase child B door-present). All three surfaces keep their existing offering-window scoping (door has no offering link) and their existing UI; only the data source changes.
 
 **Tech Stack:** Next.js 16 (server components), TypeScript (`exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`), Vitest, the T1 `resolve-attendance.ts` / `get-member-attendance.ts` / `get-attendance.ts` readers.
 
@@ -13,24 +13,24 @@
 ## Standing constraints (do not violate)
 
 - **Portal writes UAT only**; door reads are read-only via the T1 seam. T4 adds **no writes** and **no new Firestore index** (reuses `attendanceEvents (fid, date DESC)` and `(mid, date DESC)`, already deployed).
-- **N=2 lint tripwire** (`apps/portal/eslint.config.js`): in `app/family/page.tsx` and `app/family/members/**/page.tsx`, NEVER write `e.status === 'active'` inline — always go through `selectBalaViharEnrollment()` / `buildFamilyDashboardModel()`. Calling those helpers is the sanctioned path.
+- **N=2 lint tripwire** (`apps/portal/eslint.config.js`): in `app/family/page.tsx` and `app/family/members/**/page.tsx`, NEVER write `e.status === 'active'` inline - always go through `selectBalaViharEnrollment()` / `buildFamilyDashboardModel()`. Calling those helpers is the sanctioned path.
 - **N=2 correctness:** any family-level fold must treat each child's attendance independently (portal-wins is *per child*); a teacher-absent for one child must never erase a door-present for a sibling on the same date. Add a 2-child fixture proving it.
-- `exactOptionalPropertyTypes` ON — never assign `undefined` to optional; use `null` / conditional spread.
+- `exactOptionalPropertyTypes` ON - never assign `undefined` to optional; use `null` / conditional spread.
 - **Run the FULL `pnpm --filter @cmt/portal lint`** before every commit (the recurring unused-`describe`/import trap). Pre-push hook runs `typecheck && lint && test && build`; never `--no-verify`.
 - Spawn all subagents on **Opus**.
 
 ## File structure
 
 **Modify:**
-- `apps/portal/src/features/setu/attendance/resolve-attendance.ts` — export `STATUS_RANK`, `summarizeResolvedMarks`, `EMPTY_RESOLVED_SUMMARY` (internal refactor; `resolveMemberAttendance` reuses them).
-- `apps/portal/src/features/setu/attendance/get-member-attendance.ts` — add optional `windowStart`/`windowEnd` (scope the door side).
-- `apps/portal/src/features/setu/members/get-child-profile.ts` — union the `check-in` branch.
-- `apps/portal/src/app/family/members/[mid]/page.tsx` — swap door-only read for `getMemberUnifiedAttendance`; adapt `AttendanceSummaryBlock`.
-- `apps/portal/src/app/family/_helpers/dashboard-model.ts` — input takes `bvAttendance: ResolvedSummary` (was `rawCheckIns`); attendance section formats it.
-- `apps/portal/src/app/family/page.tsx` — compute the BV union via the new reader, pass `bvAttendance` into the model.
+- `apps/portal/src/features/setu/attendance/resolve-attendance.ts` - export `STATUS_RANK`, `summarizeResolvedMarks`, `EMPTY_RESOLVED_SUMMARY` (internal refactor; `resolveMemberAttendance` reuses them).
+- `apps/portal/src/features/setu/attendance/get-member-attendance.ts` - add optional `windowStart`/`windowEnd` (scope the door side).
+- `apps/portal/src/features/setu/members/get-child-profile.ts` - union the `check-in` branch.
+- `apps/portal/src/app/family/members/[mid]/page.tsx` - swap door-only read for `getMemberUnifiedAttendance`; adapt `AttendanceSummaryBlock`.
+- `apps/portal/src/app/family/_helpers/dashboard-model.ts` - input takes `bvAttendance: ResolvedSummary` (was `rawCheckIns`); attendance section formats it.
+- `apps/portal/src/app/family/page.tsx` - compute the BV union via the new reader, pass `bvAttendance` into the model.
 
 **Create:**
-- `apps/portal/src/features/setu/attendance/get-family-attendance.ts` — `getFamilyBalaViharAttendance(args)` family-level union reader.
+- `apps/portal/src/features/setu/attendance/get-family-attendance.ts` - `getFamilyBalaViharAttendance(args)` family-level union reader.
 - `apps/portal/src/features/setu/attendance/__tests__/get-family-attendance.test.ts`.
 
 **Test (update):** `resolve-attendance.test.ts` (stays green post-refactor), `get-member-attendance.test.ts` (window), `get-child-profile.test.ts` (union), `app/family/__tests__/dashboard-model.test.ts` (input shape).
@@ -45,12 +45,12 @@
 - Create: `apps/portal/src/features/setu/attendance/__tests__/get-family-attendance.test.ts`
 - Test (regression): `apps/portal/src/features/setu/attendance/__tests__/resolve-attendance.test.ts` (must stay green unchanged)
 
-- [ ] **Step 1: Refactor `resolve-attendance.ts`** — export the rank, the summarizer, and an empty constant; have `resolveMemberAttendance` reuse them. Replace the file's body from `STATUS_RANK` downward with:
+- [ ] **Step 1: Refactor `resolve-attendance.ts`** - export the rank, the summarizer, and an empty constant; have `resolveMemberAttendance` reuse them. Replace the file's body from `STATUS_RANK` downward with:
 
 ```ts
 // When a member has more than one portal mark on the same date (e.g. enrolled
 // in two levels under one program), the attended status wins deterministically
-// — present > late > absent — so a stray absent can never silently overwrite an
+// - present > late > absent - so a stray absent can never silently overwrite an
 // attendance. (Guards the N=2 / one→many trap; door marks are unique per date.)
 export const STATUS_RANK: Record<SetuAttendanceStatus, number> = { present: 2, late: 1, absent: 0 };
 
@@ -87,7 +87,7 @@ export function resolveMemberAttendance(
     byDate.set(d.date, { date: d.date, status: d.present ? 'present' : 'absent', source: 'door' });
   }
   // Portal overrides door. Among multiple same-date portal marks, the
-  // higher-ranked (more-attended) status wins — never insertion order.
+  // higher-ranked (more-attended) status wins - never insertion order.
   for (const p of portalMarks) {
     const existing = byDate.get(p.date);
     const portalWins =
@@ -103,7 +103,7 @@ export function resolveMemberAttendance(
 }
 ```
 
-Leave the imports + the `ResolvedSource`/`ResolvedMark`/`ResolvedSummary` type declarations (lines 1–18) unchanged.
+Leave the imports + the `ResolvedSource`/`ResolvedMark`/`ResolvedSummary` type declarations (lines 1-18) unchanged.
 
 - [ ] **Step 2: Run the resolver regression test (must stay green unchanged)**
 
@@ -187,7 +187,7 @@ it('returns an empty summary when there are no children', async () => {
 - [ ] **Step 4: Run to confirm it fails**
 
 Run: `pnpm --filter @cmt/portal exec vitest run src/features/setu/attendance/__tests__/get-family-attendance.test.ts`
-Expected: FAIL — module `../get-family-attendance` not found.
+Expected: FAIL - module `../get-family-attendance` not found.
 
 - [ ] **Step 5: Implement the family reader** (`get-family-attendance.ts`)
 
@@ -205,7 +205,7 @@ import {
 export interface FamilyBvAttendanceArgs {
   fid: string;
   legacyFid: string | null;
-  /** The BV enrollment's offering id (oid) — only portal events for it count. */
+  /** The BV enrollment's offering id (oid) - only portal events for it count. */
   oid: string;
   /** Door-side window (YMD) from the BV offering; null = unbounded that side. */
   windowStart: string | null;
@@ -218,7 +218,7 @@ export interface FamilyBvAttendanceArgs {
  * Family-level BV attendance = the UNION of teacher `attendanceEvents` and door
  * self-check-ins, answering "did ANY enrolled child attend that Sunday?". Each
  * child is resolved INDEPENDENTLY (portal wins per child) and then folded by
- * date taking the best status across children — so one child's teacher-absent
+ * date taking the best status across children - so one child's teacher-absent
  * can never erase a sibling's door-present (the N=2 trap). Door records are
  * window-scoped (door has no offering link); portal events are oid-filtered.
  */
@@ -295,7 +295,7 @@ it('scopes the door side to the window when windowStart/windowEnd are given', as
 - [ ] **Step 2: Run to confirm it fails**
 
 Run: `pnpm --filter @cmt/portal exec vitest run src/features/setu/attendance/__tests__/get-member-attendance.test.ts`
-Expected: FAIL — window args are ignored today, so the out-of-window date is still counted.
+Expected: FAIL - window args are ignored today, so the out-of-window date is still counted.
 
 - [ ] **Step 3: Implement window scoping** (edit `get-member-attendance.ts`)
 
@@ -389,7 +389,7 @@ it('check-in BV is available from teacher marks even when legacySid is null (uni
   expect(bv.attendance.note).toBeNull();
 });
 ```
-Keep the existing "unavailable with a note when legacySid is null" test BUT it must now ALSO have no portal marks (it already mocks `getAttendanceForMember → []`), so it still yields unavailable — leave it as-is (it already passes `[]` for member records).
+Keep the existing "unavailable with a note when legacySid is null" test BUT it must now ALSO have no portal marks (it already mocks `getAttendanceForMember → []`), so it still yields unavailable - leave it as-is (it already passes `[]` for member records).
 
 - [ ] **Step 2: Run to confirm it fails**
 
@@ -402,7 +402,7 @@ Add the resolver import:
 ```ts
 import { resolveMemberAttendance } from '@/features/setu/attendance/resolve-attendance';
 ```
-Replace the `if (mode === 'check-in') { ... }` block (lines ~81–96) with:
+Replace the `if (mode === 'check-in') { ... }` block (lines ~81-96) with:
 ```ts
 if (mode === 'check-in') {
   const off = e.offering;
@@ -419,7 +419,7 @@ if (mode === 'check-in') {
   const doorMarks = summarizeMemberCheckIns(scoped, member!.legacySid).marks;
   const resolved = resolveMemberAttendance(portalMarks, doorMarks);
   // Available if the door link exists OR a teacher has marked this child for the
-  // offering — so a child without a legacySid still shows teacher-marked dates.
+  // offering - so a child without a legacySid still shows teacher-marked dates.
   if (!member!.legacySid && portalMarks.length === 0) {
     return { mode, available: false, attended: 0, total: 0, attendedPct: 0, marks: [], note: "Attendance isn't linked for this member yet." };
   }
@@ -456,7 +456,7 @@ git commit -m "feat(child-profile): union teacher marks with door check-ins for 
 **Files:**
 - Modify: `apps/portal/src/app/family/members/[mid]/page.tsx`
 
-- [ ] **Step 1: Swap the read + adapt the block.** Replace the door-only import (line 9) and the `AttendanceSummaryBlock` (lines 21–41) and the fetch/scope block (lines 60–74).
+- [ ] **Step 1: Swap the read + adapt the block.** Replace the door-only import (line 9) and the `AttendanceSummaryBlock` (lines 21-41) and the fetch/scope block (lines 60-74).
 
 Imports (line 9 area):
 ```ts
@@ -476,22 +476,22 @@ function AttendanceSummaryBlock({ summary, hasSid }: { summary: ResolvedSummary;
       {summary.total === 0 ? (
         <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 8 }}>
           {hasSid
-            ? 'No attendance recorded yet — it appears once Sunday classes begin.'
+            ? 'No attendance recorded yet - it appears once Sunday classes begin.'
             : "Per-child attendance isn't linked for this member yet."}
         </div>
       ) : (
         <DetailGroup rows={[
           ['Attended', `${attended} of ${summary.total} Sundays`],
-          ['Last class', lastDate ?? '—'],
+          ['Last class', lastDate ?? '-'],
         ]}/>
       )}
     </>
   );
 }
 ```
-(When there are teacher marks but no sid, `summary.total > 0` so it renders the rows — the union surfaces even without a door link.)
+(When there are teacher marks but no sid, `summary.total > 0` so it renders the rows - the union surfaces even without a door link.)
 
-Replace the fetch/scope block (lines 60–74) with:
+Replace the fetch/scope block (lines 60-74) with:
 ```ts
     const [enrollments] = await Promise.all([getEnrollments(data.family.fid)]);
     const bv = selectBalaViharEnrollment(enrollments);
@@ -507,7 +507,7 @@ Replace the fetch/scope block (lines 60–74) with:
 ```
 Both `<AttendanceSummaryBlock summary={attendanceSummary} hasSid={Boolean(member.legacySid)}/>` call sites (mobile line ~128 + desktop line ~187) stay unchanged (the prop name `summary` is the same; its type is now `ResolvedSummary`).
 
-> N=2 lint: this file is covered by the tripwire. We never write `e.status === 'active'` inline — `selectBalaViharEnrollment` is the sanctioned helper. Good.
+> N=2 lint: this file is covered by the tripwire. We never write `e.status === 'active'` inline - `selectBalaViharEnrollment` is the sanctioned helper. Good.
 
 - [ ] **Step 2: Typecheck + lint the page**
 
@@ -560,7 +560,7 @@ return {
 ```
 Update the assertions:
 - The "REGRESSION: attendance is scoped to the BV window" test → rename to "formats the passed BV attendance union": keep `expect(m.attendance.hasAttendance).toBe(true); expect(m.attendance.summary.attended).toBe(2); expect(m.attendance.total).toBe(30);` (window-scoping now lives in the reader's test, Task 1).
-- The "no BV enrollment" test asserted `m.attendance.summary.attended).toBe(2)` with rawCheckIns unscoped — keep `bvAttendance: BV_ATTENDANCE` and the same `attended).toBe(2)` (the model just formats it; whether a non-BV family even computes a union is the page's job, but the model formats whatever it's given).
+- The "no BV enrollment" test asserted `m.attendance.summary.attended).toBe(2)` with rawCheckIns unscoped - keep `bvAttendance: BV_ATTENDANCE` and the same `attended).toBe(2)` (the model just formats it; whether a non-BV family even computes a union is the page's job, but the model formats whatever it's given).
 - The "empty family" test: change `rawCheckIns: []` → `bvAttendance: resolved([])` and keep `expect(m.attendance.hasAttendance).toBe(false)`.
 
 - [ ] **Step 2: Run to confirm it fails**
@@ -568,7 +568,7 @@ Update the assertions:
 Run: `pnpm --filter @cmt/portal exec vitest run src/app/family/__tests__/dashboard-model.test.ts`
 Expected: FAIL (the model still expects `rawCheckIns`).
 
-- [ ] **Step 3: Edit `dashboard-model.ts`** — swap the input + format the resolved summary.
+- [ ] **Step 3: Edit `dashboard-model.ts`** - swap the input + format the resolved summary.
 
 Imports: remove `summarizeFamilyCheckIns, type CheckInRecord, type CheckInSummary`; add:
 ```ts
@@ -589,7 +589,7 @@ import type { ResolvedSummary } from '@/features/setu/attendance/resolve-attenda
     pct: number;
   };
 ```
-In `buildFamilyDashboardModel`: destructure `bvAttendance` instead of `rawCheckIns`; delete the `offering`-based `scoped`/`summarizeFamilyCheckIns` block (lines ~106, 120–133) and replace with:
+In `buildFamilyDashboardModel`: destructure `bvAttendance` instead of `rawCheckIns`; delete the `offering`-based `scoped`/`summarizeFamilyCheckIns` block (lines ~106, 120-133) and replace with:
 ```ts
   const attended = bvAttendance.present + bvAttendance.late;
   const hasAttendance = bvAttendance.total > 0;
@@ -608,7 +608,7 @@ In `buildFamilyDashboardModel`: destructure `bvAttendance` instead of `rawCheckI
 ```
 (`isLegacyBvPeriod` + `torontoYmd` stay exported and unchanged. `selectBalaViharEnrollment` still used for `bv`.)
 
-- [ ] **Step 4: Edit `app/family/page.tsx`** — compute the union, pass it in.
+- [ ] **Step 4: Edit `app/family/page.tsx`** - compute the union, pass it in.
 
 Add imports:
 ```ts
@@ -619,7 +619,7 @@ import { torontoYmd } from './_helpers/dashboard-model';
 ```
 (Remove the `getCheckInAttendance` import if it's now otherwise unused on the page.)
 
-In the data-fetch block, replace `getCheckInAttendance(data.family.legacyFid)` in the `Promise.all` (line ~118) — drop `rawCheckIns` from that array — and after the array, compute the union:
+In the data-fetch block, replace `getCheckInAttendance(data.family.legacyFid)` in the `Promise.all` (line ~118) - drop `rawCheckIns` from that array - and after the array, compute the union:
 ```ts
       const [{ upcoming }, classSundays] = await Promise.all([
         getUpcoming(data.family.location, 'bala-vihar', undefined, 3),
@@ -654,7 +654,7 @@ In the data-fetch block, replace `getCheckInAttendance(data.family.legacyFid)` i
         legacyPaymentStatus,
       });
 ```
-The destructure `const { summary: ci, hasAttendance, total: attendanceTotal, pct: attendancePct } = model.attendance;` (line 148) and the heatmap `ci.marks.map((m) => ... m.present ...)` (lines ~403–414) + `ci.attended` (mobile line 213/217, desktop) all stay unchanged — `summary` still exposes `{ attended, marks: {date, present}[] }`.
+The destructure `const { summary: ci, hasAttendance, total: attendanceTotal, pct: attendancePct } = model.attendance;` (line 148) and the heatmap `ci.marks.map((m) => ... m.present ...)` (lines ~403-414) + `ci.attended` (mobile line 213/217, desktop) all stay unchanged - `summary` still exposes `{ attended, marks: {date, present}[] }`.
 
 > N=2 lint: `selectBalaViharEnrollment(enrollments)` is the sanctioned helper; no inline `status === 'active'`. The `.filter((mm): mm is …)` is a type guard, not a status compare. Good.
 
@@ -689,7 +689,7 @@ pnpm --filter @cmt/portal test
 ```
 Expected: all green. Fix any unused-import / strict-optional issues (do NOT skip the full lint).
 
-- [ ] **Step 2: Final cross-slice code review** — dispatch `oh-my-claudecode:code-reviewer` (opus) over the T4 diff. Confirm: read-only (no writes/index), per-child-resolve-then-fold correctness (the N=2 fixture), window-scoping preserved on all three surfaces, `selectBalaViharEnrollment`/programKey pinning intact, no N=2 lint regressions, `available` semantics for teacher-only-marks, marks `{date,present}` mapping (late→present) consistent, no dead `rawCheckIns`/door-only imports left. Address HIGH/MEDIUM, then re-run the gate.
+- [ ] **Step 2: Final cross-slice code review** - dispatch `oh-my-claudecode:code-reviewer` (opus) over the T4 diff. Confirm: read-only (no writes/index), per-child-resolve-then-fold correctness (the N=2 fixture), window-scoping preserved on all three surfaces, `selectBalaViharEnrollment`/programKey pinning intact, no N=2 lint regressions, `available` semantics for teacher-only-marks, marks `{date,present}` mapping (late→present) consistent, no dead `rawCheckIns`/door-only imports left. Address HIGH/MEDIUM, then re-run the gate.
 
 - [ ] **Step 3: Controller pushes** the T4 commits at the checkpoint (`git push` runs the full pre-push hook).
 
@@ -709,9 +709,9 @@ Expected: all green. Fix any unused-import / strict-optional issues (do NOT skip
 
 **Type consistency:** `ResolvedSummary`/`ResolvedMark` (resolve-attendance) flow into `getFamilyBalaViharAttendance` (Task 1) → dashboard model input (Task 5) and `getMemberUnifiedAttendance` (Task 2) → member page block (Task 4). Model `attendance.summary` = `{attended, marks:{date,present}[]}` matches page's `ci.attended`/`ci.marks`. Child-profile `ChildProgramAttendance.marks` = `{date,present}[]` unchanged. `STATUS_RANK`/`summarizeResolvedMarks`/`EMPTY_RESOLVED_SUMMARY` exported in Task 1, consumed in Tasks 1/5. ✓
 
-**Decision logged:** BV stays `attendanceMode: 'check-in'` (NOT flipped to `'teacher'`) — a flip would route the child-profile `teacher` branch which reads `attendanceEvents` only, dropping door check-ins. The union keeps both sources. Family-level uses OR-across-children (best status per date) via per-child resolution — never a single merged bucket (which would let a teacher-absent erase a sibling's door-present).
+**Decision logged:** BV stays `attendanceMode: 'check-in'` (NOT flipped to `'teacher'`) - a flip would route the child-profile `teacher` branch which reads `attendanceEvents` only, dropping door check-ins. The union keeps both sources. Family-level uses OR-across-children (best status per date) via per-child resolution - never a single merged bucket (which would let a teacher-absent erase a sibling's door-present).
 
 ## Known follow-ups (not this slice)
-- Surface `late` distinctly (and a door/teacher source dot) on family heatmaps — today late folds to "present" in the `{date,present}` mapping. Cosmetic; data already carries it.
-- T5 — rollout (flag flip `NEXT_PUBLIC_FEATURE_SETU_TEACHER=true`, teacher-assignment validation, UAT walkthrough, infra check). Separate plan.
+- Surface `late` distinctly (and a door/teacher source dot) on family heatmaps - today late folds to "present" in the `{date,present}` mapping. Cosmetic; data already carries it.
+- T5 - rollout (flag flip `NEXT_PUBLIC_FEATURE_SETU_TEACHER=true`, teacher-assignment validation, UAT walkthrough, infra check). Separate plan.
 - Manual UAT walkthrough (agent can't OTP): a family with a teacher-marked-but-not-door-checked-in Sunday sees it counted on the dashboard + child profile + member page; a 2-child family where one was teacher-absent and the other door-present shows the Sunday attended.

@@ -1,4 +1,4 @@
-# Slice 2 — Setu Auth + Family Registration API (Implementation Plan)
+# Slice 2 - Setu Auth + Family Registration API (Implementation Plan)
 
 **Date:** 2026-05-22
 **Status:** Ready to execute (pending user go-ahead)
@@ -20,22 +20,22 @@ Sub-slices sequenced by hard dependency:
                                                 └─► 2f (bulk legacy migration)
 ```
 
-2a is the hard prerequisite — everything else needs sessions. 2e and 2f can run in parallel with 2c/2d after 2b lands.
+2a is the hard prerequisite - everything else needs sessions. 2e and 2f can run in parallel with 2c/2d after 2b lands.
 
 ---
 
-## Sub-slice 2a — OTP auth wiring
+## Sub-slice 2a - OTP auth wiring
 
 **Goal:** A real user can hit `/sign-in`, enter email or phone, receive a 6-digit code, enter it, and end up signed in at `/family` (or redirected to `/register` if no family exists yet).
 
-**Estimated effort:** 2–3 days.
+**Estimated effort:** 2-3 days.
 
 ### Files to create
 
-- `packages/shared-domain/src/setu/index.ts` — barrel export
-- `packages/shared-domain/src/setu/session-claims.ts` — extended `SessionClaims` with `family-manager`, `family-member`, `welcome-team` roles
+- `packages/shared-domain/src/setu/index.ts` - barrel export
+- `packages/shared-domain/src/setu/session-claims.ts` - extended `SessionClaims` with `family-manager`, `family-member`, `welcome-team` roles
 - `packages/shared-domain/src/setu/__tests__/session-claims.test.ts`
-- `apps/portal/src/features/setu/auth/find-family-by-contact.ts` — Setu-side lookup against `contactKeys/{hash}` with legacy fallback
+- `apps/portal/src/features/setu/auth/find-family-by-contact.ts` - Setu-side lookup against `contactKeys/{hash}` with legacy fallback
 - `apps/portal/src/features/setu/auth/__tests__/find-family-by-contact.test.ts`
 - `apps/portal/src/app/api/setu/auth/send-code/route.ts`
 - `apps/portal/src/app/api/setu/auth/send-code/__tests__/route.test.ts`
@@ -46,12 +46,12 @@ Sub-slices sequenced by hard dependency:
 
 ### Files to modify
 
-- `packages/shared-domain/src/auth/session-claims.ts` (or whatever holds the existing `SessionClaims`) — widen the role union; add `fid`, `mid` (optional)
-- `packages/shared-domain/src/auth/can-access-route.ts` — accept new roles; `/family/*` allowed for `family-manager` + `family-member`; `/welcome/*` only for `welcome-team`
-- `packages/shared-domain/src/auth/public-routes.ts` — move `/family`, `/family/` OUT (now auth-gated); add `/api/setu/auth/send-code`, `/api/setu/auth/verify-code`, `/api/setu/auth/signout` IN
-- `apps/portal/src/middleware.ts` — redirect target: if pathname matches `/family/*` and no session, redirect to `/sign-in` (NOT `/login`). Other paths (`/check-in/*`) keep redirecting to `/login`.
-- `apps/portal/src/app/sign-in/page.tsx` — wire to real send-code; add OTP entry state; "Use phone instead" toggle
-- `apps/portal/src/lib/env.ts` — add `SETU_OTP_TTL_MIN`, `SETU_OTP_RATE_LIMIT_PER_MIN`, `NEXT_PUBLIC_FEATURE_SETU_AUTH`
+- `packages/shared-domain/src/auth/session-claims.ts` (or whatever holds the existing `SessionClaims`) - widen the role union; add `fid`, `mid` (optional)
+- `packages/shared-domain/src/auth/can-access-route.ts` - accept new roles; `/family/*` allowed for `family-manager` + `family-member`; `/welcome/*` only for `welcome-team`
+- `packages/shared-domain/src/auth/public-routes.ts` - move `/family`, `/family/` OUT (now auth-gated); add `/api/setu/auth/send-code`, `/api/setu/auth/verify-code`, `/api/setu/auth/signout` IN
+- `apps/portal/src/middleware.ts` - redirect target: if pathname matches `/family/*` and no session, redirect to `/sign-in` (NOT `/login`). Other paths (`/check-in/*`) keep redirecting to `/login`.
+- `apps/portal/src/app/sign-in/page.tsx` - wire to real send-code; add OTP entry state; "Use phone instead" toggle
+- `apps/portal/src/lib/env.ts` - add `SETU_OTP_TTL_MIN`, `SETU_OTP_RATE_LIMIT_PER_MIN`, `NEXT_PUBLIC_FEATURE_SETU_AUTH`
 
 ### TDD test list
 
@@ -87,32 +87,32 @@ Sub-slices sequenced by hard dependency:
 
 ---
 
-## Sub-slice 2b — Family registration + dedupe
+## Sub-slice 2b - Family registration + dedupe
 
 **Goal:** A new user without a family record can register, and a contact already attached to a family triggers the dedupe panel.
 
-**Estimated effort:** 3–4 days.
+**Estimated effort:** 3-4 days.
 
 ### Files to create
 
-- `packages/shared-domain/src/setu/schemas/family.ts` — zod for `FamilyDoc`
-- `packages/shared-domain/src/setu/schemas/member.ts` — zod for `MemberDoc`
-- `packages/shared-domain/src/setu/schemas/contact-key.ts` — zod for `ContactKeyDoc` + `hashContactKey()`
+- `packages/shared-domain/src/setu/schemas/family.ts` - zod for `FamilyDoc`
+- `packages/shared-domain/src/setu/schemas/member.ts` - zod for `MemberDoc`
+- `packages/shared-domain/src/setu/schemas/contact-key.ts` - zod for `ContactKeyDoc` + `hashContactKey()`
 - `packages/shared-domain/src/setu/__tests__/schemas.test.ts`
-- `apps/portal/src/features/setu/registration/register-family.ts` — the transactional family-create helper
-- `apps/portal/src/features/setu/registration/lazy-migrate.ts` — promotes a legacy family to Setu on first verify
+- `apps/portal/src/features/setu/registration/register-family.ts` - the transactional family-create helper
+- `apps/portal/src/features/setu/registration/lazy-migrate.ts` - promotes a legacy family to Setu on first verify
 - `apps/portal/src/features/setu/registration/__tests__/register-family.test.ts`
 - `apps/portal/src/features/setu/registration/__tests__/lazy-migrate.test.ts`
 - `apps/portal/src/app/api/setu/family-lookup/route.ts` + tests
 - `apps/portal/src/app/api/setu/register/route.ts` + tests
 - `apps/portal/src/app/api/setu/family/join/route.ts` + tests
-- `firestore.indexes.json` — append composite indexes for `families.searchKeys` and `contactKeys.contactKey`
+- `firestore.indexes.json` - append composite indexes for `families.searchKeys` and `contactKeys.contactKey`
 
 ### Files to modify
 
-- `apps/portal/src/app/register/page.tsx` — debounced `/family-lookup` on field blur, real submit
-- `apps/portal/src/app/register/family/page.tsx` — real submit to `/api/setu/register`; surface zod errors server-to-client
-- `apps/portal/src/app/api/setu/auth/verify-code/route.ts` — call `lazyMigrate(legacyFid)` when a legacy hit + no Setu doc
+- `apps/portal/src/app/register/page.tsx` - debounced `/family-lookup` on field blur, real submit
+- `apps/portal/src/app/register/family/page.tsx` - real submit to `/api/setu/register`; surface zod errors server-to-client
+- `apps/portal/src/app/api/setu/auth/verify-code/route.ts` - call `lazyMigrate(legacyFid)` when a legacy hit + no Setu doc
 
 ### TDD test list
 
@@ -126,7 +126,7 @@ Sub-slices sequenced by hard dependency:
    - Generated `fid` matches expected format
 3. `lazy-migrate.test.ts`:
    - Reads legacy roster, maps fields, writes Setu family with `legacyFid` populated
-   - Idempotent — second invocation on same legacy family is a no-op
+   - Idempotent - second invocation on same legacy family is a no-op
    - Members inherit grade / contact fields from legacy parent/student rows
 4. API route tests for `family-lookup`, `register`, `family/join`:
    - Happy paths
@@ -145,11 +145,11 @@ Sub-slices sequenced by hard dependency:
 
 ---
 
-## Sub-slice 2c — Family CRUD
+## Sub-slice 2c - Family CRUD
 
 **Goal:** Signed-in manager can read their family + add/edit/remove members. Member view is read-only.
 
-**Estimated effort:** 2–3 days.
+**Estimated effort:** 2-3 days.
 
 ### Files to create
 
@@ -160,12 +160,12 @@ Sub-slices sequenced by hard dependency:
 
 ### Files to modify
 
-- `apps/portal/src/app/family/page.tsx` — server-fetch family + members, replace mock
-- `apps/portal/src/app/family/members/page.tsx` — same
-- `apps/portal/src/app/family/members/[mid]/page.tsx` — lookup by `mid`; 404 if not in user's family
-- `apps/portal/src/app/family/members/new/page.tsx` — real POST to `/api/setu/members`
-- Add `apps/portal/src/app/family/members/[mid]/edit/page.tsx` — new edit screen (reuses add-member layout)
-- `apps/portal/src/features/family/data/mock.ts` — keep for fallback when `NEXT_PUBLIC_FEATURE_SETU_AUTH=false`, otherwise dead code
+- `apps/portal/src/app/family/page.tsx` - server-fetch family + members, replace mock
+- `apps/portal/src/app/family/members/page.tsx` - same
+- `apps/portal/src/app/family/members/[mid]/page.tsx` - lookup by `mid`; 404 if not in user's family
+- `apps/portal/src/app/family/members/new/page.tsx` - real POST to `/api/setu/members`
+- Add `apps/portal/src/app/family/members/[mid]/edit/page.tsx` - new edit screen (reuses add-member layout)
+- `apps/portal/src/features/family/data/mock.ts` - keep for fallback when `NEXT_PUBLIC_FEATURE_SETU_AUTH=false`, otherwise dead code
 
 ### TDD test list
 
@@ -189,23 +189,23 @@ Sub-slices sequenced by hard dependency:
 
 ---
 
-## Sub-slice 2d — Invite flow
+## Sub-slice 2d - Invite flow
 
 **Goal:** A manager can invite a co-manager via email; the invitee clicks the link, signs in via OTP, and is added to the family.
 
-**Estimated effort:** 1–2 days.
+**Estimated effort:** 1-2 days.
 
 ### Files to create
 
-- `apps/portal/src/lib/aws/templates/setu-invite-email.tsx` (React Email or plain HTML — match the existing template pattern under `src/lib/aws/templates/`)
+- `apps/portal/src/lib/aws/templates/setu-invite-email.tsx` (React Email or plain HTML - match the existing template pattern under `src/lib/aws/templates/`)
 - `apps/portal/src/app/api/setu/invite/send/route.ts` + tests
 - `apps/portal/src/app/api/setu/invite/[token]/route.ts` (GET for invite metadata) + tests
 - `apps/portal/src/app/api/setu/invite/accept/route.ts` + tests
 
 ### Files to modify
 
-- `apps/portal/src/app/invite/[token]/page.tsx` — server-fetch invite metadata; real `Accept & join` button
-- `apps/portal/src/app/family/members/page.tsx` — wire the "Invite a co-manager" CTA (mobile) and the "Invite co-manager" button (desktop) to a modal or new screen that posts to `/api/setu/invite/send`
+- `apps/portal/src/app/invite/[token]/page.tsx` - server-fetch invite metadata; real `Accept & join` button
+- `apps/portal/src/app/family/members/page.tsx` - wire the "Invite a co-manager" CTA (mobile) and the "Invite co-manager" button (desktop) to a modal or new screen that posts to `/api/setu/invite/send`
 
 ### TDD test list
 
@@ -227,25 +227,25 @@ Sub-slices sequenced by hard dependency:
 
 ---
 
-## Sub-slice 2e — Welcome-team family search
+## Sub-slice 2e - Welcome-team family search
 
 **Goal:** A welcome-team user can search families by name / email / phone / new FID / legacy FID and open a read-only family detail.
 
-**Estimated effort:** 2–3 days.
+**Estimated effort:** 2-3 days.
 
 ### Files to create
 
 - `apps/portal/src/app/api/setu/family/search/route.ts` + tests
-- `apps/portal/src/app/welcome/page.tsx` — minimal welcome dashboard with search bar
+- `apps/portal/src/app/welcome/page.tsx` - minimal welcome dashboard with search bar
 - `apps/portal/src/app/welcome/error.tsx`
-- `apps/portal/src/app/welcome/family/[fid]/page.tsx` — read-only family detail
+- `apps/portal/src/app/welcome/family/[fid]/page.tsx` - read-only family detail
 - `apps/portal/src/features/setu/search/search-families.ts` + tests
 
 ### Files to modify
 
-- `packages/shared-domain/src/auth/public-routes.ts` — `/welcome` and `/welcome/family/:fid` are NOT public; they require welcome-team role
-- `packages/shared-domain/src/auth/can-access-route.ts` — gate `/welcome/*` and `/api/setu/family/search` on `welcome-team`
-- `apps/portal/src/features/family/components/atoms.tsx` — extend `DesktopSidebar` to accept a `role` prop; welcome-team gets a different nav (Search / Pending / Donation periods placeholder)
+- `packages/shared-domain/src/auth/public-routes.ts` - `/welcome` and `/welcome/family/:fid` are NOT public; they require welcome-team role
+- `packages/shared-domain/src/auth/can-access-route.ts` - gate `/welcome/*` and `/api/setu/family/search` on `welcome-team`
+- `apps/portal/src/features/family/components/atoms.tsx` - extend `DesktopSidebar` to accept a `role` prop; welcome-team gets a different nav (Search / Pending / Donation periods placeholder)
 
 ### TDD test list
 
@@ -267,21 +267,21 @@ Sub-slices sequenced by hard dependency:
 
 ---
 
-## Sub-slice 2f — Bulk legacy migration
+## Sub-slice 2f - Bulk legacy migration
 
 **Goal:** A script can pre-populate Setu families from the legacy RTDB roster before launch.
 
-**Estimated effort:** 1–2 days.
+**Estimated effort:** 1-2 days.
 
 ### Files to create
 
 - `apps/portal/scripts/migrate-legacy-families.ts`
 - `apps/portal/scripts/__tests__/migrate-legacy-families.test.ts`
-- `docs/superpowers/specs/2026-XX-legacy-fid-migration-runbook.md` — operational runbook (date when written)
+- `docs/superpowers/specs/2026-XX-legacy-fid-migration-runbook.md` - operational runbook (date when written)
 
 ### Files to modify
 
-- `package.json` (apps/portal) — add `migrate:legacy-families` npm script
+- `package.json` (apps/portal) - add `migrate:legacy-families` npm script
 
 ### TDD test list
 
@@ -303,9 +303,9 @@ Sub-slices sequenced by hard dependency:
 
 These touch the design CSS / shadcn primitives and should land before the API work blocks UI changes:
 
-- Install missing shadcn primitives the v3 brief flagged (`badge`, `tabs`, `select`, `checkbox`, `radio-group`, `tooltip`, `popover`, `dropdown-menu`, `table`) — needed for the form UX in 2b/2c (e.g., real grade picker, payment method radio).
+- Install missing shadcn primitives the v3 brief flagged (`badge`, `tabs`, `select`, `checkbox`, `radio-group`, `tooltip`, `popover`, `dropdown-menu`, `table`) - needed for the form UX in 2b/2c (e.g., real grade picker, payment method radio).
 - Update `apps/portal/src/features/family/components/atoms.tsx` exports if any new atom needed (mostly: `OtpEntry`, `Toast`/`Sonner` wrapper).
-- Add a global `<Toaster />` mount in root layout — currently absent but needed for error toasts on form submission.
+- Add a global `<Toaster />` mount in root layout - currently absent but needed for error toasts on form submission.
 
 ---
 

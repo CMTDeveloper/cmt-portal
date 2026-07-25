@@ -1,8 +1,8 @@
-# Multi-Contact Household Dedup — Phase B Implementation Plan
+# Multi-Contact Household Dedup - Phase B Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Widen each household's contacts-on-file beyond registration — let the find screen search across many entered contacts (read-only), let a signed-in member OTP-verify and add their own extra emails/phones, and nudge existing families once after sign-in to do so — so a later lookup with any of a person's contacts resolves the existing family instead of starting a duplicate.
+**Goal:** Widen each household's contacts-on-file beyond registration - let the find screen search across many entered contacts (read-only), let a signed-in member OTP-verify and add their own extra emails/phones, and nudge existing families once after sign-in to do so - so a later lookup with any of a person's contacts resolves the existing family instead of starting a duplicate.
 
 **Architecture:** Builds on Phase A (each member already gets a `contactKey` per email/phone at registration). Phase B adds (0) additive data-model fields (`MemberDoc.altEmails/altPhones/contactsNudgeDismissedAt`, contactKey `source/verifiedAt`); (B1) a multi-contact, no-auth find-screen search backed by a generalized `lookupFamilyByContacts` + an array-accepting `family-lookup` API; (B2) two new authenticated OTP routes (`/api/setu/contacts/send-code` + `/verify-code`) reusing the existing verification-codes store + AWS SES/SNS senders + rate-limiter, writing a `source:'self-verified'` contactKey + appending plaintext to the member's `altEmails/altPhones` inside an anti-theft transaction, driven by a new `/family/settings/contacts` surface via a client fetch wrapper; (B3) a one-time dismissible post-sign-in nudge on the family dashboard, persisted via `MemberDoc.contactsNudgeDismissedAt` through a new dedicated dismiss route.
 
@@ -15,11 +15,11 @@
 ## Scope notes (read before starting)
 
 - **Phase A is shipped.** `/register/family` captures each member's single email+phone; `registerFamily` writes a contactKey per member contact (currently with no `source` field); `lookupFamilyByContacts(email, phone)` already matches on EITHER contact. Do NOT re-do Phase A.
-- **No new Firestore index needed.** Every contactKey access in Phase B is a single doc read by id (`contactKeys/{hash}`) — the dedup index is doc-id-keyed by hash, not a collectionGroup query. The B2 anti-theft check is `txn.get(db.collection('contactKeys').doc(hash))`. Do not add a `firestore.indexes.json` entry; there is no range/collectionGroup query introduced here. (If a future task adds a `where()`/collectionGroup query over contactKeys, THAT task must add the index — none in this plan does.)
-- **`exactOptionalPropertyTypes` is on.** Never assign `undefined` to an optional field. Use conditional-spread `...(x ? { x } : {})`. New schema fields use `.default([])` / `.optional()` (additive — existing docs parse).
+- **No new Firestore index needed.** Every contactKey access in Phase B is a single doc read by id (`contactKeys/{hash}`) - the dedup index is doc-id-keyed by hash, not a collectionGroup query. The B2 anti-theft check is `txn.get(db.collection('contactKeys').doc(hash))`. Do not add a `firestore.indexes.json` entry; there is no range/collectionGroup query introduced here. (If a future task adds a `where()`/collectionGroup query over contactKeys, THAT task must add the index - none in this plan does.)
+- **`exactOptionalPropertyTypes` is on.** Never assign `undefined` to an optional field. Use conditional-spread `...(x ? { x } : {})`. New schema fields use `.default([])` / `.optional()` (additive - existing docs parse).
 - **`canAccessRoute` `/api/setu/*` catch-all is manager-only.** The two new B2 routes (`/api/setu/contacts/send-code`, `/api/setu/contacts/verify-code`) AND the B3 dismiss route (`/api/setu/contacts/dismiss-nudge`) must each be explicitly opened to any signed-in family role (`isSetuFamily`) BEFORE the catch-all, or a `family-member` is denied at the middleware layer.
 - **Client/server boundary.** The `/family/settings/contacts` page is `'use client'`. It must NOT import `getCurrentFamily` (uses `next/headers` + firebase-admin). It reads identity via the existing `getCurrentFamilyClient()` wrapper and calls the new routes via a new side-effect-free `contacts-client.ts` wrapper. Mock the wrapper in component tests, not the server fns.
-- **Commit author** is preconfigured (`CMT Developer`). Do NOT push — the controller pushes. Never `--no-verify`.
+- **Commit author** is preconfigured (`CMT Developer`). Do NOT push - the controller pushes. Never `--no-verify`.
 - **DB ops target UAT only** (`chinmaya-setu-uat`). The final manual walkthrough (Task B4) runs against UAT.
 
 ## File structure
@@ -27,7 +27,7 @@
 | File | Responsibility |
 |------|----------------|
 | `packages/shared-domain/src/setu/schemas/member.ts` | **(G0)** Add `altEmails`/`altPhones` (default `[]`) + `contactsNudgeDismissedAt` (nullable, optional) to `MemberDocSchema`. |
-| `apps/portal/src/features/setu/auth/find-family-by-contact.ts` | **(G0)** Add `source`/`verifiedAt` to `SetuContactKeyDoc` (optional — read with defaults). |
+| `apps/portal/src/features/setu/auth/find-family-by-contact.ts` | **(G0)** Add `source`/`verifiedAt` to `SetuContactKeyDoc` (optional - read with defaults). |
 | `apps/portal/src/features/setu/members/get-family-by-fid.ts` | **(G0)** Default the new array/nudge fields in the manual member mapper. |
 | `apps/portal/src/features/setu/registration/family-lookup.ts` | **(B1)** Generalize `lookupFamilyByContacts` to accept a contact list (keep back-compat `(email, phone)`); extract `lookupFamilyByContactList`. |
 | `apps/portal/src/app/api/setu/family-lookup/route.ts` | **(B1)** Accept `{ emails: string[]; phones: string[] }` AND legacy `{ email, phone }`. |
@@ -46,9 +46,9 @@ Tests live next to each file under `__tests__/` (paths given per task).
 
 ---
 
-# Group 0 — Data-model foundation
+# Group 0 - Data-model foundation
 
-Additive + optional fields so every existing doc still parses. These ship first so B1–B3 build on a stable shape. Repo memory: Zod silently strips unknown fields — the schema MUST include the new fields or writes are lost.
+Additive + optional fields so every existing doc still parses. These ship first so B1-B3 build on a stable shape. Repo memory: Zod silently strips unknown fields - the schema MUST include the new fields or writes are lost.
 
 ## Task G0.1: Add altEmails / altPhones / contactsNudgeDismissedAt to MemberDocSchema
 
@@ -82,7 +82,7 @@ const base = {
   emergencyContacts: [null, null] as [unknown, unknown],
 };
 
-describe('MemberDocSchema — multi-contact fields', () => {
+describe('MemberDocSchema - multi-contact fields', () => {
   it('defaults altEmails/altPhones to [] when absent (existing docs)', () => {
     const parsed = MemberDocSchema.parse(base);
     expect(parsed.altEmails).toEqual([]);
@@ -107,7 +107,7 @@ describe('MemberDocSchema — multi-contact fields', () => {
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm --filter @cmt/shared-domain vitest run src/setu/schemas/__tests__/member.test.ts`
-Expected: FAIL — `parsed.altEmails` is `undefined` (the schema has no such field yet).
+Expected: FAIL - `parsed.altEmails` is `undefined` (the schema has no such field yet).
 
 - [ ] **Step 3: Add the fields**
 
@@ -154,7 +154,7 @@ Create `apps/portal/src/features/setu/auth/__tests__/contact-key-doc-type.test.t
 import { describe, it, expect } from 'vitest';
 import type { SetuContactKeyDoc } from '../find-family-by-contact';
 
-describe('SetuContactKeyDoc — source/verifiedAt', () => {
+describe('SetuContactKeyDoc - source/verifiedAt', () => {
   it('accepts a self-verified contactKey shape', () => {
     const doc: SetuContactKeyDoc = {
       contactKey: 'abc',
@@ -183,7 +183,7 @@ describe('SetuContactKeyDoc — source/verifiedAt', () => {
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm --filter @cmt/portal vitest run src/features/setu/auth/__tests__/contact-key-doc-type.test.ts`
-Expected: FAIL — TypeScript errors: `source`/`verifiedAt` do not exist on `SetuContactKeyDoc`.
+Expected: FAIL - TypeScript errors: `source`/`verifiedAt` do not exist on `SetuContactKeyDoc`.
 
 - [ ] **Step 3: Add the optional fields**
 
@@ -222,7 +222,7 @@ git commit -m "feat(setu/auth): SetuContactKeyDoc gains optional source/verified
 
 **Files:**
 - Modify: `apps/portal/src/features/setu/members/get-family-by-fid.ts`
-- Test: `apps/portal/src/features/setu/members/__tests__/get-family-by-fid.test.ts` (create if absent — see Step 1 for the mock pattern)
+- Test: `apps/portal/src/features/setu/members/__tests__/get-family-by-fid.test.ts` (create if absent - see Step 1 for the mock pattern)
 
 - [ ] **Step 1: Write the failing test**
 
@@ -267,7 +267,7 @@ beforeEach(() => {
   });
 });
 
-describe('getFamilyByFid — multi-contact defaults', () => {
+describe('getFamilyByFid - multi-contact defaults', () => {
   it('defaults altEmails/altPhones to [] and contactsNudgeDismissedAt to null', async () => {
     mockMembersGet.mockResolvedValue({
       docs: [
@@ -331,7 +331,7 @@ describe('getFamilyByFid — multi-contact defaults', () => {
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm --filter @cmt/portal vitest run src/features/setu/members/__tests__/get-family-by-fid.test.ts`
-Expected: FAIL — `member.altEmails` is `undefined` (the mapper omits it).
+Expected: FAIL - `member.altEmails` is `undefined` (the mapper omits it).
 
 - [ ] **Step 3: Default the fields in the mapper**
 
@@ -343,7 +343,7 @@ In `apps/portal/src/features/setu/members/get-family-by-fid.ts`, inside the `mem
       contactsNudgeDismissedAt: d.contactsNudgeDismissedAt?.toDate?.() ?? null,
 ```
 
-(`d.contactsNudgeDismissedAt` is a Firestore `Timestamp` when present; `?.toDate?.()` safely handles both Timestamp and absent. `?? null` keeps it `null`, never `undefined` — `exactOptionalPropertyTypes`.)
+(`d.contactsNudgeDismissedAt` is a Firestore `Timestamp` when present; `?.toDate?.()` safely handles both Timestamp and absent. `?? null` keeps it `null`, never `undefined` - `exactOptionalPropertyTypes`.)
 
 - [ ] **Step 4: Run the test to verify it passes**
 
@@ -359,17 +359,17 @@ git commit -m "feat(setu/members): default altEmails/altPhones/contactsNudgeDism
 
 ---
 
-# Group B1 — find-screen multi-contact search (read-only, no auth)
+# Group B1 - find-screen multi-contact search (read-only, no auth)
 
-A wider search only. No DB writes, no auth, no association — you are searching, not claiming. Catches "my primary isn't on file but my secondary is."
+A wider search only. No DB writes, no auth, no association - you are searching, not claiming. Catches "my primary isn't on file but my secondary is."
 
 ## Task B1.1: Generalize lookupFamilyByContacts to a contact list
 
-Add `lookupFamilyByContactList(contacts)` that hashes each contact, reads the contactKeys, and returns the first family hit. Keep the existing `lookupFamilyByContacts(email, phone)` working (back-compat — it delegates to the list version). The family-summary build (memberCount, managerInitials) is unchanged, extracted into a helper.
+Add `lookupFamilyByContactList(contacts)` that hashes each contact, reads the contactKeys, and returns the first family hit. Keep the existing `lookupFamilyByContacts(email, phone)` working (back-compat - it delegates to the list version). The family-summary build (memberCount, managerInitials) is unchanged, extracted into a helper.
 
 **Files:**
 - Modify: `apps/portal/src/features/setu/registration/family-lookup.ts`
-- Test: `apps/portal/src/features/setu/registration/__tests__/family-lookup.test.ts` (create if absent — Step 1 has the mock pattern)
+- Test: `apps/portal/src/features/setu/registration/__tests__/family-lookup.test.ts` (create if absent - Step 1 has the mock pattern)
 
 - [ ] **Step 1: Write the failing test**
 
@@ -478,7 +478,7 @@ describe('lookupFamilyByContacts (back-compat)', () => {
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm --filter @cmt/portal vitest run src/features/setu/registration/__tests__/family-lookup.test.ts`
-Expected: FAIL — `lookupFamilyByContactList` is not exported.
+Expected: FAIL - `lookupFamilyByContactList` is not exported.
 
 - [ ] **Step 3: Implement the generalized lookup**
 
@@ -540,7 +540,7 @@ async function buildFamilySummary(fid: string): Promise<FamilySummary | null> {
 }
 
 // Search across many contacts. Hash each non-blank contact, read the
-// contactKeys, and return the first family hit. Pure read — no auth, no writes
+// contactKeys, and return the first family hit. Pure read - no auth, no writes
 // (you're searching, not associating). Blank/whitespace contacts are skipped.
 export async function lookupFamilyByContactList(
   contacts: ContactInput[],
@@ -581,14 +581,14 @@ Expected: PASS.
 
 ```bash
 git add apps/portal/src/features/setu/registration/family-lookup.ts apps/portal/src/features/setu/registration/__tests__/family-lookup.test.ts
-git commit -m "feat(setu/registration): lookupFamilyByContactList — match across many contacts (back-compat preserved) (B1)"
+git commit -m "feat(setu/registration): lookupFamilyByContactList - match across many contacts (back-compat preserved) (B1)"
 ```
 
 ---
 
 ## Task B1.2: Accept arrays in POST /api/setu/family-lookup
 
-Body becomes `{ emails: string[]; phones: string[] }`, still accepting legacy `{ email, phone }`. Rate-limit unchanged (misses still consume quota — anti-enumeration).
+Body becomes `{ emails: string[]; phones: string[] }`, still accepting legacy `{ email, phone }`. Rate-limit unchanged (misses still consume quota - anti-enumeration).
 
 **Files:**
 - Modify: `apps/portal/src/app/api/setu/family-lookup/route.ts`
@@ -649,12 +649,12 @@ Replace the `'calls lookupFamilyByContacts with email and phone from request'` t
   });
 ```
 
-The other existing tests (`returns 200 with match summary`, `returns 429`, rate-limit bucket, flag-off) still pass with a legacy body — leave them. They reference `lookupFamilyByContacts`; switch those that assert behavior on the resolved value to set `lookupFamilyByContactList`'s mock instead. Specifically, in `'returns 200 with match=null when no family found'` (line 58) and `'returns 200 with match summary when family found'` (line 66), change `lookupFamilyByContacts` → `lookupFamilyByContactList`.
+The other existing tests (`returns 200 with match summary`, `returns 429`, rate-limit bucket, flag-off) still pass with a legacy body - leave them. They reference `lookupFamilyByContacts`; switch those that assert behavior on the resolved value to set `lookupFamilyByContactList`'s mock instead. Specifically, in `'returns 200 with match=null when no family found'` (line 58) and `'returns 200 with match summary when family found'` (line 66), change `lookupFamilyByContacts` → `lookupFamilyByContactList`.
 
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm --filter @cmt/portal vitest run src/app/api/setu/family-lookup/__tests__/route.test.ts`
-Expected: FAIL — the route still imports/calls `lookupFamilyByContacts` and rejects the `{ emails, phones }` body (current schema requires `email`+`phone`).
+Expected: FAIL - the route still imports/calls `lookupFamilyByContacts` and rejects the `{ emails, phones }` body (current schema requires `email`+`phone`).
 
 - [ ] **Step 3: Update the route**
 
@@ -702,7 +702,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'bad-request' }, { status: 400 });
   }
 
-  // Rate-limit by IP — misses still consume quota (anti-enumeration).
+  // Rate-limit by IP - misses still consume quota (anti-enumeration).
   const ip = req.headers.get('x-forwarded-for') ?? 'unknown';
   const rate = await checkAndRecordOtpRateLimit(`family-lookup:${ip}`, LOOKUP_RATE_LIMIT_MAX);
   if (!rate.allowed) {
@@ -715,7 +715,7 @@ export async function POST(req: Request) {
 }
 ```
 
-> Note: the legacy tests at lines 31/36/41 (`returns 400 on missing email/phone`, `invalid email format`) change meaning. With the new schema, `{ phone: '...' }` alone is now a VALID lookup (one phone contact), so `'returns 400 on missing email'` and `'returns 400 on missing phone'` no longer hold and must be removed or rewritten. Rewrite them as: `it('accepts a phone-only legacy body', ...)` expecting 200, and `it('accepts an email-only legacy body', ...)` expecting 200. Delete `'returns 400 on invalid email format'` — the lookup no longer validates email format (it hashes whatever it gets; a malformed email simply never matches). Update these in Step 1's edits so the file is internally consistent before running.
+> Note: the legacy tests at lines 31/36/41 (`returns 400 on missing email/phone`, `invalid email format`) change meaning. With the new schema, `{ phone: '...' }` alone is now a VALID lookup (one phone contact), so `'returns 400 on missing email'` and `'returns 400 on missing phone'` no longer hold and must be removed or rewritten. Rewrite them as: `it('accepts a phone-only legacy body', ...)` expecting 200, and `it('accepts an email-only legacy body', ...)` expecting 200. Delete `'returns 400 on invalid email format'` - the lookup no longer validates email format (it hashes whatever it gets; a malformed email simply never matches). Update these in Step 1's edits so the file is internally consistent before running.
 
 - [ ] **Step 4: Run the test to verify it passes**
 
@@ -744,7 +744,7 @@ Add up to 2 extra emails + 2 extra phones (small cap; YAGNI) under the primary f
 The existing test mocks `@cmt/ui` (`SetuIcon.plus` is already provided, line 32). Append a new `describe` block at the end of `apps/portal/src/app/register/__tests__/page.test.tsx` (before the file's final close):
 
 ```ts
-describe('RegisterReal — multi-contact find search', () => {
+describe('RegisterReal - multi-contact find search', () => {
   it('sends every entered contact (primary + extras) in the array lookup body', async () => {
     fetchMock.mockResolvedValue({ ok: true, json: async () => ({ match: null }) });
 
@@ -779,7 +779,7 @@ describe('RegisterReal — multi-contact find search', () => {
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm --filter @cmt/portal vitest run src/app/register/__tests__/page.test.tsx -t "multi-contact find search"`
-Expected: FAIL — there is no "Add another email" button and the body is `{ email, phone }`, not `{ emails, phones }`.
+Expected: FAIL - there is no "Add another email" button and the body is `{ email, phone }`, not `{ emails, phones }`.
 
 - [ ] **Step 3: Add extra-contact state + the array body**
 
@@ -947,7 +947,7 @@ In `RegisterReal`'s `formContent`, immediately AFTER the phone `div.field` block
 - [ ] **Step 5: Run the test to verify it passes**
 
 Run: `pnpm --filter @cmt/portal vitest run src/app/register/__tests__/page.test.tsx`
-Expected: PASS — all existing register tests plus the new multi-contact one. (The prototype/flag-off path is untouched.)
+Expected: PASS - all existing register tests plus the new multi-contact one. (The prototype/flag-off path is untouched.)
 
 - [ ] **Step 6: Commit**
 
@@ -958,7 +958,7 @@ git commit -m "feat(register): + add another email/phone on the find screen; loo
 
 ---
 
-# Group B2 — OTP-verified "My contacts" add
+# Group B2 - OTP-verified "My contacts" add
 
 A signed-in member adds an email/phone to themselves, proving ownership via OTP. On verify: write a `contactKey(source:'self-verified', verifiedAt: now) → this member's mid` and append the plaintext to `altEmails`/`altPhones`, inside one anti-theft transaction that refuses if the contact's hash already maps to a DIFFERENT mid (any family).
 
@@ -1089,7 +1089,7 @@ describe('addVerifiedContact', () => {
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm --filter @cmt/portal vitest run src/features/setu/contacts/__tests__/add-verified-contact.test.ts`
-Expected: FAIL — the module does not exist.
+Expected: FAIL - the module does not exist.
 
 - [ ] **Step 3: Implement the transaction**
 
@@ -1131,7 +1131,7 @@ export async function addVerifiedContact(args: AddVerifiedContactArgs): Promise<
       if (data?.mid && data.mid !== mid) {
         throw new ContactInUseError();
       }
-      // Already mapped to this member — idempotent no-op (don't double-append).
+      // Already mapped to this member - idempotent no-op (don't double-append).
       return;
     }
 
@@ -1150,7 +1150,7 @@ export async function addVerifiedContact(args: AddVerifiedContactArgs): Promise<
 }
 ```
 
-> Note: the Step 1 mock's `makeRef` chains paths, so `db.collection('families').doc(fid).collection('members').doc(mid)` yields `__path = 'families/CMT-AB12CD34/members/CMT-AB12CD34-02'` — which is what the `txn.update` assertion targets. The contactKey ref is `contactKeys/<hash>`. The `txnGet` mock returns the existing-or-not contactKey for any `contactKeys/` path and a member doc otherwise.
+> Note: the Step 1 mock's `makeRef` chains paths, so `db.collection('families').doc(fid).collection('members').doc(mid)` yields `__path = 'families/CMT-AB12CD34/members/CMT-AB12CD34-02'` - which is what the `txn.update` assertion targets. The contactKey ref is `contactKeys/<hash>`. The `txnGet` mock returns the existing-or-not contactKey for any `contactKeys/` path and a member doc otherwise.
 
 - [ ] **Step 4: Run the test to verify it passes**
 
@@ -1161,7 +1161,7 @@ Expected: PASS.
 
 ```bash
 git add apps/portal/src/features/setu/contacts/add-verified-contact.ts apps/portal/src/features/setu/contacts/__tests__/add-verified-contact.test.ts
-git commit -m "feat(setu/contacts): addVerifiedContact — anti-theft txn writes self-verified contactKey + appends altEmails/altPhones (B2)"
+git commit -m "feat(setu/contacts): addVerifiedContact - anti-theft txn writes self-verified contactKey + appends altEmails/altPhones (B2)"
 ```
 
 ---
@@ -1275,7 +1275,7 @@ describe('POST /api/setu/contacts/send-code', () => {
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm --filter @cmt/portal vitest run src/app/api/setu/contacts/send-code/__tests__/route.test.ts`
-Expected: FAIL — the route does not exist.
+Expected: FAIL - the route does not exist.
 
 - [ ] **Step 3: Implement the route**
 
@@ -1352,7 +1352,7 @@ export async function POST(req: Request) {
 }
 ```
 
-> Anti-enumeration note: unlike auth/send-code, this is an authenticated self-service add — there is no contact-enumeration risk to hide here (the user is adding THEIR contact). We always send the OTP to the entered contact; the binding (and the anti-theft refusal) is enforced atomically at verify time (Task B2.3). We deliberately do NOT pre-check ownership here to avoid leaking, via timing, whether a contact belongs to someone else.
+> Anti-enumeration note: unlike auth/send-code, this is an authenticated self-service add - there is no contact-enumeration risk to hide here (the user is adding THEIR contact). We always send the OTP to the entered contact; the binding (and the anti-theft refusal) is enforced atomically at verify time (Task B2.3). We deliberately do NOT pre-check ownership here to avoid leaking, via timing, whether a contact belongs to someone else.
 
 - [ ] **Step 4: Run the test to verify it passes**
 
@@ -1363,7 +1363,7 @@ Expected: PASS.
 
 ```bash
 git add apps/portal/src/app/api/setu/contacts/send-code/route.ts apps/portal/src/app/api/setu/contacts/send-code/__tests__/route.test.ts
-git commit -m "feat(api/setu/contacts): send-code — authenticated OTP to a new contact (B2)"
+git commit -m "feat(api/setu/contacts): send-code - authenticated OTP to a new contact (B2)"
 ```
 
 ---
@@ -1474,7 +1474,7 @@ describe('POST /api/setu/contacts/verify-code', () => {
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm --filter @cmt/portal vitest run src/app/api/setu/contacts/verify-code/__tests__/route.test.ts`
-Expected: FAIL — the route does not exist.
+Expected: FAIL - the route does not exist.
 
 - [ ] **Step 3: Implement the route**
 
@@ -1561,10 +1561,10 @@ The `/api/setu/*` catch-all (`can-access-route.ts:151`) is manager-only. A `fami
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `packages/shared-domain/src/__tests__/can-access-route.test.ts`. That file already declares typed `SessionClaims` constants at the top (`member` = `{ uid: 'mb', role: 'family-member', fid: 'FAM001', mid: 'FAM001-02' }`, `manager`, `welcomeTeam`, `admin`). Reuse them — do NOT redeclare with `as const` (the discriminated union needs the `SessionClaims` annotation):
+Append to `packages/shared-domain/src/__tests__/can-access-route.test.ts`. That file already declares typed `SessionClaims` constants at the top (`member` = `{ uid: 'mb', role: 'family-member', fid: 'FAM001', mid: 'FAM001-02' }`, `manager`, `welcomeTeam`, `admin`). Reuse them - do NOT redeclare with `as const` (the discriminated union needs the `SessionClaims` annotation):
 
 ```ts
-describe('canAccessRoute — /api/setu/contacts/* (self-service, any family role)', () => {
+describe('canAccessRoute - /api/setu/contacts/* (self-service, any family role)', () => {
   it('allows a family-member to POST send-code', () => {
     expect(canAccessRoute(member, '/api/setu/contacts/send-code', 'POST')).toBe(true);
   });
@@ -1586,14 +1586,14 @@ describe('canAccessRoute — /api/setu/contacts/* (self-service, any family role
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm --filter @cmt/shared-domain vitest run src/__tests__/can-access-route.test.ts -t "contacts"`
-Expected: FAIL — the family-member cases hit the manager-only catch-all and return `false`.
+Expected: FAIL - the family-member cases hit the manager-only catch-all and return `false`.
 
 - [ ] **Step 3: Add the allowlist rule**
 
-In `packages/shared-domain/src/auth/can-access-route.ts`, immediately BEFORE the `// Setu API — remaining paths` catch-all comment (line 149), insert:
+In `packages/shared-domain/src/auth/can-access-route.ts`, immediately BEFORE the `// Setu API - remaining paths` catch-all comment (line 149), insert:
 
 ```ts
-  // Setu API — "My contacts" self-service: any signed-in family role (incl.
+  // Setu API - "My contacts" self-service: any signed-in family role (incl.
   // family-member) may add/verify their OWN contacts and dismiss the nudge.
   // The route handlers bind every write to the caller's own mid and run the
   // anti-theft contactKey check, so member-level access is safe here.
@@ -1724,7 +1724,7 @@ describe('My contacts settings page', () => {
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm --filter @cmt/portal vitest run src/app/family/settings/contacts/__tests__/page.test.tsx`
-Expected: FAIL — neither the page nor the client wrapper exists.
+Expected: FAIL - neither the page nor the client wrapper exists.
 
 - [ ] **Step 3: Implement the client wrapper**
 
@@ -1733,7 +1733,7 @@ Create `apps/portal/src/features/setu/contacts/contacts-client.ts`:
 ```ts
 // Client-safe wrappers around the /api/setu/contacts/* routes. The route
 // handlers use next/headers + firebase-admin, which crash in a 'use client'
-// component — call these from the UI and mock THESE in component tests.
+// component - call these from the UI and mock THESE in component tests.
 
 export interface ContactsResult {
   ok: boolean;
@@ -1782,7 +1782,7 @@ export async function dismissContactsNudge(): Promise<ContactsResult> {
 }
 ```
 
-(Conditional-spread keeps `error`/`resetAt` off the object when absent — `exactOptionalPropertyTypes`.)
+(Conditional-spread keeps `error`/`resetAt` off the object when absent - `exactOptionalPropertyTypes`.)
 
 - [ ] **Step 4: Implement the page**
 
@@ -1867,7 +1867,7 @@ export default function ContactsSettingsPage() {
         setStage('idle');
         await load();
       } else if (r.error === 'contact-in-use') {
-        toast.error('That contact is already in use by another member — contact admin.');
+        toast.error('That contact is already in use by another member - contact admin.');
       } else {
         toast.error('That code was invalid or expired. Try again.');
       }
@@ -1973,7 +1973,7 @@ export default function ContactsSettingsPage() {
         </CspRoot>
       </div>
 
-      {/* Desktop — layout.tsx owns sidebar + main wrapper */}
+      {/* Desktop - layout.tsx owns sidebar + main wrapper */}
       <div className="hidden md:block">
         <header style={{ marginBottom: 28 }}>
           <p style={{ fontSize: 11, letterSpacing: '.16em', textTransform: 'uppercase', color: 'var(--muted)' }}>Settings</p>
@@ -2006,13 +2006,13 @@ git commit -m "feat(family/settings): My contacts surface + client wrappers for 
 
 ---
 
-# Group B3 — one-time post-sign-in nudge
+# Group B3 - one-time post-sign-in nudge
 
 A dismissible banner shown once on the family dashboard, pointing to the B2 add flow. Persisted via `MemberDoc.contactsNudgeDismissedAt` through a dedicated dismiss route.
 
 ## Task B3.1: POST /api/setu/contacts/dismiss-nudge
 
-Sets `contactsNudgeDismissedAt` on the CURRENT member. Uses `getCurrentFamily()` for identity; writes directly to that member's doc; revalidates the family cache. (Kept as its own route rather than extending the members PATCH schema — that route's PATCH does contactKey rewrites we don't want to touch for a simple flag set.)
+Sets `contactsNudgeDismissedAt` on the CURRENT member. Uses `getCurrentFamily()` for identity; writes directly to that member's doc; revalidates the family cache. (Kept as its own route rather than extending the members PATCH schema - that route's PATCH does contactKey rewrites we don't want to touch for a simple flag set.)
 
 **Files:**
 - Create: `apps/portal/src/app/api/setu/contacts/dismiss-nudge/route.ts`
@@ -2085,7 +2085,7 @@ describe('POST /api/setu/contacts/dismiss-nudge', () => {
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm --filter @cmt/portal vitest run src/app/api/setu/contacts/dismiss-nudge/__tests__/route.test.ts`
-Expected: FAIL — the route does not exist.
+Expected: FAIL - the route does not exist.
 
 - [ ] **Step 3: Implement the route**
 
@@ -2137,7 +2137,7 @@ git commit -m "feat(api/setu/contacts): dismiss-nudge sets contactsNudgeDismisse
 
 ## Task B3.2: The dismissible nudge component
 
-A client banner: copy + a link to `/family/settings/contacts` + a Dismiss button that calls `dismissContactsNudge()` and hides itself. Module-scope component (never declared inside another component — repo memory on remount).
+A client banner: copy + a link to `/family/settings/contacts` + a Dismiss button that calls `dismissContactsNudge()` and hides itself. Module-scope component (never declared inside another component - repo memory on remount).
 
 **Files:**
 - Create: `apps/portal/src/features/family/components/contacts-nudge.tsx`
@@ -2185,7 +2185,7 @@ describe('ContactsNudge', () => {
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm --filter @cmt/portal vitest run src/features/family/components/__tests__/contacts-nudge.test.tsx`
-Expected: FAIL — the component does not exist.
+Expected: FAIL - the component does not exist.
 
 - [ ] **Step 3: Implement the component**
 
@@ -2299,7 +2299,7 @@ describe('shouldShowContactsNudge', () => {
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm --filter @cmt/portal vitest run src/app/family/_helpers/__tests__/should-show-contacts-nudge.test.ts`
-Expected: FAIL — the helper does not exist.
+Expected: FAIL - the helper does not exist.
 
 - [ ] **Step 3: Implement the helper**
 
@@ -2359,7 +2359,7 @@ Desktop: immediately AFTER the `<header className="between" ...>...</header>` (c
 - [ ] **Step 6: Run the dashboard test suite to verify nothing broke**
 
 Run: `pnpm --filter @cmt/portal vitest run src/app/family/__tests__/`
-Expected: PASS — existing dashboard/model tests unaffected (the nudge is additive and gated). If a dashboard render test exists and now needs the `ContactsNudge`/`getCurrentFamilyClient` mocks, add `vi.mock('@/features/family/components/contacts-nudge', () => ({ ContactsNudge: () => null }))` to that test's mock block.
+Expected: PASS - existing dashboard/model tests unaffected (the nudge is additive and gated). If a dashboard render test exists and now needs the `ContactsNudge`/`getCurrentFamilyClient` mocks, add `vi.mock('@/features/family/components/contacts-nudge', () => ({ ContactsNudge: () => null }))` to that test's mock block.
 
 - [ ] **Step 7: Commit**
 
@@ -2372,17 +2372,17 @@ git commit -m "feat(family/dashboard): show the one-time contacts nudge until di
 
 ## Task B4: Mock-free UAT walkthrough (pre-ship discipline)
 
-Per `CLAUDE.md` ("walk the user's exact path in UAT before declaring done"). Manual — no code. Verifies the whole flow against UAT (`chinmaya-setu-uat`), not just route 200s.
+Per `CLAUDE.md` ("walk the user's exact path in UAT before declaring done"). Manual - no code. Verifies the whole flow against UAT (`chinmaya-setu-uat`), not just route 200s.
 
 **Prereqs:** `apps/portal/.env.local` → `PORTAL_FIREBASE_PROJECT_ID=chinmaya-setu-uat`, `NEXT_PUBLIC_FEATURE_SETU_AUTH=true`, `NEXT_PUBLIC_FEATURE_CHECK_IN_NOTIFY=true`, and your test email/phone in `SETU_EMAIL_ALLOWLIST` / `SETU_PHONE_ALLOWLIST` (so the OTP actually sends to you). Run `pnpm --filter @cmt/portal dev:e2e` (serves on `:3001`).
 
-- [ ] **Step 1: B1 find-screen multi-search.** Open `http://localhost:3001/register`. Enter a primary email/phone NOT on file. Click "+ add another email", enter a secondary that IS on file for an existing UAT family (e.g. a contact you registered earlier). Expected: the "We found a family with this contact" card appears — driven by the secondary contact. Confirms the array lookup.
+- [ ] **Step 1: B1 find-screen multi-search.** Open `http://localhost:3001/register`. Enter a primary email/phone NOT on file. Click "+ add another email", enter a secondary that IS on file for an existing UAT family (e.g. a contact you registered earlier). Expected: the "We found a family with this contact" card appears - driven by the secondary contact. Confirms the array lookup.
 
 - [ ] **Step 2: B2 add + verify.** Sign in to a UAT family (OTP). Go to `/family/settings/contacts`. Confirm the list shows your primary email + phone. Click "Add an email", enter a NEW email you control, "Send code", retrieve the real OTP from your inbox, enter it, "Verify". Expected: success toast; the new email now appears in the Emails list. In Firestore (UAT), confirm a `contactKeys/{hash}` doc with `source:'self-verified'`, `verifiedAt` set, `mid` = your member, and your member doc's `altEmails` contains the plaintext.
 
-- [ ] **Step 3: B2 anti-theft.** Repeat the add flow with a contact already registered to a DIFFERENT UAT family/member. Complete the OTP. Expected: 409 → "already in use by another member — contact admin." No contactKey is rewritten; the other family's pointer is untouched.
+- [ ] **Step 3: B2 anti-theft.** Repeat the add flow with a contact already registered to a DIFFERENT UAT family/member. Complete the OTP. Expected: 409 → "already in use by another member - contact admin." No contactKey is rewritten; the other family's pointer is untouched.
 
-- [ ] **Step 4: B1 dedup win via the new contact.** Sign out / private window. Go to `/register`, enter ONLY the email you just self-added in Step 2. Expected: the existing family is found (it resolves via the new `self-verified` contactKey) — the dedup outcome the feature exists for.
+- [ ] **Step 4: B1 dedup win via the new contact.** Sign out / private window. Go to `/register`, enter ONLY the email you just self-added in Step 2. Expected: the existing family is found (it resolves via the new `self-verified` contactKey) - the dedup outcome the feature exists for.
 
 - [ ] **Step 5: B3 nudge once.** As a member who has never dismissed, load `/family`. Expected: the "Add the other emails and phones you use" banner shows. Click Dismiss. Reload `/family`. Expected: the banner is GONE (persisted via `contactsNudgeDismissedAt`). Confirm the member doc has `contactsNudgeDismissedAt` set in UAT Firestore.
 
@@ -2408,7 +2408,7 @@ Per `CLAUDE.md` ("walk the user's exact path in UAT before declaring done"). Man
 
 ## Out of scope
 
-- Admin/welcome-team contact management for OTHER members (a manager/staff cannot OTP-verify someone else's contact — the member completes their own add).
+- Admin/welcome-team contact management for OTHER members (a manager/staff cannot OTP-verify someone else's contact - the member completes their own add).
 - Bulk backfill of existing families' missing spouse contacts.
 - Merging two families later discovered to be duplicates ("merge families" tool).
 - International phone numbers (Canadian-only stays).

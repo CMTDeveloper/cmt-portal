@@ -1,8 +1,8 @@
-# Multi-Contact Household Dedup — Phase A Implementation Plan
+# Multi-Contact Household Dedup - Phase A Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Capture each family member's email + phone on the registration screen so the household's contacts land on file at creation — fixing the #1 cause of duplicate family records (a spouse registering later with contacts no one captured).
+**Goal:** Capture each family member's email + phone on the registration screen so the household's contacts land on file at creation - fixing the #1 cause of duplicate family records (a spouse registering later with contacts no one captured).
 
 **Architecture:** Client-only change. The registration backend (`registerFamily`) **already** writes a `contactKey` per member email/phone inside its atomic transaction, the register API schema **already** accepts `additionalMembers[].email/phone`, and the lookup **already** matches on either contact. The only gap is the `/register/family` form: it has no contact inputs on member rows and silently drops email/phone at submit (`page.tsx:218`). This plan adds the inputs and stops the drop.
 
@@ -14,9 +14,9 @@
 
 ## Scope notes (read before starting)
 
-- **Phase A is the registration capture only.** Phase B (find-screen multi-search, OTP-verified "My contacts", post-sign-in nudge) is a **separate plan** — do not build it here.
-- **Deliberate deviation from the spec's data-model note:** the spec suggested landing `altEmails`/`altPhones` (MemberDoc) and `source`/`verifiedAt` (contactKeys) in Phase A. **We are NOT adding those here** — Phase A captures a single email + single phone per member, which goes to the existing `MemberDoc.email`/`phone` fields and writes existing-shape contactKeys. Adding array fields nothing populates yet violates YAGNI; Phase B introduces them when it builds multi-contact + verified-add. No schema change is needed for Phase A.
-- One member = one email + one phone at registration (no "+ add another contact per member" UI in Phase A — that's Phase B's "My contacts").
+- **Phase A is the registration capture only.** Phase B (find-screen multi-search, OTP-verified "My contacts", post-sign-in nudge) is a **separate plan** - do not build it here.
+- **Deliberate deviation from the spec's data-model note:** the spec suggested landing `altEmails`/`altPhones` (MemberDoc) and `source`/`verifiedAt` (contactKeys) in Phase A. **We are NOT adding those here** - Phase A captures a single email + single phone per member, which goes to the existing `MemberDoc.email`/`phone` fields and writes existing-shape contactKeys. Adding array fields nothing populates yet violates YAGNI; Phase B introduces them when it builds multi-contact + verified-add. No schema change is needed for Phase A.
+- One member = one email + one phone at registration (no "+ add another contact per member" UI in Phase A - that's Phase B's "My contacts").
 
 ## File structure
 
@@ -38,7 +38,7 @@ No backend/API/schema files change.
 
 - [ ] **Step 1: Write the failing test**
 
-Append this test inside the existing `describe('RegisterFamilyPage — additional members', ...)` block (after the `'included additional members in POST body'` test, before the block's closing `});`) in `apps/portal/src/app/register/family/__tests__/page.test.tsx`:
+Append this test inside the existing `describe('RegisterFamilyPage - additional members', ...)` block (after the `'included additional members in POST body'` test, before the block's closing `});`) in `apps/portal/src/app/register/family/__tests__/page.test.tsx`:
 
 ```tsx
   it("includes a member's email and phone in the POST body", async () => {
@@ -76,7 +76,7 @@ Append this test inside the existing `describe('RegisterFamilyPage — additiona
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm --filter @cmt/portal vitest run src/app/register/family/__tests__/page.test.tsx -t "includes a member's email and phone"`
-Expected: FAIL — `getAllByLabelText(/member email/i)` finds no element (the inputs don't exist yet).
+Expected: FAIL - `getAllByLabelText(/member email/i)` finds no element (the inputs don't exist yet).
 
 - [ ] **Step 3: Add email/phone to the form's member model + draft state**
 
@@ -111,7 +111,7 @@ Replace the whole `handleAddMember` callback (currently lines 168-185) with:
     if (!draftFirstName.trim() || !draftLastName.trim()) return;
     const email = draftEmail.trim();
     const phone = draftPhone.trim();
-    // A member's email is optional, but if present it must look valid — otherwise
+    // A member's email is optional, but if present it must look valid - otherwise
     // the server rejects the whole registration with a cryptic 400.
     if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
       setDraftError('Enter a valid email or leave it blank.');
@@ -140,11 +140,11 @@ Replace the whole `handleAddMember` callback (currently lines 168-185) with:
   }, [draftFirstName, draftLastName, draftEmail, draftPhone, draftType, draftGender]);
 ```
 
-(The `...(email ? { email } : {})` conditional-spread keeps `exactOptionalPropertyTypes` happy — never assign `undefined`.)
+(The `...(email ? { email } : {})` conditional-spread keeps `exactOptionalPropertyTypes` happy - never assign `undefined`.)
 
 - [ ] **Step 5: Render Email + Phone inputs in the draft member form**
 
-In the draft member form, immediately AFTER the first/last-name `div.row` (the one containing "Member first name" / "Member last name" inputs — currently closes at line 398 with `</div>`) and BEFORE the type/gender pill row (currently the `div.row` starting line 399), insert:
+In the draft member form, immediately AFTER the first/last-name `div.row` (the one containing "Member first name" / "Member last name" inputs - currently closes at line 398 with `</div>`) and BEFORE the type/gender pill row (currently the `div.row` starting line 399), insert:
 
 ```tsx
             <div className="row" style={{ gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
@@ -216,13 +216,13 @@ Replace the `additionalMembers` map in the submit `fetch` body (currently lines 
 - [ ] **Step 9: Run the test to verify it passes**
 
 Run: `pnpm --filter @cmt/portal vitest run src/app/register/family/__tests__/page.test.tsx`
-Expected: PASS — all existing tests plus the new one are green.
+Expected: PASS - all existing tests plus the new one are green.
 
 - [ ] **Step 10: Commit**
 
 ```bash
 git add apps/portal/src/app/register/family/page.tsx apps/portal/src/app/register/family/__tests__/page.test.tsx
-git commit -m "feat(register): capture each member's email + phone (dedup — stop dropping them at submit)"
+git commit -m "feat(register): capture each member's email + phone (dedup - stop dropping them at submit)"
 ```
 
 ---
@@ -236,7 +236,7 @@ The validation logic landed in Task 1 Step 4; this task adds the test that locks
 
 - [ ] **Step 1: Write the failing test**
 
-Append inside the same `describe('RegisterFamilyPage — additional members', ...)` block:
+Append inside the same `describe('RegisterFamilyPage - additional members', ...)` block:
 
 ```tsx
   it('blocks adding a member with an invalid email and does not add the row', async () => {
@@ -259,9 +259,9 @@ Append inside the same `describe('RegisterFamilyPage — additional members', ..
 - [ ] **Step 2: Run it**
 
 Run: `pnpm --filter @cmt/portal vitest run src/app/register/family/__tests__/page.test.tsx -t "invalid email"`
-Expected: PASS (the validation was implemented in Task 1 Step 4). If it FAILS, the validation in `handleAddMember` is wrong — fix `handleAddMember`, not the test.
+Expected: PASS (the validation was implemented in Task 1 Step 4). If it FAILS, the validation in `handleAddMember` is wrong - fix `handleAddMember`, not the test.
 
-> Note: this test characterizes the validation added in Task 1, so it goes green immediately — there is no separate red phase. It is here so the guard is explicit and Phase B can't silently drop it.
+> Note: this test characterizes the validation added in Task 1, so it goes green immediately - there is no separate red phase. It is here so the guard is explicit and Phase B can't silently drop it.
 
 - [ ] **Step 3: Commit**
 
@@ -272,16 +272,16 @@ git commit -m "test(register): invalid member email is blocked client-side"
 
 ---
 
-## Task 3: Guard the dedup invariant — a member's contact resolves to THAT member
+## Task 3: Guard the dedup invariant - a member's contact resolves to THAT member
 
-The backend already writes member contactKeys (`register-family.ts:150-167`) and the existing test asserts the **count** (`register-family.test.ts:88-104`). This task adds a sharper assertion: the email **and** phone contactKeys for an additional member carry that member's `mid` — the invariant the whole dedup story rests on. No production code changes.
+The backend already writes member contactKeys (`register-family.ts:150-167`) and the existing test asserts the **count** (`register-family.test.ts:88-104`). This task adds a sharper assertion: the email **and** phone contactKeys for an additional member carry that member's `mid` - the invariant the whole dedup story rests on. No production code changes.
 
 **Files:**
 - Test: `apps/portal/src/features/setu/registration/__tests__/register-family.test.ts`
 
 - [ ] **Step 1: Add the guard test**
 
-Append this test inside the existing `describe('registerFamily — happy path', ...)` block (after the `'creates N+1 member docs when additionalMembers provided'` test, before the block's closing `});`):
+Append this test inside the existing `describe('registerFamily - happy path', ...)` block (after the `'creates N+1 member docs when additionalMembers provided'` test, before the block's closing `});`):
 
 ```ts
   it("writes a member's email + phone contactKeys pointing to THAT member (dedup invariant)", async () => {
@@ -314,7 +314,7 @@ Append this test inside the existing `describe('registerFamily — happy path', 
 - [ ] **Step 2: Run it**
 
 Run: `pnpm --filter @cmt/portal vitest run src/features/setu/registration/__tests__/register-family.test.ts`
-Expected: PASS — it characterizes the existing backend. If it FAILS, the backend isn't mapping a member's contact to that member's mid — that's a real bug; stop and report rather than weakening the test.
+Expected: PASS - it characterizes the existing backend. If it FAILS, the backend isn't mapping a member's contact to that member's mid - that's a real bug; stop and report rather than weakening the test.
 
 - [ ] **Step 3: Commit**
 
@@ -327,7 +327,7 @@ git commit -m "test(register): member contactKeys map to that member's mid (dedu
 
 ## Task 4: Mock-free UAT walkthrough (pre-ship discipline)
 
-Per `CLAUDE.md` ("walk the user's exact path in UAT before declaring done"), verify the dedup outcome end-to-end against UAT. This is a manual verification task — no code.
+Per `CLAUDE.md` ("walk the user's exact path in UAT before declaring done"), verify the dedup outcome end-to-end against UAT. This is a manual verification task - no code.
 
 **Prereqs:** `apps/portal/.env.local` points at `chinmaya-setu-uat`; `NEXT_PUBLIC_FEATURE_SETU_AUTH=true`. Run the dev server: `pnpm --filter @cmt/portal dev:e2e` (serves on `:3001`).
 
@@ -337,16 +337,16 @@ Open `http://localhost:3001/register`. Enter a fresh test email + phone (one not
 
 - [ ] **Step 2: Confirm the spouse's contact now finds the family (the dedup win)**
 
-Sign out (or open a private window). Go to `http://localhost:3001/register`. Enter the **spouse's** email + phone (the ones you just added — NOT the manager's). 
+Sign out (or open a private window). Go to `http://localhost:3001/register`. Enter the **spouse's** email + phone (the ones you just added - NOT the manager's). 
 Expected: the **"We found a family with this contact"** card appears for the family you just created. Before this change, those contacts were never stored, so this lookup would have missed and offered to create a duplicate.
 
 - [ ] **Step 3 (optional): Clean up the UAT test family**
 
-If you used `_test`-tagged data or want to remove the throwaway family, use the existing `pnpm --filter @cmt/portal wipe:test-leaks` (only removes `_test:true` docs) — note a normal registration is NOT tagged `_test`, so manual cleanup via the admin/welcome tools may be needed, or just leave it (UAT).
+If you used `_test`-tagged data or want to remove the throwaway family, use the existing `pnpm --filter @cmt/portal wipe:test-leaks` (only removes `_test:true` docs) - note a normal registration is NOT tagged `_test`, so manual cleanup via the admin/welcome tools may be needed, or just leave it (UAT).
 
 - [ ] **Step 4: Record the result**
 
-Note in the PR/commit summary: "UAT walkthrough done — spouse contact entered at registration is found by the lookup (no duplicate)." If anything deviated, say so plainly.
+Note in the PR/commit summary: "UAT walkthrough done - spouse contact entered at registration is found by the lookup (no duplicate)." If anything deviated, say so plainly.
 
 ---
 
@@ -356,6 +356,6 @@ Note in the PR/commit summary: "UAT walkthrough done — spouse contact entered 
 - The full pre-push gate (`typecheck && lint && test && build`) passes (it runs on push; never `--no-verify`).
 - The UAT walkthrough (Task 4) confirms a spouse's registration-entered contact resolves to the existing family.
 
-## Out of scope (Phase B — separate plan)
+## Out of scope (Phase B - separate plan)
 
 Find-screen multi-contact search; OTP-verified "My contacts" add (`POST /api/setu/contacts/{send-code,verify-code}`, `canAccessRoute` allowlist); the one-time post-sign-in nudge; `MemberDoc.altEmails/altPhones` + contactKey `source`/`verifiedAt`; backfilling existing families.

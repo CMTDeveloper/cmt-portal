@@ -378,15 +378,37 @@ export async function buildAttendanceDetailIndex(
 Run: `pnpm --filter @cmt/portal test -- attendance-detail`
 Expected: PASS.
 
-- [ ] **Step 5: Audit indexes**
+- [ ] **Step 5: Add the missing index - VERIFIED ABSENT, this is required**
 
-The only filtered query is `collectionGroup('enrollments').where('status','==','active')` - a single-field collectionGroup equality, which is **not** auto-indexed. Confirm `firestore.indexes.json` already carries a matching entry; the existing `enrollments (pid, status)` composite does **not** serve a bare `status` query. If absent, add a single-field override and deploy to UAT only:
+The only filtered query is `collectionGroup('enrollments').where('status','==','active')` - a **single-field collectionGroup equality, which Firestore does NOT auto-index.**
+
+`firestore.indexes.json` was checked on 2026-07-25 and **does not contain a matching entry.** What exists for `enrollments`:
+
+| Scope | Fields |
+|---|---|
+| COLLECTION | `status`, `enrolledAt` |
+| COLLECTION_GROUP | `pid`, `status` |
+| COLLECTION_GROUP | `oid`, `status` |
+| COLLECTION_GROUP | `programKey`, `status` |
+| fieldOverrides (COLLECTION_GROUP) | `eid`, `_test`, `location` |
+
+**None of these serves a bare `where('status','==')` at collectionGroup scope.** A two-field composite `(pid, status)` does not answer a single-field `status` query, and the COLLECTION-scoped `(status, enrolledAt)` is the wrong scope. Without a new entry this query throws `FAILED_PRECONDITION` the first time a teacher opens the attendance screen against real Firestore - and **fake-firestore will not catch it**, so the unit tests from Steps 1-4 all pass.
+
+> The precedent is already in the repo: `enrollments.location` has a COLLECTION_GROUP fieldOverride for exactly this reason - the runbook records that its absence made the "remove a centre" path 500.
+
+Add a `fieldOverrides` entry for `enrollments.status` at `COLLECTION_GROUP` scope, then deploy to **UAT only**:
 
 ```bash
 firebase deploy --only firestore:indexes --project chinmaya-setu-uat
 ```
 
-Follow the `auditing-firestore-indexes` skill. Record any new index in runbook §5 plus a dated §14 entry.
+Never `--force`, and never against prod `chinmaya-setu-715b8`. Indexes build asynchronously - a query against a still-building index throws `FAILED_PRECONDITION: index is currently building`. Wait and retry.
+
+**Then prove it against real Firestore**, because no local test can: run the attendance E2E from Task 5 Step 6 against deployed UAT and confirm the screen renders rather than 500s.
+
+Record the new index in runbook §5 plus a dated §14 entry. Follow the `auditing-firestore-indexes` skill.
+
+> **Alternative worth considering if the index proves awkward:** drop the `where` and filter `status` in memory, as `roster-confirmation.ts` and `grade-eligible.ts` already do for their collectionGroup reads. That is index-free by design and consistent with the surrounding code. Slightly more data transferred, no schema surface to deploy.
 
 - [ ] **Step 6: Commit**
 

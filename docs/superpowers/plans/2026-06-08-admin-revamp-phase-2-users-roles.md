@@ -1,8 +1,8 @@
-# Admin Revamp — Phase 2: Users & Roles — Implementation Plan
+# Admin Revamp - Phase 2: Users & Roles - Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development. Steps use checkbox (`- [ ]`) syntax. Spec: `docs/superpowers/specs/2026-06-08-admin-section-revamp-design.md` (Phase 2 + the "⚠️ Real role model" correction).
 
-**Goal:** One unified `/admin/users` screen (admin-only) that lists every staff person with their effective roles, lets an admin grant/revoke admin & welcome-team through the **correct dual-path** (family→`roleAssignments/{mid}`, non-family→auth-claims), surfaces teacher status read-only, and shows a roles reference — replacing the three fragmented grant screens. Mobile + mobile-API ready.
+**Goal:** One unified `/admin/users` screen (admin-only) that lists every staff person with their effective roles, lets an admin grant/revoke admin & welcome-team through the **correct dual-path** (family→`roleAssignments/{mid}`, non-family→auth-claims), surfaces teacher status read-only, and shows a roles reference - replacing the three fragmented grant screens. Mobile + mobile-API ready.
 
 **Architecture:** Extract the proven dual-path grant/revoke logic from `scripts/grant-admin.ts` into a shared server module `features/setu/auth/manage-roles.ts` (CLI + API both call it). Build a merged, **deduped-by-person** `listStaff()` reader over `roleAssignments` + Auth claims + `teacherAssignments`. Thin themed UI + JSON API on top.
 
@@ -11,12 +11,12 @@
 **Standing constraints:** roles via `isAdmin`/`isWelcomeTeam` helpers (never strict equality); `exactOptionalPropertyTypes` + `noUncheckedIndexedAccess`; tests in the SAME commit as branching logic; **N=2 fixtures** for every merged read; UAT-only DB; mobile layout + mobile API for every screen; designer pass on UI tasks; `.csp` scoping; never `--no-verify`; commit per task (controller pushes after review). Subagents on Opus.
 
 **Authoritative reference to read first:**
-- `apps/portal/src/features/setu/auth/build-session-claims.ts` — how roles resolve into a session (the merge this screen must mirror).
-- `apps/portal/scripts/grant-admin.ts` — the dual-path grant/revoke/list logic to extract (currently hardcoded to `'admin'`; generalize to `GrantableRole`).
-- `apps/portal/src/features/setu/auth/member-roles.ts` — `getMemberRoles`/`addMemberRole`/`removeMemberRole`/`listMembersWithRole`.
-- `apps/portal/src/lib/auth/role-claims.ts` — `addCapability`/`removeCapability`/`hasCapability`.
-- `apps/portal/src/features/setu/teacher/assignments.ts` — `getTeacherLevelIds`/`isTeacherAssigned`.
-- `apps/portal/src/features/setu/auth/find-family-by-contact.ts` — contact → `{source, fid, mid, member, legacyFid}`.
+- `apps/portal/src/features/setu/auth/build-session-claims.ts` - how roles resolve into a session (the merge this screen must mirror).
+- `apps/portal/scripts/grant-admin.ts` - the dual-path grant/revoke/list logic to extract (currently hardcoded to `'admin'`; generalize to `GrantableRole`).
+- `apps/portal/src/features/setu/auth/member-roles.ts` - `getMemberRoles`/`addMemberRole`/`removeMemberRole`/`listMembersWithRole`.
+- `apps/portal/src/lib/auth/role-claims.ts` - `addCapability`/`removeCapability`/`hasCapability`.
+- `apps/portal/src/features/setu/teacher/assignments.ts` - `getTeacherLevelIds`/`isTeacherAssigned`.
+- `apps/portal/src/features/setu/auth/find-family-by-contact.ts` - contact → `{source, fid, mid, member, legacyFid}`.
 
 ---
 
@@ -75,7 +75,7 @@ export const GrantableRoleSchema = z.enum(GRANTABLE_ROLES);
 export type GrantableRole = z.infer<typeof GrantableRoleSchema>;
 
 export const StaffRowSchema = z.object({
-  key: z.string().min(1),                 // mid when known, else tid, else uid — dedupe key
+  key: z.string().min(1),                 // mid when known, else tid, else uid - dedupe key
   mid: z.string().nullable(),
   fid: z.string().nullable(),
   uid: z.string().nullable(),
@@ -104,7 +104,7 @@ export const StaffListResponseSchema = z.object({ staff: z.array(StaffRowSchema)
 export type StaffListResponse = z.infer<typeof StaffListResponseSchema>;
 ```
 
-Export these from `packages/shared-domain/src/setu/index.ts` (and the root barrel if staff types are re-exported there — follow the existing pattern for `donation`/`enrollment`).
+Export these from `packages/shared-domain/src/setu/index.ts` (and the root barrel if staff types are re-exported there - follow the existing pattern for `donation`/`enrollment`).
 
 - [ ] **Step 4:** Run the test → PASS. Run `pnpm --filter @cmt/shared-domain exec tsc --noEmit` → clean.
 
@@ -112,7 +112,7 @@ Export these from `packages/shared-domain/src/setu/index.ts` (and the root barre
 
 ---
 
-## Task 2: Shared `manage-roles.ts` — dual-path grant/revoke
+## Task 2: Shared `manage-roles.ts` - dual-path grant/revoke
 
 **Files:** Create `apps/portal/src/features/setu/auth/manage-roles.ts` + tests. Reads/writes `roleAssignments` (family) and Auth claims (non-family), exactly mirroring `grant-admin.ts` but generalized to `GrantableRole` and role-parameterized.
 
@@ -183,7 +183,7 @@ export async function revokeRole(args: { contact: string; role: GrantableRole })
   }
 }
 ```
-  Note: `Capability` in role-claims is `'admin' | 'welcome-team'` — identical to `GrantableRole`, so the casts are safe; if TS complains, widen `addCapability`/`removeCapability` param to accept `GrantableRole` (they already only branch on the value).
+  Note: `Capability` in role-claims is `'admin' | 'welcome-team'` - identical to `GrantableRole`, so the casts are safe; if TS complains, widen `addCapability`/`removeCapability` param to accept `GrantableRole` (they already only branch on the value).
 
 - [ ] **Step 4:** Run tests → PASS.
 
@@ -193,14 +193,14 @@ export async function revokeRole(args: { contact: string; role: GrantableRole })
 
 ---
 
-## Task 3: `listStaff()` — merged, deduped-by-person reader
+## Task 3: `listStaff()` - merged, deduped-by-person reader
 
 **Files:** add `listStaff()` to `manage-roles.ts` (or a sibling `list-staff.ts`); tests with **N=2** fixtures.
 
 **Merge algorithm (dedupe key = mid when known, else tid, else uid):**
-1. **roleAssignments** — `listMembersWithRole('admin')` + `listMembersWithRole('welcome-team')`; accumulate roles per `mid`. Resolve name/contact from `families/{fid}/members/{mid}` (firstName+lastName; email or phone). `source:'family'`.
-2. **teacherAssignments** — read all docs. For ref that matches a member `mid` already in the map (or resolvable as `families/*/members/{mid}` via a collectionGroup query on `mid`): set `isTeacher=true` + join `levels` (levelId→levelName) for `teacherLevels`, merging into that row. For a standalone `tid` (resolve `teachers/{tid}`): add a `source:'staff'` row keyed by tid.
-3. **Auth claims** — `listUsers()` paginated; for each user whose claims carry admin/welcome-team: resolve their contact (`claims.email`/`claims.phone`/auth email) → `findSetuFamilyByContact`. If it maps to a `mid`, **merge** roles into that mid's row (dedup — don't double count). Else add a `source:'staff'` row keyed by `uid` with the contact.
+1. **roleAssignments** - `listMembersWithRole('admin')` + `listMembersWithRole('welcome-team')`; accumulate roles per `mid`. Resolve name/contact from `families/{fid}/members/{mid}` (firstName+lastName; email or phone). `source:'family'`.
+2. **teacherAssignments** - read all docs. For ref that matches a member `mid` already in the map (or resolvable as `families/*/members/{mid}` via a collectionGroup query on `mid`): set `isTeacher=true` + join `levels` (levelId→levelName) for `teacherLevels`, merging into that row. For a standalone `tid` (resolve `teachers/{tid}`): add a `source:'staff'` row keyed by tid.
+3. **Auth claims** - `listUsers()` paginated; for each user whose claims carry admin/welcome-team: resolve their contact (`claims.email`/`claims.phone`/auth email) → `findSetuFamilyByContact`. If it maps to a `mid`, **merge** roles into that mid's row (dedup - don't double count). Else add a `source:'staff'` row keyed by `uid` with the contact.
 
 - [ ] **Step 1: Write failing test** with a fixture exercising **two of each** + the dedup case:
   - two family admins (`roleAssignments`), one of whom is ALSO welcome-team;
@@ -215,13 +215,13 @@ export async function revokeRole(args: { contact: string; role: GrantableRole })
 
 - [ ] **Step 4:** Run → PASS.
 
-- [ ] **Step 5: Commit** `feat(setu): listStaff() — merged deduped admin/welcome-team/teacher reader`.
+- [ ] **Step 5: Commit** `feat(setu): listStaff() - merged deduped admin/welcome-team/teacher reader`.
 
 ---
 
 ## Task 4: API routes (`/api/admin/users`, `/api/admin/users/roles`)
 
-**Files:** Create the two route files. Admin-only (the `/api/admin/*` catch-all in `canAccessRoute` already gates these — verify, add a test, no new rule needed).
+**Files:** Create the two route files. Admin-only (the `/api/admin/*` catch-all in `canAccessRoute` already gates these - verify, add a test, no new rule needed).
 
 - [ ] **Step 1: Write failing route tests** (mock the manage-roles module + `readSessionFromHeaders`):
   - `GET` returns `{staff}` for an admin session; 403/empty for non-admin (note: middleware gates, but the handler re-checks `isAdmin` defensively).
@@ -252,9 +252,9 @@ if (role === 'admin') {
 
 **Files:** `users-client.ts`, `roles-reference.ts`, `features/admin/users/*` components, `app/admin/users/page.tsx` + `error.tsx`. **Designer pass required** (UI/UX + mobile).
 
-- [ ] **Step 1:** `roles-reference.ts` — exported `ROLE_REFERENCE: Record<Role, { label: string; grants: string[] }>` authored from `canAccessRoute` (admin = all admin tools; welcome-team = family search/roster, seva, teacher-assign; teacher = own levels' attendance; family-manager = manage own family; family-member = view own family). Pure data; unit-test it lists every role in `ROLES`.
+- [ ] **Step 1:** `roles-reference.ts` - exported `ROLE_REFERENCE: Record<Role, { label: string; grants: string[] }>` authored from `canAccessRoute` (admin = all admin tools; welcome-team = family search/roster, seva, teacher-assign; teacher = own levels' attendance; family-manager = manage own family; family-member = view own family). Pure data; unit-test it lists every role in `ROLES`.
 
-- [ ] **Step 2:** `users-client.ts` — `listStaffClient()`, `grantRoleClient(body)`, `revokeRoleClient(body)` — fetch the API, **throw on non-OK** (so the UI fires an error toast, per the welcome-search pattern). These are the client/server boundary wrappers; the page's client components import THESE, never the server module.
+- [ ] **Step 2:** `users-client.ts` - `listStaffClient()`, `grantRoleClient(body)`, `revokeRoleClient(body)` - fetch the API, **throw on non-OK** (so the UI fires an error toast, per the welcome-search pattern). These are the client/server boundary wrappers; the page's client components import THESE, never the server module.
 
 - [ ] **Step 3:** `page.tsx` (server component, `await connection()` since it touches Firebase Admin) calls `listStaff()` for the initial render; hands `StaffRow[]` to a client list component for live grant/revoke + filter. Sections: header + add-staff form, staff list (role chips filter + search), roles reference panel. Reuse `themed-add-form.tsx`/`themed-list.tsx` patterns from `features/admin/welcome-team/` as the styling reference.
   - Add form: contact input + role select (admin/welcome-team) → `grantRoleClient` → optimistic refresh + success toast (note "applies at their next sign-in").
@@ -262,13 +262,13 @@ if (role === 'admin') {
 
 - [ ] **Step 4:** **Mobile layout** (`block md:hidden`): stacked staff cards, add via a sheet, role chips horizontally scrollable, ≥44px tap targets, `.csp` scoping. Same client wrappers/API.
 
-- [ ] **Step 5:** Tests: component test for the list (renders badges, dual-role person shows two chips — N=2; teacher row shows levels), roles-reference test. Designer review (desktop + 375px mobile) → apply fixes.
+- [ ] **Step 5:** Tests: component test for the list (renders badges, dual-role person shows two chips - N=2; teacher row shows levels), roles-reference test. Designer review (desktop + 375px mobile) → apply fixes.
 
-- [ ] **Step 6: Commit** (may be 2 commits: data/client+page, then mobile+polish) `feat(admin): Users & Roles screen (/admin/users) — list, grant/revoke, reference`.
+- [ ] **Step 6: Commit** (may be 2 commits: data/client+page, then mobile+polish) `feat(admin): Users & Roles screen (/admin/users) - list, grant/revoke, reference`.
 
 ---
 
-## Task 6: Wire-up — nav re-point + redirects
+## Task 6: Wire-up - nav re-point + redirects
 
 **Files:** `admin/page.tsx`, `admin-sidebar.tsx` (+ test), `admin-mobile-nav.tsx`, redirect routes.
 
@@ -285,8 +285,8 @@ if (role === 'admin') {
 ## Final verification (after all tasks)
 
 - [ ] `pnpm --filter @cmt/portal test` green; `pnpm typecheck && pnpm lint && pnpm build` clean (pre-push enforces).
-- [ ] Code-review pass (correctness, dual-path routing, dedup, guards, `canAccessRoute`) + designer pass (UI/UX + mobile) — both as separate review lanes.
-- [ ] **Mock-free UAT walkthrough (operator — needs admin OTP):** open `/admin/users`; confirm the list shows family-member staff (from roleAssignments), non-family staff (claims), and teachers (with levels) without dupes; grant welcome-team to a test family contact → re-sign-in that contact → role applies; revoke → applies; last-admin/self-lockout guards fire. Distinguish "tests pass" from "verified in UAT".
+- [ ] Code-review pass (correctness, dual-path routing, dedup, guards, `canAccessRoute`) + designer pass (UI/UX + mobile) - both as separate review lanes.
+- [ ] **Mock-free UAT walkthrough (operator - needs admin OTP):** open `/admin/users`; confirm the list shows family-member staff (from roleAssignments), non-family staff (claims), and teachers (with levels) without dupes; grant welcome-team to a test family contact → re-sign-in that contact → role applies; revoke → applies; last-admin/self-lockout guards fire. Distinguish "tests pass" from "verified in UAT".
 - [ ] If any UAT DB writes happen during validation, update `docs/runbooks/production-cutover-checklist.md` + §14 change-log.
 - [ ] `git push` (single push after review).
 

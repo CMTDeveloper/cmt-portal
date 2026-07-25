@@ -1,10 +1,10 @@
-# Slice B4 — Admin Dashboard + Provisioning Implementation Plan
+# Slice B4 - Admin Dashboard + Provisioning Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace the B0 stub `/check-in/admin` with a real admin dashboard: stats cards (today's check-ins, guest count, unpaid-family count, week-over-week), admin user provisioning UI (`/check-in/admin/users` — list, add, delete with self-delete guard), guest list with pagination (`/check-in/admin/guests`), unpaid-family list with "send donation email" button (`/check-in/admin/unpaid`), and CSV attendance/check-in/guest exports (`/check-in/admin/reports`). All admin-gated.
+**Goal:** Replace the B0 stub `/check-in/admin` with a real admin dashboard: stats cards (today's check-ins, guest count, unpaid-family count, week-over-week), admin user provisioning UI (`/check-in/admin/users` - list, add, delete with self-delete guard), guest list with pagination (`/check-in/admin/guests`), unpaid-family list with "send donation email" button (`/check-in/admin/unpaid`), and CSV attendance/check-in/guest exports (`/check-in/admin/reports`). All admin-gated.
 
-**Architecture:** All routes and APIs live under `features/check-in/admin/*` and `/api/check-in/admin/*`. Admin user CRUD uses `getOrCreateAdminUser`, `listUsers`, `deleteUser`, `setCustomUserClaims` from `@cmt/firebase-shared/admin/claims` + `admin/auth`. Self-delete is guarded at the handler level. The "send donation email" button calls the B5 notifications API, which in B4 is wired to B2's `mockSender` (real AWS in B5). Exports use the Task 7 CSV serializer from B3 — no `xlsx` client bundle, server-only `exceljs` if xlsx is ever added in a later slice.
+**Architecture:** All routes and APIs live under `features/check-in/admin/*` and `/api/check-in/admin/*`. Admin user CRUD uses `getOrCreateAdminUser`, `listUsers`, `deleteUser`, `setCustomUserClaims` from `@cmt/firebase-shared/admin/claims` + `admin/auth`. Self-delete is guarded at the handler level. The "send donation email" button calls the B5 notifications API, which in B4 is wired to B2's `mockSender` (real AWS in B5). Exports use the Task 7 CSV serializer from B3 - no `xlsx` client bundle, server-only `exceljs` if xlsx is ever added in a later slice.
 
 **Tech Stack:** Builds on B0 auth middleware, B2 `features/check-in/shared/*` + domain types, B3's CSV serializer. Uses `@cmt/ui` shadcn primitives.
 
@@ -27,7 +27,7 @@ test -f packages/firebase-shared/src/admin/claims.ts && \
 echo "OK" || echo "MISSING prerequisite"
 ```
 
-**Feature flag during execution:** `NEXT_PUBLIC_FEATURE_CHECK_IN_ADMIN=true` in `.env.local` (already true from B0 dev setup — verify).
+**Feature flag during execution:** `NEXT_PUBLIC_FEATURE_CHECK_IN_ADMIN=true` in `.env.local` (already true from B0 dev setup - verify).
 
 **Seeded admin required:** Every e2e and manual verification needs the bootstrapped admin from `pnpm seed:admin`. Re-run if needed.
 
@@ -96,7 +96,7 @@ CLAUDE.md                                                    [Task 13]
 
 ---
 
-## Task 1: `GET /api/check-in/admin/stats` — dashboard stats
+## Task 1: `GET /api/check-in/admin/stats` - dashboard stats
 
 Aggregates today's check-in count, guest count, unpaid-family count, and week-over-week check-in delta.
 
@@ -171,7 +171,7 @@ describe('GET /api/check-in/admin/stats', () => {
 });
 ```
 
-- [ ] **Step 2: Run — expect failure**
+- [ ] **Step 2: Run - expect failure**
 
 - [ ] **Step 3: Create `apps/portal/src/app/api/check-in/admin/stats/route.ts`**
 
@@ -224,7 +224,7 @@ export async function GET() {
 }
 ```
 
-- [ ] **Step 4: Run — expect pass**
+- [ ] **Step 4: Run - expect pass**
 
 - [ ] **Step 5: Commit**
 
@@ -285,7 +285,7 @@ describe('AdminDashboard', () => {
 });
 ```
 
-- [ ] **Step 2: Run — expect failure**
+- [ ] **Step 2: Run - expect failure**
 
 - [ ] **Step 3: Create `apps/portal/src/features/check-in/admin/stat-card.tsx`**
 
@@ -385,7 +385,7 @@ import { AdminDashboard } from '@/features/check-in/admin';
 import { flags } from '@/lib/flags';
 import type { Family } from '@cmt/shared-domain/check-in';
 
-export const metadata = { title: 'Admin — CMT Portal' };
+export const metadata = { title: 'Admin - CMT Portal' };
 export const dynamic = 'force-dynamic';
 
 function startOfTodayIso(): string {
@@ -425,7 +425,7 @@ export default async function AdminDashboardPage() {
 }
 ```
 
-- [ ] **Step 7: Run test — expect pass**
+- [ ] **Step 7: Run test - expect pass**
 
 - [ ] **Step 8: Commit**
 
@@ -436,7 +436,7 @@ git commit -m "feat(portal): replace /check-in/admin stub with real dashboard (S
 
 ---
 
-## Task 3: `GET`/`POST /api/check-in/admin/users` — list + create admin
+## Task 3: `GET`/`POST /api/check-in/admin/users` - list + create admin
 
 **Files:**
 - Create: `apps/portal/src/app/api/check-in/admin/users/route.ts`
@@ -530,7 +530,7 @@ describe('POST /api/check-in/admin/users', () => {
 });
 ```
 
-- [ ] **Step 2: Run — expect failure**
+- [ ] **Step 2: Run - expect failure**
 
 - [ ] **Step 3: Create `apps/portal/src/app/api/check-in/admin/users/route.ts`**
 
@@ -570,7 +570,7 @@ export async function POST(req: Request) {
 }
 ```
 
-- [ ] **Step 4: Run — expect pass**
+- [ ] **Step 4: Run - expect pass**
 
 - [ ] **Step 5: Commit**
 
@@ -650,7 +650,7 @@ describe('DELETE /api/check-in/admin/users/:uid', () => {
 });
 ```
 
-- [ ] **Step 2: Run — expect failure**
+- [ ] **Step 2: Run - expect failure**
 
 - [ ] **Step 3: Create `apps/portal/src/app/api/check-in/admin/users/[uid]/route.ts`**
 
@@ -679,7 +679,7 @@ export async function DELETE(
 }
 ```
 
-- [ ] **Step 4: Run — expect pass**
+- [ ] **Step 4: Run - expect pass**
 
 - [ ] **Step 5: Commit**
 
@@ -690,7 +690,7 @@ git commit -m "feat(portal): DELETE /api/check-in/admin/users/:uid with self-del
 
 ---
 
-## Task 5: Admin users UI — list + add form + delete button + page
+## Task 5: Admin users UI - list + add form + delete button + page
 
 **Files:**
 - Create: `apps/portal/src/features/check-in/admin/admin-user-list.tsx`
@@ -749,7 +749,7 @@ describe('AdminUserList', () => {
 });
 ```
 
-- [ ] **Step 2: Run — expect failure**
+- [ ] **Step 2: Run - expect failure**
 
 - [ ] **Step 3: Create `apps/portal/src/features/check-in/admin/delete-admin-button.tsx`**
 
@@ -907,7 +907,7 @@ import { AdminUserList } from '@/features/check-in/admin/admin-user-list';
 import { AddAdminForm } from '@/features/check-in/admin/add-admin-form';
 import { flags } from '@/lib/flags';
 
-export const metadata = { title: 'Admin users — CMT Portal' };
+export const metadata = { title: 'Admin users - CMT Portal' };
 export const dynamic = 'force-dynamic';
 
 export default async function AdminUsersPage() {
@@ -959,7 +959,7 @@ export { AddAdminForm } from './add-admin-form';
 export { DeleteAdminButton } from './delete-admin-button';
 ```
 
-- [ ] **Step 9: Run test — expect pass**
+- [ ] **Step 9: Run test - expect pass**
 
 - [ ] **Step 10: Commit**
 
@@ -970,7 +970,7 @@ git commit -m "feat(portal): /check-in/admin/users page with list, add form, del
 
 ---
 
-## Task 6: `GET /api/check-in/admin/guests` — paginated guest list
+## Task 6: `GET /api/check-in/admin/guests` - paginated guest list
 
 **Files:**
 - Create: `apps/portal/src/app/api/check-in/admin/guests/route.ts`
@@ -1053,7 +1053,7 @@ describe('GET /api/check-in/admin/guests', () => {
 });
 ```
 
-- [ ] **Step 2: Run — expect failure**
+- [ ] **Step 2: Run - expect failure**
 
 - [ ] **Step 3: Create `apps/portal/src/app/api/check-in/admin/guests/route.ts`**
 
@@ -1087,7 +1087,7 @@ export async function GET(req: Request) {
 }
 ```
 
-- [ ] **Step 4: Run — expect pass**
+- [ ] **Step 4: Run - expect pass**
 
 - [ ] **Step 5: Commit**
 
@@ -1142,7 +1142,7 @@ describe('GuestList', () => {
 });
 ```
 
-- [ ] **Step 2: Run — expect failure**
+- [ ] **Step 2: Run - expect failure**
 
 - [ ] **Step 3: Create `apps/portal/src/features/check-in/admin/guest-list.tsx`**
 
@@ -1230,7 +1230,7 @@ import { GuestList } from '@/features/check-in/admin/guest-list';
 import { CursorPagination } from '@/features/check-in/admin/cursor-pagination';
 import { flags } from '@/lib/flags';
 
-export const metadata = { title: 'Guests — CMT Portal' };
+export const metadata = { title: 'Guests - CMT Portal' };
 export const dynamic = 'force-dynamic';
 
 interface Props {
@@ -1297,7 +1297,7 @@ export { GuestList } from './guest-list';
 export { CursorPagination } from './cursor-pagination';
 ```
 
-- [ ] **Step 8: Run test — expect pass**
+- [ ] **Step 8: Run test - expect pass**
 
 - [ ] **Step 9: Commit**
 
@@ -1308,7 +1308,7 @@ git commit -m "feat(portal): /check-in/admin/guests list + cursor pagination"
 
 ---
 
-## Task 8: `GET /api/check-in/admin/unpaid` — unpaid family list
+## Task 8: `GET /api/check-in/admin/unpaid` - unpaid family list
 
 **Files:**
 - Create: `apps/portal/src/app/api/check-in/admin/unpaid/route.ts`
@@ -1354,7 +1354,7 @@ describe('GET /api/check-in/admin/unpaid', () => {
 });
 ```
 
-- [ ] **Step 2: Run — expect failure**
+- [ ] **Step 2: Run - expect failure**
 
 - [ ] **Step 3: Create `apps/portal/src/app/api/check-in/admin/unpaid/route.ts`**
 
@@ -1373,13 +1373,13 @@ export async function GET() {
 }
 ```
 
-- [ ] **Step 4: Run — expect pass**
+- [ ] **Step 4: Run - expect pass**
 
 - [ ] **Step 5: Commit**
 
 ```sh
 git add apps/portal/src/app/api/check-in/admin/unpaid/ apps/portal/src/app/api/check-in/admin/__tests__/unpaid.test.ts
-git commit -m "feat(portal): GET /api/check-in/admin/unpaid — families with paymentStatus != paid"
+git commit -m "feat(portal): GET /api/check-in/admin/unpaid - families with paymentStatus != paid"
 ```
 
 ---
@@ -1455,7 +1455,7 @@ describe('UnpaidFamilyList', () => {
 });
 ```
 
-- [ ] **Step 2: Run — expect failure**
+- [ ] **Step 2: Run - expect failure**
 
 - [ ] **Step 3: Create `apps/portal/src/features/check-in/admin/send-donation-email-button.tsx`**
 
@@ -1548,7 +1548,7 @@ import { UnpaidFamilyList } from '@/features/check-in/admin/unpaid-family-list';
 import { flags } from '@/lib/flags';
 import type { Family } from '@cmt/shared-domain/check-in';
 
-export const metadata = { title: 'Unpaid families — CMT Portal' };
+export const metadata = { title: 'Unpaid families - CMT Portal' };
 export const dynamic = 'force-dynamic';
 
 export default async function AdminUnpaidPage() {
@@ -1589,7 +1589,7 @@ export { UnpaidFamilyList } from './unpaid-family-list';
 export { SendDonationEmailButton } from './send-donation-email-button';
 ```
 
-- [ ] **Step 8: Run test — expect pass**
+- [ ] **Step 8: Run test - expect pass**
 
 - [ ] **Step 9: Commit**
 
@@ -1600,7 +1600,7 @@ git commit -m "feat(portal): /check-in/admin/unpaid page with UnpaidFamilyList +
 
 ---
 
-## Task 10: `POST /api/check-in/admin/reports/[kind]` — CSV streaming
+## Task 10: `POST /api/check-in/admin/reports/[kind]` - CSV streaming
 
 **Files:**
 - Create: `apps/portal/src/app/api/check-in/admin/reports/[kind]/route.ts`
@@ -1669,7 +1669,7 @@ describe('POST /api/check-in/admin/reports/check-ins', () => {
 });
 ```
 
-- [ ] **Step 2: Run — expect failure**
+- [ ] **Step 2: Run - expect failure**
 
 - [ ] **Step 3: Create `apps/portal/src/app/api/check-in/admin/reports/[kind]/route.ts`**
 
@@ -1744,7 +1744,7 @@ export async function POST(
 }
 ```
 
-- [ ] **Step 4: Run — expect pass**
+- [ ] **Step 4: Run - expect pass**
 
 - [ ] **Step 5: Commit**
 
@@ -1806,7 +1806,7 @@ import { notFound } from 'next/navigation';
 import { ReportExportButton } from '@/features/check-in/admin/report-export-button';
 import { flags } from '@/lib/flags';
 
-export const metadata = { title: 'Reports — CMT Portal' };
+export const metadata = { title: 'Reports - CMT Portal' };
 
 export default function AdminReportsPage() {
   if (!flags.checkInAdmin) notFound();
@@ -1872,7 +1872,7 @@ async function signInAsAdmin(page: import('@playwright/test').Page) {
   await page.waitForURL('/check-in/admin');
 }
 
-test.describe('B4 — admin dashboard', () => {
+test.describe('B4 - admin dashboard', () => {
   test.skip(
     !ADMIN_EMAIL || !ADMIN_PASSWORD,
     'E2E_ADMIN_EMAIL / E2E_ADMIN_PASSWORD not set',
@@ -1928,13 +1928,13 @@ git commit -m "test(portal): add b4-admin.spec.ts covering dashboard, users, gue
 - [ ] **Step 1: Update README slice-B progress tracker**
 
 ```markdown
-- **Slice B** — 🚧 In progress —
-  - B0 ✅ — Portal auth foundation
-  - B2 ✅ — Family portal
-  - B3 ✅ — Teacher portal
-  - B1 ✅ — Kiosk 1:1 port
-  - B4 ✅ — Admin dashboard + user provisioning
-  - B5 — Notifications & cron (last)
+- **Slice B** - 🚧 In progress -
+  - B0 ✅ - Portal auth foundation
+  - B2 ✅ - Family portal
+  - B3 ✅ - Teacher portal
+  - B1 ✅ - Kiosk 1:1 port
+  - B4 ✅ - Admin dashboard + user provisioning
+  - B5 - Notifications & cron (last)
 ```
 
 - [ ] **Step 2: Update CLAUDE.md "Slice B status"**

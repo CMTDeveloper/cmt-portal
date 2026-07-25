@@ -1,4 +1,4 @@
-# Teacher Attendance — T2 (redesigned teacher screen) Implementation Plan
+# Teacher Attendance - T2 (redesigned teacher screen) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax.
 
@@ -10,35 +10,35 @@
 
 ## Cross-cutting (hard rules)
 - **UI/UX is the headline requirement** (CMT Developer): best-in-class **mobile-first** (teachers mark on a phone in class) AND desktop, designer pass on the screen (Task 5). Cool-Mist tokens, `CspRoot`/`.csp` scoping (the teacher layout already wraps children in `CspRoot`, so `.card`/`.btn`/`.pill`/`.input` + tokens resolve). Big tap targets (≥44px), thumb-reachable Save.
-- **Read-only door access** — the overlay only READS `family-check-ins` via `checkInSourceFirestore()` (T1). Never writes the door's collections.
-- **Mobile-app-ready** — the roster API uses `readSessionFromHeaders` + `isTeacher` + `canTeachLevel`, ISO/plain JSON. The page may use `cookies()`/`verifyPortalSessionCookie` (web render).
-- **`exactOptionalPropertyTypes`** — conditional-spread, never assign `undefined` to an optional.
-- **N=2** — the resolver/precedence already guards same-date duplicates; the view test uses ≥2 kids with mixed statuses + a door-checked-in kid.
+- **Read-only door access** - the overlay only READS `family-check-ins` via `checkInSourceFirestore()` (T1). Never writes the door's collections.
+- **Mobile-app-ready** - the roster API uses `readSessionFromHeaders` + `isTeacher` + `canTeachLevel`, ISO/plain JSON. The page may use `cookies()`/`verifyPortalSessionCookie` (web render).
+- **`exactOptionalPropertyTypes`** - conditional-spread, never assign `undefined` to an optional.
+- **N=2** - the resolver/precedence already guards same-date duplicates; the view test uses ≥2 kids with mixed statuses + a door-checked-in kid.
 
-## Key facts (verified — build on these)
-- `deriveRoster(levelId, date)` (`features/setu/teacher/roster.ts`) → `RosterResult { levelId, levelName, ageLabel, location, pid, date, members: RosterMember[], markedCount, total }`. `RosterMember { mid, fid, firstName, lastName, type, schoolGrade, hasSafetyInfo, status: RosterStatus }` where `RosterStatus = SetuAttendanceStatus | 'unaccounted'`. A matched kid with no portal `attendanceEvents` row is `'unaccounted'`. Enrollment-gated by active enrollment for `level.pid` at `level.location` + `memberMatchesLevel`. **It does NOT currently carry `legacySid`/`legacyFid`** — T2.1 adds them.
+## Key facts (verified - build on these)
+- `deriveRoster(levelId, date)` (`features/setu/teacher/roster.ts`) → `RosterResult { levelId, levelName, ageLabel, location, pid, date, members: RosterMember[], markedCount, total }`. `RosterMember { mid, fid, firstName, lastName, type, schoolGrade, hasSafetyInfo, status: RosterStatus }` where `RosterStatus = SetuAttendanceStatus | 'unaccounted'`. A matched kid with no portal `attendanceEvents` row is `'unaccounted'`. Enrollment-gated by active enrollment for `level.pid` at `level.location` + `memberMatchesLevel`. **It does NOT currently carry `legacySid`/`legacyFid`** - T2.1 adds them.
 - `buildRoster(level, families, events, date, now)` is the pure core; `RosterMemberInput { mid, firstName, lastName, type, schoolGrade, birthMonthYear, foodAllergies }`; `RosterFamily { fid, members }`.
 - `saveAttendance({ levelId, date, marks: Record<mid, SetuAttendanceStatus>, markedByUid, markedByMid })` (`save-attendance.ts`) writes one `attendanceEvents/{aid}` per mid (`aid = attendanceAid(levelId, mid, date)`), `isGuest:false`, idempotent merge; mids not on the roster are skipped. **Unchanged by T2.**
 - `POST /api/setu/teacher/attendance` (`SaveAttendanceSchema { levelId, date, marks }`, `isTeacher` + `canTeachLevel`) → `saveAttendance`. **Unchanged by T2.**
 - `GET /api/setu/teacher/levels/[levelId]/roster` currently returns `deriveRoster`. T2.3 repoints it to the view.
 - `checkInSourceFirestore()` (T1, `features/setu/attendance/check-in-source.ts`) → read-only Firestore handle to the door app's project. Door doc: `family-check-ins/{legacyFid}/checkIns/{YYYY-MM-DD}.students[{ sid, isCheckedIn }]`.
 - `getCheckInAttendance` + `CheckInRecord` live in `features/setu/attendance/check-in-attendance.ts`.
-- `torontoToday(now?)` (`features/setu/calendar/calendar.ts`) → Toronto `YYYY-MM-DD`. **No Sunday helper yet** — T2.1 adds `mostRecentSunday`.
+- `torontoToday(now?)` (`features/setu/calendar/calendar.ts`) → Toronto `YYYY-MM-DD`. **No Sunday helper yet** - T2.1 adds `mostRecentSunday`.
 - Family `legacyFid` is on the `families/{fid}` doc; member `legacySid` is on each `families/{fid}/members/{mid}` doc (both mapped in `get-family-by-fid.ts`). Null for portal-native families/kids.
 - `SetuAttendanceStatus = 'present'|'late'|'absent'`, `RosterStatus`, `memberMatchesLevel`, `attendanceAid` all from `@cmt/shared-domain`.
 - The existing island `features/setu/teacher/components/attendance-marker.tsx` (`'use client'`, `useState`+`useTransition`, `toast` from `@cmt/ui`) is the pattern to REWRITE.
 
 ## File structure
 **Create:**
-- `apps/portal/src/features/setu/teacher/level-attendance-view.ts` (+ `__tests__/level-attendance-view.test.ts`) — the composed view reader.
+- `apps/portal/src/features/setu/teacher/level-attendance-view.ts` (+ `__tests__/level-attendance-view.test.ts`) - the composed view reader.
 - (door reader) extend `apps/portal/src/features/setu/attendance/check-in-attendance.ts` with `readDoorPresentSids(legacyFids, date)`.
 
 **Modify:**
-- `apps/portal/src/features/setu/teacher/roster.ts` (+ its test) — carry `legacyFid`/`legacySid`.
-- `apps/portal/src/features/setu/calendar/calendar.ts` (+ its test) — add `mostRecentSunday`.
-- `apps/portal/src/features/setu/teacher/components/attendance-marker.tsx` (+ test) — redesigned island.
-- `apps/portal/src/app/teacher/levels/[levelId]/attendance/page.tsx` — use the view + Sunday default.
-- `apps/portal/src/app/api/setu/teacher/levels/[levelId]/roster/route.ts` (+ test if present) — return the view.
+- `apps/portal/src/features/setu/teacher/roster.ts` (+ its test) - carry `legacyFid`/`legacySid`.
+- `apps/portal/src/features/setu/calendar/calendar.ts` (+ its test) - add `mostRecentSunday`.
+- `apps/portal/src/features/setu/teacher/components/attendance-marker.tsx` (+ test) - redesigned island.
+- `apps/portal/src/app/teacher/levels/[levelId]/attendance/page.tsx` - use the view + Sunday default.
+- `apps/portal/src/app/api/setu/teacher/levels/[levelId]/roster/route.ts` (+ test if present) - return the view.
 
 ---
 
@@ -46,7 +46,7 @@
 
 **Files:** modify `roster.ts` (+ `__tests__/roster.test.ts`), `calendar.ts` (+ `__tests__/calendar.test.ts`).
 
-- [ ] **Step 1 — extend roster types + reads.** In `roster.ts`:
+- [ ] **Step 1 - extend roster types + reads.** In `roster.ts`:
   - add `legacySid: string | null;` to `RosterMemberInput`.
   - add `legacyFid: string | null;` to `RosterFamily`.
   - add `legacySid: string | null;` and `legacyFid: string | null;` to `RosterMember`.
@@ -73,9 +73,9 @@ return {
 };
 ```
 
-- [ ] **Step 2 — update `roster.test.ts`.** READ it. Add `legacySid`/`legacyFid` to its fixtures (RosterFamily fixtures get `legacyFid`, member fixtures get `legacySid`) and assert the built RosterMember carries them through for at least one member. Do NOT weaken existing assertions. Run: `pnpm --filter @cmt/portal exec vitest run src/features/setu/teacher/__tests__/roster.test.ts` → green.
+- [ ] **Step 2 - update `roster.test.ts`.** READ it. Add `legacySid`/`legacyFid` to its fixtures (RosterFamily fixtures get `legacyFid`, member fixtures get `legacySid`) and assert the built RosterMember carries them through for at least one member. Do NOT weaken existing assertions. Run: `pnpm --filter @cmt/portal exec vitest run src/features/setu/teacher/__tests__/roster.test.ts` → green.
 
-- [ ] **Step 3 — `mostRecentSunday` failing test.** Add to `apps/portal/src/features/setu/calendar/__tests__/calendar.test.ts` (create if absent, mirroring the torontoToday test style):
+- [ ] **Step 3 - `mostRecentSunday` failing test.** Add to `apps/portal/src/features/setu/calendar/__tests__/calendar.test.ts` (create if absent, mirroring the torontoToday test style):
 ```ts
 import { mostRecentSunday } from '../calendar';
 it('mostRecentSunday returns the same day when today is Sunday', () => {
@@ -86,7 +86,7 @@ it('mostRecentSunday rolls back to the previous Sunday midweek', () => {
 });
 ```
 
-- [ ] **Step 4 — implement `mostRecentSunday`** in `calendar.ts` (near `torontoToday`):
+- [ ] **Step 4 - implement `mostRecentSunday`** in `calendar.ts` (near `torontoToday`):
 ```ts
 /** The most recent Sunday (today if today is Sunday) as a Toronto YYYY-MM-DD. */
 export function mostRecentSunday(now: Date = new Date()): string {
@@ -97,7 +97,7 @@ export function mostRecentSunday(now: Date = new Date()): string {
 }
 ```
 
-- [ ] **Step 5 — run both suites + `tsc --noEmit` → green. Step 6 — commit:** `feat(teacher-attendance): roster carries legacy bridge fields; mostRecentSunday helper`.
+- [ ] **Step 5 - run both suites + `tsc --noEmit` → green. Step 6 - commit:** `feat(teacher-attendance): roster carries legacy bridge fields; mostRecentSunday helper`.
 
 ---
 
@@ -105,7 +105,7 @@ export function mostRecentSunday(now: Date = new Date()): string {
 
 **Files:** modify `apps/portal/src/features/setu/attendance/check-in-attendance.ts` (+ `__tests__/check-in-attendance.test.ts`).
 
-- [ ] **Step 1 — failing test** (add to the existing check-in-attendance test; it already mocks `../check-in-source`'s `checkInSourceFirestore`). Assert: given two legacyFids whose `checkIns/{date}` docs list students, `readDoorPresentSids(['4421','7000'], '2026-01-04')` returns a `Set` of the sids with `isCheckedIn === true` across both families; a missing day-doc contributes nothing; never throws.
+- [ ] **Step 1 - failing test** (add to the existing check-in-attendance test; it already mocks `../check-in-source`'s `checkInSourceFirestore`). Assert: given two legacyFids whose `checkIns/{date}` docs list students, `readDoorPresentSids(['4421','7000'], '2026-01-04')` returns a `Set` of the sids with `isCheckedIn === true` across both families; a missing day-doc contributes nothing; never throws.
 ```ts
 it('readDoorPresentSids collects checked-in sids for a date across families', async () => {
   // mock checkInSourceFirestore() to return a fake where:
@@ -118,7 +118,7 @@ it('readDoorPresentSids collects checked-in sids for a date across families', as
 ```
 (Mirror the fake-firestore chain already in this test file; key the fake by the doc id path so the two families resolve to different student arrays. If the existing fake is too simple, extend it to route by `doc(id)`.)
 
-- [ ] **Step 2 — implement** in `check-in-attendance.ts`:
+- [ ] **Step 2 - implement** in `check-in-attendance.ts`:
 ```ts
 /**
  * READ-ONLY: the set of legacy sids checked in at the door for a single date,
@@ -151,9 +151,9 @@ export async function readDoorPresentSids(
   return present;
 }
 ```
-(Add `import { checkInSourceFirestore } from './check-in-source';` — it's already imported in this file after T1.)
+(Add `import { checkInSourceFirestore } from './check-in-source';` - it's already imported in this file after T1.)
 
-- [ ] **Step 3 — run the suite + `tsc --noEmit` → green. Step 4 — commit:** `feat(teacher-attendance): readDoorPresentSids — door self-check-ins for a date`.
+- [ ] **Step 3 - run the suite + `tsc --noEmit` → green. Step 4 - commit:** `feat(teacher-attendance): readDoorPresentSids - door self-check-ins for a date`.
 
 ---
 
@@ -161,7 +161,7 @@ export async function readDoorPresentSids(
 
 **Files:** create `apps/portal/src/features/setu/teacher/level-attendance-view.ts` + `__tests__/level-attendance-view.test.ts`.
 
-- [ ] **Step 1 — failing test.** Mock `./roster` (`deriveRoster`) and `@/features/setu/attendance/check-in-attendance` (`readDoorPresentSids`). Assert with a 3-kid roster (one portal `absent`, one `unaccounted` + door-checked-in, one `unaccounted` + no door):
+- [ ] **Step 1 - failing test.** Mock `./roster` (`deriveRoster`) and `@/features/setu/attendance/check-in-attendance` (`readDoorPresentSids`). Assert with a 3-kid roster (one portal `absent`, one `unaccounted` + door-checked-in, one `unaccounted` + no door):
   - the portal-`absent` kid → `status:'absent', source:'portal'`;
   - the `unaccounted` + door kid → `status:'present', source:'door', checkedInAtDoor:true`;
   - the `unaccounted` + no-door kid → `status:'present', source:'default', checkedInAtDoor:false`;
@@ -204,7 +204,7 @@ it('returns null when the level is missing', async () => {
 });
 ```
 
-- [ ] **Step 2 — implement** `level-attendance-view.ts`:
+- [ ] **Step 2 - implement** `level-attendance-view.ts`:
 ```ts
 import type { SetuAttendanceStatus } from '@cmt/shared-domain';
 import { deriveRoster } from './roster';
@@ -219,7 +219,7 @@ export interface AttendanceViewRow {
   lastName: string;
   schoolGrade: string | null;
   hasSafetyInfo: boolean;
-  status: SetuAttendanceStatus; // present | late | absent — defaults to present
+  status: SetuAttendanceStatus; // present | late | absent - defaults to present
   source: AttendanceRowSource;
   checkedInAtDoor: boolean;
 }
@@ -271,7 +271,7 @@ export async function getLevelAttendanceView(levelId: string, date: string): Pro
 }
 ```
 
-- [ ] **Step 3 — run + `tsc --noEmit` → green. Step 4 — commit:** `feat(teacher-attendance): getLevelAttendanceView — roster + door overlay, default-present`.
+- [ ] **Step 3 - run + `tsc --noEmit` → green. Step 4 - commit:** `feat(teacher-attendance): getLevelAttendanceView - roster + door overlay, default-present`.
 
 ---
 
@@ -279,7 +279,7 @@ export async function getLevelAttendanceView(levelId: string, date: string): Pro
 
 **Files:** rewrite `apps/portal/src/features/setu/teacher/components/attendance-marker.tsx` (+ `__tests__/attendance-marker.test.tsx`); modify the attendance page + the roster API route.
 
-- [ ] **Step 1 — failing island test** `apps/portal/src/features/setu/teacher/components/__tests__/attendance-marker.test.tsx`:
+- [ ] **Step 1 - failing island test** `apps/portal/src/features/setu/teacher/components/__tests__/attendance-marker.test.tsx`:
 ```tsx
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
@@ -327,32 +327,32 @@ it('flagging a student absent decrements the present count and posts the full ma
   expect(sent).toMatchObject({ levelId: 'L', date: '2026-01-04', marks: { 'F-02': 'absent', 'F-03': 'present' } });
 });
 ```
-(If the double body-parse is awkward in this repo's vitest, keep only the `sent` assertion — the point is: the POST body carries the FULL marks map with the flagged change.)
+(If the double body-parse is awkward in this repo's vitest, keep only the `sent` assertion - the point is: the POST body carries the FULL marks map with the flagged change.)
 
-- [ ] **Step 2 — implement** the redesigned `attendance-marker.tsx` (`'use client'`). Requirements (designer polishes visuals in Task 5; ship it functional + themed + mobile-first now):
+- [ ] **Step 2 - implement** the redesigned `attendance-marker.tsx` (`'use client'`). Requirements (designer polishes visuals in Task 5; ship it functional + themed + mobile-first now):
   - Props: `{ levelId, levelName, ageLabel, date, rows: AttendanceViewRow[], presentCount, total }` (import the `AttendanceViewRow` type from `@/features/setu/teacher/level-attendance-view`).
   - State `marks: Record<string, SetuAttendanceStatus>` seeded from `rows` (`{ [r.mid]: r.status }`). A derived live `presentCount = Object.values(marks).filter(s => s === 'present').length`.
-  - **Header**: level name + `ageLabel · {date}` + prev/next-Sunday nav — `‹`/`›` `next/link`s to `?date=${addDays(date, -7)}` / `?date=${addDays(date, +7)}` (compute with a local `addDays(ymd, n)` helper: `new Date(\`${ymd}T12:00:00Z\`)`, `setUTCDate(+n)`, slice). A "Visitors →" link to `/teacher/levels/${levelId}/guests?date=${date}` (T3 redesigns that screen).
+  - **Header**: level name + `ageLabel · {date}` + prev/next-Sunday nav - `‹`/`›` `next/link`s to `?date=${addDays(date, -7)}` / `?date=${addDays(date, +7)}` (compute with a local `addDays(ymd, n)` helper: `new Date(\`${ymd}T12:00:00Z\`)`, `setUTCDate(+n)`, slice). A "Visitors →" link to `/teacher/levels/${levelId}/guests?date=${date}` (T3 redesigns that screen).
   - **Roster**: one row per `rows` entry, each with `data-testid="att-row"`. Show name, grade, a safety dot when `hasSafetyInfo` (link to `/teacher/students/${mid}`), a `·door` pill when `checkedInAtDoor`, and three segmented buttons **Present / Late / Absent** (`aria-pressed` on the active one; tap sets `marks[mid]`). Present = accent, Late = warn, Absent = err (match the existing OPTION colors).
   - **Sticky footer**: live `{presentCount} / {total} present` + a **Save attendance** primary button → `fetch('/api/setu/teacher/attendance', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ levelId, date, marks }) })`; `!res.ok` → `toast.error`; success → `toast.success('Attendance saved')`. `useTransition` for pending; disable Save while pending.
   - Empty roster (`rows.length === 0`) → a friendly "No enrolled students match this level yet." card.
   - NO nested component declarations (module-scope helpers or inline only). Mobile-first: rows are full-width, the 3 buttons are a `repeat(3,1fr)` grid, the footer is `position:sticky` bottom.
 
-- [ ] **Step 3 — wire the page** `app/teacher/levels/[levelId]/attendance/page.tsx`:
+- [ ] **Step 3 - wire the page** `app/teacher/levels/[levelId]/attendance/page.tsx`:
   - import `getLevelAttendanceView` + `mostRecentSunday`.
   - `const date = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : mostRecentSunday();`
   - `const view = await getLevelAttendanceView(levelId, date); if (!view) return <p ...>That class doesn't exist.</p>;`
   - render `<AttendanceMarker levelId={view.levelId} levelName={view.levelName} ageLabel={view.ageLabel} date={view.date} rows={view.rows} presentCount={view.presentCount} total={view.total} />`.
   - (keep the existing cookie/`canTeachLevel` auth block unchanged.)
 
-- [ ] **Step 4 — repoint the roster API** `app/api/setu/teacher/levels/[levelId]/roster/route.ts`: replace `deriveRoster(levelId, date)` with `getLevelAttendanceView(levelId, date)` and return `{ view }` (keep the `isTeacher`+`canTeachLevel`+date-validation guards; default date to `mostRecentSunday()`). Update its test if present.
+- [ ] **Step 4 - repoint the roster API** `app/api/setu/teacher/levels/[levelId]/roster/route.ts`: replace `deriveRoster(levelId, date)` with `getLevelAttendanceView(levelId, date)` and return `{ view }` (keep the `isTeacher`+`canTeachLevel`+date-validation guards; default date to `mostRecentSunday()`). Update its test if present.
 
-- [ ] **Step 5 — run the island test + page/route tests + `tsc --noEmit` + `eslint` on touched files → green. Step 6 — commit:** `feat(teacher-attendance): redesigned default-present attendance screen + door overlay`.
+- [ ] **Step 5 - run the island test + page/route tests + `tsc --noEmit` + `eslint` on touched files → green. Step 6 - commit:** `feat(teacher-attendance): redesigned default-present attendance screen + door overlay`.
 
 ---
 
 ## Task 5 (controller): designer pass + slice verification
-- [ ] **Designer pass.** Dispatch `oh-my-claudecode:designer` (opus) over `attendance-marker.tsx` ONLY: a beautiful, fast, **mobile-first** class-attendance experience — confident present/late/absent segmented control with big tap targets, a calm `·door` annotation, a satisfying live present-count, the Sunday nav, and a thumb-reachable sticky Save; excellent at 375px AND a clean desktop layout. Constraint: do NOT change props, the `AttendanceViewRow` contract, exported name `AttendanceMarker`, the fetch contract, `data-testid="att-row"`, or test-queried text (`/save attendance/i`, `/present/i`, `/late/i`, `/absent/i`, `/door/i`, `\d/\d present`). Re-run the island test + `tsc` + `eslint`. Commit `style(teacher-attendance): polish the attendance screen`.
+- [ ] **Designer pass.** Dispatch `oh-my-claudecode:designer` (opus) over `attendance-marker.tsx` ONLY: a beautiful, fast, **mobile-first** class-attendance experience - confident present/late/absent segmented control with big tap targets, a calm `·door` annotation, a satisfying live present-count, the Sunday nav, and a thumb-reachable sticky Save; excellent at 375px AND a clean desktop layout. Constraint: do NOT change props, the `AttendanceViewRow` contract, exported name `AttendanceMarker`, the fetch contract, `data-testid="att-row"`, or test-queried text (`/save attendance/i`, `/present/i`, `/late/i`, `/absent/i`, `/door/i`, `\d/\d present`). Re-run the island test + `tsc` + `eslint`. Commit `style(teacher-attendance): polish the attendance screen`.
 - [ ] **Final review** (Opus, separate context): spec-compliance + code-quality over the slice (view reader, door overlay, island, page/route). Address blocking/important issues; re-review.
 
 ## T2 verification (before done)

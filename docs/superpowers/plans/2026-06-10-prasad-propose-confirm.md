@@ -17,7 +17,7 @@
 - Tests ship in the same commit as the branching logic they cover.
 - Never `--no-verify`; push after each authorized commit is fine but at minimum push at the end (pre-push gate = typecheck/lint/test/build).
 - E2E mutation specs must tolerate re-runs (UAT is shared state; seeds restore fixtures).
-- The existing E2E fixture `prasadAssignments/bv-brampton-2025-26-CMT-FSWEDU2X` stays `status:'assigned'` — the shipped locked-move specs depend on it.
+- The existing E2E fixture `prasadAssignments/bv-brampton-2025-26-CMT-FSWEDU2X` stays `status:'assigned'` - the shipped locked-move specs depend on it.
 
 ---
 
@@ -29,7 +29,7 @@
 | `apps/portal/src/features/setu/prasad/load-engine-input.ts` | proposed docs count as `existing` |
 | `apps/portal/src/features/setu/prasad/family-assignment.ts` | view + options + move count/return proposed; new `confirmAssignment` |
 | `apps/portal/src/features/setu/prasad/publish-assignments.ts` | publish writes `proposed` + null lifecycle fields |
-| `apps/portal/src/features/setu/prasad/proposal-notify.ts` | **new** — notify un-notified proposals (env-gated, stamp-after-send) |
+| `apps/portal/src/features/setu/prasad/proposal-notify.ts` | **new** - notify un-notified proposals (env-gated, stamp-after-send) |
 | `apps/portal/src/features/setu/prasad/reminder-service.ts` | status-aware copy (assigned reminder vs proposed confirm-nudge) |
 | `apps/portal/src/app/api/setu/prasad/confirm/route.ts` | **new** POST (manager-only via existing prefix rule) |
 | `apps/portal/src/app/api/admin/prasad/assignment/route.ts` | `assign:true` flips proposed→assigned |
@@ -45,7 +45,7 @@
 
 ---
 
-### Task 1: Schema — status, lifecycle fields, request bodies
+### Task 1: Schema - status, lifecycle fields, request bodies
 
 **Files:**
 - Modify: `packages/shared-domain/src/setu/prasad.ts`
@@ -127,7 +127,7 @@ describe('propose→confirm lifecycle', () => {
 - [ ] **Step 2: Run to verify failure**
 
 Run: `pnpm --filter @cmt/portal exec vitest run src/features/setu/prasad/__tests__/prasad-schemas.test.ts`
-Expected: FAIL — `'proposed'` not in enum, unknown export `PrasadConfirmBodySchema`, unrecognized keys stripped.
+Expected: FAIL - `'proposed'` not in enum, unknown export `PrasadConfirmBodySchema`, unrecognized keys stripped.
 
 - [ ] **Step 3: Implement** in `packages/shared-domain/src/setu/prasad.ts`:
 
@@ -187,7 +187,7 @@ git commit -m "feat(prasad): proposed status + confirm lifecycle fields/bodies i
 **Files:**
 - Modify: `apps/portal/src/features/setu/prasad/load-engine-input.ts:55`
 - Modify: `apps/portal/src/features/setu/prasad/family-assignment.ts`
-- Test: `apps/portal/src/features/setu/prasad/__tests__/family-assignment.test.ts` (extend the existing seeds harness — `AssignmentSeed.status` already exists)
+- Test: `apps/portal/src/features/setu/prasad/__tests__/family-assignment.test.ts` (extend the existing seeds harness - `AssignmentSeed.status` already exists)
 
 - [ ] **Step 1: Write the failing tests** (append to the file; `ymdPlus(n)` and `makeDb(seeds, updateOps)` are already in the harness):
 
@@ -227,7 +227,7 @@ describe('proposed-status handling', () => {
   });
 
   it('a PROPOSED family sees near-term Sundays (no 7-day lock) but never past ones', async () => {
-    const near = ymdPlus(3); // inside MOVE_LOCK_DAYS — visible only to proposed
+    const near = ymdPlus(3); // inside MOVE_LOCK_DAYS - visible only to proposed
     const seeds: Seeds = {
       calendar: [
         { entryId: 'c1', location: 'Brampton', programKey: 'bala-vihar', date: near, kind: 'class' },
@@ -270,16 +270,16 @@ describe('proposed-status handling', () => {
 - [ ] **Step 2: Run to verify failure**
 
 Run: `pnpm --filter @cmt/portal exec vitest run src/features/setu/prasad/__tests__/family-assignment.test.ts`
-Expected: FAIL — proposed doc skipped by `getFamilyAssignment`; proposed seat not counted; near-term Sunday filtered by the lock.
+Expected: FAIL - proposed doc skipped by `getFamilyAssignment`; proposed seat not counted; near-term Sunday filtered by the lock.
 
 - [ ] **Step 3: Implement** in `family-assignment.ts`:
 
-`getFamilyAssignment` — replace the status guard (line 20):
+`getFamilyAssignment` - replace the status guard (line 20):
 ```ts
     if (a.status !== 'assigned' && a.status !== 'proposed') continue;
 ```
 
-`getMoveOptions` — replace the seat-count filter (line 50) and the lock filter (line 55):
+`getMoveOptions` - replace the seat-count filter (line 50) and the lock filter (line 55):
 ```ts
     if (a.status === 'assigned' || a.status === 'proposed') countByDate.set(a.date, (countByDate.get(a.date) ?? 0) + 1);
 ```
@@ -289,7 +289,7 @@ Expected: FAIL — proposed doc skipped by `getFamilyAssignment`; proposed seat 
     .filter((e) => daysUntil(e.date, todayYmd) > (current.status === 'proposed' ? 0 : MOVE_LOCK_DAYS) && e.date !== current.date)
 ```
 
-`moveAssignment` — replace the txn count (line 80):
+`moveAssignment` - replace the txn count (line 80):
 ```ts
     const activeCount = targetSnap.docs.filter((d) => {
       const s = (d.data() as { status: string }).status;
@@ -297,7 +297,7 @@ Expected: FAIL — proposed doc skipped by `getFamilyAssignment`; proposed seat 
     }).length;
 ```
 
-In `load-engine-input.ts` — replace line 55 so proposed families are not re-proposed and keep their seat:
+In `load-engine-input.ts` - replace line 55 so proposed families are not re-proposed and keep their seat:
 ```ts
     if (a.status === 'assigned' || a.status === 'proposed') existingByFid.set(a.fid, { date: a.date });
 ```
@@ -305,7 +305,7 @@ In `load-engine-input.ts` — replace line 55 so proposed families are not re-pr
 - [ ] **Step 4: Run the full prasad unit set**
 
 Run: `pnpm --filter @cmt/portal exec vitest run src/features/setu/prasad`
-Expected: PASS (existing tests unaffected — they seed only `assigned`/`cancelled`).
+Expected: PASS (existing tests unaffected - they seed only `assigned`/`cancelled`).
 
 - [ ] **Step 5: Commit**
 
@@ -390,7 +390,7 @@ Add `confirmAssignment` to the import at the top of the test file.
 - [ ] **Step 2: Run to verify failure**
 
 Run: `pnpm --filter @cmt/portal exec vitest run src/features/setu/prasad/__tests__/family-assignment.test.ts`
-Expected: FAIL — `confirmAssignment` not exported.
+Expected: FAIL - `confirmAssignment` not exported.
 
 - [ ] **Step 3: Implement** (append to `family-assignment.ts`):
 
@@ -399,7 +399,7 @@ export type ConfirmResult = 'confirmed' | 'not-found' | 'already-confirmed' | 'i
 
 /**
  * Family confirm: no targetDate → flip the proposed doc to assigned in place
- * (the seat is already counted — no cap check). With targetDate → validate it
+ * (the seat is already counted - no cap check). With targetDate → validate it
  * against the live options list, then re-count the target inside the txn
  * (mirrors moveAssignment) and move+flip in one update. confirmedBy:'family'.
  */
@@ -461,7 +461,7 @@ export async function confirmAssignment(
 }
 ```
 
-(Note: if the harness's `makeDb` txn only supports `tx.get(query)` and not `tx.get(docRef)`, extend the fake's transaction object with a doc-ref branch that resolves via the same `assignmentDocRef(...).get()` — keep the extension inside the test file's `makeDb`.)
+(Note: if the harness's `makeDb` txn only supports `tx.get(query)` and not `tx.get(docRef)`, extend the fake's transaction object with a doc-ref branch that resolves via the same `assignmentDocRef(...).get()` - keep the extension inside the test file's `makeDb`.)
 
 - [ ] **Step 4: Run**
 
@@ -483,7 +483,7 @@ git commit -m "feat(prasad): confirmAssignment transaction (in-place + choose-a-
 - Modify: `apps/portal/src/features/setu/prasad/publish-assignments.ts:35-38`
 - Test: `apps/portal/src/features/setu/prasad/__tests__/publish-assignments.test.ts`
 
-- [ ] **Step 1: Write the failing test** (extend the existing publish test that asserts the written doc shape — locate the assertion on `status: 'assigned'` and change/extend):
+- [ ] **Step 1: Write the failing test** (extend the existing publish test that asserts the written doc shape - locate the assertion on `status: 'assigned'` and change/extend):
 
 ```ts
 it('publish writes NEW rows as proposed with null lifecycle fields', async () => {
@@ -499,14 +499,14 @@ it('publish writes NEW rows as proposed with null lifecycle fields', async () =>
 });
 ```
 
-(Adapt the capture variable name to the file's existing batch mock — it records `batch.set` calls.)
+(Adapt the capture variable name to the file's existing batch mock - it records `batch.set` calls.)
 
 - [ ] **Step 2: Run to verify failure**
 
 Run: `pnpm --filter @cmt/portal exec vitest run src/features/setu/prasad/__tests__/publish-assignments.test.ts`
-Expected: FAIL — written status is `'assigned'`, lifecycle keys absent. Any existing test asserting `status: 'assigned'` in the written doc must be updated to `'proposed'` in this same step.
+Expected: FAIL - written status is `'assigned'`, lifecycle keys absent. Any existing test asserting `status: 'assigned'` in the written doc must be updated to `'proposed'` in this same step.
 
-- [ ] **Step 3: Implement** — in `publishAssignments`, replace the written-doc literal (lines 35-38):
+- [ ] **Step 3: Implement** - in `publishAssignments`, replace the written-doc literal (lines 35-38):
 
 ```ts
         source: 'auto', status: 'proposed',
@@ -538,7 +538,7 @@ git commit -m "feat(prasad): publish writes proposals, not assignments"
 - Create: `apps/portal/src/features/setu/prasad/proposal-notify.ts`
 - Test: `apps/portal/src/features/setu/prasad/__tests__/proposal-notify.test.ts`
 
-- [ ] **Step 1: Write the failing test** (mirror `reminder-service.test.ts`'s mocks — `resolveSender` returns typed `vi.fn` senders; fake firestore seeds proposed docs + manager members):
+- [ ] **Step 1: Write the failing test** (mirror `reminder-service.test.ts`'s mocks - `resolveSender` returns typed `vi.fn` senders; fake firestore seeds proposed docs + manager members):
 
 ```ts
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -590,7 +590,7 @@ describe('notifyUnnotifiedProposals', () => {
 - [ ] **Step 2: Run to verify failure**
 
 Run: `pnpm --filter @cmt/portal exec vitest run src/features/setu/prasad/__tests__/proposal-notify.test.ts`
-Expected: FAIL — module not found.
+Expected: FAIL - module not found.
 
 - [ ] **Step 3: Implement** `proposal-notify.ts`:
 
@@ -608,11 +608,11 @@ function formatDate(ymd: string): string {
 export interface ProposalNotifyResult { disabled?: boolean; checked: number; sent: number; skipped: number; failed: number }
 
 /**
- * One-time "your suggested prasad Sunday — please confirm" email+SMS to every
+ * One-time "your suggested prasad Sunday - please confirm" email+SMS to every
  * PROPOSED family that hasn't been notified yet. Self-healing by design: keyed
  * off the docs (status=='proposed' && proposalNotifiedAt==null), NOT the publish
  * response rows, so a crash between publish and notify is repaired by the next
- * publish click. Stamp-after-send + per-family try/catch — same semantics as
+ * publish click. Stamp-after-send + per-family try/catch - same semantics as
  * sendDuePrasadReminders. Gated by PRASAD_REMINDER_CRON_ENABLED (the master
  * prasad-send switch) + the UAT allowlists inside resolveSender.
  */
@@ -624,7 +624,7 @@ export async function notifyUnnotifiedProposals(pid: string): Promise<ProposalNo
   const sender = resolveSender();
   const base = process.env.NEXT_PUBLIC_PORTAL_BASE_URL ?? 'https://cmt-setu.vercel.app';
 
-  // Two equality filters — served by merged single-field indexes, no composite.
+  // Two equality filters - served by merged single-field indexes, no composite.
   const snap = await db.collection('prasadAssignments')
     .where('pid', '==', pid).where('status', '==', 'proposed').get();
 
@@ -638,8 +638,8 @@ export async function notifyUnnotifiedProposals(pid: string): Promise<ProposalNo
       const when = formatDate(a.date);
       for (const m of managersSnap.docs) {
         const mem = m.data() as { email?: string | null; phone?: string | null; firstName?: string };
-        const msg = `Namaste ${mem.firstName ?? ''}! Your family's suggested Bala Vihar prasad Sunday is ${when}. Please confirm it or pick another date: ${base}/family/prasad — Chinmaya Mission Toronto`;
-        if (mem.email) await sender.sendEmail({ to: mem.email, subject: `Prasad Sunday — please confirm (${when})`, text: msg });
+        const msg = `Namaste ${mem.firstName ?? ''}! Your family's suggested Bala Vihar prasad Sunday is ${when}. Please confirm it or pick another date: ${base}/family/prasad - Chinmaya Mission Toronto`;
+        if (mem.email) await sender.sendEmail({ to: mem.email, subject: `Prasad Sunday - please confirm (${when})`, text: msg });
         if (mem.phone) await sender.sendSMS({ phone: mem.phone, message: msg });
       }
       await doc.ref.set({ proposalNotifiedAt: FieldValue.serverTimestamp() }, { merge: true });
@@ -698,12 +698,12 @@ it('still sends the plain reminder to an assigned family in the same run', async
 - [ ] **Step 2: Run to verify failure**
 
 Run: `pnpm --filter @cmt/portal exec vitest run src/features/setu/prasad/__tests__/reminder-service.test.ts`
-Expected: FAIL — the query only matches `status=='assigned'`; proposed docs invisible.
+Expected: FAIL - the query only matches `status=='assigned'`; proposed docs invisible.
 
-- [ ] **Step 3: Implement** — in `sendDuePrasadReminders`, replace the single query + message build:
+- [ ] **Step 3: Implement** - in `sendDuePrasadReminders`, replace the single query + message build:
 
 ```ts
-  // One query per status — `in` can't combine with the date `in` filter, and
+  // One query per status - `in` can't combine with the date `in` filter, and
   // each (status==, date in […]) pair is served by the existing (status,date)
   // composite. Proposed families get a confirm-nudge instead of a reminder.
   const targets = Object.keys(KIND_BY_DAYS).map((d) => addDays(today, Number(d)));
@@ -717,14 +717,14 @@ Expected: FAIL — the query only matches `status=='assigned'`; proposed docs in
   ];
 ```
 
-…and inside the loop (`for (const { doc, proposed } of docs)`) build the copy per status (everything else — stamps, deep-merge comment, try/catch — unchanged):
+…and inside the loop (`for (const { doc, proposed } of docs)`) build the copy per status (everything else - stamps, deep-merge comment, try/catch - unchanged):
 
 ```ts
       const base = process.env.NEXT_PUBLIC_PORTAL_BASE_URL ?? 'https://cmt-setu.vercel.app';
       const msg = proposed
-        ? `Namaste ${mem.firstName ?? ''}! Your family's suggested Bala Vihar prasad Sunday (${when}) is ${lead} and is not confirmed yet. Please confirm or pick another date: ${base}/family/prasad — Chinmaya Mission Toronto`
-        : `Namaste ${mem.firstName ?? ''}! Your family's Bala Vihar prasad day ${lead} — ${when}. Please bring prasad for the assembly. — Chinmaya Mission Toronto`;
-      const subject = proposed ? `Prasad Sunday — please confirm (${when})` : `Prasad reminder — ${when}`;
+        ? `Namaste ${mem.firstName ?? ''}! Your family's suggested Bala Vihar prasad Sunday (${when}) is ${lead} and is not confirmed yet. Please confirm or pick another date: ${base}/family/prasad - Chinmaya Mission Toronto`
+        : `Namaste ${mem.firstName ?? ''}! Your family's Bala Vihar prasad day ${lead} - ${when}. Please bring prasad for the assembly. - Chinmaya Mission Toronto`;
+      const subject = proposed ? `Prasad Sunday - please confirm (${when})` : `Prasad reminder - ${when}`;
 ```
 
 Update `checked` to `assignedSnap.size + proposedSnap.size`.
@@ -732,7 +732,7 @@ Update `checked` to `assignedSnap.size + proposedSnap.size`.
 - [ ] **Step 4: Run**
 
 Run: `pnpm --filter @cmt/portal exec vitest run src/features/setu/prasad/__tests__/reminder-service.test.ts`
-Expected: PASS (existing assigned-only tests still pass — the second query returns empty for them).
+Expected: PASS (existing assigned-only tests still pass - the second query returns empty for them).
 
 - [ ] **Step 5: Commit**
 
@@ -743,7 +743,7 @@ git commit -m "feat(prasad): 7d/2d cron nudges unconfirmed proposals with confir
 
 ---
 
-### Task 7: Routes — confirm, admin assign, assign-remaining, publish notify
+### Task 7: Routes - confirm, admin assign, assign-remaining, publish notify
 
 **Files:**
 - Create: `apps/portal/src/app/api/setu/prasad/confirm/route.ts`
@@ -797,11 +797,11 @@ describe('POST /api/admin/prasad/assign-remaining', () => {
 - [ ] **Step 2: Run to verify failure**
 
 Run: `pnpm --filter @cmt/portal exec vitest run "src/app/api/setu/prasad/__tests__" "src/app/api/admin/prasad/__tests__"`
-Expected: FAIL — missing route modules / unhandled body keys.
+Expected: FAIL - missing route modules / unhandled body keys.
 
 - [ ] **Step 3: Implement.**
 
-`apps/portal/src/app/api/setu/prasad/confirm/route.ts` (new — mirrors `move/route.ts`; manager-only via the existing `/api/setu/prasad/` prefix rule in `canAccessRoute`, no gate change):
+`apps/portal/src/app/api/setu/prasad/confirm/route.ts` (new - mirrors `move/route.ts`; manager-only via the existing `/api/setu/prasad/` prefix rule in `canAccessRoute`, no gate change):
 ```ts
 import { NextResponse } from 'next/server';
 import { PrasadConfirmBodySchema } from '@cmt/shared-domain';
@@ -810,7 +810,7 @@ import { flags } from '@/lib/flags';
 import { confirmAssignment } from '@/features/setu/prasad/family-assignment';
 
 /**
- * POST /api/setu/prasad/confirm — family confirms their PROPOSED Sunday, either
+ * POST /api/setu/prasad/confirm - family confirms their PROPOSED Sunday, either
  * in place (no body date) or at another open Sunday. Manager-only at the
  * middleware gate; the transaction re-validates status + target capacity.
  */
@@ -831,7 +831,7 @@ export async function POST(req: Request) {
 }
 ```
 
-`assignment/route.ts` — insert the assign branch BEFORE the date-only branch (cancel stays first):
+`assignment/route.ts` - insert the assign branch BEFORE the date-only branch (cancel stays first):
 ```ts
   if (parsed.data.assign === true) {
     const data = snap.data() as { status?: string; date?: string } | undefined;
@@ -851,7 +851,7 @@ export async function POST(req: Request) {
   }
 ```
 
-`assign-remaining/route.ts` (new — same gate stack as publish):
+`assign-remaining/route.ts` (new - same gate stack as publish):
 ```ts
 import { NextResponse } from 'next/server';
 import { isAdmin, PrasadAssignRemainingBodySchema } from '@cmt/shared-domain';
@@ -860,7 +860,7 @@ import { readSessionFromHeaders } from '@/lib/auth/headers';
 import { flags } from '@/lib/flags';
 import { CURRENT_PRASAD_PIDS } from '@/features/setu/prasad/constants';
 
-/** POST /api/admin/prasad/assign-remaining — flip every still-PROPOSED row for
+/** POST /api/admin/prasad/assign-remaining - flip every still-PROPOSED row for
  *  the pid to assigned (confirmedBy:'admin'). The "assign the stragglers"
  *  bulk action before the season starts. Admin-only. */
 export async function POST(req: Request) {
@@ -896,11 +896,11 @@ export async function POST(req: Request) {
 }
 ```
 
-`publish/route.ts` — after `publishAssignments(...)`:
+`publish/route.ts` - after `publishAssignments(...)`:
 ```ts
   const result = await publishAssignments(period.pid, period.location, parsed.data.cap, actor);
   // Fire the one-time proposal notifications for anything still un-notified
-  // (self-healing — includes rows from a previous publish whose notify crashed).
+  // (self-healing - includes rows from a previous publish whose notify crashed).
   const notify = await notifyUnnotifiedProposals(period.pid);
   return NextResponse.json({ ...result, notify }, { status: 200 });
 ```
@@ -909,7 +909,7 @@ export async function POST(req: Request) {
 - [ ] **Step 4: Run all route tests**
 
 Run: `pnpm --filter @cmt/portal exec vitest run "src/app/api/setu/prasad" "src/app/api/admin/prasad" "src/app/api/cron/__tests__/send-prasad-reminders.test.ts"`
-Expected: PASS (publish route tests may need the new `notifyUnnotifiedProposals` mocked — add `vi.mock('@/features/setu/prasad/proposal-notify', () => ({ notifyUnnotifiedProposals: vi.fn().mockResolvedValue({ checked: 0, sent: 0, skipped: 0, failed: 0 }) }))`).
+Expected: PASS (publish route tests may need the new `notifyUnnotifiedProposals` mocked - add `vi.mock('@/features/setu/prasad/proposal-notify', () => ({ notifyUnnotifiedProposals: vi.fn().mockResolvedValue({ checked: 0, sent: 0, skipped: 0, failed: 0 }) }))`).
 
 - [ ] **Step 5: Commit**
 
@@ -934,7 +934,7 @@ it('assignRemainingPrasad posts the pid and returns the assigned count', async (
 it('adminReassignPrasad passes assign:true through', async () => { /* body assertion */ });
 ```
 
-- [ ] **Step 2: Run to verify failure** — `pnpm --filter @cmt/portal exec vitest run src/features/setu/prasad/__tests__/prasad-client.test.ts`
+- [ ] **Step 2: Run to verify failure** - `pnpm --filter @cmt/portal exec vitest run src/features/setu/prasad/__tests__/prasad-client.test.ts`
 
 - [ ] **Step 3: Implement** (append; extend the reassign body type):
 
@@ -963,7 +963,7 @@ export async function assignRemainingPrasad(pid: string): Promise<number> {
 ```
 …and change `adminReassignPrasad`'s parameter type to `{ paid: string; date?: string; cancel?: boolean; assign?: boolean }`.
 
-- [ ] **Step 4: Run** — same command, expected PASS.
+- [ ] **Step 4: Run** - same command, expected PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -974,7 +974,7 @@ git commit -m "feat(prasad): confirm/assign-remaining client wrappers"
 
 ---
 
-### Task 9: Family card — proposed state
+### Task 9: Family card - proposed state
 
 **Files:**
 - Modify: `apps/portal/src/features/setu/prasad/family-prasad-card.tsx`
@@ -1002,14 +1002,14 @@ it('confirm CTA calls confirmPrasad() and refreshes', async () => {
   expect(mockConfirmPrasad).toHaveBeenCalledWith(undefined);
 });
 
-it('assigned: unchanged — Your prasad Sunday + move button when movable', () => {
+it('assigned: unchanged - Your prasad Sunday + move button when movable', () => {
   render(<FamilyPrasadCard assignment={{ ...PROPOSED, status: 'assigned' }} />);
   expect(screen.getByText(/your prasad sunday/i)).toBeInTheDocument();
 });
 ```
 (Mock `./prasad-client` exporting `confirmPrasad`/`movePrasad`/`fetchMoveOptions` like the existing tests mock the move pair.)
 
-- [ ] **Step 2: Run to verify failure** — `pnpm --filter @cmt/portal exec vitest run src/features/setu/prasad/__tests__/family-prasad-card.test.tsx`
+- [ ] **Step 2: Run to verify failure** - `pnpm --filter @cmt/portal exec vitest run src/features/setu/prasad/__tests__/family-prasad-card.test.tsx`
 
 - [ ] **Step 3: Implement.** In `family-prasad-card.tsx`:
 
@@ -1024,7 +1024,7 @@ it('assigned: unchanged — Your prasad Sunday + move button when movable', () =
     setConfirming(true);
     try {
       await confirmPrasad(undefined);
-      toast.success('Prasad Sunday confirmed — thank you!');
+      toast.success('Prasad Sunday confirmed - thank you!');
       router.refresh();
     } catch (err) {
       const code = err instanceof Error ? err.message : '';
@@ -1065,27 +1065,27 @@ it('assigned: unchanged — Your prasad Sunday + move button when movable', () =
           /* existing locked note unchanged */
         )}
 ```
-6. Sheet: pass a mode prop — `<MovePrasadSheet mode={isProposed ? 'choose' : 'move'} …/>`. In `MovePrasadSheet`:
+6. Sheet: pass a mode prop - `<MovePrasadSheet mode={isProposed ? 'choose' : 'move'} …/>`. In `MovePrasadSheet`:
    - props gain `mode: 'move' | 'choose'`;
    - title: `mode === 'choose' ? 'Pick your prasad Sunday' : 'Move your prasad Sunday'`;
-   - intro copy for choose: `You're suggested for <strong>{currentDate}</strong>. Pick any Sunday with room — picking one confirms it.`;
-   - `confirmMove` calls `mode === 'choose' ? confirmPrasad(picked) : movePrasad(picked)` and the success toast becomes `mode === 'choose' ? 'Prasad Sunday confirmed — thank you!' : 'Prasad day moved'`;
+   - intro copy for choose: `You're suggested for <strong>{currentDate}</strong>. Pick any Sunday with room - picking one confirms it.`;
+   - `confirmMove` calls `mode === 'choose' ? confirmPrasad(picked) : movePrasad(picked)` and the success toast becomes `mode === 'choose' ? 'Prasad Sunday confirmed - thank you!' : 'Prasad day moved'`;
    - CTA label: `mode === 'choose' ? 'Confirm this Sunday' : 'Confirm move'`;
-   - error mapping gains `'already-confirmed'` → `toast.error('Already confirmed — refresh to see your date.')`.
+   - error mapping gains `'already-confirmed'` → `toast.error('Already confirmed - refresh to see your date.')`.
 
-- [ ] **Step 4: Run** — card tests + full prasad set: `pnpm --filter @cmt/portal exec vitest run src/features/setu/prasad`
+- [ ] **Step 4: Run** - card tests + full prasad set: `pnpm --filter @cmt/portal exec vitest run src/features/setu/prasad`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add apps/portal/src/features/setu/prasad/family-prasad-card.tsx apps/portal/src/features/setu/prasad/__tests__/family-prasad-card.test.tsx
-git commit -m "feat(prasad): family card proposed state — confirm in place or pick a Sunday"
+git commit -m "feat(prasad): family card proposed state - confirm in place or pick a Sunday"
 ```
 
 ---
 
-### Task 10: Admin screen — chips, Assign, bulk, counts, CTA copy
+### Task 10: Admin screen - chips, Assign, bulk, counts, CTA copy
 
 **Files:**
 - Modify: `apps/portal/src/features/setu/prasad/admin-prasad-screen.tsx`
@@ -1115,7 +1115,7 @@ it('bulk button shows the unconfirmed count and calls assignRemainingPrasad', as
 it('publish CTA reads "Publish proposals"', () => { /* render PreviewBody path, assert text */ });
 ```
 
-- [ ] **Step 2: Run to verify failure** — `pnpm --filter @cmt/portal exec vitest run src/features/setu/prasad/__tests__/admin-prasad-screen.test.tsx`
+- [ ] **Step 2: Run to verify failure** - `pnpm --filter @cmt/portal exec vitest run src/features/setu/prasad/__tests__/admin-prasad-screen.test.tsx`
 
 - [ ] **Step 3: Implement** in `admin-prasad-screen.tsx`:
 
@@ -1206,14 +1206,14 @@ function StatusChip({ status }: { status: string }) {
 ```
 5. Publish CTA (line 988): `'Publish schedule'` → `'Publish proposals'`; the publishing spinner label stays. Also update the heading at line ~783 from `Published assignments` to `Published proposals & assignments`.
 
-- [ ] **Step 4: Run** — `pnpm --filter @cmt/portal exec vitest run src/features/setu/prasad`
+- [ ] **Step 4: Run** - `pnpm --filter @cmt/portal exec vitest run src/features/setu/prasad`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add apps/portal/src/features/setu/prasad/admin-prasad-screen.tsx apps/portal/src/features/setu/prasad/__tests__/admin-prasad-screen.test.tsx
-git commit -m "feat(prasad): admin manage view — status chips, per-row + bulk assign, counts"
+git commit -m "feat(prasad): admin manage view - status chips, per-row + bulk assign, counts"
 ```
 
 ---
@@ -1236,11 +1236,11 @@ it('includes proposed families with their status, confirmed sorted first', async
 });
 ```
 
-- [ ] **Step 2: Run to verify failure** — `pnpm --filter @cmt/portal exec vitest run src/features/setu/prasad/__tests__/upcoming.test.ts`
+- [ ] **Step 2: Run to verify failure** - `pnpm --filter @cmt/portal exec vitest run src/features/setu/prasad/__tests__/upcoming.test.ts`
 
 - [ ] **Step 3: Implement.** In `upcoming.ts`:
 - `PrasadFamily` gains `status: 'proposed' | 'assigned';`
-- the status filter becomes `(a.status === 'assigned' || a.status === 'proposed')` and carries `status` through the row objects (`rows.push({ fid, familyName, status: a.status })` — adjust the intermediate `grouped` type accordingly);
+- the status filter becomes `(a.status === 'assigned' || a.status === 'proposed')` and carries `status` through the row objects (`rows.push({ fid, familyName, status: a.status })` - adjust the intermediate `grouped` type accordingly);
 - when building each Sunday's `families`, sort confirmed first: `rows.sort((x, y) => (x.status === y.status ? 0 : x.status === 'assigned' ? -1 : 1))`;
 - update the doc comment ("keep status==assigned" → "keep assigned + proposed").
 
@@ -1261,7 +1261,7 @@ In `page.tsx` `SundayCard`: change the count pill and add a per-family chip:
             </div>
 ```
 
-- [ ] **Step 4: Run** — `pnpm --filter @cmt/portal exec vitest run src/features/setu/prasad && pnpm --filter @cmt/portal typecheck`
+- [ ] **Step 4: Run** - `pnpm --filter @cmt/portal exec vitest run src/features/setu/prasad && pnpm --filter @cmt/portal typecheck`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -1308,7 +1308,7 @@ git commit -m "feat(prasad): welcome day-of list shows proposed families with ch
         console.log(`  [${p.key}] proposed prasad fixture ${paid} (date=${date})`);
       }
 ```
-Note `merge: false` (plain set) — re-seed must RESET a confirmed doc back to proposed.
+Note `merge: false` (plain set) - re-seed must RESET a confirmed doc back to proposed.
 
 - [ ] **Step 2: Run the seed against UAT**
 
@@ -1351,7 +1351,7 @@ test.describe('prasad propose→confirm', () => {
     const bad = await ctx.post('/api/setu/prasad/confirm', { data: { date: 'nope' } });
     expect(bad.status()).toBe(400);
     const bogus = await ctx.post('/api/setu/prasad/confirm', { data: { date: '2099-01-03' } });
-    expect(bogus.status()).toBe(409); // invalid-target or already-confirmed — both 409
+    expect(bogus.status()).toBe(409); // invalid-target or already-confirmed - both 409
   });
 
   test('in-place confirm round-trips (or reports already-confirmed on rerun)', async () => {
@@ -1382,8 +1382,8 @@ test.describe('prasad propose→confirm', () => {
 });
 ```
 
-- [ ] **Step 4: Typecheck + unit suite** — `pnpm --filter @cmt/portal typecheck && pnpm --filter @cmt/portal test`
-Expected: clean. (The Playwright run happens AFTER deploy — see Final verification.)
+- [ ] **Step 4: Typecheck + unit suite** - `pnpm --filter @cmt/portal typecheck && pnpm --filter @cmt/portal test`
+Expected: clean. (The Playwright run happens AFTER deploy - see Final verification.)
 
 - [ ] **Step 5: Commit**
 
@@ -1403,11 +1403,11 @@ git commit -m "test(prasad): proposed seed fixture + propose→confirm E2E"
 - [ ] **Step 1: Runbook §14 entry** (top of the change log):
 
 ```markdown
-- **2026-06-10** — **Prasad propose→confirm revision** (spec `docs/superpowers/specs/2026-06-10-prasad-propose-confirm-design.md`; admin-team feedback). Publish now writes `status:'proposed'`; families confirm in place or pick any open Sunday (`POST /api/setu/prasad/confirm`, manager-only via the existing prefix rule); admin assigns stragglers per-row (`assign:true` on the PATCH) or in bulk (`POST /api/admin/prasad/assign-remaining`). New doc fields `confirmedAt`/`confirmedBy('family'|'admin')`/`proposalNotifiedAt`; statuses now `proposed|assigned|cancelled` ('assigned' still = committed, so pre-revision docs need **no migration**). Publish fires a one-time confirm-request email+SMS per family and the daily cron nudges unconfirmed proposals at 7d/2d — both gated by `PRASAD_REMINDER_CRON_ENABLED` + allowlists. **No new indexes** (cron reuses `(status,date)`; bulk assign is equality-only). Seed: proposed fixture on the Scarborough test family (`seed:test-accounts`, plain-set so re-seed resets a confirmed doc). **Operational ritual change:** publish proposals → families confirm over ~2 weeks → admin clicks "Assign all unconfirmed (N)" before the season starts. **Prod TODO:** unchanged from the prasad-module entry.
+- **2026-06-10** - **Prasad propose→confirm revision** (spec `docs/superpowers/specs/2026-06-10-prasad-propose-confirm-design.md`; admin-team feedback). Publish now writes `status:'proposed'`; families confirm in place or pick any open Sunday (`POST /api/setu/prasad/confirm`, manager-only via the existing prefix rule); admin assigns stragglers per-row (`assign:true` on the PATCH) or in bulk (`POST /api/admin/prasad/assign-remaining`). New doc fields `confirmedAt`/`confirmedBy('family'|'admin')`/`proposalNotifiedAt`; statuses now `proposed|assigned|cancelled` ('assigned' still = committed, so pre-revision docs need **no migration**). Publish fires a one-time confirm-request email+SMS per family and the daily cron nudges unconfirmed proposals at 7d/2d - both gated by `PRASAD_REMINDER_CRON_ENABLED` + allowlists. **No new indexes** (cron reuses `(status,date)`; bulk assign is equality-only). Seed: proposed fixture on the Scarborough test family (`seed:test-accounts`, plain-set so re-seed resets a confirmed doc). **Operational ritual change:** publish proposals → families confirm over ~2 weeks → admin clicks "Assign all unconfirmed (N)" before the season starts. **Prod TODO:** unchanged from the prasad-module entry.
 ```
 Also amend the original prasad entry's prod-TODO sequence: "admin publishes each location from `/admin/prasad`" → "admin publishes **proposals** per location from `/admin/prasad`, then bulk-assigns unconfirmed families before the first prasad Sunday".
 
-- [ ] **Step 2: CLAUDE.md** — in the Prasad-module status paragraph, after "rollover-pattern preview→publish at `/admin/prasad`", insert: "Revised 2026-06-10 to **propose→confirm**: publish writes proposals, families confirm (or pick another open Sunday) at `/family/prasad`, admin assigns stragglers per-row or in bulk; reminders are status-aware."
+- [ ] **Step 2: CLAUDE.md** - in the Prasad-module status paragraph, after "rollover-pattern preview→publish at `/admin/prasad`", insert: "Revised 2026-06-10 to **propose→confirm**: publish writes proposals, families confirm (or pick another open Sunday) at `/family/prasad`, admin assigns stragglers per-row or in bulk; reminders are status-aware."
 
 - [ ] **Step 3: Commit + push**
 
@@ -1422,6 +1422,6 @@ git push
 ## Final verification (after the push deploys to UAT)
 
 1. `pnpm --filter @cmt/portal seed:test-accounts` (restores the proposed fixture).
-2. `PLAYWRIGHT_BASE_URL=https://cmt-setu.vercel.app pnpm test:e2e` — full suite. Baseline before this plan: 48 passed / 12 skipped; this plan adds 5 (prasad-propose.spec.ts) → expect **53 passed / 12 skipped / 0 failed**. The shipped `prasad.spec.ts` must stay green untouched (its fixture remains `assigned`).
+2. `PLAYWRIGHT_BASE_URL=https://cmt-setu.vercel.app pnpm test:e2e` - full suite. Baseline before this plan: 48 passed / 12 skipped; this plan adds 5 (prasad-propose.spec.ts) → expect **53 passed / 12 skipped / 0 failed**. The shipped `prasad.spec.ts` must stay green untouched (its fixture remains `assigned`).
 3. Browser walkthrough (mock-free, per CLAUDE.md pre-ship rules): sign in as `setu-test-parent-scarborough@…` → `/family/prasad` shows **Suggested prasad Sunday** with both CTAs → "Pick a different Sunday" lists open Sundays → Confirm → card flips to **Your prasad Sunday**. Then as admin: `/admin/prasad` → Scarborough tab → manage list shows the Confirmed chip, counts line, and (after re-seeding) the Assign + bulk-assign controls.
 4. Note in the summary which steps were browser-verified vs API-verified.

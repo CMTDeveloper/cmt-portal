@@ -2,16 +2,16 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Give every family a memorable 4-digit Family ID (from `1001`) and every member a memorable 5-digit Member ID (from `50001`), surfaced in the UI, while keeping every prior ID searchable — implemented as **additive public-id fields**, never a re-key.
+**Goal:** Give every family a memorable 4-digit Family ID (from `1001`) and every member a memorable 5-digit Member ID (from `50001`), surfaced in the UI, while keeping every prior ID searchable - implemented as **additive public-id fields**, never a re-key.
 
-**Architecture:** The current `CMT-XXXXXXXX` FID stays the Firestore `families` **doc-id** and the current `${fid}-NN` MID stays the `members` **doc-id**; nothing is renamed and no foreign key (donations, attendance, contactKeys, enrollments, claims, invites, routes) is touched. We add two new indexed string fields — `publicFid` on the family doc and `publicMid` on the member doc — allocated from transactional Firestore **counter** docs. New families/members get them at creation; a one-time idempotent UAT migration backfills all existing records. The UI shows `publicFid` at family level and `publicMid` on the member detail page (un-hiding the MID that issue #4's first pass hid — it is now the canonical, user-facing Member ID). Search gains lookup by both new numbers; all legacy IDs remain findable because they remain the primary keys.
+**Architecture:** The current `CMT-XXXXXXXX` FID stays the Firestore `families` **doc-id** and the current `${fid}-NN` MID stays the `members` **doc-id**; nothing is renamed and no foreign key (donations, attendance, contactKeys, enrollments, claims, invites, routes) is touched. We add two new indexed string fields - `publicFid` on the family doc and `publicMid` on the member doc - allocated from transactional Firestore **counter** docs. New families/members get them at creation; a one-time idempotent UAT migration backfills all existing records. The UI shows `publicFid` at family level and `publicMid` on the member detail page (un-hiding the MID that issue #4's first pass hid - it is now the canonical, user-facing Member ID). Search gains lookup by both new numbers; all legacy IDs remain findable because they remain the primary keys.
 
 **Tech Stack:** Next.js 16 (App Router), TypeScript, `firebase-admin` Firestore, Zod (`@cmt/shared-domain`), Vitest, Playwright (deployed-UAT E2E), pnpm/Turborepo.
 
 ## Global Constraints
 
 - **DB target is `chinmaya-setu-uat` ONLY.** Prod `chinmaya-setu-715b8` is OFF-LIMITS for every write (migration, index deploy, seed). Never `firebase deploy ... --force`.
-- **Additive only — no re-key.** `families` doc-id stays `CMT-…`; `members` doc-id stays `${fid}-NN`. Do NOT change any existing doc-id, foreign key, route param, or session claim.
+- **Additive only - no re-key.** `families` doc-id stays `CMT-…`; `members` doc-id stays `${fid}-NN`. Do NOT change any existing doc-id, foreign key, route param, or session claim.
 - **Doc-schema fields are validated on READ** → every new schema field is `.nullable().optional()`; never `.min(1)`/required on a doc schema. Enforce required-ness at write sites only.
 - **`exactOptionalPropertyTypes` is on** → never assign `undefined` to an optional; omit the key or assign `null`.
 - **Counters are the single source of truth** for sequential allocation, shared by runtime creation and the migration, so the two never collide.
@@ -28,7 +28,7 @@
 - Member-creation sites: `features/setu/registration/register-family.ts`, `…/registration/lazy-migrate.ts`, `features/setu/teacher/pending-family.ts`, `app/api/setu/members/route.ts` (POST), `app/api/setu/invite/accept/route.ts` (verify), `features/setu/enrollment/enroll-family.ts` (verify).
 - No sequential allocator exists today. `runTransaction` pattern is used widely (e.g. `register-family.ts:110`).
 - `firestore.indexes.json` has an `indexes` array; a `members.publicMid` collection-group query needs a field-override (single-field collection-group index).
-- MID was hidden from families in commit `ba86989` (member detail page + profile header) — this plan un-hides it as `publicMid`.
+- MID was hidden from families in commit `ba86989` (member detail page + profile header) - this plan un-hides it as `publicMid`.
 
 ---
 
@@ -42,7 +42,7 @@
 **Interfaces:**
 - Produces: `FamilyDoc.publicFid?: string | null`, `MemberDoc.publicMid?: string | null`.
 
-- [ ] **Step 1: Write the failing test** — add to `schemas.test.ts`:
+- [ ] **Step 1: Write the failing test** - add to `schemas.test.ts`:
 
 ```ts
 it('FamilyDoc accepts an optional publicFid and defaults absent to undefined', () => {
@@ -109,7 +109,7 @@ Pure helpers so every UI surface shows the new number with a safe fallback to th
 
 **Files:**
 - Create: `packages/shared-domain/src/setu/public-ids.ts`
-- Modify: `packages/shared-domain/src/setu/index.ts` (or the package barrel that re-exports setu helpers — match existing export style)
+- Modify: `packages/shared-domain/src/setu/index.ts` (or the package barrel that re-exports setu helpers - match existing export style)
 - Test: `packages/shared-domain/src/setu/__tests__/public-ids.test.ts`
 
 **Interfaces:**
@@ -183,7 +183,7 @@ git commit -m "feat(setu): add displayFid/displayMid public-id helpers (issue #4
 
 **Design notes:** Allocation runs in its **own** `runTransaction`, so callers MUST allocate **before** opening their own registration/member transaction (Firestore forbids nested transactions). `allocateMemberPublicIds(n)` reserves a block in one txn (increment by `n`) so a multi-member registration takes a single round-trip.
 
-- [ ] **Step 1: Write the failing test** (uses the repo's fake-firestore harness — match the import used by other `features/setu/**/__tests__`):
+- [ ] **Step 1: Write the failing test** (uses the repo's fake-firestore harness - match the import used by other `features/setu/**/__tests__`):
 
 ```ts
 import { describe, it, expect, beforeEach } from 'vitest';
@@ -272,7 +272,7 @@ git commit -m "feat(setu): transactional public-id allocator with counters (issu
 **Interfaces:**
 - Consumes: `allocateFamilyPublicId`, `allocateMemberPublicIds` (Task 3); `FamilyDoc.publicFid`, `MemberDoc.publicMid` (Task 1).
 
-- [ ] **Step 1: Write the failing test** — assert the written family + members carry the new fields:
+- [ ] **Step 1: Write the failing test** - assert the written family + members carry the new fields:
 
 ```ts
 it('assigns publicFid to the family and a publicMid to every member', async () => {
@@ -297,7 +297,7 @@ it('assigns publicFid to the family and a publicMid to every member', async () =
 Run: `pnpm --filter @cmt/portal exec vitest run src/features/setu/registration/__tests__/register-family.test.ts`
 Expected: FAIL (`publicFid` undefined).
 
-- [ ] **Step 3: Implement** — allocate BEFORE the transaction, thread into the `set` calls:
+- [ ] **Step 3: Implement** - allocate BEFORE the transaction, thread into the `set` calls:
 
 After `const fid = generateFid();` (line ~66) add:
 ```ts
@@ -306,7 +306,7 @@ After `const fid = generateFid();` (line ~66) add:
   const publicMids = await allocateMemberPublicIds(1 + input.additionalMembers.length);
   const managerPublicMid = publicMids[0]!;
 ```
-Add `publicFid` to the family `txn.set` payload; add `publicMid: managerPublicMid` to the manager `txn.set`; in the additional-members loop use `publicMids[seq - 1]` (seq starts at 2, so member i gets `publicMids[i+1]`) — set `publicMid: publicMids[memberIndex + 1]`. Add the import at top:
+Add `publicFid` to the family `txn.set` payload; add `publicMid: managerPublicMid` to the manager `txn.set`; in the additional-members loop use `publicMids[seq - 1]` (seq starts at 2, so member i gets `publicMids[i+1]`) - set `publicMid: publicMids[memberIndex + 1]`. Add the import at top:
 ```ts
 import { allocateFamilyPublicId, allocateMemberPublicIds } from '@/features/setu/ids/public-id-allocator';
 ```
@@ -329,18 +329,18 @@ git commit -m "feat(setu): assign publicFid/publicMid at family registration (is
 Cover every other place a family or member doc is born so no new record ships without a public id.
 
 **Files (modify each + extend its test):**
-- `apps/portal/src/features/setu/registration/lazy-migrate.ts` (lazy legacy migration on first sign-in) — allocate `publicFid` for the family + `publicMid` per member it creates.
-- `apps/portal/src/features/setu/teacher/pending-family.ts` — new family → `publicFid`; new child (`nextMid`) → one `publicMid`.
-- `apps/portal/src/app/api/setu/members/route.ts` (POST add member, ~line 166 txn) — allocate one `publicMid` before the txn, set on the new member.
-- `apps/portal/src/app/api/setu/invite/accept/route.ts` — **first read** the route: if accepting creates/links a *new* member doc, allocate a `publicMid`; if it only attaches a `uid` to an existing member, no change (note the finding in the commit body).
-- `apps/portal/src/features/setu/enrollment/enroll-family.ts` (~line 113) — **first read** the route: confirm it does NOT create member docs (it should create enrollments). If it does create members, allocate `publicMid`; otherwise no change.
+- `apps/portal/src/features/setu/registration/lazy-migrate.ts` (lazy legacy migration on first sign-in) - allocate `publicFid` for the family + `publicMid` per member it creates.
+- `apps/portal/src/features/setu/teacher/pending-family.ts` - new family → `publicFid`; new child (`nextMid`) → one `publicMid`.
+- `apps/portal/src/app/api/setu/members/route.ts` (POST add member, ~line 166 txn) - allocate one `publicMid` before the txn, set on the new member.
+- `apps/portal/src/app/api/setu/invite/accept/route.ts` - **first read** the route: if accepting creates/links a *new* member doc, allocate a `publicMid`; if it only attaches a `uid` to an existing member, no change (note the finding in the commit body).
+- `apps/portal/src/features/setu/enrollment/enroll-family.ts` (~line 113) - **first read** the route: confirm it does NOT create member docs (it should create enrollments). If it does create members, allocate `publicMid`; otherwise no change.
 
 **Interfaces:** Consumes Task 3 allocators. Each path allocates **before** its `runTransaction`.
 
 - [ ] **Step 1:** For `lazy-migrate.ts` write a failing test asserting a lazily-migrated family has `publicFid` and each created member has `publicMid`. Run it (FAIL). Implement (allocate before the `runTransaction` at line ~47; set fields on each `members.doc(mid)` set at lines ~74/105/128 and on the family doc). Run it (PASS).
-- [ ] **Step 2:** For `pending-family.ts` write a failing test (new child gets a `publicMid`; new family gets a `publicFid`). The MID block is built inside a txn at line ~72 — allocate the `publicMid` (and `publicFid` when `createdFamily`) BEFORE the txn opens. Run FAIL → implement → PASS.
+- [ ] **Step 2:** For `pending-family.ts` write a failing test (new child gets a `publicMid`; new family gets a `publicFid`). The MID block is built inside a txn at line ~72 - allocate the `publicMid` (and `publicFid` when `createdFamily`) BEFORE the txn opens. Run FAIL → implement → PASS.
 - [ ] **Step 3:** For `members/route.ts` POST write a failing test (added member doc has `publicMid`). Allocate before the txn at ~166; set on the new member doc at ~201. Run FAIL → implement → PASS.
-- [ ] **Step 4:** Read `invite/accept/route.ts` and `enroll-family.ts`. For each that creates a member doc, add allocation + a test as above. If neither creates members, record that explicitly in the commit message ("invite/accept attaches uid to an existing member — no publicMid mint needed"). 
+- [ ] **Step 4:** Read `invite/accept/route.ts` and `enroll-family.ts`. For each that creates a member doc, add allocation + a test as above. If neither creates members, record that explicitly in the commit message ("invite/accept attaches uid to an existing member - no publicMid mint needed"). 
 - [ ] **Step 5:** Run the full portal suite to confirm no regression:
 
 Run: `pnpm --filter @cmt/portal exec vitest run src/features/setu`
@@ -364,9 +364,9 @@ git commit -m "feat(setu): mint public ids at all family/member creation paths (
 
 **Interfaces:** Consumes `publicFid`/`publicMid` fields. The non-contact branch gains two parallel lookups.
 
-**Index note:** `families.where('publicFid','==')` is a single-field collection-scoped query — Firestore auto-indexes it, **no JSON entry**. `db.collectionGroup('members').where('publicMid','==')` needs a single-field **collection-group** index → add a `fieldOverrides` entry. Run the `auditing-firestore-indexes` skill; deploy to UAT only (`--project chinmaya-setu-uat`, never `--force`).
+**Index note:** `families.where('publicFid','==')` is a single-field collection-scoped query - Firestore auto-indexes it, **no JSON entry**. `db.collectionGroup('members').where('publicMid','==')` needs a single-field **collection-group** index → add a `fieldOverrides` entry. Run the `auditing-firestore-indexes` skill; deploy to UAT only (`--project chinmaya-setu-uat`, never `--force`).
 
-- [ ] **Step 1: Write the failing test** — searching the 4-digit FID and the 5-digit MID each return the family:
+- [ ] **Step 1: Write the failing test** - searching the 4-digit FID and the 5-digit MID each return the family:
 
 ```ts
 it('finds a family by its 4-digit publicFid', async () => {
@@ -386,7 +386,7 @@ it('finds a family by a member 5-digit publicMid', async () => {
 Run: `pnpm --filter @cmt/portal exec vitest run src/features/setu/search`
 Expected: FAIL (no match).
 
-- [ ] **Step 3: Implement** — extend the non-contact `Promise.all` in `searchFamilies`:
+- [ ] **Step 3: Implement** - extend the non-contact `Promise.all` in `searchFamilies`:
 
 ```ts
 const [fidSnap, legacySnap, nameSnap, publicFidSnap, publicMidSnap] = await Promise.all([
@@ -444,7 +444,7 @@ git commit -m "feat(setu): search families by publicFid + publicMid (issue #4)"
 Surface the new numbers via the Task-2 helpers. FID is the prominent family-facing id (per CMT Developer); MID is the per-member id shown only on the member detail page (un-hiding what `ba86989` hid).
 
 **Files (locate exact render sites in Step 1; known leads):**
-- Family-level FID display: `apps/portal/src/app/family/_helpers/load-dashboard.ts` consumers — the family dashboard header / family card, and `apps/portal/src/features/setu/search/get-family-for-welcome.ts` consumers (`/welcome/family/[fid]`), welcome roster rows.
+- Family-level FID display: `apps/portal/src/app/family/_helpers/load-dashboard.ts` consumers - the family dashboard header / family card, and `apps/portal/src/features/setu/search/get-family-for-welcome.ts` consumers (`/welcome/family/[fid]`), welcome roster rows.
 - Member MID display: the member detail page under `apps/portal/src/app/family/members/[mid]/` and the profile header component changed in `ba86989` (`git show ba86989 --stat` to find the exact files).
 - Test: component tests next to each changed component + the E2E in Task 10.
 
@@ -508,7 +508,7 @@ Guard at top: `if (projectId !== 'chinmaya-setu-uat' && !allowProd) { throw new 
 Run: `pnpm --filter @cmt/portal migrate:public-ids --dry-run --limit 5 --csv-out /tmp/public-ids-dry.csv`
 Expected: logs 5 families + their members with assigned numbers, **no writes**.
 
-- [ ] **Step 4: Commit (script only — do NOT run the live migration yet)**
+- [ ] **Step 4: Commit (script only - do NOT run the live migration yet)**
 
 ```bash
 git add apps/portal/scripts/assign-public-ids.ts apps/portal/package.json apps/portal/scripts/__tests__/
@@ -529,7 +529,7 @@ git commit -m "feat(setu): idempotent assign-public-ids backfill script, UAT-gua
 ## `<sha>` · 2026-06-24 · families/members gain public ids (FID 4-digit, MID 5-digit)
 - **Family responses** (`GET /api/setu/dashboard`, `GET /api/setu/family`, family search hits, welcome family) gain an additive **`publicFid: string | null`** (4-digit, e.g. `'1042'`). The existing `fid` (`CMT-…`) is unchanged and remains the join key.
 - **Member responses** (`GET /api/setu/dashboard` members, `GET /api/setu/members`, member detail) gain an additive **`publicMid: string | null`** (5-digit, e.g. `'50001'`). The existing `mid` (`${fid}-NN`) is unchanged and remains the join key / route param.
-  - **Mobile:** add optional `publicFid`/`publicMid` to the family/member schemas; display `publicFid` as the Family ID and `publicMid` as the Member ID (fall back to `fid`/`mid` when null). **Do NOT** use them as join keys or route params — keep using `fid`/`mid`. No request-shape change.
+  - **Mobile:** add optional `publicFid`/`publicMid` to the family/member schemas; display `publicFid` as the Family ID and `publicMid` as the Member ID (fall back to `fid`/`mid` when null). **Do NOT** use them as join keys or route params - keep using `fid`/`mid`. No request-shape change.
 ```
 
 - [ ] **Step 2:** Append a dated Change-log entry to the cutover runbook describing: new `counters` collection (`familyPublicId`@1001, `memberPublicId`@50001), the `members.publicMid` collection-group index (UAT-deployed), and the `migrate:public-ids` backfill (UAT, on-demand).
@@ -543,7 +543,7 @@ git commit -am "docs(setu): mobile changelog + cutover runbook for public ids (i
 
 ### Task 10: Run the UAT migration + deployed-UAT E2E verification
 
-**This is the irreversible step — get explicit go-ahead before running the live migration (see Execution Handoff).**
+**This is the irreversible step - get explicit go-ahead before running the live migration (see Execution Handoff).**
 
 **Files:**
 - Create: `apps/portal/e2e/setu/public-ids.spec.ts` (Playwright `setu` project, against `https://cmt-setu.vercel.app`)

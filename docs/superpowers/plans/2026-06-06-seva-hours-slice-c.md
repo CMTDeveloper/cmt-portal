@@ -1,4 +1,4 @@
-# Seva Hours — Slice C (Confirmation + hours accrual) Implementation Plan
+# Seva Hours - Slice C (Confirmation + hours accrual) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax.
 
@@ -6,43 +6,43 @@
 
 **Architecture:** A confirmer-facing `POST /api/welcome/seva/signups/[signupId]/confirm` writes `status` + `hoursAwarded` + `confirmedAt`/`confirmedBy` onto the existing `seva_signups/{oppId__fid}` doc (built in Slice B). A `GET /api/welcome/seva/opportunities/[oppId]/signups` roster endpoint + a `getOpportunityRoster(oppId)` reader join each sign-up to its family name (and credited member name) via the already-cached `getFamilyByFid`. The themed `/welcome/seva/[oppId]` roster page drives confirmation. On the family side, `getFamilySevaView` gains a computed `hoursEarned` (Σ completed `hoursAwarded` this year) and a closed-opportunity join fix so resolved sign-ups still render their opportunity summary; `seva-browser.tsx` learns the `completed`/`no-show` states.
 
-**Tech Stack / strict flags / conventions:** identical to Slices A & B — see `docs/superpowers/plans/2026-06-05-seva-hours-slice-a.md` (**"Design system / UX requirements"** + **"Mobile-app readiness"**) and `docs/superpowers/plans/2026-06-06-seva-hours-slice-b.md`, both of which apply verbatim. Spec: `docs/superpowers/specs/2026-06-05-seva-hours-design.md`.
+**Tech Stack / strict flags / conventions:** identical to Slices A & B - see `docs/superpowers/plans/2026-06-05-seva-hours-slice-a.md` (**"Design system / UX requirements"** + **"Mobile-app readiness"**) and `docs/superpowers/plans/2026-06-06-seva-hours-slice-b.md`, both of which apply verbatim. Spec: `docs/superpowers/specs/2026-06-05-seva-hours-design.md`.
 
-## Cross-cutting (REPEAT of the hard rules — do not skip)
-- **Mobile-app readiness:** EVERY new `/api/welcome/seva/*` and `/api/setu/seva/*` handler derives identity from `readSessionFromHeaders(req)` (works for the web `__session` cookie AND a Bearer-token mobile client). **NEVER `getCurrentFamily()` / `cookies()` inside an API handler.** (Server *pages* — `/welcome/seva/[oppId]/page.tsx` — are web rendering and MAY read `cookies()` for the defensive role re-check, mirroring `app/welcome/family/[fid]/page.tsx`.) Responses: JSON, ISO-string dates (`serializeOpportunity` / `serializeSignup` / the roster serializer), numbers as numbers, consistent `{ ... }` / `{ error }` envelope.
+## Cross-cutting (REPEAT of the hard rules - do not skip)
+- **Mobile-app readiness:** EVERY new `/api/welcome/seva/*` and `/api/setu/seva/*` handler derives identity from `readSessionFromHeaders(req)` (works for the web `__session` cookie AND a Bearer-token mobile client). **NEVER `getCurrentFamily()` / `cookies()` inside an API handler.** (Server *pages* - `/welcome/seva/[oppId]/page.tsx` - are web rendering and MAY read `cookies()` for the defensive role re-check, mirroring `app/welcome/family/[fid]/page.tsx`.) Responses: JSON, ISO-string dates (`serializeOpportunity` / `serializeSignup` / the roster serializer), numbers as numbers, consistent `{ ... }` / `{ error }` envelope.
 - **Modern on-theme UX:** Cool-Mist tokens, `CspRoot` / `.csp` scoping, real mobile (`block md:hidden`) + desktop (`hidden md:block`) layouts, designer pass. Mirror the existing `SevaManager` (`apps/portal/src/features/admin/seva/seva-manager.tsx`), `SevaBrowser` (`apps/portal/src/features/setu/seva/seva-browser.tsx`), and `app/welcome/family/[fid]/page.tsx`.
 - **Role checks via helpers:** `isWelcomeTeam(session)` (NEVER strict-equality on `role`). Admin inherits welcome-team.
 - **`exactOptionalPropertyTypes`:** never assign `undefined` to an optional property; conditionally spread / omit instead.
 
-## Index strategy — NO new composite index in Slice C (deliberate deviation from the spec)
+## Index strategy - NO new composite index in Slice C (deliberate deviation from the spec)
 The umbrella spec proposed `seva_signups (oppId, status)` and `(fid, sevaYear, status)` composite indexes. **Slice C does not add them**, because every query it issues is **single-field** and reduces in memory:
 - Roster: `listSignupsForOpp(oppId)` = `where('oppId','==',oppId)` (no `orderBy`) → Firestore automatic single-field index; sort/group by status happens in memory.
 - Family earned-hours: reuses `listFamilySignups(fid)` = `where('fid','==',fid)` → automatic single-field index; the `status==='completed' && sevaYear===year` filter + sum happen in memory (a family has only a handful of sign-ups).
 
 This is strictly safer (no Firestore index deploy, zero `FAILED_PRECONDITION` risk, no brush with the prod-index `--force` hazard) and correct at this data scale. If a future server-side aggregate query is written (e.g. Slice D compliance querying `seva_signups` across all families), add the matching composite index **in that slice, in the same commit as the query** (per the `feedback_firestore_collection_group_index` rule) and deploy to **UAT only**, never `--force` prod.
 
-## canAccessRoute — already covered, no change
-Both new endpoints live under `/api/welcome/seva/` (`/api/welcome/seva/opportunities/[oppId]/signups` and `/api/welcome/seva/signups/[signupId]/confirm`), which the existing rule `if (pathname === '/api/welcome/seva' || pathname.startsWith('/api/welcome/seva/')) return isWelcomeTeam(claims);` (`can-access-route.ts:159`) already gates. The roster **page** `/welcome/seva/[oppId]` is covered by `/welcome/*` → `isWelcomeTeam`. **No `can-access-route.ts` change in Slice C.** (Add a confirming test anyway — Task C3.)
+## canAccessRoute - already covered, no change
+Both new endpoints live under `/api/welcome/seva/` (`/api/welcome/seva/opportunities/[oppId]/signups` and `/api/welcome/seva/signups/[signupId]/confirm`), which the existing rule `if (pathname === '/api/welcome/seva' || pathname.startsWith('/api/welcome/seva/')) return isWelcomeTeam(claims);` (`can-access-route.ts:159`) already gates. The roster **page** `/welcome/seva/[oppId]` is covered by `/welcome/*` → `isWelcomeTeam`. **No `can-access-route.ts` change in Slice C.** (Add a confirming test anyway - Task C3.)
 
 ---
 
 ## File structure
 
 **Create:**
-- `apps/portal/src/features/setu/seva/get-opportunity-roster.ts` — `getOpportunityRoster(oppId)` (joins family + credited-member names) + `RosterRow` / `RosterData` types via shared shape.
-- `apps/portal/src/app/api/welcome/seva/opportunities/[oppId]/signups/route.ts` — GET roster.
-- `apps/portal/src/app/api/welcome/seva/signups/[signupId]/confirm/route.ts` — POST confirm.
-- `apps/portal/src/features/admin/seva/roster-client.ts` — client wrappers (`fetchRoster`, `confirmSignup`) + serialized types.
-- `apps/portal/src/features/admin/seva/roster-manager.tsx` — themed confirmer UI.
-- `apps/portal/src/app/welcome/seva/[oppId]/page.tsx` — server page (defensive role check + mobile/desktop blocks).
+- `apps/portal/src/features/setu/seva/get-opportunity-roster.ts` - `getOpportunityRoster(oppId)` (joins family + credited-member names) + `RosterRow` / `RosterData` types via shared shape.
+- `apps/portal/src/app/api/welcome/seva/opportunities/[oppId]/signups/route.ts` - GET roster.
+- `apps/portal/src/app/api/welcome/seva/signups/[signupId]/confirm/route.ts` - POST confirm.
+- `apps/portal/src/features/admin/seva/roster-client.ts` - client wrappers (`fetchRoster`, `confirmSignup`) + serialized types.
+- `apps/portal/src/features/admin/seva/roster-manager.tsx` - themed confirmer UI.
+- `apps/portal/src/app/welcome/seva/[oppId]/page.tsx` - server page (defensive role check + mobile/desktop blocks).
 - Tests alongside each.
 
 **Modify:**
-- `packages/shared-domain/src/setu/schemas/seva.ts` (+ test) — add `ConfirmSevaSignupSchema` + type.
-- `apps/portal/src/features/setu/seva/get-family-seva-view.ts` (+ test) — add `hoursEarned`; fix the closed-opportunity join.
-- `apps/portal/src/features/setu/seva/seva-browser-client.ts` — surface `hoursEarned` from the opportunities response.
-- `apps/portal/src/features/setu/seva/seva-browser.tsx` (+ test) — handle `completed` / `no-show` states; show `X of {target}` earned hours.
-- `apps/portal/src/features/admin/seva/seva-manager.tsx` (+ test) — add a "View roster" link on each opportunity card.
+- `packages/shared-domain/src/setu/schemas/seva.ts` (+ test) - add `ConfirmSevaSignupSchema` + type.
+- `apps/portal/src/features/setu/seva/get-family-seva-view.ts` (+ test) - add `hoursEarned`; fix the closed-opportunity join.
+- `apps/portal/src/features/setu/seva/seva-browser-client.ts` - surface `hoursEarned` from the opportunities response.
+- `apps/portal/src/features/setu/seva/seva-browser.tsx` (+ test) - handle `completed` / `no-show` states; show `X of {target}` earned hours.
+- `apps/portal/src/features/admin/seva/seva-manager.tsx` (+ test) - add a "View roster" link on each opportunity card.
 
 ---
 
@@ -50,7 +50,7 @@ Both new endpoints live under `/api/welcome/seva/` (`/api/welcome/seva/opportuni
 
 **Files:** modify `packages/shared-domain/src/setu/schemas/seva.ts`; create `packages/shared-domain/src/setu/schemas/__tests__/seva-confirm.test.ts`.
 
-- [ ] **Step 1 — failing test** (`seva-confirm.test.ts`):
+- [ ] **Step 1 - failing test** (`seva-confirm.test.ts`):
 ```ts
 import { describe, it, expect } from 'vitest';
 import { ConfirmSevaSignupSchema } from '../seva';
@@ -78,12 +78,12 @@ describe('ConfirmSevaSignupSchema', () => {
 });
 ```
 
-- [ ] **Step 2 — run, confirm fail:** `pnpm --filter @cmt/shared-domain exec vitest run src/setu/schemas/__tests__/seva-confirm.test.ts`
+- [ ] **Step 2 - run, confirm fail:** `pnpm --filter @cmt/shared-domain exec vitest run src/setu/schemas/__tests__/seva-confirm.test.ts`
 
-- [ ] **Step 3 — implement** (append to `seva.ts`, after `CreateSevaSignupSchema`):
+- [ ] **Step 3 - implement** (append to `seva.ts`, after `CreateSevaSignupSchema`):
 ```ts
 // Confirmation: a roster manager marks a sign-up completed (hours accrue) or
-// no-show (0 hrs). hoursAwarded is optional — when omitted on 'completed', the
+// no-show (0 hrs). hoursAwarded is optional - when omitted on 'completed', the
 // route falls back to the opportunity's defaultHours.
 export const ConfirmSevaSignupSchema = z.object({
   status: z.enum(['completed', 'no-show']),
@@ -93,7 +93,7 @@ export type ConfirmSevaSignupInput = z.infer<typeof ConfirmSevaSignupSchema>;
 ```
 (The barrel already does `export * from './schemas/seva'`, so no barrel change.)
 
-- [ ] **Step 4 — run the seva schema tests + full shared-domain suite + `tsc --noEmit` → green. Step 5 — commit:** `feat(seva): confirm-signup schema`.
+- [ ] **Step 4 - run the seva schema tests + full shared-domain suite + `tsc --noEmit` → green. Step 5 - commit:** `feat(seva): confirm-signup schema`.
 
 ---
 
@@ -103,7 +103,7 @@ export type ConfirmSevaSignupInput = z.infer<typeof ConfirmSevaSignupSchema>;
 
 This reader powers the roster GET endpoint and the roster page. It joins each non-cancelled sign-up to its family name (via the already-cached `getFamilyByFid`) and, when a member is credited, that member's name. Rows sort by status priority (`signed-up` first, then `completed`, then `no-show`) and then `signedUpAt` ascending.
 
-- [ ] **Step 1 — failing test:** mock `./get-opportunities` (`getOpportunity`, `serializeOpportunity` as identity passthrough), `./get-signups` (`listSignupsForOpp`), and `@/features/setu/members/get-family-by-fid` (`getFamilyByFid`). Assert:
+- [ ] **Step 1 - failing test:** mock `./get-opportunities` (`getOpportunity`, `serializeOpportunity` as identity passthrough), `./get-signups` (`listSignupsForOpp`), and `@/features/setu/members/get-family-by-fid` (`getFamilyByFid`). Assert:
   - returns `null` when `getOpportunity` returns null.
   - excludes `cancelled` sign-ups from `rows`.
   - resolves `familyName` from `getFamilyByFid(fid).family.name`; falls back to the `fid` string when the family lookup is null.
@@ -180,8 +180,8 @@ describe('getOpportunityRoster', () => {
 });
 ```
 
-- [ ] **Step 2 — confirm fail.**
-- [ ] **Step 3 — implement** (`get-opportunity-roster.ts`):
+- [ ] **Step 2 - confirm fail.**
+- [ ] **Step 3 - implement** (`get-opportunity-roster.ts`):
 ```ts
 import type { SevaSignupStatusType } from '@cmt/shared-domain';
 import { getOpportunity, serializeOpportunity } from './get-opportunities';
@@ -243,21 +243,21 @@ export async function getOpportunityRoster(oppId: string): Promise<RosterData | 
 }
 ```
 
-- [ ] **Step 4 — run + `tsc --noEmit` → green. Step 5 — commit:** `feat(seva): opportunity roster reader (family + member join)`.
+- [ ] **Step 4 - run + `tsc --noEmit` → green. Step 5 - commit:** `feat(seva): opportunity roster reader (family + member join)`.
 
 ---
 
 ## Task C3: Roster GET + confirm POST endpoints (mobile-ready)
 
-**Files:** create `apps/portal/src/app/api/welcome/seva/opportunities/[oppId]/signups/route.ts` + `__tests__`, `apps/portal/src/app/api/welcome/seva/signups/[signupId]/confirm/route.ts` + `__tests__`. Also add a confirming test to `packages/shared-domain/src/auth/__tests__/can-access-route.test.ts` (NO production change — the existing `/api/welcome/seva/*` rule covers both paths).
+**Files:** create `apps/portal/src/app/api/welcome/seva/opportunities/[oppId]/signups/route.ts` + `__tests__`, `apps/portal/src/app/api/welcome/seva/signups/[signupId]/confirm/route.ts` + `__tests__`. Also add a confirming test to `packages/shared-domain/src/auth/__tests__/can-access-route.test.ts` (NO production change - the existing `/api/welcome/seva/*` rule covers both paths).
 
 Mobile-ready: auth via `readSessionFromHeaders`; role via `isWelcomeTeam`. Mirror `app/api/welcome/seva/opportunities/[oppId]/route.ts`.
 
-- [ ] **Step 1 — failing tests.**
+- [ ] **Step 1 - failing tests.**
 
-Roster GET (`opportunities/[oppId]/signups/__tests__/route.test.ts`) — mock `@/features/setu/seva/get-opportunity-roster` (`getOpportunityRoster`). Cases: 401 no session; 403 non-welcome (e.g. `family-member`); 404 when roster is null; 200 returns `{ opportunity, rows }` for welcome-team and for admin (admin inherits welcome-team). Request helper sets `x-portal-role` / `x-portal-uid` headers (mirror the Slice B `signups/__tests__/route.test.ts` `req()` helper). Params are passed as `ctx = { params: Promise.resolve({ oppId: 'o1' }) }`.
+Roster GET (`opportunities/[oppId]/signups/__tests__/route.test.ts`) - mock `@/features/setu/seva/get-opportunity-roster` (`getOpportunityRoster`). Cases: 401 no session; 403 non-welcome (e.g. `family-member`); 404 when roster is null; 200 returns `{ opportunity, rows }` for welcome-team and for admin (admin inherits welcome-team). Request helper sets `x-portal-role` / `x-portal-uid` headers (mirror the Slice B `signups/__tests__/route.test.ts` `req()` helper). Params are passed as `ctx = { params: Promise.resolve({ oppId: 'o1' }) }`.
 
-Confirm POST (`signups/[signupId]/confirm/__tests__/route.test.ts`) — mock `@/features/setu/seva/get-signups` (`getSignup`), `@/features/setu/seva/get-opportunities` (`getOpportunity`), and `@cmt/firebase-shared/admin/firestore` (`portalFirestore` set + `FieldValue.serverTimestamp`). Cases:
+Confirm POST (`signups/[signupId]/confirm/__tests__/route.test.ts`) - mock `@/features/setu/seva/get-signups` (`getSignup`), `@/features/setu/seva/get-opportunities` (`getOpportunity`), and `@cmt/firebase-shared/admin/firestore` (`portalFirestore` set + `FieldValue.serverTimestamp`). Cases:
   - 401 no session; 403 non-welcome;
   - 400 bad body (`{ status: 'signed-up' }` or `{}`);
   - 404 when `getSignup` → null;
@@ -276,8 +276,8 @@ it('gates the roster + confirm paths to welcome-team (admin inherits)', () => {
 ```
 (Use whatever `welcomeTeam` / `admin` / `member` claim fixtures the existing test file already defines.)
 
-- [ ] **Step 2 — confirm fail.**
-- [ ] **Step 3 — implement.**
+- [ ] **Step 2 - confirm fail.**
+- [ ] **Step 3 - implement.**
 
 Roster GET (`opportunities/[oppId]/signups/route.ts`):
 ```ts
@@ -324,7 +324,7 @@ export async function POST(req: Request, ctx: RouteContext) {
   const existing = await getSignup(signupId);
   if (!existing) return NextResponse.json({ error: 'not-found' }, { status: 404 });
   // A family-cancelled sign-up cannot be confirmed (they withdrew). Any other
-  // state — signed-up, or a prior completed/no-show being re-adjusted — is fine.
+  // state - signed-up, or a prior completed/no-show being re-adjusted - is fine.
   if (existing.status === 'cancelled') return NextResponse.json({ error: 'not-confirmable' }, { status: 409 });
 
   const { status } = parsed.data;
@@ -346,7 +346,7 @@ export async function POST(req: Request, ctx: RouteContext) {
 }
 ```
 
-- [ ] **Step 4 — run both route suites + the canAccessRoute suite + `tsc --noEmit` → green. Step 5 — commit:** `feat(seva): roster GET + confirm-signup APIs`.
+- [ ] **Step 4 - run both route suites + the canAccessRoute suite + `tsc --noEmit` → green. Step 5 - commit:** `feat(seva): roster GET + confirm-signup APIs`.
 
 ---
 
@@ -356,7 +356,7 @@ export async function POST(req: Request, ctx: RouteContext) {
 
 Read `SevaManager`, `SevaBrowser`, and `app/welcome/family/[fid]/page.tsx` first for the exact tokens, the `block md:hidden` / `hidden md:block` split, the defensive role re-check, and the no-nested-component render-helper discipline.
 
-- [ ] **Step 1 — client wrappers** (`roster-client.ts`):
+- [ ] **Step 1 - client wrappers** (`roster-client.ts`):
 ```ts
 // Client-safe wrappers around the welcome roster + confirm routes. The route
 // handlers use firebase-admin (server-only); call THESE from the UI and mock
@@ -406,9 +406,9 @@ export async function confirmSignup(
   return { ok: false, ...(data.error ? { error: data.error } : {}) };
 }
 ```
-Note: `confirmSignup`'s caller must OMIT `hoursAwarded` from the object when it should default — never pass `hoursAwarded: undefined` (exactOptionalPropertyTypes). Build the body conditionally.
+Note: `confirmSignup`'s caller must OMIT `hoursAwarded` from the object when it should default - never pass `hoursAwarded: undefined` (exactOptionalPropertyTypes). Build the body conditionally.
 
-- [ ] **Step 2 — component test** (`roster-manager.test.tsx`) — mock `@cmt/ui` (`SetuIcon` as stub glyphs, `toast`) and `../roster-client` (`fetchRoster`, `confirmSignup`). Assert:
+- [ ] **Step 2 - component test** (`roster-manager.test.tsx`) - mock `@cmt/ui` (`SetuIcon` as stub glyphs, `toast`) and `../roster-client` (`fetchRoster`, `confirmSignup`). Assert:
   - renders the opportunity title + each row's `familyName` (and `memberName` when present, e.g. "For Ravi Sharma");
   - a `signed-up` row shows a "Mark completed" action and a "No-show" action;
   - clicking "Mark completed" reveals an hours input prefilled with the opportunity `defaultHours`, and confirming calls `confirmSignup(signupId, { status: 'completed', hoursAwarded: <number> })`;
@@ -417,17 +417,17 @@ Note: `confirmSignup`'s caller must OMIT `hoursAwarded` from the object when it 
   - after a successful confirm the manager re-reads via `fetchRoster` (assert it's called again) and fires a success toast;
   - an empty roster (`rows: []`) shows a friendly "No sign-ups yet" state.
 
-- [ ] **Step 3 — implement `RosterManager`** (`roster-manager.tsx`, `'use client'`). Props: `{ initial: RosterData }`. Structure (themed, reuses the `SevaManager` style constants — copy the small style objects locally; do NOT cross-import a component's internals):
+- [ ] **Step 3 - implement `RosterManager`** (`roster-manager.tsx`, `'use client'`). Props: `{ initial: RosterData }`. Structure (themed, reuses the `SevaManager` style constants - copy the small style objects locally; do NOT cross-import a component's internals):
   - **Header:** eyebrow "Seva roster", `<h1>` = opportunity title, a metadata line (Toronto `fmtDate(opportunity.date)` · `{defaultHours} hrs` · `{location}` · capacity), and a count summary ("{n} signed up · {m} completed").
   - **Rows list:** one `card` per row → family name (mono-ish, bold), credited member ("For {memberName}") when present, a status pill, and an action area:
     - `signed-up`: **Mark completed** (primary) → opens an inline hours `<input type="number">` prefilled with `opportunity.defaultHours` + a **Confirm** button → `confirmSignup(signupId, { status:'completed', hoursAwarded:Number(hours) })`; and a **No-show** (ghost) → `confirmSignup(signupId, { status:'no-show' })`.
     - `completed`: a "Completed · {hoursAwarded} hrs" accent pill + an **Edit** (secondary) that re-opens the hours control (defaulting to the current `hoursAwarded`).
     - `no-show`: a muted "No-show" pill + a **Mark completed** option (lets a confirmer correct a mistake).
   - State: `rows` in `useState` (seed from `initial.rows`); one row's editor open at a time (`editingId` + `hoursDraft`); a `pendingId` double-click guard (mirror `SevaBrowser`). After any successful `confirmSignup`, call `fetchRoster(oppId)` and re-seed `rows` (so accrued hours + status reflect the server), then `toast.success`. On error, map `not-confirmable` → "This sign-up was cancelled by the family" else a generic toast.
-  - **No nested component declarations** — use a `renderRowAction(row)` helper called as a function (the focus-stealing remount rule).
+  - **No nested component declarations** - use a `renderRowAction(row)` helper called as a function (the focus-stealing remount rule).
   - Mobile-first: the row layout must wrap cleanly at ~375px (stack the action area under the name); verify with the `block md:hidden` page wrapper below.
 
-- [ ] **Step 4 — implement the page** (`app/welcome/seva/[oppId]/page.tsx`) — mirror `app/welcome/family/[fid]/page.tsx`: a thin `<Suspense>` wrapper + a body that does the **defensive welcome-team re-check** (`cookies()` → `verifyPortalSessionCookie` → `isWelcomeTeam`), `notFound()` when the roster is null, and renders `RosterManager` inside both a mobile (`block md:hidden`, `CspRoot` + padding + a back link to `/welcome/seva`) and desktop (`hidden md:block`, capped width + back link) block:
+- [ ] **Step 4 - implement the page** (`app/welcome/seva/[oppId]/page.tsx`) - mirror `app/welcome/family/[fid]/page.tsx`: a thin `<Suspense>` wrapper + a body that does the **defensive welcome-team re-check** (`cookies()` → `verifyPortalSessionCookie` → `isWelcomeTeam`), `notFound()` when the roster is null, and renders `RosterManager` inside both a mobile (`block md:hidden`, `CspRoot` + padding + a back link to `/welcome/seva`) and desktop (`hidden md:block`, capped width + back link) block:
 ```tsx
 import { Suspense } from 'react';
 import { connection } from 'next/server';
@@ -441,7 +441,7 @@ import { CspRoot } from '@/features/family/components/atoms';
 import { getOpportunityRoster } from '@/features/setu/seva/get-opportunity-roster';
 import { RosterManager } from '@/features/admin/seva/roster-manager';
 
-export const metadata = { title: 'Seva roster — CMT Portal' };
+export const metadata = { title: 'Seva roster - CMT Portal' };
 
 export default function WelcomeSevaRosterPage({ params }: { params: Promise<{ oppId: string }> }) {
   return (
@@ -495,29 +495,29 @@ export async function RosterPageBody({ params }: { params: Promise<{ oppId: stri
 }
 ```
 
-- [ ] **Step 5 — add the "View roster" link in `SevaManager`** — on each non-editing opportunity card's action row (next to Edit / Close), add a `<Link href={`/welcome/seva/${o.oppId}`}>` styled as a `btn btn--s` ("View roster"). Update the `seva-manager.test.tsx` to assert the link renders with the right href for an opportunity. (Use `next/link`; it renders an `<a href>` in jsdom.)
+- [ ] **Step 5 - add the "View roster" link in `SevaManager`** - on each non-editing opportunity card's action row (next to Edit / Close), add a `<Link href={`/welcome/seva/${o.oppId}`}>` styled as a `btn btn--s` ("View roster"). Update the `seva-manager.test.tsx` to assert the link renders with the right href for an opportunity. (Use `next/link`; it renders an `<a href>` in jsdom.)
 
-- [ ] **Step 6 — run the roster-manager + seva-manager tests → PASS; `tsc --noEmit` → clean; `pnpm lint` clean.**
+- [ ] **Step 6 - run the roster-manager + seva-manager tests → PASS; `tsc --noEmit` → clean; `pnpm lint` clean.**
 
-- [ ] **Step 7 — designer pass:** dispatch `oh-my-claudecode:designer` (opus) to elevate `roster-manager.tsx` visuals (row cards, status pills, the inline hours-confirm affordance, completed/no-show states, count summary, empty state) against the tokens and make the mobile experience excellent — WITHOUT changing behavior or breaking the tests. Re-run test + typecheck + lint.
+- [ ] **Step 7 - designer pass:** dispatch `oh-my-claudecode:designer` (opus) to elevate `roster-manager.tsx` visuals (row cards, status pills, the inline hours-confirm affordance, completed/no-show states, count summary, empty state) against the tokens and make the mobile experience excellent - WITHOUT changing behavior or breaking the tests. Re-run test + typecheck + lint.
 
-- [ ] **Step 8 — commit:** `feat(seva): opportunity roster page + confirmer UI`.
+- [ ] **Step 8 - commit:** `feat(seva): opportunity roster page + confirmer UI`.
 
 ---
 
-## Task C5: Family carry-forward — earned hours + resolved-signup states
+## Task C5: Family carry-forward - earned hours + resolved-signup states
 
 **Files:** modify `apps/portal/src/features/setu/seva/get-family-seva-view.ts` (+ test), `apps/portal/src/features/setu/seva/seva-browser-client.ts`, `apps/portal/src/features/setu/seva/seva-browser.tsx` (+ test), `apps/portal/src/app/family/seva/page.tsx`.
 
 This closes the Slice B carry-forward: a `completed` / `no-show` sign-up must NOT render a Sign-up button (it would 409 `already-resolved`), and the family should see hours accrue.
 
-- [ ] **Step 1 — `getFamilySevaView` test additions** — extend `__tests__/get-family-seva-view.test.ts`:
+- [ ] **Step 1 - `getFamilySevaView` test additions** - extend `__tests__/get-family-seva-view.test.ts`:
   - add `hoursEarned` to the returned shape: Σ `hoursAwarded` over the family's `completed` sign-ups in the current year (e.g. a completed signup with `hoursAwarded:4` and a `no-show` with `hoursAwarded:0` ⇒ `hoursEarned === 4`).
-  - the **closed-opportunity join fix**: a `completed` sign-up whose opportunity is now `closed` (so absent from the open-only browse list) still gets its `opportunity` summary in `mySignups` (NOT null). (Set up the mock so `listOpportunities({ sevaYear })` — all-statuses, no `status` filter — returns the closed opp, while `listOpportunities({ sevaYear, status:'open' })` returns only the open ones.)
+  - the **closed-opportunity join fix**: a `completed` sign-up whose opportunity is now `closed` (so absent from the open-only browse list) still gets its `opportunity` summary in `mySignups` (NOT null). (Set up the mock so `listOpportunities({ sevaYear })` - all-statuses, no `status` filter - returns the closed opp, while `listOpportunities({ sevaYear, status:'open' })` returns only the open ones.)
   - when `currentSevaYear` is null → `{ ..., hoursEarned: 0 }`.
 
-- [ ] **Step 2 — confirm fail.**
-- [ ] **Step 3 — implement** — update `getFamilySevaView`:
+- [ ] **Step 2 - confirm fail.**
+- [ ] **Step 3 - implement** - update `getFamilySevaView`:
 ```ts
 import { getSevaRequirement } from '@/lib/seva-requirement';
 import { listOpportunities, serializeOpportunity } from './get-opportunities';
@@ -573,20 +573,20 @@ export async function getFamilySevaView(fid: string) {
 }
 ```
 
-- [ ] **Step 4 — thread `hoursEarned` through the client + page.**
+- [ ] **Step 4 - thread `hoursEarned` through the client + page.**
   - `seva-browser-client.ts` → `fetchOpportunities` return type gains `hoursEarned: number`; read `data.hoursEarned ?? 0`; default `0` in the error branch.
-  - `app/family/seva/page.tsx` → pass `hoursEarned={view.hoursEarned}` to `<SevaBrowser>` (both wrapper blocks already share the one `browser` element — just add the prop once).
+  - `app/family/seva/page.tsx` → pass `hoursEarned={view.hoursEarned}` to `<SevaBrowser>` (both wrapper blocks already share the one `browser` element - just add the prop once).
 
-- [ ] **Step 5 — `seva-browser.tsx` test additions** — extend `__tests__/seva-browser.test.tsx`:
-  - the goal band shows earned progress: with `hoursEarned={6}` and `hoursPerYear={20}` it renders "6 of 20" (keep the existing `{hoursPerYear} hours` assertion working by adjusting it to the new copy — see Step 6).
+- [ ] **Step 5 - `seva-browser.tsx` test additions** - extend `__tests__/seva-browser.test.tsx`:
+  - the goal band shows earned progress: with `hoursEarned={6}` and `hoursPerYear={20}` it renders "6 of 20" (keep the existing `{hoursPerYear} hours` assertion working by adjusting it to the new copy - see Step 6).
   - an opportunity with `mySignupStatus:'completed'` renders a "Completed" indicator and **no "Sign up" button** (query that the sign-up button is absent for that card).
   - a `completed` entry appears in "My sign-ups" showing its `hoursAwarded` (e.g. "4 hrs") and has **no Cancel button**.
   - a `signed-up` entry still shows Cancel (unchanged).
 
-- [ ] **Step 6 — implement `seva-browser.tsx` changes** (behavior-focused; the designer already owns the polish, keep edits minimal + on-theme):
+- [ ] **Step 6 - implement `seva-browser.tsx` changes** (behavior-focused; the designer already owns the polish, keep edits minimal + on-theme):
   - Accept a new prop `hoursEarned: number` (add to `SevaBrowserProps`); `app/family/seva/page.tsx` passes it.
-  - **Goal band copy:** replace the single goal line with progress: render the earned total against the target, e.g. a line that contains the contiguous text `"{hoursEarned} of {hoursPerYear}"` plus "hours of seva this year". Keep it a simple text treatment (the full progress bar is Slice D) — but the `{hoursEarned} of {hoursPerYear}` substring MUST be a single contiguous text node so the test can match it. Update the existing goal-band test expectation accordingly.
-  - **`renderOppAction(o)`** — add, BEFORE the `isSignedUp` branch, a resolved-state branch:
+  - **Goal band copy:** replace the single goal line with progress: render the earned total against the target, e.g. a line that contains the contiguous text `"{hoursEarned} of {hoursPerYear}"` plus "hours of seva this year". Keep it a simple text treatment (the full progress bar is Slice D) - but the `{hoursEarned} of {hoursPerYear}` substring MUST be a single contiguous text node so the test can match it. Update the existing goal-band test expectation accordingly.
+  - **`renderOppAction(o)`** - add, BEFORE the `isSignedUp` branch, a resolved-state branch:
     ```tsx
     if (o.mySignupStatus === 'completed' || o.mySignupStatus === 'no-show') {
       const done = o.mySignupStatus === 'completed';
@@ -598,21 +598,21 @@ export async function getFamilySevaView(fid: string) {
     }
     ```
     (This prevents the completed→Sign-up→409 bug.) Keep `isSignedUp` / `isFull` / default branches as they are.
-  - **My sign-ups:** split the list into the active (`status === 'signed-up'`, with Cancel) ones and the completed (`status === 'completed'`) ones. Render completed rows with a check glyph and "{hoursAwarded} hrs" and NO Cancel button. (no-show rows may be omitted from My-signups, or shown muted — omitting is fine.) Replace the `const activeSignups = mySignups.filter((s) => s.status === 'signed-up')` line with the two derived lists and render both groups under the "My sign-ups" `SectionLabel` (active first). Keep the existing empty-state when BOTH are empty.
+  - **My sign-ups:** split the list into the active (`status === 'signed-up'`, with Cancel) ones and the completed (`status === 'completed'`) ones. Render completed rows with a check glyph and "{hoursAwarded} hrs" and NO Cancel button. (no-show rows may be omitted from My-signups, or shown muted - omitting is fine.) Replace the `const activeSignups = mySignups.filter((s) => s.status === 'signed-up')` line with the two derived lists and render both groups under the "My sign-ups" `SectionLabel` (active first). Keep the existing empty-state when BOTH are empty.
 
-- [ ] **Step 7 — run `seva-browser` + `get-family-seva-view` tests → PASS; `tsc --noEmit` → clean; `pnpm lint` clean.**
-- [ ] **Step 8 — designer touch-up (optional, light):** if the new completed/earned states need polish, a short `oh-my-claudecode:designer` (opus) pass on the goal band + completed rows only — no behavior change. Re-run tests.
-- [ ] **Step 9 — commit:** `feat(seva): family earned-hours + completed/no-show states on /family/seva`.
+- [ ] **Step 7 - run `seva-browser` + `get-family-seva-view` tests → PASS; `tsc --noEmit` → clean; `pnpm lint` clean.**
+- [ ] **Step 8 - designer touch-up (optional, light):** if the new completed/earned states need polish, a short `oh-my-claudecode:designer` (opus) pass on the goal band + completed rows only - no behavior change. Re-run tests.
+- [ ] **Step 9 - commit:** `feat(seva): family earned-hours + completed/no-show states on /family/seva`.
 
 ---
 
 ## Slice C verification (before done)
 
 - [ ] `tsc --noEmit` (portal + shared-domain) → 0 errors; `pnpm lint` clean; full vitest suites green.
-- [ ] **Mobile-app readiness:** every new `/api/welcome/seva/*` handler uses `readSessionFromHeaders` + `isWelcomeTeam` (grep to confirm no `getCurrentFamily`/`cookies` inside handlers); ISO-string dates; consistent envelope. The roster **page** may use `cookies()` (web render) — that's expected.
-- [ ] **No new Firestore index** was added (single-field queries only — see "Index strategy"). Confirm no handler/reader introduced a two-field `where`/`orderBy` on `seva_signups`.
+- [ ] **Mobile-app readiness:** every new `/api/welcome/seva/*` handler uses `readSessionFromHeaders` + `isWelcomeTeam` (grep to confirm no `getCurrentFamily`/`cookies` inside handlers); ISO-string dates; consistent envelope. The roster **page** may use `cookies()` (web render) - that's expected.
+- [ ] **No new Firestore index** was added (single-field queries only - see "Index strategy"). Confirm no handler/reader introduced a two-field `where`/`orderBy` on `seva_signups`.
 - [ ] Final review pass (spec-compliance + code-quality, Opus).
-- [ ] **Mock-free UAT walkthrough:** as welcome-team → `/welcome/seva` → open an opportunity's roster → mark a family **completed** (accept default hours, then edit hours) and another **no-show** → confirm the roster reflects it. Then as that family → `/family/seva` (mobile + desktop) → the completed opportunity shows "Completed" (no Sign-up button) and the goal band shows "{earned} of {target}". Report UAT status explicitly (note: OTP sign-in may block the agent from doing this live — flag it for CMT Developer if so).
+- [ ] **Mock-free UAT walkthrough:** as welcome-team → `/welcome/seva` → open an opportunity's roster → mark a family **completed** (accept default hours, then edit hours) and another **no-show** → confirm the roster reflects it. Then as that family → `/family/seva` (mobile + desktop) → the completed opportunity shows "Completed" (no Sign-up button) and the goal band shows "{earned} of {target}". Report UAT status explicitly (note: OTP sign-in may block the agent from doing this live - flag it for CMT Developer if so).
 - [ ] Push (full gate). Update resume-note memory: Slice C shipped; D remains.
 
 ## Not in Slice C (Slice D)

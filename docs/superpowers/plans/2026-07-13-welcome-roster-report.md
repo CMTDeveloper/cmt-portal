@@ -671,7 +671,7 @@ git commit -m "feat(roster): bulk report dataset builder + level CSV column"
 In `packages/shared-domain/src/auth/can-access-route.ts`, immediately AFTER the existing `/api/welcome/families` block (the one returning `isWelcomeTeam(claims)`), add:
 
 ```ts
-  // Welcome-team API — single-page roster report (browse/filter dataset + CSV).
+  // Welcome-team API - single-page roster report (browse/filter dataset + CSV).
   if (pathname === '/api/welcome/roster' || pathname.startsWith('/api/welcome/roster/')) {
     return isWelcomeTeam(claims);
   }
@@ -682,7 +682,7 @@ In `packages/shared-domain/src/auth/can-access-route.ts`, immediately AFTER the 
 In `packages/shared-domain/src/__tests__/can-access-route.test.ts`, add a new `describe` block near the other `/welcome/*` cases. The file already defines top-level fixtures `welcomeTeam` and `member` (SessionClaims) and calls `canAccessRoute(claims, pathname, method)` (claims FIRST):
 
 ```ts
-describe('canAccessRoute — /api/welcome/roster — welcome-team', () => {
+describe('canAccessRoute - /api/welcome/roster - welcome-team', () => {
   it('allows welcome-team on the roster report', () => {
     expect(canAccessRoute(welcomeTeam, '/api/welcome/roster/report', 'GET')).toBe(true);
   });
@@ -1029,7 +1029,7 @@ function RosterContent({ year, locationOptions }: { year?: string; locationOptio
     <div className="col" style={{ gap: 16 }}>
       <MigrationStrip />
 
-      {/* Search input — same markup as today */}
+      {/* Search input - same markup as today */}
       <div style={{ position: 'relative' }}>
         <div style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', pointerEvents: 'none', display: 'inline-flex' }}>
           <SetuIcon.search />
@@ -1047,7 +1047,7 @@ function RosterContent({ year, locationOptions }: { year?: string; locationOptio
         )}
       </div>
 
-      {/* Filters + summary — hidden while searching (search ignores filters, as today) */}
+      {/* Filters + summary - hidden while searching (search ignores filters, as today) */}
       {!searchActive && (
         <>
           <div className="col" style={{ gap: 10 }}>
@@ -1309,7 +1309,7 @@ import { hasFamilyCreds } from '../../_helpers';
 
 // Roster report: the single E2E user is family-manager + admin, so the
 // authenticated storageState reaches /welcome/roster (welcome-team gate; admin
-// inherits). Read-only — no mutations, no cleanup. Mobile + desktop blocks both
+// inherits). Read-only - no mutations, no cleanup. Mobile + desktop blocks both
 // render in the DOM; scope to the visible (desktop) instances.
 test.describe('Roster report (/welcome/roster)', () => {
   test.skip(!hasFamilyCreds, 'E2E_FAMILY_EMAIL / E2E_FAMILY_PASSWORD required');

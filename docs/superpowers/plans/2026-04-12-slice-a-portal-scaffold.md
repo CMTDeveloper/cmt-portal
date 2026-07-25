@@ -1,4 +1,4 @@
-# Slice A — Portal Monorepo Scaffold Implementation Plan
+# Slice A - Portal Monorepo Scaffold Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -15,8 +15,8 @@
 ## Pre-flight notes
 
 The repo has already been initialized. Two commits exist on `main`:
-- `facb92c` — initial design spec
-- `af7bb69` — spec self-review fix
+- `facb92c` - initial design spec
+- `af7bb69` - spec self-review fix
 
 The local git config is already set to `CMT Developer <developer@chinmayatoronto.org>` (set during brainstorming). Verify before starting:
 
@@ -123,7 +123,7 @@ chinmaya-mission-portal/
 │               └── card.test.tsx
 │
 └── apps/
-    └── portal/                            [Tasks 8–17]
+    └── portal/                            [Tasks 8-17]
         ├── package.json                   [Task 8]
         ├── tsconfig.json                  [Task 8]
         ├── next.config.ts                 [Task 8]
@@ -209,7 +209,7 @@ Standalone for now; `@cmt/config/prettier.config.js` will land in Task 2 and the
 NEXT_PUBLIC_FEATURE_EVENTS=false
 NEXT_PUBLIC_FEATURE_CHECK_IN=false
 
-# Firebase (slice B/C — not required for slice A)
+# Firebase (slice B/C - not required for slice A)
 # FIREBASE_PROJECT_ID=
 # FIREBASE_CLIENT_EMAIL=
 # FIREBASE_PRIVATE_KEY=
@@ -219,7 +219,7 @@ NEXT_PUBLIC_FEATURE_CHECK_IN=false
 # NEXT_PUBLIC_FIREBASE_PROJECT_ID=
 # NEXT_PUBLIC_FIREBASE_DATABASE_URL=
 
-# Stripe (slice C — not required for slice A)
+# Stripe (slice C - not required for slice A)
 # STRIPE_API_KEY=
 # STRIPE_CHECKOUT_URL=
 # WEBHOOK_API_KEY=
@@ -294,7 +294,7 @@ packages:
 }
 ```
 
-`^build` means "build all upstream workspace dependencies first" — needed because consumers of `@cmt/ui` etc. need those packages built.
+`^build` means "build all upstream workspace dependencies first" - needed because consumers of `@cmt/ui` etc. need those packages built.
 
 - [ ] **Step 7: Run `pnpm install` to generate lockfile**
 
@@ -466,7 +466,7 @@ export default [
               from: 'feature',
               disallow: ['feature'],
               message:
-                'Cross-feature imports forbidden — go through @cmt/shared-domain or @cmt/ui',
+                'Cross-feature imports forbidden - go through @cmt/shared-domain or @cmt/ui',
             },
           ],
         },
@@ -494,9 +494,9 @@ export default [
 ];
 ```
 
-Two scoped sections: the global rules (boundaries enforcement) and a `shared-domain`-only section that physically forbids React/Next/Radix imports — this is discipline 2's enforcement.
+Two scoped sections: the global rules (boundaries enforcement) and a `shared-domain`-only section that physically forbids React/Next/Radix imports - this is discipline 2's enforcement.
 
-**Note:** Verify the exact `eslint-plugin-boundaries` v5 API at implementation time by reading https://github.com/javierbrea/eslint-plugin-boundaries — the rule shape may have shifted between v4 and v5. The intent here is correct but the exact field names should be checked.
+**Note:** Verify the exact `eslint-plugin-boundaries` v5 API at implementation time by reading https://github.com/javierbrea/eslint-plugin-boundaries - the rule shape may have shifted between v4 and v5. The intent here is correct but the exact field names should be checked.
 
 - [ ] **Step 5: Create `packages/config/tailwind.preset.ts`**
 
@@ -559,7 +559,7 @@ const preset: Partial<Config> = {
 export default preset;
 ```
 
-**Note the `card` and `popover` extensions:** the spec only lists 7 brand color tokens but the shadcn Card component uses `bg-card text-card-foreground` and Popover/Dialog use `bg-popover text-popover-foreground`. These are added to keep the lifted shadcn components rendering correctly. The CSS variables themselves are defined in `apps/portal/src/app/globals.css` (Task 9) — they default to the same values as `background`/`foreground`.
+**Note the `card` and `popover` extensions:** the spec only lists 7 brand color tokens but the shadcn Card component uses `bg-card text-card-foreground` and Popover/Dialog use `bg-popover text-popover-foreground`. These are added to keep the lifted shadcn components rendering correctly. The CSS variables themselves are defined in `apps/portal/src/app/globals.css` (Task 9) - they default to the same values as `background`/`foreground`.
 
 - [ ] **Step 6: Create `packages/config/prettier.config.js`**
 
@@ -584,11 +584,11 @@ Workspace-only shared configuration. Consumed by every other package and `apps/p
 
 ## What's here
 
-- `tsconfig.base.json` — strict TypeScript baseline (`strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`)
-- `tsconfig.next.json` — Next.js extension of the base
-- `eslint.config.js` — flat config with `eslint-plugin-boundaries` for feature-isolation enforcement
-- `tailwind.preset.ts` — base Tailwind config wired to CSS-variable brand tokens
-- `prettier.config.js` — formatting rules
+- `tsconfig.base.json` - strict TypeScript baseline (`strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`)
+- `tsconfig.next.json` - Next.js extension of the base
+- `eslint.config.js` - flat config with `eslint-plugin-boundaries` for feature-isolation enforcement
+- `tailwind.preset.ts` - base Tailwind config wired to CSS-variable brand tokens
+- `prettier.config.js` - formatting rules
 
 ## How packages consume it
 
@@ -663,7 +663,7 @@ The pure-TypeScript domain layer. Empty in slice A; placeholder structure plus a
 }
 ```
 
-`main` and `types` point at source `.ts` for slice A — Next's `transpilePackages` setting (Task 8) handles compilation. No build step needed.
+`main` and `types` point at source `.ts` for slice A - Next's `transpilePackages` setting (Task 8) handles compilation. No build step needed.
 
 - [ ] **Step 2: Create `packages/shared-domain/tsconfig.json`**
 
@@ -728,7 +728,7 @@ describe('@cmt/shared-domain', () => {
 cd packages/shared-domain && pnpm test
 ```
 
-Expected: FAIL — `Cannot find module '../index'` or similar (because `src/index.ts` doesn't exist yet).
+Expected: FAIL - `Cannot find module '../index'` or similar (because `src/index.ts` doesn't exist yet).
 
 - [ ] **Step 7: Create the empty barrel**
 
@@ -745,7 +745,7 @@ export {};
 pnpm test
 ```
 
-Expected: PASS — both tests green.
+Expected: PASS - both tests green.
 
 - [ ] **Step 9: Commit**
 
@@ -770,7 +770,7 @@ git commit -m "feat(shared-domain): scaffold @cmt/shared-domain package skeleton
 - Test: `packages/firebase-shared/src/__tests__/env.test.ts`
 - Test: `packages/firebase-shared/src/__tests__/admin.test.ts`
 
-The single-source-of-truth for Firebase SDK initialization. Two entry points: `/admin` (server) and `/client` (browser). Slice A only verifies env validation works and that admin init returns a valid app object given mock env vars — no actual network calls.
+The single-source-of-truth for Firebase SDK initialization. Two entry points: `/admin` (server) and `/client` (browser). Slice A only verifies env validation works and that admin init returns a valid app object given mock env vars - no actual network calls.
 
 - [ ] **Step 1: Create `packages/firebase-shared/package.json`**
 
@@ -907,7 +907,7 @@ describe('clientEnvSchema', () => {
 cd packages/firebase-shared && pnpm test
 ```
 
-Expected: FAIL — `Cannot find module '../env'`.
+Expected: FAIL - `Cannot find module '../env'`.
 
 - [ ] **Step 6: Implement `packages/firebase-shared/src/env.ts`**
 
@@ -963,7 +963,7 @@ export function readClientEnv(): ClientEnv {
 pnpm test -- env.test
 ```
 
-Expected: PASS — all 5 env tests green.
+Expected: PASS - all 5 env tests green.
 
 - [ ] **Step 8: Write the failing admin test**
 
@@ -1019,7 +1019,7 @@ describe('getAdminApp', () => {
 pnpm test -- admin.test
 ```
 
-Expected: FAIL — `Cannot find module '../admin'`.
+Expected: FAIL - `Cannot find module '../admin'`.
 
 - [ ] **Step 10: Implement `packages/firebase-shared/src/admin.ts`**
 
@@ -1073,7 +1073,7 @@ The `replace(/\\n/g, '\n')` handles the common case where `FIREBASE_PRIVATE_KEY`
 pnpm test -- admin.test
 ```
 
-Expected: PASS — all 3 admin tests green. Note: the memoization test relies on Vitest module caching; if it fails, swap to using `vi.resetModules()` between calls.
+Expected: PASS - all 3 admin tests green. Note: the memoization test relies on Vitest module caching; if it fails, swap to using `vi.resetModules()` between calls.
 
 - [ ] **Step 12: Implement `packages/firebase-shared/src/client.ts`**
 
@@ -1119,7 +1119,7 @@ export function getClientDatabase(): Database {
 }
 ```
 
-No tests for `client.ts` in slice A — it requires a browser-like environment to instantiate, and slice A's smoke test discipline says "no network, no browser bootstrapping". The contract is identical to `admin.ts` and is exercised in slices B/C when feature code consumes it.
+No tests for `client.ts` in slice A - it requires a browser-like environment to instantiate, and slice A's smoke test discipline says "no network, no browser bootstrapping". The contract is identical to `admin.ts` and is exercised in slices B/C when feature code consumes it.
 
 - [ ] **Step 13: Implement `packages/firebase-shared/src/index.ts`**
 
@@ -1134,7 +1134,7 @@ export type { AdminEnv, ClientEnv } from './env';
 pnpm test
 ```
 
-Expected: PASS — env tests (5) + admin tests (3) = 8 tests in this package.
+Expected: PASS - env tests (5) + admin tests (3) = 8 tests in this package.
 
 - [ ] **Step 15: Commit**
 
@@ -1159,7 +1159,7 @@ git commit -m "feat(firebase-shared): add @cmt/firebase-shared with admin and cl
 - Create: `packages/ui/src/styles/tokens.css`
 - Create: `packages/ui/src/error-fallback.tsx`
 
-The UI package skeleton — no shadcn components yet (those land in Task 6), but everything else needed for those components to drop in cleanly.
+The UI package skeleton - no shadcn components yet (those land in Task 6), but everything else needed for those components to drop in cleanly.
 
 - [ ] **Step 1: Create `packages/ui/package.json`**
 
@@ -1222,7 +1222,7 @@ The UI package skeleton — no shadcn components yet (those land in Task 6), but
 }
 ```
 
-Radix dependencies are listed per-component as the components need them. Verify exact Radix package names against the Setu component imports during Task 6 — if a component imports `@radix-ui/react-X` not in this list, add it.
+Radix dependencies are listed per-component as the components need them. Verify exact Radix package names against the Setu component imports during Task 6 - if a component imports `@radix-ui/react-X` not in this list, add it.
 
 - [ ] **Step 2: Create `packages/ui/tsconfig.json`**
 
@@ -1296,7 +1296,7 @@ The class-merge utility every shadcn component uses. Lifted shadcn components im
 ```css
 @layer base {
   :root {
-    /* CMT brand — mined from chinmayatoronto.org */
+    /* CMT brand - mined from chinmayatoronto.org */
     --background: 0 0% 100%;
     --foreground: 205 38% 30%;
 
@@ -1361,7 +1361,7 @@ export function ErrorFallback({ error, reset, feature }: ErrorFallbackProps) {
         {feature ? `Something went wrong in ${feature}` : 'Something went wrong'}
       </h2>
       <p className="text-muted-foreground">
-        We hit an unexpected error. The rest of the portal is still working — you can try this
+        We hit an unexpected error. The rest of the portal is still working - you can try this
         section again.
       </p>
       <button
@@ -1377,7 +1377,7 @@ export function ErrorFallback({ error, reset, feature }: ErrorFallbackProps) {
 }
 ```
 
-The shared error UI rendered by every `error.tsx` segment file (Task 17). Has its own minimal Tailwind classes — does not depend on the Button component being lifted yet.
+The shared error UI rendered by every `error.tsx` segment file (Task 17). Has its own minimal Tailwind classes - does not depend on the Button component being lifted yet.
 
 - [ ] **Step 8: Create the initial `packages/ui/src/index.ts`** (will be expanded in Task 6)
 
@@ -1396,10 +1396,10 @@ CMT design system. Built on shadcn/ui (Radix Primitives + Tailwind), themed with
 
 ## Public surface
 
-- 12 shadcn components — `Button`, `Card`, `Input`, `Label`, `Form`, `Dialog`, `Sheet`, `Sonner`, `Alert`, `Skeleton`, `Avatar`, `Separator`
-- `<ErrorFallback />` — shared error UI consumed by all `error.tsx` segments in `apps/portal`
-- `cn()` — Tailwind class merge utility
-- `styles/tokens.css` — CMT brand variables in HSL format
+- 12 shadcn components - `Button`, `Card`, `Input`, `Label`, `Form`, `Dialog`, `Sheet`, `Sonner`, `Alert`, `Skeleton`, `Avatar`, `Separator`
+- `<ErrorFallback />` - shared error UI consumed by all `error.tsx` segments in `apps/portal`
+- `cn()` - Tailwind class merge utility
+- `styles/tokens.css` - CMT brand variables in HSL format
 
 ## Adding a new component
 
@@ -1418,7 +1418,7 @@ The CLI reads `components.json`, downloads the upstream component, and writes it
 
 ## Manual upgrade discipline
 
-The shadcn model is "you own the source". Component bug fixes upstream do NOT arrive via dependency upgrade — they have to be re-applied manually. To manage drift:
+The shadcn model is "you own the source". Component bug fixes upstream do NOT arrive via dependency upgrade - they have to be re-applied manually. To manage drift:
 
 - Run `pnpm dlx shadcn diff` quarterly to see what's changed upstream
 - Apply only the fixes that matter; document any local divergences in this README
@@ -1426,7 +1426,7 @@ The shadcn model is "you own the source". Component bug fixes upstream do NOT ar
 
 ## Token theming
 
-Colors are HSL CSS variables in `styles/tokens.css`. To rebrand, edit that file — every component picks up the change automatically because they reference `hsl(var(--primary))` etc. via the Tailwind preset in `@cmt/config/tailwind`.
+Colors are HSL CSS variables in `styles/tokens.css`. To rebrand, edit that file - every component picks up the change automatically because they reference `hsl(var(--primary))` etc. via the Tailwind preset in `@cmt/config/tailwind`.
 ```
 
 - [ ] **Step 10: Install deps**
@@ -1472,7 +1472,7 @@ The 12 components live at `/Users/dineshmatta/projects/chinmaya-setu/components/
 1. `cp /Users/dineshmatta/projects/chinmaya-setu/components/ui/<name>.tsx packages/ui/src/components/<name>.tsx`
 2. Open the file and replace `import { cn } from "@/lib/utils"` with `import { cn } from "../lib/cn"`
 3. If the file imports any other Setu-aliased path (`@/components/...`, `@/hooks/...`), replace with the correct relative path or remove if unused
-4. If the file imports a Radix package not in `packages/ui/package.json`, add the package to `dependencies` (e.g., `@radix-ui/react-slot` for Button — already listed)
+4. If the file imports a Radix package not in `packages/ui/package.json`, add the package to `dependencies` (e.g., `@radix-ui/react-slot` for Button - already listed)
 5. Verify the file compiles: `cd packages/ui && pnpm typecheck`
 6. Add a re-export to `src/index.ts`
 
@@ -1489,7 +1489,7 @@ Open `packages/ui/src/components/button.tsx` and replace the import line:
 + import { cn } from "../lib/cn"
 ```
 
-The Button uses `@radix-ui/react-slot` and `class-variance-authority` — both already in dependencies.
+The Button uses `@radix-ui/react-slot` and `class-variance-authority` - both already in dependencies.
 
 - [ ] **Step 2: Copy `card.tsx`**
 
@@ -1530,7 +1530,7 @@ The Form component imports from `@/components/ui/label` (the local Label compone
 + import { Label } from "./label"
 ```
 
-Form uses `react-hook-form` and `@hookform/resolvers` — both already in deps.
+Form uses `react-hook-form` and `@hookform/resolvers` - both already in deps.
 
 - [ ] **Step 6: Copy `dialog.tsx`**
 
@@ -1546,7 +1546,7 @@ Replace `@/lib/utils` → `../lib/cn`. Uses `@radix-ui/react-dialog` (already in
 cp /Users/dineshmatta/projects/chinmaya-setu/components/ui/sheet.tsx packages/ui/src/components/sheet.tsx
 ```
 
-Replace `@/lib/utils` → `../lib/cn`. Sheet is built on `@radix-ui/react-dialog` (same package, different presentation) — already in deps. Uses `class-variance-authority` and `lucide-react`.
+Replace `@/lib/utils` → `../lib/cn`. Sheet is built on `@radix-ui/react-dialog` (same package, different presentation) - already in deps. Uses `class-variance-authority` and `lucide-react`.
 
 - [ ] **Step 8: Copy `sonner.tsx`**
 
@@ -1666,7 +1666,7 @@ export { Separator } from './components/separator';
 cd packages/ui && pnpm typecheck
 ```
 
-Expected: PASS. If it fails, the most likely cause is a missed import path rewrite — re-grep for `@/lib/utils` or `@/components/ui/`:
+Expected: PASS. If it fails, the most likely cause is a missed import path rewrite - re-grep for `@/lib/utils` or `@/components/ui/`:
 
 ```sh
 grep -rn '@/' src/components
@@ -1727,7 +1727,7 @@ describe('Button', () => {
 cd packages/ui && pnpm test
 ```
 
-Expected: FAIL — likely because `@testing-library/react` isn't set up yet (no setup file). If it fails for that reason, proceed to Step 3 to add a setup file.
+Expected: FAIL - likely because `@testing-library/react` isn't set up yet (no setup file). If it fails for that reason, proceed to Step 3 to add a setup file.
 
 - [ ] **Step 3: Add a Vitest setup file for testing-library** (if needed)
 
@@ -1746,7 +1746,7 @@ export default defineConfig({
 });
 ```
 
-For slice A this is sufficient — no extra `setupFiles` needed because we're not using DOM matchers like `toBeInTheDocument`. If the test still fails, the issue is the `react/jsx-runtime` resolution; verify `@vitejs/plugin-react` is properly transforming JSX.
+For slice A this is sufficient - no extra `setupFiles` needed because we're not using DOM matchers like `toBeInTheDocument`. If the test still fails, the issue is the `react/jsx-runtime` resolution; verify `@vitejs/plugin-react` is properly transforming JSX.
 
 Re-run:
 
@@ -1754,7 +1754,7 @@ Re-run:
 pnpm test -- button.test
 ```
 
-Expected: PASS — all 3 button tests green.
+Expected: PASS - all 3 button tests green.
 
 - [ ] **Step 4: Write the failing Card test**
 
@@ -1796,7 +1796,7 @@ describe('Card', () => {
 pnpm test -- card.test
 ```
 
-Expected: PASS — both card tests green.
+Expected: PASS - both card tests green.
 
 - [ ] **Step 6: Run all UI tests to confirm both files green**
 
@@ -1829,7 +1829,7 @@ git commit -m "test(ui): add smoke tests for Button and Card with brand tokens"
 - Create: `apps/portal/vercel.json`
 - Create: `apps/portal/src/features/.gitkeep`
 
-The Next.js app structure — config files, Tailwind setup, Vitest setup. No UI yet (that's Tasks 9–17).
+The Next.js app structure - config files, Tailwind setup, Vitest setup. No UI yet (that's Tasks 9-17).
 
 - [ ] **Step 1: Create `apps/portal/package.json`**
 
@@ -1969,7 +1969,7 @@ export default defineConfig({
 
 ```ts
 // Vitest setup for apps/portal.
-// Slice A is intentionally minimal — no global mocks, no DOM matchers.
+// Slice A is intentionally minimal - no global mocks, no DOM matchers.
 // Slice B/C will add fetch mocks and Firebase emulator hooks here.
 ```
 
@@ -2007,7 +2007,7 @@ Expected: Next.js, React, Tailwind, Vitest, etc. all install.
 cd apps/portal && pnpm typecheck
 ```
 
-Expected: PASS (or "No inputs were found in config file" — both are acceptable at this stage).
+Expected: PASS (or "No inputs were found in config file" - both are acceptable at this stage).
 
 - [ ] **Step 12: Commit**
 
@@ -2053,7 +2053,7 @@ The CSS entry point. Imports the tokens file from `@cmt/ui` and declares Tailwin
 
 The `@import` pulls the brand variables into scope; the `@layer base` block applies Inter to body and Merriweather to all headings via the CSS variables defined by `next/font/google` in `layout.tsx` (Task 13).
 
-- [ ] **Step 2: Verify CSS file syntax (no execution yet — CSS is loaded by the layout in Task 13)**
+- [ ] **Step 2: Verify CSS file syntax (no execution yet - CSS is loaded by the layout in Task 13)**
 
 ```sh
 cd apps/portal && cat src/app/globals.css
@@ -2151,7 +2151,7 @@ For slice A, use the same logo as the favicon. The simplest approach is to copy 
 cp apps/portal/public/cmt-logo.png apps/portal/public/favicon.ico
 ```
 
-A proper `.ico` conversion is a follow-up task — slice A just needs a placeholder so Next does not warn about a missing favicon.
+A proper `.ico` conversion is a follow-up task - slice A just needs a placeholder so Next does not warn about a missing favicon.
 
 - [ ] **Step 3: Commit**
 
@@ -2169,7 +2169,7 @@ git commit -m "chore(portal): add CMT logo and placeholder favicon"
 - Create: `apps/portal/src/components/chrome/footer.tsx`
 - Create: `apps/portal/src/components/chrome/nav.tsx`
 
-The portal chrome — header with logo and nav, footer, mobile nav. These are NOT extracted to a package per discipline 6 (only one consumer).
+The portal chrome - header with logo and nav, footer, mobile nav. These are NOT extracted to a package per discipline 6 (only one consumer).
 
 - [ ] **Step 1: Create `apps/portal/src/components/chrome/nav.tsx`**
 
@@ -2310,7 +2310,7 @@ const merriweather = Merriweather({
 export const metadata: Metadata = {
   title: 'Chinmaya Mission Toronto',
   description:
-    'Bridging knowledge, community, and spiritual practice — Chinmaya Mission Toronto portal.',
+    'Bridging knowledge, community, and spiritual practice - Chinmaya Mission Toronto portal.',
 };
 
 export default function RootLayout({
@@ -2427,7 +2427,7 @@ describe('Landing page', () => {
 cd apps/portal && pnpm test
 ```
 
-Expected: FAIL — `Cannot find module '../page'` or similar.
+Expected: FAIL - `Cannot find module '../page'` or similar.
 
 - [ ] **Step 4: Implement `apps/portal/src/app/page.tsx`**
 
@@ -2509,7 +2509,7 @@ export default function HomePage() {
 pnpm test
 ```
 
-Expected: PASS — all 4 landing page tests green.
+Expected: PASS - all 4 landing page tests green.
 
 **Note:** The test queries by `name` may need adjustment if the accessible name of the link includes the description. If `getByRole('link', { name: /events/i })` returns multiple matches, narrow with `getAllByRole(...)` and assertion on length, or use a more specific name pattern like `name: /^Events:/i`.
 
@@ -2557,7 +2557,7 @@ describe('/events placeholder', () => {
 cd apps/portal && pnpm test -- events
 ```
 
-Expected: FAIL — `Cannot find module '../page'`.
+Expected: FAIL - `Cannot find module '../page'`.
 
 - [ ] **Step 3: Implement `apps/portal/src/app/events/page.tsx`**
 
@@ -2768,7 +2768,7 @@ export default function CheckInError({
 cd apps/portal && pnpm typecheck && pnpm test
 ```
 
-Expected: PASS for both. The error boundary files are not test-covered in slice A — they are wired up by Next.js automatically.
+Expected: PASS for both. The error boundary files are not test-covered in slice A - they are wired up by Next.js automatically.
 
 - [ ] **Step 7: Commit**
 
@@ -2818,12 +2818,12 @@ The portal runs at <http://localhost:3000>.
 
 ```
 apps/
-  portal/                 # Next.js 16 app — the only app
+  portal/                 # Next.js 16 app - the only app
 packages/
-  ui/                     # @cmt/ui — shadcn-based design system + brand tokens
-  firebase-shared/        # @cmt/firebase-shared — admin and client Firebase init
-  shared-domain/          # @cmt/shared-domain — pure TS types and business logic (web + mobile reusable)
-  config/                 # @cmt/config — shared TS, ESLint, Tailwind, Prettier configs
+  ui/                     # @cmt/ui - shadcn-based design system + brand tokens
+  firebase-shared/        # @cmt/firebase-shared - admin and client Firebase init
+  shared-domain/          # @cmt/shared-domain - pure TS types and business logic (web + mobile reusable)
+  config/                 # @cmt/config - shared TS, ESLint, Tailwind, Prettier configs
 docs/superpowers/specs/   # Design specs for each slice
 docs/superpowers/plans/   # Implementation plans for each slice
 ```
@@ -2841,7 +2841,7 @@ docs/superpowers/plans/   # Implementation plans for each slice
 
 ## Commit identity
 
-All commits in this repo must be authored by `CMT Developer <developer@chinmayatoronto.org>`. The local repo config is set to enforce this — verify with:
+All commits in this repo must be authored by `CMT Developer <developer@chinmayatoronto.org>`. The local repo config is set to enforce this - verify with:
 
 ```sh
 git config user.name && git config user.email
@@ -2858,11 +2858,11 @@ git config user.email "developer@chinmayatoronto.org"
 
 This project ships in slices, each with its own design spec and implementation plan. See `docs/superpowers/specs/` for the current state.
 
-- **Slice A** — Monorepo scaffold + portal app shell + 4 shared packages (this slice)
-- **Slice B** — Port `chinmaya-family-check-in` into the portal as `apps/portal/src/app/check-in/*`
-- **Slice C** — Port `chinmaya-event-registration` into the portal as `apps/portal/src/app/events/*`
-- **Slice D** — Unified portal-level auth
-- **Slice E+** — Future modules (programs, enrollment, retirement of old portal)
+- **Slice A** - Monorepo scaffold + portal app shell + 4 shared packages (this slice)
+- **Slice B** - Port `chinmaya-family-check-in` into the portal as `apps/portal/src/app/check-in/*`
+- **Slice C** - Port `chinmaya-event-registration` into the portal as `apps/portal/src/app/events/*`
+- **Slice D** - Unified portal-level auth
+- **Slice E+** - Future modules (programs, enrollment, retirement of old portal)
 
 ## CI
 
@@ -2872,7 +2872,7 @@ GitHub Actions runs `typecheck`, `lint`, `test`, `build` on every PR. Branch pro
 - [ ] **Step 2: Create `CLAUDE.md`**
 
 ```markdown
-# CLAUDE.md — Agent guidance for cmt-portal
+# CLAUDE.md - Agent guidance for cmt-portal
 
 This file orients AI agents (Claude Code, Cursor, etc.) working in this repository. Read before making changes.
 
@@ -2884,16 +2884,16 @@ A Turborepo monorepo for the Chinmaya Mission Toronto unified portal. One Next.j
 
 ## Architecture in one paragraph
 
-`apps/portal` is a single Next.js 16 monolith. Future features (events, check-in, programs, etc.) are added as **internal route segments** under `apps/portal/src/app/<feature>/`, NOT as sibling apps in the monorepo. Cross-feature dependencies must go through shared packages (`@cmt/shared-domain` or `@cmt/ui`), enforced by `eslint-plugin-boundaries`. The choice to stay monolithic was deliberate — it preserves operational simplicity and gives future mobile apps a single API surface. The structure has been designed so that splitting into Next.js multi-zones later is cheap if needed.
+`apps/portal` is a single Next.js 16 monolith. Future features (events, check-in, programs, etc.) are added as **internal route segments** under `apps/portal/src/app/<feature>/`, NOT as sibling apps in the monorepo. Cross-feature dependencies must go through shared packages (`@cmt/shared-domain` or `@cmt/ui`), enforced by `eslint-plugin-boundaries`. The choice to stay monolithic was deliberate - it preserves operational simplicity and gives future mobile apps a single API surface. The structure has been designed so that splitting into Next.js multi-zones later is cheap if needed.
 
 ## The 6 disciplines (non-negotiable)
 
-1. **Strict feature boundaries** — Files under `apps/portal/src/features/<a>/` cannot import from `apps/portal/src/features/<b>/`. Lint-enforced via `eslint-plugin-boundaries`.
-2. **`@cmt/shared-domain`** is for pure TypeScript that web + mobile can both consume. No React, no Next, no DOM imports — enforced by ESLint `no-restricted-imports`.
-3. **Per-segment React error boundaries** — Every top-level route segment under `src/app/` has its own `error.tsx`.
-4. **CI gate on `main`** — No PR merges without `pnpm typecheck && pnpm lint && pnpm test && pnpm build` all passing. Branch protection enforces.
-5. **Feature flags via env vars** — All risky features gated through `apps/portal/src/lib/flags.ts`. No hardcoded booleans.
-6. **No premature package extraction** — Code lives in the consuming app until two consumers exist. Portal chrome (header, footer, nav) lives in `apps/portal/src/components/chrome/`, NOT in a `@cmt/portal-chrome` package. New shared packages require justification.
+1. **Strict feature boundaries** - Files under `apps/portal/src/features/<a>/` cannot import from `apps/portal/src/features/<b>/`. Lint-enforced via `eslint-plugin-boundaries`.
+2. **`@cmt/shared-domain`** is for pure TypeScript that web + mobile can both consume. No React, no Next, no DOM imports - enforced by ESLint `no-restricted-imports`.
+3. **Per-segment React error boundaries** - Every top-level route segment under `src/app/` has its own `error.tsx`.
+4. **CI gate on `main`** - No PR merges without `pnpm typecheck && pnpm lint && pnpm test && pnpm build` all passing. Branch protection enforces.
+5. **Feature flags via env vars** - All risky features gated through `apps/portal/src/lib/flags.ts`. No hardcoded booleans.
+6. **No premature package extraction** - Code lives in the consuming app until two consumers exist. Portal chrome (header, footer, nav) lives in `apps/portal/src/components/chrome/`, NOT in a `@cmt/portal-chrome` package. New shared packages require justification.
 
 ## Where things live
 
@@ -2915,20 +2915,20 @@ A Turborepo monorepo for the Chinmaya Mission Toronto unified portal. One Next.j
 
 ## Workflow expectations
 
-- **Tests are TDD** — write the failing test, run it to confirm it fails, implement, run it again, commit. See existing tests in `packages/firebase-shared/src/__tests__/` for the pattern.
-- **Frequent commits** — Each task in the implementation plan corresponds to one (or a few) commits. Don't bundle unrelated changes.
-- **Commit author** — Always `CMT Developer <developer@chinmayatoronto.org>` (set in local `.git/config`, not global).
+- **Tests are TDD** - write the failing test, run it to confirm it fails, implement, run it again, commit. See existing tests in `packages/firebase-shared/src/__tests__/` for the pattern.
+- **Frequent commits** - Each task in the implementation plan corresponds to one (or a few) commits. Don't bundle unrelated changes.
+- **Commit author** - Always `CMT Developer <developer@chinmayatoronto.org>` (set in local `.git/config`, not global).
 - **Never bypass `--no-verify`** on commits unless explicitly told.
 
 ## Reading the prototype
 
-The original 4-phase product brief is in `docs/superpowers/specs/reference/Chinmaya Setu Prototype.{md,pdf}`. **Phase 1 of that brief is already implemented as the standalone `chinmaya-family-check-in` app and will be ported into this portal in slice B.** The Setu prototype's `chinmaya-setu` repo (a different prior-dev attempt with a Supabase schema and ~83 shadcn components) is REFERENCE ONLY — its data model is intentionally NOT being adopted because it reinvents what production already has. We did salvage the 12 shadcn components in slice A.
+The original 4-phase product brief is in `docs/superpowers/specs/reference/Chinmaya Setu Prototype.{md,pdf}`. **Phase 1 of that brief is already implemented as the standalone `chinmaya-family-check-in` app and will be ported into this portal in slice B.** The Setu prototype's `chinmaya-setu` repo (a different prior-dev attempt with a Supabase schema and ~83 shadcn components) is REFERENCE ONLY - its data model is intentionally NOT being adopted because it reinvents what production already has. We did salvage the 12 shadcn components in slice A.
 
 ## Things not to do
 
 - Don't add a new package to `packages/` without justifying two-or-more consumers (discipline 6).
-- Don't import across feature directories — go through `@cmt/shared-domain` or `@cmt/ui`.
-- Don't add React/Next imports to `@cmt/shared-domain` — lint will fail and the discipline matters.
+- Don't import across feature directories - go through `@cmt/shared-domain` or `@cmt/ui`.
+- Don't add React/Next imports to `@cmt/shared-domain` - lint will fail and the discipline matters.
 - Don't bypass the CI gate. If `pnpm test` fails, fix the test or the code, not the CI config.
 - Don't migrate to Tailwind v4, `vercel.ts`, or shadcn v4-only components without a dedicated upgrade slice.
 - Don't propose retiring the standalone `chinmaya-event-registration` or `chinmaya-family-check-in` deployments until slices B and C are proven in parallel-run.
@@ -3001,7 +3001,7 @@ jobs:
         run: pnpm build
 ```
 
-The `concurrency` group cancels superseded runs on the same PR — saves CI minutes when you push twice in quick succession.
+The `concurrency` group cancels superseded runs on the same PR - saves CI minutes when you push twice in quick succession.
 
 - [ ] **Step 2: Create the directory if it does not exist and verify**
 
@@ -3061,10 +3061,10 @@ pnpm test
 Expected: PASS. Total test count should be **≥ 8** (the 8 smoke tests defined in the spec, possibly more if any task added incidental coverage).
 
 Specifically:
-- `packages/shared-domain` — 2 tests (barrel exists, empty)
-- `packages/firebase-shared` — 5 tests (env validation 5) + 3 tests (admin) = 8 tests
-- `packages/ui` — 5 tests (Button 3, Card 2)
-- `apps/portal` — 8 tests (landing 4, /events 2, /check-in 2)
+- `packages/shared-domain` - 2 tests (barrel exists, empty)
+- `packages/firebase-shared` - 5 tests (env validation 5) + 3 tests (admin) = 8 tests
+- `packages/ui` - 5 tests (Button 3, Card 2)
+- `apps/portal` - 8 tests (landing 4, /events 2, /check-in 2)
 
 That's ~28 tests. The spec says "~8 smoke tests" which referred to the *minimum surface*; the actual count is higher because each smoke test was naturally written as a small group of related assertions.
 
@@ -3085,10 +3085,10 @@ pnpm dev
 Expected: Turborepo starts `next dev` for `apps/portal`. Visit <http://localhost:3000> in a browser and verify:
 
 - [ ] Landing page renders with the CMT logo, "Chinmaya Mission Toronto" heading in Merriweather, the lead paragraph in Inter, and two cards
-- [ ] Brand colors visible — header has `--background` white background, cards have a border, primary navy/teal is visible on hover/CTA text
-- [ ] Click the **Events** card → URL becomes `/events` and the "Events — Coming Soon" placeholder renders
+- [ ] Brand colors visible - header has `--background` white background, cards have a border, primary navy/teal is visible on hover/CTA text
+- [ ] Click the **Events** card → URL becomes `/events` and the "Events - Coming Soon" placeholder renders
 - [ ] Click the back link → returns to `/`
-- [ ] Click the **Family Check-in** card → URL becomes `/check-in` and the "Family Check-in — Coming Soon" placeholder renders
+- [ ] Click the **Family Check-in** card → URL becomes `/check-in` and the "Family Check-in - Coming Soon" placeholder renders
 - [ ] Visit `http://localhost:3000/nonexistent` → renders the `not-found.tsx` page
 - [ ] Stop the dev server with `Ctrl+C`
 
@@ -3126,7 +3126,7 @@ git log --pretty=format:'%an <%ae>' | sort -u
 
 Expected: only `CMT Developer <developer@chinmayatoronto.org>` appears.
 
-- [ ] **Step 10: No commit needed for this task — it's verification only.**
+- [ ] **Step 10: No commit needed for this task - it's verification only.**
 
 If any step failed, fix the underlying issue and commit the fix as its own commit before proceeding to Task 21.
 
@@ -3154,7 +3154,7 @@ git remote add origin https://github.com/CMTDeveloper/cmt-portal.git
 git push -u origin slice-a/scaffold
 ```
 
-Expected: push succeeds. If the user has not authenticated with GitHub on this machine, this will prompt for credentials — set up `gh auth login` first or use SSH.
+Expected: push succeeds. If the user has not authenticated with GitHub on this machine, this will prompt for credentials - set up `gh auth login` first or use SSH.
 
 - [ ] **Step 3: Open a pull request**
 
@@ -3162,7 +3162,7 @@ Expected: push succeeds. If the user has not authenticated with GitHub on this m
 gh pr create \
   --base main \
   --head slice-a/scaffold \
-  --title "feat: slice A — portal monorepo scaffold" \
+  --title "feat: slice A - portal monorepo scaffold" \
   --body "$(cat <<'EOF'
 ## Summary
 
@@ -3192,8 +3192,8 @@ Auth, real features, real domain. See spec §4 for the full non-goals list.
 
 - [ ] CI passes (`typecheck`, `lint`, `test`, `build`)
 - [ ] Vercel preview deploy succeeds
-- [ ] Visit preview URL — landing page renders, both cards navigate, both placeholders show
-- [ ] Visit a 404 path — `not-found` renders
+- [ ] Visit preview URL - landing page renders, both cards navigate, both placeholders show
+- [ ] Visit a 404 path - `not-found` renders
 EOF
 )"
 ```
@@ -3279,7 +3279,7 @@ Visit `https://cmt-portal.vercel.app` (the auto-generated default domain). Verif
 - [ ] Both placeholder routes render
 - [ ] Brand colors and fonts load
 
-If anything is broken, the issue is likely in the Vercel project root directory or env vars — recheck Step 3 and Step 4.
+If anything is broken, the issue is likely in the Vercel project root directory or env vars - recheck Step 3 and Step 4.
 
 ---
 
@@ -3310,7 +3310,7 @@ Click **Create** or **Save changes**.
 
 - [ ] **Step 3: Verify the protection is active**
 
-Try a no-op test: from a local branch, attempt `git push --force origin main` (do NOT actually do this — just confirm in the GitHub UI that force-push protection is shown as active under the branch's settings page).
+Try a no-op test: from a local branch, attempt `git push --force origin main` (do NOT actually do this - just confirm in the GitHub UI that force-push protection is shown as active under the branch's settings page).
 
 - [ ] **Step 4: Slice A is complete.**
 
@@ -3323,35 +3323,35 @@ All 15 acceptance criteria from the spec are now met. Slice A is shipped. Begin 
 After writing this plan, I checked it against the spec with fresh eyes. Findings:
 
 **Spec coverage:**
-- ✅ Spec §3 goal 1 (landing page with brand) — Tasks 9, 13, 14
-- ✅ Spec §3 goal 2 (placeholder routes) — Tasks 14, 15, 16
-- ✅ Spec §3 goal 3 (six disciplines enforced) — Task 2 (lint config), Task 4 (env validation), Task 10 (flags), Task 17 (error boundaries), Task 18 (CLAUDE.md documentation), Task 19 (CI gate)
-- ✅ Spec §3 goal 4 (CI pipeline) — Task 19
-- ✅ Spec §3 goal 5 (smoke tests) — Tasks 3, 4, 7, 14, 15, 16
-- ✅ Spec §6 file tree — every file in the tree maps to a task
-- ✅ Spec §7 toolchain versions — Tasks 1, 2, 8 specify exact versions
-- ✅ Spec §9 brand tokens — Task 5 (skeleton with tokens.css), Task 2 (Tailwind preset that reads them)
-- ✅ Spec §10 landing page IA — Task 14
-- ✅ Spec §11 Vercel + branch protection — Tasks 22, 23
-- ✅ Spec §12 test surface — Tasks 3, 4, 7, 14, 15, 16 produce the smoke tests
-- ✅ Spec §13 acceptance criteria — Task 20 walks through every item
-- ✅ Spec §14 commit identity — preflight check + Task 18 README mentions
+- ✅ Spec §3 goal 1 (landing page with brand) - Tasks 9, 13, 14
+- ✅ Spec §3 goal 2 (placeholder routes) - Tasks 14, 15, 16
+- ✅ Spec §3 goal 3 (six disciplines enforced) - Task 2 (lint config), Task 4 (env validation), Task 10 (flags), Task 17 (error boundaries), Task 18 (CLAUDE.md documentation), Task 19 (CI gate)
+- ✅ Spec §3 goal 4 (CI pipeline) - Task 19
+- ✅ Spec §3 goal 5 (smoke tests) - Tasks 3, 4, 7, 14, 15, 16
+- ✅ Spec §6 file tree - every file in the tree maps to a task
+- ✅ Spec §7 toolchain versions - Tasks 1, 2, 8 specify exact versions
+- ✅ Spec §9 brand tokens - Task 5 (skeleton with tokens.css), Task 2 (Tailwind preset that reads them)
+- ✅ Spec §10 landing page IA - Task 14
+- ✅ Spec §11 Vercel + branch protection - Tasks 22, 23
+- ✅ Spec §12 test surface - Tasks 3, 4, 7, 14, 15, 16 produce the smoke tests
+- ✅ Spec §13 acceptance criteria - Task 20 walks through every item
+- ✅ Spec §14 commit identity - preflight check + Task 18 README mentions
 
-**Placeholder scan:** No `TBD`, `TODO`, "implement later", "fill in" anywhere in the plan. Two notes flag uncertainties (the eslint-plugin-boundaries v5 API in Task 2 and the next-themes detection in Sonner in Task 6) — both resolved with fallback instructions, not deferred.
+**Placeholder scan:** No `TBD`, `TODO`, "implement later", "fill in" anywhere in the plan. Two notes flag uncertainties (the eslint-plugin-boundaries v5 API in Task 2 and the next-themes detection in Sonner in Task 6) - both resolved with fallback instructions, not deferred.
 
 **Type consistency:**
-- `getAdminApp`, `getAdminFirestore`, `getAdminDatabase` defined in Task 4 Step 10 — referenced consistently in `index.ts` (Step 13).
-- `cn` exported from `packages/ui/src/lib/cn.ts` (Task 5 Step 5) — imported by lifted shadcn components in Task 6 (after `@/lib/utils` rewrite).
-- `ErrorFallback` interface (Task 5 Step 7) takes `{ error, reset, feature? }` — matches usage in Task 17 error boundary files.
-- `ComingSoon` component (Task 14 Step 1) takes `{ feature: string }` — matches usage in Tasks 15, 16.
+- `getAdminApp`, `getAdminFirestore`, `getAdminDatabase` defined in Task 4 Step 10 - referenced consistently in `index.ts` (Step 13).
+- `cn` exported from `packages/ui/src/lib/cn.ts` (Task 5 Step 5) - imported by lifted shadcn components in Task 6 (after `@/lib/utils` rewrite).
+- `ErrorFallback` interface (Task 5 Step 7) takes `{ error, reset, feature? }` - matches usage in Task 17 error boundary files.
+- `ComingSoon` component (Task 14 Step 1) takes `{ feature: string }` - matches usage in Tasks 15, 16.
 - `flags` shape (Task 10) matches the spec §5.3 discipline 5 description.
 
-**Scope check:** This plan covers slice A only. No multi-slice work. The plan is large (~70 files, 23 tasks) but each task is self-contained and produces a working commit. Slice A's scope is foundational and atomic — splitting it further would create slices that don't ship working software on their own.
+**Scope check:** This plan covers slice A only. No multi-slice work. The plan is large (~70 files, 23 tasks) but each task is self-contained and produces a working commit. Slice A's scope is foundational and atomic - splitting it further would create slices that don't ship working software on their own.
 
 **Ambiguity check:**
 - Task 6 component lift relies on `chinmaya-setu` being present at a specific path. The plan states this clearly upfront. If the source repo moves, the implementer will hit an obvious file-not-found error and can adjust.
 - Task 11 logo download depends on the upstream chinmayatoronto.org URL being live. Fallback (browser save) is documented.
-- Task 22 (Vercel manual) and Task 23 (branch protection) are platform actions, not code — clearly marked as such.
+- Task 22 (Vercel manual) and Task 23 (branch protection) are platform actions, not code - clearly marked as such.
 
 No issues fixed inline (the two `Note:` callouts in Tasks 2 and 6 are deliberate guidance for the implementer, not gaps).
 
@@ -3361,8 +3361,8 @@ No issues fixed inline (the two `Note:` callouts in Tasks 2 and 6 are deliberate
 
 Plan saved to `docs/superpowers/plans/2026-04-12-slice-a-portal-scaffold.md`. Two execution options:
 
-**1. Subagent-Driven (recommended)** — I dispatch a fresh subagent per task, review between tasks, fast iteration.
+**1. Subagent-Driven (recommended)** - I dispatch a fresh subagent per task, review between tasks, fast iteration.
 
-**2. Inline Execution** — Execute tasks in this session using executing-plans, batch execution with checkpoints.
+**2. Inline Execution** - Execute tasks in this session using executing-plans, batch execution with checkpoints.
 
 Which approach?

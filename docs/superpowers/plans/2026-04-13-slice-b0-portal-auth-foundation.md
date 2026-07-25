@@ -1,10 +1,10 @@
-# Slice B0 — Portal Auth Foundation Implementation Plan
+# Slice B0 - Portal Auth Foundation Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build the portal-wide authentication foundation: dual Firebase Admin apps, server-verified session cookies, dual-mode auth middleware (web cookie + mobile Bearer), role-based route access (`admin`, `teacher`, `family`), login pages for admin and teacher, a scaffolded family login (OTP wiring deferred to B2), an auth-gated `/check-in/admin` stub page, a `pnpm seed:admin` bootstrap CLI, per-segment error boundaries, and the first Playwright e2e flow.
 
-**Architecture:** Two Firebase Admin apps initialized side-by-side — the `portal` app owns Firestore and Auth (UAT project in dev, prod in prod), the `master` app owns RTDB reads only (always prod). Firebase `createSessionCookie`/`verifySessionCookie` is the web session mechanism; `verifyIdToken` is the mobile path. A single `apps/portal/src/middleware.ts` handles both and attaches claims to request headers for server components. Pure auth logic (role, public routes, `canAccessRoute`) lives in `@cmt/shared-domain/auth/*` with zero React/Next imports. Firebase admin service wrappers live in `@cmt/firebase-shared/src/admin/*` with RTDB write helpers intentionally absent and lint-blocked.
+**Architecture:** Two Firebase Admin apps initialized side-by-side - the `portal` app owns Firestore and Auth (UAT project in dev, prod in prod), the `master` app owns RTDB reads only (always prod). Firebase `createSessionCookie`/`verifySessionCookie` is the web session mechanism; `verifyIdToken` is the mobile path. A single `apps/portal/src/middleware.ts` handles both and attaches claims to request headers for server components. Pure auth logic (role, public routes, `canAccessRoute`) lives in `@cmt/shared-domain/auth/*` with zero React/Next imports. Firebase admin service wrappers live in `@cmt/firebase-shared/src/admin/*` with RTDB write helpers intentionally absent and lint-blocked.
 
 **Tech Stack:** Node 22 LTS, pnpm 9.15, Turborepo 2, Next.js 16.2, React 19.2, TypeScript 5 strict, Tailwind v3.4, Vitest 4, Playwright 1.50, ESLint 9 flat config, Zod 3.24, `firebase-admin` 13, `firebase` 12, `eslint-plugin-boundaries` 5.
 
@@ -26,9 +26,9 @@ git config user.name && git config user.email
 
 Expected: `CMT Developer` / `developer@chinmayatoronto.org`.
 
-**Branch model — solo-dev main-only.** All commits go directly to `main`. The pre-push hook validates `pnpm typecheck && lint && test && build`. Do **not** create a feature branch for B0.
+**Branch model - solo-dev main-only.** All commits go directly to `main`. The pre-push hook validates `pnpm typecheck && lint && test && build`. Do **not** create a feature branch for B0.
 
-**Pre-push hook is mandatory.** If it fails, fix the underlying issue — never `--no-verify`.
+**Pre-push hook is mandatory.** If it fails, fix the underlying issue - never `--no-verify`.
 
 **B0 ends with a push.** The final task in this plan pushes to `origin/main` after all typecheck/lint/test/build checks pass locally.
 
@@ -36,7 +36,7 @@ Expected: `CMT Developer` / `developer@chinmayatoronto.org`.
 
 ```sh
 cat > apps/portal/.env.local <<'ENV'
-# Portal Firebase (UAT in dev — chinmaya-setu-uat)
+# Portal Firebase (UAT in dev - chinmaya-setu-uat)
 PORTAL_FIREBASE_PROJECT_ID=chinmaya-setu-uat
 PORTAL_FIREBASE_CLIENT_EMAIL=firebase-adminsdk-41ayt@chinmaya-setu-uat.iam.gserviceaccount.com
 PORTAL_FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nMII...\n-----END PRIVATE KEY-----\n"
@@ -47,7 +47,7 @@ NEXT_PUBLIC_PORTAL_FIREBASE_STORAGE_BUCKET=chinmaya-setu-uat.firebasestorage.app
 NEXT_PUBLIC_PORTAL_FIREBASE_MESSAGING_SENDER_ID=1041244422802
 NEXT_PUBLIC_PORTAL_FIREBASE_APP_ID=1:1041244422802:web:acaac6d9bf7b30cee3dc4b
 
-# Master Firebase (prod RTDB — chinmaya-setu-715b8, read-only)
+# Master Firebase (prod RTDB - chinmaya-setu-715b8, read-only)
 MASTER_FIREBASE_PROJECT_ID=chinmaya-setu-715b8
 MASTER_FIREBASE_CLIENT_EMAIL=firebase-adminsdk-jq5z2@chinmaya-setu-715b8.iam.gserviceaccount.com
 MASTER_FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nMII...\n-----END PRIVATE KEY-----\n"
@@ -138,8 +138,8 @@ chinmaya-mission-portal/
 │
 ├── packages/firebase-shared/
 │   ├── src/
-│   │   ├── env.ts                                         [Task 2, MODIFIED — new schemas]
-│   │   ├── admin.ts                                       [Task 4, REMOVED — split into admin/]
+│   │   ├── env.ts                                         [Task 2, MODIFIED - new schemas]
+│   │   ├── admin.ts                                       [Task 4, REMOVED - split into admin/]
 │   │   ├── admin/
 │   │   │   ├── apps.ts                                    [Task 4]
 │   │   │   ├── auth.ts                                    [Task 5]
@@ -158,7 +158,7 @@ chinmaya-mission-portal/
 │   │       ├── claims.test.ts                             [Task 9]
 │   │       └── env.test.ts                                [Task 2]
 │   ├── package.json                                       [Task 10, MODIFIED]
-│   └── eslint.config.js                                   [Task 10, MODIFIED — RTDB import lint]
+│   └── eslint.config.js                                   [Task 10, MODIFIED - RTDB import lint]
 │
 ├── packages/shared-domain/
 │   ├── src/
@@ -176,7 +176,7 @@ chinmaya-mission-portal/
 │
 ├── README.md                                              [Task 29, MODIFIED]
 ├── CLAUDE.md                                              [Task 29, MODIFIED]
-└── package.json                                           [Task 26, MODIFIED — test:e2e script]
+└── package.json                                           [Task 26, MODIFIED - test:e2e script]
 ```
 
 **Task count:** 29. **Estimated commits:** 29. **Final task pushes.**
@@ -193,7 +193,7 @@ New runtime and test deps are needed across three workspaces.
 
 - [ ] **Step 1: Add portal runtime dependency on `@cmt/firebase-shared` subpath exports**
 
-`@cmt/firebase-shared` is already a workspace dependency. No change needed here — just verify:
+`@cmt/firebase-shared` is already a workspace dependency. No change needed here - just verify:
 
 ```sh
 jq '.dependencies."@cmt/firebase-shared"' apps/portal/package.json
@@ -351,7 +351,7 @@ describe('masterClientEnvSchema', () => {
 pnpm --filter @cmt/firebase-shared test
 ```
 
-Expected: test file cannot resolve `portalAdminEnvSchema`, `masterAdminEnvSchema`, etc. — module export error.
+Expected: test file cannot resolve `portalAdminEnvSchema`, `masterAdminEnvSchema`, etc. - module export error.
 
 - [ ] **Step 3: Rewrite `packages/firebase-shared/src/env.ts`**
 
@@ -360,7 +360,7 @@ Replace the entire file:
 ```ts
 import { z } from 'zod';
 
-// Portal Firebase project (Firestore + Auth — UAT in dev, prod in prod)
+// Portal Firebase project (Firestore + Auth - UAT in dev, prod in prod)
 export const portalAdminEnvSchema = z.object({
   PORTAL_FIREBASE_PROJECT_ID: z.string().min(1),
   PORTAL_FIREBASE_CLIENT_EMAIL: z.string().email(),
@@ -378,7 +378,7 @@ export const portalClientEnvSchema = z.object({
 });
 export type PortalClientEnv = z.infer<typeof portalClientEnvSchema>;
 
-// Master Firebase project (RTDB reads — always prod)
+// Master Firebase project (RTDB reads - always prod)
 export const masterAdminEnvSchema = z.object({
   MASTER_FIREBASE_PROJECT_ID: z.string().min(1),
   MASTER_FIREBASE_CLIENT_EMAIL: z.string().email(),
@@ -421,7 +421,7 @@ export function readMasterAdminEnv(): MasterAdminEnv {
 pnpm --filter @cmt/firebase-shared test
 ```
 
-Expected: all tests in `env.test.ts` pass. The existing `admin.test.ts` will fail because `admin.ts` still imports the old `readAdminEnv` — that's fixed in Task 4.
+Expected: all tests in `env.test.ts` pass. The existing `admin.test.ts` will fail because `admin.ts` still imports the old `readAdminEnv` - that's fixed in Task 4.
 
 - [ ] **Step 5: Commit**
 
@@ -432,7 +432,7 @@ git commit -m "feat(firebase-shared): split env schema into portal (Firestore+Au
 
 ---
 
-## Task 3: Create `apps/portal/src/lib/env.ts` — portal-wide Zod schema
+## Task 3: Create `apps/portal/src/lib/env.ts` - portal-wide Zod schema
 
 Portal-level env schema that validates *everything* the portal needs at startup (Firebase, auth, AWS, feature flags, cron). Extends the narrow firebase-shared schemas with AWS + auth + flags.
 
@@ -768,7 +768,7 @@ export function getMasterApp(): App {
 pnpm --filter @cmt/firebase-shared test -- src/__tests__/apps.test.ts
 ```
 
-Expected: all three `getPortalApp` and `getMasterApp` tests pass. The existing `admin.test.ts` still fails — that's fixed in Task 10 when the old `admin.ts` is removed.
+Expected: all three `getPortalApp` and `getMasterApp` tests pass. The existing `admin.test.ts` still fails - that's fixed in Task 10 when the old `admin.ts` is removed.
 
 - [ ] **Step 5: Commit**
 
@@ -779,7 +779,7 @@ git commit -m "feat(firebase-shared): dual-app Admin SDK initializer (portal + m
 
 ---
 
-## Task 5: Create `admin/auth.ts` — `portalAuth` wrapper
+## Task 5: Create `admin/auth.ts` - `portalAuth` wrapper
 
 Thin wrapper that returns `Auth` bound to the portal app.
 
@@ -859,7 +859,7 @@ git commit -m "feat(firebase-shared): portalAuth wrapper bound to portal Admin a
 
 ---
 
-## Task 6: Create `admin/firestore.ts` — `portalFirestore` wrapper
+## Task 6: Create `admin/firestore.ts` - `portalFirestore` wrapper
 
 **Files:**
 - Create: `packages/firebase-shared/src/admin/firestore.ts`
@@ -937,7 +937,7 @@ git commit -m "feat(firebase-shared): portalFirestore wrapper bound to portal Ad
 
 ---
 
-## Task 7: Create `admin/rtdb.ts` — read-only RTDB helpers
+## Task 7: Create `admin/rtdb.ts` - read-only RTDB helpers
 
 Exposes `masterRtdb()` and `readRtdb<T>(path)`. **No write helpers exist.** This is the single permitted entry point for `firebase-admin/database` imports in the monorepo (enforced in Task 10).
 
@@ -1052,12 +1052,12 @@ Expected: all four tests pass.
 
 ```sh
 git add packages/firebase-shared/src/admin/rtdb.ts packages/firebase-shared/src/__tests__/rtdb.test.ts
-git commit -m "feat(firebase-shared): read-only RTDB helper (masterRtdb, readRtdb) — no write helpers present"
+git commit -m "feat(firebase-shared): read-only RTDB helper (masterRtdb, readRtdb) - no write helpers present"
 ```
 
 ---
 
-## Task 8: Create `admin/session.ts` — session cookie + custom-token exchange
+## Task 8: Create `admin/session.ts` - session cookie + custom-token exchange
 
 This module is the session-cookie implementation. It wraps `createSessionCookie`, `verifySessionCookie`, and `verifyIdToken` from the Admin SDK, plus the Identity Toolkit REST call for exchanging custom tokens → ID tokens. `createPortalSessionCookie` accepts an ID token; `exchangeCustomTokenForIdToken` accepts a custom token and calls the REST endpoint.
 
@@ -1280,7 +1280,7 @@ export async function signInWithEmailPassword(
 pnpm --filter @cmt/firebase-shared test -- src/__tests__/session.test.ts
 ```
 
-Expected: all session tests pass. (The `signInWithEmailPassword` helper is untested in this task — covered by the admin signin route test in Task 22.)
+Expected: all session tests pass. (The `signInWithEmailPassword` helper is untested in this task - covered by the admin signin route test in Task 22.)
 
 - [ ] **Step 5: Commit**
 
@@ -1291,7 +1291,7 @@ git commit -m "feat(firebase-shared): session cookie + Identity Toolkit REST hel
 
 ---
 
-## Task 9: Create `admin/claims.ts` — custom claims helpers
+## Task 9: Create `admin/claims.ts` - custom claims helpers
 
 **Files:**
 - Create: `packages/firebase-shared/src/admin/claims.ts`
@@ -1648,7 +1648,7 @@ git commit -m "refactor(firebase-shared): split admin.ts into admin/{apps,auth,f
 
 ---
 
-## Task 11: Create `@cmt/shared-domain/src/auth/role.ts` — role union + predicates
+## Task 11: Create `@cmt/shared-domain/src/auth/role.ts` - role union + predicates
 
 Pure TypeScript. Zero imports.
 
@@ -1755,7 +1755,7 @@ git commit -m "feat(shared-domain): add Role union and role predicate helpers (a
 
 ---
 
-## Task 12: Create `@cmt/shared-domain/src/auth/session.ts` — SessionClaims type
+## Task 12: Create `@cmt/shared-domain/src/auth/session.ts` - SessionClaims type
 
 Pure type module for session claims shape.
 
@@ -1778,7 +1778,7 @@ export interface SessionClaims {
 }
 ```
 
-- [ ] **Step 2: Verify it compiles (no test — types only)**
+- [ ] **Step 2: Verify it compiles (no test - types only)**
 
 ```sh
 pnpm --filter @cmt/shared-domain typecheck
@@ -1889,7 +1889,7 @@ export const PUBLIC_ROUTES = [
   '/login/teacher',
   '/login/family',
 
-  // Kiosk (public) — feature-flagged in the app layer
+  // Kiosk (public) - feature-flagged in the app layer
   '/check-in',
   '/check-in/guest',
   '/check-in/lookup',
@@ -1977,7 +1977,7 @@ const admin: SessionClaims = { uid: 'a', role: 'admin' };
 const teacher: SessionClaims = { uid: 't', role: 'teacher' };
 const family: SessionClaims = { uid: 'f', role: 'family', familyId: '42' };
 
-describe('canAccessRoute — public routes', () => {
+describe('canAccessRoute - public routes', () => {
   it('allows anyone to access /login', () => {
     expect(canAccessRoute(admin, '/login')).toBe(true);
     expect(canAccessRoute(teacher, '/login')).toBe(true);
@@ -1990,7 +1990,7 @@ describe('canAccessRoute — public routes', () => {
   });
 });
 
-describe('canAccessRoute — /check-in/admin', () => {
+describe('canAccessRoute - /check-in/admin', () => {
   it('allows admin', () => {
     expect(canAccessRoute(admin, '/check-in/admin')).toBe(true);
     expect(canAccessRoute(admin, '/check-in/admin/users')).toBe(true);
@@ -2003,7 +2003,7 @@ describe('canAccessRoute — /check-in/admin', () => {
   });
 });
 
-describe('canAccessRoute — /check-in/teacher', () => {
+describe('canAccessRoute - /check-in/teacher', () => {
   it('allows teacher', () => {
     expect(canAccessRoute(teacher, '/check-in/teacher')).toBe(true);
     expect(canAccessRoute(teacher, '/check-in/teacher/attendance')).toBe(true);
@@ -2016,7 +2016,7 @@ describe('canAccessRoute — /check-in/teacher', () => {
   });
 });
 
-describe('canAccessRoute — /check-in/family', () => {
+describe('canAccessRoute - /check-in/family', () => {
   it('allows family', () => {
     expect(canAccessRoute(family, '/check-in/family')).toBe(true);
     expect(canAccessRoute(family, '/check-in/family/check-in')).toBe(true);
@@ -2029,7 +2029,7 @@ describe('canAccessRoute — /check-in/family', () => {
   });
 });
 
-describe('canAccessRoute — API surface mirrors pages', () => {
+describe('canAccessRoute - API surface mirrors pages', () => {
   it('/api/check-in/admin requires admin', () => {
     expect(canAccessRoute(admin, '/api/check-in/admin/users')).toBe(true);
     expect(canAccessRoute(teacher, '/api/check-in/admin/users')).toBe(false);
@@ -2045,7 +2045,7 @@ describe('canAccessRoute — API surface mirrors pages', () => {
   });
 });
 
-describe('canAccessRoute — unknown routes default-deny', () => {
+describe('canAccessRoute - unknown routes default-deny', () => {
   it('denies an unknown protected route', () => {
     expect(canAccessRoute(admin, '/some/unknown/area')).toBe(false);
     expect(canAccessRoute(teacher, '/foo')).toBe(false);
@@ -2305,7 +2305,7 @@ export default [
                 'check-in-notifications',
               ],
               message:
-                'Cross-sub-feature imports under features/check-in/** forbidden — go through features/check-in/shared/',
+                'Cross-sub-feature imports under features/check-in/** forbidden - go through features/check-in/shared/',
             },
           ],
         },
@@ -2332,7 +2332,7 @@ git commit -m "feat(portal): extend eslint with sub-feature boundaries under fea
 
 ---
 
-## Task 17: Create `apps/portal/src/middleware.ts` — dual-mode auth middleware
+## Task 17: Create `apps/portal/src/middleware.ts` - dual-mode auth middleware
 
 Reads cookie (web) or `Authorization: Bearer` (mobile), verifies via `@cmt/firebase-shared`, attaches claims to request headers, returns 401 JSON for `/api/*` and 302 redirect for pages.
 
@@ -2369,7 +2369,7 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-describe('middleware — public routes', () => {
+describe('middleware - public routes', () => {
   it('passes through /login without auth', async () => {
     const res = await middleware(makeReq('http://localhost/login'));
     expect(res.status).toBe(200);
@@ -2382,7 +2382,7 @@ describe('middleware — public routes', () => {
   });
 });
 
-describe('middleware — cookie auth', () => {
+describe('middleware - cookie auth', () => {
   it('attaches claims headers when cookie is valid', async () => {
     (verifyPortalSessionCookie as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       uid: 'u1',
@@ -2411,7 +2411,7 @@ describe('middleware — cookie auth', () => {
   });
 });
 
-describe('middleware — bearer auth', () => {
+describe('middleware - bearer auth', () => {
   it('accepts a valid Bearer ID token', async () => {
     (verifyPortalIdToken as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       uid: 'u2',
@@ -2611,7 +2611,7 @@ export { LoginRolePicker } from './login-role-picker';
 ```tsx
 import { LoginRolePicker } from '@/features/check-in/auth';
 
-export const metadata = { title: 'Sign in — CMT Portal' };
+export const metadata = { title: 'Sign in - CMT Portal' };
 
 export default function LoginPage() {
   return <LoginRolePicker />;
@@ -2820,7 +2820,7 @@ export function AdminLoginForm() {
 ```tsx
 import { AdminLoginForm } from '@/features/check-in/auth/admin-login-form';
 
-export const metadata = { title: 'Admin sign in — CMT Portal' };
+export const metadata = { title: 'Admin sign in - CMT Portal' };
 
 export default function AdminLoginPage() {
   return (
@@ -3009,7 +3009,7 @@ export function TeacherLoginForm() {
 ```tsx
 import { TeacherLoginForm } from '@/features/check-in/auth/teacher-login-form';
 
-export const metadata = { title: 'Teacher sign in — CMT Portal' };
+export const metadata = { title: 'Teacher sign in - CMT Portal' };
 
 export default function TeacherLoginPage() {
   return (
@@ -3087,7 +3087,7 @@ export function FamilyLoginForm() {
 ```tsx
 import { FamilyLoginForm } from '@/features/check-in/auth/family-login-form';
 
-export const metadata = { title: 'Family sign in — CMT Portal' };
+export const metadata = { title: 'Family sign in - CMT Portal' };
 
 export default function FamilyLoginPage() {
   return (
@@ -3136,7 +3136,7 @@ git commit -m "feat(portal): scaffold /login/family page (OTP flow deferred to s
 
 ---
 
-## Task 22: `POST /api/auth/admin/signin` — admin signin handler
+## Task 22: `POST /api/auth/admin/signin` - admin signin handler
 
 Validates credentials via Firebase Identity Toolkit REST, verifies the user has the `admin` claim, creates a session cookie, sets it on the response.
 
@@ -3340,7 +3340,7 @@ git commit -m "feat(portal): POST /api/auth/admin/signin with zod validation + s
 
 ---
 
-## Task 23: `POST /api/auth/teacher/signin` — teacher signin handler
+## Task 23: `POST /api/auth/teacher/signin` - teacher signin handler
 
 Timing-safe compare on the passphrase, creates/reuses the shared teacher Firebase user, mints custom token → exchanges for ID token → creates session cookie.
 
@@ -3528,7 +3528,7 @@ git commit -m "feat(portal): POST /api/auth/teacher/signin with timing-safe pass
 
 ---
 
-## Task 24: `POST /api/auth/signout` — clears the session cookie
+## Task 24: `POST /api/auth/signout` - clears the session cookie
 
 **Files:**
 - Create: `apps/portal/src/app/api/auth/signout/route.ts`
@@ -3606,10 +3606,10 @@ git commit -m "feat(portal): POST /api/auth/signout clears __session cookie"
 
 ## Task 25: Replace `/check-in/admin/page.tsx` with an auth-gated stub
 
-The slice A `/check-in/admin/page.tsx` currently shows a `ComingSoon` placeholder via the route's parent route. B0 makes it a proper admin stub page — served only behind auth, showing "Admin dashboard — coming in B4."
+The slice A `/check-in/admin/page.tsx` currently shows a `ComingSoon` placeholder via the route's parent route. B0 makes it a proper admin stub page - served only behind auth, showing "Admin dashboard - coming in B4."
 
 **Files:**
-- Modify: `apps/portal/src/app/check-in/admin/page.tsx` (create if missing — slice A may not have added a nested segment)
+- Modify: `apps/portal/src/app/check-in/admin/page.tsx` (create if missing - slice A may not have added a nested segment)
 - Create: `apps/portal/src/app/check-in/admin/error.tsx`
 - Create: `apps/portal/src/app/check-in/admin/loading.tsx`
 
@@ -3626,7 +3626,7 @@ If it prints `not present`, the segment doesn't exist yet and you'll create it b
 ```tsx
 import { headers } from 'next/headers';
 
-export const metadata = { title: 'Admin — Check-in — CMT Portal' };
+export const metadata = { title: 'Admin - Check-in - CMT Portal' };
 export const dynamic = 'force-dynamic';
 
 export default async function AdminStubPage() {
@@ -3641,7 +3641,7 @@ export default async function AdminStubPage() {
         You are signed in as <strong>{role}</strong> (<code>{uid}</code>).
       </p>
       <p className="text-[hsl(var(--foreground))]">
-        The full admin dashboard — stats, user provisioning, guest list, reports — is shipping in
+        The full admin dashboard - stats, user provisioning, guest list, reports - is shipping in
         slice B4. This stub confirms the auth gate works.
       </p>
       <form action="/api/auth/signout" method="post">
@@ -3701,7 +3701,7 @@ git commit -m "feat(portal): add auth-gated /check-in/admin stub (real dashboard
 
 ---
 
-## Task 26: `seed-admin.ts` CLI — bootstrap the first admin account
+## Task 26: `seed-admin.ts` CLI - bootstrap the first admin account
 
 **Files:**
 - Create: `apps/portal/scripts/seed-admin.ts`
@@ -3847,7 +3847,7 @@ git commit -m "feat(portal): add pnpm seed:admin CLI to bootstrap the first admi
 - Create: `apps/portal/playwright.config.ts`
 - Create: `apps/portal/e2e/fixtures.ts`
 - Create: `.gitignore` entries for `playwright-report/` and `test-results/`
-- Modify: `package.json` (root) — add `test:e2e` script
+- Modify: `package.json` (root) - add `test:e2e` script
 
 - [ ] **Step 1: Install Playwright**
 
@@ -3917,7 +3917,7 @@ IGNORE
 pnpm --filter @cmt/portal typecheck && pnpm --filter @cmt/portal lint
 ```
 
-Expected: zero errors. No e2e spec yet — Playwright won't run anything yet.
+Expected: zero errors. No e2e spec yet - Playwright won't run anything yet.
 
 - [ ] **Step 7: Commit**
 
@@ -3928,7 +3928,7 @@ git commit -m "feat(portal): install Playwright + baseline config + test:e2e scr
 
 ---
 
-## Task 28: Write `e2e/b0-auth.spec.ts` — the critical B0 flow
+## Task 28: Write `e2e/b0-auth.spec.ts` - the critical B0 flow
 
 Requires a seeded admin user in UAT Firebase. Documented as a pre-req in the spec.
 
@@ -3944,7 +3944,7 @@ import { test, expect } from './fixtures';
 const ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL ?? 'developer@chinmayatoronto.org';
 const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD ?? 'DevPassword!234';
 
-test.describe('B0 — portal auth foundation', () => {
+test.describe('B0 - portal auth foundation', () => {
   test('unauthenticated user is redirected from /check-in/admin to /login', async ({ page }) => {
     await page.goto('/check-in/admin');
     await expect(page).toHaveURL(/\/login\?from=%2Fcheck-in%2Fadmin/);
@@ -3953,7 +3953,7 @@ test.describe('B0 — portal auth foundation', () => {
   test('admin can sign in and land on /check-in/admin', async ({ page }) => {
     test.skip(
       !process.env.E2E_ADMIN_EMAIL || !process.env.E2E_ADMIN_PASSWORD,
-      'E2E_ADMIN_EMAIL / E2E_ADMIN_PASSWORD not set — seed an admin first with `pnpm seed:admin`',
+      'E2E_ADMIN_EMAIL / E2E_ADMIN_PASSWORD not set - seed an admin first with `pnpm seed:admin`',
     );
 
     await page.goto('/login/admin');
@@ -3987,7 +3987,7 @@ test.describe('B0 — portal auth foundation', () => {
 pnpm --filter @cmt/portal lint
 ```
 
-Expected: zero errors. (We don't run Playwright against a live server in this task — that happens in Task 29 pre-push verification and manually before prod promotion.)
+Expected: zero errors. (We don't run Playwright against a live server in this task - that happens in Task 29 pre-push verification and manually before prod promotion.)
 
 - [ ] **Step 3: Commit**
 
@@ -4027,7 +4027,7 @@ NEXT_PUBLIC_PORTAL_FIREBASE_STORAGE_BUCKET
 NEXT_PUBLIC_PORTAL_FIREBASE_MESSAGING_SENDER_ID
 NEXT_PUBLIC_PORTAL_FIREBASE_APP_ID
 
-# Master Firebase (RTDB reads — always prod)
+# Master Firebase (RTDB reads - always prod)
 MASTER_FIREBASE_PROJECT_ID
 MASTER_FIREBASE_CLIENT_EMAIL
 MASTER_FIREBASE_PRIVATE_KEY
@@ -4055,7 +4055,7 @@ Before `/login/admin` works, there must be at least one Firebase user with the `
 pnpm --filter @cmt/portal seed:admin --email=your-admin@example.com
 ```
 
-The script prompts for a password (8+ chars), creates the user in the portal Firebase project if missing, and sets the `admin` claim. It is idempotent — re-running it updates the password.
+The script prompts for a password (8+ chars), creates the user in the portal Firebase project if missing, and sets the `admin` claim. It is idempotent - re-running it updates the password.
 
 ## End-to-end tests (Playwright)
 
@@ -4063,7 +4063,7 @@ The script prompts for a password (8+ chars), creates the user in the portal Fir
 pnpm test:e2e
 ```
 
-Playwright runs against a locally-served `pnpm --filter @cmt/portal dev -- --port=3001`. Set `E2E_ADMIN_EMAIL` and `E2E_ADMIN_PASSWORD` in your environment before running — the "admin can sign in" test is skipped without them. Playwright is **not** on the pre-push hook; run it before every production promotion.
+Playwright runs against a locally-served `pnpm --filter @cmt/portal dev -- --port=3001`. Set `E2E_ADMIN_EMAIL` and `E2E_ADMIN_PASSWORD` in your environment before running - the "admin can sign in" test is skipped without them. Playwright is **not** on the pre-push hook; run it before every production promotion.
 ```
 
 - [ ] **Step 2: Update `CLAUDE.md`**
@@ -4073,16 +4073,16 @@ Find the "Slice A status" line and update to reflect slice B progress:
 ```markdown
 **Slice A status:** ✅ Shipped (merged to `main`). Spec: `docs/superpowers/specs/2026-04-12-slice-a-portal-scaffold-design.md`, plan: `docs/superpowers/plans/2026-04-12-slice-a-portal-scaffold.md`.
 
-**Slice B status:** In progress. Spec: `docs/superpowers/specs/2026-04-13-slice-b-family-check-in-port-design.md`. Decomposed into six sub-slices (B0 → B2 → B3 → B1 → B4 → B5); B0 (portal auth foundation) is the first. Slice D (unified auth) is **removed** from the roadmap — B0 absorbs it.
+**Slice B status:** In progress. Spec: `docs/superpowers/specs/2026-04-13-slice-b-family-check-in-port-design.md`. Decomposed into six sub-slices (B0 → B2 → B3 → B1 → B4 → B5); B0 (portal auth foundation) is the first. Slice D (unified auth) is **removed** from the roadmap - B0 absorbs it.
 ```
 
 Update the "Slice-based development" list in CLAUDE.md and the corresponding list in README.md to strike through slice D:
 
 ```markdown
-- **Slice A** — ✅ **Shipped** — Monorepo scaffold + portal app shell + 4 shared packages
-- **Slice B** — 🚧 In progress — Port `chinmaya-family-check-in` + portal-wide auth foundation (subsumes former slice D)
-- **Slice C** — Port `chinmaya-event-registration` into `apps/portal/src/app/events/*`
-- **Slice E+** — Future modules (programs, enrollment, retirement of old portal)
+- **Slice A** - ✅ **Shipped** - Monorepo scaffold + portal app shell + 4 shared packages
+- **Slice B** - 🚧 In progress - Port `chinmaya-family-check-in` + portal-wide auth foundation (subsumes former slice D)
+- **Slice C** - Port `chinmaya-event-registration` into `apps/portal/src/app/events/*`
+- **Slice E+** - Future modules (programs, enrollment, retirement of old portal)
 ```
 
 - [ ] **Step 3: Run the full pre-push suite locally**
@@ -4116,13 +4116,13 @@ The pre-push hook re-runs `pnpm typecheck && lint && test && build`. On success,
 After the push succeeds:
 
 1. Vercel auto-deploys a preview. Wait for green.
-2. Visit `https://<preview-url>/login` — the role picker should render.
-3. Visit `https://<preview-url>/check-in/admin` — should redirect to `/login`.
+2. Visit `https://<preview-url>/login` - the role picker should render.
+3. Visit `https://<preview-url>/check-in/admin` - should redirect to `/login`.
 4. Set `PORTAL_*`, `MASTER_*`, `TEACHER_PASSPHRASE`, and `NEXT_PUBLIC_FEATURE_CHECK_IN=true` + `NEXT_PUBLIC_FEATURE_CHECK_IN_ADMIN=true` in Vercel env for preview.
 5. Run `pnpm --filter @cmt/portal seed:admin --email=developer@chinmayatoronto.org` locally against UAT Firebase (the script talks directly to Firebase; no Vercel call needed).
 6. Try the admin login flow on the preview deploy. Confirm landing on `/check-in/admin`.
 
-B0 is complete when steps 1–6 are all green. Slice B2 begins next.
+B0 is complete when steps 1-6 are all green. Slice B2 begins next.
 
 ---
 
@@ -4140,8 +4140,8 @@ Before declaring B0 done, confirm each acceptance criterion from spec §9.2:
 | B0-AC-6 | `/check-in/admin` with teacher cookie → 302 `?error=unauthorized` | Task 17 middleware test |
 | B0-AC-7 | `/api/check-in/admin/stats` without auth → 401 JSON | Task 17 middleware test |
 | B0-AC-8 | Bearer token path for `/api/check-in/admin/*` works | Task 17 middleware test |
-| B0-AC-9 | Unit tests green: canAccessRoute, session, claims, rtdb, firestore, env, apps, auth | Tasks 2–14 |
-| B0-AC-10 | Integration tests green for all signin and signout handlers | Tasks 22–24 |
+| B0-AC-9 | Unit tests green: canAccessRoute, session, claims, rtdb, firestore, env, apps, auth | Tasks 2-14 |
+| B0-AC-10 | Integration tests green for all signin and signout handlers | Tasks 22-24 |
 | B0-AC-11 | Playwright `b0-auth.spec.ts` green | Task 28 manual run |
 | B0-AC-12 | `pnpm typecheck && lint && test && build` all green | Task 29 step 3 |
 | B0-AC-13 | Pre-push hook passes | Task 29 step 5 |

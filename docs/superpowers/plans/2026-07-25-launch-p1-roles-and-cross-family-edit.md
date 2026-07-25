@@ -137,9 +137,10 @@ export type Capability = 'admin' | 'welcome-team' | 'coordinator' | 'kiosk';
 ```ts
   coordinator: {
     label: 'Coordinator',
-    summary: 'Manages rosters, visitors, programs, levels and teacher assignments. Above welcome team, below admin.',
+    summary: 'Manages rosters, visitors, programs, levels and teacher assignments.',
     grants: [
-      'Everything a welcome-team volunteer can do (family search, roster, visitors)',
+      'Browse and export the family roster (/welcome/roster)',
+      'See the visitor list (/welcome/visitors)',
       'Create and edit programs (/admin/programs) and their offerings, including donation amounts',
       'Manage class levels (/admin/levels)',
       'Assign and unassign teachers for any level',
@@ -372,15 +373,48 @@ In `packages/shared-domain/src/auth/can-access-route.ts`, import `isCoordinator`
   }
 ```
 
-Then widen the four existing welcome-team clauses at `:51-73` to add `|| isCoordinator(claims)`, and the `/welcome/*` page rule at `:113` plus the roster/visitors API rules, so a coordinator inherits the welcome-team surface:
+Then widen the four existing welcome-team clauses at `:51-73` to add `|| isCoordinator(claims)`.
+
+For the welcome surface, grant **only the specific paths** - roster and visitors - and insert them **above** the general `/welcome/*` rule at `:113`:
 
 ```ts
-  if (pathname === '/welcome' || pathname.startsWith('/welcome/')) {
+  // Coordinator reaches the roster and visitors surfaces, and /welcome itself
+  // because it redirects to /welcome/roster. Deliberately NOT the whole
+  // /welcome/* prefix: that would also hand them the reports hub, which spec
+  // 3.1 explicitly excludes ("Still excluded: ... reports ...").
+  if (
+    pathname === '/welcome' ||
+    pathname === '/welcome/roster' || pathname.startsWith('/welcome/roster/') ||
+    pathname === '/welcome/visitors' || pathname.startsWith('/welcome/visitors/') ||
+    pathname === '/api/welcome/roster' || pathname.startsWith('/api/welcome/roster/') ||
+    pathname === '/api/welcome/visitors' || pathname.startsWith('/api/welcome/visitors/')
+  ) {
     return isWelcomeTeam(claims) || isCoordinator(claims);
   }
 ```
 
-> **Ordering matters.** The new `/api/admin/levels` clause must sit **above** the existing `/api/admin/levels/[id]/teachers` regex at `:70-73`, or the broader rule shadows it. Both return the same answer for a coordinator, but the narrower rule still needs to run for welcome-team, who gets `/teachers` but not level CRUD.
+**Leave the general `/welcome/*` rule at `:113` as `isWelcomeTeam(claims)` alone.** A coordinator hitting `/welcome/reports` then falls through to it and is denied, which is exactly what the Step 1 denial test asserts.
+
+> **Why this is spelled out:** an earlier draft of this plan widened the whole `/welcome/*` prefix, which contradicted its own denial test - the implementation could not have passed Step 1. `/api/welcome/reports/*` is gated to `isWelcomeTeam` at `can-access-route.ts:275-277`, and spec §3.1 lists reports among the coordinator exclusions. Grant specific paths, never the prefix.
+
+> **Ordering: narrow rules ALWAYS before broad ones.** `canAccessRoute` returns at the first match, so a broad rule placed above a narrow one silently replaces it.
+>
+> **The `/api/admin/levels` case is a live regression risk.** Welcome-team today reaches `/api/admin/levels/{id}/teachers` via the narrow regex at `:70-73` but must **not** get level CRUD. If the new broad `/api/admin/levels` coordinator clause is placed **above** that regex, it answers first and returns `isAdmin || isCoordinator` - and **welcome-team loses teacher assignment**, a capability they have today.
+>
+> Correct placement:
+> 1. **First**, the existing `/api/admin/levels/{id}/teachers` regex at `:70-73`, widened to `isAdmin || isWelcomeTeam || isCoordinator`.
+> 2. **Then** the new broad `/api/admin/levels` clause returning `isAdmin || isCoordinator`.
+>
+> Add a regression test to Step 1 pinning this, because nothing else would catch it:
+> ```ts
+> it('welcome-team keeps teacher assignment but never gets level CRUD', () => {
+>   const wt = { role: 'welcome-team' as const };
+>   expect(canAccessRoute(wt, '/api/admin/levels/brampton-l2/teachers', 'POST')).toBe(true);
+>   expect(canAccessRoute(wt, '/api/admin/levels', 'POST')).toBe(false);
+> });
+> ```
+>
+> The roster/visitors clause is the same principle: it must sit **above** the general `/welcome/*` rule at `:113`, or that rule answers first and denies the coordinator.
 
 - [ ] **Step 4: Run tests**
 
