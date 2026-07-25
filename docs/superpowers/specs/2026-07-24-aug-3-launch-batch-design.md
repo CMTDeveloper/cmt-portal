@@ -14,11 +14,24 @@
 |---|---|
 | What "launch" means | **Full production cutover.** Real families, prod Firebase `chinmaya-setu-715b8`, real domain. |
 | W&R Team role | **Not a new role.** It is the existing `welcome-team`. **Keep the name `welcome-team`** everywhere - internal identifiers *and* UI copy. Add edit powers + a Visitors page to it. |
-| Coordinator role | **New role.** Scope is literally **Roster + Programs**. Nothing else - no levels, no calendar, no school-year, no locations. |
+| Coordinator role | **New role.** ~~Roster + Programs only~~ **SUPERSEDED 2026-07-25 by Vaibhav's list (CMT Developer confirmed): rosters + visitors + program management + levels + teacher assignments.** Still excluded: users/roles, school-year rollover, locations, reports, donations. See §3. |
 | W&R edit power | **Full family edit** (everything a family manager can do, on any family) **+ audit log**. |
 | "Canadian numbers" at login | **`+1` / NANP** (Canada + US). No area-code allowlist. |
 | Requirement 6 (turn off old portal) | **Owned by CMT Developer.** Out of scope for this spec, but sequenced against in §9. |
 | If it doesn't fit in 5 days | Plan the full batch; CMT Developer adds capacity. |
+| SMS sign-in | **Unsupported, with an explicit error.** Phone numbers are still collected for **WhatsApp**. See §8.0. |
+
+### 0.1 This spec is one of three (split decided 2026-07-25)
+
+Vaibhav's 2026-07-25 note restated this meeting and added two genuinely new features. Of his ten items, seven were already specced here or already shipped in `b1395e0`; one (visitor grade filter, §5.4) is a small addition folded in. The two new ones get **their own specs**, because they carry policy that is not yet finalized, need different reviewers (accounting; program leadership), and must be able to slip **without** taking the production cutover with them:
+
+| Spec | Covers | Status |
+|---|---|---|
+| **This one** - `2026-07-24-aug-3-launch-batch-design.md` | Production cutover + roles + teacher view + visitors + roster reset + SMS posture | Ready for planning |
+| `2026-07-25-adult-study-class-design.md` | Adult Study Class program, BV-exemption fee logic, which-parent selection, both-parents-teachers rule | To be written |
+| `2026-07-25-monthly-pledge-pad-design.md` | Monthly pledge via pre-authorized debit: bank-detail capture, cheque upload, `processing` donation state, accounting hand-off | To be written |
+
+All three target Aug 3. The dependency runs one way: the two new specs consume the **Coordinator role** and **programs** surfaces defined here, so this spec is built first.
 
 ### Honest sizing (revised 2026-07-24 after measuring the real constraints)
 
@@ -278,12 +291,23 @@ Rejected alternatives:
 
 ## 3. Requirement 2 - Coordinator role
 
-### 3.1 Scope (literal, per decision)
+### 3.1 Scope (REVISED 2026-07-25 - Vaibhav's definition, confirmed by CMT Developer)
 
-- **Roster:** `/welcome/roster` + `GET /api/welcome/roster/report`
-- **Programs:** `/admin/programs`, `/admin/programs/[key]`, `/api/admin/programs`, `/api/admin/programs/[key]`
+Coordinator sits **above** welcome-team. Granted:
 
-Nothing else. Explicitly **not** granted: levels, calendar, school-year, locations, users/roles, reports, family search, family edit.
+| Area | Routes |
+|---|---|
+| **Roster** | `/welcome/roster` + `GET /api/welcome/roster/report` |
+| **Visitors** | `/welcome/visitors` (new, §5.2) + its read API |
+| **Programs** | `/admin/programs`, `/admin/programs/[key]`, `/api/admin/programs`, `/api/admin/programs/[key]` |
+| **Levels** | `/admin/levels` (Level management) + `/api/admin/levels/*` |
+| **Teacher assignments** | `/api/admin/teacher-assignments/*`, `/api/admin/teachers/*`, `/api/admin/levels/[id]/teachers` |
+
+Still **excluded**: users/roles (`/admin/users`), school-year rollover, locations, reports, donations, family edit.
+
+**Most of the added surface is nearly free.** `can-access-route.ts:51-73` already opens teacher-assignments, `teachers/search`, and `levels/[id]/teachers` to `isAdmin || isWelcomeTeam` - Coordinator joins those existing clauses. Only `/admin/levels` **page** access and full level CRUD are genuinely new grants.
+
+> **Security constraint (unchanged and non-negotiable):** every grant is an explicit per-route clause placed **above** the `/api/admin/` catch-all at `:75`. That prefix is never loosened, because `/api/admin/welcome-team*` has no in-handler role check (§1.3) and widening the prefix would let a Coordinator grant welcome-team.
 
 ### 3.2 Work - every touchpoint
 
@@ -402,6 +426,9 @@ Capture (per-child name + grade, required contact) and teacher surfacing shipped
 1. **Fix defect D1** (§1.5) - normalize the guest `date` key to the same Sunday basis the teacher views use, or make the visitors query span the week. Preference: **write both** `date` (calendar day, preserved for admin reports) **and** `sessionDate` (`mostRecentSunday`), and query on `sessionDate`. Non-destructive to existing docs and to the admin reports that read `date`.
 2. **New `/welcome/visitors`** - the welcome-team-visible visitors surface. Reuses `getLevelVisitorsView` across levels rather than the per-level teacher view.
 3. **The missing E2E** - a real UI→UI Playwright spec: submit the guest form, then assert the child appears in the teacher's visitors panel. This is the specific gap called out at `e2e/legacy/b1-kiosk.spec.ts:22`.
+4. **Grade filter on the visitor list** (added 2026-07-25 from Vaibhav's list) - teachers filter visitors by school grade. Cheap: `getLevelVisitorsView` already carries `grade` on every `VisitorRow` (`visitors.ts:25-31`) and already grade-matches to the level, so this is a client-side filter control, no new read and no index.
+
+> Already shipped in `b1395e0`, listed here because Vaibhav's note restates them as requirements: per-child **name + school grade** capture, and **mandatory parent email + phone** on the guest form. No further work - the contact fields are enforced at the route, and grade drives the level matching in `guestMatchesLevel` (`visitors.ts:15-23`). The outstanding items are 1-4 above.
 
 ---
 
@@ -431,15 +458,24 @@ Two facts to carry into that work:
 
 ## 8. Requirement 7 - `+1`/NANP-only SMS at login
 
-### 8.0 Launch posture: SMS is undeliverable, so sign-in is email-only
+### 8.0 Launch posture: SMS sign-in is unsupported and says so (REVISED 2026-07-25)
 
-Per the measured state in §1.8, **SNS is in the sandbox with no origination number** - SMS OTP cannot reach any real family on Aug 3. A `+1` gate alone would therefore still leave every phone user on a screen waiting for a code that never arrives, which is exactly the silent failure this requirement exists to remove.
+**Decision (Vaibhav's wording, confirmed by CMT Developer):** keep collecting international phone numbers - they are used for **WhatsApp outreach**, not authentication - and **show an explicit error if someone tries to sign in by SMS, because that method is not supported.**
 
-**Launch behaviour: hide the Phone option on `/sign-in` behind a flag (`NEXT_PUBLIC_FEATURE_SMS_OTP`, default off) and present email as the sign-in channel.** This is safe because §1.8 measured **100% email coverage across all 867 families**.
+This supersedes the earlier "hide the Phone option behind a flag" plan, and it is the better design:
+- It matches the measured reality exactly (§1.8: SNS sandboxed, no origination number, so SMS reaches nobody).
+- It is honest. A user who expects SMS is *told why* and redirected to email, instead of finding the option mysteriously absent.
+- It removes the launch dependency on the `+1`/NANP gate entirely - **"no SMS" is a strictly simpler rule than "some countries only"**.
 
-The `+1` gate below is still the correct code and should ship - it is what runs the day SNS is out of the sandbox and the flag flips on. It is written now, verified now, and dormant until then.
+**Behaviour:**
+- `/sign-in` keeps the Phone/Email toggle. Choosing Phone shows an inline notice: SMS sign-in is unavailable, please use your email address. The submit path is blocked client-side.
+- `POST /api/setu/auth/send-code` returns a typed **`400 { error: 'sms-signin-unsupported' }`** for `type: 'phone'`, so the mobile app and any direct API caller get the same clear answer rather than today's silent `200` with no code (`route.ts:173`).
+- `verify-code` mirrors it, so no one burns verify attempts against a code that was never sent.
+- Phone number **capture** is untouched everywhere else: registration, member add/edit, and profile all keep accepting any country's number for WhatsApp.
 
-Server-side, the country check stays enforced regardless of the UI flag, so the mobile app and any direct API caller get the same typed error rather than a silent 200.
+**Gating:** the block is controlled by one flag (`NEXT_PUBLIC_FEATURE_SMS_OTP`, default **off**). When SNS eventually clears the sandbox and an origination number is registered, flipping it on restores SMS sign-in, and *that* is when the `+1`/NANP gate in §8.2 becomes the operative rule. The gate is written and tested now, dormant until then.
+
+> Safe because §1.8 measured **100% email coverage across all 867 families** - 767 with both, 100 email-only, zero phone-only.
 
 ### 8.1 Hard constraint
 
