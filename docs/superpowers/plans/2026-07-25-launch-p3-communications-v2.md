@@ -17,7 +17,7 @@
 ## Global Constraints
 
 - **`sendTemplatedEmail` is already taken, and means the opposite thing.** `features/check-in/notifications/send-email-service.ts:5,11` exports `SendTemplatedEmailArgs { to; template; props }` and `sendTemplatedEmail(args)` for the **in-code** renderer, consumed by `payment-reminder-service.ts:4,31`, `app/api/check-in/notifications/send-email/route.ts:3,18`, and three test files that `vi.mock` the module **by that export name**. This plan introduces `sendSesTemplatedEmail` (low level, `lib/aws/ses.ts`) and `sendManagedEmail` (registry + fallback). **Never ship two exports named `sendTemplatedEmail`.**
-- **The sender interface is `ResolvedSender`, and there are two of them.** `lib/aws/resolve-sender.ts:6-9` declares `ResolvedSender`; `features/check-in/shared/notifications/mock-sender.ts:13-16` declares a separate `NotificationSender`, and `mockSender` is typed against it while being used as a `ResolvedSender` at `resolve-sender.ts:53`, `:85`, `:113`. **Both interfaces gain any new method, in the same commit**, or those three sites fail typecheck. There is no interface called `Sender`.
+- **The sender interface is `ResolvedSender`, and there are two of them.** `lib/aws/resolve-sender.ts:6-9` declares `ResolvedSender`; `features/check-in/shared/notifications/mock-sender.ts:13-16` declares a separate `NotificationSender`, and `mockSender` is typed against it while being returned as a `ResolvedSender` at `resolve-sender.ts:53`. **Both interfaces gain any new method, in the same commit**, or that assignment fails typecheck - and the two whole-module mock factories in `resolve-sender.test.ts:3,5-10` must be widened with it. There is no interface called `Sender`.
 - **Paths.** The real email service is `apps/portal/src/features/check-in/**notifications**/send-email-service.ts`. `features/check-in/shared/notifications/` contains **only** `mock-sender.ts`. Getting this wrong is what made v1's Task 3 unimplementable.
 - **`sendOtpEmail` does not exist** anywhere in `apps/portal/src` or `packages/`. Do not write a test against it.
 - **Everything in `lib/aws/` starts with `import 'server-only'`** (`ses.ts:1`, `sns.ts:1`, `resolve-sender.ts:1`, `render-template.ts:1`). New files there must too, or a stray client import reads `undefined` for every `SES_TEMPLATE_*` and silently pins the fallback path forever.
@@ -46,7 +46,14 @@ So a template that **exists but fails to render** resolves successfully: `sendMa
 
 1. **Spec §8.4 understates the SMS regression and is corrected.** It records "a non-`+1` number cannot be added" via `/api/setu/contacts/send-code` as a known limitation of the old NANP-gate design. Under §8.0's "no SMS at all" posture, that route (`route.ts:74-76`) is dead for **every** number including Canadian ones. Task 5 covers it rather than inheriting the old wording.
 2. **Task 5 also fixes the legacy path, which the spec does not mention.** `/api/auth/family/send-code:48-56` still calls `resolveSender().sendSMS`, and its UI still offers Phone (`features/check-in/family/family-login-form.tsx:81-85`). CLAUDE.md states legacy `/login` + `/check-in/*` is **still the production entry point** for existing BV families, so leaving it is leaving the exact bug this requirement exists to fix, on the path most families use.
-3. **The `+1`/NANP gate (spec §8.2 items 1-4) is not built.** §8.0 supersedes it: "no SMS" is strictly simpler than "some countries only", and the gate only becomes operative if SNS ever clears the sandbox. Writing it now is dead code with a dormant test. Recorded so the omission is a decision.
+3. **The `+1`/NANP gate: spec §8.2 items 1-3 are not built. Item 4 IS built.** §8.0 supersedes items 1-3 - "no SMS" is strictly simpler than "some countries only", and those are sign-in-path gates that only become operative if SNS clears the sandbox, so writing them now is dead code with a dormant test.
+
+   **Item 4 is not a sign-in item and that reasoning does not transfer to it.** §8.0 governs sign-in only, but `sns.ts:17`'s `sendSMS` is the publish layer for **seven** call sites, and Task 5 touches three. Four keep publishing today, to numbers §1.8 measured as unreachable:
+   - `features/setu/prasad/reminder-service.ts:59` (daily cron)
+   - `features/setu/prasad/proposal-notify.ts:47`
+   - `app/api/setu/join-request/send/route.ts:80` (manager notification)
+
+   So item 4 is operative **right now**, for every prasad reminder and every join-request SMS. It is a five-line refuse-and-log guard inside `sns.ts:17` that covers all callers at once, including the three routes Task 5 already edits. Build it (Task 5 Step 6b) rather than defer it on a rationale that does not apply.
 
 ---
 
@@ -99,6 +106,12 @@ So a template that **exists but fails to render** resolves successfully: `sendMa
 
 Cover: the command is `SendTemplatedEmailCommand`; `Template` is the template name; `TemplateData` is `JSON.stringify(data)`; `Source` comes from the same sender identity `sendEmail` uses; a `TemplateDoesNotExistException` propagates unchanged (the *caller* decides to fall back, not this layer).
 
+**Plus the two governance branches spec §6 item 3 requires**, which are the whole reason the method joins the interface:
+- with `NEXT_PUBLIC_FEATURE_CHECK_IN_NOTIFY` unset, a templated send reaches `mockSender.sendSesTemplatedEmail`, not the real one
+- with the flag on and `SETU_EMAIL_ALLOWLIST` set, a send to a non-allowlisted address reaches `mockSender`, not the real one
+
+`aws-sdk-client-mock` is already the convention here (`__tests__/ses.test.ts:2,6,16,23`).
+
 - [ ] **Step 2: Run to verify they fail**
 
 ```bash
@@ -111,7 +124,20 @@ Mirror the existing `sendEmail`'s client construction and sender-identity resolu
 
 - [ ] **Step 4: Add it to BOTH sender interfaces**
 
-`ResolvedSender` (`resolve-sender.ts:6-9`) **and** `NotificationSender` (`mock-sender.ts:13-16`). Adding it to only one breaks `resolve-sender.ts:53`, `:85`, `:113`, where `mockSender` is returned or called as a `ResolvedSender`.
+`ResolvedSender` (`resolve-sender.ts:6-9`) **and** `NotificationSender` (`mock-sender.ts:13-16`). Widening only `ResolvedSender` breaks `resolve-sender.ts:53` (`return mockSender`), the one assignability position. (`:85` and `:113` are method calls on existing members and are unaffected - the conclusion holds, the evidence is one site, not three.)
+
+**Widen the two mock factories in the same commit, or every test in `resolve-sender.test.ts` fails on module access.** Both are whole-module replacements:
+
+```ts
+// apps/portal/src/lib/aws/__tests__/resolve-sender.test.ts:3
+vi.mock('../ses', () => ({ sendEmail: vi.fn() }));
+// :5-10
+vi.mock('@/features/check-in/shared', () => ({
+  mockSender: { sendEmail: vi.fn(), sendSMS: vi.fn() },
+}));
+```
+
+Once `resolve-sender.ts` imports `sendSesTemplatedEmail` from `./ses` and the mock branch calls `mockSender.sendSesTemplatedEmail(args)`, vitest 4 raises `No "sendSesTemplatedEmail" export is defined on the "../ses" mock` on access. Add the export to the first factory and the method to the second.
 
 - [ ] **Step 5: Carry the allowlist and redirect branches - and fix the marker they depend on**
 
@@ -232,19 +258,62 @@ it('never sends twice', async () => {
 
 Read `SES_TEMPLATE_*` per name. `import 'server-only'` at the top. Missing var means "not configured", which is the info-level fallback, not an error.
 
-- [ ] **Step 4: Implement `sendManagedEmail`**
+**Add all five `SES_TEMPLATE_*` names plus `SES_CONFIGURATION_SET` to `turbo.json`'s `build.env` array** (currently `:12-56`, which already lists `AWS_SES_REGION`, `AWS_SES_FROM_EMAIL`, `SETU_EMAIL_ALLOWLIST`, `SETU_EMAIL_REDIRECT_TO` and every other AWS/SETU var, and none of the new ones). Stage `turbo.json` in Step 7's commit. These are server-only vars read at request time, so the practical bite is narrower than the Global Constraint implies - Vercel injects the full env into the function runtime either way - but they are absent from Turborepo's build hash, so changing a template name will not invalidate a cached build. Add them for that, and for consistency with the rule.
+
+Also add them to `apps/portal/src/lib/env.ts`'s `portalEnvSchema`. That file is the single written inventory of portal env and explicitly lists vars it does not itself consume ("Read directly from `process.env` in `resolveSender()`; listed here for schema completeness"). Zod's non-strict object ignores unknown keys so nothing breaks either way; the inventory just stops being complete.
+
+- [ ] **Step 4: Implement `sendManagedEmail` - through `resolveSender()`, never `./ses`**
+
+```ts
+await resolveSender().sendSesTemplatedEmail({ to, templateName, data });
+```
+
+**This is the single most important line in the plan.** After Task 1 there are two importable callables with the same name: the raw `lib/aws/ses.ts` export and the governed `resolveSender().sendSesTemplatedEmail`. `send-managed-email.ts` sits in the same directory as `ses.ts`, so `import { sendSesTemplatedEmail } from './ses'` is the *natural* import and the wrong one. Spec §3 item 2, verbatim:
+
+> **This is not optional:** `resolveSender()` holds the UAT allowlist, the redirect-to-test-address branch, and the mock sender. A direct `ses.ts` call would bypass all three and mail real families from a test run.
+
+Concretely, a direct call skips `SETU_EMAIL_ALLOWLIST` (`resolve-sender.ts:19-28`), `SETU_EMAIL_REDIRECT_TO` (`:66-67`), and the `NEXT_PUBLIC_FEATURE_CHECK_IN_NOTIFY !== 'true'` route to `mockSender` (`:51-54`). Every non-prod environment would then mail `setu-invite`, `setu-join-request`, `payment-reminder` and `donation-thank-you` to real recipients - and the payment-reminder cron would blast the roster.
 
 Use `err instanceof TemplateDoesNotExistException` from the SDK. Never a `.name` string compare, never `.includes()` - see Global Constraints.
 
+- [ ] **Step 4b: Pin the routing with a test that fails if someone imports `./ses` directly**
+
+```ts
+vi.mock('@/lib/aws/resolve-sender');
+vi.mock('../ses');
+
+it('sends through resolveSender, never the raw ses module', async () => {
+  await sendManagedEmail({ name: 'setu-invite', to: 'a@b.com', data: {}, fallback: noop });
+  expect(mockResolved.sendSesTemplatedEmail).toHaveBeenCalledTimes(1);
+  expect(rawSendSesTemplatedEmail).not.toHaveBeenCalled();
+});
+```
+
 - [ ] **Step 5: Run the tests**
 
-- [ ] **Step 6: Wire a configuration set so render failures are not silent**
+- [ ] **Step 6: Route render failures to an out-of-band alarm - the application still cannot see them**
 
-Without this, a template that exists but fails to render resolves successfully and delivers nothing, and no fallback fires. `SendTemplatedEmailRequest` accepts `ConfigurationSetName?` (verified in the installed SDK). Pass it from `SES_CONFIGURATION_SET`, pointed at an SES configuration set publishing **Rendering Failure** events.
+**Be precise about what this buys, because the obvious reading is wrong.** The SDK's next sentence after the render-failure warning (`SendTemplatedEmailCommand.d.ts:75-77`) is "we highly recommend that you set up Amazon SES to send you **notifications** when Rendering Failure events occur." A configuration-set event destination publishes to SNS / CloudWatch / Firehose - strictly out of band. With `ConfigurationSetName` set:
 
-This needs an AWS-side prerequisite from Vaibhav: create the configuration set and an SNS or CloudWatch destination for `RENDERING_FAILURE`. Add it to Task 6's runbook as an operational prerequisite alongside the templates themselves.
+- `client().send(...)` still resolves with a `MessageId` (`SendTemplatedEmailResponse` carries only that)
+- `sendManagedEmail` still logs a send and still does not fall back
+- the recipient still gets nothing
 
-**If it is deferred past launch, record it as an accepted risk in the runbook and make the per-template UAT send a hard gate**: no `SES_TEMPLATE_*` var is set in production until that template has rendered correctly in a real UAT send. That gate is the only other thing standing between a bad template and silent loss.
+So this is **alerting, not correctness**. The in-application gap stays open. Do it anyway - a silent loss someone gets paged for beats one nobody sees - but name a topic, an alarm and an owner in Task 6, or it is a config change nobody reads.
+
+**The thing that actually closes the gap is the per-template UAT send in Task 6 Step 3.** By this plan's own admission it is the only other barrier between a bad template and silent loss, so it is a numbered non-optional step there, not a parenthetical here.
+
+Implementation, with the failure mode this step introduces:
+
+`SendTemplatedEmailRequest` accepts `ConfigurationSetName?` (verified at `models_0.d.ts:3290`). **Omit the key entirely when `SES_CONFIGURATION_SET` is unset** - do not let `undefined` ride in on a spread. And add a row to the fallback matrix, because `ConfigurationSetDoesNotExistException` is in the command's declared throws (`SendTemplatedEmailCommand.d.ts:135`):
+
+| Condition | Behaviour |
+|---|---|
+| `ConfigurationSetDoesNotExistException` | Log at **error**, then **retry once without `ConfigurationSetName`**. Do not fail the send. |
+
+Without that row, the plan's own "never fall back on any other SES failure" rule means a misspelled `SES_CONFIGURATION_SET`, or one created in a region other than `AWS_SES_REGION` (configuration sets are region-scoped exactly like templates), makes **all five managed emails throw** - a failure that is impossible today and impossible without this step. Worst at the invite (a 500 with the row already written) and the payment-reminder cron (retries forever, since `lastReminderSentAt` is written after the send). Add it as a sixth test.
+
+AWS-side prerequisite for Vaibhav: create the configuration set **in `AWS_SES_REGION`** with a `RENDERING_FAILURE` destination. Record it in Task 6.
 
 - [ ] **Step 7: Commit**
 
@@ -264,7 +333,7 @@ This needs an AWS-side prerequisite from Vaibhav: create the configuration set a
 | `donation-thank-you` | `app/api/check-in/notifications/send-email/route.ts:18` - **branch on `template`; only this one migrates.** `otp-code` and `payment-reminder` keep calling `sendTemplatedEmail` from here. |
 
 **Behaviour to preserve, per call site:**
-- **invite** - post-transaction and uncaught, so today a send failure is a 500 with the invite row already written. The matrix preserves that. This is also the email the render-failure gap (Task 2 Step 6) hits hardest. While you are here, null-guard `inviterName!` / `familyName!` at `:177`: under the code template a null-ish name interpolates visibly, but as `TemplateData` it is JSON-stringified and rendered by SES, where the failure is quieter.
+- **invite** - post-transaction and uncaught, so today a send failure is a 500 with the invite row already written. The matrix preserves that. This is also the email the render-failure gap (Task 2 Step 6) hits hardest. While you are here, guard `inviterName!` / `familyName!` at `:177` for **emptiness, not nullness**: both are `let`s at `:64-65` assigned unconditionally inside the transaction (`:75`, `:108`), so the `!` is a definite-assignment escape and a null guard would catch nothing. The real degradation is an empty string, which renders as a blank in SES.
 - **join-request** - wrapped in `Promise.allSettled`, so nothing propagates either way. The safest of the four.
 - **payment-reminder** - writes `lastReminderSentAt` **after** the send (`:37`), so a rethrow leaves the idempotency window unset and the next cron retries. Preserved either way; state it in the commit.
 - **donation-thank-you** - admin-triggered from `features/check-in/admin/send-donation-email-button.tsx:26`.
@@ -275,7 +344,20 @@ One per template, asserting the exact `{ name, data }` handed to `sendManagedEma
 
 - [ ] **Step 2: Run to verify they fail**
 - [ ] **Step 3: Migrate the four call sites**, each passing `fallback: () => <existing code path>`
-- [ ] **Step 4: Run the full suite** - `pnpm test`. The three test files that `vi.mock` `send-email-service` by export name must still pass unmodified.
+- [ ] **Step 4: Two assertions per call site, because "the old tests still pass" proves nothing here**
+
+An earlier draft of this step said the three files that `vi.mock` `send-email-service` by export name "must still pass unmodified". **That gate cannot fail** - and it is structurally the same tautology this plan calls out in v1's Task 4.
+
+Those files do not mock `sendManagedEmail`. After the migration the real one runs, finds no `SES_TEMPLATE_*` in the test env, and takes the fallback, which calls the still-mocked `sendTemplatedEmail`. So `payment-reminder-service.test.ts:110` and `send-email.test.ts:47` pass whether the migration happened, happened wrong, or never happened at all.
+
+Assert both halves instead:
+
+1. **Mock `@/lib/aws/send-managed-email`** and assert `sendManagedEmail` was called with the expected `name` and `data`. This is the migration.
+2. **Unmocked, with no `SES_TEMPLATE_*` set**, assert the fallback reaches `sendTemplatedEmail`. This is the safety net.
+
+Add `delete process.env.SES_TEMPLATE_*` in `beforeEach` so test 2's independence is structural rather than incidental on `.env.local` not being loaded.
+
+Then run `pnpm test`.
 - [ ] **Step 5: Commit**
 
 ---
@@ -315,15 +397,40 @@ Spec §8.0. Four surfaces, not one.
 
 - [ ] **Step 1: Add the flag**
 
-`NEXT_PUBLIC_FEATURE_SMS_OTP`, default **off**, in `lib/flags.ts` **and** `turbo.json`'s `env` array (absent today at `:12-56`; without it Vercel strips the var and local passes while prod fails).
+`NEXT_PUBLIC_FEATURE_SMS_OTP`, default **off**, in `lib/flags.ts` as `flags.smsOtp` **and** in `turbo.json`'s `env` array (absent today at `:12-56`).
 
-Consider a server-only `SETU_SMS_OTP` for the route refusals in addition to the public flag for the UI: a `NEXT_PUBLIC_` value is readable from the bundle and must be set at build time, so it is the wrong lever for a server-side refusal. Not blocking; record whichever you choose.
+**One public flag, read on both sides.** An earlier draft floated an additional server-only `SETU_SMS_OTP` and left the choice to the executor - that is an unassigned design decision in the middle of a task, and it lets the UI flag and the route flag drift apart. Every other `NEXT_PUBLIC_FEATURE_*` in `lib/flags.ts` is already read server-side; follow that. `flags.smsOtp` does not exist yet - a repo-wide grep for `SMS_OTP` / `smsOtp` returns nothing - so there is no precedent to preserve.
 
 - [ ] **Step 2: Typed 400 at `/api/setu/auth/send-code` and `verify-code`**
 
-`400 { error: 'sms-signin-unsupported' }` for `type: 'phone'`. **Place it on the shape of the input, before `findSetuFamilyByContact` (`route.ts:72`) and before the anti-enumeration silent-200 (`:128-135`)**, so every phone input gets an identical response whether or not the number is registered. Placing it before the rate limit at `:51` is also fine - it does strictly less work and bypasses nothing. Mirror in `verify-code` or a user burns verify attempts against a code that was never sent.
+**Gate it on the flag** - an unconditional 400 makes `flags.smsOtp` decorative, and spec §8.0 requires the block to be reversible ("flipping it on restores SMS sign-in"):
+
+```ts
+if (type === 'phone' && !flags.smsOtp) {
+  return NextResponse.json({ error: 'sms-signin-unsupported' }, { status: 400 });
+}
+```
+
+**Place it on the shape of the input, before `findSetuFamilyByContact` (`route.ts:72`) and before the anti-enumeration silent-200 (`:128-135`)**, so every phone input gets an identical response whether or not the number is registered. Placing it before the rate limit at `:51` is also fine - it does strictly less work and bypasses nothing. Mirror in `verify-code` or a user burns verify attempts against a code that was never sent.
+
+Test both directions: flag off → 400; **flag on → still reaches `sendSMS`**. The second is what keeps the flag real.
 
 `MOBILE_API_CHANGELOG.md` entry required - the mobile app calls the same route.
+
+- [ ] **Step 2b: The four existing tests that assert SMS *is* sent, and one you must not simply delete**
+
+All four pass today and all four break here. Enumerated because the failure mode is an executor improvising which assertions to invert:
+
+| Test | Broken by |
+|---|---|
+| `app/api/setu/auth/send-code/__tests__/route.test.ts:148-158` - `accepts phone contact, calls SNS sender with E.164-canonical phone` | Step 2 |
+| `app/api/setu/auth/send-code/__tests__/route.test.ts:160-169` - `phone variations all canonicalize to the same E.164 form` | Step 2 |
+| `app/api/auth/family/send-code/__tests__/route.test.ts:155-174` - `calls sendSMS for phone type` | Step 5 |
+| `app/api/setu/contacts/send-code/__tests__/route.test.ts:70-73` - `sends an OTP SMS for a phone contact (E.164-canonical)` | Step 6 |
+
+Also affected by Step 4: `app/sign-in/__tests__/page.test.tsx:124-135` (`SignInPage - prefill from ?type=phone&value=`) and `:561-569`.
+
+**The second one is identity-critical and must not just be deleted.** It is the only coverage of `normalizeContactForKey('phone', ...)` canonicalization, and spec §8.1 says changing that function **re-keys identities** - sign-in misses the existing family and a brand-new auth user is created. **Move those assertions onto `normalizeContactForKey` directly** so the guarantee keeps a test after the route stops exercising it.
 
 - [ ] **Step 3: Guard inside `handleSendCode`, not just the copy**
 
@@ -357,9 +464,38 @@ Apply the same typed refusal and the same UI notice behind the same flag.
 
 `/api/setu/contacts/send-code:74-76` SMSes a code to verify a phone being added to a profile. Spec §8.4 records this as a limitation **for non-`+1` numbers** under the old NANP-gate design; under §8.0 it is dead for **every** number, Canadian included. That is a materially larger regression than §8.4 describes.
 
-Decide and record: either surface an explicit "phone verification is unavailable, we will add it without verification / please contact us" state, or hide the add-phone affordance behind `flags.smsOtp`. Do **not** leave a control that silently does nothing. **The spec §8.4 wording is corrected as part of this task.**
+**Decision, made here rather than left to the executor: hide the add-phone affordance behind `flags.smsOtp`, and leave the email add-path untouched.** It is reversible with the flag, and the alternative - adding an unverified phone - creates contact rows that `contactKeys` would then key on, which is a worse trade than temporarily losing the capability.
+
+**The affordance, named.** An earlier draft named only the API route, which is the same defect as v1's (a file the executor cannot find) with the sign flipped:
+
+- `apps/portal/src/app/family/settings/contacts/page.tsx:118` - `onClick={() => beginAdd('phone')}`, with `beginAdd` at `:41` and the type state at `:18`
+- `apps/portal/src/features/setu/contacts/contacts-client.ts:15` - `sendContactCode`
+- `apps/portal/src/app/api/setu/contacts/send-code/route.ts:74-76` - the SMS branch
+
+Spec §8.4 **already carries the rescope** (it was corrected when this plan was written and cross-references this step) - do not re-edit it.
 
 Note what is genuinely untouched: registration verifies by **email** (`register/family/page.tsx:358-364` hardcodes `type: 'email'`), so phone *capture* at registration and member add/edit is unaffected. It is the *verification* that gates adding one later which is dead.
+
+- [ ] **Step 6b: Refuse non-`+1` publishes at the `sns.ts` layer (spec §8.2 item 4)**
+
+One guard inside `sendSMS` (`lib/aws/sns.ts:17`) covers all seven callers, including the four this task does not otherwise touch - the two prasad senders and the join-request manager notification, all of which publish to unreachable international numbers today and bill for them:
+
+```ts
+if (!args.phone.startsWith('+1')) {
+  console.error(`[sns] refusing non-+1 publish to ${args.phone.slice(0, 4)}... - SNS cannot deliver`);
+  return;
+}
+```
+
+Log the prefix only, never the full number. This is belt-and-braces, independent of `flags.smsOtp`: even with SMS sign-in restored, a non-NANP publish still goes nowhere.
+
+- [ ] **Step 6c: Mirror the refusal in the other two verify routes**
+
+Step 2 mirrors `send-code` into `verify-code` so nobody burns attempts against a code that was never sent. The same reasoning applies to the two paired routes this task also disables, and neither was named:
+- `app/api/auth/family/verify-code/route.ts` (pairs with Step 5)
+- `app/api/setu/contacts/verify-code/route.ts` (pairs with Step 6)
+
+Both accept `type: 'phone'` today. Low impact - no code exists to verify, so they fail as `invalid-or-expired` - but the principle should be applied consistently or not stated.
 
 - [ ] **Step 7: Run the full suite, then commit**
 
@@ -370,6 +506,28 @@ Note what is genuinely untouched: registration verifies by **email** (`register/
 - [ ] **Step 1: Create `docs/runbooks/ses-email-templates.md`**
 
 Per template: the SES template name, every variable the calling code sends, an example `TemplateData` payload, and the reserved `_testRecipient` variable from Task 1 Step 5. This is the untyped cross-system contract; it is the only place it exists in writing.
+
+**And the escaping requirement, which nothing else in the repo will state once this ships.** Spec §5: "Escaping moves to SES." Today `lib/aws/templates/setu-invite-email.ts:9-16` defines `escapeHtml()` and `:20-23` applies it to `inviterName`, `familyName` and `relation` - all family-supplied (`invite/send/route.ts:75`, `:108`). Once the send is a `TemplateData` payload rendered by SES, **that protection stops running** and lives entirely in how the template is authored.
+
+Write it explicitly, and flag it in the handoff:
+
+> Every variable carrying family-supplied text - `inviterName`, `familyName`, `relation`, `requesterName`, `requesterContact` - MUST use double-brace `{{var}}` interpolation in the SES template, never triple-brace `{{{var}}}`. Handlebars escapes the first and does not escape the second. The repo-side `escapeHtml()` no longer runs for these emails.
+
+Same for `setu-join-request-email.ts`.
+
+- [ ] **Step 1b: The per-template UAT send gate - one checkbox per template**
+
+Promoted out of Task 2 Step 6 because it is, by this plan's own reasoning, the **only** in-application barrier between a bad template and silent loss. A configuration set alerts someone out of band; this is what stops the send.
+
+**No `SES_TEMPLATE_*` var is set in production until that template has rendered correctly in a real UAT send**, checked against the variable contract above:
+
+- [ ] `payment-reminder`
+- [ ] `donation-thank-you`
+- [ ] `setu-invite`
+- [ ] `setu-join-request`
+- [ ] `pledge-activated`
+
+Note `resolveSender()` redirects or drops in non-production (`resolve-sender.ts:50-127`), so a UAT send may not land at the real address - check the redirect inbox, and use `_testRecipient` to confirm who it was for.
 
 - [ ] **Step 2: Cutover entries**
 
@@ -388,5 +546,16 @@ Also record spec §5's open question: **confirm UAT and production share an AWS 
 **Type consistency.** `sendSesTemplatedEmail` / `SendSesTemplatedEmailArgs` (Task 1) are distinct from the existing `sendTemplatedEmail` / `SendTemplatedEmailArgs` throughout. `sendManagedEmail` (Task 2) is consumed with the same `{ name, to, data, fallback }` shape in Task 3 and guarded in Task 4.
 
 **Every review finding addressed:** C1 → Task 3's real call sites + the branch that keeps `otp-code` off the managed path. C2 → the naming rule in Global Constraints. C3 → Task 5 Step 4. M1 → Task 2 Step 6. M2 → Task 4 Steps 1-3. M3 → Task 1 Step 4. M4 → Task 1 Step 5. M5 → Task 2 Step 1 test 4. M6 → Task 5 Step 3. M7 → Task 5 Steps 5-6 + deviation 1. m1 → Task 5 Step 1. m2 → the SDK facts block (Step 0 is closed). m3 → Global Constraints (`server-only`). m4 → Task 3's null-guard note. m5 → the File Structure table. m6 → Task 6 Step 2.
+
+## Review history
+
+Reviewed once after the first draft (`docs/superpowers/reviews/2026-07-25-review-p3v2.md`): 1 critical, 9 major, 10 minor. The v1 defects were confirmed fixed; the new ones clustered in the two places v2 *added* material and the one place it *dropped* an instruction v1 had. What changed most:
+
+1. **The critical was mine, and the rename caused it.** v2 created two same-named callables - `lib/aws/ses.ts`'s `sendSesTemplatedEmail` and `resolveSender().sendSesTemplatedEmail` - and then Task 2 never said which one `sendManagedEmail` uses. `send-managed-email.ts` is a sibling of `ses.ts`, so the natural import is the wrong one, and spec §3 item 2 says a direct `ses.ts` call "would bypass all three and mail real families from a test run". Now stated, and pinned by a test that fails if `./ses` is imported directly.
+2. **`ConfigurationSetName` buys alerting, not correctness.** The SDK's next sentence recommends *notifications*; an event destination is out of band, the send still resolves, and the recipient still gets nothing. Step 6 is retitled honestly and the per-template UAT gate - the thing that actually closes the gap - is promoted to a numbered Task 6 step with a checkbox per template. Step 6 also introduced a **new** hard failure: `ConfigurationSetDoesNotExistException` is in the declared throws, and under this plan's own no-fallback rule a misspelled or wrong-region `SES_CONFIGURATION_SET` would make all five emails throw. It now has its own matrix row.
+3. **"The three test files must still pass unmodified" was a tautology** - the same defect this plan criticises in v1's Task 4. Those files do not mock `sendManagedEmail`, so the fallback path keeps them green whether the migration happened, happened wrong, or never happened. Replaced with two real assertions per call site.
+4. **Deviation 3's rationale was wrong for spec §8.2 item 4.** `sns.ts`'s `sendSMS` has seven callers and Task 5 touches three; the prasad reminders and the join-request notification publish to unreachable numbers **today**, so "dead code, dormant until SNS clears" does not apply. Now built as Task 5 Step 6b.
+
+Also corrected: four currently-passing tests that assert SMS *is* sent, one of which is the **only** coverage of the identity-critical `normalizeContactForKey` canonicalization (§8.1) and must be moved rather than deleted; the flag left undecided in Task 5 Step 1 and never applied in Step 2; the add-phone UI file left unnamed; the `turbo.json` / `env.ts` entries v2 dropped; and the escaping requirement that stops running once SES renders these emails.
 
 **Known risk.** Task 2 Step 6 depends on an AWS-side action by someone other than the implementer. If the configuration set does not exist by launch, the per-template UAT send in Task 6 is the **only** thing preventing a silently-undelivered email, and it is a manual gate. Say so out loud at cutover rather than discovering it from a family who never got their invite.

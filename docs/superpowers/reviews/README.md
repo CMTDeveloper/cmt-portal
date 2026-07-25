@@ -18,18 +18,27 @@ wrote its findings here.
 | `2026-07-25-review-coverage.md` | 12 uncovered · 11 partial · 6 INDEX defects | | |
 | `2026-07-25-review-p1v2-authz.md` | 2 | 9 | 7 |
 | `2026-07-25-review-p1v2-exec.md` | 6 | 14 | 11 |
-
 | `2026-07-25-review-p2v2.md` | 1 | 16 | 14 |
+| `2026-07-25-review-p3v2.md` | 1 | 9 | 10 |
 
-**P1 and P2 have been rebuilt** (`...-p1-roles-and-cross-family-edit-v2.md`,
-`...-p2-teacher-visitors-roster-v2.md`) and reviewed again by the `p1v2` / `p2v2` reports.
+**P1, P2 and P3 have been rebuilt** (`...-p1-roles-and-cross-family-edit-v2.md`,
+`...-p2-teacher-visitors-roster-v2.md`, `...-p3-communications-v2.md`) and reviewed again by the `p1v2` / `p2v2` / `p3v2` reports.
 Those findings are folded into the plans; read the reports for the reasoning, not as an
-open to-do list. **P3-P6 have NOT been rebuilt** and should not be implemented as written.
+open to-do list. **P4-P6 have NOT been rebuilt** and should not be implemented as written.
 
-**The pattern across both rebuilds:** the v1 *diagnoses* were largely right and the v1
-*fixes and tests* were wrong, and each rebuild introduced at least one new defect of its
-own that only a second review caught - in both cases a false claim about scope or defaults
-that had been "verified" once already. Budget for the second pass.
+**The pattern across all three rebuilds, now with n=3:** the v1 *diagnoses* were largely
+right and the v1 *fixes and tests* were wrong - and **every** rebuild introduced at least
+one new defect that only a second review caught. In each case it was a confident claim
+about scope, defaults, or what does or does not exist, made about code that had already
+been "verified" once:
+
+| Rebuild | The defect the rebuild itself introduced |
+|---|---|
+| P1 v2 | Widened `Capability` but not `RESURRECTABLE_SEVAK_CAPS`, creating a privilege-retention hole that Task 2 made reachable |
+| P2 v2 | Called a **program-scoped** fid set "level-scoped, 20-40", reintroducing the exact fan-out the same plan's Global Constraints forbid |
+| P3 v2 | Created two same-named callables and omitted which one to use - the natural import bypasses the allowlist and mails real families from a test run |
+
+**Budget for the second pass. It is not optional, and it has never come back empty.**
 
 ## The three findings that outrank the rest
 
