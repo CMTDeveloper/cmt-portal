@@ -1,5 +1,23 @@
 # P4 - Adult Study Class - Implementation Plan
 
+> # ⛔ SUPERSEDED 2026-07-25 - DO NOT IMPLEMENT THIS FILE
+>
+> Replaced by **`2026-07-25-launch-p4-adult-study-class-v2.md`**.
+> Reviewed as REQUEST CHANGES: 3 critical, 8 major, 7 minor
+> (`docs/superpowers/reviews/2026-07-25-review-p4.md`).
+>
+> 1. **No task implements the `enroll-family.ts` change the whole plan depends on.** As
+>    written it enrolls every adult, bills a Bala Vihar family **$101**, and never writes
+>    `membershipMode` - so the selection is overwritten on the next member edit.
+> 2. **The re-selection is a strict no-op → a permanent redirect loop.** `eid` is
+>    deterministic and the already-active branch writes nothing, so a family whose chosen
+>    parent left can never satisfy the gate and **never reaches `/family` again**.
+> 3. **No feature flag and no "an open offering exists" precondition.** The day the
+>    offering expires, every paid manager at that location is redirected to a page they
+>    cannot complete, with no kill switch.
+>
+> Work from v2.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** add an adult-only program that is free to Bala Vihar families and `$101` to everyone else, with a persistent post-donation prompt asking which adults will attend.

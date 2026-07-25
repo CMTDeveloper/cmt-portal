@@ -19,12 +19,14 @@
 | **P1** | **`2026-07-25-launch-p1-roles-and-cross-family-edit-v2.md`** (v1 superseded, do not implement) | `coordinator` role across **all three** authorization gates, `audit_log`, staff cross-family edit endpoints, welcome edit UI, grade editor for welcome-team | - |
 | **P2** | **`2026-07-25-launch-p2-teacher-visitors-roster-v2.md`** (v1 superseded, do not implement) | roster-confirmation `fid` bug + guest date-key fix (**ship these two first, alone**), teacher attendance revamp, `/welcome/visitors` + nav, visitor grade filter, roster Reset, guest→teacher E2E | - |
 | **P3** | **`2026-07-25-launch-p3-communications-v2.md`** (v1 superseded, do not implement) | `sendSesTemplatedEmail` + `sendManagedEmail`, narrow code fallback, migrate 4 emails, pin the OTP exemption in code, SMS sign-in refusal across **four** surfaces | - |
-| **P4** | `2026-07-25-launch-p4-adult-study-class.md` | Adult program, `$0`/`$101` fee rule, multi-select, `AdultClassGate` | P1 (coordinator offerings grant) |
-| **P5** | `2026-07-25-launch-p5-monthly-pledge.md` | Pledge capture, AES-256-GCM at rest, confirm/cancel + purge, status card | P1 (`audit_log`), P3 (`sendManagedEmail`) |
-| **P6** | `2026-07-25-launch-p6-migration-dormant-and-centre.md` | Dormant-family skip in the bulk migration, `locationNeedsConfirmation` centre prompt | - |
+| **P4** | **`2026-07-25-launch-p4-adult-study-class-v2.md`** (v1 superseded, do not implement) | Adult program, `$0`/`$101` fee rule, explicit `enrollFamily` mids/override/mode, **reconcile-not-create**, flag-gated `AdultClassGate`, success-page ask + skip | P1 (coordinator offerings grant **and** its can-access-route edits); **P6 Task 5 before P4 Task 8** |
+| **P5** | **`2026-07-25-launch-p5-monthly-pledge-v2.md`** (v1 superseded, do not implement) | **deny-all `firestore.rules`**, pledge capture, AES-256-GCM + AAD at rest, PAD authorization record, confirm/cancel + purge, admin list, sweep-as-cron, hardened export | P1 (`audit_log`), P3 (`sendManagedEmail`) |
+| **P6** | **`2026-07-25-launch-p6-migration-dormant-and-centre-v2.md`** (v1 superseded, do not implement) | Dormant-family skip in the bulk migration, `locationNeedsConfirmation` through the **hand-written field map**, centre selector + the four form edits that stop the redirect loop | - |
 | **P0** | `docs/runbooks/production-cutover-checklist.md` | The cutover itself. **Already written and current** - not restated here. | all code merged |
 
-P1, P2, P3 and P6 are mutually independent and can run in parallel. P4 and P5 must wait on their dependencies.
+P1, P2 and P3 are mutually independent and can run in parallel. P4 and P5 must wait on their dependencies.
+
+> **P6 is NOT independent of P4, and the collision is semantic rather than textual.** Both edit `apps/portal/src/app/family/layout.tsx` - P6 adds a centre condition to the profile gate at `:53-56` **and its mirrored copy at `:76`**, P4 inserts `AdultClassGate` after `DisclaimerGate` and extracts a shared `earlierGatesPending(data)`. Git merges them cleanly, but if P6 lands without fixing `:76`, **P4 copies the now-incomplete guard** and a family needing centre confirmation can be routed to `/adult-class`. Land P6 Task 5 first, then rebase P4 Task 8 onto it. Both also edit `app/family/__tests__/layout.test.tsx`, which **will** conflict textually in parallel worktrees.
 
 > **P6 was added after a coverage review** found that launch-batch spec §1.9b (dormant-family skip) and §1.9c (unknown-centre prompt) were implemented by none of P1-P5. Both are **cutover-blocking**: §1.9b changes what the production migration imports, and §1.9c is the only thing preventing an unknown-centre family from being silently assigned to Brampton forever.
 
@@ -71,7 +73,7 @@ After any one-to-many change, exercise every read path with **two** of the thing
 
 If the week compresses, cut in this order. Nothing here blocks the cutover.
 
-1. **P5 monthly pledge** - gates nothing. Families can donate normally without it.
+1. **P5 monthly pledge** - gates nothing. Families can donate normally without it. **Except P5 Task 1 (the deny-all `firestore.rules`), which is NOT part of this feature and must ship regardless.** There is no rules file in the repo today, `getClientFirestore()` is exported and live, and every family holds an authenticated Firebase session - so the database surface is currently governed by whatever is deployed in the console, which nobody has checked. Ten minutes, independent of the pledge.
 2. **P4 adult study class** - additive; no existing user is affected by its absence.
 3. **P3 template migration** (the 4 existing emails only) - they work today as code. Keep the `sendManagedEmail` infrastructure if P5 is shipping.
 4. **P1 Track A, the coordinator role** (v2 Tasks 1-6) - additive; no existing user loses anything. Cut it whole or not at all: a partially-shipped role that clears middleware but not the handler and layout gates looks granted and reaches nothing, which is worse than not shipping it.

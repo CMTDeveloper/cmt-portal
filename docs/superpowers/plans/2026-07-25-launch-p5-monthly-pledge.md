@@ -1,5 +1,28 @@
 # P5 - Monthly Pledge (Pre-Authorized Debit) - Implementation Plan
 
+> # ⛔ SUPERSEDED 2026-07-25 - DO NOT IMPLEMENT THIS FILE
+>
+> Replaced by **`2026-07-25-launch-p5-monthly-pledge-v2.md`**.
+> Reviewed as REQUEST CHANGES: 2 critical, 10 major, 14 minor
+> (`docs/superpowers/reviews/2026-07-25-review-p5.md`). This plan handles real bank
+> account details, so the bar is higher than elsewhere in the batch.
+>
+> - **CRITICAL-1 (Sentry egress) is already FIXED in code** as of `7902c63` - though the
+>   review's stated mechanism was wrong; see the correction box at the top of that report.
+> - **CRITICAL-2 stands: there is no `firestore.rules` file in this repo at all.**
+>   `firebase.json` declares only indexes, and `getClientFirestore()` is exported and live.
+>   The design's headline control ("no read path exists") is true of the HTTP surface and
+>   unmanaged at the database surface - where open rules would let a family flip their own
+>   pledge to `active`.
+> - Ten majors, including: handlers with no role check of their own, **three missing
+>   composite indexes** (both read paths 500), a designed-but-unwired kill switch and no
+>   feature flag, no duplicate-submission guard (one family, N live secrets), **two of the
+>   three headline security tests assert nothing**, no admin list (so staff must browse the
+>   Firestore console next to `pledge_secrets`), an undefined accounting hand-off, and no
+>   record that the family ever authorized the debit.
+>
+> Work from v2.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** let a family pledge a recurring monthly gift by pre-authorized debit, storing their bank details encrypted and unreachable from any UI, and purge those details in the same action that confirms the pledge.

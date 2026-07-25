@@ -1,5 +1,27 @@
 # P6 - Dormant-Family Skip & Unknown-Centre Prompt - Implementation Plan
 
+> # ⛔ SUPERSEDED 2026-07-25 - DO NOT IMPLEMENT THIS FILE
+>
+> Replaced by **`2026-07-25-launch-p6-migration-dormant-and-centre-v2.md`**.
+> Reviewed as REQUEST CHANGES: 2 critical, 7 major, 7 minor
+> (`docs/superpowers/reviews/2026-07-25-review-p6.md`). The dormancy predicate is sound
+> and its numbers reproduce against the real snapshot; both criticals are on the
+> centre-prompt half.
+>
+> 1. **The flag never reaches the gate - it ships as dead code with passing tests.**
+>    `FamilyDoc` values are built by a **hand-written field map** in
+>    `get-family-by-fid.ts:27-45` with no spread, so a field added only to the Zod schema
+>    is `undefined` forever. The plan's tests mock `getCurrentFamily`, so all four pass
+>    green against a feature that is inert in UAT and prod.
+> 2. **A family whose only gap is the centre hits an infinite redirect loop.**
+>    `complete-profile-form.tsx:223-231` hard-navigates back to `/family` when members and
+>    address are complete, with no notion of the centre - and because it is a *hard* nav
+>    the gate re-runs on fresh data every time, so the loop is permanent.
+>
+> Also: `PATCH /api/setu/family` does not accept `location` at all (the plan asserted it
+> did), and the migration wiring is unimplementable because the script never sees a
+> `LegacyRosterRow`. Work from v2.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** stop the bulk migration from importing ~190 stale-grade children of dormant families, and ask any family whose legacy centre was unknown to confirm it at first sign-in instead of silently defaulting them to Brampton.
