@@ -1,5 +1,21 @@
 # P1 - Coordinator Role & Staff Cross-Family Edit - Implementation Plan
 
+> # ⛔ SUPERSEDED 2026-07-25 - DO NOT IMPLEMENT THIS FILE
+>
+> Replaced by **`2026-07-25-launch-p1-roles-and-cross-family-edit-v2.md`**.
+>
+> Reviewed as REQUEST CHANGES: 7 critical, 14 major, 7 minor
+> (`docs/superpowers/reviews/2026-07-25-review-p1.md`). The headline defect is that
+> this plan implements the coordinator role **only at the middleware layer**. Route
+> access needs three independent gates - `canAccessRoute`, the page layout, and the
+> in-handler check - so all six API grants and both page grants here are dead on
+> arrival, while the `can-access-route` unit tests pass green.
+>
+> Two further reasons not to salvage steps from this file: Task 3 Step 3's placement
+> instruction would have **revoked** welcome-team's per-level teacher management in
+> production, and Task 8 is built on a bug that does not exist. Several cited file
+> paths are also wrong. Work from v2.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** add a `coordinator` role scoped to roster + visitors + programs + offerings + levels + teacher assignments, and let welcome-team staff edit any family's details with a full audit trail.

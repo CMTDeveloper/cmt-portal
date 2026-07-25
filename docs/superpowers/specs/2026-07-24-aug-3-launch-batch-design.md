@@ -332,6 +332,8 @@ Still **excluded**: users/roles (`/admin/users`), school-year rollover, location
 | Badge (build-breaking) | `role-badges.tsx:9` | add entry |
 | Test (build-breaking) | `roles-reference.test.ts:6-12` | updates with `ROLES` |
 | Route gate | `can-access-route.ts` | **explicit clauses above `:50` and `:75`** (see below) |
+| **In-handler gate** | 9 files under `app/api/admin/` | **ADDED 2026-07-25.** `programs`, `programs/[key]`, `offerings`, `offerings/[oid]`, `levels`, `levels/[levelId]` each re-check `isAdmin` internally; `levels/[levelId]/teachers`, `teacher-assignments`, `teachers/search` re-check `isAdmin \|\| isWelcomeTeam`. **A canAccessRoute grant without these 403s from the handler.** |
+| **Shell gate** | `app/admin/layout.tsx:37`, `app/welcome/layout.tsx:34` | **ADDED 2026-07-25.** Each renders "Access denied" for the wrong role. A page grant without these lands on that screen. Keep them as plain role checks - `middleware.ts:101` runs `canAccessRoute` on pages too and is already the per-page allow-list. |
 | Sidebar | `desktop-sidebar.tsx:13` | widen `role` union + link filtering |
 | Mobile nav | mobile nav components | add coordinator links |
 | Seeds | `scripts/seed-test-accounts.ts` | add a coordinator persona |
@@ -362,7 +364,11 @@ if (pathname === '/api/welcome/roster' || pathname.startsWith('/api/welcome/rost
 
 ### 3.4 Tests
 
-A dedicated `can-access-route` test asserting the **negative** cases: a coordinator is denied `/admin`, `/admin/users`, `/api/admin/welcome-team`, `/api/admin/levels`, `/welcome/reports`, `/api/setu/family/search`. Negative authorization tests are the point here, not the positive ones.
+A dedicated `can-access-route` test asserting the **negative** cases: a coordinator is denied `/admin`, `/admin/users`, `/api/admin/welcome-team`, ~~`/api/admin/levels`~~, `/welcome/reports`, `/api/setu/family/search`. Negative authorization tests are the point here, not the positive ones.
+
+> **Corrected 2026-07-25.** `/api/admin/levels` is struck above because this list contradicted §3.1's grant table, which **grants** Levels to coordinator. §3.1 is the later revision and wins. Also add `/api/admin/calendar` to the denied list: the class calendar is not in §3.1's table, and widening it along with the three other welcome-team clauses would hand coordinator publish rights by accident.
+>
+> **Scope note:** the Visitors row of §3.1's grant table is **not** implementable in P1 - `/welcome/visitors` does not exist yet (it is §5.2 new work, banded "cuttable to week 2" in §10). Granting a path with no handler, or shipping a nav link to a 404, is worse than omitting it. §5.2 adds its own clause when it lands.
 
 ---
 
