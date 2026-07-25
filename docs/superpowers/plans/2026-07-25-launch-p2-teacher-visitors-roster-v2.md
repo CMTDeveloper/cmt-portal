@@ -16,9 +16,15 @@
 
 ## Global Constraints
 
-- **Bulk reads, never a per-family fan-out over the roster.** Per-family loops time out at ~45s @ 769 families. The rule targets **roster-scoped** loops; a **level-scoped** bounded read (20-40 families) is fine and already precedented at `student-detail.ts:62`. Say which one you are doing, in a comment, every time.
+- **Bulk reads, never a per-family fan-out over the roster.** Per-family loops time out at ~45s @ 769 families. The rule targets **roster-scoped** loops; a **level-scoped** bounded read (20-40 families) is acceptable. Say which one you are doing, in a comment, every time - and **prove it**, because the obvious fid set is the wrong one:
+
+  > **`deriveRoster`'s `fids` (`roster.ts:154`) is PROGRAM-and-location scoped, not level scoped.** The enrollment scan at `:135-139` filters on `pid` (the offering period for the whole program at a location) and `:147` filters only on `location`. **Level matching happens later and per member**, inside `buildRoster` via `memberMatchesLevel` (`:83`). So `fids` is every family with an active Bala Vihar enrollment at that location - hundreds. The level-scoped set is `[...new Set(roster.members.map((m) => m.fid))]`, derived from the **built** roster.
+  >
+  > `roster.ts:156-174` is a 19-line comment explaining why the old per-family loop was removed ("~2N calls that made the teacher screens slow"), and `__tests__/roster-fetch.test.ts:126-130` guards it with `expect(fs.perFamilyMemberSubGets).toBe(0)`. Do not reintroduce it.
+
+- **jsdom renders both responsive branches, but "act on every match" is NOT universal.** It applies when the branches are **separate component instances with separate state** - `RosterBrowser` renders `<RosterContent>` twice (`roster-browser.tsx:446-474`), so its filters are genuinely independent. It does **not** apply when one component owns the state for both branches: `AttendanceMarker` has a single `present` map (`attendance-marker.tsx:134`), so acting on both toggles calls `toggle(mid)` twice and **nets zero**. Decide which case you are in before writing the test, and say so.
 - **Audit Firestore indexes on any query change.** Fake-firestore is index-blind. This plan is designed to need **zero** new indexes - if you find yourself adding a multi-`where` or a `.where().orderBy()`, stop and re-read the task.
-- **jsdom renders BOTH responsive branches.** `block md:hidden` and `hidden md:block` both mount, every element appears twice, and **each branch owns independent React state**. Use `getAllBy*`/`findAllBy*` and act on **every** match. Documented at `features/setu/roster/__tests__/roster-browser.test.tsx:49-53` and `reports/__tests__/reports-hub.test.tsx:54`. `getBy*` throws on multiple matches.
+- **jsdom renders BOTH responsive branches.** `block md:hidden` and `hidden md:block` both mount and every element appears twice, so `getBy*` throws - use `getAllBy*`/`findAllBy*`. Documented at `features/setu/roster/__tests__/roster-browser.test.tsx:49-53` and `reports/__tests__/reports-hub.test.tsx:54`. Whether to **act** on every match depends on the state model - see the constraint above.
 - **`/api/setu/**` response-shape changes need a `MOBILE_API_CHANGELOG.md` entry** in the same commit (dated, SHA-keyed). `GET /api/setu/teacher/levels/[levelId]/roster` returns `{ view }` verbatim (`route.ts:24-26`), so widening `AttendanceViewRow` **is** such a change.
 - **All Firestore work targets `chinmaya-setu-uat`.** Never prod `chinmaya-setu-715b8`, never `--force`.
 - **Never parse a `YYYY-MM-DD` with a bare `new Date(ymd)`.** That is UTC midnight, which is the previous evening in Toronto. Always anchor: `new Date(\`${ymd}T12:00:00Z\`)`. This is the C1 defect and the repo already uses the anchor at `calendar.ts:42` and `attendance-marker.tsx:29-33`.
@@ -31,8 +37,12 @@
 ### Deliberate deviations from the spec
 
 1. **Spec §6 omits `level` and `grade` from Reset.** `roster-browser.tsx:246-251` holds **six** filters - `location`, `program`, `level`, `grade`, `payment`, `engagement`. Resetting four of six would leave the button visibly failing to reset while `isDefault` reads true. Task 8 resets all six. **The spec has been corrected to match.**
-2. **`/welcome/visitors` coordinator access is out of scope.** P1 v2 deliberately does not grant it (the route did not exist when P1 was written). `/welcome/visitors` falls to `can-access-route.ts:112` and welcome-team gets it for free; a coordinator does not. If coordinator access is wanted it is one path added to P1 v2 Task 4 Step 6's clause. **Task 6 must not assume P1 landed.**
-3. **`guest_check_ins.date` keeps its calendar-day meaning.** v1 justified the dual-write as protecting "the admin reports that read it". That is false - `date` has exactly **one** reader in the repo, `check-in-attendance.ts:172`, which this plan moves off it. The dual-write is still right, for the real reasons: it is non-destructive to existing docs and `date` preserves the actual day the guest walked in, which `sessionDate` erases. Task 2 says so in the comment so nobody later assumes `date` is load-bearing.
+2. **`/welcome/visitors` coordinator access is out of scope.** P1 v2 deliberately does not grant it (the route did not exist when P1 was written). `/welcome/visitors` falls to `packages/shared-domain/src/auth/can-access-route.ts:112` and welcome-team gets it for free; a coordinator does not. If coordinator access is wanted it is one path added to P1 v2 Task 4 Step 6's clause. **Task 6 must not assume P1 landed.**
+3. **`/welcome/visitors` does NOT reuse `getLevelVisitorsView` across levels**, which spec §5.2 asks for. Calling it per level multiplies a genuine per-family fan-out by the level count - `readDoorGuestCheckIns` lists every `guest-families` doc and point-reads `checkIns/{date}` for each (`check-in-attendance.ts:113-153`), plus a `contactKeys` get per matched child (`visitors.ts:72`). Task 6 reads the levels once and groups in memory instead.
+
+4. **`sessionDateFor` lives in `features/setu/calendar/`, which makes `features/check-in` import from `features/setu`.** CLAUDE.md discipline 1 forbids cross-feature imports, and `@cmt/shared-domain` is the discipline-clean home for a pure date function (`torontoYmd` already lives at `packages/shared-domain/src/setu/schemas/offering.ts:102`). Two reasons this ships as-is: the `boundaries/element-types` rule is currently **inert** (its `apps/portal/src/features/*` pattern is cwd-relative and never matches when lint runs as `eslint src` from `apps/portal` - the app config comments on this glob trap at `apps/portal/eslint.config.js:15-16`), and the reverse edge already exists at `features/setu/auth/build-session-claims.ts:1`. **But this adds the edge that makes setu ↔ check-in circular.** If you would rather not, put `sessionDateFor` in `@cmt/shared-domain` beside `torontoYmd` - it is a pure function with no server imports and the move is free.
+
+5. **`guest_check_ins.date` keeps its calendar-day meaning.** v1 justified the dual-write as protecting "the admin reports that read it". That is false - `date` has exactly **one** reader in the repo, `check-in-attendance.ts:172`, which this plan moves off it. The dual-write is still right, for the real reasons: it is non-destructive to existing docs and `date` preserves the actual day the guest walked in, which `sessionDate` erases. Task 2 says so in the comment so nobody later assumes `date` is load-bearing.
 
 ---
 
@@ -42,7 +52,7 @@
 |---|---|---|
 | `apps/portal/src/features/setu/teacher/roster-confirmation.ts:77` | fid resolution for top-level donation docs | 1 |
 | `apps/portal/src/features/setu/calendar/calendar.ts` | new `sessionDateFor(ymd)` - the single date-normalization seam | 2 |
-| `apps/portal/src/features/check-in/shared/firestore/guest-check-ins.ts:33-45` | dual-write `date` + `sessionDate` | 2 |
+| `apps/portal/src/features/check-in/shared/firestore/guest-check-ins.ts:32-44` | dual-write `date` + `sessionDate` | 2 |
 | `apps/portal/src/features/setu/attendance/check-in-attendance.ts:168-173` | query `sessionDate` | 2 |
 | `apps/portal/src/features/setu/teacher/visitors.ts:59-63` | normalize the caller's date | 2 |
 | `apps/portal/scripts/backfill-guest-session-date.ts` | one-shot, re-runnable backfill | 2 |
@@ -53,7 +63,7 @@
 | `apps/portal/src/features/setu/teacher/components/attendance-marker.tsx` | row restructure + table/card layouts + drawer | 5 |
 | `apps/portal/src/app/welcome/visitors/page.tsx` | welcome-team visitors surface | 6 |
 | `apps/portal/src/features/family/components/desktop-sidebar.tsx` + `welcome-mobile-nav.tsx` | Visitors nav link | 6 |
-| `apps/portal/src/features/setu/teacher/components/visitors-panel.tsx:8-10,89` | grade filter (mind the existing local `VisitorRow` and `grade` state) | 7 |
+| `apps/portal/src/features/setu/teacher/components/visitors-panel.tsx:8-15,89` | grade filter (mind the existing local `VisitorRow` and `grade` state) | 7 |
 | `apps/portal/src/features/setu/roster/roster-browser.tsx:246-251` | Reset control | 8 |
 | `apps/portal/e2e/setu/teacher/guest-to-teacher.spec.ts` | the spec §5.3 gap | 9 |
 
@@ -84,20 +94,26 @@ it('confirms a family from a TOP-LEVEL donation doc (fid in data, no parent doc)
   // Real shape: donations live at /donations/{did} with an `fid` field, so
   // ref.parent.parent is null. The pre-existing fixture had it backwards, which
   // is why this suite stayed green while the teacher roster never confirmed.
+  //
+  // The `eid` is load-bearing. Confirmation runs through isEnrollmentConfirmed,
+  // whose donation clause is
+  //   donations.some((d) => d.status === 'completed' && d.eid === enrollment.eid)
+  // (app/family/_helpers/enrollment-confirmation.ts:37). A donation without a
+  // matching eid is grouped by fid and then discarded, so the test would still
+  // fail after the fix and tell you nothing.
+  const enr = base({ fid: 'CMT-FAM-01', eid: 'CMT-FAM-01-o' });
   const db = fakeDbWithTopLevelDonation({
     fid: 'CMT-FAM-01',
-    donation: { status: 'completed', amountCAD: 200, fid: 'CMT-FAM-01' },
+    donation: { status: 'completed', amountCAD: 200, fid: 'CMT-FAM-01', eid: 'CMT-FAM-01-o' },
   });
-  const confirmed = await deriveConfirmedFidsForLevel(db, 'bala-vihar-2026-27', [
-    { fid: 'CMT-FAM-01', /* ...the LevelEnrollment fields the helper reads... */ },
-  ]);
+  const confirmed = await deriveConfirmedFidsForLevel(db, 'bala-vihar-2026-27', [enr]);
   expect(confirmed.has('CMT-FAM-01')).toBe(true);
 });
 ```
 
-Note the signature: **three** arguments, `(db, pid, enrollments)`. Extend the existing `fakeDb` helper with a variant whose donation docs expose `ref.parent.parent === null` and carry `fid` in `data()`; do not invent `seedEnrollment`/`seedDonation` helpers, this file has none.
+Note the signature: **three** arguments, `(db, pid, enrollments)`. Use the file's existing `base()` helper (`__tests__/roster-confirmation.test.ts:39-41`) for the enrollment, and extend the existing `fakeDb` with a variant whose donation docs expose `ref.parent.parent === null` and carry `fid` in `data()`. Do not invent `seedEnrollment`/`seedDonation` helpers - this file has none.
 
-Only the legacy-payment-source path reads donations (`if (needsRead.length > 0)` guards the scan), so the fixture's enrollment must have a legacy payment source or the scan never runs and the test passes vacuously. Check what `paymentSourceOf` returns for the fixture before asserting.
+The donations scan is guarded by `needsRead.length > 0` (`roster-confirmation.ts:72`) and **nothing else**. `paymentSource` gates only `getLegacyPaymentStatus` at `:88-91`, not the donations read. So the fixture must be `enrolledVia: 'promotion'` with no attended mid, which lands it in `needsRead` - `base()` already defaults to `'promotion'`. **Do not** set `paymentSource: 'legacy'` to "make the scan run"; that routes the fixture down the legacy branch and the test then passes or fails for reasons unrelated to the fid bug it exists to pin.
 
 - [ ] **Step 2: Run to verify it fails**
 
@@ -158,18 +174,20 @@ actually needed fixing."
 
 ## Task 2: Fix the guest date-key mismatch
 
-**The bug is real and verified.** The writer stamps `date: torontoYMD()` - the actual calendar day (`guest-check-ins.ts:41`). The teacher visitors page defaults its `?date=` to `mostRecentSunday()` (`app/teacher/levels/[levelId]/visitors/page.tsx:26`). A guest who checks in on a Sunday matches; a guest who checks in midweek is invisible on the Sunday view. The precedent for the fix is already in the repo: `features/setu/check-in/mark-door-attendance.ts:63-64` normalizes to `mostRecentSunday(now)` with a comment saying exactly why.
+**The bug is real and verified.** The writer stamps `date: torontoYMD()` - the actual calendar day (`guest-check-ins.ts:40`). The teacher visitors page defaults its `?date=` to `mostRecentSunday()` (`app/teacher/levels/[levelId]/visitors/page.tsx:26`). A guest who checks in on a Sunday matches; a guest who checks in midweek is invisible on the Sunday view. The precedent for the fix is already in the repo: `features/setu/check-in/mark-door-attendance.ts:63-64` normalizes to `mostRecentSunday(now)` with a comment saying exactly why.
 
 **One helper, three call sites.** The writer, the reader's caller, and the backfill must all compute the same Sunday. v1 spread that logic across three places and got it wrong in one of them, a full week off. A single exported function removes the possibility.
 
 **Files:**
 - Modify: `apps/portal/src/features/setu/calendar/calendar.ts` (add `sessionDateFor`)
-- Modify: `apps/portal/src/features/check-in/shared/firestore/guest-check-ins.ts:33-45`
+- Modify: `apps/portal/src/features/check-in/shared/firestore/guest-check-ins.ts:32-44`
 - Modify: `apps/portal/src/features/setu/attendance/check-in-attendance.ts:168-173`
 - Modify: `apps/portal/src/features/setu/teacher/visitors.ts:59-63` - **the sole caller, and v1 never touched it**
 - Create: `apps/portal/scripts/backfill-guest-session-date.ts`
 - Test: `apps/portal/src/features/setu/calendar/__tests__/calendar.test.ts`
 - Test: `apps/portal/src/features/setu/teacher/__tests__/visitors.test.ts`
+- Test: `apps/portal/src/features/setu/attendance/__tests__/check-in-attendance.test.ts` - **asserts the old `date` query at `:12,18`; Step 5 breaks it**
+- Test: `apps/portal/src/features/check-in/shared/__tests__/guest-check-ins.test.ts` - **would stay green with `sessionDate` missing; Step 4 has no coverage without it**
 
 **Interfaces:**
 - Produces: `sessionDateFor(ymd: string): string` - maps a `YYYY-MM-DD` to the Sunday that starts its week, in Toronto terms.
@@ -236,29 +254,51 @@ export function sessionDateFor(ymd: string): string {
 `guest-check-ins.ts`, inside `recordGuestCheckIn`:
 
 ```ts
-    // `date` is the actual Toronto calendar day the guest walked in. It is kept
-    // for forensic value and because rewriting existing docs would destroy it -
-    // but note it has NO reader after this change (the only one was
-    // check-in-attendance.ts:172, which now reads sessionDate). Do not assume
-    // it is load-bearing.
-    date: torontoYMD(),
+Compute the day **once** - two `torontoYMD()` calls are two independent clock reads and can disagree across a Toronto midnight:
+
+```ts
+    const ymd = torontoYMD();
+    // ...
+    // `date` is the actual Toronto calendar day the guest walked in. Kept for
+    // forensic value and because rewriting existing docs would destroy it. Note
+    // it has no PRIMARY reader after this change - check-in-attendance.ts:172
+    // now queries sessionDate and only reads `date` as a transitional fallback.
+    // Do not assume it is load-bearing.
+    date: ymd,
     // `sessionDate` is the Sunday teachers actually view. A midweek guest was
     // previously invisible on the Sunday visitors panel.
-    sessionDate: sessionDateFor(torontoYMD()),
+    sessionDate: sessionDateFor(ymd),
     checkedInAt: new Date().toISOString(),
+```
 ```
 
 - [ ] **Step 5: Read `sessionDate`, and normalize at the caller**
 
 `check-in-attendance.ts:172` - swap the field and rename the parameter to `sessionDate` so the contract is visible at the call site:
 
+**Read BOTH keys for one release.** Existing `guest_check_ins` docs have no `sessionDate`, so a straight swap makes every pre-existing guest invisible between the deploy and the moment someone remembers to run the prod backfill. That is a regression from today's behaviour, on a Sunday, introduced by the fix. Both are single-field equalities, so this stays index-free:
+
 ```ts
 export async function readPortalGuestChildren(sessionDate: string): Promise<DoorGuestChild[]> {
   // ...
-    const snap = await db.collection('guest_check_ins').where('sessionDate', '==', sessionDate).get();
+  // Transitional: read both keys and de-duplicate by doc id. Pre-backfill docs
+  // have only `date`; post-backfill and new docs have `sessionDate`. Drop the
+  // `date` leg once the prod backfill has run - tracked in runbook 14.
+  const [bySession, byDate] = await Promise.all([
+    db.collection('guest_check_ins').where('sessionDate', '==', sessionDate).get(),
+    db.collection('guest_check_ins').where('date', '==', sessionDate).get(),
+  ]);
+  const seen = new Set<string>();
+  const docs = [...bySession.docs, ...byDate.docs].filter((d) => {
+    if (seen.has(d.id)) return false;
+    seen.add(d.id);
+    return true;
+  });
 ```
 
 Single-field equality on a top-level collection is auto-indexed. No composite index, no `firestore.indexes.json` change.
+
+Also update the JSDoc at `:157-167`, which currently documents the `date` field, and the writer comment at `guest-check-ins.ts:24-26`, which says `date` is "the same key the teacher attendance/visitors screens query by" - false after this change.
 
 **Then fix the caller, which v1 never touched.** `visitors.ts:59-63` passes its own `date` straight through to both readers, and that `date` is a **user-supplied, unnormalized** `?date=` validated only by `/^\d{4}-\d{2}-\d{2}$/` (`teacher/levels/[levelId]/visitors/page.tsx:26`). Without this edit, any non-Sunday `?date=` matches nothing - trading "midweek guests invisible on the Sunday view" for "midweek guests invisible on the midweek view":
 
@@ -273,15 +313,37 @@ Single-field equality on a top-level collection is auto-indexed. No composite in
   ]);
 ```
 
-- [ ] **Step 6: Write the caller test**
+- [ ] **Step 6: Write the caller test - assert the ARGUMENT, not a seeded round-trip**
+
+`__tests__/visitors.test.ts:20` mocks the whole reader module:
 
 ```ts
-it('surfaces a guest whose sessionDate is the preceding Sunday when the view asks for a Wednesday', async () => {
-  // Seed guest_check_ins with sessionDate: '2026-09-06'
-  const view = await getLevelVisitorsView('brampton-level-2', '2026-09-09');
-  expect(view!.visitors.map((v) => v.name)).toContain('Guest Child');
+vi.mock('@/features/setu/attendance/check-in-attendance', () => ({
+  readDoorGuestCheckIns: mockReadGuests, readPortalGuestChildren: mockReadPortalGuests,
+}));
+```
+
+so there is no `guest_check_ins` collection to seed here - `readPortalGuestChildren` never touches Firestore in this suite. The contract Step 5 introduces is exactly what to assert:
+
+```ts
+it('normalizes the portal guest query to the session Sunday, leaving the legacy door key raw', async () => {
+  await getLevelVisitorsView('L', '2026-09-09');
+  expect(mockReadPortalGuests).toHaveBeenCalledWith('2026-09-06'); // normalized
+  expect(mockReadGuests).toHaveBeenCalledWith('2026-09-09');       // raw - legacy door has its own key
 });
 ```
+
+Note also that `VisitorsView` has **no `visitors` field** - it is `doorVisitors` (`visitors.ts:34-42`), as the existing tests use at `__tests__/visitors.test.ts:58,80`. A real seeded round-trip belongs in `features/setu/attendance/__tests__/check-in-attendance.test.ts`, not here.
+
+- [ ] **Step 6b: Update the two test suites this change breaks**
+
+Both are currently written against the old `date` field and are **not** optional:
+
+- `features/setu/attendance/__tests__/check-in-attendance.test.ts:12,18` documents and drives off `where('date','==',date)`. Step 5's swap breaks it.
+- `features/check-in/shared/__tests__/guest-check-ins.test.ts:39-40` asserts the written doc shape (`written.date`, `written.checkedInAt`) and would stay **green with `sessionDate` missing entirely** - Step 4 is the write half of the fix and has zero coverage today. Add, with a frozen clock:
+  ```ts
+  expect(written.sessionDate).toBe(sessionDateFor(written.date));
+  ```
 
 - [ ] **Step 7: Write the backfill script**
 
@@ -353,10 +415,33 @@ Spec §4.4 wants parent contact and payment status on the attendance screen. Nei
 
 **Read budget: bounded and index-free.** v1 proposed three unfiltered `collectionGroup` scans on the eager render (~2,500 members + ~870 enrollments + all donations, forever-growing), duplicating a donations scan `deriveConfirmedFidsForLevel` already performs in the same request, and moving `grade-eligible.ts`'s deliberately **lazy** ~2,500-doc scan onto the eager path. This route is hit by every teacher, on every level, every Sunday morning. Do none of that. Instead:
 
-- **Enrollments: zero new reads.** `deriveRoster` already reads them and builds `enrMetaByFid` (`roster.ts:144`). Widen that map to carry the amount fields it currently discards at `:146`.
-- **Donations: chunked `in` queries on the level's fids, not a collectionGroup scan.** `donations` is top-level with an `fid` field, so `db.collection('donations').where('fid','in',chunk)` works directly. Chunk at 30 (Firestore's `in` cap), so a 40-family level is two queries. Filter `status === 'completed'` **in memory** - adding it as a second `where` would make it a multi-`where` needing a composite index this plan otherwise does not need.
+**Get the fid set right first - this is the whole task.** `deriveRoster`'s `fids` and `enrMetaByFid` are keyed on **every family with an active enrollment for this program period at this location** (`roster.ts:135-139` filters `pid` + `status`; `:147` filters `location`). Level matching happens later, per member, in `buildRoster`. Passing that set to the contacts read would issue **hundreds** of parallel subcollection queries on the eager teacher render - the exact fan-out `roster.ts:156-174` was written to eliminate and `roster-fetch.test.ts:126-130` guards.
+
+The level-scoped set comes from the **built** roster:
+
+```ts
+const roster = await deriveRoster(levelId, date, undefined, { withConfirmation: true });
+// LEVEL-scoped: buildRoster has already applied memberMatchesLevel. deriveRoster's
+// own `fids` is PROGRAM-and-location scoped (hundreds) - never use it here.
+const levelFids = [...new Set(roster.members.map((m) => m.fid))];
+const detail = await buildAttendanceDetailIndex(db, levelFids, roster.enrMetaByFid);
+```
+
+- **Enrollments: zero new reads.** `deriveRoster` already reads them and builds `enrMetaByFid` (`roster.ts:144`). Widen that map to carry the amount fields it currently discards at `:146`. It stays keyed by the program set; that is fine, it is a lookup map, not a read list.
+- **Donations: chunked `in` queries on `levelFids`.** `donations` is top-level with an `fid` field, so `db.collection('donations').where('fid','in',chunk)` works directly. Chunk at 30 - Firestore's `in` cap is a **hard limit**, so an unchunked call throws `INVALID_ARGUMENT` rather than degrading. The chunker is load-bearing, not an optimisation. Filter `status === 'completed'` **in memory**; a second `where` would need a composite index this plan otherwise does not need.
 - **Offerings: one batched `getAll`.** Typically exactly one `oid` per level.
-- **Contacts: bounded parallel subcollection reads** over the level's fids, the same shape as `student-detail.ts:62`. This is **level-scoped (20-40 families), not roster-scoped (867)** - the anti-fan-out rule targets the latter. Say so in a comment and cap it.
+- **Contacts: bounded parallel subcollection reads over `levelFids`.** `student-detail.ts:62` reads **exactly one** family this way, so it is a precedent for the shape, not for a bounded-N loop. Add a real cap so a future caller cannot silently pass the program set:
+
+```ts
+const MAX_DETAIL_FIDS = 80;
+if (fids.length > MAX_DETAIL_FIDS) {
+  throw new Error(
+    `buildAttendanceDetailIndex got ${fids.length} fids. Expected a LEVEL-scoped set ` +
+    `(~20-40). deriveRoster's own fids is program-and-location scoped - derive from ` +
+    `roster.members instead.`,
+  );
+}
+```
 
 **Files:**
 - Create: `apps/portal/src/features/setu/teacher/attendance-detail.ts`
@@ -375,10 +460,24 @@ Spec §4.4 wants parent contact and payment status on the attendance screen. Nei
   }
   export async function buildAttendanceDetailIndex(
     db: FirebaseFirestore.Firestore,
+    /** LEVEL-scoped fids, from roster.members. NOT deriveRoster's own `fids`. */
     fids: string[],
-    enrMeta: Map<string, { oid: string; enrolledAt: string; suggestedAmountOverride: number | null; suggestedAmountSnapshot: number | null }>,
+    enrMeta: Map<string, {
+      oid: string;
+      enrolledAt: Date;                        // a Date, not a string - see below
+      suggestedAmountOverride: number | null;
+      suggestedAmountSnapshot: number | null;
+    }>,
   ): Promise<Map<string, AttendanceDetail>>
   ```
+
+  **`resolveSuggestedAmount(offering, enrollDate: Date): number`** (`packages/shared-domain/src/setu/schemas/offering.ts:95-98`) takes a **`Date`** and returns a **non-nullable `number`**. Two consequences:
+  - `enrolledAt` is `z.date()` on the schema (`enrollment.ts:21`) and arrives from a raw `d.data()` read as a Firestore **`Timestamp`**. Convert it in `roster.ts` with the repo's `toDate()` helper (`build-csv-rows.ts:10-15`), the way `report-dataset.ts:96` does. A naive `new Date(timestamp as string)` yields `Invalid Date`, and `torontoYmd()` inside `resolveSuggestedAmount` (`offering.ts:102`) then picks `tiers[0]` - the wrong tier, silently.
+  - `?? snapshot` after it is **dead code**. The fallback the three cited surfaces actually use is for a *missing offering*:
+    ```ts
+    const expected = override ?? (offering ? resolveSuggestedAmount(offering, enrolledAt) : snapshot);
+    ```
+    Exactly as `get-enrollments.ts:87`, `report-dataset.ts:180` and `build-csv-rows.ts:115` write it.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -401,10 +500,27 @@ it('uses the LIVE offering amount, not the enrollment snapshot', async () => {
 it('prefers suggestedAmountOverride over both', async () => { /* ... */ });
 
 it('reads donations in chunks of 30 fids', async () => {
-  // Guards the Firestore `in` cap. Seed 65 fids, assert 3 queries.
+  // Guards the Firestore `in` cap, which is hard: an unchunked call throws
+  // INVALID_ARGUMENT. Seed 65 fids, assert 3 queries.
 });
 
 it('returns a null parent when a family has no manager adult', async () => { /* ... */ });
+
+it('throws if handed a program-scoped fid set', async () => {
+  await expect(buildAttendanceDetailIndex(db, manyFids(81), enrMeta)).rejects.toThrow(/LEVEL-scoped/);
+});
+
+it('only reads detail for the level"s families, not the whole program period', async () => {
+  // The regression test for the critical defect in the first draft of this plan.
+  // Fixture: three levels sharing ONE pid at one location (the real shape -
+  // roster-fetch.test.ts:86-93 has exactly this), families spread across them.
+  // Assert the contacts read touched only the target level's fids.
+  const roster = await deriveRoster('brampton-level-2', date, undefined, { withConfirmation: true });
+  const levelFids = [...new Set(roster.members.map((m) => m.fid))];
+  expect(levelFids.length).toBeLessThan(allProgramFids.length);
+  await buildAttendanceDetailIndex(db, levelFids, roster.enrMetaByFid!);
+  expect(fakeFs.perFamilyMemberSubGets).toBe(levelFids.length);
+});
 ```
 
 - [ ] **Step 2: Run to verify they fail**
@@ -429,7 +545,16 @@ At `:146`, the destructure currently drops the amount fields. Add them, and add 
     };
 ```
 
-Carry them into the `enrMetaByFid.set(...)` at `:152` and expose the map on `RosterResult`. **Zero extra reads** - these fields are already in the documents being read.
+Convert `enrolledAt` with the repo's `toDate()` helper, then carry the three fields into the `enrMetaByFid.set(...)` at `:152`. **Zero extra reads** - these fields are already in the documents being read.
+
+**Expose it by spreading in `deriveRoster`, and do not touch `buildRoster`'s signature.** `RosterResult` is returned by **two** functions: the pure `buildRoster(level, families, events, date, now, confirmedFids)` (`roster.ts:62-120`) and `deriveRoster`. `buildRoster` has no `enrMetaByFid` - its `RosterFamily` input (`:16-22`) carries only `fid / legacyFid / enrolledMids / members`. Adding a **required** field to `RosterResult` breaks `buildRoster`'s return at `:107-119` and all 12 `buildRoster(...)` call sites in `__tests__/roster.test.ts`. So:
+
+```ts
+// deriveRoster's return, roster.ts
+return { ...buildRoster(level, families, events, date, now, confirmedFids), enrMetaByFid };
+```
+
+and declare it on `RosterResult` as optional (`enrMetaByFid?: Map<...>`), or as a separate return type for `deriveRoster` only. The `vi.mock('../roster')` mocks in `level-attendance-view.test.ts:4`, `save-attendance.test.ts:17`, `confirm-previous.test.ts:4` and `student-detail.test.ts:18` are untyped `vi.fn()`s, so they are unaffected either way.
 
 - [ ] **Step 4: Implement `attendance-detail.ts`**
 
@@ -464,10 +589,10 @@ export async function buildAttendanceDetailIndex(db, fids, enrMeta) {
     ? await db.getAll(...oids.map((oid) => db.collection('offerings').doc(oid)))
     : [];
 
-  // Contacts: bounded parallel subcollection reads. This fid set is
-  // LEVEL-scoped (typically 20-40 families), NOT roster-scoped (867). The
-  // anti-fan-out rule targets the latter; student-detail.ts:62 reads one
-  // family's members exactly this way for exactly this data.
+  // Contacts: bounded parallel subcollection reads. `fids` MUST be the
+  // level-scoped set derived from roster.members - the cap above enforces it.
+  // deriveRoster's own `fids` is program-and-location scoped (hundreds) and
+  // passing it here reintroduces the fan-out roster.ts:156-174 removed.
   const memSnaps = await Promise.all(
     fids.map((fid) => db.collection('families').doc(fid).collection('members').get()),
   );
@@ -518,6 +643,7 @@ welcome roster's chip for the same family after any pricing-tier change."
 - Modify: `apps/portal/src/features/setu/teacher/roster.ts:37,92` - **`safetyNotes` cannot be populated without this.** `getLevelAttendanceView` maps from `RosterMember`, which carries only `hasSafetyInfo: boolean`; the underlying `foodAllergies` text is collapsed to a boolean at `:92` and discarded. `RosterMemberInput.foodAllergies` exists at `:12` but never reaches `RosterMember`.
 - Modify: `apps/portal/docs/MOBILE_API_CHANGELOG.md`
 - Test: `apps/portal/src/features/setu/teacher/__tests__/level-attendance-view.test.ts`, `roster.test.ts`
+- Test: `apps/portal/src/features/setu/teacher/components/__tests__/attendance-marker.test.tsx` - **widening `AttendanceViewRow` with required fields breaks the `ROWS` fixture at `:16-19` and the inline row literals at `:237` and `:253`.** Either add the new fields to all three, or declare them optional on `AttendanceViewRow` and say which you chose.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -552,7 +678,7 @@ Add `foodAllergies: string | null` to the `RosterMember` interface (`:37`) and s
 
 - [ ] **Step 4: Widen `AttendanceViewRow` and populate it**
 
-Join `buildAttendanceDetailIndex`'s output by `fid` in `getLevelAttendanceView`, and map `safetyNotes` from `m.foodAllergies`.
+Join `buildAttendanceDetailIndex`'s output by `fid` in `getLevelAttendanceView`, and map `safetyNotes` from `m.foodAllergies ?? null`. The `?? null` is required, not defensive: `level-attendance-view.test.ts:15-18`'s `mockDerive` members have no `foodAllergies`, and a bare read yields `undefined`, which `exactOptionalPropertyTypes` rejects against `string | null`.
 
 - [ ] **Step 5: Write the MOBILE_API_CHANGELOG entry**
 
@@ -585,7 +711,7 @@ parent contact and donation status; medical text was not in that decision."
 
 Spec §4.1-4.3. Desktop table, mobile cards, detail drawer, stat cards, filter chips, footer bar.
 
-**The row restructure is the risky part.** Rows are `<button>` elements today (`attendance-marker.tsx:509`, spanning `:505-580`), which makes a nested `View profile` link invalid HTML. Spec §4.5: the row becomes a plain container, the toggle is a button, `View profile` is a link.
+**The row restructure is the risky part.** Rows are `<button>` elements today (`attendance-marker.tsx:509`, spanning `:509-578`), which makes a nested `View profile` link invalid HTML. Spec §4.5: the row becomes a plain container, the toggle is a button, `View profile` is a link.
 
 Two things that restructure must preserve, neither of which v1 stated:
 1. **The container must not carry `role="button"`** - that reintroduces the nesting violation it exists to fix.
@@ -605,7 +731,11 @@ function row(name: string): HTMLElement {
 }
 ```
 
-(`__tests__/attendance-marker.test.tsx:27-29`), used across ~10 assertions (`aria-pressed`, `within(row(...))`, tap-to-toggle). Replacing the row `<button>` with a container **breaks every one of them**.
+(`__tests__/attendance-marker.test.tsx:27-29`). Replacing the row `<button>` with a container breaks every use. **Enumerate the full blast radius before you start** - it is larger than the helper:
+
+- `row(...)` at `:43, :44, :52, :58, :59, :65, :79, :92, :101, :109, :160, :195, :196, :199, :241, :248, :249, :255` - ~18 usages
+- four direct row lookups the helper rewrite does not cover: `getByRole('button', { name: /.../i })` at `:68, :69, :70, :235`
+- **five `queryAllByTestId('att-row')` length assertions** at `:91` (1), `:118` (0), `:174` (2), `:176` (1), `:186` (1). `data-testid="att-row"` **already exists** on the row button (`:512`) - it is not something this task adds. If the desktop table and the mobile card list both emit it, every one of these counts **doubles**. Either scope the id per branch (`att-row-desktop` / `att-row-mobile`) or halve the expected counts, and say which.
 
 Rewrite the helper to find the row container by test id and student name, then reach the toggle inside it:
 
@@ -655,7 +785,9 @@ Container is a `<div>`/`<tr>` with `data-testid="att-row"` and **no** `role`. In
 
 ```tsx
 onClick={(e) => {
-  if ((e.target as HTMLElement).closest('a,button')) return;
+  // Widen rather than narrow: the drawer trigger, a select, or any future
+  // interactive child must not fall through to a toggle.
+  if ((e.target as HTMLElement).closest('a, button, select, input, [role="button"]')) return;
   toggle(r.mid);
 }}
 ```
@@ -663,6 +795,15 @@ onClick={(e) => {
 - [ ] **Step 4: Build the rest of §4.1-4.3**
 
 Stat cards, info banner, search + filter chips with counts, `Mark all present`, the desktop table columns, the mobile card list, the detail drawer (Attendance / Registration / Primary Parent / Actions / Note), and the footer bar. Keep the existing safety dot and give it an accessible label (§4.3) - it is a bare visual today. The drawer gets a `Safety & medical` block rendering `safetyNotes` as text.
+
+**Four things in §4.1 collide with the component as built. Decide each before writing code, and record the decision:**
+
+1. **Four-state stat cards and chips vs a binary model.** §4.1 wants ENROLLED · PRESENT · UNMARKED · ABSENT and chips All/Present/Unmarked/Absent. `AttendanceMarker` is explicitly binary: one `present` map (`:130-137`), a filter of `'all' | 'unmarked'` (`:140`), and `buildMarks()` (`:205-209`) writes `absent` for everything untapped. Distinct Unmarked-vs-Absent counts need a **three-state** local model seeded from `AttendanceViewRow.status`, which also changes the tap gesture, `markAllToggle`, and the autosave payload. That is materially bigger than "stat cards with counts". Either specify that migration, or record the deviation that Absent stays fused with Unmarked and drop it from the cards and chips.
+2. **`data-unmarked` duplication breaks "Next unmarked" on mobile.** `jumpNext()` does `document.querySelectorAll('[data-unmarked="1"]')` (`:253`). With a table and a card list both emitting it, the query returns both branches; on a phone the desktop nodes are `display:none`, so `getBoundingClientRect().top` is 0 and `scrollIntoView` is a no-op. The floating button (`:597-625`) silently stops working. Scope the selector to the visible branch.
+3. **The drawer's "Enrollment Status chip" is a constant.** Every row in `rows[]` is confirmed by construction - `roster.ts:80` routes unconfirmed families to `previousStudents`. Say so and drop it, or add a real field.
+4. **"View registration ↗" has no target.** `/teacher/students/[mid]` exists and covers "View full profile"; the second link points nowhere. Name a route or drop it.
+
+§4.1's header also specifies counted `Visitors (n)` / `Previous students (n)` buttons and a `📅 date ▾` dropdown. Today there is one uncounted `Visitors →` link (`:341-360`), the date nav is prev/next arrows (`:319-336`), and the previous-students link was **deliberately removed** - pinned by an existing assertion at `__tests__/attendance-marker.test.tsx:215`. Re-adding it contradicts that test. Scope them in or record the deviation.
 
 - [ ] **Step 5: Run the full component suite**
 
@@ -689,11 +830,20 @@ Sign in as the teacher persona, open a level with **at least two** students, and
 
 **Read pattern - one reading only.** v1's Architecture line said "reuses `getLevelVisitorsView` across levels" while its Step 3 said to read the enabled levels once and group by level. **Step 3 is correct**; calling `getLevelVisitorsView` per level multiplies a genuine per-family fan-out by the level count - `readDoorGuestCheckIns` lists every `guest-families` doc and point-reads `checkIns/{date}` for each (`check-in-attendance.ts:113-153`), plus a `contactKeys` get per matched child (`visitors.ts:72`) and a `listGuestsDetailed` per level.
 
-Read the enabled levels once with the existing `fetchEnabledLevelsForPid(oid)` (`derive-child-level.ts:36`, already used at `mark-door-attendance.ts:59`) - do not write a new levels read - then group the date's guest children by level with the existing `guestMatchesLevel` predicate (`visitors.ts:15-23`).
+Read the enabled levels once with the existing `fetchEnabledLevelsForPid(oid)` (`features/setu/enrollment/derive-child-level.ts:36`, already used at `mark-door-attendance.ts:59`) - do not write a new levels read - then group the date's guest children by level with the existing `guestMatchesLevel` predicate (`visitors.ts:15-23`).
 
-**Access.** `/welcome/visitors` falls to `can-access-route.ts:112` and welcome-team gets it with **no new clause**. Do not add one. **Do not assume P1 landed** - P1 v2 deliberately does not grant this path to a coordinator, so scope the access test to welcome-team and admin only. If coordinator access is wanted later it is one path added to P1 v2 Task 4 Step 6.
+**Access.** `/welcome/visitors` falls to `packages/shared-domain/src/auth/can-access-route.ts:112` and welcome-team gets it with **no new clause**. Do not add one. **Do not assume P1 landed** - P1 v2 deliberately does not grant this path to a coordinator, so scope the access test to welcome-team and admin only. If coordinator access is wanted later it is one path added to P1 v2 Task 4 Step 6.
 
-**Nav.** P1 v2 does **not** add a Visitors nav link (visitors was removed from P1's scope). This task owns it, or welcome-team gets an unreachable page - which is requirement 1 in spec §0.
+**Nav - two sidebars, not one.** P1 v2 does **not** add a Visitors nav link (visitors was removed from P1's scope). This task owns it, or the page is unreachable - which is requirement 1 in spec §0.
+
+`WELCOME_NAV_ITEMS` (`desktop-sidebar.tsx:65-73`) is **not what an admin sees**. `welcome/layout.tsx` renders `AdminSidebarLive` for admins and `DesktopSidebarLive` only for non-admin welcome-team, with a comment saying admins are deliberately kept in the admin sidebar. So wiring only `WELCOME_NAV_ITEMS` leaves `/welcome/visitors` unreachable for every admin - the exact failure this paragraph exists to prevent.
+
+Add the entry to **both**:
+- `features/family/components/desktop-sidebar.tsx` - `WELCOME_NAV_ITEMS`, plus a new member on the `SidebarTab` closed union (`:9`) and the `deriveActiveFromPathname` mapper
+- `features/admin/components/admin-sidebar.tsx` - the `NAV_GROUPS` entry and its `deriveActive` mapping at `:44-51`
+- `features/family/components/welcome-mobile-nav.tsx`
+
+If P1 v2's Task 6 is also in flight, both plans touch `desktop-sidebar.tsx` and `admin-sidebar.tsx`. Sequence them or expect a conflict.
 
 - [ ] **Step 1: Write the failing page test**
 - [ ] **Step 2: Run to verify it fails**
@@ -708,9 +858,12 @@ Read the enabled levels once with the existing `fetchEnabledLevelsForPid(oid)` (
 
 Spec §5.4. Client-side only - `VisitorRow` already carries `grade` (`visitors.ts:25-32`) and `getLevelVisitorsView` already grade-matches to the level. No new read, no index.
 
-**Two collisions to avoid** in `visitors-panel.tsx`:
+**Three collisions to avoid** in `visitors-panel.tsx`:
 - It already declares `const [grade, setGrade] = useState('')` at `:89` for the **add-visitor** form (used at `:149`, `:277`). Name the filter state something else - `gradeFilter`.
-- It declares its **own local** `interface VisitorRow` at `:8-10`; it does not import the shared type from `visitors.ts`. Either import the shared one or leave the local one alone deliberately - do not assume they are the same type.
+- The add-visitor `<select>` already carries `aria-label="Grade"` at `:279`. A second control named "Grade" makes `getByRole('combobox', { name: /grade/i })` ambiguous and `getBy*` throws. Give the filter a distinct accessible name - "Filter by grade".
+- It declares its **own local** `interface VisitorRow` at `:8-15`; it does not import the shared type from `visitors.ts:25-32`. They are field-identical today. Either import the shared one deliberately or leave the local one alone - do not assume they will stay in sync.
+
+**Say which list the filter applies to.** The panel takes no visitor data as props - `teacher/levels/[levelId]/visitors/page.tsx` passes only `levelId / levelName / date`, and the panel fetches `/api/setu/teacher/visitors` client-side in `load()` (`:96`), holding the result in `view`. `view` has **two** lists: `doorVisitors` (type `VisitorRow`) and `confirmed` (a different type, `DetailedGuest`). Filtering only `doorVisitors` while `confirmed` stays unfiltered will read as a bug. Decide and state it.
 
 - [ ] **Step 1: Write the failing test** (remember `getAllBy*` if this panel has responsive branches)
 - [ ] **Step 2: Run to verify it fails**
@@ -740,18 +893,33 @@ The control is hidden or disabled when the filters are already at their defaults
 
 - [ ] **Step 1: Write the failing tests**
 
-`RosterBrowser` renders both responsive branches with **independent state**. Every assertion uses `getAllBy*`, and every interaction acts on **all** matches, or clicking one Reset leaves the other branch's filters set. Follow `clearDefaultFilters()` at `roster-browser.test.tsx:55-60`.
+`RosterBrowser` **is** the independent-state case - it renders `<RosterContent>` twice (`:446-474`), so act on every match. Follow `clearDefaultFilters()` at `roster-browser.test.tsx:56-60`.
+
+**Reset must render OUTSIDE the `!searchActive` gate.** `roster-browser.tsx:346` wraps the entire filter grid *and* the summary in `{!searchActive && (...)}`, where `searchActive = query.trim().length > 0` (`:262`). The moment search text exists, **every combobox unmounts** - `getAllByRole('combobox', ...)` returns `[]` and any `for...of` over it is a silent no-op. Put Reset next to the count/export row at `:389-399`, which is always mounted, or it cannot clear the search it is specified to clear. `isDefault` must include `query === ''`.
+
+Assert the filters and the search separately, because they cannot both be set at once:
 
 ```ts
-it('reset restores all six filters and clears search', async () => {
-  render(<RosterBrowser {...props} />);
-  // set every filter away from its default, on BOTH branches
+it('reset restores all six filters', async () => {
+  render(<RosterBrowser {...props} />);        // no search text: the grid is mounted
+  // Level and Grade are conditionally rendered (:357, :363) - a loop over an
+  // empty array passes vacuously, so assert length first. The fixture needs
+  // bvChildren carrying a levelName and a grade.
+  expect(screen.getAllByRole('combobox', { name: 'Level' }).length).toBeGreaterThan(0);
   for (const sel of screen.getAllByRole('combobox', { name: 'Payment' })) await userEvent.selectOptions(sel, '');
-  // ... and location / program / level / grade / engagement, plus search text
+  // ... location / program / level / grade / Enrollment (the accessible name at :374)
   for (const btn of screen.getAllByRole('button', { name: /reset/i })) await userEvent.click(btn);
   for (const sel of screen.getAllByRole('combobox', { name: 'Payment' })) expect(sel).toHaveValue('paid');
   for (const sel of screen.getAllByRole('combobox', { name: 'Level' })) expect(sel).toHaveValue('');
-  for (const sel of screen.getAllByRole('combobox', { name: 'Grade' })) expect(sel).toHaveValue('');
+});
+
+it('reset clears the search box, and stays mounted while searching', async () => {
+  render(<RosterBrowser {...props} />);
+  for (const box of screen.getAllByRole('searchbox')) await userEvent.type(box, 'rana');
+  // The filter grid is unmounted here by design; Reset must not be.
+  expect(screen.getAllByRole('button', { name: /reset/i }).length).toBeGreaterThan(0);
+  for (const btn of screen.getAllByRole('button', { name: /reset/i })) await userEvent.click(btn);
+  for (const box of screen.getAllByRole('searchbox')) expect(box).toHaveValue('');
 });
 
 it('hides Reset when the filters are already at their defaults', () => {
@@ -808,5 +976,18 @@ Guest check-ins written by the spec must be removed, or they accumulate in UAT a
 **Type consistency.** `sessionDateFor(ymd)` is defined in Task 2 and used in the writer, `visitors.ts`, and the backfill. `buildAttendanceDetailIndex(db, fids, enrMeta)` is defined in Task 3 and consumed in Task 4. `AttendanceDetail`'s four fields map onto `AttendanceViewRow`'s new fields plus `safetyNotes`, which comes from `RosterMember.foodAllergies` added in Task 4 Step 3.
 
 **Every review finding is addressed:** C1 → Task 2 Steps 1-3 (one helper, noon-UTC anchor, a test that pins the week-off case) plus `--recompute`. C2 → Task 2 Step 5 (the caller). M1 → Task 3's read budget. M2 → Task 3 Step 1's live-amount test. M3 → Task 4 Step 3. M4 → Task 4 Step 5. M5 → Task 5 Step 2 (fetch body, no `onMark`). M6 → Task 5 Step 1's `row`/`toggle` helpers. M7 → Global Constraints + Tasks 5 and 8. M8 → Task 5 Step 1 (migrate first). M9 → Task 9. m1 → Deviation 3. m2 → Task 1 Step 1. m3 → Task 3 Step 6 (no index, no branch). m4 → Task 8 + the spec. m5 → Task 7. m6 → Task 6's single reading.
+
+## Review history
+
+Reviewed once after the first draft (`docs/superpowers/reviews/2026-07-25-review-p2v2.md`): 1 critical, 16 major, 14 minor. Everything re-verified against the code is folded in above. The four that changed the most:
+
+1. **The critical was mine, and it undid the plan's own central rule.** Task 3 called the fid set "level-scoped, 20-40 families" and told the implementer to take it from `enrMetaByFid`. But `deriveRoster`'s enrollment scan filters on `pid` + `location` and defers level matching to `buildRoster`, so that set is **program-and-location scoped - hundreds**. The contacts read would have issued ~500-800 parallel subcollection queries on the eager teacher render, which is exactly the fan-out `roster.ts:156-174` was written to remove. Now derived from `roster.members`, with a hard cap that throws.
+2. **`resolveSuggestedAmount(offering, enrollDate: Date): number`** takes a `Date` and returns a non-nullable number. The plan typed `enrolledAt: string` (it arrives as a Firestore `Timestamp`) and wrote a `?? snapshot` fallback that is dead code. As specified it would not typecheck, and the naive repair silently picks the wrong pricing tier - defeating the chip-parity fix it exists to deliver.
+3. **Both bug-fix tests were unrunnable.** Task 1's fixture donation had no `eid`, and confirmation matches on `eid`, so the flagship test still fails *after* the fix. Task 2's caller test referenced `view.visitors` (the field is `doorVisitors`) and tried to seed a collection that suite mocks away.
+4. **"Act on every match" is wrong for `AttendanceMarker`.** It holds one `present` map, so acting on both branches double-toggles and nets zero - contradicting the plan's own `toggle()` helper. The constraint now distinguishes separate component instances (`RosterBrowser`) from shared state.
+
+Also corrected: four test suites the plan broke without listing (`check-in-attendance.test.ts`, `guest-check-ins.test.ts`, `attendance-marker.test.tsx`'s `ROWS` fixture, and 12 `buildRoster` call sites); a deploy window where every existing guest check-in went invisible between the reader swap and the prod backfill; `/welcome/visitors` unreachable for admins because they get `AdminSidebarLive`, not the welcome sidebar; and Reset unmountable because `roster-browser.tsx:346` hides the whole filter grid while searching.
+
+**Verified correct and left alone:** `sessionDateFor`'s arithmetic across Sunday/Monday/Saturday and both 2026 DST switches; the no-new-index claim against the full `firestore.indexes.json`; `guest_check_ins.date` having exactly one reader; and P1 v2 genuinely not granting `/welcome/visitors` or its nav link.
 
 **Known risk.** Task 5 is the largest single piece in the whole launch batch - a full UI rebuild of the screen every teacher uses every Sunday, on top of a test suite that must be migrated rather than extended. It is also the most cuttable: Tasks 1, 2, 3, 4 deliver real fixes and real data without it, and the current attendance screen works. If the week compresses, ship 1-4 and 6-9 and let the visual rebuild slip.
