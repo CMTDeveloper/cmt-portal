@@ -33,8 +33,10 @@ The gate fires when **all** of these hold:
 1. The viewer is a **family manager** (matching how the family-address gate is manager-scoped, `layout.tsx:55`).
 2. The family has an **active Bala Vihar enrollment**, selected by `programKey` via `selectBalaViharEnrollment` - never "the first active enrollment" (§5.2).
 3. That Bala Vihar donation is **paid**.
-4. The family has **no active Adult Study Class enrollment for the current term**.
+4. The family has **no active Adult Study Class enrollment for the current term** carrying **at least one** adult in `enrolledMids`.
 5. At least one adult in the family is **eligible to attend** (§4.4).
+
+> Condition 4 is deliberately "an enrollment with at least one selected adult", not merely "an enrollment exists". An enrollment whose selected adult was later removed from the family (§4.5) leaves `enrolledMids` empty - that family still needs to choose someone, so the gate must fire again rather than treat the empty enrollment as satisfied.
 
 ### 2.2 Why "teachers are busy" reframes the exception cleanly
 
@@ -122,6 +124,13 @@ const effectiveSuggestedAmount =
 ```
 It uses `??` (nullish), **not** `||`. A `0` override therefore resolves to `0` rather than falling through - the exemption works with no change to the resolution logic. With `||` this design would silently fail; it is worth a regression test pinning that.
 
+### The fee rule, stated canonically (confirmed 2026-07-25)
+
+> **A family that has paid its Bala Vihar donation pays nothing for the Adult Study Class - for as many adults as they choose to send.**
+> **A family with no children, attending only the Adult Study Class, pays the configurable donation (default `$101`).**
+
+There is no middle case and no per-person component. The fee is a property of the *family's* situation, not a headcount.
+
 The arithmetic then works out on its own (B3 dissolves):
 
 | Family | Expected | Behaviour |
@@ -138,7 +147,13 @@ The arithmetic then works out on its own (B3 dissolves):
 
 That is the right moment for the same reason the pledge ask sits there - the family has just finished paying, their enrollment is complete, and the class is free to them. Asking earlier would add a step to a payment flow that already gates a child's place in class.
 
-**The UI:** the family's adults are listed and they pick who attends. One adult → preselected, one tap to confirm. Selecting triggers enrollment at `$0` (§4.2).
+**The UI: multi-select, minimum one** (CMT Developer, 2026-07-25).
+
+The family's adults are listed. **At least one must be selected, but the family may select as many as they like - including every adult - all at no cost.** One adult → preselected, one tap to confirm.
+
+Because the exemption lives on the **enrollment** (`suggestedAmountOverride: 0`), not per member, the cost is `$0` regardless of how many adults are in `enrolledMids`. Selecting three adults costs exactly what selecting one costs. **No per-person arithmetic exists or should be added.**
+
+**Screen copy must explain the why** (Vaibhav to supply exact wording, O7). The substance: *one parent needs to be present during Bala Vihar classes.* That single sentence is what makes the requirement feel reasonable rather than arbitrary - a family reading "you must pick an adult" with no explanation will read it as bureaucracy, and it is the difference between a gate people complete and a gate people resent.
 
 > **The success page now carries two asks, and the order matters.** The adult-class selection comes **first** - it is quick, free, and part of completing enrollment. The monthly-pledge ask (`2026-07-25-monthly-pledge-pad-design.md` §5) comes **second and quieter** - it asks for more money and is entirely optional. Reversing them leads with a money ask straight after a $500 payment.
 >
@@ -256,7 +271,10 @@ Unrelated to the Adult Study Class, cheap, and it removes a visible inconsistenc
 1. **Deployed-UAT E2E**: create the program, enrol a Bala-Vihar family (assert `effectiveSuggestedAmount === 0`) and a non-BV family (assert `101`).
 2. **The `??` regression test**: pin that a `0` override resolves to `0` and does not fall through. If anyone ever "tidies" `??` into `||`, this must fail loudly.
 3. **The B2 test - the one most likely to be skipped**: enrol with a manual selection, then **edit an unrelated member**, then re-assert `enrolledMids` is unchanged. This is the failure that unit tests and a single-pass walkthrough both miss.
-4. **N=2**: a family with **two adults** and two children. Select one adult; assert the other is not enrolled. A one-adult fixture passes trivially and proves nothing.
+4. **N=2, both directions**: a family with **two adults** and two children.
+   - Select **one** adult → assert the other is not in `enrolledMids`.
+   - Select **both** → assert both are enrolled **and the cost is still `$0`**. This is the test that catches anyone who "helpfully" adds per-person pricing.
+   A one-adult fixture passes trivially and proves nothing.
 5. **Roster payment isn't corrupted** (B3): a fully-paid BV family that adds an exempt Adult class enrollment must still read **paid**, not `outstanding`.
 6. **Teacher rule**: a family whose adults are all teacher-assigned is not auto-enrolled; a family with one teacher and one non-teacher **is**.
 7. **Index audit**: this spec adds no new query shape. `enrollments (programKey, status)` already exists. Confirm before shipping.
@@ -269,7 +287,8 @@ Unrelated to the Adult Study Class, cheap, and it removes a visible inconsistenc
 |---|---|---|
 | ~~O1~~ | RESOLVED 2026-07-25 - **enforced as a persistent post-donation prompt, never a block** (§2). Implemented as a fourth gate after profile-completion and disclaimers. | done |
 | ~~O2~~ | RESOLVED 2026-07-25 - **selectable adults are non-teacher-assigned adults; an empty set means the gate never fires** (§2.2, §4.4). Derived from Vaibhav's stated reason (teachers are busy in BV classes), which handles the both-teachers, single-teacher, and mixed cases with one rule. | done |
-| **O7** | Gate copy: what the family sees on `/adult-class`, and how the requirement is explained. Needs Vaibhav's wording. | Vaibhav |
+| **O7** | Gate copy for `/adult-class` - must carry the note that **one parent needs to be present during Bala Vihar classes** (§4.3), plus the "select as many adults as you like, at no cost" framing. Vaibhav's wording. | Vaibhav |
+| **O8** | May a **teacher-assigned** adult be selected voluntarily? §4.4 excludes them from the selectable set because they are teaching at that hour, so "select all adults" means all *non-teaching* adults. If a teacher should be able to opt in anyway, the list needs a marked-but-selectable state. Minor UI question, not a blocker. | Vaibhav |
 | **O3** | Adult-class-first then Bala Vihar: retroactive exemption or not (§4.5)? | CMT Developer |
 | **O4** | Does Adult Study Class need attendance tracking (`attendanceMode`) and levels? Assumed **no** for v1 - it is a donation + enrollment record only. | Vaibhav |
 | **O5** | UX when the selected parent is removed from the family (§4.5). | CMT Developer |
