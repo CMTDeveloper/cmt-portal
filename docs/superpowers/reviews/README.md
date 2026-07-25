@@ -19,17 +19,26 @@ wrote its findings here.
 
 ## The three findings that outrank the rest
 
-**1. Sentry would publish the bank details (P5 CRITICAL-1).**
-`apps/portal/src/sentry.server.config.ts` has its `dataCollection` block commented
-out, no `beforeSend` scrubber exists anywhere in the repo, and `@sentry/nextjs` v10
-defaults capture request bodies **and** stack-frame locals. One unhandled error in
-`POST /api/pledges` sends plaintext bank/transit/institution/account numbers to a
-third-party SaaS, permanently. The monthly-pledge spec listed "never sent to Sentry"
-as a control; it was an assertion, never an implementation. `SECURITY_REVIEW_2026-07-22.md:712-735`
-had already flagged this file as an open finding.
+**1. Sentry had no repo-defined privacy posture (P5 CRITICAL-1). ✅ FIXED 2026-07-25 —
+and the finding as written was overstated.**
+The monthly-pledge spec listed "never sent to Sentry" as a control; it was an assertion,
+never an implementation, and no `beforeSend` scrubber existed anywhere in the repo. That
+part was real and is now closed by `apps/portal/src/lib/sentry/scrub-event.ts`, wired into
+all three init sites with 13 unit tests.
 
-**Fix this before ANY route that accepts sensitive input ships.** It is independent of
-the launch batch and closes an existing audit finding.
+But the mechanism the review named was wrong. It quoted the `@default` JSDoc in
+`datacollection.d.ts`, which documents the permissive `DEFAULTS` constant rather than the
+value that actually applies when `dataCollection` is absent. Reading
+`resolveDataCollectionOptions.js` shows the restrictive branch was in force:
+**request bodies were never being captured**, and `stackFrameVariables` was inert because
+`localVariablesIntegration` no-ops without `includeLocalVariables`. The review's own
+suggested fix — a *partial* `dataCollection` object — would have **widened** cookie, header
+and query-param collection, because passing the object at all flips every omitted field to
+the permissive defaults. See the correction box at the top of P5 CRITICAL-1.
+
+**Lesson worth more than the fix: verify quoted SDK defaults in `node_modules` before acting
+on them.** Two of the three headline findings turned on a misread of code the reviewer had
+open (see finding 3).
 
 **2. Route access needs THREE gates, not one (P1 C1-C3).**
 `canAccessRoute` is only the first. `app/admin/layout.tsx:56` and
@@ -50,5 +59,5 @@ Work from the report, not from the plan it reviews - several plans cite file pat
 that do not exist, and two build on premises that are false. Every finding carries
 the plan section, the claim, the verified truth with a citation, and a concrete fix.
 
-Recommended order: fix Sentry, correct the specs, then re-plan P1 alone against the
-three-gate model and have it reviewed before writing anything else.
+Recommended order: ~~fix Sentry~~ (done, see finding 1), correct the specs, then re-plan P1
+alone against the three-gate model and have it reviewed before writing anything else.

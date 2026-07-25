@@ -4,6 +4,7 @@
 import * as Sentry from '@sentry/nextjs';
 import { nodeProfilingIntegration } from '@sentry/profiling-node';
 import { SENTRY_DSN } from './sentry.dsn';
+import { SENTRY_DATA_COLLECTION, scrubSentryEvent } from './lib/sentry/scrub-event';
 
 const isDev = process.env.NODE_ENV === 'development';
 
@@ -23,10 +24,15 @@ Sentry.init({
   profileSessionSampleRate: isDev ? 1.0 : 0.1,
   profileLifecycle: 'trace',
 
-  // dataCollection: {
-  //   // To disable sending user data and HTTP bodies, uncomment the lines below:
-  //   // https://docs.sentry.io/platforms/javascript/guides/node/configuration/options/#dataCollection
-  //   userInfo: false,
-  //   httpBodies: [],
-  // },
+  // Privacy controls. See lib/sentry/scrub-event.ts — every dataCollection
+  // field is pinned there on purpose, because a PARTIAL object widens the
+  // fields it omits rather than leaving them alone.
+  dataCollection: SENTRY_DATA_COLLECTION,
+  beforeSend: scrubSentryEvent,
+  beforeSendTransaction: scrubSentryEvent,
+
+  // NOTE: `includeLocalVariables` is deliberately not set. It is the switch that
+  // actually activates localVariablesIntegration (a no-op without it), and
+  // turning it on would serialize function locals — including anything holding
+  // bank details or credentials — into every stack frame.
 });

@@ -111,6 +111,13 @@ The plaintext, before encryption, is exactly:
 2. **No `canAccessRoute` rule grants it.** The default-deny at `can-access-route.ts:315` is the backstop if someone later adds a route without thinking.
 3. It is a **top-level collection, not** `families/{fid}/...`, so a family or collectionGroup read can never include it.
 4. It is **never logged**, never put in an error message, never sent to Sentry.
+   The Sentry half is an implemented control, not an assertion, as of 2026-07-25:
+   `apps/portal/src/lib/sentry/scrub-event.ts` pins `httpBodies: []`, `cookies: false`,
+   `userInfo: false` and `stackFrameVariables: false` across the server, edge and client
+   inits, and its `beforeSend` scrubber redacts `bank`/`transit`/`institution`/
+   `accountNumber`/`iban`/`routingNumber`/`cardNumber` keys anywhere in the event graph.
+   That is defense in depth only - the primary rule is still the first clause of this
+   sentence. Never write these values into a log line or an error message.
 
 > **Landmine (verified):** `can-access-route.ts:311-313` - the `/api/setu/*` catch-all grants **welcome-team** by default. A pledge route placed under that prefix without an explicit rule would be readable by precisely the staff who must not see it. **All pledge routes live outside `/api/setu/*` with their own explicit rules.**
 
