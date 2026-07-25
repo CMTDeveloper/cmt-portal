@@ -19,9 +19,17 @@ wrote its findings here.
 | `2026-07-25-review-p1v2-authz.md` | 2 | 9 | 7 |
 | `2026-07-25-review-p1v2-exec.md` | 6 | 14 | 11 |
 
-**P1 has been rebuilt** as `2026-07-25-launch-p1-roles-and-cross-family-edit-v2.md` and reviewed again by the
-two `p1v2` reports above. Their findings are folded into that plan; read them for the
-reasoning, not as an open to-do list. P2-P6 have **not** been rebuilt.
+| `2026-07-25-review-p2v2.md` | 1 | 16 | 14 |
+
+**P1 and P2 have been rebuilt** (`...-p1-roles-and-cross-family-edit-v2.md`,
+`...-p2-teacher-visitors-roster-v2.md`) and reviewed again by the `p1v2` / `p2v2` reports.
+Those findings are folded into the plans; read the reports for the reasoning, not as an
+open to-do list. **P3-P6 have NOT been rebuilt** and should not be implemented as written.
+
+**The pattern across both rebuilds:** the v1 *diagnoses* were largely right and the v1
+*fixes and tests* were wrong, and each rebuild introduced at least one new defect of its
+own that only a second review caught - in both cases a false claim about scope or defaults
+that had been "verified" once already. Budget for the second pass.
 
 ## The three findings that outrank the rest
 
