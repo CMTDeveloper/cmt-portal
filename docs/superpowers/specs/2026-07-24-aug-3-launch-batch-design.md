@@ -65,9 +65,14 @@ The section exists and is wired end to end:
 - Bulk reads only, **no new Firestore index** (`grade-eligible.ts:58-62`) ✅
 - Roster data supports it: **1,061 children in the snapshot, 100% have a grade** ✅
 
-> **Caveat W1 - the silent Brampton default.** `legacy-parser.ts:112-116` `mapLocation()` returns **`'Brampton'`** for any unrecognised centre. Measured in the snapshot, the legacy `center` field holds: `Brampton` 1,411 rows, **`"NULL"` 574 rows**, `Scarborough` 548 rows, `"ALL"` 10 rows. At family level that is **299 of 867 families (34%) with no usable centre, 124 of which have an active child.** All of them migrate as **Brampton**.
+> **Caveat W1 - the silent Brampton default (CORRECTED 2026-07-25).** `legacy-parser.ts:112-116` `mapLocation()` returns **`'Brampton'`** for any unrecognised centre. Measured in the snapshot, the legacy `center` field holds: `Brampton` 1,411 rows, **`"NULL"` 574 rows**, `Scarborough` 548 rows, `"ALL"` 10 rows. At family level, **299 of 867 families (34%) have no usable centre on any row** and migrate as Brampton.
 >
-> Effect on launch Sunday: those 124 families' children appear in **Brampton** teachers' "Registered · not enrolled" lists and are **absent from Scarborough's**. Brampton would hold ~702 of 867 families against Scarborough's ~165. This is a pre-existing documented fallback, not a regression, but at 34% it is worth a deliberate decision before cutover rather than a discovery afterwards.
+> **An earlier revision of this spec claimed 124 of those have an active child. That was wrong** - the measuring script treated the literal string `"NULL"` as a level value. Corrected measurements:
+> - **0 of the 299 have an ACTIVE child** (no row carries a real `level`). Every one is dormant.
+> - **0 families are misassigned.** There is no case where the parser's `first.center` is NULL while another row of the same family carries a real centre, so `mapLocation(first.center)` never silently mis-picks a centre for an active family. The Brampton default only ever fires on all-NULL families.
+> - Of the 299: **124 have any child row, 119 have a child whose legacy grade maps to a `schoolGrade`, totalling 190 children.** Join dates cluster 2020-2023, `classyear` is NULL throughout, payment is `Unpaid`.
+>
+> **So the risk is the inverse of what was first stated.** Scarborough loses nothing. The real effect is that **~190 dormant children with stale grades would land in Brampton teachers' "Registered · not enrolled" lists** on launch Sunday, because that list is location + grade driven and *not* enrollment driven. A child last registered in Grade 2 in 2023 is now in Grade 5, so they would surface in the wrong level and never appear in class. See §1.9b for the resolution.
 
 > **Trap M1 - the migration would silently use the June 10 snapshot.** `migrate-legacy-families.ts:28` → `listAllFamilies` (`family-lookup.ts:212-217`) → `readRtdb`, and `readRtdb` (`packages/firebase-shared/src/admin/rtdb.ts:45-52`) returns snapshot data **and never touches the network** whenever `RTDB_SNAPSHOT_DIR` is set - which CLAUDE.md instructs you to keep set in `apps/portal/.env.local`.
 >
@@ -78,6 +83,30 @@ The section exists and is wired end to end:
 > pnpm --filter @cmt/portal snapshot:rtdb   # one live read; rewrites .rtdb-snapshot/
 > ```
 > Then diff the family count against the current 867 before migrating, so the drift is a measured number rather than an assumption.
+
+### 1.9b W1 resolution: grade-first migration, parent completes the rest (CMT Developer, 2026-07-25)
+
+**The proposal:** the migration carries the child's grade so level placement works; anything missing is filled in by the parent at first sign-in, because their profile is flagged incomplete.
+
+**Verified: the self-healing half already works, and it fixes the stale-grade problem.**
+- `REQUIRED_CHILD = ['schoolGrade', 'birthMonthYear']` (`member-required-fields.ts:42`)
+- `lazy-migrate.ts:185` writes **`birthMonthYear: null`** for every migrated child
+- ⇒ **every migrated child is incomplete by construction**, so the `/family` gate (`app/family/layout.tsx:55,76`) diverts the manager to `/complete-profile` on first sign-in, where `schoolGrade` is re-confirmed alongside the birth month.
+- ⇒ a stale 2023 grade is corrected by the parent at the moment they return, exactly as intended. The migration does **not** need to guess how many years to advance a dormant child.
+
+**One gap: `location` is never asked.** The completion gate checks the member matrix plus `isFamilyAddressComplete` (street/city/province/postal). **Neither the gate nor `complete-profile-form.tsx` collects the CMT centre.** The family home address is not the centre - a Mississauga family may attend either. So a family that migrates with the wrong centre stays wrong until staff fix it.
+
+**And `location` cannot simply be left empty.** `FamilyDocSchema.location` is `z.string().min(1)` - non-nullable, non-optional, and **validated on read** (`schemas/family.ts:55`). Writing `null` or `''` would fail validation on *every subsequent read* of that family doc. Widening it is exactly the doc-schema-read-validation trap the repo already has a rule about, so it is not a casual change.
+
+**Resolution: skip dormant families in the bulk migration.** A family with **no centre on any row AND no active level on any row** is not migrated at cutover. Rationale:
+- It removes all 190 stale children from Brampton's grade-eligible list, which is the actual launch-day symptom.
+- Nothing is lost. Those families are not deleted - `lazyMigrateLegacyFamily` still runs on their first OTP sign-in, kiosk check-in, or teacher add, at which point they enter Setu with a real centre and a parent-confirmed grade.
+- It matches the principle already adopted for the 2026-07-20 rollover change: do not pre-create records; let a family's own engagement create them.
+- It needs no schema change, no gate change, and no new form field.
+
+Implementation: a filter in `migrate-legacy-families.ts` (dormant = every row's `center` is NULL/empty **and** every row's `level` is NULL/empty), reported in the run summary and the `--csv-out` file so the skipped set is auditable rather than silent.
+
+**Residual, accepted:** an *active* family whose centre is genuinely wrong in the legacy data is not self-correcting. Welcome-team can fix it once the family-edit work in §2 ships, which is in this same batch.
 
 ### 1.9 The two decisions that outrank the features (now resolved - see §1.9a)
 
@@ -477,7 +506,8 @@ Green `pnpm test` does **not** mean shipped working. Every item below is require
 |---|---|---|
 | ~~D-A~~ | RESOLVED - bulk-migrate at cutover (§1.9a) | done |
 | ~~D-B~~ | RESOLVED - skip the BV backfill; rely on "Not in this class yet" (§1.9a). **Runbook §6 step 8 must have its stale "Recommended for launch" sentence deleted.** | done |
-| **W1** | **34% of families (299/867, 124 with an active child) have no legacy centre and silently migrate as Brampton** (§1.9a). Decide before cutover: accept, or clean the centre data first. | **CMT Developer** |
+| ~~W1~~ | RESOLVED (§1.9b) - skip dormant families (no centre **and** no active level) in the bulk migration; they lazy-migrate on first engagement. Earlier "124 with an active child" figure was a measuring error; corrected to **0 active, 190 stale children across 119 dormant families**. | done |
+| **W2** | The completion gate never asks for the CMT **centre** (§1.9b), and `FamilyDocSchema.location` is read-validated `z.string().min(1)` so it cannot be left empty. An active family with a wrong legacy centre self-corrects only via welcome-team edit (§2). Accepted for launch. | accepted |
 | **M1** | **Refresh `.rtdb-snapshot` before the prod migration** (§1.9a) - it is 7.7 weeks stale and `readRtdb` prefers it silently. ~$0.0016. | **CMT Developer, at cutover** |
 | O1 | Domain re-point rehearsal (§9) - no runbook entry exists | CMT Developer |
 | O2 | Requirement 6 old-portal shutdown (§7) | CMT Developer |
