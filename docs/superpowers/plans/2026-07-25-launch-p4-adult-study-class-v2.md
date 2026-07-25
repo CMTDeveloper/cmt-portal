@@ -65,8 +65,18 @@
 
 This widens the welcome-team `PATCH /api/welcome/enrollments/[eid]/override` contract (`route.ts:56`) to accept `0`. The existing suite pins `-50 → 400` (`enrollment-integration.test.ts:704`) and nothing pins `0`. Add a test for `0 → 200` and note the behaviour change in the commit - staff can now zero an override deliberately, which is a feature, but it is a contract change.
 
-- [ ] **Step 5: `MOBILE_API_CHANGELOG.md` entry.** This is a `@cmt/shared-domain` schema change consumed by `/api/setu/enrollments`, so CLAUDE.md requires one.
-- [ ] **Step 6: Run and commit**
+- [ ] **Step 5: Add `membershipMode` to `EnrollmentDocSchema` too**
+
+Spec §4.3b step 1 asks for it and no earlier draft did it. `EnrollmentDocSchema` (`enrollment.ts:13-35`) has no such field, and it is the type `get-enrollments.ts:15` casts raw docs to - the shape `GET /api/setu/enrollments` returns raw (`enrollments/route.ts:26`). Without it, Task 12's mobile-changelog entry documents a field the schema does not declare, and any future `.parse()` strips it silently.
+
+```ts
+membershipMode: z.enum(['auto', 'manual']).optional(),
+```
+
+**Bare `.optional()`, no `.default()`.** The repo has two recorded burns here: a `.default()` on a write schema erases the field for partial writers, and doc schemas validate on read so required-ness belongs at the write routes.
+
+- [ ] **Step 6: `MOBILE_API_CHANGELOG.md` entry.** This is a `@cmt/shared-domain` schema change consumed by `/api/setu/enrollments`, so CLAUDE.md requires one.
+- [ ] **Step 7: Run and commit**
 
 ---
 
@@ -90,7 +100,20 @@ it('applies the no-eligible-members guard to the SUPPLIED list', async () => {
 it('is byte-identical for existing callers that supply none of the new params', async () => { /* ... */ });
 ```
 
-The last one is the proof obligation: `/api/setu/enrollments`, the rollover, and the backfill all call this today.
+**The last one is the proof obligation, and it must point at the right callers.** An earlier draft named "`/api/setu/enrollments`, the rollover, and the backfill". Two of those are wrong: `scripts/promote-families.ts` never references `enrollFamily` (the 2026-07-20 change made rollover grade-and-level only), and `scripts/backfill-bv-enrollments.ts:32` says explicitly that it *"Does NOT call enrollFamily/getProgram (they use Next 'use cache' and throw outside a render context)"*.
+
+The four real callers, in traffic order:
+
+| Caller | Why it matters |
+|---|---|
+| `features/setu/check-in/auto-enroll-bala-vihar.ts:24` | **the door kiosk**, every Sunday morning. Its docstring at `:13` reads *"Idempotent (enrollFamily no-ops an already-active enrollment)"* - the exact semantics Task 3 rewrites |
+| `features/setu/enrollment/enroll-on-first-attendance.ts:20` | a teacher marking a guest child present, via `teacher/guests.ts:66` |
+| `app/api/setu/enrollments/route.ts:56` | family self-serve |
+| `app/api/welcome/enrollments/route.ts:34` | welcome-team staff enroll |
+
+Plus `src/__tests__/e2e/enrollments.e2e.test.ts:203,211`, which runs against real UAT and is **not** in the pre-push hook.
+
+Assert the kiosk and first-attendance paths explicitly - both are already mocked and testable. Note that `features/setu/check-in/__tests__/auto-enroll-bala-vihar.test.ts:22` pins the call with an **exact-object** matcher, so any caller that later gains a parameter fails there rather than where you are looking. `sync-enrollment-members.ts:22` also carries a comment asserting the no-op semantics; update it in Task 3.
 
 - [ ] **Step 2: Run to verify they fail**
 - [ ] **Step 3: Extend `EnrollFamilyParams`**
@@ -212,17 +235,54 @@ v1 named this and never defined it, and the two obvious helpers are both wrong:
 - `isEnrollmentConfirmed` (`enrollment-confirmation.ts:34`) returns `true` for any `enrolledVia === 'family-initiated'` **regardless of payment**, so it would gate families who clicked Enroll and never paid - contradicting spec §2 ("**After** the BV donation").
 - A bare donations sum misses legacy-paid families and teacher-managed offerings, whose families never pay in-portal and would be gated **forever**.
 
-The predicate is a three-way disjunction. One test per branch:
+The predicate is a three-way disjunction. **Two of the three helpers an earlier draft named do not exist**, and the nearest real one is wrong in a way that would fire the gate on families who never paid Bala Vihar:
+
+- **There is no `sumCompletedDonationsForEid`.** The real export is `sumCompletedDonations(fid)` (`roster/donations-sum.ts:5`), which sums **every** completed donation for the family with **no eid filter** - so a Tabla or general donation would count toward the Bala Vihar amount. The only eid-scoped sums in the repo are inline; copy `dashboard-model.ts:115-119`.
+- **`legacyPaid` is not a free variable, and unconditional use is wrong in both directions.** Both real derivations gate it on the offering actually being legacy-sourced (`family-engagement.ts:59-65`, `dashboard-model.ts:122-124`). Ungated, a family whose **2025-26** legacy row reads `paid` is treated as having paid the **2026-27** donation, contradicting spec §2 ("**After** the BV donation").
 
 ```ts
-const bvPaid =
-  sumCompletedDonationsForEid(donations, bv.eid) >= (bv.effectiveSuggestedAmount ?? 0)
-  || legacyPaid
-  || paymentSourceOf(bvOffering) === 'teacher-managed';
+const donations = await getDonations(fid);
+const bvPaidByDonation = donations
+  .filter((d) => d.status === 'completed' && d.eid === bv.eid)
+  .reduce((sum, d) => sum + d.amountCAD, 0) >= (bv.effectiveSuggestedAmount ?? 0);
+
+const source = bv.offering ? paymentSourceOf(bv.offering) : 'portal';
+const legacyPaid = source === 'legacy'
+  ? (await getLegacyPaymentStatus(family.legacyFid)) === 'paid'
+  : false;
+
+const bvPaid = bvPaidByDonation || legacyPaid || source === 'teacher-managed';
 ```
 
-- [ ] **Step 5: Implement conditions 1, 2, 4, 5** per spec §2.1, selecting Bala Vihar via `selectBalaViharEnrollment` and scoping condition 4 to the **current term**.
-- [ ] **Step 6: Run and commit**
+Note `getLegacyPaymentStatus` reads the **entire prod RTDB roster** (`legacy-payment.ts:26-38`). It is `use cache`-backed, but it is a real cost on a gate that runs on every `/family/*` render - see Step 6.
+
+- [ ] **Step 5: Implement conditions 1, 2, 4, 5, and define "current term" concretely**
+
+Spec §4.6.1 says condition 4 is "no active enrollment **for the current term**" and never says what identifies a term. `getOpenOfferingsForFamily` returns `OfferingDoc[]` and deliberately **merges two result sets** - located (`get-open-offerings.ts:96`) and location-less (`:90`), deduped at `:99-103` - so it can return more than one open adult-class offering the moment an admin creates a location-less one alongside a per-centre one.
+
+With two open offerings and no definition, a family enrolled in offering A is still un-enrolled for offering B: the gate never clears and they are locked out of `/family` - the exact failure condition 0 exists to prevent.
+
+**Definition: `openOfferings[0]` (earliest `startDate`, which is the returned sort order) is *the* current offering.** Condition 4 is "no active enrollment whose `oid === current.oid`", and **the `/adult-class` screen enrolls into that same `oid`**. Add a test with two open offerings.
+
+Select Bala Vihar via `selectBalaViharEnrollment`, never "the first active enrollment".
+
+- [ ] **Step 6: Give the predicate a real signature, and budget the reads**
+
+This plan's own architecture line calls it "a **pure** `needsAdultClassSelection(family)` predicate", and Task 8 criticises `DisclaimerGate` for "an extra Firestore read on every `/family/*` render". As specified it is neither pure nor cheap - per render of every `/family/*` page it needs:
+
+| Input | Cost |
+|---|---|
+| condition 0's offering | up to 2 queries (`get-open-offerings.ts:90,96`) |
+| enrollments | 1 query + 1 `.get()` per distinct oid, **not cached** (`get-enrollments.ts:54,66-68`) |
+| donations | 1 query |
+| `legacyPaid` | whole-roster RTDB read, cached |
+| teacher flags | **1 `teacherAssignments` doc read per adult** (`assignments.ts:22-33`) |
+
+Roughly 7+ Firestore ops added to every family page load, against the ~1 the plan objects to. And `getCurrentFamily()` returns only `{ family, members, currentMid, isManager }` (`get-current-family.ts:8-13`), so the stated signature cannot carry any of it.
+
+Split it: a genuinely pure `needsAdultClassSelection({ family, members, enrollments, donations, currentOffering, teacherAssignedMids })`, and one `loadAdultClassGateData(fid)` that does the I/O. State the render-cost budget in Task 8 and measure it in Task 12.
+
+- [ ] **Step 7: Run and commit**
 
 ---
 
@@ -246,8 +306,14 @@ CLAUDE.md discipline 3: every top-level route segment has its own. Both `/comple
 
 `middleware.ts:179-188` lists `/complete-profile` and `/acknowledgements` - the two routes this one is modelled on - and `/adult-class` is not there. Without it, an expired-session manager hitting `/adult-class` is bounced to the **legacy `/login`**, not `/sign-in`. Add a middleware test.
 
-- [ ] **Step 6: Add the `canAccessRoute` rules** for `/adult-class` and `/api/setu/adult-class` (any Setu family; the handler binds `fid` from the session). Remember the `/api/setu/` catch-all is manager-only, so a member-reachable path needs its own clause.
-- [ ] **Step 7: Run and commit**
+- [ ] **Step 6: Build `POST /api/setu/adult-class` - the handler the Save button calls**
+
+An earlier draft granted this path in `canAccessRoute` and wrote it into the mobile changelog **without any task creating it**. Executed literally that ships a selection screen whose Save does nothing, and Task 8 then redirects every paid Bala Vihar manager to it - a permanent lockout, the exact failure Task 3 exists to prevent.
+
+The handler: manager-only in-handler check; `fid` from the **session**, never the body; body is `{ mids: string[] }` with `.strict()`; validates every mid is in `selectableAdults`; calls `enrollFamily` with `enrolledMids: mids`, `suggestedAmountOverride: bvPaid ? 0 : null`, `membershipMode: 'manual'`, and the current offering's `oid` from Step 5's definition.
+
+- [ ] **Step 7: Add the `canAccessRoute` rules** for `/adult-class` and `/api/setu/adult-class` (any Setu family; the handler binds `fid` from the session). The `/api/setu/` catch-all is manager-only, so a member-reachable path needs its own clause.
+- [ ] **Step 8: Run and commit**
 
 ---
 
@@ -262,9 +328,27 @@ In `lib/flags.ts` and `turbo.json`'s `env` array. **v1 added the gate unconditio
 
 v1 said "guarding on both earlier gates exactly as `DisclaimerGate` guards on profile completeness (`layout.tsx:76`)". That is not the same shape. `:76` is a pure in-memory check (`incompleteMembers` + `isFamilyAddressComplete`). A **fourth** gate must additionally defer to the **disclaimer** gate, which needs `getDisclaimerStateForFamily(portalFirestore(), data.family)` (`:78`) - an extra Firestore read on every `/family/*` render - and must respect the `flags.setuDisclaimers` short-circuit: when disclaimers are OFF, `DisclaimerGate` never fires and the deferral must not block.
 
-Extract a shared `earlierGatesPending(data)` that both gates call, rather than copying `:76`. Copying it also inherits a mismatch: `:76` uses `incompleteMembers(data.members)` (all members) while `ProfileCompletionGate` uses the narrower `membersRequiringCompletion(...)` (`:52`).
+Extract a shared `earlierGatesPending(data)` that both gates call, rather than copying `:76`.
 
-- [ ] **Step 4: Exempt `/family/donate/success`** - see Task 9. Without this the gate redirects away from the page carrying the ask.
+**And say which scope it takes, because the two differ today and unifying them is a live behaviour change.** `:76` uses `incompleteMembers(data.members)` (all members); `ProfileCompletionGate` uses `membersRequiringCompletion(...)` (`:52`), which filters `inviteStatus !== 'pending'` (`member-required-fields.ts:155`).
+
+So a family with a **pending co-manager invite** whose invitee record is incomplete currently sees *neither* gate: `ProfileCompletionGate` does not redirect (narrow scope), and `DisclaimerGate` returns null (wide scope). They never accept disclaimers.
+
+**Unify on the narrow scope** - it is the correct one - and record that this also closes an existing hole where a pending co-manager suppressed the disclaimer gate. Those families will start being redirected to `/acknowledgements` for the first time. Add a test for it. Do not let it land as an unexplained side effect nine days before launch.
+
+- [ ] **Step 4: Do NOT exempt a path from inside the layout. Move the success page out instead.**
+
+An earlier draft of this step said "exempt `/family/donate/success`". **That is the pattern this repo has already had an outage from, and it contradicts R1 in this plan's own Global Constraints.** The gates are server components rendered from `app/family/layout.tsx`; a component has no pathname, so the only way to give it one is a header - and `layout.tsx:23-32` records what happened last time:
+
+> "When the completion screen was nested at /family/complete-profile it inherited THIS gate, which then had to exempt itself via the current request pathname - and under a soft client-side navigation that header is stale (it read '/family' while the layout re-rendered for the completion route), so the gate redirected to itself forever: a blank page with flickering chrome."
+
+There is also no such header to read: `middleware.ts:106-135` sets `x-portal-{role,uid,family-id,fid,mid,extra-roles,email,phone}` and nothing else. No `x-pathname`, no `x-invoke-path` anywhere in the repo.
+
+**Instead, move `/family/donate/success` to a top-level `/donate/success`, outside the gated layout** - the same reason `/complete-profile`, `/acknowledgements` and `/adult-class` are top-level. It already renders its own full-screen `CspRoot` (`donate/success/page.tsx:30`) and uses none of the layout chrome, so the move is nearly free.
+
+This is what makes the owner's requirement work: **the gate stays persistent, and the Bala Vihar donation flow is never blocked by it.** P5's pledge card moves with the page; update P5 v2 Task 9's path reference in the same commit.
+
+**Files:** move `app/family/donate/success/` → `app/donate/success/`; add `app/donate/success/error.tsx`; add the `canAccessRoute` clause and the `isSetuRoute` entry for `/donate`; update every link to it (`grep -rn "donate/success"`).
 - [ ] **Step 5: Run and commit**
 
 ---
@@ -279,9 +363,17 @@ Extract a shared `earlierGatesPending(data)` that both gates call, rather than c
 
 Adult-class selection **first** - quick, free, part of completing enrollment. The pledge ask **second and quieter**. Reversing them leads with a money ask straight after a $500 payment.
 
-- [ ] **Step 4: Add the skip path and the dashboard card**
+- [ ] **Step 4: "Skip" means "not now", and the gate is what brings them back. No dashboard card.**
 
-A family who skips must be able to return, "via the same state-driven card treatment the pledge uses, surfaced on the family dashboard" (spec §4.3). The persistent `AdultClassGate` remains the fallback for families who skip and then navigate elsewhere.
+An earlier draft asked for both a skip path *and* a dashboard card *and* a persistent gate. **Those cannot coexist.** Nothing but an active enrollment carrying an adult clears spec §2.1 condition 4, and skipping writes nothing - so the moment a skipper navigates to `/family`, the gate fires and redirects them to `/adult-class`. The dashboard card could never render, and Skip would return the user to the same screen.
+
+The owner's requirement was "keep popping them like profile completion logic", so **the gate is the persistence mechanism**:
+
+- On `/donate/success`, Skip simply continues to `/family`.
+- The next `/family` visit hits the gate and lands them on `/adult-class`, where they complete it.
+- **No `adultClassPromptDismissedAt`, no sixth condition, no dashboard card.** Do not build a dismissal - it would defeat the requirement.
+
+If the product actually wants a real dismissal, that is a different feature: it needs persistence (the repo's precedent is `volunteeringSkillsNudgeDismissedAt`, `member.ts:30`) and a sixth condition in `needsAdultClassSelection`. Decide before building, not after.
 
 - [ ] **Step 5: Run and commit**
 
@@ -295,7 +387,32 @@ Two doors to one program, and the more discoverable one bills the family the spe
 
 - [ ] **Step 1: Write the failing test** - `BV-paid family POSTs /api/setu/enrollments for adult-study-class → override 0`.
 - [ ] **Step 2: Run to verify it fails**
-- [ ] **Step 3: Apply the waiver in the generic route** when `programKey === 'adult-study-class'` and the family qualifies, reusing Task 6's `bvPaid` predicate. (Alternative: hide the program from the generic enroll surface. The waiver is better - it keeps one rule in one place.)
+- [ ] **Step 3: Close BOTH halves of the door, not just the fee**
+
+The waiver alone leaves the other half open. `enroll-family.ts:124-131` still derives `enrolledMids` from `memberEligibleForProgram`, which for `memberType: 'adult'` matches **every** Adult - including teacher-assigned adults (violating spec §4.4 and matrix rows 2-4) and `inviteStatus: 'pending'` invitees. `membershipMode` stays `'auto'`, so the next member edit re-adds everyone. And because `enrolledMids` is non-empty, **condition 4 is satisfied and the gate never fires** - the family never sees the selection screen at all.
+
+So the generic route must pass all three:
+
+```ts
+enrolledMids: selectableAdults(members, teacherAssignedMids).map((m) => m.mid),
+suggestedAmountOverride: bvPaid ? 0 : null,
+membershipMode: 'manual',
+```
+
+Assert that a teacher-assigned adult is **not** in `enrolledMids` after a generic-surface enroll.
+
+- [ ] **Step 3b: Apply the waiver on CREATE only**
+
+Task 3's reconcile fires whenever `suggestedAmountOverride` is explicitly supplied. Combined with this step that silently implements the retroactive exemption Deviation 1 says is **not** being implemented: a childless family enrolls in adult class at `$101` and pays; later they add a child, enroll in Bala Vihar, and pay; they re-POST the adult-class oid; `bvPaid` is now true, the route supplies `0`, the reconcile fires, and **the $101 they already paid is rewritten to an expected of `0`.**
+
+Gate it: apply the waiver only when `created === true`, or only when the stored override is `null`. Test: "an adult-class enrollment that already carries a non-null override is not rewritten by a later BV-paid re-POST."
+
+- [ ] **Step 3c: Decide the BV-enrolled-but-unpaid case**
+
+`bvPaid` is evaluated once at enroll time and never recomputed. A family that enrolls in Bala Vihar, then enrolls in adult class **before** paying, gets `override: null` → `$101`. Paying afterwards never waives it (by design), and the gate never fires because condition 4 is satisfied. They sit at `$601` expected with no in-product recourse.
+
+Either block the generic adult-class enroll while Bala Vihar is unpaid, or write `override: 0` on any Bala Vihar **enrollment** rather than payment and accept the wider waiver. Either is defensible; silence is not.
+
 - [ ] **Step 4: Run and commit**
 
 ---
@@ -318,7 +435,19 @@ This is not a truthiness bug - the `?? 0` and `typeof === 'number'` reads all pr
 
 - [ ] **Step 1: Write the failing tests** with a **2-enrollment** fixture (N=2 rule), covering BV+ASC, ASC-only-after-BV-cancelled, and ASC-only-never-BV.
 - [ ] **Step 2: Run to verify they fail**
-- [ ] **Step 3: Decide and implement.** Recommended: `expected === 0 && activeCount > 0 && paid >= 0` classifies as `paid` - the family owes nothing and has paid nothing, which is settled, not unknown. Apply consistently across `deriveFamilyPayment`, `deriveFamilyRosterSignals` and `buildRosterCsvRows`.
+- [ ] **Step 3: Decide and implement, across all FOUR callers**
+
+Recommended: `expected === 0 && activeCount > 0` classifies as `paid` - the family owes nothing and has paid nothing, which is settled, not unknown.
+
+The classifier is shared, so changing it changes every consumer. There are **four**, not three:
+
+1. `roster/payment.ts:25` (`deriveFamilyPayment`)
+2. `roster/family-engagement.ts:50` (`deriveFamilyRosterSignals`)
+3. `roster/build-csv-rows.ts:118` (`buildRosterCsvRows`)
+4. **`roster/report-dataset.ts:183`** (`buildRosterReportDataset`), consumed by `api/welcome/roster/report/route.ts:27`
+
+**And this is a visible product change, not only a correction.** `roster-browser.tsx:250` defaults the payment filter to `'paid'`. Every family whose only active enrollments have empty `pricingTiers` - free and teacher-managed offerings, where `resolveSuggestedAmount` returns 0 (`offering.ts:101`) - starts appearing in the **default** `/welcome/roster` view labelled **Paid**. Today they are filtered out as `unknown`. Confirm that is wanted before shipping it.
+
 - [ ] **Step 4: Run and commit**
 
 ---
@@ -351,4 +480,16 @@ PLAYWRIGHT_BASE_URL=https://cmt-setu.vercel.app pnpm --filter @cmt/portal exec p
 
 **Every review finding addressed:** C1 → Task 2. C2 → Task 3. C3 → Task 6 Step 3 (offering precondition) + Task 8 Step 1 (flag). M1 → Task 10. M2 → Task 11. M3 → Task 7 Step 5. M4 → Task 7 Step 4. M5 → Task 6 Step 4. M6 → Task 8 Step 3. M7 → Task 9 + Task 8 Step 4. M8 → Task 12 Step 2. m1 → Task 1 Step 4. m2 → Task 12 Step 4. m3 → Task 7 Step 3. m4 → Task 4 Step 3. m5 → Task 4 Step 3. m6 → Task 5 Step 1. m7 → the dependency note in the header.
 
-**Known risk.** Twelve tasks, three of which (2, 3, 10) change `enrollFamily` - the single function behind every enrollment path in the portal, including the rollover and the backfill. Task 2's "byte-identical for existing callers" test is the load-bearing guard; if it needs editing, stop.
+## Review history
+
+Reviewed once after the first draft (`docs/superpowers/reviews/2026-07-25-review-p4v2.md`): 2 critical, 15 major, 8 minor. What changed most:
+
+1. **The success-page exemption was the exact pattern this repo had an outage from - and this plan's own R1 forbids it.** Gates are server components with no pathname; the only way to give them one is a header that does not exist (`middleware.ts:106-135` sets eight `x-portal-*` headers and nothing else), and `layout.tsx:23-32` records the last time a gate exempted itself by pathname: "under a soft client-side navigation that header is stale ... so the gate redirected to itself forever." Resolved by **moving the success page to a top-level `/donate/success`** instead - which is also what keeps the donation flow unblocked.
+2. **Skip, the dashboard card, and a persistent gate could not all be true.** Nothing but an active enrollment clears condition 4, so a skipper is redirected on their next `/family` visit and the card can never render. The gate *is* the persistence; the card and any dismissal state are gone.
+3. **The "proof obligation" pointed at two callers that do not exist** (the rollover and the backfill both explicitly avoid `enrollFamily`) and away from the **door kiosk**, which runs every Sunday morning and whose docstring depends on precisely the no-op semantics Task 3 rewrites.
+4. **Three helpers in the `bvPaid` definition were invented.** `sumCompletedDonationsForEid` does not exist and the nearest real helper is program-blind, which would have fired the gate on families who never paid Bala Vihar and waived their `$101`.
+5. **No task built `POST /api/setu/adult-class`** - the plan granted it in `canAccessRoute` and documented it for mobile. Executed literally, Save does nothing and the gate then locks every paid manager on a screen they cannot complete.
+
+Also corrected: the waiver applied on reconcile as well as create (silently implementing the retroactive exemption Deviation 1 disclaims); the generic route left `enrolledMids` and `membershipMode` untouched, so the gate never fired at all; `membershipMode` was never added to `EnrollmentDocSchema`; `paymentFromAmounts` has four callers, not three, and the change makes free-program families appear as **Paid** in the default roster view; "current term" had no definition and breaks with two open offerings; and `earlierGatesPending` had to pick a scope, which closes an existing hole where a pending co-manager suppressed the disclaimer gate.
+
+**Known risk.** Twelve tasks, four of which (2, 3, 6, 10) change `enrollFamily` or its inputs - the single function behind the door kiosk, first-attendance enrollment, family self-serve and staff enroll. Task 2's "byte-identical for existing callers" test is the load-bearing guard, and `auto-enroll-bala-vihar.test.ts:22` pins the call with an exact-object matcher, so a new parameter fails there rather than where you are looking. If either needs editing, stop.

@@ -10,7 +10,7 @@
 
 **Supersedes:** `2026-07-25-launch-p5-monthly-pledge.md`, reviewed as REQUEST CHANGES (2 critical, 10 major, 14 minor). Review: `docs/superpowers/reviews/2026-07-25-review-p5.md`.
 
-**Depends on:** P1 v2's `writeAuditLog(txn, db, entry)` and its `can-access-route.ts` edits; P3 v2's `sendManagedEmail`.
+**Depends on:** P1 v2's `writeAuditLog(txn, db, entry)` and its `can-access-route.ts` edits; P3 v2's `sendManagedEmail`; **P4 v2 Task 8 Step 4 and Task 9** - Task 9's card lives on the donation success page, which P4 moves to a top-level `/donate/success` and whose ordering P4 owns. Ship P5 first and the card renders for nobody in the gated cohort, with no test failing.
 
 ---
 
@@ -38,16 +38,34 @@ Spec §8.2 dismisses this as tolerable because the secrets are encrypted. **That
 
 **Files:** create `firestore.rules`; modify `firebase.json`.
 
-- [ ] **Step 1: Write the rules**
+> ## ⛔ A deny-all ruleset must NEVER be deployed to prod `715b8` while the standalone door app lives
+>
+> An earlier draft of this task shipped a blanket deny-all and instructed a prod deploy after a one-line "confirm the shared-app owner is Admin-SDK-only". **That answer is no, it is checkable from the filesystem in ninety seconds, and the deploy would have taken down the entire door operation on launch Sunday.**
+>
+> Verified in `/Users/dineshmatta/projects/chinmaya-family-check-in/`:
+> - `app/lib/firebase/config.ts:3,26` - `export const db = getFirestore(app)`, the **client** SDK
+> - `serviceAccountKey-prod.json:3` - `"project_id": "chinmaya-setu-715b8"`
+> - client-SDK access to the exact collections the cutover runbook marks **DO NOT TOUCH** (`production-cutover-checklist.md:52-55`): `family.ts:313` guest check-in write, `:362,370` teacher batch check-in, `:429` family self check-in, `:649` teacher report read, `teacher.ts:64` teacher check-in screen
+>
+> `firebase deploy --only firestore:rules` **replaces** the project's ruleset. A deny-all there breaks kiosk check-in, family self check-in, the teacher check-in screen, the teacher report and guest check-in - and per CLAUDE.md the legacy `/check-in/*` path is still the production entry point. **Neither repo tracks a rules file**, so there is no rollback artifact: recovery is hand-retyping rules into the console mid-Sunday.
+>
+> UAT (`chinmaya-setu-uat`) is portal-only and verified safe - `getClientFirestore` / `getClientAuth` / `getClientDatabase` have **zero** call sites in this repo outside their own definitions, and the only `from 'firebase/...'` imports in the monorepo are `packages/firebase-shared/src/client.ts:1-4`.
+
+- [ ] **Step 1: Write the UAT rules - deny-all, correct for a portal-only project**
 
 ```
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // The portal reaches Firestore exclusively through the Admin SDK, which
-    // bypasses rules entirely. Nothing legitimate uses the client SDK for data,
-    // so deny everything: a future client-side read then fails loudly instead
-    // of succeeding silently.
+    // chinmaya-setu-uat is portal-only, and the portal reaches Firestore
+    // exclusively through the Admin SDK, which bypasses rules. Verified: zero
+    // client-SDK call sites in this repo. Deny everything, so a future
+    // client-side read fails loudly instead of succeeding silently.
+    //
+    // NOT SAFE FOR PROD 715b8. That project is shared with the standalone
+    // chinmaya-family-check-in app, which reads and writes family-check-ins
+    // and guest-families through the CLIENT SDK from 'use client' pages. See
+    // Step 4 for the prod path.
     match /{document=**} {
       allow read, write: if false;
     }
@@ -69,12 +87,23 @@ firebase deploy --only firestore:rules --project chinmaya-setu-uat
 
 Then run the full E2E. It will pass - nothing reads client-side - but run it, because "nothing reads client-side" is the assumption being tested.
 
-- [ ] **Step 4: Check prod for test mode**
+- [ ] **Step 4: Prod - export the deployed ruleset FIRST, then add targeted denies only**
 
-A two-minute console check, not a code change: is prod in `allow read, write: if request.time < ...`? That is the failure case that turns this from theoretical to live. Record the answer in the runbook either way.
+Not a deny-all, and not optional either: the door app works in prod today, which means the deployed ruleset permits authenticated client access to those paths - most likely a blanket `allow read, write: if request.auth != null` or a lingering test-mode `request.time <` clause. Under either, **`pledges` and `pledge_secrets` are client-readable and client-writable in prod on day one**, by any family holding a Firebase session. That is the risk spec §8 claims to have closed.
 
-- [ ] **Step 5: Confirm the shared-app owner**, then deploy to prod `715b8`. Runbook §14 entry.
-- [ ] **Step 6: Commit**
+1. **Export the live ruleset and commit it as the baseline** (`firebase firestore:rules get`, or copy from the console). There is no tracked rules file in either repo; without this there is no rollback artifact and no record of what the door app actually relies on.
+2. **Add the two P5 collections as explicit denies on top of that baseline.** Targeted, additive, and it does not touch `family-check-ins` or `guest-families`:
+   ```
+   match /pledges/{pid}        { allow read, write: if false; }
+   match /pledge_secrets/{pid} { allow read, write: if false; }
+   ```
+3. Deploy to prod only after diffing against the exported baseline, and only with the standalone app's owner confirming the door surface is unchanged. Writing rules **tighter** than the door app's real access pattern is the same outage in a different shape.
+
+- [ ] **Step 5: Gate the prod flag flip on this**
+
+Task 6's `NEXT_PUBLIC_FEATURE_SETU_PLEDGE` must not go true in production until Step 4 lands - not merely until the O4 key backup is confirmed. Until then, `pledges` is client-writable and a family could set their own `status: 'active'`.
+
+- [ ] **Step 6: Runbook §14, and commit**
 
 ---
 
@@ -112,9 +141,17 @@ it('rejects a payload that decrypts but has the wrong shape', () => {
 - [ ] **Step 2: Run to verify they fail**
 - [ ] **Step 3: Implement**
 
+**No `??` fallback on the version lookup - it loses money silently, in two directions.** Bump `KEY_VERSION` to 2 without setting `_V2` and new blobs are stamped `keyVersion: 2` while encrypted with the v1 key; set `_V2` later and every one is permanently undecryptable. Or rotate by replacing `PLEDGE_ENCRYPTION_KEY` - the only variable spec §4.3 and the runbook name - and every existing `keyVersion: 1` blob loses its key. For a `pending` pledge the decrypted export is the **only** path to accounting, so that is the family's money until they resubmit.
+
 ```ts
+const KEYS: Record<number, string | undefined> = {
+  1: process.env.PLEDGE_ENCRYPTION_KEY_V1 ?? process.env.PLEDGE_ENCRYPTION_KEY, // legacy alias, v1 only
+  2: process.env.PLEDGE_ENCRYPTION_KEY_V2,
+};
+
 function key(version = KEY_VERSION): Buffer {
-  const raw = process.env[`PLEDGE_ENCRYPTION_KEY_V${version}`] ?? process.env.PLEDGE_ENCRYPTION_KEY;
+  const raw = KEYS[version];
+  if (!raw) throw new Error(`pledge key v${version} not configured`);
   // length-checked, read per call, never re-exported
 }
 
@@ -225,11 +262,17 @@ it('REFUSES to confirm a pledge whose secret was swept', async () => {
 - [ ] **Step 2: Run to verify they fail**
 - [ ] **Step 3: Implement**
 
-**`txn.get(pledgeRef)` before writing.** Without that read, Firestore has nothing to detect contention on and concurrent confirms do not serialize. v1 never said so.
+**`txn.get(pledgeRef)` before writing.** Without that read, Firestore has nothing to detect contention on and concurrent confirms do not serialize.
+
+**Guard the status, not just the sweep flag.** `secretPurgedAt` is written by the Task 10 sweep only. The **cancel** path deletes the secret too, so: admin cancels pledge X, then confirms it - from a stale tab, a re-run of the copy-pasted `pid` from Task 8's list, or two staff on the same queue. `txn.delete` on the absent secret is a no-op, `secretPurgedAt` is unset, status flips to `active`, the audit row looks clean, and the family is told their monthly gift is active for a PAD that can never exist. Same end state MAJOR-5 was written to close, re-entered through the cancel door.
 
 ```ts
-if (data.secretPurgedAt) throw new Error('pledge-secret-purged');
+if (data.status === 'cancelled') throw new Error('pledge-cancelled');       // → 409
+if (data.status === 'active')    return { alreadyActive: true };
+if (data.secretPurgedAt)         throw new Error('pledge-secret-purged');   // → 409
 ```
+
+And make `cancelPledge` set `secretPurgedAt` as well, so the invariant is "no secret ⇒ `secretPurgedAt` is set", enforced in one place. Add the confirm-after-cancel case to Step 1.
 
 Use P1's `writeAuditLog(txn, db, entry)` so the status flip, the secret delete and the audit row commit together or not at all.
 
@@ -267,7 +310,27 @@ if (!session || !isAdmin(session)) return 403;
 Middleware is one gate. Without the second, a single edit to `can-access-route.ts` silently opens a financial endpoint - and the plan's own security test cannot pass, because vitest calls the handler directly and middleware never runs.
 
 - [ ] **Step 4: `canAccessRoute` clauses.** `/api/pledges` above the `/api/setu/` catch-all; `/api/admin/pledges/*` lands on the admin-only `:75` rule with none of the welcome-team exceptions matching.
-- [ ] **Step 5: Send the activation email** via P3's `sendManagedEmail` with `name: 'pledge-activated'`, **outside** the confirm transaction so a template problem cannot roll back an activated pledge. Skip on the `alreadyActive` path.
+- [ ] **Step 5: Send the activation email - and handle the two ways it silently never arrives**
+
+P3 v2's signature requires a `fallback`, and **P5 has nothing to put there**: spec §7 says no email copy is hardcoded for this feature, so unlike every other managed name there is no in-code renderer to fall back to. Write `fallback: async () => {}` and P3's "not configured" branch logs at **info** - so if the SES template or its `SES_TEMPLATE_*` var is missing at launch (spec O5 and O8 are both still open, so that is the likely state), **every activation email silently does not send.**
+
+```ts
+await sendManagedEmail({
+  name: 'pledge-activated',
+  to: email,
+  data: { familyName, monthlyAmount },
+  // No in-code template exists for this email by design (spec 7). Alarm rather
+  // than no-op: silent non-delivery of the most important transactional email
+  // in the feature is not an acceptable default.
+  fallback: async () => { throw new Error('pledge-activated has no SES template configured'); },
+});
+```
+
+**And catch it.** P3 pins that non-template failures propagate, so an uncaught throw makes confirm return 500. The admin retries, hits Task 5's idempotent path, gets `{ alreadyActive: true }`, and the send is **deliberately skipped** - the email is now unsendable through the product, on a pledge whose bank details are already destroyed. Spec §7.3 requires the opposite: "a failed email must be logged and surfaced, never allowed to undo that."
+
+Wrap the send, return `200 { ok: true, emailSent: false }` on failure, and add `activationEmailSentAt` to `PledgeDoc` so the idempotent path can re-attempt a send it has not yet made. Pin the variable-name contract with a test (spec §7.2 / O5).
+
+Send **outside** the confirm transaction so a template problem cannot roll back an activated pledge.
 - [ ] **Step 6: Run and commit**
 
 ---
@@ -301,6 +364,38 @@ The first is the same shape as `getDonations`, which documents its index at `get
 
 ---
 
+## Task 8b: The form the family actually types into, and the config behind it
+
+**Walk the earlier draft task by task and a family can never submit a pledge.** Task 3 was schemas, Task 4 the server function, Task 6 the routes, Task 9 the *card*, Task 11 the export. Spec §6.1 steps 1-2 - "Family opens the pledge form... enters bank number, transit number, institution number, account number" - had **no task**, and the self-review claimed coverage and stopped.
+
+This is the most sensitive input surface in the system, so leaving it unspecified is not a scheduling gap.
+
+- [ ] **Step 1: Input hardening - a checklist, not a preference**
+
+**Browser autofill is a fifth copy of the account number**, outside the encryption, the purge, the rules and the export - synced to the user's browser account. That directly contradicts this plan's own Global Constraint: *when a step trades convenience for one fewer place they can appear, take the trade.*
+
+- `autoComplete="off"` on the form **and** on every bank field (browsers ignore form-level alone)
+- `inputMode="numeric"`, `autoCorrect="off"`, `spellCheck={false}`
+- never persist to `localStorage` / `sessionStorage` / any form-state devtool
+- never put a value in the URL or a query param
+- clear the fields on successful submit
+- decide `type="password"` vs `type="text"` deliberately and record why
+
+- [ ] **Step 2: Render the PAD agreement and collect the acknowledgement**
+
+Task 3 Step 5 stores `padAgreementVersion` / `padAgreementText` and Task 4 rejects version mismatches server-side - but nothing rendered the agreement or collected consent. Payments Canada Rule H1, which is this plan's own justification for the fields, requires the payor **see and accept** it. Required checkbox, text from `app_config/pledge`, snapshot stored with the pledge.
+
+- [ ] **Step 3: Define `app_config/pledge` - three tasks read it and none defined it**
+
+Task 6 Step 2 reads `cfg.enabled`, Task 3 Step 4 reads `cfg.minMonthlyAmount`, Task 3 Step 5 reads `padAgreementVersion` / `padAgreementText`. Spec §4.4's shape has only `{enabled, minMonthlyAmount, suggestedAmounts}` - no PAD fields - and no task wrote the schema, the default constant or the editor.
+
+Follow the disclaimers pattern: a `PledgeConfigSchema`, a `DEFAULT_PLEDGE_CONFIG` constant (`packages/shared-domain/src/setu/disclaimers.ts:10` is the precedent), and an `/admin/pledge` editor - the no-external-CMS rule means admin-editable copy needs a portal screen.
+
+- [ ] **Step 4: `error.tsx` for the new route segment** (CLAUDE.md discipline 3).
+- [ ] **Step 5: Run and commit**
+
+---
+
 ## Task 9: The family card
 
 Spec §5.1's state-driven treatment, on the donation success page **below** the adult-class ask (P4 v2 Task 9 owns the ordering) and on the dashboard.
@@ -320,7 +415,19 @@ v1 made it a manual CLI script run twice-remembered (script + `--commit`), forev
 
 - [ ] **Step 1: Write the failing tests** - deletes secrets older than the window; sets `status: 'cancelled'`, `cancelReason: 'stale-secret-purged'`, `secretPurgedAt`; leaves `active` pledges alone.
 - [ ] **Step 2: Run to verify they fail**
-- [ ] **Step 3: Implement as a Vercel Cron route**, declared in `vercel.ts` beside the existing daily crons. Keep a CLI entry point for manual runs, but the cron is the primary.
+- [ ] **Step 3: Implement as a Vercel Cron route - all THREE pieces, in one commit**
+
+A cron route needs three things and an earlier draft named one. `public-routes.ts:78-89` is explicit: *"EVERY path declared as a cron in vercel.ts MUST be listed here - a scheduled job whose route is missing here silently 401s."* `canAccessRoute` has no `/api/cron/` clause, so an unlisted cron path hits the default-deny at `:315` and middleware denies at `middleware.ts:97-99` before the handler runs - Vercel sends `Authorization: Bearer ${CRON_SECRET}`, which `verifyPortalIdToken` cannot decode.
+
+**The purge would then never fire, silently, with a green `vercel.ts` entry as evidence that it does - and real bank account numbers would be retained indefinitely.** That is precisely the human-forgetfulness failure this task exists to remove.
+
+And the opposite mistake is worse. `public-routes.ts:91-95`: *"Adding a route here without a self-authenticating handler would expose an unauthenticated endpoint with no enforcement."* An unauthenticated purge route mass-deletes `pledge_secrets` and flips pledges to `cancelled`.
+
+1. Add `'/api/cron/purge-stale-pledge-secrets'` to `PUBLIC_ROUTES`.
+2. Copy the timing-safe Bearer check **verbatim** from `app/api/cron/send-prasad-reminders/route.ts:5,17`.
+3. Add the `{ path, schedule }` entry to `vercel.ts:4-11`.
+
+Test that the route 401s without the Bearer. Keep a CLI entry point for manual runs, but the cron is the primary.
 - [ ] **Step 4: Purge visibly**
 
 ```ts
@@ -359,6 +466,11 @@ writeFileSync(out, csv, { mode: 0o600 });   // default 0644 is world-readable
 
 Reuse `apps/portal/src/lib/csv.ts`'s `csvCell` so the export inherits the repo's formula-injection neutralization rather than hand-rolling a second encoder. Add `*.pledge-export.csv` and `/pledge-export*` to `.gitignore`.
 
+**Guard the target database, and keep the key out of every file.** The script decrypts, so it needs the **production** key and must read **production** Firestore - against the repo's standing UAT-only directive. Two consequences the file-handling rules do not cover:
+
+- **Target guard, mirroring `migrate-legacy-families.ts`:** refuse to run unless `PORTAL_FIREBASE_PROJECT_ID` is the prod project **and** `--allow-prod` is passed. Without it, an operator with a UAT-pointed `.env.local` gets an empty CSV and concludes there is nothing to hand over.
+- **The key never touches a dotfile.** Every other CLI script here runs via a pnpm alias with `tsx --env-file=.env.local`, so the path of least resistance is writing the prod key into a laptop dotfile. Instead: read it from the password manager into the process env **for that one invocation**, prefix the command with a space so zsh skips history, and unset it after. Say this in the runbook, not just here.
+
 Print the `pid` alongside each row so confirm is a copy-paste, never a console browse.
 
 Dry-run by default. (Note: this is the **right** choice but **not** the existing convention - `migrate-legacy-families.ts:31` defaults `dryRun: false`. Do not claim otherwise in the commit; a reviewer checking will find the opposite.)
@@ -377,18 +489,26 @@ This is the highest-residual-risk part of the feature and it currently has no ow
 
 **Two of v1's three headline tests were no-ops.**
 
-- [ ] **Step 1: Make the "no route returns bank details" test enumerate the real surface**
+- [ ] **Step 1: Two tests that can actually fail - not a route sweep**
 
-v1 called `GET_ANY_PLEDGE_ROUTE(pid, role)` - but the plan builds **no GET route at all**, so the test asserted that a 404 body contains no bank fields. It passes forever, including after someone adds a leaky route. Spec §10.2 calls this "the most important one here".
+v1's test called a `GET_ANY_PLEDGE_ROUTE` helper for a route the plan never builds, so it asserted that a 404 body contains no bank fields: green forever. An earlier draft of v2 replaced it with a `globby` sweep over every route module. **That is the same vacuousness at 135x the cost:** `globby` is not a dependency (spec §9 says no new ones), there are 135 route files of which 28 have dynamic segments that a generic probe cannot invoke, and the overwhelming majority return 400/404/500 to a blind call - a body that 500s trivially contains no bank field. It also cannot catch the regression it exists for, since it will never have the params, roles and fixtures to reach the leaking code path.
+
+**(a) A static assertion over the source tree.** This is the property Global Constraints claims, so pin it directly:
 
 ```ts
-// Enumerate every route module under src/app/api at test time, hit each with
-// each role, and assert no response body ever contains a bank field name or
-// the seeded account number. A NEW route is then covered automatically.
-const routes = await globby('src/app/api/**/route.ts');
+// Every mention of pledge_secrets in src/ must live in the two places allowed
+// to touch it. A new reader fails this loudly.
+const hits = grepRepo('pledge_secrets', 'apps/portal/src');
+expect(hits.every((f) => f.startsWith('apps/portal/src/features/setu/pledge/'))).toBe(true);
 ```
 
-Plus targeted assertions on the family read paths spec §10.2 names - `getCurrentFamily`, `GET /api/setu/family`, `GET /api/setu/dashboard`, `GET /api/welcome/families`, the roster CSV, the reports CSVs - seeded with a family that has a pending pledge. These are safe by construction today (`pledge_secrets` is top-level; every `collectionGroup()` in the repo targets only `donations`/`enrollments`/`invites`/`members`; `listCollections()` is never called) - but that is a property to **pin**, not assume. It is one careless `collectionGroup('pledge_secrets')` from being false.
+Plus a rule that `pledge_secrets` docs never carry a `date` or `classId` field - see below.
+
+**(b) The targeted fixture-driven assertions** spec §10.2 names: `getCurrentFamily`, `GET /api/setu/family`, `GET /api/setu/dashboard`, `GET /api/welcome/families`, the roster CSV, the reports CSVs - each seeded with a family holding a pending pledge.
+
+**Correct the safety argument while you are here.** An earlier draft said "every `collectionGroup()` in the repo targets only `donations`/`enrollments`/`invites`/`members`". That is wrong twice: `joinRequests` is a fifth literal (`features/setu/join-request/{get-by-token,approve-request,decline-request}.ts`), and **two call sites take the collection-group name from a variable, one straight off the query string** - `api/check-in/teacher/report/route.ts:14,23` does `collectionGroup(url.searchParams.get('classId'))`, and `api/check-in/teacher/uninformed/route.ts:21` does `collectionGroup(c.classId)`.
+
+A collection-group query matches **top-level** collections with that id too, so the isolation argument in spec §4.2 rule 3 does not hold against one. Not exploitable today - the route is teacher-gated and the query adds `.where('classId','==',...).orderBy('date','desc')`, which no `pledge_secrets` doc can satisfy - but the stated reason for safety was false, and the safety is one added field away from evaporating. Add an AST or regex check that no `collectionGroup` argument is a non-literal. `listCollections()` genuinely is never called.
 
 - [ ] **Step 2: Fix the cross-family test, which asserted the wrong thing**
 
@@ -425,4 +545,15 @@ expect(res.status).toBe(400);                 // .strict() rejects the extra key
 
 **Every review finding addressed:** CRITICAL-1 → already shipped (`7902c63`). CRITICAL-2 → Task 1. MAJOR-1 → Task 6 Step 3. MAJOR-2 → Task 7. MAJOR-3 → Task 6 Steps 1-2. MAJOR-4 → Task 10 Step 3. MAJOR-5 → Tasks 5 and 10 Step 4. MAJOR-6 → Task 4. MAJOR-7 → Task 12. MAJOR-8 → Task 8. MAJOR-9 → Task 11. MAJOR-10 → Task 3 Step 5. Minors 1-14 → Tasks 2 (1, 2, 4), 3 (5, 6, 7, 8), 4 (9), 5 (11), 13 (3, 10, 12, 13), 11 (14a).
 
-**Known risk.** Task 11 Step 2 is the only step whose output is a paragraph of prose rather than code, and it is the step guarding the highest residual risk in the feature. If it ships as "TBD", the encryption, the purge and the deny-all rules are all bypassed by someone attaching a CSV to an email. It needs a named owner before launch, not after.
+## Review history
+
+Reviewed once after the first draft (`docs/superpowers/reviews/2026-07-25-review-p5v2.md`): 2 critical, 9 major, 10 minor. **The first critical is the worst error in this whole rebuild series.**
+
+1. **Task 1 would have taken the live door app down on launch Sunday.** The draft shipped a blanket deny-all ruleset and instructed a prod deploy after a one-line "confirm the shared-app owner is Admin-SDK-only", written as a formality. The answer is **no**, and it was checkable from the filesystem in ninety seconds: `/Users/dineshmatta/projects/chinmaya-family-check-in/app/lib/firebase/config.ts:26` is `getFirestore(app)` - the **client** SDK - against `chinmaya-setu-715b8`, reading and writing `family-check-ins` and `guest-families` from `'use client'` pages. A rules deploy **replaces** the ruleset, so the blast radius was kiosk check-in, family self check-in, the teacher check-in screen, the teacher report and guest check-in - on the path CLAUDE.md calls the current production entry point, with no tracked rules file anywhere to roll back to. The claim was also written *into the rules file itself*, where the next reader would trust it. Now: deny-all for UAT only, and prod gets an exported baseline plus two targeted denies.
+2. **Which leaves `pledges` client-writable in prod**, since the door app's client access proves the deployed ruleset permits it. The flag flip is now blocked on the baseline export, not just the key backup.
+3. **No task built the form the family types their account number into.** Spec §6.1 steps 1-2 had no owner while the self-review claimed coverage. Added as Task 8b with input hardening (browser autofill is a fifth copy of the account number, outside every control this design has), the PAD agreement render, and `app_config/pledge` - which three tasks read and none defined.
+4. **The cron would silently never fire.** `public-routes.ts:78-89` says every cron path must be listed there or it 401s; the draft named only `vercel.ts`. The purge that exists because humans forget would itself have been forgotten, with a green config entry as evidence it worked. Both halves now specified, including the self-authenticating Bearer check - adding the route without it would expose an unauthenticated endpoint that mass-deletes secrets.
+
+Also corrected: the `??` key fallback that makes rotation destroy the only copy of the bank details, in two directions; confirm-after-**cancel** reaching `active` with the secret already gone (MAJOR-5's end state through a different door); an activation email with a required `fallback` P5 has nothing to fill and no error handling, so it silently never sends and then becomes unsendable; a `globby` route sweep that is not a dependency and would have been vacuous at 135 files; a **false** "every collectionGroup targets only four literals" claim (there is a fifth, and two call sites take the name from a **variable**, one off the query string); and an export script with no target guard and no instruction to keep the prod key out of `.env.local`.
+
+**Known risk.** Task 11 Step 2 is still the only step whose output is prose rather than code, and it guards the highest residual risk in the feature: if the accounting hand-off ships as "TBD", the encryption, the purge and the rules are all bypassed by someone attaching a CSV to an email. It needs a named owner and a channel before the flag flips, not after.

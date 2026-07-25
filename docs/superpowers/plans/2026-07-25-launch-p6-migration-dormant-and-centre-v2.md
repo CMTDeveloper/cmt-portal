@@ -64,7 +64,36 @@ it('treats "ALL" as a real centre', () => { /* 10 rows in the snapshot */ });
 - [ ] **Step 2: Run to verify they fail**
 - [ ] **Step 3: Implement and carry it out**
 
-Export `LegacyRosterRow`. Add `dormant: boolean` to `LegacyFamilyForMigration` (the interface spans `:83-93`), set from the same rows the parser already filtered, alongside Task 1's existing `locationDefaulted`.
+Export `LegacyRosterRow`. Add `dormant: boolean` to `LegacyFamilyForMigration` (the interface spans `:83-93`), set from the same rows the parser already filtered.
+
+- [ ] **Step 3b: Make `mapLocation` report the fallback - without this the WHOLE centre half is inert**
+
+An earlier draft referred to "Task 1's existing `locationDefaulted`". **There is no such field.** Verified: `locationDefaulted` and `mapLocationDetailed` appear nowhere in `apps/` or `packages/`. `mapLocation` (`legacy-parser.ts:111-116`) returns a bare `LegacyLocation` and reports nothing:
+
+```ts
+function mapLocation(value: unknown): LegacyLocation {
+  const s = clean(value);
+  if (s && (VALID_LOCATIONS as readonly string[]).includes(s)) return s as LegacyLocation;
+  return 'Brampton';
+}
+```
+
+`LegacyFamilyForMigration` (`:83-93`) has nine fields and no such flag, and `:224` is the only call site. **So nothing ever writes `locationNeedsConfirmation: true`** - and every downstream edit in Tasks 2, 4, 5 and 6 fires on a value that is permanently absent. This is v1's C1 relocated from the read path to the write path, and Task 2's round-trip test would not catch it because that test seeds the doc directly.
+
+Spec §1.9c Part 3 item 2 asks for it explicitly: *"**Parser** - `mapLocation` reports whether it fell back to the default; `lazy-migrate` persists `locationNeedsConfirmation: true` in that case."*
+
+```ts
+export function mapLocationDetailed(value: unknown): { location: LegacyLocation; defaulted: boolean } {
+  const s = clean(value);
+  if (s && (VALID_LOCATIONS as readonly string[]).includes(s)) {
+    return { location: s as LegacyLocation, defaulted: false };
+  }
+  return { location: 'Brampton', defaulted: true };
+}
+// mapLocation stays as a thin wrapper so no existing caller changes.
+```
+
+Add `locationDefaulted: boolean` to `LegacyFamilyForMigration`, set it at `:224`, and test `defaulted === true` for `center` of `'NULL'`, `''`, missing and `'ALL'`, `false` for `'Brampton'` and `'Scarborough'`.
 
 - [ ] **Step 4: Run and commit**
 
@@ -77,7 +106,8 @@ Export `LegacyRosterRow`. Add `dormant: boolean` to `LegacyFamilyForMigration` (
 **Files:**
 - `packages/shared-domain/src/setu/schemas/family.ts` (`FamilyDocSchema`)
 - **`apps/portal/src/features/setu/members/get-family-by-fid.ts:27-45`** - the hand-written map
-- **`apps/portal/src/features/setu/members/get-session-family.ts:22`** - the same map feeds `GET /api/setu/family`
+- **`apps/portal/src/features/setu/search/get-family-for-welcome.ts:41-50`** - the **second** hand-map, backing `/welcome/family/[fid]`. It already drops `familyEmergencyContact`, `familyAddress` and `disclaimersAccepted`, and would drop this too - killing spec §1.9c's stated bonus that the flag doubles as a welcome-team work queue.
+- `get-session-family.ts:22` and `get-current-family.ts:42` need **no change**: they delegate to `getFamilyByFid` and spread the result. An earlier draft called `get-session-family.ts:22` "the same map"; it is `const cached = await getFamilyByFid(fid);`. A full audit of `: FamilyDoc = {` in non-test source finds exactly **two** construction sites, the two named above.
 - `apps/portal/src/features/setu/registration/lazy-migrate.ts:193-201` - the family `txn.set`
 - `apps/portal/docs/MOBILE_API_CHANGELOG.md`
 
@@ -104,9 +134,11 @@ it('round-trips locationNeedsConfirmation from the Firestore doc', async () => {
 locationNeedsConfirmation: familyData.locationNeedsConfirmation ?? null,
 ```
 
-in `get-family-by-fid.ts:27-45` and the equivalent in `get-session-family.ts:22`.
+in `get-family-by-fid.ts:27-45` **and** `get-family-for-welcome.ts:41-50`. `get-session-family` and `get-current-family` delegate and need no edit.
 
-- [ ] **Step 5: Write it during migration** - `lazy-migrate.ts:193-201` sets it `true` when `locationDefaulted` is true.
+- [ ] **Step 5: Write it during migration** - `lazy-migrate.ts:193-201` sets it `true` when Task 1 Step 3b's `locationDefaulted` is true, and **omits the key entirely otherwise** (never `false`, per `exactOptionalPropertyTypes`).
+
+Add a `lazyMigrateLegacyFamily` test asserting the written family doc carries `locationNeedsConfirmation: true` for a defaulted-centre legacy family and omits it for a real-centre one. **This is the test that catches a broken writer** - Step 1's `getFamilyByFid` round-trip seeds the doc directly and would pass green against a writer that never runs.
 - [ ] **Step 6: `MOBILE_API_CHANGELOG.md` entry.** `FamilyDocSchema` is the `family` object returned by `GET /api/setu/family` (`route.ts:16-21`) and `/api/setu/dashboard`, and the mobile repo hand-mirrors it. Precedent entries at `:52`, `:62`.
 - [ ] **Step 7: Run and commit**
 
@@ -132,7 +164,15 @@ const missingFids = legacyFids.filter((fid) => !setuLegacyFids.has(fid));
 
 After the skip, `GET /api/welcome/families/migration-status` reports `missing: 299` permanently, and staff cannot distinguish "deliberately skipped as dormant" from "the migration broke" - a red health indicator on a launch-week screen with no explanation.
 
-Exclude dormant fids from `legacyFids` and report them as a separate `skippedDormant` count. If `MigrationStatusResponse` changes shape, add a changelog entry.
+Exclude dormant fids from `legacyFids` and report them as a separate `skippedDormant` count.
+
+**But not from `listAllFamilies()`** - `reconcile-migration.ts:13` sources its fids from exactly the function Task 1 rejects as unusable, for exactly the same reason: `Family` (`packages/shared-domain/src/check-in/family.ts:31-38`) has no `center`, and `level` survives only as a lossily-normalized `Student.level`. Deriving dormancy there would repeat the mistake one file over.
+
+Two workable mechanisms - pick one and write it down:
+- **Persist the verdict.** The skip already knows which fids it skipped; write them to a `migrationSkips` doc (or a `dormantSkipped: true` marker) during Task 3 Step 3, and have `getMigrationStatus` subtract that set. One extra read, no parsing.
+- **Read the roster directly** in `reconcile-migration.ts` via the parser rather than `listAllFamilies()`, reusing Task 1's predicate.
+
+The first is cheaper and keeps the roster-parsing in one place. If `MigrationStatusResponse` changes shape, add a mobile changelog entry.
 
 - [ ] **Step 5: Run and commit**
 
@@ -201,7 +241,17 @@ if (scoped.every((m) => isMemberComplete(m)) && addressDone) {
 
 The target family for §1.9c is a *returning* family: members complete, address complete, only the centre unknown. Gate → `/complete-profile` → short-circuit → hard nav to `/family` → gate → … permanently. And because it is a **hard** navigation the gate re-runs server-side on fresh data every time, so this is worse than the stale-cache bounce, not better.
 
-- [ ] **Step 1: Write the failing tests** - a members-complete, address-complete, centre-unknown manager **stays on the form**; the selector starts unselected; Save sends `location`; the flag clears.
+- [ ] **Step 1: Write the failing tests - including the negative cases, which are the ones that matter**
+
+Positive: a members-complete, address-complete, centre-unknown manager **stays on the form**; the selector starts unselected; Save sends `location`; the flag clears.
+
+**Negative, and non-optional** - `allReady` is a hard block (`:312-324` shows an error toast and returns without PATCHing or navigating), and **every one of the ~568 bulk-migrated managers passes through this screen at first sign-in**, because `lazy-migrate.ts:132-136,183-189` writes `foodAllergies: null`, `birthMonthYear: null` and `gender: 'PreferNotToSay'`, all of which count as missing:
+
+- an **unflagged** manager with one incomplete member **can still Save**
+- a **non-manager** can still Save
+- a flagged manager **cannot** Save until they pick
+
+Without these three, a `centreReady` that is unsatisfiable for unflagged families ships green and locks out the entire launch population.
 - [ ] **Step 2: Run to verify they fail**
 - [ ] **Step 3: Extend the load short-circuit (`:227`)**
 
@@ -213,9 +263,18 @@ if (scoped.every((m) => isMemberComplete(m)) && addressDone && centreDone) {
 }
 ```
 
-- [ ] **Step 4: Add `centreReady` to `allReady` (`:288-295`)**
+- [ ] **Step 4: Add `centreReady` to `allReady` (`:288-295`), defined so it cannot deadlock Save**
 
-Today it is `membersOk && addressReady`, so a manager with everything else complete is "all set", the Save button proceeds, and the flag is never cleared.
+Today `allReady` is `membersOk && addressReady`, so a manager with everything else complete is "all set", Save proceeds, and the flag is never cleared.
+
+**`centreReady` must be conditional on the flag, not on the value.** Defined as `centre !== ''` it blocks the Save button for **every manager who is not flagged** - which is essentially the entire launch population - because the selector that would satisfy it renders only when the flag is set. That is the repo's recorded "mutually exclusive conditions" trap: a control whose visibility and whose enablement are gated on opposite states is never clickable.
+
+```ts
+const centreNeeded = !!data?.isManager && data.family.locationNeedsConfirmation === true;
+const centreReady = !centreNeeded || centre !== '';
+```
+
+`=== true` matters: the field is `boolean | null | undefined`, and only the literal `true` means "ask". Use the **same** `centreNeeded` expression in Step 3's short-circuit, Step 5's PATCH condition and Step 6's render condition, so the four sites cannot drift.
 
 - [ ] **Step 5: Include `location` in the manager PATCH (`:372-391`)**
 
@@ -265,4 +324,13 @@ PLAYWRIGHT_BASE_URL=https://cmt-setu.vercel.app pnpm --filter @cmt/portal exec p
 
 **Every review finding addressed:** C1 → Task 2 Step 4 (both hand-maps) + Step 1's unmocked test. C2 → Task 6 Steps 3-6. M1 → Task 1. M2 → Task 4. M3 → Tasks 2 and 4 changelog steps. M4 → Task 5 Step 3. M5 → Task 3 Step 4. M6 → Deviation 1. M7 → Task 5's cross-plan note. M8 → Task 6 Step 6. m1 → Task 1 Step 1 (`parseLegacyRowsForMigration`, two args). m2 → line numbers corrected throughout.
 
-**Known risk.** Task 6 changes the screen every returning family passes through on first sign-in, three days before a cutover that sends ~867 families through it. The load short-circuit is the dangerous line: too strict and everyone loops, too loose and the centre is never asked. Its test is the one to write first and trust least.
+## Review history
+
+Reviewed once after the first draft (`docs/superpowers/reviews/2026-07-25-review-p6v2.md`): 2 critical, 6 major, 8 minor. Both criticals were the same failure shape as v1's, moved one layer:
+
+1. **`locationDefaulted` does not exist and no task created it.** The draft called it "Task 1's *existing*" field. `mapLocation` (`legacy-parser.ts:111-116`) returns a bare `LegacyLocation`, and `LegacyFamilyForMigration` has nine fields with no such flag - so **nothing ever writes `locationNeedsConfirmation: true`**, and every downstream edit fires on a permanently absent value. v1's C1 was the read path; this was the write path. Spec §1.9c Part 3 item 2 asks for the parser change explicitly, and the draft dropped it. Now Task 1 Step 3b, with the `lazyMigrateLegacyFamily` test that would have caught it.
+2. **`centreReady` was never defined, and the obvious reading locks out the entire launch population.** `allReady` is a hard block, and every one of the ~568 bulk-migrated managers passes through this screen at first sign-in. `centreReady = centre !== ''` blocks Save for every manager who is not flagged, because the selector that would satisfy it renders only when the flag is set - the repo's recorded mutually-exclusive-conditions trap. Now written out, gated on `centreNeeded`, with three negative tests.
+
+Also corrected: `get-session-family.ts:22` is a **delegation, not a hand-map** (there was nothing to edit there), and the real second construction site is `get-family-for-welcome.ts:41-50`, which backs `/welcome/family/[fid]` and would have dropped the flag - killing the spec's stated welcome-team work-queue bonus. And Task 3 Step 4 repeated the exact unimplementability Task 1 diagnosed, sourcing fids from `listAllFamilies()` again.
+
+**Known risk.** Task 6 changes the screen every returning family passes through on first sign-in, days before a cutover that sends ~867 families through it. Two lines are dangerous in opposite directions: the load short-circuit (too strict and everyone loops, too loose and the centre is never asked) and `centreReady` (too broad and nobody can Save). Write their negative tests first and trust both least.
