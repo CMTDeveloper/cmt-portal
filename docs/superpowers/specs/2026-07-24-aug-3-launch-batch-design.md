@@ -45,7 +45,41 @@ An earlier draft of this spec said "12-16 engineering days". **That was wrong** 
 
 So SMS being unavailable **locks nobody out**. Email OTP - the channel that is production-ready - covers the entire roster. This is the single most important fact in this spec.
 
-### 1.9 The two decisions that outrank the features
+### 1.9a RESOLVED: D-A and D-B (CMT Developer, 2026-07-24)
+
+**D-A resolved: bulk-migrate at production cutover.** Runbook §6 step 2 runs. Verified consequences below.
+
+**D-B resolved: do NOT run the BV enrollment backfill** (runbook §6 step 8). The 2026-07-20 note is correct and the "Recommended for launch" sentence above it is stale and must be deleted from the runbook. Teachers see returning students through the existing **"Not in this class yet"** section instead; marking one present enrolls them. Requirement: that list must be visibly populated on launch Sunday, while the Enrolled roster behaves normally.
+
+#### D-B verification (code-level, done)
+
+The section exists and is wired end to end:
+- UI: `features/setu/teacher/components/not-in-class-section.tsx:177` heading, `:192` the copy quoted by CMT Developer
+- It renders **two groups**: *Previous students* (carry-forwards, passed server-side) and *Registered · not enrolled* (lazy-loaded on expand via `GET /api/setu/teacher/grade-eligible`)
+- Read model: `features/setu/teacher/grade-eligible.ts:68-123`
+
+**It populates from exactly what the bulk migration writes**, so D-A is what makes D-B work:
+- `grade-eligible.ts:78` - `families.where('location','==', level.location)`; `lazy-migrate.ts:197` writes `location: legacy.location` ✅
+- `grade-eligible.ts:109-117` - needs `type:'Child'` + `schoolGrade`; `lazy-migrate.ts:177-183` writes both ✅
+- `grade-eligible.ts:89-99` - excludes children already actively enrolled for the level's `pid` ✅
+- Bulk reads only, **no new Firestore index** (`grade-eligible.ts:58-62`) ✅
+- Roster data supports it: **1,061 children in the snapshot, 100% have a grade** ✅
+
+> **Caveat W1 - the silent Brampton default.** `legacy-parser.ts:112-116` `mapLocation()` returns **`'Brampton'`** for any unrecognised centre. Measured in the snapshot, the legacy `center` field holds: `Brampton` 1,411 rows, **`"NULL"` 574 rows**, `Scarborough` 548 rows, `"ALL"` 10 rows. At family level that is **299 of 867 families (34%) with no usable centre, 124 of which have an active child.** All of them migrate as **Brampton**.
+>
+> Effect on launch Sunday: those 124 families' children appear in **Brampton** teachers' "Registered · not enrolled" lists and are **absent from Scarborough's**. Brampton would hold ~702 of 867 families against Scarborough's ~165. This is a pre-existing documented fallback, not a regression, but at 34% it is worth a deliberate decision before cutover rather than a discovery afterwards.
+
+> **Trap M1 - the migration would silently use the June 10 snapshot.** `migrate-legacy-families.ts:28` → `listAllFamilies` (`family-lookup.ts:212-217`) → `readRtdb`, and `readRtdb` (`packages/firebase-shared/src/admin/rtdb.ts:45-52`) returns snapshot data **and never touches the network** whenever `RTDB_SNAPSHOT_DIR` is set - which CLAUDE.md instructs you to keep set in `apps/portal/.env.local`.
+>
+> The local snapshot is `capturedAt: 2026-06-10T11:39:05Z` (`.rtdb-snapshot/meta.json`), i.e. **~7.7 weeks stale at launch**, spanning the summer registration season. Running the prod bulk migration as-is would migrate June-10 data and silently omit every family registered or changed since - with no error.
+>
+> **Resolution: refresh the snapshot immediately before the prod migration.** Cost is negligible - the whole snapshot is **1.6 MB** (`roster.json` 1,682,067 bytes), so at RTDB's ~$1/GB that is **~$0.0016**, a fraction of a cent. The CLAUDE.md cost rule targets repeated full-node reads in dev/test loops, not one deliberate pre-cutover capture.
+> ```bash
+> pnpm --filter @cmt/portal snapshot:rtdb   # one live read; rewrites .rtdb-snapshot/
+> ```
+> Then diff the family count against the current 867 before migrating, so the drift is a measured number rather than an assumption.
+
+### 1.9 The two decisions that outrank the features (now resolved - see §1.9a)
 
 **D-A: Is the roster populated at launch?** Under the lazy-migration path (runbook §6 steps 2-5 skipped), a legacy family enters Setu only on first engagement, so **the welcome roster starts nearly empty**. Roster is precisely what requirement 1 (welcome-team) and requirement 2 (Coordinator) grant access to. Shipping both roles onto an empty roster makes them look broken on day one. Either bulk-migrate (runbook §6 step 2, ~864 families, ~15 min) or accept an empty launch roster - deliberately, not by omission.
 
@@ -404,7 +438,7 @@ The **domain re-point**. `setu.chinmayatoronto.org` is currently served by a dif
 
 | Band | Items |
 |---|---|
-| **Decide first (blocks everything)** | D-A roster population, D-B teacher-roster backfill (§1.9). Both are human calls; both change what the features are built against. |
+| **Cutover data steps (decided - §1.9a)** | Refresh the RTDB snapshot (trap M1), bulk-migrate families (D-A), **skip** the BV enrollment backfill (D-B), verify "Not in this class yet" is populated per level |
 | **Must ship (cutover)** | Prod Firebase, indexes (no `--force`), **SES only** (SNS stays sandboxed - §1.8), flag flips, domain re-point, prod smoke E2E |
 | **Must ship (small, low risk)** | Roster Reset (§6), email-only sign-in posture + `+1` gate (§8.0/§8.2), guest date-key fix D1 (§5.1) |
 | **High value, medium risk** | Teacher attendance revamp (§4) |
@@ -441,8 +475,10 @@ Green `pnpm test` does **not** mean shipped working. Every item below is require
 
 | # | Item | Owner |
 |---|---|---|
-| **D-A** | **Bulk-migrate families or accept a near-empty launch roster (§1.9)** - decides whether requirements 1 and 2 have anything to show | **CMT Developer, before build starts** |
-| **D-B** | **Resolve the runbook §6 step 8 self-contradiction (§1.9)** - decides whether teacher rosters are empty on launch Sunday; correct the runbook either way | **CMT Developer, before build starts** |
+| ~~D-A~~ | RESOLVED - bulk-migrate at cutover (§1.9a) | done |
+| ~~D-B~~ | RESOLVED - skip the BV backfill; rely on "Not in this class yet" (§1.9a). **Runbook §6 step 8 must have its stale "Recommended for launch" sentence deleted.** | done |
+| **W1** | **34% of families (299/867, 124 with an active child) have no legacy centre and silently migrate as Brampton** (§1.9a). Decide before cutover: accept, or clean the centre data first. | **CMT Developer** |
+| **M1** | **Refresh `.rtdb-snapshot` before the prod migration** (§1.9a) - it is 7.7 weeks stale and `readRtdb` prefers it silently. ~$0.0016. | **CMT Developer, at cutover** |
 | O1 | Domain re-point rehearsal (§9) - no runbook entry exists | CMT Developer |
 | O2 | Requirement 6 old-portal shutdown (§7) | CMT Developer |
 | O3 | Count of pre-`69132b1` corrupted international phone keys (§8.5) | read-only scan during cutover |
