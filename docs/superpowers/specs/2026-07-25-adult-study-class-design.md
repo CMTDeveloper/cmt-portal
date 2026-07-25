@@ -50,6 +50,30 @@ The stated reason is **availability** - a teacher is running a class while the a
 
 This dissolves three of the four policy edges that were open in §4.4, using one rule derived from the reason Vaibhav gave rather than from the letter of it.
 
+### 2.3 The complete scenario matrix
+
+Confirmed with CMT Developer 2026-07-25. **"All adults" always means all *non-teaching* adults** - a teacher-assigned adult is never offered, because they are running a class at that hour.
+
+| # | Family | Children in BV | Adults | Gate fires? | Adult-class cost |
+|---|---|---|---|---|---|
+| 1 | Typical BV family | Yes | 2, neither teaches | **Yes** - select 1 or both | **$0** |
+| 2 | BV family, one parent teaches | Yes | 1 teacher, 1 not | **Yes** - only the non-teacher is offered | **$0** |
+| 3 | BV family, both parents teach | Yes | 2 teachers | **No** - selectable set empty | n/a |
+| 4 | Single parent, teaches | Yes | 1 teacher | **No** - selectable set empty | n/a |
+| 5 | Single parent, does not teach | Yes | 1 non-teacher | **Yes** - preselected, one tap | **$0** |
+| 6 | Adults only, wants the class | No | any non-teacher | **No** - no BV enrollment. May enroll voluntarily | **$101** (configurable) |
+| 7 | **Adults only, both teachers** | **No** | **2 teachers** | **No** | n/a |
+
+**Row 7 is the case CMT Developer raised explicitly**, and it is worth noting that it fails the gate **twice over**:
+- **Condition 2** - they have no active Bala Vihar enrollment, so the gate never reaches the adult check.
+- **Condition 5** - even if they did, every adult is teacher-assigned, so the selectable set is empty.
+
+Both must be tested independently. If only one is asserted, a later change to the other could silently start prompting a teacher couple with no children to enroll in a class they are teaching through - the exact outcome this row exists to prevent.
+
+> Rows 3, 4 and 7 all resolve through the same mechanism (empty selectable set), which is why §2.2's rule is preferable to a literal "if both parents are teachers" check - that phrasing would have handled row 3 and quietly missed rows 4 and 7.
+
+**Availability vs. obligation.** None of this removes the Adult Study Class from the programs a family *can* enroll in. Rows 3, 4 and 7 simply are never *required* to. A teacher who genuinely wants to attend can still enroll through the normal program surface.
+
 ---
 
 ## 3. What already works, and what does not
@@ -276,7 +300,9 @@ Unrelated to the Adult Study Class, cheap, and it removes a visible inconsistenc
    - Select **both** → assert both are enrolled **and the cost is still `$0`**. This is the test that catches anyone who "helpfully" adds per-person pricing.
    A one-adult fixture passes trivially and proves nothing.
 5. **Roster payment isn't corrupted** (B3): a fully-paid BV family that adds an exempt Adult class enrollment must still read **paid**, not `outstanding`.
-6. **Teacher rule**: a family whose adults are all teacher-assigned is not auto-enrolled; a family with one teacher and one non-teacher **is**.
+6. **Teacher rule - one test per row of the §2.3 matrix.** Rows 3, 4 and 7 must each assert the gate does **not** fire; rows 1, 2 and 5 must assert it **does**, with only non-teaching adults offered.
+   - **Row 7 needs two separate assertions**, since it fails the gate twice over: once because the family has no Bala Vihar enrollment, and once because every adult is teacher-assigned. Test each in isolation - a fixture that happens to satisfy both proves neither, and a later change to one condition would silently start prompting a teacher couple to enroll in a class they are teaching.
+   - Row 2 must assert the **teacher adult is not offered at all**, not merely that the non-teacher can be picked.
 7. **Index audit**: this spec adds no new query shape. `enrollments (programKey, status)` already exists. Confirm before shipping.
 
 ---
@@ -288,7 +314,7 @@ Unrelated to the Adult Study Class, cheap, and it removes a visible inconsistenc
 | ~~O1~~ | RESOLVED 2026-07-25 - **enforced as a persistent post-donation prompt, never a block** (§2). Implemented as a fourth gate after profile-completion and disclaimers. | done |
 | ~~O2~~ | RESOLVED 2026-07-25 - **selectable adults are non-teacher-assigned adults; an empty set means the gate never fires** (§2.2, §4.4). Derived from Vaibhav's stated reason (teachers are busy in BV classes), which handles the both-teachers, single-teacher, and mixed cases with one rule. | done |
 | **O7** | Gate copy for `/adult-class` - must carry the note that **one parent needs to be present during Bala Vihar classes** (§4.3), plus the "select as many adults as you like, at no cost" framing. Vaibhav's wording. | Vaibhav |
-| **O8** | May a **teacher-assigned** adult be selected voluntarily? §4.4 excludes them from the selectable set because they are teaching at that hour, so "select all adults" means all *non-teaching* adults. If a teacher should be able to opt in anyway, the list needs a marked-but-selectable state. Minor UI question, not a blocker. | Vaibhav |
+| ~~O8~~ | RESOLVED 2026-07-25 - **"all adults" means all non-teaching adults.** A teacher-assigned adult is never offered in the selection. Confirmed alongside scenario row 7 (§2.3): a childless family whose adults are all teachers is never shown the mandatory enrollment. | done |
 | **O3** | Adult-class-first then Bala Vihar: retroactive exemption or not (§4.5)? | CMT Developer |
 | **O4** | Does Adult Study Class need attendance tracking (`attendanceMode`) and levels? Assumed **no** for v1 - it is a donation + enrollment record only. | Vaibhav |
 | **O5** | UX when the selected parent is removed from the family (§4.5). | CMT Developer |
