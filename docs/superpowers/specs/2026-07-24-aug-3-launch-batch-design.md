@@ -513,7 +513,11 @@ This supersedes the earlier "hide the Phone option behind a flag" plan, and it i
 
 Any-country phone numbers on profiles **already work** via registration, which verifies by **email** (`register/family/page.tsx:358-364`). Only the login SMS path is gated.
 
-**Known limitation, not fixed here:** adding a phone to an existing profile (`/family/settings/contacts` → `/api/setu/contacts/send-code`) requires an SMS OTP, so a non-`+1` number cannot be added that way. Registration is unaffected. Recorded as follow-up, not launch-blocking.
+**Known limitation — RESCOPED 2026-07-25, and it is larger than first written.** Adding a phone to an existing profile (`/family/settings/contacts` → `/api/setu/contacts/send-code:74-76`) requires an SMS OTP. This paragraph originally said "a non-`+1` number cannot be added that way", which was true of the **superseded** NANP-gate design. Under §8.0's "no SMS at all" posture that route is dead for **every** number, Canadian included. So this is not a narrow international edge case - it is the whole add-a-phone flow.
+
+It must not ship as a control that silently does nothing. P3 v2 Task 5 Step 6 either surfaces an explicit unavailable state or hides the affordance behind `flags.smsOtp`.
+
+Registration is genuinely unaffected: it verifies by **email** (`register/family/page.tsx:358-364` hardcodes `type: 'email'`), so phone *capture* at registration and member add/edit still accepts any country. It is the *verification* that gates adding one later which is dead.
 
 ### 8.5 Pre-existing data caveat
 

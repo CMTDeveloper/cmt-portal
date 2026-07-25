@@ -1,5 +1,27 @@
 # P3 - Communications: SES Templates & SMS Sign-in Posture - Implementation Plan
 
+> # ⛔ SUPERSEDED 2026-07-25 - DO NOT IMPLEMENT THIS FILE
+>
+> Replaced by **`2026-07-25-launch-p3-communications-v2.md`**.
+>
+> Reviewed as REQUEST CHANGES: 3 critical, 7 major, 6 minor
+> (`docs/superpowers/reviews/2026-07-25-review-p3.md`).
+>
+> The three that make it unimplementable as written:
+>
+> 1. **Task 3's migration point does not exist**, and the file that does is the shared
+>    three-way dispatcher - rewriting its body would route **`otp-code` through the
+>    managed SES path**, the one outcome the whole plan exists to prevent. `sendOtpEmail`,
+>    which Task 4 tests against, does not exist anywhere.
+> 2. **`sendTemplatedEmail` and `SendTemplatedEmailArgs` already exist** with incompatible
+>    shapes, two call sites, and three test files that `vi.mock` them by name. Task 1 would
+>    have shipped two exports under one name meaning opposite things.
+> 3. **The register→sign-in phone handoff becomes a hard dead end.** `sign-in/page.tsx:184`
+>    deliberately suppresses the saved password preference for a handoff, so a family
+>    matched on phone gets an OTP they can never receive with no fallback.
+>
+> Task 4's OTP "pin" is also a tautology that cannot fail. Work from v2.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** move every non-OTP email onto AWS-SES-managed templates with a code fallback, and make SMS sign-in fail with a clear message instead of a silent nothing.

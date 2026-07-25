@@ -18,9 +18,9 @@
 |---|---|---|---|
 | **P1** | **`2026-07-25-launch-p1-roles-and-cross-family-edit-v2.md`** (v1 superseded, do not implement) | `coordinator` role across **all three** authorization gates, `audit_log`, staff cross-family edit endpoints, welcome edit UI, grade editor for welcome-team | - |
 | **P2** | **`2026-07-25-launch-p2-teacher-visitors-roster-v2.md`** (v1 superseded, do not implement) | roster-confirmation `fid` bug + guest date-key fix (**ship these two first, alone**), teacher attendance revamp, `/welcome/visitors` + nav, visitor grade filter, roster Reset, guest→teacher E2E | - |
-| **P3** | `2026-07-25-launch-p3-ses-templates.md` | `sendTemplatedEmail`, `Sender` interface, code-template fallback, migrate 4 templates | - |
+| **P3** | **`2026-07-25-launch-p3-communications-v2.md`** (v1 superseded, do not implement) | `sendSesTemplatedEmail` + `sendManagedEmail`, narrow code fallback, migrate 4 emails, pin the OTP exemption in code, SMS sign-in refusal across **four** surfaces | - |
 | **P4** | `2026-07-25-launch-p4-adult-study-class.md` | Adult program, `$0`/`$101` fee rule, multi-select, `AdultClassGate` | P1 (coordinator offerings grant) |
-| **P5** | `2026-07-25-launch-p5-monthly-pledge.md` | Pledge capture, AES-256-GCM at rest, confirm/cancel + purge, status card | P1 (`audit_log`), P3 (`sendTemplatedEmail`) |
+| **P5** | `2026-07-25-launch-p5-monthly-pledge.md` | Pledge capture, AES-256-GCM at rest, confirm/cancel + purge, status card | P1 (`audit_log`), P3 (`sendManagedEmail`) |
 | **P6** | `2026-07-25-launch-p6-migration-dormant-and-centre.md` | Dormant-family skip in the bulk migration, `locationNeedsConfirmation` centre prompt | - |
 | **P0** | `docs/runbooks/production-cutover-checklist.md` | The cutover itself. **Already written and current** - not restated here. | all code merged |
 
@@ -73,7 +73,7 @@ If the week compresses, cut in this order. Nothing here blocks the cutover.
 
 1. **P5 monthly pledge** - gates nothing. Families can donate normally without it.
 2. **P4 adult study class** - additive; no existing user is affected by its absence.
-3. **P3 template migration** (the 4 existing emails only) - they work today as code. Keep the `sendTemplatedEmail` infrastructure if P5 is shipping.
+3. **P3 template migration** (the 4 existing emails only) - they work today as code. Keep the `sendManagedEmail` infrastructure if P5 is shipping.
 4. **P1 Track A, the coordinator role** (v2 Tasks 1-6) - additive; no existing user loses anything. Cut it whole or not at all: a partially-shipped role that clears middleware but not the handler and layout gates looks granted and reaches nothing, which is worse than not shipping it.
 
 5. **P2's attendance UI rebuild** (v2 Tasks 3-5) - the largest single piece in the batch, on the screen every teacher uses every Sunday, and it requires migrating an existing test suite rather than extending it. The current screen works. P2 Tasks 1-2 and 6-9 deliver without it.
