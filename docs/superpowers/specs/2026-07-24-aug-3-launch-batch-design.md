@@ -108,6 +108,36 @@ Implementation: a filter in `migrate-legacy-families.ts` (dormant = every row's 
 
 **Residual, accepted:** an *active* family whose centre is genuinely wrong in the legacy data is not self-correcting. Welcome-team can fix it once the family-edit work in §2 ships, which is in this same batch.
 
+### 1.9c Skipped families must stay findable AND be asked for their centre (CMT Developer, 2026-07-25)
+
+**Requirement:** a family skipped by the dormant filter must still be found when they sign in or register, and because we already know their centre is unknown, they must be **asked** for it.
+
+#### Part 1 - findability: already works, verified
+
+- `find-family-by-contact.ts:62-71` - when the `contactKeys` lookup misses, it falls back to `legacyFindFamilyByContact` against the legacy roster. Pre-migration families sign in normally.
+- On a legacy hit, `build-session-claims.ts:174` runs `lazyMigrateLegacyFamily`, so the family enters Setu at that moment. The kiosk path does the same at `resolve-kiosk-family.ts:70`.
+- Contact coverage of the 299 dormant families, measured: **299 have an email, 238 also have a phone, 0 have neither.** Every one is reachable, and email is the launch sign-in channel (§1.8).
+
+⇒ Skipping them at bulk-migration time costs them nothing. Nobody becomes unfindable.
+
+#### Part 2 - the centre prompt: registration is fine, sign-in is NOT
+
+- **Registration already asks.** `/register/family` has a required *Primary location* picker (`register/family/page.tsx:59`, validated at `:337`, rendered `:508-519`) fed by `GET /api/setu/locations`.
+- **Sign-in does not.** The lazy path runs `legacy-parser.ts:224` `mapLocation(first.center)`, which **silently returns `'Brampton'`** for an unknown centre. A returning dormant family would be assigned Brampton without anyone being asked - precisely the outcome this requirement rejects.
+
+#### Part 3 - the fix
+
+`location` itself cannot be made empty: `FamilyDocSchema.location` is a read-validated `z.string().min(1)` (`schemas/family.ts:55`) and many consumers (grade-eligible, roster filters, level matching, search) assume a string. So the unknown-ness is carried by an **additive marker** instead, leaving `location` a valid string throughout.
+
+1. **Schema** - add `locationNeedsConfirmation: z.boolean().nullable().optional()` to `FamilyDocSchema`. Nullable + optional, so it is safe on read for every existing doc (this widens, it never tightens).
+2. **Parser** - `mapLocation` reports whether it fell back to the default; `lazy-migrate` persists `locationNeedsConfirmation: true` in that case. Bulk-migrated families with a real centre never get the flag.
+3. **Gate** - `ProfileCompletionGate` (`app/family/layout.tsx:55`) adds the manager-scoped check next to the existing `isFamilyAddressComplete` one, so a returning family is diverted to `/complete-profile` exactly as it already is for a missing home address.
+4. **Form** - `complete-profile-form.tsx` gains a centre selector, shown only when the flag is set. This fits the existing shape: the form already collects **family-level** fields (`familyAddress`, `ProvinceSelect` at `:17`, `:203`, `:238-242`), and `/api/setu/locations` is already family-readable (`can-access-route.ts:199-205`). On save, `location` is set and the flag is cleared.
+
+**Both changes ship together and are complementary:** the dormant skip keeps the 190 stale-grade children out of Brampton's teacher lists on launch Sunday, and the centre prompt guarantees that any of those families who *do* return are asked for their centre instead of being silently defaulted.
+
+**Bonus:** the flag doubles as a work queue - welcome-team can be shown "families with an unconfirmed centre" once the §2 edit surface exists.
+
 ### 1.9 The two decisions that outrank the features (now resolved - see §1.9a)
 
 **D-A: Is the roster populated at launch?** Under the lazy-migration path (runbook §6 steps 2-5 skipped), a legacy family enters Setu only on first engagement, so **the welcome roster starts nearly empty**. Roster is precisely what requirement 1 (welcome-team) and requirement 2 (Coordinator) grant access to. Shipping both roles onto an empty roster makes them look broken on day one. Either bulk-migrate (runbook §6 step 2, ~864 families, ~15 min) or accept an empty launch roster - deliberately, not by omission.
@@ -507,7 +537,8 @@ Green `pnpm test` does **not** mean shipped working. Every item below is require
 | ~~D-A~~ | RESOLVED - bulk-migrate at cutover (§1.9a) | done |
 | ~~D-B~~ | RESOLVED - skip the BV backfill; rely on "Not in this class yet" (§1.9a). **Runbook §6 step 8 must have its stale "Recommended for launch" sentence deleted.** | done |
 | ~~W1~~ | RESOLVED (§1.9b) - skip dormant families (no centre **and** no active level) in the bulk migration; they lazy-migrate on first engagement. Earlier "124 with an active child" figure was a measuring error; corrected to **0 active, 190 stale children across 119 dormant families**. | done |
-| **W2** | The completion gate never asks for the CMT **centre** (§1.9b), and `FamilyDocSchema.location` is read-validated `z.string().min(1)` so it cannot be left empty. An active family with a wrong legacy centre self-corrects only via welcome-team edit (§2). Accepted for launch. | accepted |
+| ~~W2~~ | RESOLVED (§1.9c) - additive `locationNeedsConfirmation` flag + gate check + centre selector on `/complete-profile`, so an unknown-centre family is asked instead of silently defaulted to Brampton. Findability verified: legacy fallback works and **all 299 dormant families have an email, 0 have neither contact**. | done |
+| **W3** | An **active** family whose legacy centre is simply *wrong* (not missing) is not flagged and does not self-correct. Fixed by welcome-team edit (§2). Accepted for launch. | accepted |
 | **M1** | **Refresh `.rtdb-snapshot` before the prod migration** (§1.9a) - it is 7.7 weeks stale and `readRtdb` prefers it silently. ~$0.0016. | **CMT Developer, at cutover** |
 | O1 | Domain re-point rehearsal (§9) - no runbook entry exists | CMT Developer |
 | O2 | Requirement 6 old-portal shutdown (§7) | CMT Developer |
