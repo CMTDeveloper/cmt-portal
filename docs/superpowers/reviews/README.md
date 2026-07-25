@@ -16,6 +16,12 @@ wrote its findings here.
 | `2026-07-25-review-p5.md` | 2 | 10 | 14 |
 | `2026-07-25-review-p6.md` | 2 | 7 | 7 |
 | `2026-07-25-review-coverage.md` | 12 uncovered · 11 partial · 6 INDEX defects | | |
+| `2026-07-25-review-p1v2-authz.md` | 2 | 9 | 7 |
+| `2026-07-25-review-p1v2-exec.md` | 6 | 14 | 11 |
+
+**P1 has been rebuilt** as `2026-07-25-launch-p1-roles-and-cross-family-edit-v2.md` and reviewed again by the
+two `p1v2` reports above. Their findings are folded into that plan; read them for the
+reasoning, not as an open to-do list. P2-P6 have **not** been rebuilt.
 
 ## The three findings that outrank the rest
 

@@ -4,7 +4,9 @@
 
 **Goal:** Ship a `coordinator` role that can actually reach Roster + Programs + Levels, and give welcome-team the ability to edit any family, with an audit trail.
 
-**Architecture:** Two independent tracks. **Track A (Tasks 1-6)** adds the coordinator role through all three authorization gates. **Track B (Tasks 7-10)** adds staff cross-family editing for welcome-team + admin. They share no files and can be built in parallel by two people. Task 11 verifies both against deployed UAT.
+**Architecture:** **Track A (Tasks 1-6)** adds the coordinator role through all three authorization gates. **Track B (Tasks 7-10)** adds staff cross-family editing for welcome-team + admin. Task 11 verifies both against deployed UAT.
+
+**Parallelism, stated honestly:** Tasks 7, 8 and 10 are genuinely independent of Track A and can be built alongside it. **Task 9 is not** - its route tests need the `coordinator` fixture and the widened `Role` type, so it needs Tasks 1 and 4 first. That is why Task 4 Step 6c owns the `/api/welcome/families` authorization cases rather than Task 9: two workers editing `can-access-route.test.ts` in parallel is a guaranteed conflict, not a shared-nothing split.
 
 **Tech Stack:** Next.js 16 App Router, TypeScript (`exactOptionalPropertyTypes`), Firebase Admin Firestore, Zod, Vitest, Playwright.
 
@@ -100,7 +102,10 @@ The previous plan split this across Tasks 1 and 2 and could not typecheck in bet
 - Modify: `apps/portal/src/lib/auth/role-claims.ts:16`
 - Modify: `apps/portal/src/lib/auth/roles-reference.ts` (`ROLE_REFERENCE` + `ROLE_REFERENCE_ORDER:93-101`)
 - Modify: `apps/portal/src/features/admin/users/role-badges.tsx:9-12`
+- Modify: `apps/portal/src/features/admin/users/sevak-manager.tsx:67-69,116` (two `Record<GrantableRole, boolean>` literals)
 - Modify: `apps/portal/src/features/setu/auth/member-roles.ts:23,30,39-41`
+- Modify: `apps/portal/src/features/setu/auth/revoke-sessions.ts:33` (`RESURRECTABLE_SEVAK_CAPS`)
+- Modify: `apps/portal/src/app/api/setu/members/[mid]/__tests__/route.test.ts:25` (the mock of that constant)
 - Test: `packages/shared-domain/src/__tests__/role.test.ts` (note: **`src/__tests__/`**, not `src/auth/__tests__/`, which does not exist)
 - Test: `apps/portal/src/lib/auth/__tests__/roles-reference.test.ts`
 
@@ -109,11 +114,9 @@ The previous plan split this across Tasks 1 and 2 and could not typecheck in bet
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `packages/shared-domain/src/__tests__/role.test.ts`. The import path is `'../auth/role'` from this directory:
+In `packages/shared-domain/src/__tests__/role.test.ts`, **extend the existing import at `:2`** by adding `isCoordinator` to it. Do not write a new import line - `isAdmin`, `isWelcomeTeam` and `ROLES` are already imported there, and a second import of the same names is a duplicate-identifier error. Then append the block:
 
 ```ts
-import { isAdmin, isCoordinator, isWelcomeTeam, ROLES } from '../auth/role';
-
 describe('isCoordinator', () => {
   it('is true for a primary coordinator', () => {
     expect(isCoordinator({ role: 'coordinator' })).toBe(true);
@@ -147,28 +150,16 @@ describe('isCoordinator', () => {
 });
 ```
 
-Append to `apps/portal/src/lib/auth/__tests__/roles-reference.test.ts`:
+**Do not add a `ROLE_REFERENCE_ORDER` test.** An earlier draft of this plan told you to write one, on the premise that the order array had no coverage. **That premise is false** - `apps/portal/src/lib/auth/__tests__/roles-reference.test.ts:26-29` already asserts exactly it:
 
 ```ts
-import { ROLES } from '@cmt/shared-domain';
-import { ROLE_REFERENCE, ROLE_REFERENCE_ORDER } from '../roles-reference';
-
-describe('ROLE_REFERENCE_ORDER', () => {
-  // ROLE_REFERENCE is compile-checked by the _exhaustive assert at
-  // roles-reference.ts:105. ROLE_REFERENCE_ORDER is a plain Role[] and is NOT.
-  // A role missing here gets a reference entry the Users & Roles panel never
-  // renders - a silent omission. This test is the missing compile check.
-  it('covers every role in ROLES', () => {
-    expect([...ROLE_REFERENCE_ORDER].sort()).toEqual([...ROLES].sort());
-  });
-
-  it('has a reference entry for every ordered role', () => {
-    for (const role of ROLE_REFERENCE_ORDER) {
-      expect(ROLE_REFERENCE[role]).toBeDefined();
-    }
-  });
+it('ROLE_REFERENCE_ORDER lists each role exactly once', () => {
+  expect([...ROLE_REFERENCE_ORDER].sort()).toEqual([...ROLES].sort());
+  expect(new Set(ROLE_REFERENCE_ORDER).size).toBe(ROLE_REFERENCE_ORDER.length);
 });
 ```
+
+That existing test is what will fail in Step 2 once `'coordinator'` joins `ROLES`, and it is what Step 4 satisfies. `ROLE_REFERENCE_ORDER` is still a **silent** break in the sense that matters - it is a plain `Role[]`, so the `_exhaustive` assert at `roles-reference.ts:105` does not cover it and `pnpm typecheck` stays green. The suite catches it; the compiler does not.
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
@@ -207,7 +198,9 @@ export const GRANTABLE_ROLES = ['admin', 'welcome-team', 'coordinator'] as const
 
 - [ ] **Step 4: Fix the sites the compiler now breaks**
 
-Adding to `ROLES` breaks `roles-reference.ts` (via the `_exhaustive` assert at `:105`). Adding to `GRANTABLE_ROLES` breaks `role-badges.tsx` (a `Record<GrantableRole, ...>`). Two build breaks, not three - do not use build failures alone as the checklist, because `member-roles.ts` and `ROLE_REFERENCE_ORDER` break **silently**.
+**Four** build breaks. Adding to `ROLES` breaks `roles-reference.ts` (via the `_exhaustive` assert at `:105`). Adding to `GRANTABLE_ROLES` breaks three `Record<GrantableRole, ...>` literals: one in `role-badges.tsx:9-12` and **two in `sevak-manager.tsx`** (`:67-69` `snapshotRoles`, `:116` the `draft` state).
+
+Do not use build failures alone as the checklist anyway - `member-roles.ts`, `ROLE_REFERENCE_ORDER`, `RESURRECTABLE_SEVAK_CAPS` and the two `manage-roles.ts` sites in Task 3 all break **silently**.
 
 `apps/portal/src/lib/auth/roles-reference.ts` - add to `ROLE_REFERENCE`:
 
@@ -232,6 +225,24 @@ Add `'coordinator'` to `ROLE_REFERENCE_ORDER` (`:93-101`), after `'welcome-team'
 ```ts
   coordinator: { label: 'Coordinator', bg: 'var(--ok-soft)', fg: 'var(--ok-deep)' },
 ```
+
+`apps/portal/src/features/admin/users/sevak-manager.tsx` - seed the new key in **both** records, `:67-69` and `:116`:
+
+```ts
+function snapshotRoles(row: SevakRow): Record<GrantableRole, boolean> {
+  return {
+    admin: row.roles.includes('admin'),
+    'welcome-team': row.roles.includes('welcome-team'),
+    coordinator: row.roles.includes('coordinator'),
+  };
+}
+// ...
+  const [draft, setDraft] = useState<Record<GrantableRole, boolean>>({
+    admin: false, 'welcome-team': false, coordinator: false,
+  });
+```
+
+Seeding `coordinator: false` in `snapshotRoles` instead of reading the row would be a live bug, not just a type fix: `saveDraft` at `:197-198` computes `GRANTABLE_ROLES.filter((r) => !draft[r] && openRow.roles.includes(r))` as the revoke set, so an admin opening the drawer for an existing coordinator and pressing Save would **silently revoke the grant**. Never silence this error with a cast.
 
 `apps/portal/src/lib/auth/role-claims.ts:16`:
 
@@ -261,6 +272,35 @@ Replace the hardcoded filter at `:39-41`:
   );
 ```
 
+- [ ] **Step 5b: Widen `RESURRECTABLE_SEVAK_CAPS` - this one is a security hole, not a type fix**
+
+`apps/portal/src/features/setu/auth/revoke-sessions.ts:33` is a literal array, so widening `Capability` does nothing for it:
+
+```ts
+export const RESURRECTABLE_SEVAK_CAPS: Capability[] = ['admin', 'welcome-team'];
+```
+
+It is the strip-list used on member DELETE (`app/api/setu/members/[mid]/route.ts:493`). Left alone, **Task 2 turns it into a privilege-retention bug**, because Task 2 is what makes a family-less coordinator session possible in the first place. The chain, all verified:
+
+1. A family member is granted coordinator and signs in once. `preservedExtras()` puts `'coordinator'` in `claims.extraRoles`, and `api/setu/auth/verify-code/route.ts:98` persists it via `setCustomUserClaims`.
+2. A manager deletes them from the family. `revokeMemberSessions` strips only `admin` and `welcome-team`, so `coordinator` **survives on both auth uids**.
+3. They sign in again. `findSetuFamilyByContact` returns `source: null`, and Task 2's new branch at `build-session-claims.ts:210-223` mints a standalone `{ role: 'coordinator' }` session.
+
+A person removed from the system keeps every family's PII through `/api/welcome/roster/report`, plus program/level/pricing write access. Nothing logs it. The file's own header comment (`:20-25`) warns about exactly this escalation for the two roles it does cover.
+
+Derive it so the next grantable role is covered for free:
+
+```ts
+import { GRANTABLE_ROLES } from '@cmt/shared-domain';
+
+// Derived, not literal: any role that can be granted must also be stripped when
+// the member it was granted to is deleted, or the claim outlives the person and
+// resurrects as a standalone session on next sign-in.
+export const RESURRECTABLE_SEVAK_CAPS: Capability[] = [...GRANTABLE_ROLES];
+```
+
+Update the hardcoded mock at `app/api/setu/members/[mid]/__tests__/route.test.ts:25` to match, and add a test asserting member DELETE strips `coordinator`.
+
 - [ ] **Step 6: Run the tests and the full typecheck**
 
 ```bash
@@ -281,7 +321,10 @@ git add packages/shared-domain/src/auth/role.ts \
   apps/portal/src/lib/auth/roles-reference.ts \
   apps/portal/src/lib/auth/__tests__/roles-reference.test.ts \
   apps/portal/src/features/admin/users/role-badges.tsx \
-  apps/portal/src/features/setu/auth/member-roles.ts
+  apps/portal/src/features/admin/users/sevak-manager.tsx \
+  apps/portal/src/features/setu/auth/member-roles.ts \
+  apps/portal/src/features/setu/auth/revoke-sessions.ts \
+  apps/portal/src/app/api/setu/members/\[mid\]/__tests__/route.test.ts
 git commit -m "feat(roles): add the coordinator role to the type system
 
 One commit because the type change is not separable: sevak.ts exports the
@@ -289,11 +332,19 @@ shared GrantableRole, manage-roles.ts:6 imports it, and member-roles.ts:23
 declared its OWN narrower copy that manage-roles.ts:64 passes into. Widening
 one without the other does not typecheck.
 
-Two of the six sites break the build (roles-reference via _exhaustive,
-role-badges via Record<GrantableRole>). The other four fail SILENTLY:
+Four sites break the build (roles-reference via _exhaustive, plus three
+Record<GrantableRole, ...> literals in role-badges and sevak-manager). Five
+more fail SILENTLY, which is why build errors are not the checklist:
 member-roles.ts's hardcoded read filter, ROLE_REFERENCE_ORDER (a plain array
-the _exhaustive assert does not cover), and the two manage-roles sites in the
-next commit. A new test pins ROLE_REFERENCE_ORDER against ROLES.
+the _exhaustive assert does not cover), RESURRECTABLE_SEVAK_CAPS, and the two
+manage-roles sites in the next commit.
+
+RESURRECTABLE_SEVAK_CAPS is the one that matters. It is the strip-list on
+member DELETE, and the NEXT commit is what makes leaving it alone dangerous:
+once a family-less coordinator can hold a session, a persisted coordinator
+claim outlives deletion from the family and resurrects as a standalone
+session with every family's roster PII. Now derived from GRANTABLE_ROLES so
+the next grantable role is covered for free.
 
 Coordinator inherits nothing and grants nothing to welcome-team - they are
 siblings with disjoint grants per spec 3.1. Tested both directions."
@@ -307,7 +358,9 @@ Without this, a standalone coordinator account is bounced to `/register` and no 
 
 **Files:**
 - Modify: `apps/portal/src/features/setu/auth/build-session-claims.ts` (`:111-123` role flags, `:125-131` `preservedExtras`, `:134-141` the register bounce, `:210-223` the family-less claim chain)
-- Test: `apps/portal/src/features/setu/auth/__tests__/build-session-claims.test.ts`
+- Modify: `apps/portal/src/middleware.ts:145-151` (`dashboardForRole`)
+- Test: **create** `apps/portal/src/features/setu/auth/__tests__/build-session-claims-coordinator.test.ts`. There is no `build-session-claims.test.ts` - the directory holds `-gate`, `-kiosk` and `-teacher` variants. **Copy the structure of `build-session-claims-kiosk.test.ts`**: kiosk is the exact precedent, a family-less role gated through `allExistingRoles` at `:123`.
+- Test: `apps/portal/src/__tests__/middleware*.test.ts` (follow the existing middleware test file, whichever name it uses)
 
 **Interfaces:**
 - Consumes: `isCoordinator`, widened `Capability` (Task 1)
@@ -383,13 +436,37 @@ At `:134-141`, add to the bounce guard so a coordinator is not sent to `/registe
 
 At `:210-223`, add a `coordinator` branch to the family-less chain, after the `isWelcomeTeamUser` branch and before `isKioskUser`. Follow the exact shape of the welcome-team branch in that chain, substituting `role: 'coordinator'`.
 
+- [ ] **Step 5b: Give a coordinator a dashboard in `middleware.ts`**
+
+`middleware.ts:145-151` has no coordinator branch:
+
+```ts
+function dashboardForRole(role: unknown): string | null {
+  if (role === 'family-manager' || role === 'family-member') return '/family';
+  if (role === 'admin') return '/admin';
+  if (role === 'welcome-team') return '/welcome';
+  if (role === 'kiosk') return '/check-in';
+  return null;
+}
+```
+
+This is a different code path from the `redirectTo` Task 2 fixes above. Without a branch, `null` means a signed-in standalone coordinator visiting `/`, `/sign-in` or `/register` is **not** redirected to a dashboard (`:51-52` needs a non-null return) and just sees the marketing page while holding a valid session. Every authorization denial also routes them to `/sign-in` (`deny()`, `:179-193`) where the same `null` leaves them stranded - which reads as "it signs me out at random".
+
+```ts
+  if (role === 'coordinator') return '/welcome/roster';
+```
+
+Add a middleware test for it.
+
 - [ ] **Step 6: Run the tests**
 
 ```bash
-pnpm --filter @cmt/portal exec vitest run src/features/setu/auth/__tests__/build-session-claims.test.ts --project node
+pnpm --filter @cmt/portal exec vitest run src/features/setu/auth/__tests__/build-session-claims-coordinator.test.ts --project node
 ```
 
-Expected: PASS, with every pre-existing test in the file still green.
+Expected: PASS, with every pre-existing test in the directory still green.
+
+**Fixture note.** `buildSessionClaimsForContact` takes `{ type: 'email' | 'phone'; value: string; contactProvenance: 'otp' | 'magic-link' | 'password' }` (`build-session-claims.ts:10-14`). A "coordinator-only" fixture is not just an argument - it needs `portalAuth().getUser(uid)` mocked to return `customClaims: { role: 'coordinator' }` and `findSetuFamilyByContact` mocked to return `{ source: null }`. `build-session-claims-kiosk.test.ts` does exactly this shape for kiosk; copy it and swap the role string.
 
 - [ ] **Step 7: Commit**
 
@@ -645,13 +722,20 @@ Line 75 is `if (pathname.startsWith('/api/admin/')) return isAdmin(claims);`. Pl
 Line 112 is `if (pathname === '/welcome' || pathname.startsWith('/welcome/'))`. `/welcome` root redirects to `/welcome/roster`, so the bare `/welcome` path needs the allowance too or a coordinator is denied before the redirect runs:
 
 ```ts
-  // Coordinator: roster browse only. /welcome root is included because it
-  // redirects to /welcome/roster - denying it would block the redirect itself.
-  // Reports, seva and prasad stay welcome-team-only via the clause below.
+  // Coordinator: roster browse + read-only family detail. /welcome root is
+  // included because it redirects to /welcome/roster - denying it would block
+  // the redirect itself. /welcome/family/* is included because EVERY roster row
+  // is a link to it (roster-browser.tsx:134 and :172); without it the one screen
+  // the role is granted is a dead end that 302s on click. Spec 3.1 excludes
+  // family EDIT from coordinator, not family read, and the roster already
+  // exposes the same PII. Reports, seva and prasad stay welcome-team-only via
+  // the clause below.
   if (
     pathname === '/welcome' ||
     pathname === '/welcome/roster' ||
-    pathname.startsWith('/welcome/roster/')
+    pathname.startsWith('/welcome/roster/') ||
+    pathname === '/welcome/family' ||
+    pathname.startsWith('/welcome/family/')
   ) {
     return isWelcomeTeam(claims) || isCoordinator(claims);
   }
@@ -661,6 +745,30 @@ Line 112 is `if (pathname === '/welcome' || pathname.startsWith('/welcome/'))`. 
 ```
 
 Note the second clause replaces the existing `:251-253` rule rather than adding a duplicate. Delete the old one.
+
+- [ ] **Step 6b: Widen the two page-side gates that `/welcome/family/*` carries**
+
+Granting the route is not enough - the pages re-check. `app/welcome/family/[fid]/members/[mid]/page.tsx:43` (and its `[fid]` sibling) return an access-denied view on `!isWelcomeTeam(...)`. Widen those to `isWelcomeTeam(...) || isCoordinator(...)`.
+
+**Task 10's grade editor must stay `isWelcomeTeam`-gated** so a coordinator gets read-only detail. That is the whole point of granting read but not edit.
+
+- [ ] **Step 6c: Add the Track B denial cases here, not in Task 9**
+
+These belong in this task because the `coordinator` fixture and the widened `Role` type both live here. Task 9 must not re-declare them.
+
+```ts
+it('allows welcome-team to PATCH a family', () => {
+  expect(canAccessRoute(welcomeTeam, '/api/welcome/families/CMT-X', 'PATCH')).toBe(true);
+});
+it('denies a coordinator - family EDIT is excluded even though family READ is granted', () => {
+  expect(canAccessRoute(coordinator, '/api/welcome/families/CMT-X', 'PATCH')).toBe(false);
+});
+it('denies a plain family-manager', () => {
+  expect(canAccessRoute(manager, '/api/welcome/families/CMT-X', 'PATCH')).toBe(false);
+});
+```
+
+`welcomeTeam` and `manager` are already declared at `can-access-route.test.ts:10` and `:8` - reuse them, and declare only `coordinator`, annotated `: SessionClaims` to match the file's style.
 
 - [ ] **Step 7: Run the tests**
 
@@ -704,7 +812,10 @@ yet (spec 5.2); a nav link to a 404 is worse than no link."
 
 Without this, every route Task 4 authorized still returns 403 - from the handler instead of the middleware.
 
+**The sweep rule: for EVERY path Task 4 grants, find its handler and check it.** Not just `/api/admin/*`. An earlier draft of this task listed only the nine admin handlers and missed `/api/welcome/roster/report`, which is the coordinator's **only data source** - `/welcome/roster` would have rendered an empty screen. Re-derive the list from Task 4's grant table rather than trusting this one.
+
 **Files:**
+- Modify: `apps/portal/src/app/api/welcome/roster/report/route.ts:19` - **the coordinator's only data endpoint.** `roster-client.ts:9` (`fetchRosterReportClient`) and `roster-export-button.tsx:42` (CSV) both hit it, and `fetchRosterReportClient` throws on non-OK, so a 403 here means the roster renders nothing.
 - Modify: `apps/portal/src/app/api/admin/programs/route.ts:12,34`
 - Modify: `apps/portal/src/app/api/admin/programs/[key]/route.ts:16`
 - Modify: `apps/portal/src/app/api/admin/offerings/route.ts:11,37`
@@ -784,13 +895,28 @@ Preserve the existing `!session ||` prefix where it is present today (`offerings
   if (!session || (!isAdmin(session) && !isCoordinator(session))) {
 ```
 
-- [ ] **Step 4: Widen the three shared handlers**
+- [ ] **Step 4: Widen the three shared admin handlers**
 
 In `levels/[levelId]/teachers/route.ts:30`, `teacher-assignments/route.ts:27`, `teachers/search/route.ts:12`:
 
 ```ts
   if (!isAdmin(session) && !isWelcomeTeam(session) && !isCoordinator(session)) {
 ```
+
+In `levels/[levelId]/teachers/route.ts` the check lives inside a shared `guard()` helper (`:22-55`) serving both `POST` (`:58`) and `DELETE` (`:72`) - one edit covers both methods.
+
+- [ ] **Step 4b: Widen the roster report handler**
+
+`apps/portal/src/app/api/welcome/roster/report/route.ts:19`. Note the different call shape - this handler builds the claims object inline rather than passing `session`:
+
+```ts
+  const claims = { role: session.role, extraRoles: session.extraRoles };
+  if (!isWelcomeTeam(claims) && !isCoordinator(claims)) {
+    return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+  }
+```
+
+Same three test cases as the admin handlers. This is the assertion that makes Task 11's "lands on `/welcome/roster` with rows rendered" mean something.
 
 - [ ] **Step 5: Run the tests**
 
@@ -803,15 +929,18 @@ Expected: PASS, with every pre-existing admin route test still green.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add apps/portal/src/app/api/admin
+git add apps/portal/src/app/api/admin apps/portal/src/app/api/welcome/roster
 git commit -m "feat(roles): widen the in-handler checks for coordinator
 
-canAccessRoute is only the first of three gates. All nine handlers behind the
+canAccessRoute is only the first of three gates. All ten handlers behind the
 routes the previous commit authorized re-check the role independently, so a
 coordinator still got a 403 - from the handler instead of the middleware.
 
-Six were isAdmin-only; three already allowed welcome-team. Each gains
-isCoordinator.
+Six admin handlers were isAdmin-only; three already allowed welcome-team.
+The tenth is api/welcome/roster/report, the coordinator's ONLY data source:
+without it /welcome/roster renders an empty screen, because
+fetchRosterReportClient throws on non-OK. Deriving the handler list from the
+route grants rather than from a directory is what surfaces that one.
 
 Every handler gets a test for a coordinator whose PRIMARY role is
 family-manager with coordinator in extraRoles. That is the realistic shape -
@@ -831,14 +960,15 @@ at all and is protected only by the /api/admin/ prefix, which stays admin-only."
 **The layout gate is not the per-page allow-list - middleware is.** `middleware.ts:197`'s matcher covers every non-static path and `:101` runs `canAccessRoute` on pages as well as APIs. So a coordinator can only ever *reach* `/admin/programs` and `/admin/levels`; the layout only needs to decide "is this person staff enough for the admin shell". Do not add per-page role logic to the layout, and do not `redirect()` from it - the repo has a standing rule against layout redirects keyed on a header pathname.
 
 **Files:**
-- Modify: `apps/portal/src/app/admin/layout.tsx:26-50` (`resolveAdminIdentity`)
-- Modify: `apps/portal/src/app/welcome/layout.tsx:34`, `:88-90`, `:103-105`
-- Modify: `apps/portal/src/features/admin/components/admin-sidebar.tsx:16-38` (`NAV_GROUPS`)
-- Modify: `apps/portal/src/features/admin/components/admin-mobile-nav.tsx`
-- Modify: `apps/portal/src/features/family/components/desktop-sidebar.tsx:13` (`role` union), `:66-74` (`WELCOME_NAV_ITEMS`)
-- Modify: `apps/portal/src/features/family/components/welcome-mobile-nav.tsx:37-49`
+- Modify: `apps/portal/src/app/admin/layout.tsx` - `resolveAdminIdentity` (`:26-50`), the `AdminIdentity` interface (`:20`), render sites `:71` (`AdminSidebarLive`) and `:98` (`AdminMobileNav`), and `SchoolYearScopeBar` at `:73`/`:95`
+- Modify: `apps/portal/src/app/welcome/layout.tsx` - gate `:34`, guards `:90` and `:105`, copy `:75`, **`:59`** (`AdminSidebarLive` second call site), **`:61`** (the hardcoded `role="welcome-team"`), `:94` (mobile nav render site)
+- Modify: `apps/portal/src/features/admin/components/admin-sidebar.tsx:16-40` (`NAV_GROUPS`), `:108-125` (the Dashboard link, outside the groups), `:8-14` (props)
+- Modify: `apps/portal/src/features/admin/components/admin-mobile-nav.tsx:11-16` (`TABS`), `:22-31` (`MORE_THEMED`), `:33-38` (`MORE_LEGACY`)
+- Modify: `apps/portal/src/features/family/components/desktop-sidebar.tsx:13` (`role` union), `:65-73` (`WELCOME_NAV_ITEMS`), `:101-102` (the `navItems` ternary)
+- Modify: `apps/portal/src/features/family/components/welcome-mobile-nav.tsx:15` (props), `:37-51` (five links)
 - Test: `apps/portal/src/features/family/components/__tests__/desktop-sidebar.test.tsx` (note: **`features/family/components/`**, NOT `components/chrome/`)
 - Test: `apps/portal/src/features/admin/components/__tests__/admin-sidebar.test.tsx`
+- Test: `apps/portal/src/features/admin/components/__tests__/admin-mobile-nav.test.tsx`
 
 **Interfaces:**
 - Consumes: `isCoordinator` (Task 1)
@@ -870,19 +1000,26 @@ describe('DesktopSidebar - coordinator', () => {
 });
 
 describe('AdminSidebar - coordinator', () => {
+  // displayEmail and hasFamily are REQUIRED props (admin-sidebar.tsx:8-14).
+  // Omitting them is a compile error, not the missing-prop error you might expect.
+  const base = { displayEmail: 'a@b.c', hasFamily: false };
+
   it('shows only Programs and Level management', () => {
-    render(<AdminSidebar canSeeAdminOnly={false} />);
+    render(<AdminSidebar {...base} canSeeAdminOnly={false} />);
     expect(screen.getByText('Programs')).toBeInTheDocument();
     expect(screen.getByText('Level management')).toBeInTheDocument();
     expect(screen.queryByText('Users & roles')).not.toBeInTheDocument();
     expect(screen.queryByText('School year rollover')).not.toBeInTheDocument();
     expect(screen.queryByText('Locations')).not.toBeInTheDocument();
     expect(screen.queryByText('Class calendar')).not.toBeInTheDocument();
+    // Rendered outside NAV_GROUPS, so the group filter alone misses it.
+    expect(screen.queryByText('Dashboard')).not.toBeInTheDocument();
   });
 
   it('shows everything for an admin', () => {
-    render(<AdminSidebar canSeeAdminOnly />);
+    render(<AdminSidebar {...base} canSeeAdminOnly />);
     expect(screen.getByText('Users & roles')).toBeInTheDocument();
+    expect(screen.getByText('Dashboard')).toBeInTheDocument();
   });
 });
 ```
@@ -897,18 +1034,24 @@ Expected: FAIL - `role="coordinator"` is not assignable, and `AdminSidebar` take
 
 - [ ] **Step 3: Widen the two layout gates**
 
-`app/admin/layout.tsx` - import `isCoordinator`, and at `:37`:
+`app/admin/layout.tsx` - import `isCoordinator`. Hoist a flag **above** the `if (sessionCookie)` block, because `raw` is block-scoped inside it (`:33-49`) and the function returns at `:50` - you cannot compute this in the return expression:
 
 ```ts
+  let allowed = false;
+  let adminOnly = false;
+  // ... inside the existing if (sessionCookie) block, replacing :37:
     // Staff-shell gate only. WHICH /admin/* pages a coordinator may reach is
     // decided by canAccessRoute in middleware (middleware.ts:101), which runs
     // on pages as well as APIs - do not duplicate that allow-list here.
-    if (raw && (isAdmin(raw as unknown as WithRole) || isCoordinator(raw as unknown as WithRole))) {
-      allowed = true;
+    if (raw) {
+      adminOnly = isAdmin(raw as unknown as WithRole);
+      allowed = adminOnly || isCoordinator(raw as unknown as WithRole);
     }
 ```
 
-Add `adminOnly` to the `AdminIdentity` interface (`:20`) and return `adminOnly: isAdmin(raw as unknown as WithRole)` so the nav can filter. Pass it into the sidebar and mobile nav at `:62` and `:85` as `canSeeAdminOnly`.
+Add `adminOnly: boolean` to the `AdminIdentity` interface (`:20`) and to the `:50` return. Destructure it at `:62` and `:85`, and pass it as `canSeeAdminOnly` to the **render sites**: `<AdminSidebarLive>` at `:71` and `<AdminMobileNav>` at `:98`.
+
+Also pass it to `SchoolYearScopeBar` at `:73` and `:95`, which today hardcodes `canManage` - that renders a link to `/admin/school-year`, denied to a coordinator. `welcome/layout.tsx:70` already does this correctly with `canManage={admin}`; copy that.
 
 Change the `AccessDenied` copy at `:56` to `Access denied. Admin or coordinator role required.`
 
@@ -920,15 +1063,58 @@ Change the `AccessDenied` copy at `:56` to `Access denied. Admin or coordinator 
     }
 ```
 
-Apply the same widening at `:90` and `:105` so the mobile nav and scope bar render for a coordinator. Update the `:75` copy to `Access denied. Welcome-team or coordinator role required.`
+Apply the same widening at the single-line guards `:90` and `:105` so the mobile nav and scope bar render for a coordinator. Update the `:75` copy to `Access denied. Welcome-team or coordinator role required.`
 
-- [ ] **Step 4: Filter the admin nav**
+**`:59` also renders `AdminSidebarLive`** - pass `canSeeAdminOnly` there too. That branch is `admin === true`, so the value is `true`.
 
-`admin-sidebar.tsx` - add `coordinator?: true` to the `NAV_GROUPS` item type, mark **only** `{ label: 'Programs', href: '/admin/programs', coordinator: true }` and `{ label: 'Level management', href: '/admin/levels', coordinator: true }`, then accept `canSeeAdminOnly: boolean` and filter each group's items with `canSeeAdminOnly || item.coordinator`. Drop any group left with zero visible items so no empty heading renders.
+- [ ] **Step 3b: Thread the coordinator role into the welcome sidebar - without this, Step 5 is dead code**
 
-Apply the identical change to `admin-mobile-nav.tsx`.
+`welcome/layout.tsx:61` hardcodes the prop:
 
-- [ ] **Step 5: Filter the welcome nav**
+```tsx
+<DesktopSidebarLive role="welcome-team" displayName="Welcome team" subtitle="Welcome team" showSignOut showTeacher={showTeacher} />
+```
+
+`desktop-sidebar.tsx:101-102` selects its nav list off that prop, so a coordinator would render the **full welcome-team sidebar** - Reports, Levels & rosters, Seva, Prasad, all four denied by Task 4 and each a 302 to `/sign-in`. The Step 1 unit test renders `<DesktopSidebar role="coordinator" />` directly and passes while production shows all five links.
+
+Compute the flag beside `admin` (already at `:39`) and pass it:
+
+```tsx
+const coordinatorOnly =
+  !isWelcomeTeam(raw as unknown as WithRole) && isCoordinator(raw as unknown as WithRole);
+// ...
+<DesktopSidebarLive
+  role={coordinatorOnly ? 'coordinator' : 'welcome-team'}
+  displayName={coordinatorOnly ? 'Coordinator' : 'Welcome team'}
+  subtitle={coordinatorOnly ? 'Coordinator' : 'Welcome team'}
+  showSignOut
+  showTeacher={showTeacher}
+/>
+```
+
+`displayName` is not cosmetic here: `desktop-sidebar.tsx:103-105` only special-cases `'welcome-team'` and `'teacher'` for the fallback, so a coordinator with no `displayName` renders "Family member".
+
+- [ ] **Step 4: Filter the admin sidebar**
+
+`admin-sidebar.tsx` - `canSeeAdminOnly` must be **optional with a `true` default** (`canSeeAdminOnly?: boolean`), not required. `AdminSidebarLive` is `Omit<AdminSidebarProps, 'active'>` (`:186`) and has two call sites - `admin/layout.tsx:71` and `welcome/layout.tsx:59` - so a required prop is a compile error in the second.
+
+Add `coordinator?: true` to the `NAV_GROUPS` item type (`:16-40`), mark **only** `{ label: 'Programs', href: '/admin/programs', coordinator: true }` and `{ label: 'Level management', href: '/admin/levels', coordinator: true }`, then filter each group's items with `canSeeAdminOnly || item.coordinator`. Drop any group left with zero visible items so no empty heading renders.
+
+**Also gate the Dashboard link at `:108-125`.** It renders `<Link href="/admin">` **outside** `NAV_GROUPS`, so the group filter never touches it, and `/admin` is denied to a coordinator by Task 4's own test. Same defect this plan cites as its reason for excluding `/welcome/visitors`.
+
+- [ ] **Step 4b: Filter the admin mobile nav - it has a different shape**
+
+`admin-mobile-nav.tsx` has **no `NAV_GROUPS`**. Three separate constants:
+
+- `:11-16` `TABS` - the always-visible bottom bar: Home `/admin`, Programs `/admin/programs`, Levels `/admin/levels`, Calendar `/admin/calendar`. **Two of the four are denied to a coordinator.**
+- `:22-31` `MORE_THEMED` - 8 entries, all denied to a coordinator.
+- `:33-38` `MORE_LEGACY` - 4 `/check-in/admin/*` entries, all denied.
+
+Add `coordinator?: true` to the `TABS` and `MORE_THEMED` item types. Mark **only** the `programs` and `levels` tabs. Filter all three lists by `canSeeAdminOnly || item.coordinator`. When the "More" sheet has zero visible entries, do not render the More trigger at all. Accept the same optional `canSeeAdminOnly?: boolean` and thread it from `admin/layout.tsx:98`.
+
+Add an `admin-mobile-nav` case to Step 1's tests - a coordinator must see exactly two tabs and no More trigger.
+
+- [ ] **Step 5: Filter the welcome navs**
 
 `desktop-sidebar.tsx:13`:
 
@@ -936,7 +1122,7 @@ Apply the identical change to `admin-mobile-nav.tsx`.
   role?: 'family' | 'welcome-team' | 'teacher' | 'coordinator';
 ```
 
-Add a dedicated list beside `WELCOME_NAV_ITEMS` (`:66-74`) rather than mirroring it - four of those seven links point at paths a coordinator is denied:
+Add a dedicated list beside `WELCOME_NAV_ITEMS` (`:65-73`) rather than mirroring it - four of those seven links point at paths a coordinator is denied:
 
 ```ts
 // Coordinator sees Roster only. Reports / Levels & rosters / Seva / Prasad are
@@ -946,9 +1132,9 @@ const COORDINATOR_NAV_ITEMS: [SidebarTab, string, keyof typeof SetuIcon, string,
 ];
 ```
 
-Select it wherever `WELCOME_NAV_ITEMS` is chosen today.
+Select it in the `navItems` ternary at `:101-102`, which currently reads `role === 'welcome-team' ? WELCOME_NAV_ITEMS : role === 'teacher' ? ...`.
 
-`welcome-mobile-nav.tsx:37-49` hardcodes five links and takes **no `role` prop**. Add `role?: 'welcome-team' | 'coordinator'` to its props, thread it from `welcome/layout.tsx:90`, and render only the Roster link when `role === 'coordinator'`.
+`welcome-mobile-nav.tsx` hardcodes **five** links at `:37-51` (Roster, Levels, Seva, Prasad, **Reports** - the Reports link opens at `:49` and closes at `:51`) and takes **no `role` prop**; its signature at `:15` is `({ isAdmin = false, hasFamily = false, showTeacher = false })`. Add `role?: 'welcome-team' | 'coordinator'`, thread it from the render site at `welcome/layout.tsx:94`, and render only the Roster link when `role === 'coordinator'`. Decide the conditional block at `:52-70` too - the Admin link at `:58` is denied to a coordinator.
 
 - [ ] **Step 6: Run the tests**
 
@@ -1122,7 +1308,16 @@ the same commit."
 - Consumes: `writeAuditLog` (Task 7)
 - Produces:
   - `addMemberSchema` (moved, unchanged)
-  - `firstMissingRequiredField(input, type): string | null`
+  - `firstMissingRequiredField(input, type: 'Adult' | 'Child'): string | null` - **a new wrapper, not a rename.** The existing picker at `api/setu/members/route.ts:103` is `requiredFieldError(missing: MemberRequiredField[])`, taking the output of `whatsMissingForMember` (imported at `route.ts:10` from `@cmt/shared-domain/setu/member-required-fields`). Move that picker as a private helper and export the wrapper:
+    ```ts
+    export function firstMissingRequiredField(
+      input: Parameters<typeof whatsMissingForMember>[0],
+      type: 'Adult' | 'Child',
+    ): string | null {
+      return pickFirst(whatsMissingForMember(input, type));
+    }
+    ```
+  - `firstMissingRequiredFieldForPatch(input, type): string | null` - **PATCH has its own matrix and it is deliberately different.** `api/setu/members/[mid]/route.ts:47` is `Record<MemberRequiredField, string | null>` (some fields not enforced on PATCH) against `:51`'s `Record<MemberRequiredField, string>` on POST, with its own `REQUIRED_FIELD_ORDER` at `:61` and picker `requiredFieldErrorPatch` at `:70`. Move both matrices, export both wrappers, and keep them distinct. Collapsing them into one would change PATCH semantics and trip Step 5's "existing tests unmodified" gate.
   - `addMember(args: { fid: string; input: AddMemberInput; actor: Actor | null }): Promise<Result>`
   - `updateMember(args: { fid: string; mid: string; patch: UpdateMemberInput; actor: Actor | null }): Promise<Result>`
   - `deleteMember(args: { fid: string; mid: string; actor: Actor | null }): Promise<Result>`
@@ -1235,28 +1430,19 @@ Per route, cover: 401 with no session; 403 for a plain family-manager; 200 for w
 
 The fourth case is the important one - welcome-team volunteers are usually parents, so a raw header comparison would 403 exactly the people this feature is for. The fifth is the privilege boundary: authority comes from the session, target comes from the route param, and they must never be mixed.
 
-Add to `can-access-route.test.ts`:
+**Do not touch `can-access-route.test.ts` in this task.** Its authorization cases live in Task 4 Step 6c, where the `coordinator` fixture and the widened `Role` type already exist. Adding them here would need both, which is what makes this task depend on Tasks 1 and 4.
 
-```ts
-it('allows welcome-team to PATCH a family', () => {
-  expect(canAccessRoute(welcomeTeam, '/api/welcome/families/CMT-X', 'PATCH')).toBe(true);
-});
-it('denies a coordinator (family edit is excluded from the role)', () => {
-  expect(canAccessRoute(coordinator, '/api/welcome/families/CMT-X', 'PATCH')).toBe(false);
-});
-it('denies a plain family-manager', () => {
-  expect(canAccessRoute({ role: 'family-manager', uid: 'u' }, '/api/welcome/families/CMT-X', 'PATCH')).toBe(false);
-});
-```
+Two repo-standard concerns the shown route body below omits, both of which its `/api/setu/members` sibling has:
+- route tests that hit `revalidateTag` need `vi.mock('next/cache')` in this harness, or they throw "static generation store missing" and look like a transaction flake
+- decide whether these routes need the `if (!flags.setuAuth)` 404 guard that `api/setu/members/route.ts:113-116` opens with; `/api/welcome/*` siblings do not have it, so the answer is probably no - record it either way
 
 - [ ] **Step 2: Run to verify they fail**
 
 ```bash
 pnpm --filter @cmt/portal exec vitest run src/app/api/welcome/families --project node
-pnpm --filter @cmt/shared-domain exec vitest run src/__tests__/can-access-route.test.ts
 ```
 
-Expected: route tests FAIL (modules missing); the three `canAccessRoute` cases already PASS, which is the point - `:246` covers them.
+Expected: FAIL - modules missing.
 
 - [ ] **Step 3: Implement the member POST route**
 
@@ -1269,7 +1455,11 @@ import { addMember, addMemberSchema, firstMissingRequiredField } from '@/feature
 
 export async function POST(req: Request, { params }: { params: Promise<{ fid: string }> }) {
   const session = readSessionFromHeaders(req);
-  if (!session) return NextResponse.json({ error: 'no-session' }, { status: 401 });
+  // `uid` is `string | null` on PortalSessionHeaders (headers.ts:4) because
+  // family routes authenticate via fid. Actor.uid is `string`, so the null
+  // check is load-bearing, not defensive. Same form as the sibling handler at
+  // api/admin/levels/[levelId]/teachers/route.ts:27-29.
+  if (!session || !session.uid) return NextResponse.json({ error: 'no-session' }, { status: 401 });
   if (!isWelcomeTeam(session)) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
 
   // Authority from the session, target from the route. Never mixed.
@@ -1312,13 +1502,13 @@ pnpm test
 - [ ] **Step 7: Commit**
 
 ```bash
-git add apps/portal/src/app/api/welcome/families packages/shared-domain/src/__tests__/can-access-route.test.ts
+git add apps/portal/src/app/api/welcome/families
 git commit -m "feat(welcome): staff routes to edit any family and its members
 
 Three new routes under /api/welcome/families/[fid]. No canAccessRoute change:
 :246 already covers the whole prefix with isWelcomeTeam, which inherits admin.
-Coordinator is denied, per spec 3.1 excluding family edit from that role -
-pinned by a test.
+Coordinator is denied, per spec 3.1 excluding family EDIT even though it now
+grants family READ - pinned by a test in the canAccessRoute commit.
 
 Authority comes from the session, target from the route param, never mixed.
 Every route has a test for a welcome-team volunteer whose primary role is
@@ -1427,19 +1617,31 @@ Green unit tests do not mean shipped. Everything above is invisible to mocks: th
 
 - [ ] **Step 1: Widen the persona union and add two personas**
 
+**Three** sites, not one. The union at `StandalonePersona.role` (`:89-95`, the role line is `:93`):
+
 ```ts
-interface StandalonePersona {
-  kind: 'standalone';
-  key: string;
-  email: string;
   role: 'admin' | 'welcome-team' | 'coordinator';
-  landing: string;
-}
+```
+
+and the second hardcoded union at `:200`:
+
+```ts
+async function grantStandaloneRole(email: string, role: 'admin' | 'welcome-team' | 'coordinator')
 ```
 
 Add a standalone `setu-test-coordinator` (landing `/welcome/roster`). Task 2 is a hard prerequisite - the existing standalone personas are family-less, and before Task 2 a family-less coordinator could not get a session at all.
 
-Add a **second** coordinator persona attached to a family, so the realistic `role='family-manager'` + `extraRoles=['coordinator']` shape is covered. A staff-only persona passes while production fails.
+Then the **second** persona, attached to a family, which covers the realistic `role='family-manager'` + `extraRoles=['coordinator']` shape. A staff-only persona passes while production fails. This one is **not** an array entry: `interface FamilyPersona` (`:74-88`) has no role field at all and nothing in the script writes `roleAssignments`. Add:
+
+```ts
+interface FamilyPersona {
+  // ...existing fields...
+  /** Sevak roles granted to this persona's manager mid, written to roleAssignments/{mid}. */
+  sevakRoles?: GrantableRole[];
+}
+```
+
+and a write of `roleAssignments/{mid}` with `{ mid, fid, roles: sevakRoles, grantedAt, grantedVia }` for any persona that declares it. That persona is the only end-to-end exercise of Task 5's `extraRoles` handling and of the `RESURRECTABLE_SEVAK_CAPS` path from Task 1 Step 5b.
 
 - [ ] **Step 2: Seed against UAT**
 
@@ -1467,8 +1669,10 @@ Sign in as the welcome-team persona, open a family with **at least two members**
 - [ ] **Step 5: Run against deployed UAT**
 
 ```bash
-pnpm test:e2e --project setu -- coordinator.spec.ts staff-family-edit.spec.ts
+PLAYWRIGHT_BASE_URL=https://cmt-setu.vercel.app pnpm --filter @cmt/portal exec playwright test --project=setu coordinator staff-family-edit
 ```
+
+The `PLAYWRIGHT_BASE_URL` prefix is the whole point of this task. Bare `pnpm test:e2e` auto-starts `next dev` on :3001 (`apps/portal/e2e/README.md:27`) and runs against **localhost**, which is the one thing this task exists to prevent - and local `next dev` has a known `/family` hang. Note `--project=setu` with the `=`, and bare positional filters with no `--` separator, matching `e2e/README.md:32`.
 
 Never run the whole setu Playwright suite - the OTP limiter cascade makes it unreliable.
 
@@ -1502,7 +1706,20 @@ were widened; only a real save proves all three."
 
 **Every review finding is addressed:** C1→Task 5, C2/C3→Task 6, C4→Task 4 Steps 3/5, C5→Task 1 atomic, C6→Task 2, C7→Task 10. M1→Task 3, M2→Task 1 Step 4 + test, M3→Task 4 Step 4 + denial test, M4/M8→Task 6 with corrected paths, M5→corrected test paths throughout, M6→excluded with reason, M7→Task 9 preamble, M9→Task 8, M10→Task 10's do-not-edit note, M11→Task 8 Step 4 recorded deviation, M12→Task 1 Step 5, M13→Task 11 Step 1, M14→Task 4 Step 1 + deviations. m1→Global Constraints + Task 9 Step 3, m2→line numbers re-verified against `b1395e0`, m3→Task 1 Step 4 states two, m4→Task 6 declares no Task 1 dependency for the sidebar prop, m5→Task 3 Step 1 note, m6→Task 7 `_test`, m7→Task 7 Step 1 mock.
 
-**Task independence.** Tasks 1→2→3 are sequential (shared types). Task 4 needs Task 1. Tasks 5 and 6 need Task 4 to be meaningful but are independently mergeable. **Track B (7→8→9→10) needs nothing from Track A** and can be built in parallel. Task 11 needs both.
+**Task independence.** Tasks 1→2→3 are sequential (shared types). Task 4 needs Task 1. Tasks 5 and 6 need Task 4 to be meaningful but are independently mergeable. **Tasks 7, 8 and 10 need nothing from Track A** and can be built in parallel with it; **Task 9 needs Tasks 1 and 4** for its fixtures and types. Task 11 needs both tracks.
+
+## Review history
+
+This plan has been through one adversarial review round (two independent reviewers, 2026-07-25). Reports: `docs/superpowers/reviews/2026-07-25-review-p1v2-authz.md` and `-exec.md`. Everything they found that I re-verified against the code is folded in above. The four that changed the most:
+
+1. **`RESURRECTABLE_SEVAK_CAPS` (Task 1 Step 5b)** - the plan was *creating* a privilege-retention hole. Task 2 makes a family-less coordinator session possible; the strip-list on member DELETE only covered admin and welcome-team, so a deleted member's coordinator claim would resurrect as a standalone session with every family's roster PII.
+2. **`api/welcome/roster/report` (Task 5 Step 4b)** - the coordinator's only data endpoint, missed because Task 5 scoped itself to a directory (`api/admin/`) instead of to Task 4's grant table.
+3. **`welcome/layout.tsx:61` (Task 6 Step 3b)** - `role="welcome-team"` is hardcoded, so `COORDINATOR_NAV_ITEMS` would have shipped as dead code while production showed four denied links. The unit test renders the component directly and would have passed.
+4. **`/welcome/family/*` (Task 4 Step 6)** - every roster row links there, so the one screen the role is granted was a dead end.
+
+Also corrected: a test this plan told you to write **already exists** (`roles-reference.test.ts:26-29`), three "append this import" snippets duplicated imports already in their files, `Actor.uid` did not typecheck against `session.uid`, PATCH has a deliberately different required-field matrix from POST, and the E2E command ran against localhost.
+
+**The lesson for whoever implements this:** every claim here was verified against the code at least once and several were still wrong. Re-check before you trust, especially anything asserting that something does *not* exist.
 
 ## Known risk
 
