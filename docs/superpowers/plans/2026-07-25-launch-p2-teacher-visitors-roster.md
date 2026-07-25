@@ -1,5 +1,24 @@
 # P2 - Teacher Attendance, Visitors & Roster - Implementation Plan
 
+> # ⛔ SUPERSEDED 2026-07-25 - DO NOT IMPLEMENT THIS FILE
+>
+> Replaced by **`2026-07-25-launch-p2-teacher-visitors-roster-v2.md`**.
+>
+> Reviewed as REQUEST CHANGES: 2 critical, 9 major, 6 minor
+> (`docs/superpowers/reviews/2026-07-25-review-p2.md`).
+>
+> **Both headline bug diagnoses in this file are correct** and are carried into v2
+> unchanged. The defects are in the fixes and the tests. The two that matter most:
+> Task 2 Step 5's backfill computes a Sunday **a full week early** (`new Date('2026-09-06')`
+> is UTC midnight, which Toronto reads as the previous evening) and writes it once,
+> irreversibly, to real data; and Task 2 never updates `visitors.ts`, the sole caller,
+> so the fix would have traded "midweek guests invisible on the Sunday view" for
+> "midweek guests invisible on the midweek view".
+>
+> Task 3 also puts three unfiltered `collectionGroup` scans on the eager teacher render
+> when the data is already in hand, and Tasks 4/5/8 specify tests that cannot compile
+> against the real components. Work from v2.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** rebuild the teacher attendance list to the supplied design, give welcome-team a visitors page, add a roster filter reset, and fix two live defects found during design.

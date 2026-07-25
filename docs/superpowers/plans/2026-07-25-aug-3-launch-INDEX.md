@@ -17,7 +17,7 @@
 | # | Plan | Covers | Depends on |
 |---|---|---|---|
 | **P1** | **`2026-07-25-launch-p1-roles-and-cross-family-edit-v2.md`** (v1 superseded, do not implement) | `coordinator` role across **all three** authorization gates, `audit_log`, staff cross-family edit endpoints, welcome edit UI, grade editor for welcome-team | - |
-| **P2** | `2026-07-25-launch-p2-teacher-visitors-roster.md` | Teacher attendance revamp, `/welcome/visitors`, visitor grade filter, roster Reset, guest date-key fix, roster-confirmation `fid` bug | - |
+| **P2** | **`2026-07-25-launch-p2-teacher-visitors-roster-v2.md`** (v1 superseded, do not implement) | roster-confirmation `fid` bug + guest date-key fix (**ship these two first, alone**), teacher attendance revamp, `/welcome/visitors` + nav, visitor grade filter, roster Reset, guest→teacher E2E | - |
 | **P3** | `2026-07-25-launch-p3-ses-templates.md` | `sendTemplatedEmail`, `Sender` interface, code-template fallback, migrate 4 templates | - |
 | **P4** | `2026-07-25-launch-p4-adult-study-class.md` | Adult program, `$0`/`$101` fee rule, multi-select, `AdultClassGate` | P1 (coordinator offerings grant) |
 | **P5** | `2026-07-25-launch-p5-monthly-pledge.md` | Pledge capture, AES-256-GCM at rest, confirm/cancel + purge, status card | P1 (`audit_log`), P3 (`sendTemplatedEmail`) |
@@ -76,6 +76,8 @@ If the week compresses, cut in this order. Nothing here blocks the cutover.
 3. **P3 template migration** (the 4 existing emails only) - they work today as code. Keep the `sendTemplatedEmail` infrastructure if P5 is shipping.
 4. **P1 Track A, the coordinator role** (v2 Tasks 1-6) - additive; no existing user loses anything. Cut it whole or not at all: a partially-shipped role that clears middleware but not the handler and layout gates looks granted and reaches nothing, which is worse than not shipping it.
 
-**Never cut:** P2's `roster-confirmation` fid bug and guest date-key fix (both are live defects), and the cutover itself.
+5. **P2's attendance UI rebuild** (v2 Tasks 3-5) - the largest single piece in the batch, on the screen every teacher uses every Sunday, and it requires migrating an existing test suite rather than extending it. The current screen works. P2 Tasks 1-2 and 6-9 deliver without it.
+
+**Never cut:** P2's `roster-confirmation` fid bug and guest date-key fix (v2 Tasks 1-2, both live defects), and the cutover itself.
 
 > **Corrected 2026-07-25.** This section previously listed P1's cross-family edit under "never cut" because "it fixes a live 403." **There is no live 403** - `welcome/family/[fid]/members/[mid]/page.tsx:73` gates the grade editor on `admin &&`, so welcome-team never sees it. Staff cross-family edit (v2 Track B) is a **new capability**, which makes it cuttable on the same footing as the rest, not a defect fix that must ship.

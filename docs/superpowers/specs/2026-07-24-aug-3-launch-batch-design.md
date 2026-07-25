@@ -452,7 +452,9 @@ Smallest item. `roster-browser.tsx` - a `Reset filters` control that restores th
 
 - `payment` → `'paid'`
 - `engagement` → `'enrolled'`
-- search, location, program → cleared
+- search, location, program, **`level`, `grade`** → cleared
+
+> **Corrected 2026-07-25.** `level` and `grade` were missing from this list. `roster-browser.tsx:246-251` declares **six** filter states - `location`, `program`, `level`, `grade`, `payment`, `engagement`. Resetting only four leaves the button visibly failing to reset while the `isDefault` check reads "default" with a level or grade still narrowing the list.
 
 **Assumption (stated, easily changed):** Reset does **not** touch `?year=`. The school year is a *scope* selected in a separate bar (`school-year-scope-bar.tsx:95-105`) and lives in the URL, not a filter chip. Resetting it would silently move the user to a different year's data.
 
