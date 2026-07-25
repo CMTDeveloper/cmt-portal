@@ -189,9 +189,9 @@ Authorization is one pure function, `canAccessRoute` (`packages/shared-domain/sr
 - `apps/portal/src/app/api/setu/members/route.ts:118-127` - `POST` requires `role === 'family-manager'` and writes into the caller's own `x-portal-fid`
 - `apps/portal/src/app/api/setu/members/[mid]/route.ts:95` - same `fid` binding on `PATCH`/`DELETE`
 - `/welcome/family/[fid]` is **purely read-only**, no edit affordance
-- Sole exception: `MemberGradeEditor` at `welcome/family/[fid]/members/[mid]/page.tsx:73-80` posts to `/api/admin/school-year/set-grade`, which is **admin-only**
+- Sole exception: `MemberGradeEditor` at `welcome/family/[fid]/members/[mid]/page.tsx:73-80` posts to `/api/admin/school-year/set-grade`, which is **admin-only** - and is itself gated on `admin &&` at `:73`, so welcome-team never sees it
 
-> **Existing bug (fix in this batch):** welcome-team users are shown `MemberGradeEditor` and get a **403** when they use it. This is exactly the "edit child grade" capability requirement 1 asks for.
+> **CORRECTED 2026-07-25.** An earlier draft of this section claimed welcome-team users are shown `MemberGradeEditor` and get a live **403** when they use it. **That bug does not exist.** Line 73 reads `{admin && profile.type === 'Child' && (`, so the control is never rendered for welcome-team - there is no 403 because there is nothing to click. What is true is the plain statement above it: **welcome-team has no way to edit a child's grade at all.** That is a missing capability, not a broken one. Requirement 1 asks for the capability; plan it as new work, not as a fix, and do not write a test asserting a 403 that never fires.
 
 ### 1.3 `/api/admin/welcome-team*` has no in-handler role check
 
@@ -275,10 +275,17 @@ Rejected alternatives:
    `{ actorUid, actorRole, action, fid, mid|null, before, after, at }`
    Written inside the same transaction as the mutation so an audit gap is impossible.
 5. **UI.** Add edit affordances to `/welcome/family/[fid]` and `/welcome/family/[fid]/members/[mid]`, reusing the existing family edit components where possible.
-6. **Fix the `MemberGradeEditor` 403** - repoint it at the new staff member-PATCH route instead of the admin-only `set-grade` endpoint.
+6. **Give welcome-team a grade editor** - widen the `admin &&` gate at `welcome/family/[fid]/members/[mid]/page.tsx:73` to admin-or-welcome-team, and point the component at the new staff member-PATCH route rather than the admin-only `set-grade` endpoint. (Corrected 2026-07-25: this is new capability, not a 403 fix. See the note under §1.2.)
 7. **Last-manager guard** must hold on the staff paths too (existing rule: every demotion path checks it).
 
 ### 2.3 Risks
+
+- **Route access needs THREE independent gates, not one.** Added 2026-07-25 after the coordinator-role plan was written against `canAccessRoute` alone - every one of its six API grants and both page grants would have been dead on arrival. A role reaches a route only if all three pass:
+  1. **`canAccessRoute`** (`packages/shared-domain/src/auth/can-access-route.ts`), called once from `middleware.ts:101`. It returns at the **first matching rule**, so a broad rule placed above a narrow one silently replaces it. Narrow grants must be inserted *above* the catch-alls.
+  2. **The page layout.** `app/admin/layout.tsx:56` renders "Access denied. Admin role required." for any non-admin; `app/welcome/layout.tsx:75` does the same for non-welcome-team. A page grant that is not also matched here renders an access-denied screen to a user the middleware just let through.
+  3. **The in-handler check.** `api/admin/{programs,offerings,levels}/route.ts` each re-check `isAdmin` internally. An API grant not matched here still 403s.
+
+  **Consequence:** any task that adds a role must widen all three layers together, and each layer needs its own test - a green `canAccessRoute` unit test proves nothing about whether the route actually answers. This is also why §2.2 step 6 is a UI gate change (`page.tsx:73`) *and* a route change, not just a route change.
 
 - **Privilege boundary.** These are the first endpoints where the acting user's `fid` and the target `fid` differ. Every handler must derive the target `fid` from the **route param** and the authority from the **session**, never mix them.
 - **Read roles through the helpers, never the raw header.** `middleware.ts:118` sets `x-portal-role` to the **primary** role only; extras go into a separate comma-separated `x-portal-extra-roles` header (`middleware.ts:123-129`). A welcome-team member who is also a parent has `role='family-member'`, `extraRoles=['welcome-team']` - so a bare `x-portal-role` string comparison **403s real staff**, who are usually also parents.

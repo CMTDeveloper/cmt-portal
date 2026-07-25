@@ -962,9 +962,9 @@ family editing."
 
 ---
 
-### Task 8: Staff family-level edit + fix the MemberGradeEditor 403
+### Task 8: Staff family-level edit + give welcome-team a grade editor
 
-Fixes a **live bug**: welcome-team users are shown `MemberGradeEditor` today and get a 403, because it posts to the admin-only `/api/admin/school-year/set-grade`.
+> **CORRECTED 2026-07-25.** This task previously opened "Fixes a **live bug**: welcome-team users are shown `MemberGradeEditor` today and get a 403." **There is no such bug.** `welcome/family/[fid]/members/[mid]/page.tsx:73` reads `{admin && profile.type === 'Child' && (`, so welcome-team never renders the control and never hits the endpoint. The true gap is that **welcome-team cannot edit a child's grade at all** - missing capability, not broken behaviour. Two consequences for the steps below: the UI gate at `:73` must be widened to admin-or-welcome-team (repointing the POST target alone changes nothing for them), and Step 5 must not be written as "confirm the 403 is gone."
 
 **Files:**
 - Create: `apps/portal/src/app/api/welcome/families/[fid]/route.ts`
