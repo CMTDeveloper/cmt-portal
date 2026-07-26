@@ -10,7 +10,7 @@
 
 **Supersedes:** `2026-07-25-launch-p4-adult-study-class.md`, reviewed as REQUEST CHANGES (3 critical, 8 major, 7 minor). Review: `docs/superpowers/reviews/2026-07-25-review-p4.md`.
 
-> **PROGRESS: Tasks 1, 2, 3, 4, 5 COMPLETE 2026-07-26** (`efc9b74`, `75e8423`, `40f78c4`, `6bf05ef`).
+> **PROGRESS: Tasks 1, 2, 3, 4, 5 COMPLETE; Task 6 predicate done (loader outstanding) 2026-07-26** (`efc9b74`, `75e8423`, `40f78c4`, `6bf05ef`).
 > Task 2's proof obligation held: the existing suite passes **UNMODIFIED** - only
 > `enroll-family.ts` changed plus ONE NEW test file, and the kiosk's exact-object
 > matcher (`auto-enroll-bala-vihar.test.ts:22`) is untouched and green. The plan's
@@ -261,6 +261,37 @@ persisted doc carries `membershipMode: 'manual'`. Same blind-spot shape as the
   errors best-effort - turning a narrow race into a silent total sync failure.
   Doing it properly needs per-doc writes with individual error handling, which
   is more than Task 4 warrants this close to launch.
+
+### Third audit (Task 6 pre-implementation, 2026-07-26) - `42ca6c8`
+
+**FIXED: the `>=` amount threshold in this plan's Task 6 Step 4 was WRONG.** It
+contradicts an explicit owner decision (2026-07-02, issue #23) already
+implemented at `enrollment-confirmation.ts:38`: *"any completed donation tied to
+its eid ... Amount is irrelevant (donations are suggestions, not fees)."* The
+threshold silently exempted every PARTIAL donor from the policy this feature
+enforces, and no fixture would have caught it. It also made the gate a function
+of later pricing edits, since `effectiveSuggestedAmount` is recomputed LIVE
+(`get-enrollments.ts:85-87`). **Both bugs die with the threshold.**
+**⚠️ Task 10 Step 3 uses the same `bvPaid` - it must use the threshold-free rule.**
+
+**CONFIRMED, with a stronger argument than the plan's:** condition 0 is not only
+a config risk. The `endDate` filter is evaluated PER REQUEST against `new Date()`
+(`get-open-offerings.ts`), so without condition 0 this fires **at midnight on the
+term's end date with no deploy and no config change** - a scheduled outage.
+
+**STILL OPEN - for the loader (Task 6 Step 6) and Task 7:**
+
+| Finding | Where it belongs |
+|---|---|
+| **The current-offering resolver owes a DELIBERATE tie-break.** Equal `startDate`s resolve to the LOCATED offering only because the dedupe Map is filled located-first - an accident of insertion order nothing states or tests. And **"earliest" is wrong when an online location-less class starts before the family's own centre's**: `[0]` is then the online one and the family is gated on, and enrolled into, the wrong offering. Resolve as *"earliest startDate, the family's location wins a tie"* and test the **equal-startDate** located-vs-location-less pair - two different dates pass under any ordering. | **Loader** (noted in `needs-selection.ts`'s `currentOffering` doc) |
+| **Condition 5's set RESOLUTION is untested.** `selectableAdults` takes `teacherAssignedMids` as input, so if the loader resolves it over children, or the wrong mids, every predicate test still passes. | **Loader**, its own test |
+| **A family with `location: null` takes the single-query branch** and skips the merge entirely. Zero coverage today. | **Loader** test |
+| **9 uncached Firestore ops per `/family/*` render**, not 7. Only `getLegacyPaymentStatus` is cached. On `/family` itself the gate and `load-dashboard` issue literal duplicate `getEnrollments`/`getDonations` queries. **The biggest lever is NOT the signature split** - it is adding `'use cache'` + `cacheTag(\`family-${fid}\`)` to `getEnrollments`/`getDonations`, whose invalidation is ALREADY wired (the mutation routes call `revalidateTag`). `getCurrentFamily` is React-`cache()`d, so re-calling it in the gate is free. | **Its own task** - do not fold into Task 6 |
+| `getLegacyPaymentStatus` **fails SOFT to `'unknown'`**, so an RTDB blip silently un-pays every legacy family and the gate stops firing. | accepted; note in Task 12 |
+
+**Task 8's closing test, restated:** all 28 predicate tests can be green while the
+gate is **never mounted**. Task 8 must assert `layout.tsx` renders
+`AdultClassGate` AFTER `DisclaimerGate`, and Task 12 must walk it in deployed UAT.
 
 ### STILL OPEN - carry into the tasks below
 
