@@ -710,13 +710,13 @@ the move (each authorization entry). All fail the suite.
 
 **v1 implemented a hard redirect gate only, and spec §4.3 asks for something else.** The consequences are concrete: `app/family/donate/success/page.tsx` is **inside** the `/family` layout, so once the BV donation reads paid, v1's gate redirects away from it - and P5's monthly-pledge card, which is added to that exact file, **would never render for a gated family**. Spec §4.3's own "the order matters, adult-class first, pledge second" becomes unimplementable.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 - [x] **Step 2: Run to verify they fail**
-- [ ] **Step 3: Render the ask on `/donate/success`, above the pledge ask** (top-level since Task 8 Step 4 - the old `/family/donate/success` no longer exists)
+- [x] **Step 3: Render the ask on `/donate/success`, above the pledge ask** (top-level since Task 8 Step 4 - the old `/family/donate/success` no longer exists)
 
 Adult-class selection **first** - quick, free, part of completing enrollment. The pledge ask **second and quieter**. Reversing them leads with a money ask straight after a $500 payment.
 
-- [ ] **Step 4: "Skip" means "not now", and the gate is what brings them back. No dashboard card.**
+- [x] **Step 4: "Skip" means "not now", and the gate is what brings them back. No dashboard card.**
 
 An earlier draft asked for both a skip path *and* a dashboard card *and* a persistent gate. **Those cannot coexist.** Nothing but an active enrollment carrying an adult clears spec §2.1 condition 4, and skipping writes nothing - so the moment a skipper navigates to `/family`, the gate fires and redirects them to `/adult-class`. The dashboard card could never render, and Skip would return the user to the same screen.
 
@@ -728,7 +728,45 @@ The owner's requirement was "keep popping them like profile completion logic", s
 
 If the product actually wants a real dismissal, that is a different feature: it needs persistence (the repo's precedent is `volunteeringSkillsNudgeDismissedAt`, `member.ts:30`) and a sixth condition in `needsAdultClassSelection`. Decide before building, not after.
 
-- [ ] **Step 5: Run and commit**
+- [x] **Step 5: Run and commit**
+
+---
+
+### Task 9 as SHIPPED (`11da5ec`)
+
+**DEVIATION, deliberate: there is no "Skip for now" control.** Step 4's own text
+establishes that skipping writes nothing and `AdultClassGate` is the persistence
+mechanism - so a skipper reaching `/family` trips the gate and lands on
+`/adult-class` regardless. A button labelled "Skip" that demonstrably cannot skip
+is worse than the honest **"Back to family"** link already on the page, which
+performs the identical action and satisfies Step 4's stated intent ("there is a
+way to not do it now; the gate brings them back"). Tested from both directions:
+there IS a way out that writes nothing, and there is NO control claiming to skip.
+
+**The ask is the REAL form, inline** (`AdultClassForm` reused), not a link to
+`/adult-class` - a family finishes in place. It is gated on the SAME
+`needsAdultClassSelection` predicate the gate uses, so the two surfaces cannot
+disagree about who owes a selection.
+
+**Ordering against `markDonationStatus` is load-bearing.** The ask loads AFTER
+the completion write, because condition 3 asks whether the Bala Vihar donation is
+paid and that write is what makes it so. Reversing the two lines means the family
+who JUST paid is the one family never asked. This is the same read/write race
+that was DANGEROUS in Task 8, working in our favour here.
+
+**FAIL-SOFT here, THROWING on `/adult-class`** - the split earning its keep in
+both directions. A receipt page must never lose the family's confirmation that
+their ~$500 arrived over an optional ask; on `/adult-class` the whole page is the
+ask, so swallowing a failure there would be a blank screen. Both are tested by
+mocking BOTH variants and asserting which one is called.
+
+**A `{/* P5 MONTHLY PLEDGE CARD GOES HERE */}` marker sits between the ask and the
+"Back to family" link**, naming the required order and why. P5 v3 Task 5 Step 4
+lands there.
+
+The page had **no test file at all** before this (it moved in `47663d1` and none
+came with it); it has ten now. Four mutations verified: ignoring the predicate,
+using the throwing loader, dropping the flag gate, and removing the way out.
 
 ---
 
