@@ -76,11 +76,18 @@ export function resolveAdultClassEnrollParams(
   // zero a $101 the family has already PAID: enroll childless at $101, pay, add a
   // child, enroll in Bala Vihar, re-POST the adult-class oid, and the amount they
   // owed becomes 0. Deviation 1 says retroactive exemption is NOT implemented.
-  // So once an override is stored, this never touches it again.
+  //
+  // The gate is the EXISTENCE of an active enrollment, NOT whether its override
+  // is non-null. A stored `null` is structurally AMBIGUOUS: this function always
+  // supplies one value or the other, so `null` means "explicitly priced at the
+  // snapshot" - which is exactly how the family got billed $101 - and is
+  // indistinguishable from "never decided". Gating on non-null therefore reads a
+  // billed-and-paid enrollment as safe to waive and performs the very rewrite it
+  // was meant to prevent. Once an enrollment exists, leave its price alone,
+  // whatever it is.
   const existing = input.enrollments.find((e) => e.status === 'active' && e.oid === oid);
-  const alreadyPriced = existing != null && existing.suggestedAmountOverride != null;
 
-  const waiver = alreadyPriced ? null : { suggestedAmountOverride: hasBalaVihar ? 0 : null };
+  const waiver = existing ? null : { suggestedAmountOverride: hasBalaVihar ? 0 : null };
 
   return {
     enrolledMids,

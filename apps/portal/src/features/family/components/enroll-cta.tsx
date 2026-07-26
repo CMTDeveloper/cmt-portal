@@ -65,6 +65,11 @@ export function EnrollCta({ oid, donationsEnabled, usesDonation = false, payment
           toast.error('This term is no longer available — please refresh and try again.');
         } else if (err === 'program-not-available') {
           toast.error('This program is not available right now — please check back soon.');
+        } else if (err === 'no-selectable-adults') {
+          // Deterministic and actionable - retrying changes nothing. Every adult
+          // in the household is assigned to teach (or there are none), so there
+          // is no one left who could attend the class.
+          toast.error('Everyone in your family is already teaching during this class.');
         } else if (err === 'no-eligible-members') {
           toast.error('Add a child to your family before enrolling in Bala Vihar.');
         } else if (err === 'family-not-found' || err === 'missing-fid') {

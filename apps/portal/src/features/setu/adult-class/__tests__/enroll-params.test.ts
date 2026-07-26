@@ -131,15 +131,21 @@ describe('resolveAdultClassEnrollParams - create-only (Step 3b)', () => {
     expect(r.waiver).toBeNull();
   });
 
-  // A null stored override is "never priced", so the waiver may still apply.
-  it('still applies the waiver when the existing enrollment has no override', () => {
+  // THE AMBIGUOUS NULL. This function always supplies one value or the other, so
+  // a stored `null` means "explicitly priced at the snapshot" - which is exactly
+  // how a no-Bala-Vihar family got billed $101 - and is indistinguishable from
+  // "never decided". Gating on non-null would read this as safe to waive and
+  // perform the very rewrite Step 3b exists to prevent: enroll childless at $101,
+  // PAY it, later join Bala Vihar, re-POST, and the amount owed becomes 0.
+  it('does NOT waive an existing enrollment whose override is a stored null', () => {
     const r = resolve({
       enrollments: [
-        enrollment({ oid: ASC_OID, programKey: 'adult-study-class' }),
+        enrollment({ oid: ASC_OID, programKey: 'adult-study-class' }), // override: null
         enrollment({ oid: BV_OID, programKey: 'bala-vihar' }),
       ],
     });
-    expect(r.waiver).toEqual({ suggestedAmountOverride: 0 });
+    expect(r.waiver).toBeNull();
+    expect(r.overrideInForce).toBeNull(); // still the snapshot price, unchanged
   });
 
   // A CANCELLED prior enrollment must not block a fresh one from being priced.
