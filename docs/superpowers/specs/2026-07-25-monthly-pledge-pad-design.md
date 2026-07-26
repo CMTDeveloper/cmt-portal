@@ -34,6 +34,54 @@ This lands **before any pledge code was written** (verified: zero pledge impleme
 
 ---
 
+---
+
+## 0. The Stripe integration contract (received 2026-07-26)
+
+Source: *Stripe Integration Doc* (Vaibhav). **Verified: it describes the SAME service
+the portal already uses** - our existing `/api/setu/donations/checkout` call matches
+`/checkout-link` field for field (`lineItems`, `customerEmail`, `client_reference_id`,
+`successUrl`, `cancelUrl`, `metadata` → `{ checkoutUrl, sessionId }`).
+
+### The PAD flow is FOUR steps, not two
+
+| # | Call | Notes |
+|---|---|---|
+| 1 | `POST /pad/setup-link` | `{customerEmail, customerName, client_reference_id, branding_settings, successUrl, cancelUrl, metadata}` → `{checkoutUrl, sessionId, customerId}`. **Takes no amount** - the mandate is not amount-bound. |
+| 2 | redirect | Stripe-hosted page collects bank details + mandate acceptance. |
+| 3 | `POST /checkout-session-result` | `{sessionId}` → `success` \| `failed` \| `pending`. |
+| 4 | `POST /pad/monthly-subscription` | `{setupSessionId, priceId, idempotencyKey?}` → `{subscriptionId, status, customerId, paymentMethodId}`. |
+| 5 | `POST /subscription-result` | `{subscriptionId}` → `success` \| `failed` \| `pending`. UI status only. |
+
+> ⚠️ **Step 4 is a SECOND server call, and it is where a pledge can be orphaned.**
+> If the family completes the mandate but the portal never reaches step 4 - browser
+> closed, network blip, deploy mid-flow - **the mandate exists at Stripe and no
+> subscription is ever created.** No money moves, and the family believes they have
+> set up monthly giving. A reconciliation job that retries step 4 for any pledge
+> stuck after step 3 is **required**, not optional. `idempotencyKey` exists to make
+> that retry safe (**confirm** - open item O12).
+
+### Decisions from Vaibhav, 2026-07-26
+
+| # | Answer | Consequence for this spec |
+|---|---|---|
+| Amount | **Fixed `$51/month` for now** ("let's put in the variable $51") | **Supersedes the family-chosen amount.** No minimum, no suggested tiers, no amount picker. `/pad/monthly-subscription` requires a fixed Stripe `priceId`, and one amount means one Price. §4.3's `minMonthlyAmount`/`suggestedAmounts` are void for v1. |
+| Polling | **Do not poll.** Call each result endpoint once, driven by the previous response | Sequence is: step 3 once → if `success`, step 4 → step 5 once for UI. No loops. |
+| Cancellation | **Handled manually by the temple/ashram** | The portal gets NO cancel endpoint. An admin "cancel" in the portal is **bookkeeping only** - it must not imply the debit stopped. Copy has to say so, or staff will believe clicking it stopped the money. |
+| Environment | **`/pad/*` is available in TEST ONLY for now** | 🔴 **PAD cannot go live on Aug 3 unless it is promoted to live mode.** See §9. |
+
+### ⚠️ STILL UNRESOLVED - how the portal learns a DELAYED outcome
+
+The doc states PAD outcomes are commonly delayed and says to *"render a processing
+UI and update state from webhook-backed data"*, with webhooks going to
+**`POST /webhooks/stripe` on Vaibhav's service** - not to the portal.
+
+"Do not poll" answers the *sequencing* question but not this one. After the redirect,
+step 3 will frequently return `pending`, and there is currently **no described channel
+from that service back to the portal**. Without one, a pledge that genuinely succeeded
+days later stays `started` in our database forever. **Open item O9, still the blocker.**
+
+
 ## 1. What this is - and what it is NOT
 
 A **monthly pledge** is a voluntary, recurring gift supporting Chinmaya Mission Toronto, collected by **pre-authorized debit (PAD)**. As of the 2026-07-26 revision it is **set up by the family on a Stripe-hosted page**; CMT's payment service handles the mandate and the portal never sees bank details.
@@ -43,7 +91,7 @@ A **monthly pledge** is a voluntary, recurring gift supporting Chinmaya Mission 
 | | Bala Vihar donation | Monthly pledge |
 |---|---|---|
 | Purpose | Enrollment for the school year | Ongoing support for the mission |
-| Amount | ~$500/year, offering-defined | Family-chosen, **min $50/month, configurable** |
+| Amount | ~$500/year, offering-defined | **Fixed `$51/month`** (Vaibhav 2026-07-26; one Stripe Price, so nothing to choose) |
 | Channel | Stripe checkout (hosted) | **Stripe PAD (hosted)** - same proxy, new mode |
 | Gates enrollment? | **Yes** | **No - gates nothing, ever** |
 | Status field | Existing donation status | **Its own separate status** |
@@ -70,10 +118,10 @@ Struck-through rows were superseded by the 2026-07-26 revision.
 | Pledge status | **Separate** from the BV donation status. Exists only if a family pledges. |
 | ~~Confirmation is a manual server-side API~~ | **SUPERSEDED** - see §6.2. Depends on what Vaibhav's endpoint can report (O9). |
 | ~~Purge: the confirm call deletes the bank details~~ | **Moot** - there is nothing to purge. |
-| Minimum amount | **$50/month**, configurable. |
+| ~~Minimum amount $50/month, configurable~~ | **SUPERSEDED 2026-07-26: a fixed `$51/month`.** One Stripe `priceId` = one amount. |
 | Placement | Donation success page (primary) + family dashboard card (secondary). |
 | Card once pledged | **Shows pledge status** - it does not disappear. |
-| Family cancel / change | **Read-only for v1.** Families contact the temple. |
+| Family cancel / change | **Read-only for v1.** Families contact the temple - and per Vaibhav 2026-07-26 the temple cancels **manually in Stripe**. The portal has no cancel endpoint at all. |
 | Family email on activation | **Yes**, via an **AWS-SES-managed template**. See §7 - the mechanism is already built. |
 
 ---
@@ -127,11 +175,20 @@ No encrypted collection, no `PLEDGE_ENCRYPTION_KEY`, no crypto module, no key ro
 ```ts
 {
   enabled: boolean,               // kill switch
-  minMonthlyAmount: 50,
-  suggestedAmounts: [50, 100, 200],
   // copy fields for the ask card
 }
 ```
+
+> **`minMonthlyAmount` and `suggestedAmounts` are VOID for v1** (Vaibhav 2026-07-26:
+> fixed **$51/month**). `/pad/monthly-subscription` takes a fixed Stripe `priceId`, so
+> one amount means one Price and there is nothing for the family to choose.
+>
+> **The amount and the priceId must live TOGETHER, in env, not split across env and
+> admin config.** They are environment-specific (test vs live Prices) and, more
+> importantly, they must never drift: an admin editing the displayed amount to $75
+> while the Price still charges $51 would make the portal lie about a recurring debit.
+> Proposed: `STRIPE_PLEDGE_PRICE_ID` + `PLEDGE_MONTHLY_AMOUNT_CAD`, changed together,
+> with the amount rendered from the same source the charge uses.
 
 Same shape as `app_config/{disclaimers,locations,school_year}`, so it stays admin-editable in the portal with no external CMS (repo rule).
 
@@ -158,7 +215,7 @@ Same shape as `app_config/{disclaimers,locations,school_year}`, so it stays admi
 | Pledge state | Card |
 |---|---|
 | none | The ask: "Support the mission monthly, from $50/month" |
-| `started` | Wording depends on O9. If we cannot verify, it must NOT claim success - something like "If you completed the setup, your monthly gift will begin shortly." |
+| `started` | **PAD settles slowly by design** - the integration doc says to render a processing UI. This must NOT claim success: *"We're setting up your monthly gift. This can take a few days to confirm."* |
 | `active` | "You're giving $X monthly since [date]. Thank you." |
 | `cancelled` | Back to the ask |
 
@@ -196,11 +253,13 @@ Three options, in descending order of preference:
 
 **Whichever is chosen, the client may never write `active` directly.** That rule survives from the original design and is the one part of the old §8.1 that still fully applies.
 
-### 6.3 Cancel
+### 6.3 Cancel - BOOKKEEPING ONLY
 
-`POST /api/admin/pledges/[pid]/cancel` - admin only; sets `status: 'cancelled'`, writes an `audit_log` row. Covers withdrawal, rejection, and abandonment.
+`POST /api/admin/pledges/[pid]/cancel` - admin only; sets `status: 'cancelled'`, writes an `audit_log` row.
 
-> **Stopping the actual debit happens at Stripe, not here.** Cancelling in the portal must not imply the money stopped. Whether the portal can request cancellation through Vaibhav's service, or whether staff must do it in Stripe directly, is part of O9.
+> 🔴 **RESOLVED 2026-07-26 and it constrains the UI: cancellation is handled MANUALLY by the temple/ashram in Stripe.** There is no cancel endpoint on the payment service and the portal cannot stop a debit.
+>
+> So this route records a decision; it does **not** stop the money. The admin screen must say so in as many words - something like *"This only updates the record. Cancel the actual debit in Stripe."* Left implicit, staff will click it, believe the debit stopped, and the family keeps being charged.
 
 ### 6.4 ~~Backstop purge sweep~~ - DELETED 2026-07-26
 
@@ -259,8 +318,15 @@ A pledge **gates nothing**, so it is fully decoupled from the cutover's critical
 
 **The revision changed why it is last.** It was cut candidate #1 because of crypto plus the unowned accounting hand-off. Both are gone, and the build is now small. But it has acquired a **hard external dependency**: Vaibhav's Stripe PAD endpoint and its integration details, which do not exist yet.
 
+> 🔴 **PAD IS TEST-MODE ONLY as of 2026-07-26** (Vaibhav: *"all of this available to test in TEST only for now"*). Unless it is promoted to live before Aug 3, **this feature cannot take a real mandate on launch day.** Two honest options, and the choice is the owner's:
+> 1. **Ship it dark** - build it, verify against test, leave `NEXT_PUBLIC_FEATURE_SETU_PLEDGE` off, flip when live mode exists. Costs nothing at launch.
+> 2. **Ship the interim** - the "email them the instructions" path from Vaibhav's 8:02 message (~1 day), and replace it with PAD later.
+>
+> **Doing neither, and shipping the Stripe path against a test key, would take real families through a flow that charges nobody.**
+
 Depends on:
-- **Vaibhav's Stripe service supporting monthly PAD**, and its contract (O9) - *blocking*
+- **Vaibhav's Stripe service supporting monthly PAD IN LIVE MODE** - *blocking for launch, not for build*
+- **The delayed-outcome channel (O9)** - *blocking*
 - `audit_log` (shipped)
 - `app_config` pattern (exists)
 - P3's `sendSesTemplatedEmail` (shipped)
@@ -290,10 +356,13 @@ Does **not** depend on: file upload, the donation-status model, or the Adult Stu
 | # | Item | Owner |
 |---|---|---|
 | ~~O1~~ | RESOLVED - the "$500 donation" is the Bala Vihar donation; the pledge is separate (§1.1). | done |
-| **O9** ⭐ | **THE BLOCKER. How does the portal learn a PAD mandate was actually established?** Options A/B/C in §6.2; **A is recommended and he is editing those endpoints now.** Also needed: the request payload for a PAD-mode checkout, what comes back, whether cancellation can be requested through the service, and test-mode credentials. | **Vaibhav** |
+| **O9** ⭐ | **STILL THE BLOCKER, narrowed.** The payload, the result endpoints and cancellation are all answered. What is NOT: **how the portal learns a DELAYED outcome.** PAD settles slowly, step 3 will usually return `pending`, and the authoritative webhooks land on Vaibhav's service. Needs either (a) his service calling a portal webhook, or (b) the portal registering its own Stripe webhook, or (c) an explicit accepted limit that a pledge can sit `started` until someone reconciles by hand. | **Vaibhav** |
+| **O12** | Is `POST /pad/monthly-subscription` safe to RETRY later with the same `setupSessionId` (via `idempotencyKey`)? The orphan-mandate case in §0 makes a reconciliation job mandatory, and it depends on this being idempotent. | **Vaibhav** |
+| **O13** | The actual **`priceId` for $51** (test now, live later), and the service **BASE URL** - today `STRIPE_CHECKOUT_URL` points at one endpoint, but the contract needs `{BASE}/pad/setup-link`, `/checkout-session-result`, `/pad/monthly-subscription`, `/subscription-result`. Also: same `x-api-key` for test? | **Vaibhav** |
+| **O14** | **When does `/pad/*` go live?** Decides ship-dark vs the interim email path (§9). | **Vaibhav / CMT Developer** |
 | **O10** | Family-facing **name** for this feature. "Pledge" already means the Chinmaya Mission Pledge in the disclaimers - two unrelated things under one word. | CMT Developer |
 | **O2** | Who may invoke cancel - admin only (assumed), or admin + coordinator? | CMT Developer |
 | **O5** | Vaibhav creates the activation template **in AWS SES** (`ca-central-1`) and shares the **template name** + exact **variable names**. | Vaibhav |
 | **O8** | Confirm UAT and production share one AWS account/region for SES templates, and create `SES_CONFIGURATION_SET` with a RENDERING_FAILURE destination. | CMT Developer |
-| **O11** | Is "email them the instructions" (Vaibhav, 8:02 AM) the **interim** path if Stripe PAD is not ready by Aug 3, or fully superseded by the 10:26 decision? Sizing differs sharply. | Vaibhav |
+| **O11** | ~~Is "email them the instructions" the interim path?~~ **NOW LIVE AGAIN** because `/pad/*` is test-only (§9). Decide: ship dark, or build the interim. | CMT Developer |
 | ~~O3~~ ~~O4~~ ~~O6~~ ~~O7~~ | Purge window, encryption-key custody, accounting hand-off, bank-field validation - **all deleted** with the bank-detail collection. | closed 2026-07-26 |
