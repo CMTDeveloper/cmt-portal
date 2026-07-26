@@ -170,6 +170,16 @@ Emergency contact is now a single OPTIONAL **family-level** record instead of pe
 ## 2026-07-03 — `de017f6` — Attendance is Present/Absent only (Late retired)
 `POST /api/setu/teacher/attendance` (`marks`) and `POST /api/setu/teacher/guests` (`status`) now accept only `present` | `absent`. Sending `late` → 400 `bad-request`. Reads are unchanged (historical `late` events still returned). **Mobile:** drop `late` from the attendance marker UI and never send it; render any historical `late` in read views as needed.
 
+## `cdb72b6` · 2026-07-26 · NEW `POST /api/setu/adult-class` (ships dark)
+- **New `POST /api/setu/adult-class`** — the family names which non-teaching adult(s) attend the Adult Study Class. **Manager-only.** Body is **`{ mids: string[] }`**, `.strict()` (any extra key, including `fid`, is a **400** — `fid` is bound from the session), minimum 1 entry, and **duplicates are rejected** (400), not deduped.
+  - Responses: **`201`** on a new enrollment, **`200`** when reconciling an existing one, both `{ eid, enrolledMids, suggestedAmountOverride }`.
+  - Errors: **`403 manager-required`** · **`422 mid-not-selectable`** (any submitted mid that is not a currently-selectable adult — all-or-nothing, never a partial enroll) · **`409 no-adult-class-offering`** (no open offering, or nobody in the household is selectable) · **`422 offering-disabled|offering-expired|program-not-available`** · **`400 no-eligible-members`** · **`404 family-not-found|offering-not-found`**.
+  - **Selectable** = `type === 'Adult'` AND `inviteStatus !== 'pending'` AND not assigned as a teacher. A child, a pending invitee, a teaching parent, or another family's mid all 422.
+  - A family whose **Bala Vihar donation is paid** gets the adult-class donation waived (`suggestedAmountOverride: 0`). Paid is **threshold-free** — ANY completed donation tied to the BV `eid` counts, amount irrelevant (issue #23), plus legacy-paid and teacher-managed offerings.
+  - **Gated by `NEXT_PUBLIC_FEATURE_SETU_ADULT_CLASS`; returns `404 not-found` while OFF.** It is OFF at launch.
+  - **Mobile:** nothing to do yet — the flag is off. When it flips, add the endpoint + `{ mids }` request schema, and mirror the web gate: prompt a MANAGER with a paid BV enrollment and no current adult-class enrollment to pick from the selectable adults. `enrolledMids` and `membershipMode: 'manual'` are additive on the enrollment doc; **`suggestedAmountOverride` can now be `0`** (previously only `null` or positive), so treat it with `??`, never truthiness — a `0` means "waived", not "no override".
+
+
 ## `f960ee5` · 2026-07-03 — Disclaimers (Slice 2)
 
 **New — `GET /api/setu/disclaimers`** → `{ version:number, schoolYear:string, sections:{id,title,body}[], accepted:boolean }`. The signed-in family's disclaimer state. Any family role.
