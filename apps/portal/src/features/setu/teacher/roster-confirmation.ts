@@ -72,9 +72,14 @@ export async function deriveConfirmedFidsForLevel(
   if (needsRead.length > 0) {
     const donSnap = await db.collectionGroup('donations').get();
     for (const d of donSnap.docs) {
-      const data = d.data() as DonationDoc & { status?: unknown };
+      const data = d.data() as DonationDoc & { status?: unknown; fid?: unknown };
       if (data.status !== 'completed') continue;
-      const fid = d.ref.parent.parent?.id;
+      // `donations` is a TOP-LEVEL collection with an `fid` field
+      // (create-donation.ts:28), so d.ref.parent.parent is null for every real
+      // doc. Prefer the field; keep the parent-path fallback for any legacy
+      // subcollection doc. Same pattern as enrollment-report.ts:178,
+      // report-dataset.ts:111 and build-csv-rows.ts:78.
+      const fid = typeof data.fid === 'string' ? data.fid : d.ref.parent.parent?.id;
       if (!fid || !needsReadFids.has(fid)) continue;
       const arr = donationsByFid.get(fid) ?? [];
       arr.push(data as DonationDoc);
