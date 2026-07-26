@@ -288,3 +288,41 @@ export async function fetchLegacyFamilyForMigration(
   const rows = Object.values(roster).filter((r) => isFidMatch(r.fid, legacyFid));
   return parseLegacyRowsForMigration(rows, legacyFid);
 }
+
+/**
+ * Every legacy fid whose family is dormant, in one pass over /roster.
+ *
+ * Two callers need the same verdict and MUST agree: the bulk migration, which
+ * skips these families, and the roster's migration-completeness check, which
+ * must not then report them as missing. Deriving it in both places from this
+ * one function on this one source makes disagreement impossible.
+ *
+ * The alternative considered was persisting the skipped set during the
+ * migration run and having the reconciler subtract it. That was rejected: the
+ * persisted set would be stale or partial after any `--limit`/`--fid` run, and
+ * a reconciler that silently depends on a script having been run correctly is
+ * worse than one that recomputes. Recomputing is nearly free here - /roster is
+ * a single TTL-cached read that `listAllFamilies()` is making anyway.
+ *
+ * Fids are keyed with `String(fid)`, matching how `listAllFamilies()` groups
+ * them (family-lookup.ts:221), so the two sets are directly comparable.
+ */
+export async function listDormantLegacyFids(): Promise<Set<string>> {
+  const roster = (await readRtdb<Record<string, LegacyRosterRow>>('/roster')) ?? {};
+
+  const byFid = new Map<string, LegacyRosterRow[]>();
+  for (const row of Object.values(roster)) {
+    if (row.fid == null) continue;
+    const fid = String(row.fid);
+    if (!fid) continue;
+    const group = byFid.get(fid);
+    if (group) group.push(row);
+    else byFid.set(fid, [row]);
+  }
+
+  const dormant = new Set<string>();
+  for (const [fid, rows] of byFid) {
+    if (parseLegacyRowsForMigration(rows, fid)?.dormant) dormant.add(fid);
+  }
+  return dormant;
+}

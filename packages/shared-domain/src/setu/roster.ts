@@ -24,10 +24,17 @@ export const RosterPersonCsvRowSchema = z.object({
 export type RosterPersonCsvRow = z.infer<typeof RosterPersonCsvRowSchema>;
 
 export const MigrationStatusResponseSchema = z.object({
+  // Legacy families we EXPECT to be in Setu: the roster total minus the dormant
+  // families the bulk migration deliberately skips.
   legacyTotal: z.number().int().nonnegative(),
   migrated: z.number().int().nonnegative(),
   missing: z.number().int().nonnegative(),
   missingFids: z.array(z.string()), // capped sample of legacy fids absent from Setu
+  // Dormant families skipped on purpose (no centre and no level on any roster
+  // row) that have not since signed in. Reported separately so staff can tell a
+  // deliberate skip from a broken migration - without this they are
+  // indistinguishable, and the roster shows a permanent amber warning.
+  skippedDormant: z.number().int().nonnegative(),
   checkedAt: z.string(), // ISO timestamp
 });
 export type MigrationStatusResponse = z.infer<typeof MigrationStatusResponseSchema>;

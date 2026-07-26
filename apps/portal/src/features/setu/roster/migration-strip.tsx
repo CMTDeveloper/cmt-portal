@@ -76,6 +76,12 @@ export function MigrationStrip() {
           {status.missing > 0 && (
             <> · <span style={{ color: 'var(--warn)', fontWeight: 600 }}>{status.missing.toLocaleString()} not yet in portal</span></>
           )}
+          {/* Stated plainly and in the muted colour, NOT the warn colour: these
+              were skipped on purpose and need no action. Without this line the
+              legacy total silently shrinks by ~299 and looks like data loss. */}
+          {status.skippedDormant > 0 && (
+            <> · {status.skippedDormant.toLocaleString()} inactive families skipped on purpose (they join when they next sign in)</>
+          )}
         </span>
         {status.missing > 0 && (
           <button

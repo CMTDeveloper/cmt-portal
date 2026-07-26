@@ -8,10 +8,24 @@
  *
  * Usage:
  *   pnpm --filter @cmt/portal exec tsx scripts/migrate-legacy-families.ts \
- *     [--dry-run] [--limit N] [--fid X] [--csv-out path] [--allow-prod]
+ *     [--dry-run] [--limit N] [--fid X] [--csv-out path] [--allow-prod] \
+ *     [--include-dormant]
  *
  * Defaults: writes against UAT (PORTAL_FIREBASE_PROJECT_ID=chinmaya-setu-uat).
  * Refuses to write to prod unless --allow-prod is passed.
+ *
+ * DORMANT FAMILIES ARE SKIPPED BY DEFAULT (spec 1.9b) - a family with no centre
+ * and no level on any roster row. Measured on the 2026-06-10 snapshot: 299 of
+ * 867. They are not lost; lazyMigrateLegacyFamily still runs on their first
+ * sign-in, kiosk check-in, or teacher add. Pass --include-dormant to migrate
+ * them anyway (you almost certainly do not want this - it is the switch that
+ * puts ~190 stale-grade children back into teachers' class lists).
+ *
+ * IMPORTANT: refresh the RTDB snapshot immediately before a production run.
+ * readRtdb() serves from .rtdb-snapshot whenever RTDB_SNAPSHOT_DIR is set (it is,
+ * per CLAUDE.md) and never touches the network, so a stale snapshot would
+ * silently migrate stale data with no error:
+ *   pnpm --filter @cmt/portal snapshot:rtdb
  *
  * Examples:
  *   # dry-run, show plan for all families
@@ -26,6 +40,7 @@
 
 import { writeFileSync } from 'node:fs';
 import { listAllFamilies } from '@/features/check-in/shared/rtdb/family-lookup';
+import { listDormantLegacyFids } from '@/features/setu/registration/legacy-parser';
 import { lazyMigrateLegacyFamily } from '@/features/setu/registration/lazy-migrate';
 
 interface Args {
@@ -34,14 +49,18 @@ interface Args {
   fid: string | null;
   csvOut: string | null;
   allowProd: boolean;
+  includeDormant: boolean;
 }
 
 function parseArgs(argv: string[]): Args {
-  const args: Args = { dryRun: false, limit: null, fid: null, csvOut: null, allowProd: false };
+  const args: Args = {
+    dryRun: false, limit: null, fid: null, csvOut: null, allowProd: false, includeDormant: false,
+  };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--dry-run') args.dryRun = true;
     else if (a === '--allow-prod') args.allowProd = true;
+    else if (a === '--include-dormant') args.includeDormant = true;
     else if (a === '--limit') args.limit = Number(argv[++i]);
     else if (a === '--fid') args.fid = argv[++i] ?? null;
     else if (a === '--csv-out') args.csvOut = argv[++i] ?? null;
@@ -54,7 +73,7 @@ interface Row {
   legacyName: string;
   members: number;
   newFid: string | '';
-  status: 'migrated' | 'skipped' | 'error' | 'dry-run';
+  status: 'migrated' | 'skipped' | 'error' | 'dry-run' | 'dormant';
   error?: string;
 }
 
@@ -90,6 +109,34 @@ async function main() {
   console.log('Reading legacy roster…');
   let families = await listAllFamilies();
   console.log(`  → ${families.length} legacy families found`);
+
+  // Dormant families - no centre AND no level on any roster row - are skipped by
+  // default. Their children's grades are years stale, and migrating them would
+  // put ~190 of them into Brampton teachers' "Registered - not enrolled" lists
+  // on launch Sunday at levels they will never attend. Nothing is lost: they
+  // still enter Setu via lazyMigrateLegacyFamily the moment they sign in, check
+  // in at the kiosk, or are added by a teacher - at which point they are asked
+  // for their real centre and the parent re-confirms the grade.
+  const dormantFids = args.includeDormant ? new Set<string>() : await listDormantLegacyFids();
+  const dormantRows: Row[] = [];
+  if (!args.includeDormant) {
+    const before = families.length;
+    const skipped = families.filter((f) => dormantFids.has(String(f.fid)));
+    families = families.filter((f) => !dormantFids.has(String(f.fid)));
+    for (const f of skipped) {
+      dormantRows.push({
+        legacyFid: String(f.fid),
+        legacyName: f.name,
+        members: (f.students?.length ?? 0) + (f.contacts?.length ?? 0),
+        newFid: '',
+        status: 'dormant',
+      });
+    }
+    console.log(`  → ${skipped.length} dormant families skipped (no centre and no level on any row)`);
+    console.log(`  → ${families.length} to migrate (of ${before})`);
+  } else {
+    console.log(`  → --include-dormant: dormant families will NOT be skipped`);
+  }
 
   if (args.fid !== null) {
     families = families.filter((f) => String(f.fid) === args.fid);
@@ -143,17 +190,20 @@ async function main() {
 
   console.log(`\nSummary:`);
   if (args.dryRun) {
-    console.log(`  Dry-run: ${counts.dryRun} families would be migrated`);
+    console.log(`  Dry-run:   ${counts.dryRun} families would be migrated`);
   } else {
     console.log(`  Migrated:  ${counts.migrated}`);
     console.log(`  Skipped:   ${counts.skipped} (already migrated)`);
     console.log(`  Errors:    ${counts.error}`);
-    console.log(`  Total:     ${rows.length}`);
   }
+  console.log(`  Dormant:   ${dormantRows.length} (skipped on purpose - they migrate lazily on first sign-in)`);
+  console.log(`  Total:     ${rows.length + dormantRows.length} legacy families examined`);
 
   if (args.csvOut) {
     const header = 'legacyFid,legacyName,memberRows,newFid,status,error\n';
-    const body = rows.map(fmtRow).join('\n');
+    // Dormant skips go in the CSV too, so the skipped set is auditable rather
+    // than a number nobody can check.
+    const body = [...rows, ...dormantRows].map(fmtRow).join('\n');
     writeFileSync(args.csvOut, header + body + '\n', 'utf-8');
     console.log(`\nCSV report written to ${args.csvOut}`);
   }

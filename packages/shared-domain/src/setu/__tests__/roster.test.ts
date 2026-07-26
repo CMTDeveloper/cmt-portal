@@ -28,7 +28,18 @@ describe('roster schemas', () => {
 
   it('MigrationStatusResponseSchema parses', () => {
     expect(MigrationStatusResponseSchema.parse({
-      legacyTotal: 864, migrated: 800, missing: 64, missingFids: ['123'], checkedAt: '2026-06-09T00:00:00.000Z',
+      legacyTotal: 864, migrated: 800, missing: 64, missingFids: ['123'], skippedDormant: 0,
+      checkedAt: '2026-06-09T00:00:00.000Z',
     }).missing).toBe(64);
+  });
+
+  it('MigrationStatusResponseSchema requires skippedDormant', () => {
+    // Required, not optional-with-default: this is a RESPONSE schema, and a
+    // default would let a server that forgot to compute the count report a
+    // confident 0 - which reads as "no families were skipped" when the truth is
+    // "nobody looked".
+    expect(MigrationStatusResponseSchema.safeParse({
+      legacyTotal: 1, migrated: 1, missing: 0, missingFids: [], checkedAt: 'x',
+    }).success).toBe(false);
   });
 });

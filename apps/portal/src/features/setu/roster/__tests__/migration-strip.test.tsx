@@ -24,13 +24,29 @@ describe('MigrationStrip', () => {
 
   it('fetches on click and renders the counts', async () => {
     fetchMigrationStatusClient.mockResolvedValue({
-      legacyTotal: 867, migrated: 860, missing: 7, missingFids: ['1', '2', '3', '4', '5', '6', '7'], checkedAt: 'x',
+      legacyTotal: 867, migrated: 860, missing: 7, missingFids: ['1', '2', '3', '4', '5', '6', '7'], skippedDormant: 0, checkedAt: 'x',
     });
     render(<MigrationStrip />);
     await userEvent.click(screen.getByRole('button', { name: /check migration status/i }));
     expect(await screen.findByText(/860 of 867 legacy families migrated/i)).toBeTruthy();
     expect(screen.getByText(/7 not yet in portal/i)).toBeTruthy();
     expect(fetchMigrationStatusClient).toHaveBeenCalledTimes(1);
+  });
+
+  // The launch-day shape: everything expected is migrated, and the ~299 dormant
+  // families are absent on purpose. That must read as healthy (green dot, no
+  // warn text), or staff spend launch morning chasing a non-problem.
+  it('shows the dormant skips as deliberate, and stays green', async () => {
+    fetchMigrationStatusClient.mockResolvedValue({
+      legacyTotal: 568, migrated: 568, missing: 0, missingFids: [], skippedDormant: 299, checkedAt: 'x',
+    });
+    render(<MigrationStrip />);
+    await userEvent.click(screen.getByRole('button', { name: /check migration status/i }));
+
+    expect(await screen.findByText(/568 of 568 legacy families migrated/i)).toBeTruthy();
+    expect(screen.getByText(/299 inactive families skipped on purpose/i)).toBeTruthy();
+    expect(screen.queryByText(/not yet in portal/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: /show missing/i })).toBeNull();
   });
 
   it('shows a quiet error with retry when the check fails, and retries on click', async () => {
