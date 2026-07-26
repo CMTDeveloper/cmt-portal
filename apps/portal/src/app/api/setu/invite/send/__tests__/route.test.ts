@@ -21,6 +21,24 @@ vi.mock('@/features/setu/ids/public-id-allocator', () => ({
   allocateMemberPublicIds: vi.fn(async () => ['50999']),
 }));
 
+// Records the managed-email contract while still running the REAL
+// sendManagedEmail, so the existing sendEmail assertions below keep exercising
+// the in-code fallback. A plain mock would silence them; asserting only that
+// they still pass would prove nothing, since with no SES_TEMPLATE_* set the
+// fallback runs whether or not the migration happened.
+const managedEmailCalls = vi.hoisted(
+  () => [] as Array<{ name: string; to: string; data: Record<string, unknown> }>,
+);
+vi.mock('@/lib/aws/send-managed-email', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/aws/send-managed-email')>();
+  return {
+    sendManagedEmail: async (args: Parameters<typeof actual.sendManagedEmail>[0]) => {
+      managedEmailCalls.push({ name: args.name, to: args.to, data: args.data });
+      return actual.sendManagedEmail(args);
+    },
+  };
+});
+
 const mockSendEmail = vi.fn().mockResolvedValue(undefined);
 
 import { POST } from '../route';
@@ -138,6 +156,12 @@ function setupFirestoreMock(overrides: {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // A plain array, so clearAllMocks does not reach it.
+  managedEmailCalls.length = 0;
+  // Structural, not incidental on .env.local being absent: with a template name
+  // configured the real sendManagedEmail would take the SES path and the
+  // fallback assertions below would go quiet.
+  delete process.env.SES_TEMPLATE_SETU_INVITE;
   mockSendEmail.mockResolvedValue(undefined);
   setupFirestoreMock();
 });
@@ -222,6 +246,25 @@ describe('POST /api/setu/invite/send', () => {
     expect(body.email).toBeUndefined();
     expect(body.acceptUrl).toBeUndefined();
     expect(body.url).toBeUndefined();
+  });
+
+  it('hands sendManagedEmail the setu-invite name and its exact variable contract', async () => {
+    // The variable names cross the SES boundary as untyped JSON, so a rename
+    // here renders blanks in the template with no compile or runtime error.
+    // Deep equality is the only thing standing in for a type.
+    await POST(makeRequest(validBody, managerHeaders()));
+
+    expect(managedEmailCalls).toHaveLength(1);
+    expect(managedEmailCalls[0]).toEqual({
+      name: 'setu-invite',
+      to: 'invitee@example.com',
+      data: {
+        inviterName: 'Raj Sharma',
+        familyName: 'Sharma Family',
+        relation: 'Spouse',
+        acceptUrl: expect.stringContaining('/invite/'),
+      },
+    });
   });
 
   it('happy path: calls sendEmail with subject containing inviter name', async () => {

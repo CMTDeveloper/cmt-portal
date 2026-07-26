@@ -6,6 +6,7 @@ import { flags } from '@/lib/flags';
 import { portalFirestore, FieldValue, Timestamp } from '@cmt/firebase-shared/admin/firestore';
 import { portalEnv } from '@/lib/env';
 import { resolveSender } from '@/lib/aws/resolve-sender';
+import { sendManagedEmail } from '@/lib/aws/send-managed-email';
 import { setuInviteEmail } from '@/lib/aws/templates/setu-invite-email';
 import { allocateMemberPublicIds } from '@/features/setu/ids/public-id-allocator';
 import { nextMemberMid } from '@/features/setu/ids/member-mid';
@@ -172,9 +173,27 @@ export async function POST(req: Request) {
   const baseUrl = env.NEXT_PUBLIC_PORTAL_BASE_URL ?? '';
   const acceptUrl = `${baseUrl}/invite/${token}`;
 
-  await resolveSender().sendEmail({
+  // Guard for EMPTINESS, not nullness. Both are `let`s assigned unconditionally
+  // inside the transaction, so the `!` is a definite-assignment escape and a
+  // null check would catch nothing. The real degradation is an empty string,
+  // which renders as a blank in an SES template ("invited you to join the
+  // family"). Fall back to the same defaults the transaction itself uses.
+  const inviter = inviterName!.trim() || 'A family manager';
+  const family = familyName!.trim() || fid;
+
+  // Uncaught on purpose: this runs AFTER the transaction commits, so a send
+  // failure is a 500 with the invite row already written. That is the existing
+  // behaviour and the matrix preserves it - the invitee gets a resend rather
+  // than a silently dead invite.
+  await sendManagedEmail({
+    name: 'setu-invite',
     to: normalizedEmail,
-    ...setuInviteEmail({ inviterName: inviterName!, familyName: familyName!, relation, acceptUrl }),
+    data: { inviterName: inviter, familyName: family, relation, acceptUrl },
+    fallback: () =>
+      resolveSender().sendEmail({
+        to: normalizedEmail,
+        ...setuInviteEmail({ inviterName: inviter, familyName: family, relation, acceptUrl }),
+      }),
   });
 
   return NextResponse.json({ token }, { status: 201 });

@@ -4,6 +4,7 @@ import { flags } from '@/lib/flags';
 import { checkAndRecordOtpRateLimit, LOOKUP_RATE_LIMIT_MAX } from '@/features/check-in/shared';
 import { portalEnv } from '@/lib/env';
 import { resolveSender } from '@/lib/aws/resolve-sender';
+import { sendManagedEmail } from '@/lib/aws/send-managed-email';
 import { setuJoinRequestEmail } from '@/lib/aws/templates/setu-join-request-email';
 import { createJoinRequest } from '@/features/setu/join-request/create-request';
 
@@ -63,15 +64,20 @@ export async function POST(req: Request) {
       result.managers.flatMap((m) => {
         const tasks: Array<Promise<unknown>> = [];
         if (m.email) {
+          const managerEmail = m.email;
+          const emailData = {
+            requesterName: result.requesterName ?? result.requesterContact,
+            requesterContact: result.requesterContact,
+            familyName: result.familyName,
+            reviewUrl,
+          };
           tasks.push(
-            sender.sendEmail({
-              to: m.email,
-              ...setuJoinRequestEmail({
-                requesterName: result.requesterName ?? result.requesterContact,
-                requesterContact: result.requesterContact,
-                familyName: result.familyName,
-                reviewUrl,
-              }),
+            sendManagedEmail({
+              name: 'setu-join-request',
+              to: managerEmail,
+              data: emailData,
+              fallback: () =>
+                sender.sendEmail({ to: managerEmail, ...setuJoinRequestEmail(emailData) }),
             }),
           );
         }
