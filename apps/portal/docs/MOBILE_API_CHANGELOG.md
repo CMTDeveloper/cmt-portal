@@ -22,6 +22,13 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
+## 2026-07-25 - `d278185` - GET /api/setu/teacher/visitors - `?date=` now means "any day in that week" for PORTAL guests (behavioral; shape UNCHANGED)
+Bug fix: the portal's self-serve guest check-in stamped the **actual Toronto calendar day**, while every teacher surface defaults its `?date=` to the week's Sunday - so a guest who walked in midweek was **invisible to teachers**. Guest docs are now keyed additionally by `sessionDate` (the Sunday that starts their week) and the reader queries that.
+- **`GET /api/setu/teacher/visitors?levelId=&date=`** - request and response **shapes, error codes and required fields are UNCHANGED** (`{ view }`, `VisitorsView` with `doorVisitors: VisitorRow[]` + `confirmed`). Validation is still `/^\d{4}-\d{2}-\d{2}$/`.
+- **What changed is which guests come back.** For the **portal** guest source the `date` you pass is now normalized to the Sunday of its week, so: (a) passing a **midweek** date returns that week's guests instead of usually nothing, and (b) passing a **Sunday** now also returns people who walked in **midweek**. The **legacy door** source (`guest-families`) still keys on the exact calendar day and is unchanged. `view.date` still echoes the raw `date` you sent.
+- **Mobile action: NONE required.** No schema edit - this is a server-side behavior fix and an existing client keeps working. Worth knowing only if the mobile shows a date picker on a visitors screen: the returned set is now week-scoped for portal guests, so two different midweek dates in the same week return the SAME portal guests. Do not present that as a per-day list.
+- Note `guest_check_ins` documents gained a `sessionDate` field. It is internal to the guest store; the only endpoint that echoes whole guest docs is **`GET /api/check-in/admin/guests`**, which is web/kiosk-only and has no mobile mirror (see the 2026-07-20 entry). No `@cmt/shared-domain` schema changed; the new `sessionDateFor()` export is a pure helper with no wire representation.
+
 ## 2026-07-24 - POST /api/setu/register - `familyName` is now OPTIONAL (server derives it from the manager's last name)
 Per family feedback, the registration form no longer asks for a separate "Family name"; the family display name is derived server-side from the primary manager's last name.
 - **`POST /api/setu/register`** request body: **`familyName` changed from REQUIRED to OPTIONAL.** When omitted (or blank), the server sets the family display name to **`manager.lastName`**. When a non-empty `familyName` IS sent, that explicit value is kept unchanged. No response-shape or error-code change; every other field is unchanged.
