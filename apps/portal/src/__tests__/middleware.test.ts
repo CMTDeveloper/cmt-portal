@@ -186,3 +186,30 @@ describe('middleware — bearer auth', () => {
     expect(res.status).toBe(401);
   });
 });
+
+describe('middleware - authorization denial must not loop', () => {
+  // ERR_TOO_MANY_REDIRECTS, found by walking the coordinator role in UAT.
+  // A signed-in user hitting a page their role cannot access was sent to
+  // /sign-in?from=<that page>; the auth-entry branch then honoured `from` and
+  // redirected straight back. Latent for every role with a dashboard.
+  it('does NOT carry ?from= when a signed-in user is denied (unauthorized)', async () => {
+    (verifyPortalSessionCookie as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      uid: 'c1',
+      role: 'coordinator',
+    });
+    const res = await middleware(makeReq('http://localhost/admin/users', { cookie: 'good' }));
+    expect(res.status).toBe(307);
+    const loc = res.headers.get('location') ?? '';
+    expect(loc).toContain('/sign-in');
+    expect(loc).toContain('error=unauthorized');
+    expect(loc, 'from= sends them straight back into the same denial').not.toContain('from=');
+  });
+
+  it('DOES carry ?from= for a signed-out visitor (no-session), which is the legitimate case', async () => {
+    const res = await middleware(makeReq('http://localhost/welcome/roster', {}));
+    expect(res.status).toBe(307);
+    const loc = res.headers.get('location') ?? '';
+    expect(loc).toContain('from=');
+    expect(loc).toContain('error=session-expired');
+  });
+});

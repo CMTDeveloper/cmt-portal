@@ -36,6 +36,7 @@ import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestor
 import { portalAuth } from '@cmt/firebase-shared/admin/auth';
 import { sha256Hex } from '@/features/check-in/shared';
 import { normalizeContactForKey, NO_ALLERGIES } from '@cmt/shared-domain/setu';
+import type { GrantableRole } from '@cmt/shared-domain';
 import {
   resolveSuggestedAmount,
   memberEligibleForProgram,
@@ -83,6 +84,12 @@ interface FamilyPersona {
   children: ChildSpec[];
   enrollOid?: string; // BV offering to keep active (with pid for rosters)
   teacherLevels?: LevelPick;
+  /** Sevak roles granted to this persona's MANAGER mid, written to
+   *  roleAssignments/{mid}. This is the realistic staff shape - staff are
+   *  usually parents too - which lands the sevak role in extraRoles while the
+   *  family role keeps the primary slot. A standalone-only persona passes while
+   *  that path fails. */
+  sevakRoles?: GrantableRole[];
   landing: string;
 }
 
@@ -90,7 +97,7 @@ interface StandalonePersona {
   kind: 'standalone';
   key: string;
   email: string;
-  role: 'admin' | 'welcome-team';
+  role: 'admin' | 'welcome-team' | 'coordinator';
   landing: string;
 }
 
@@ -116,7 +123,12 @@ const PERSONAS: Persona[] = [
       { firstName: 'Test', lastName: 'Child Two', gender: 'Male', schoolGrade: 'Grade 4', birthMonthYear: '2016-04' },
     ],
     enrollOid: 'bv-brampton-2025-26',
-    landing: '/family',
+    // Coordinator granted mid-keyed, so this persona signs in as
+    // role='family-manager' with extraRoles=['coordinator'] - the shape a raw
+    // x-portal-role comparison would 403, and the one a standalone persona
+    // cannot exercise.
+    sevakRoles: ['coordinator'],
+    landing: '/family (+ coordinator: /welcome/roster, /admin/programs)',
   },
   {
     kind: 'family',
@@ -183,6 +195,13 @@ const PERSONAS: Persona[] = [
     role: 'admin',
     landing: '/admin',
   },
+  {
+    kind: 'standalone',
+    key: 'coordinator',
+    email: `setu-test-coordinator@${DOMAIN}`,
+    role: 'coordinator',
+    landing: '/welcome/roster',
+  },
 ];
 
 /** Month (1-12) from a 'YYYY-MM' birthMonthYear — feeds members.birthMonth (prasad). */
@@ -197,7 +216,7 @@ function monthOf(birthMonthYear: string): number | null {
  * inlined because that module imports 'server-only', which Next aliases at
  * build time but plain tsx cannot resolve.
  */
-async function grantStandaloneRole(email: string, role: 'admin' | 'welcome-team'): Promise<void> {
+async function grantStandaloneRole(email: string, role: 'admin' | 'welcome-team' | 'coordinator'): Promise<void> {
   const result = await findSetuFamilyByContact('email', email);
   if (result.source === 'setu') {
     throw new Error(`${email} unexpectedly maps to a Setu family — standalone grant aborted`);
@@ -643,6 +662,22 @@ async function main(): Promise<void> {
 
       if (p.enrollOid) {
         await ensureEnrollmentWithPid(db, fid, p.enrollOid, managerMid, p.key);
+      }
+
+      // Mid-keyed sevak grant. Idempotent: the doc is fully rewritten each run
+      // so a re-seed cannot accumulate stale roles.
+      if (p.sevakRoles && p.sevakRoles.length > 0) {
+        await db.collection('roleAssignments').doc(managerMid).set(
+          {
+            mid: managerMid,
+            fid,
+            roles: p.sevakRoles,
+            grantedAt: FieldValue.serverTimestamp(),
+            grantedVia: p.email,
+          },
+          { merge: true },
+        );
+        console.log(`  [${p.key}] roleAssignments/${managerMid} = ${p.sevakRoles.join(', ')}`);
       }
 
       // Proposed-prasad fixture (propose→confirm E2E): always restored to

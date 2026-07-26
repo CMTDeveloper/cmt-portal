@@ -194,7 +194,15 @@ function deny(req: NextRequest, reason: 'no-session' | 'unauthorized') {
     pathname.startsWith('/join-request/') || pathname.startsWith('/invite/');
   const loginPath = isSetuRoute ? '/sign-in' : '/login';
   const redirect = new URL(loginPath, req.nextUrl.origin);
-  redirect.searchParams.set('from', pathname);
+  // `from` ONLY on 'no-session'. On 'unauthorized' the visitor is already
+  // signed in, and the auth-entry branch above honours `?from=` and redirects
+  // straight back - so carrying it here is an infinite redirect loop:
+  //   /admin/users -> deny -> /sign-in?from=/admin/users -> /admin/users -> ...
+  // Chrome surfaces it as ERR_TOO_MANY_REDIRECTS. This bites every role that
+  // has a dashboard, not just new ones; it was latent for welcome-team on any
+  // admin-only page and only became reachable for coordinator once that role
+  // got a dashboardForRole entry.
+  if (reason === 'no-session') redirect.searchParams.set('from', pathname);
   redirect.searchParams.set('error', reason === 'no-session' ? 'session-expired' : 'unauthorized');
   return NextResponse.redirect(redirect);
 }
