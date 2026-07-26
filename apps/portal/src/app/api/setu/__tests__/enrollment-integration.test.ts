@@ -699,12 +699,36 @@ describe('PATCH /api/welcome/enrollments/:eid (override)', () => {
     expect(res.status).toBe(403);
   });
 
-  it('returns 400 on invalid body (positive number required, or null)', async () => {
+  it('returns 400 on invalid body (non-negative number required, or null)', async () => {
     const res = await welcomeOverridePATCH(
       makeRequest('PATCH', `/api/welcome/enrollments/${EID}`, { suggestedAmountOverride: -50 }, welcomeHeaders()),
       makeCtx('eid', EID),
     );
     expect(res.status).toBe(400);
+  });
+
+  // CONTRACT WIDENING (P4 Task 1): 0 used to 400. It is now a deliberate,
+  // meaningful value - the Adult Study Class exemption for a family that has
+  // already paid its Bala Vihar donation - so staff can set it too.
+  it('accepts an override of 0 and WRITES the zero (previously a 400)', async () => {
+    // Seeds its own ACTIVE enrollment: the 409 test above uses a persistent
+    // mockResolvedValue, so its cancelled doc leaks into every later test here.
+    mockCollectionGet.mockResolvedValue({
+      empty: false,
+      docs: [{ ref: { update: mockDocUpdate }, data: () => ({ status: 'active', fid: FID }) }],
+    });
+
+    const res = await welcomeOverridePATCH(
+      makeRequest('PATCH', `/api/welcome/enrollments/${EID}`, { suggestedAmountOverride: 0 }, welcomeHeaders()),
+      makeCtx('eid', EID),
+    );
+
+    expect(res.status).toBe(200);
+    // A 200 alone would also pass if Zod had coerced the 0 away, so assert the
+    // value actually reaching Firestore.
+    expect(mockDocUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ suggestedAmountOverride: 0 }),
+    );
   });
 
   it('returns 404 when feature flag off', async () => {

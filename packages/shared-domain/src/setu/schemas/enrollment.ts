@@ -23,7 +23,12 @@ export const EnrollmentDocSchema = z.object({
   enrolledByMid: z.string().nullable(),
   enrolledMids: z.array(z.string()),
   suggestedAmountSnapshot: z.number().int().nonnegative(),
-  suggestedAmountOverride: z.number().int().positive().nullable(),
+  // `0` is meaningful, not "unset": it is how the Adult Study Class exemption is
+  // persisted (a family that paid its Bala Vihar donation owes nothing, spec
+  // 4.2). `positive()` made that rule unrepresentable. `null` still means "no
+  // override, use the snapshot"; negatives stay rejected because an expected
+  // amount below zero would read as the org owing the family money.
+  suggestedAmountOverride: z.number().int().nonnegative().nullable(),
   status: z.enum(['active', 'cancelled']),
   cancelledAt: z.date().nullable(),
   cancelledReason: z.string().nullable(),
@@ -32,6 +37,16 @@ export const EnrollmentDocSchema = z.object({
   pid: z.string().optional(),
   // Per-mid grade/level snapshot for this enrollment's year. Keyed by mid.
   levelSnapshots: z.record(z.string(), LevelSnapshotSchema).optional(),
+  // How `enrolledMids` is maintained. 'auto' (the default when absent) lets the
+  // member-edit sync re-derive the list from program eligibility; 'manual'
+  // freezes an explicit family choice against that prune, so the adult the
+  // family picked for the Adult Study Class is not silently replaced the next
+  // time anyone edits a member.
+  //
+  // Bare .optional(), never .default(): doc schemas validate on READ, every
+  // pre-existing enrollment lacks the field, and a default here would also make
+  // partial writers erase it. Absence is interpreted as 'auto' by the consumer.
+  membershipMode: z.enum(['auto', 'manual']).optional(),
 });
 
 export type EnrollmentDoc = z.infer<typeof EnrollmentDocSchema>;
@@ -49,8 +64,12 @@ export const WelcomePostEnrollmentBodySchema = z.object({
 
 export type WelcomePostEnrollmentBody = z.infer<typeof WelcomePostEnrollmentBodySchema>;
 
+// CONTRACT WIDENING (2026-07-26): `0` was a 400 and is now accepted, so staff
+// can deliberately zero an override on PATCH /api/welcome/enrollments/[eid]/override
+// (previously only `null` — "remove the override" — or a positive amount).
+// Negatives are still rejected.
 export const OverrideEnrollmentBodySchema = z.object({
-  suggestedAmountOverride: z.number().int().positive().nullable(),
+  suggestedAmountOverride: z.number().int().nonnegative().nullable(),
 });
 
 export type OverrideEnrollmentBody = z.infer<typeof OverrideEnrollmentBodySchema>;
