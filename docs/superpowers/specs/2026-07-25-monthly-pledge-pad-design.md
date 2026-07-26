@@ -68,18 +68,31 @@ the portal already uses** - our existing `/api/setu/donations/checkout` call mat
 | Amount | **Fixed `$51/month` for now** ("let's put in the variable $51") | **Supersedes the family-chosen amount.** No minimum, no suggested tiers, no amount picker. `/pad/monthly-subscription` requires a fixed Stripe `priceId`, and one amount means one Price. §4.3's `minMonthlyAmount`/`suggestedAmounts` are void for v1. |
 | Polling | **Do not poll.** Call each result endpoint once, driven by the previous response | Sequence is: step 3 once → if `success`, step 4 → step 5 once for UI. No loops. |
 | Cancellation | **Handled manually by the temple/ashram** | The portal gets NO cancel endpoint. An admin "cancel" in the portal is **bookkeeping only** - it must not imply the debit stopped. Copy has to say so, or staff will believe clicking it stopped the money. |
-| Environment | **`/pad/*` is available in TEST ONLY for now** | 🔴 **PAD cannot go live on Aug 3 unless it is promoted to live mode.** See §9. |
+| Environment | **`/pad/*` is TEST ONLY for now** | **DECIDED: SHIP IT DARK.** Build it, verify against test, flag OFF at launch, flip when live mode exists. No interim email path. |
+| Retry | **`/pad/monthly-subscription` is safe to retry** with the same `setupSessionId` | Makes the orphan-mandate reconciliation viable. |
+| Delayed outcomes | **Poll on a schedule** ("after few hours or at specific time") | A Vercel Cron reconciler, not a push from his service. |
+| Base URL | **Derived, not asked** | The configured `STRIPE_CHECKOUT_URL` is `{BASE}/checkout-link`, so BASE is the Cloud Run host. Add an explicit `STRIPE_API_BASE_URL` rather than string-stripping a suffix at runtime; keep the existing var for the one-time flow. Same `x-api-key` throughout. |
 
-### ⚠️ STILL UNRESOLVED - how the portal learns a DELAYED outcome
+### RESOLVED 2026-07-26 - a SCHEDULED reconciliation, not a push
 
-The doc states PAD outcomes are commonly delayed and says to *"render a processing
-UI and update state from webhook-backed data"*, with webhooks going to
-**`POST /webhooks/stripe` on Vaibhav's service** - not to the portal.
+Vaibhav: *"for this we can poll after few hours or at specific time?"* - yes. So the
+delayed-outcome channel is a **cron**, not a webhook from his service.
 
-"Do not poll" answers the *sequencing* question but not this one. After the redirect,
-step 3 will frequently return `pending`, and there is currently **no described channel
-from that service back to the portal**. Without one, a pledge that genuinely succeeded
-days later stays `started` in our database forever. **Open item O9, still the blocker.**
+> **This does not contradict his earlier "do not poll".** They are different things:
+> no tight loop immediately after the redirect (that was about UX), but a scheduled
+> reconciliation hours later is fine - and it is the only mechanism available, since
+> the authoritative webhooks land on his service rather than the portal.
+
+**ONE cron does both jobs**, and the second is not optional:
+
+| Pledge state | Action |
+|---|---|
+| mandate confirmed, no subscription yet | **Retry step 4** (`/pad/monthly-subscription`) with the same `setupSessionId`. **Vaibhav confirmed 2026-07-26 this is safe to retry**, which is what makes the orphan-mandate case recoverable at all. |
+| subscription created, not yet active | Call step 5 (`/subscription-result`); on `success` → `active` + the activation email. |
+| stuck for an unreasonable time | Surface on a stale report for a human. |
+
+Vercel Cron is already the repo's pattern (daily cache-reset, weekly payment
+reminders, prasad reminders), so this needs no new infrastructure.
 
 
 ## 1. What this is - and what it is NOT
@@ -318,11 +331,14 @@ A pledge **gates nothing**, so it is fully decoupled from the cutover's critical
 
 **The revision changed why it is last.** It was cut candidate #1 because of crypto plus the unowned accounting hand-off. Both are gone, and the build is now small. But it has acquired a **hard external dependency**: Vaibhav's Stripe PAD endpoint and its integration details, which do not exist yet.
 
-> 🔴 **PAD IS TEST-MODE ONLY as of 2026-07-26** (Vaibhav: *"all of this available to test in TEST only for now"*). Unless it is promoted to live before Aug 3, **this feature cannot take a real mandate on launch day.** Two honest options, and the choice is the owner's:
-> 1. **Ship it dark** - build it, verify against test, leave `NEXT_PUBLIC_FEATURE_SETU_PLEDGE` off, flip when live mode exists. Costs nothing at launch.
-> 2. **Ship the interim** - the "email them the instructions" path from Vaibhav's 8:02 message (~1 day), and replace it with PAD later.
+> ✅ **DECIDED 2026-07-26: SHIP IT DARK.** `/pad/*` is TEST-mode only, so the feature is
+> built, verified against test, and shipped with `NEXT_PUBLIC_FEATURE_SETU_PLEDGE`
+> **OFF**. It is flipped on when live mode exists. No interim email path is built.
 >
-> **Doing neither, and shipping the Stripe path against a test key, would take real families through a flow that charges nobody.**
+> **Consequence to hold onto: the flag flip is NOT a no-op.** The first family through
+> after the flip is the first REAL mandate, and O13 - does that `priceId` actually mean
+> $51? - will not have been proven against live money until then. **Verify the live
+> Price in the Stripe dashboard BEFORE flipping, not after.**
 
 Depends on:
 - **Vaibhav's Stripe service supporting monthly PAD IN LIVE MODE** - *blocking for launch, not for build*
@@ -357,12 +373,12 @@ Does **not** depend on: file upload, the donation-status model, or the Adult Stu
 |---|---|---|
 | ~~O1~~ | RESOLVED - the "$500 donation" is the Bala Vihar donation; the pledge is separate (§1.1). | done |
 | **O9** ⭐ | **STILL THE BLOCKER, narrowed.** The payload, the result endpoints and cancellation are all answered. What is NOT: **how the portal learns a DELAYED outcome.** PAD settles slowly, step 3 will usually return `pending`, and the authoritative webhooks land on Vaibhav's service. Needs either (a) his service calling a portal webhook, or (b) the portal registering its own Stripe webhook, or (c) an explicit accepted limit that a pledge can sit `started` until someone reconciles by hand. | **Vaibhav** |
-| **O12** | Is `POST /pad/monthly-subscription` safe to RETRY later with the same `setupSessionId` (via `idempotencyKey`)? The orphan-mandate case in §0 makes a reconciliation job mandatory, and it depends on this being idempotent. | **Vaibhav** |
-| **O13** | The actual **`priceId` for $51** (test now, live later), and the service **BASE URL** - today `STRIPE_CHECKOUT_URL` points at one endpoint, but the contract needs `{BASE}/pad/setup-link`, `/checkout-session-result`, `/pad/monthly-subscription`, `/subscription-result`. Also: same `x-api-key` for test? | **Vaibhav** |
-| **O14** | **When does `/pad/*` go live?** Decides ship-dark vs the interim email path (§9). | **Vaibhav / CMT Developer** |
+| ~~O12~~ | ~~Is `/pad/monthly-subscription` safe to retry?~~ **RESOLVED: yes.** The reconciliation cron is viable. | done |
+| **O13** ⚠️ | **CONFIRM THE `priceId` ACTUALLY MAPS TO $51.** Vaibhav offered the doc's example id (`price_1TxTuwRNUSAfwnFqdXBP8Opi`) with *"I guess"*, and the doc nowhere states that example is $51. **A wrong `priceId` charges a different amount than the portal displays, every month, silently** - the portal cannot detect it, because the amount lives at Stripe, not here. Verify in the Stripe TEST dashboard during the E2E, and again when the LIVE Price is created. Highest-consequence unknown left. | **Vaibhav / verify at E2E** |
+| ~~O14~~ | ~~When does `/pad/*` go live?~~ **RESOLVED: ship dark**, flip when live exists. | done |
 | **O10** | Family-facing **name** for this feature. "Pledge" already means the Chinmaya Mission Pledge in the disclaimers - two unrelated things under one word. | CMT Developer |
 | **O2** | Who may invoke cancel - admin only (assumed), or admin + coordinator? | CMT Developer |
 | **O5** | Vaibhav creates the activation template **in AWS SES** (`ca-central-1`) and shares the **template name** + exact **variable names**. | Vaibhav |
 | **O8** | Confirm UAT and production share one AWS account/region for SES templates, and create `SES_CONFIGURATION_SET` with a RENDERING_FAILURE destination. | CMT Developer |
-| **O11** | ~~Is "email them the instructions" the interim path?~~ **NOW LIVE AGAIN** because `/pad/*` is test-only (§9). Decide: ship dark, or build the interim. | CMT Developer |
+| ~~O11~~ | ~~Interim email path?~~ **CLOSED: no.** Ship dark instead; nothing interim is being built. | done |
 | ~~O3~~ ~~O4~~ ~~O6~~ ~~O7~~ | Purge window, encryption-key custody, accounting hand-off, bank-field validation - **all deleted** with the bank-detail collection. | closed 2026-07-26 |
