@@ -22,6 +22,11 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
+## 2026-07-26 - `47663d1` - donation success page moved to top-level `/donate/success` (**mobile action required IF you match on the path**)
+The Stripe Checkout `successUrl` the portal generates changed from **`{origin}/family/donate/success?did=...`** to **`{origin}/donate/success?did=...`**. No request or response SHAPE changed - `POST /api/setu/donations/checkout` still returns the same body, and the `did` query param is unchanged.
+- **Why:** the page had to leave the `/family` layout. That layout now carries a persistent Adult Study Class gate, which would otherwise redirect a family off their own receipt the moment their Bala Vihar donation read paid.
+- **Mobile:** if the app detects "payment finished" by matching the redirect URL against `/family/donate/success` (in a webview navigation delegate, deep-link handler, or `returnUrl` comparison), **update the match to `/donate/success`** - a stale match leaves the user stranded on a page the app does not recognise. If the app instead reads the checkout response or polls the donation status, nothing to do.
+
 ## 2026-07-26 - `cdb72b6` - NEW POST /api/setu/adult-class - Adult Study Class selection (SHIPS DARK; no mobile action yet)
 - **New `POST /api/setu/adult-class`** — the family names which non-teaching adult(s) attend the Adult Study Class. **Manager-only.** Body is **`{ mids: string[] }`**, `.strict()` (any extra key, including `fid`, is a **400** — `fid` is bound from the session), minimum 1 entry, and **duplicates are rejected** (400), not deduped.
   - Responses: **`201`** on a new enrollment, **`200`** when reconciling an existing one, both `{ eid, enrolledMids, suggestedAmountOverride }`.

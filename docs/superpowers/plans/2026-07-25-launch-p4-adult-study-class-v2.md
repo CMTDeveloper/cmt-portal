@@ -609,12 +609,12 @@ still right - it denies the two staff roles, which carry no `fid`.
 
 ## Task 8: `AdultClassGate`, flag-gated and ordered
 
-- [ ] **Step 1: Add `flags.setuAdultClass`, default off**
+- [x] **Step 1: Add `flags.setuAdultClass`, default off**
 
 In `lib/flags.ts` and `turbo.json`'s `env` array. **v1 added the gate unconditionally**, which violates discipline 5 and removes the kill switch three days before launch - on a gate that redirects. `DisclaimerGate` is the precedent: `layout.tsx:68` opens with `if (!flags.setuDisclaimers) return null;`.
 
-- [ ] **Step 2: Write the failing tests** - fires for a gated family; returns `null` when the flag is off; returns `null` while either earlier gate would fire.
-- [ ] **Step 3: Implement, deferring to the earlier gates explicitly**
+- [x] **Step 2: Write the failing tests** - fires for a gated family; returns `null` when the flag is off; returns `null` while either earlier gate would fire.
+- [x] **Step 3: Implement, deferring to the earlier gates explicitly**
 
 v1 said "guarding on both earlier gates exactly as `DisclaimerGate` guards on profile completeness (`layout.tsx:76`)". That is not the same shape. `:76` is a pure in-memory check (`incompleteMembers` + `isFamilyAddressComplete`). A **fourth** gate must additionally defer to the **disclaimer** gate, which needs `getDisclaimerStateForFamily(portalFirestore(), data.family)` (`:78`) - an extra Firestore read on every `/family/*` render - and must respect the `flags.setuDisclaimers` short-circuit: when disclaimers are OFF, `DisclaimerGate` never fires and the deferral must not block.
 
@@ -626,7 +626,7 @@ So a family with a **pending co-manager invite** whose invitee record is incompl
 
 **Unify on the narrow scope** - it is the correct one - and record that this also closes an existing hole where a pending co-manager suppressed the disclaimer gate. Those families will start being redirected to `/acknowledgements` for the first time. Add a test for it. Do not let it land as an unexplained side effect nine days before launch.
 
-- [ ] **Step 4: Do NOT exempt a path from inside the layout. Move the success page out instead.**
+- [x] **Step 4: Do NOT exempt a path from inside the layout. Move the success page out instead.**
 
 An earlier draft of this step said "exempt `/family/donate/success`". **That is the pattern this repo has already had an outage from, and it contradicts R1 in this plan's own Global Constraints.** The gates are server components rendered from `app/family/layout.tsx`; a component has no pathname, so the only way to give it one is a header - and `layout.tsx:23-32` records what happened last time:
 
@@ -639,7 +639,48 @@ There is also no such header to read: `middleware.ts:106-135` sets `x-portal-{ro
 This is what makes the owner's requirement work: **the gate stays persistent, and the Bala Vihar donation flow is never blocked by it.** P5's pledge card moves with the page; update P5 v2 Task 9's path reference in the same commit.
 
 **Files:** move `app/family/donate/success/` → `app/donate/success/`; add `app/donate/success/error.tsx`; add the `canAccessRoute` clause and the `isSetuRoute` entry for `/donate`; update every link to it (`grep -rn "donate/success"`).
-- [ ] **Step 5: Run and commit**
+- [x] **Step 5: Run and commit**
+
+---
+
+### Task 8 as SHIPPED (`2ed04dc` gate, `47663d1` the move)
+
+**The plan said "extract a shared `earlierGatesPending(data)`". It needed to be
+TWO functions, not one.** `profileGatePending(data)` is the pure in-memory
+condition list that all THREE gates call; `earlierGatesPending(data)` composes it
+with the disclaimer read and the `setuDisclaimers` short-circuit, and only the
+third gate needs that. One function could not serve both, because
+`DisclaimerGate` must not defer to itself.
+
+**The disclaimer read is now React `cache()`d on the family object**
+(`getDisclaimerStateCached`). `getCurrentFamily` already memoizes that object, so
+both gates get the same identity and therefore ONE Firestore read - adding a
+third gate costs zero extra reads rather than doubling the disclaimer read on
+every `/family/*` render. `acceptance.ts` itself is untouched (it takes a `db`
+param, so caching it there would key on the db handle).
+
+**The scope unification landed and is tested.** `DisclaimerGate` now uses
+`membersRequiringCompletion` (pending invitees excluded) instead of
+`incompleteMembers` over all members. Confirmed in code first: the filter is at
+`member-required-fields.ts:155`. **Families with a pending co-manager invite whose
+invitee row is incomplete will start being redirected to `/acknowledgements` for
+the first time** - they previously saw neither gate and never accepted at all.
+
+**Step 4's move cost three code references**, all `successUrl`-related. The page
+was already self-contained (its own `CspRoot`, no layout chrome). **It needed a
+mobile changelog entry** the plan did not anticipate: the Stripe redirect target
+changed, and a mobile client matching on `/family/donate/success` to detect
+payment completion would strand the user. Recorded at `47663d1`.
+
+**P5 v3 already references `/donate/success`** (its Task 5), so no cross-plan
+edit was needed - v2's reference was the stale one and v2 is superseded.
+
+Five mutations verified on the gate (swap the loader variant, un-mount it, drop
+the deferral, revert the member scope, ignore the disclaimers flag) and two on
+the move (each authorization entry). All fail the suite.
+
+**⚠️ Task 9 Step 3 must now target `app/donate/success/page.tsx`**, not
+`app/family/donate/success/page.tsx`.
 
 ---
 
