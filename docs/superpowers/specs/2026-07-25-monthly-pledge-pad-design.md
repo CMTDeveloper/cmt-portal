@@ -1,136 +1,128 @@
 # Monthly Pledge (Pre-Authorized Debit) - Design
 
-> **Status:** Draft for review
+> **Status:** REVISED 2026-07-26 - see the banner below. Draft for review.
 > **Author:** CMT Developer (with AI agent)
-> **Date:** 2026-07-25
+> **Date:** 2026-07-25, substantially revised 2026-07-26
 > **Target:** Monday 2026-08-03 (decoupled - see §9)
 > **Sibling specs:** `2026-07-24-aug-3-launch-batch-design.md` (launch batch), `2026-07-25-adult-study-class-design.md`
 
 ---
 
+## ⚠️ REVISION 2026-07-26 - the portal no longer touches bank details at all
+
+**Vaibhav, 2026-07-26:**
+> *"For pledge, let's NOT collect bank details."* … *"I am updating stripe endpoints to now accept one-time credit card (current) and adding monthly PAD."* … *"so in our setu app, we won't store anything PCI - all done directly in Stripe."*
+
+This lands **before any pledge code was written** (verified: zero pledge implementation in the repo on 2026-07-26), so it costs a spec revision and nothing else.
+
+**What it deletes outright:**
+
+| Deleted | Was |
+|---|---|
+| `pledge_secrets` collection | encrypted bank details at rest |
+| `PLEDGE_ENCRYPTION_KEY` + AES-256-GCM module | §4.3, and the key-custody blocker O4 |
+| The accounting hand-off | O6 - *"the highest residual risk in the feature"* |
+| Bank-field shape validation | O7 |
+| The 90-day purge sweep + stale-pledge report | §6.4 - nothing sensitive is stored, so nothing can outlive its purpose |
+| Extraction script / decrypted-file transmission | the whole manual pipeline |
+
+**What replaces it:** the family is sent to a **Stripe-hosted** page to authorise the PAD, exactly as the one-time Bala Vihar donation already works. The portal stores **status only**.
+
+**The central design question changes with it.** The old §8.1 argued that a manually-processed PAD *"can never be made provider-authoritative the way Stripe can"*, and settled for "the client can never move a pledge out of `pending`." With Stripe in the loop that constraint is lifted **if** the payment service can tell us a mandate was really established. That is now the single most important open item (O9) - see §6.2 and §11.
+
+**Terminology note:** the disclaimers already use "Pledge" for the *Chinmaya Mission Pledge*, a values statement (`disclaimers.ts:18`, links to `chinmayatoronto.org/cmpledge`). Families will meet two unrelated things called "pledge" on the same site. The family-facing label for **this** feature needs a deliberate decision (O10).
+
+---
+
 ## 1. What this is - and what it is NOT
 
-A **monthly pledge** is a voluntary, recurring gift supporting Chinmaya Mission Toronto, collected by **pre-authorized debit (PAD)** at the family's bank. It is set up **manually by the accounting team** from bank details the portal collects.
+A **monthly pledge** is a voluntary, recurring gift supporting Chinmaya Mission Toronto, collected by **pre-authorized debit (PAD)**. As of the 2026-07-26 revision it is **set up by the family on a Stripe-hosted page**; CMT's payment service handles the mandate and the portal never sees bank details.
 
 > **It is NOT the Bala Vihar donation.** The ~$500 yearly Bala Vihar donation, paid via Stripe, gates enrollment and is unchanged by this spec. A pledge is *extra* support on top of it.
-
-This distinction was settled by CMT Developer on 2026-07-25 and it drives every design decision below.
 
 | | Bala Vihar donation | Monthly pledge |
 |---|---|---|
 | Purpose | Enrollment for the school year | Ongoing support for the mission |
 | Amount | ~$500/year, offering-defined | Family-chosen, **min $50/month, configurable** |
-| Channel | Stripe checkout | Pre-authorized debit, set up manually by accounting |
+| Channel | Stripe checkout (hosted) | **Stripe PAD (hosted)** - same proxy, new mode |
 | Gates enrollment? | **Yes** | **No - gates nothing, ever** |
 | Status field | Existing donation status | **Its own separate status** |
 | Required? | Effectively, to enroll | Entirely optional |
 
 ### 1.1 RESOLVED - the pledge is separate from the Bala Vihar donation
 
-Vaibhav's written note opened with *"Regarding the $500 donation, we are introducing a monthly pledge option"*, which read as though the pledge **were** the payment mechanism for the $500 (i.e. paying it in monthly instalments). That reading would have inverted §5 (placement) and §6 (enrollment linkage).
+Vaibhav's original note opened with *"Regarding the $500 donation, we are introducing a monthly pledge option"*, which read as though the pledge **were** the payment mechanism for the $500. **Confirmed 2026-07-25: the "$500 donation" is the Bala Vihar donation and the pledge is separate.** Consequences that stand:
 
-**Confirmed with Vaibhav, 2026-07-25 (via CMT Developer): the "$500 donation" refers to the Bala Vihar donation, and the pledge is separate from it.** This spec's model is correct as written. No change required.
-
-Consequences that now stand confirmed:
 - The pledge does **not** confirm Bala Vihar enrollment (the $500 does).
 - The pledge is offered **after** the Bala Vihar donation, never in competition with it (§5).
 - The pledge gates nothing, so it can slip without affecting the cutover (§9).
 
 ---
 
-## 2. Locked decisions (CMT Developer, 2026-07-25)
+## 2. Locked decisions
+
+Struck-through rows were superseded by the 2026-07-26 revision.
 
 | Decision | Answer |
 |---|---|
-| Cheque / direct-deposit-form upload | **None, ever.** Accounting works from the four typed bank fields permanently. |
-| Bank details | **Collected and stored** (encrypted), never emailed, never shown in any UI. Manually handed to accounting for PAD setup. |
+| ~~Cheque / direct-deposit-form upload~~ | ~~None, ever.~~ **Moot** - no bank data is collected at all. |
+| ~~Bank details collected and stored (encrypted)~~ | **SUPERSEDED 2026-07-26: not collected, not stored, not transmitted. Stripe only.** |
 | Pledge status | **Separate** from the BV donation status. Exists only if a family pledges. |
-| Confirmation | **Manual, server-side API** invoked by CMT Developer / Vaibhav. An admin UI may follow later. |
-| Purge | **The confirm call itself deletes the bank details.** One action, both effects. |
+| ~~Confirmation is a manual server-side API~~ | **SUPERSEDED** - see §6.2. Depends on what Vaibhav's endpoint can report (O9). |
+| ~~Purge: the confirm call deletes the bank details~~ | **Moot** - there is nothing to purge. |
 | Minimum amount | **$50/month**, configurable. |
 | Placement | Donation success page (primary) + family dashboard card (secondary). |
 | Card once pledged | **Shows pledge status** - it does not disappear. |
-| Family cancel / change | **Read-only for v1.** Families contact the temple. A UI cancellation *request* may come later. |
-| Family email on activation | **Yes**, via an **AWS-SES-managed template** Vaibhav creates in the SES service. **No subject/body hardcoded in the repo**; the portal passes dynamic variables at call time. See §7. |
+| Family cancel / change | **Read-only for v1.** Families contact the temple. |
+| Family email on activation | **Yes**, via an **AWS-SES-managed template**. See §7 - the mechanism is already built. |
 
 ---
 
-## 3. Why "no upload" matters more than it looks
+## 3. Why "no upload" mattered
 
-Verified 2026-07-25: **no file-upload surface exists anywhere in this codebase.** No Vercel Blob, no S3 upload, no Firebase Storage initialization, no multipart handling, no `<input type="file">`. Independently corroborated by the external review at `SECURITY_REVIEW_2026-07-22.md:1282` ("No file-upload surface was found").
+Verified 2026-07-25: **no file-upload surface exists anywhere in this codebase** - no Vercel Blob, no S3, no Firebase Storage, no multipart, no `<input type="file">`. Corroborated by `SECURITY_REVIEW_2026-07-22.md:1282`.
 
-Dropping the upload therefore removes the single largest unknown in this feature - building a first-ever upload surface, for cheque images (about the most sensitive file type available), during production-cutover week. The four typed fields are sufficient to set up a PAD; the cheque is corroboration accounting can request by other means in the rare case they need it.
+After the 2026-07-26 revision this is **moot rather than merely decided**: there is no bank data to corroborate, so there is nothing to upload. Retained only so the "should we accept a void cheque?" question is not reopened from scratch.
 
 ---
 
 ## 4. Data model
 
-Two records, deliberately in **separate top-level collections** so that no family-scoped read can ever sweep up the sensitive one.
+**One record.** The second collection and the entire encryption layer were deleted on 2026-07-26.
 
-### 4.1 `pledges/{pid}` - non-sensitive, family-readable
+### 4.1 `pledges/{pid}` - status only, non-sensitive
 
 ```ts
 {
   pid: string,
   fid: string,
   monthlyAmount: number,          // dollars; >= app_config/pledge.minMonthlyAmount at write time
-  status: 'pending' | 'active' | 'cancelled',
-  submittedAt: Date,
-  confirmedAt: Date | null,
+  status: 'started' | 'active' | 'cancelled',
+  startedAt: Date,
+  activatedAt: Date | null,
   cancelledAt: Date | null,
-  submittedByMid: string,
+  startedByMid: string,
+  // Opaque provider handle, whatever Vaibhav's service returns (a Stripe
+  // subscription / mandate id, or its own reference). NOT a secret, but also
+  // NOT shown to families - it is for reconciliation only. Shape pending O9.
+  providerRef: string | null,
 }
 ```
 
 `status` semantics:
-- **`pending`** - the family submitted; accounting has not yet set up the PAD. **Counts as payment nowhere.**
-- **`active`** - accounting confirmed the PAD is live at the bank. Bank details already purged.
-- **`cancelled`** - abandoned, rejected, or stopped. Bank details purged.
+- **`started`** - the family was sent to the hosted page. **Counts as payment nowhere, and does NOT mean they finished.**
+- **`active`** - the mandate is confirmed established (how, exactly, is O9).
+- **`cancelled`** - abandoned, rejected, or stopped.
 
-### 4.2 `pledge_secrets/{pid}` - encrypted, NO read path
+> **Naming: `started`, not `pending`.** The old model's `pending` meant "submitted, awaiting accounting". Here it means "we redirected them and do not yet know what happened" - a materially weaker claim, and the name should not overstate it.
 
-```ts
-{
-  pid: string,
-  encryptedPayload: string,       // AES-256-GCM ciphertext (base64)
-  iv: string,
-  authTag: string,
-  keyVersion: number,
-  createdAt: Date,
-}
-```
+### 4.2 ~~`pledge_secrets/{pid}`~~ - DELETED 2026-07-26
 
-The plaintext, before encryption, is exactly:
+No encrypted collection, no `PLEDGE_ENCRYPTION_KEY`, no crypto module, no key rotation, no key custody. **Nothing sensitive is stored, so none of the machinery that protected it is needed.**
 
-```ts
-{ bankNumber, transitNumber, institutionNumber, accountNumber }
-```
+> The one landmine worth carrying forward: `can-access-route.ts` - the `/api/setu/*` catch-all grants **welcome-team** by default. Pledge routes still get **explicit** rules rather than relying on that prefix. Not because they hold secrets any more, but because a financial write should never inherit its authorization by accident.
 
-**Rules, non-negotiable:**
-1. **No API route returns this document, decrypted or otherwise** - not admin, not coordinator, not welcome-team. The safest access control is no read path at all.
-2. **No `canAccessRoute` rule grants it.** The default-deny at `can-access-route.ts:315` is the backstop if someone later adds a route without thinking.
-3. It is a **top-level collection, not** `families/{fid}/...`, so a family or collectionGroup read can never include it.
-4. It is **never logged**, never put in an error message, never sent to Sentry.
-   The Sentry half is an implemented control, not an assertion, as of 2026-07-25:
-   `apps/portal/src/lib/sentry/scrub-event.ts` pins `httpBodies: []`, `cookies: false`,
-   `userInfo: false` and `stackFrameVariables: false` across the server, edge and client
-   inits, and its `beforeSend` scrubber redacts `bank`/`transit`/`institution`/
-   `accountNumber`/`iban`/`routingNumber`/`cardNumber` keys anywhere in the event graph.
-   That is defense in depth only - the primary rule is still the first clause of this
-   sentence. Never write these values into a log line or an error message.
-
-> **Landmine (verified):** `can-access-route.ts:311-313` - the `/api/setu/*` catch-all grants **welcome-team** by default. A pledge route placed under that prefix without an explicit rule would be readable by precisely the staff who must not see it. **All pledge routes live outside `/api/setu/*` with their own explicit rules.**
-
-### 4.3 Encryption
-
-- **AES-256-GCM**, via Node's built-in `crypto` (no new dependency).
-- Key from **`PLEDGE_ENCRYPTION_KEY`** (32 bytes, base64), set on Vercel Production only, and added to `turbo.json`'s env passthrough array or the build will not see it.
-- `keyVersion` is stored so a future key rotation can decrypt old records.
-- Encrypt/decrypt live in one module (`features/setu/pledges/crypto.ts`) with **no** re-export of the raw key.
-
-> ⚠️ **Key custody:** if `PLEDGE_ENCRYPTION_KEY` is lost, every stored pledge becomes permanently unreadable. It must be backed up somewhere CMT Developer controls **before** the first real submission.
-
-### 4.4 `app_config/pledge` - admin-editable
+### 4.3 `app_config/pledge` - admin-editable
 
 ```ts
 {
@@ -141,162 +133,155 @@ The plaintext, before encryption, is exactly:
 }
 ```
 
-Same shape as the existing `app_config/{disclaimers,locations,school_year}` docs, so it stays admin-editable in the portal with no external CMS (repo rule).
+Same shape as `app_config/{disclaimers,locations,school_year}`, so it stays admin-editable in the portal with no external CMS (repo rule).
 
 ---
 
 ## 5. Placement - where the family meets this
 
-**Primary: the donation success page** (`/family/donate/success`). The family has just completed the Bala Vihar donation; intent is at its highest and the $500 is provably handled. Quiet copy, not a large call-to-action.
+**UNCHANGED by the revision**, with one path correction.
 
-**Secondary: a persistent card** on the family dashboard / `/family/donations`. Catches families who did not act in the success-page moment, and adults with no Bala Vihar children who simply want to support the mission.
+**Primary: the donation success page.** The family has just completed the Bala Vihar donation; intent is highest and the $500 is provably handled. Quiet copy, not a large call-to-action.
 
-**Nowhere else. Specifically NOT:**
-- in the enroll flow
-- as a modal or interstitial
-- as anything that blocks, gates, or delays enrollment or the Bala Vihar donation
+> ⚠️ **Path change from P4:** the success page moves from `/family/donate/success` to a **top-level `/donate/success`** (P4 v2 Task 8 Step 4), so it sits outside the gated `/family` layout. The pledge card moves with it.
+>
+> ⚠️ **Ordering from P4:** the **Adult Study Class ask comes first**, the pledge ask **second and quieter**. Reversing them leads with a money ask straight after a ~$500 payment.
 
-> **Rationale for not offering it before the BV donation:** it would cannibalise the payment that actually gates enrollment. A family might pledge $50/month and skip the $500, leaving enrollment stuck behind a manual accounting step for no reason.
+**Secondary: a persistent card** on the family dashboard / `/family/donations`. Catches families who did not act in the success-page moment, and adults with no Bala Vihar children.
+
+**Nowhere else. Specifically NOT:** in the enroll flow, as a modal or interstitial, or as anything that blocks or delays enrollment or the Bala Vihar donation.
+
+> **Rationale for not offering it before the BV donation:** it would cannibalise the payment that actually gates enrollment.
 
 ### 5.1 The card is state-driven, and it never disappears
 
 | Pledge state | Card |
 |---|---|
 | none | The ask: "Support the mission monthly, from $50/month" |
-| `pending` | "Pledge received - we're setting up your monthly gift. You'll get a confirmation once it's active." |
+| `started` | Wording depends on O9. If we cannot verify, it must NOT claim success - something like "If you completed the setup, your monthly gift will begin shortly." |
 | `active` | "You're giving $X monthly since [date]. Thank you." |
 | `cancelled` | Back to the ask |
 
-Hiding the card after submission was considered and rejected: verification is manual and may take days, and during exactly that window the family will want to know whether it worked. Removing the only surface that mentions pledges leaves them with nowhere to look.
+The `started` copy is a **correctness** matter, not a tone one: if the portal cannot verify the mandate, the card must not assert that a recurring financial arrangement exists.
 
-The success-page ask is suppressed the same way once a pledge exists - at most one quiet acknowledgement line, never a repeat ask.
-
-**The card reads `pledges/{pid}` only.** It cannot leak bank details by construction, and after confirmation there is nothing sensitive left to leak anyway.
+**The card reads `pledges/{pid}` only.**
 
 ---
 
 ## 6. Flows
 
-### 6.1 Submit
+### 6.1 Start
 
-1. Family opens the pledge form from either entry point.
-2. Chooses a monthly amount (≥ `minMonthlyAmount`) and enters bank number, transit number, institution number, account number.
-3. `POST /api/pledges` (outside `/api/setu/*`; family-manager only):
+1. Family opens the pledge ask from either entry point.
+2. Chooses a monthly amount (≥ `minMonthlyAmount`). **No bank fields. No card fields. Nothing sensitive is rendered, typed, or posted.**
+3. `POST /api/pledges/start` (outside `/api/setu/*`; family-manager only):
    - validates the amount against `app_config/pledge`
-   - validates the bank fields for **shape** (digit lengths) - no external verification exists or is implied
-   - in one transaction: writes `pledges/{pid}` with `status: 'pending'` **and** `pledge_secrets/{pid}` with the encrypted payload
-4. Family sees the `pending` card. **No enrollment or donation state changes. Nothing is gated.**
+   - writes `pledges/{pid}` with `status: 'started'`
+   - forwards a PAD payload to **CMT's Stripe service** and returns the hosted URL
+4. The client redirects to the hosted page. The family authorises the PAD **at Stripe**.
 
-### 6.2 Confirm (manual, after accounting sets up the PAD)
+> **This mirrors the existing one-time donation exactly.** The portal already never talks to Stripe directly: `checkout/route.ts` forwards to `getStripeCheckoutUrl()` - CMT's Cloud Run proxy, authed with `x-api-key`, shared with `chinmaya-event-registration`. The pledge is the same call with a different mode. **No new payment architecture.**
 
-`POST /api/admin/pledges/[pid]/confirm` - **admin only** (see §10 O2).
+### 6.2 Activation - THE open question (O9)
 
-In a single transaction:
-1. `pledges/{pid}.status = 'active'`, `confirmedAt = now`
-2. **`pledge_secrets/{pid}` is deleted**
-3. an `audit_log` row is written (the collection introduced by the launch-batch spec §2)
+The existing one-time flow is **client-trusted**: `mark-donation-status.ts:11` states outright *"'completed' here is client-trusted (no Stripe webhook in this slice)."* The family returns to the success page and self-attests.
 
-Then, outside the transaction, the activation email is sent (see §7).
+**That is tolerable for a one-off and NOT tolerable for a recurring mandate.** A wrong one-time record is one wrong row; a wrong pledge means the portal tells the family and staff that an ongoing debit arrangement exists when it may not.
 
-> This is the design's best property: **the purge trigger is the verification action itself.** The bank details cannot outlive their purpose by accident, because the only thing that ends their usefulness is the same call that deletes them. No retention cron to forget or misfire.
+Three options, in descending order of preference:
 
-### 6.3 Cancel / reject
+- **(A) Vaibhav's service exposes a status/verify endpoint** the portal calls on return (or polls briefly). Cheapest to build here, and he is editing those endpoints **right now** - so this is the moment to ask. **Recommended.**
+- **(B) A real Stripe webhook** into the portal. Correct long-term, but it is a new public route with signature verification, and no webhook exists today. More than launch week wants.
+- **(C) Self-attestation, explicitly labelled.** `started` never becomes `active` automatically; the card and admin views say *family-reported, unverified*, and a human reconciles against Stripe. Acceptable **only** if it is stated in the UI rather than implied.
 
-`POST /api/admin/pledges/[pid]/cancel` - same shape, opposite outcome: `status = 'cancelled'`, secret deleted, audit row written. Covers withdrawal, rejection, and bad data.
+**Whichever is chosen, the client may never write `active` directly.** That rule survives from the original design and is the one part of the old §8.1 that still fully applies.
 
-### 6.4 Backstop sweep - the gap the happy path leaves
+### 6.3 Cancel
 
-Confirm and cancel are the only purge paths, so a pledge that is simply **forgotten** holds real bank account numbers indefinitely. That is the likeliest failure mode, not the rarest.
+`POST /api/admin/pledges/[pid]/cancel` - admin only; sets `status: 'cancelled'`, writes an `audit_log` row. Covers withdrawal, rejection, and abandonment.
 
-- A scheduled sweep purges `pledge_secrets` for any pledge still `pending` after **90 days** (assumption - see §10 O3), leaving the `pledges` record intact so nothing is operationally lost.
-- A **stale-pledge report** lists anything `pending` beyond ~14 days so a human notices before the sweep ever fires.
+> **Stopping the actual debit happens at Stripe, not here.** Cancelling in the portal must not imply the money stopped. Whether the portal can request cancellation through Vaibhav's service, or whether staff must do it in Stripe directly, is part of O9.
+
+### 6.4 ~~Backstop purge sweep~~ - DELETED 2026-07-26
+
+There is nothing sensitive to purge. A **stale-pledge report** (anything `started` beyond ~14 days) is still worth having - not for data protection now, but because a pile of `started`-never-`active` rows is the signal that the hosted flow is failing.
 
 ---
 
 ## 7. Activation email - AWS-managed SES template
 
-**Decision (CMT Developer, 2026-07-25): the template lives in the AWS SES service, not in this repo.** Vaibhav authors and maintains it there. The portal only *invokes* it by name and supplies the dynamic variables.
+**Decision: the template lives in the AWS SES service, not in this repo.** Vaibhav authors and maintains it there; the portal invokes it by name with dynamic variables. **No subject or body text is hardcoded**, so copy changes need no deploy.
 
-> **No email subject or body text is hardcoded in the codebase for this feature.** Copy changes are made in SES by Vaibhav and take effect with no code change and no deploy.
+> ✅ **The mechanism is ALREADY BUILT** - P3 shipped it (`49c9821`, `0c74de9`). `sendSesTemplatedEmail` exists on both sender interfaces, routed through `resolveSender()` so templated sends inherit the allowlist / redirect / mock machinery, with the registry keyed by env var. `pledge-activated` is **already registered** in `email-templates-config.ts` and `SES_TEMPLATE_PLEDGE_ACTIVATED` is already declared in `lib/env.ts`. Nothing in §7 needs building; it needs the template to exist in SES and the variable names agreed.
 
-This is a **new pattern for this repo** and deliberately diverges from the five existing templates in `apps/portal/src/lib/aws/templates/`, which are TypeScript functions returning inline `{subject, text, html}`. Those are left exactly as they are - this spec does not migrate them.
+### 7.1 Dynamic variables
 
-### 7.1 What must be built
+Family name, monthly amount, activation date. **Never any payment detail.** Exact names are a contract between Vaibhav's SES template and the calling code and must be written down (O5) - a mismatch fails at send time, not at build time.
 
-The current mail layer cannot do this. `ses.ts` exposes only `sendEmail`, which builds `Subject` and `Body` inline via `SendEmailCommand` (verified: `ses.ts:1-37`). Required additions:
+### 7.2 Operational constraints
 
-1. **`sendTemplatedEmail` in `lib/aws/ses.ts`** - invokes the SES-side template by name with a JSON data payload, rather than an inline subject/body.
-   > The repo depends on `@aws-sdk/client-ses` (SES v1 classic), whose templated-send command is `SendTemplatedEmailCommand` taking `Template` + `TemplateData`. **Verify the exact command and argument shape against the current AWS SDK docs at implementation time** rather than trusting this from memory.
-2. **Extend the `Sender` interface** (`resolve-sender.ts:7-8`) with the new method, so templated sends pass through the same allowlist / redirect / mock machinery as everything else. A raw call to `ses.ts` that bypasses `resolveSender()` would defeat the UAT safety nets.
-3. **Mock sender support** so tests never hit AWS.
-4. **Template name as configuration**, not a literal buried in a handler.
-
-### 7.2 Dynamic variables
-
-Supplied by the portal at call time - family name, monthly amount, activation date. **Never any bank detail.**
-
-The exact variable names are a contract between Vaibhav's SES template and the calling code. They must be agreed and written down (O5), because a mismatch fails at send time, not at build time.
-
-### 7.3 Operational constraints
-
-- **SES templates are per-region and per-account.** The template must exist in `AWS_SES_REGION` (currently `ca-central-1`). If UAT and production share one AWS account, one template serves both - **confirm this**, because if they diverge, a template that exists in UAT and not in prod fails only in production.
-- **Missing template fails at runtime**, not at deploy. The send must be wrapped so a missing or renamed template **cannot roll back the confirm transaction** - the pledge is already active and the bank details are already purged; a failed email must be logged and surfaced, never allowed to undo that. This is why §6.2 sends outside the transaction.
-- `resolveSender()` (`resolve-sender.ts:50-127`) has redirect and silent-drop branches in non-production environments, so a UAT test may not see mail arrive at the real address. Testing gotcha, not a bug.
-- **SES here cannot send attachments** (`SendEmailCommand`, not `SendRawEmailCommand`). Irrelevant while there is no upload, but it forecloses "attach a receipt PDF" later without a mail-layer change.
-- **Escaping is now SES's job.** Because the template is server-side at AWS and interpolates a family-supplied name, Vaibhav must ensure the template handles that safely. The repo-side escaping question disappears along with the repo-side template.
+- **SES templates are per-region and per-account**, and must exist in `AWS_SES_REGION` (`ca-central-1`). Confirm UAT and prod share one account (O8), or a template present in UAT and absent in prod fails **only in production**.
+- **A template that exists but fails to render is accepted by SES, returns a MessageId, and delivers nothing.** The app cannot detect this. Only `SES_CONFIGURATION_SET` with a RENDERING_FAILURE destination, plus a real per-template UAT send, catches it. See `docs/runbooks/ses-email-templates.md`.
+- A failed email must **never** roll back the activation. Send outside the transaction, log, surface.
+- `resolveSender()` redirects or silently drops in non-production, so a UAT test may not see mail at the real address. Testing gotcha, not a bug.
 
 ---
 
 ## 8. Security posture
 
-This feature introduces the most sensitive data in the system, into a codebase with an open security backlog. What this design does about that:
+The revision removes this feature's entire sensitive-data surface. What remains is ordinary financial-workflow hygiene.
 
 | Risk | Mitigation |
 |---|---|
-| Firestore leak / over-broad service account | Payload is **AES-256-GCM ciphertext**; Firestore's own at-rest encryption does not protect against an Admin-SDK read |
-| Staff seeing bank details | **No read path exists at all** - not a role check that can be misconfigured |
-| Accidental inclusion in a family read | **Separate top-level collection**, never a `families` subcollection |
-| A future route exposing it | No `canAccessRoute` rule + default-deny at `:315`; routes live outside the welcome-team-granting `/api/setu/*` catch-all |
-| Data outliving its purpose | Purge is **the same call** as confirmation; plus cancel path and a 90-day sweep |
-| Email interception / logging | **Nothing sensitive is ever emailed.** Sidesteps the log-PII finding at `SECURITY_REVIEW_2026-07-22.md:712-735`, which names the exact `resolve-sender.ts` lines a banking email would traverse |
-| Unverified money counted as real | `pending` **counts as payment nowhere**; only a server-side staff action sets `active` |
+| Bank details leaking | **Not collected, not stored, not transmitted by the portal.** The risk is deleted, not mitigated. |
+| Staff seeing bank details | Same - there is nothing to see. |
+| A future route exposing pledge data | Explicit `canAccessRoute` rules, outside the welcome-team-granting `/api/setu/*` catch-all, plus default-deny. |
+| **Unverified money counted as real** | **The live risk.** `started` counts as payment nowhere; only a server-side path may set `active`. See O9. |
+| Provider handle leaking | `providerRef` is not a secret but is not shown to families; reconciliation only. |
 
-### 8.1 Deliberately NOT inheriting the existing donation flaw
+### 8.1 The client-trusted settlement flaw is now the whole story
 
-`SECURITY_REVIEW_2026-07-22.md:265-299` (**High**, open): donation settlement is **client-trusted** today - a manager can POST `status: "completed"`, or merely visit the success page, and the donation is recorded as paid with no payment (`mark-donation-status.ts:5-31`).
+`SECURITY_REVIEW_2026-07-22.md:265-299` (**High**, open): donation settlement is client-trusted today - a manager can POST `status: "completed"`, or merely visit the success page, and the donation records as paid with no payment.
 
-A manually-processed PAD has **no provider webhook**, so it can never be made provider-authoritative the way Stripe can. This spec therefore does the one thing available: **the client can never move a pledge out of `pending`.** Only an authenticated staff-side call does. The pledge path is the pattern that finding recommends, applied to the flow that most needs it.
+The original spec argued a manual PAD *"can never be made provider-authoritative the way Stripe can"* and settled for staff-only activation. **Moving to Stripe lifts that constraint** - if the payment service reports mandate status, this feature can be the first provider-authoritative flow in the portal, and the pattern that finding recommends.
 
-> It also does not touch or extend the existing Stripe settlement path. That finding remains open and is out of scope here.
+If instead we ship option (C), the pledge **inherits** the existing flaw rather than fixing it - which is survivable only because it is labelled. **Do not let (C) ship silently.**
 
 ### 8.2 Known residual
 
-**No `firestore.rules` file is tracked in this repo** (verified). Database-level rules are unmanaged, so every guarantee above rests on Admin-SDK-only access being true in practice. Encryption is what makes that residual tolerable: even direct database access yields ciphertext. Tracking rules in-repo is worth doing, but is not gated on this feature.
+`firestore.rules` now exists but is **UAT-only** (deny-all, P5 Task 1 Steps 1-3, shipped). Prod rules are unmanaged from this repo. Per the prod ruleset captured at `firestore.prod.rules.baseline`, Firestore allow rules are **additive**, so `pledges` - matching no rule - is already denied to the client SDK. **No new prod deny is required**, which retired the old blocker.
 
 ---
 
 ## 9. Scope, sequencing, and what it depends on
 
-Because a pledge **gates nothing**, this feature is fully decoupled from the production cutover's critical path. It can ship on Aug 3 or slip a week without holding back enrollment, donations, or the launch batch. That is a deliberate property, not an accident.
+A pledge **gates nothing**, so it is fully decoupled from the cutover's critical path.
+
+**The revision changed why it is last.** It was cut candidate #1 because of crypto plus the unowned accounting hand-off. Both are gone, and the build is now small. But it has acquired a **hard external dependency**: Vaibhav's Stripe PAD endpoint and its integration details, which do not exist yet.
 
 Depends on:
-- `audit_log` (defined in the launch-batch spec §2)
+- **Vaibhav's Stripe service supporting monthly PAD**, and its contract (O9) - *blocking*
+- `audit_log` (shipped)
 - `app_config` pattern (exists)
-- No new npm dependency - `crypto` is built in
+- P3's `sendSesTemplatedEmail` (shipped)
+- P4 Task 8 Step 4's move of the success page to `/donate/success`
+- **No new npm dependency, no crypto, no key management**
 
-Does **not** depend on: file upload, Stripe changes, the donation-status model, or the Adult Study Class spec.
+Does **not** depend on: file upload, the donation-status model, or the Adult Study Class beyond page placement.
 
 ---
 
 ## 10. Verification
 
-1. **Deployed-UAT E2E**: submit a pledge, assert the card shows `pending`, run confirm, assert the card shows `active` **and `pledge_secrets/{pid}` is gone.**
-2. **Negative security test - the most important one here:** assert that **no** API route returns bank details for any role (family-manager, welcome-team, coordinator, admin). Assert `pledge_secrets` is unreachable through every family/roster/report read.
+1. **Deployed-UAT E2E**: start a pledge, assert the card shows `started`, drive activation by whichever mechanism O9 settles, assert `active`.
+2. **Nothing sensitive is posted**: assert the start request body contains no bank or card field, and that the form renders none.
 3. **N=2**: a family with two pledges over time (one cancelled, one active) must render correctly - the card must not pick "the first pledge".
-4. **Round-trip crypto test**: encrypt → decrypt → identical plaintext; and a wrong-key decrypt must fail closed, never return garbage.
-5. **Purge test**: confirm and cancel both delete the secret. A failed transaction must leave **both** records untouched - never a status flip without a purge, or a purge without a status flip.
-6. **Amount validation**: below `minMonthlyAmount` is rejected server-side, not just in the form.
-7. **`pending` counts nowhere**: assert a pending pledge does not alter the payment chip, roster status, enrollment confirmation, or any report.
+4. **Amount validation**: below `minMonthlyAmount` is rejected server-side, not just in the form.
+5. **`started` counts nowhere**: assert it does not alter the payment chip, roster status, enrollment confirmation, or any report.
+6. **The client cannot write `active`**: POST it directly as a family-manager and assert refusal.
+7. **Copy honesty**: if option (C), assert the `started` and admin copy say *unverified* rather than implying success.
+
+~~Round-trip crypto test~~ and ~~purge test~~ deleted with the encryption layer.
 
 ---
 
@@ -304,11 +289,11 @@ Does **not** depend on: file upload, Stripe changes, the donation-status model, 
 
 | # | Item | Owner |
 |---|---|---|
-| ~~O1~~ | RESOLVED 2026-07-25 - Vaibhav confirmed the "$500 donation" is the **Bala Vihar** donation and the pledge is **separate** from it (§1.1). This spec's model stands. | done |
-| **O2** | Who may invoke confirm/cancel - **admin only** (assumed here, most conservative for a financial action), or admin + coordinator? | CMT Developer |
-| **O3** | Backstop sweep window - **90 days** assumed (§6.4). | CMT Developer |
-| **O4** | `PLEDGE_ENCRYPTION_KEY` generated, set on Vercel Production, added to `turbo.json` env passthrough, and **backed up** before the first real submission. | CMT Developer |
-| **O5** | Vaibhav creates the activation template **in AWS SES** (`ca-central-1`). Needs: the **template name** and the exact **variable names**, agreed and written down - a mismatch fails at send time, not at build time (§7.2). | Vaibhav |
-| **O8** | Confirm UAT and production share one AWS account/region for SES templates. If they diverge, a template present in UAT but absent in prod fails **only in production** (§7.3). | CMT Developer |
-| **O6** | Accounting hand-off mechanics: who runs the extraction script, how the decrypted file is transmitted, and how it is destroyed afterwards. The portal's job ends at the script. | CMT Developer |
-| **O7** | Bank-field shape validation rules (digit lengths for bank / transit / institution / account). Canadian standard is 3-digit institution, 5-digit transit - to be confirmed. | CMT Developer |
+| ~~O1~~ | RESOLVED - the "$500 donation" is the Bala Vihar donation; the pledge is separate (§1.1). | done |
+| **O9** ⭐ | **THE BLOCKER. How does the portal learn a PAD mandate was actually established?** Options A/B/C in §6.2; **A is recommended and he is editing those endpoints now.** Also needed: the request payload for a PAD-mode checkout, what comes back, whether cancellation can be requested through the service, and test-mode credentials. | **Vaibhav** |
+| **O10** | Family-facing **name** for this feature. "Pledge" already means the Chinmaya Mission Pledge in the disclaimers - two unrelated things under one word. | CMT Developer |
+| **O2** | Who may invoke cancel - admin only (assumed), or admin + coordinator? | CMT Developer |
+| **O5** | Vaibhav creates the activation template **in AWS SES** (`ca-central-1`) and shares the **template name** + exact **variable names**. | Vaibhav |
+| **O8** | Confirm UAT and production share one AWS account/region for SES templates, and create `SES_CONFIGURATION_SET` with a RENDERING_FAILURE destination. | CMT Developer |
+| **O11** | Is "email them the instructions" (Vaibhav, 8:02 AM) the **interim** path if Stripe PAD is not ready by Aug 3, or fully superseded by the 10:26 decision? Sizing differs sharply. | Vaibhav |
+| ~~O3~~ ~~O4~~ ~~O6~~ ~~O7~~ | Purge window, encryption-key custody, accounting hand-off, bank-field validation - **all deleted** with the bank-detail collection. | closed 2026-07-26 |

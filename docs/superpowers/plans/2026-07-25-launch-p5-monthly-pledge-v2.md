@@ -30,6 +30,39 @@
 
 ---
 
+> # ⛔ STOP - THIS PLAN IS SUPERSEDED IN PART (2026-07-26)
+>
+> **Vaibhav, 2026-07-26: the portal no longer collects or stores bank details.**
+> Monthly PAD is authorised on a **Stripe-hosted page** via CMT's existing Stripe
+> service. *"in our setu app, we won't store anything PCI - all done directly in
+> Stripe."* The spec has been revised:
+> `docs/superpowers/specs/2026-07-25-monthly-pledge-pad-design.md`. **Read the
+> revision banner there before touching any task below.**
+>
+> Nothing was lost - **zero pledge code existed** when this landed.
+>
+> | Task | Fate |
+> |---|---|
+> | **1** `firestore.rules` deny-all | ✅ **DONE** (Steps 1-3). Steps 4-5 are a **NO-OP** - prod allow rules are additive, so `pledges` was never client-writable. |
+> | **2** The crypto module | ❌ **DELETED** - nothing to encrypt |
+> | **3** Schemas incl. PAD authorization | ⚠️ **REWRITE** - status-only, no bank fields, `started`/`active`/`cancelled` + `providerRef` |
+> | **4** `submitPledge` | ⚠️ **REWRITE** as `startPledge` - forwards to the Stripe proxy, returns a hosted URL |
+> | **5** `confirmPledge` / `cancelPledge` | ⚠️ **REWRITE** - activation depends on **O9**; the purge half is deleted |
+> | **6** Routes | ⚠️ keep the shape, drop everything secret-related |
+> | **7** Three composite indexes | ⚠️ **RE-DERIVE** - fewer queries now |
+> | **8** Admin list endpoint | ✅ still wanted, simpler |
+> | **8b** The form | ⚠️ **REWRITE** - amount only; **no bank fields at all** |
+> | **9** The family card | ✅ still wanted. Path moved to top-level `/donate/success` (P4 Task 8 Step 4); `started` copy must not claim success |
+> | **10** The sweep, as a cron | ❌ **DELETED** - nothing to purge. A stale-`started` report is still worth having |
+> | **11** Export script + accounting hand-off | ❌ **DELETED** - this was the highest residual risk in the feature |
+> | **12** Security tests | ⚠️ **REWRITE** - crypto/purge tests gone; the live risk is now "unverified money counted as real" |
+> | **13** Deployed-UAT verification | ✅ still required |
+>
+> **BLOCKED on O9** - how the portal learns a mandate was really established. Do
+> not start Tasks 3-6 until Vaibhav's integration contract lands; the answer
+> changes their shape. Tasks will be renumbered in a v3 once it does.
+
+
 ## Task 1: `firestore.rules` deny-all - ships before any pledge code
 
 **This is the only control in the design enforced below the application, and it does not exist.** Verified: there is no `firestore.rules` anywhere in the repo, and `firebase.json` declares only `{"firestore": {"indexes": "firestore.indexes.json"}}`. Meanwhile `getClientFirestore()` is exported and live (`packages/firebase-shared/src/client.ts:42`), the public API key ships in every bundle, and every family holds an authenticated Firebase session.
