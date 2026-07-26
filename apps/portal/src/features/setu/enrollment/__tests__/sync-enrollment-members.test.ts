@@ -254,6 +254,39 @@ describe('syncActiveEnrollmentMemberships - membershipMode', () => {
     expect(state.updates).toHaveLength(0);
   });
 
+  it('PRESERVES the family\'s chosen order when dropping a departed member', async () => {
+    // sameSet is order-INSENSITIVE, so an implementation that rebuilt the list by
+    // filtering `members` (Firestore doc order) instead of filtering
+    // `enrolledMids` would silently reorder and NO existing assertion would
+    // notice - while load-dashboard maps enrolledMids in order for display.
+    state.members = [{ mid: 'f-01', type: 'Adult' }, { mid: 'f-03', type: 'Adult' }];
+    state.enrollments = [{
+      eid: 'e-asc', programKey: 'adult-study-class', status: 'active',
+      enrolledMids: ['f-03', 'f-02', 'f-01'], membershipMode: 'manual',
+    }];
+
+    await syncActiveEnrollmentMemberships('f');
+
+    // f-03 BEFORE f-01, exactly as stored - not doc order.
+    expect(state.updates).toEqual([{ eid: 'e-asc', enrolledMids: ['f-03', 'f-01'] }]);
+  });
+
+  it('leaves a MANUAL enrollment untouched when its PROGRAM is not active', async () => {
+    // "A paused or removed program never mutates rosters" is an invariant of the
+    // whole function; a manual enrollment is not an exception. A mode check
+    // placed BEFORE the program guard would prune here.
+    state.programs = { 'adult-study-class': { status: 'paused', eligibility: { memberType: 'adult', minAgeYears: null, maxAgeYears: null } } };
+    state.members = [{ mid: 'f-01', type: 'Adult' }];
+    state.enrollments = [{
+      eid: 'e-asc', programKey: 'adult-study-class', status: 'active',
+      enrolledMids: ['f-02'], membershipMode: 'manual',
+    }];
+
+    await syncActiveEnrollmentMemberships('f');
+
+    expect(state.updates).toHaveLength(0);
+  });
+
   it('leaves a MANUAL enrollment alone while still syncing an AUTO one beside it', async () => {
     // N=2: a real family has Bala Vihar (auto) AND the adult class (manual).
     // A single-enrollment fixture would never catch a mode check applied

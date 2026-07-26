@@ -92,17 +92,34 @@ export async function syncActiveEnrollmentMemberships(
     };
     if (!e.programKey) continue;
 
+    if (!programByKey.has(e.programKey)) {
+      programByKey.set(e.programKey, await getProgram(e.programKey));
+    }
+    const program = programByKey.get(e.programKey);
+    if (!program || program.status !== 'active') continue;
+
     // MANUAL: the family named these members deliberately (the Adult Study
     // Class asks which non-teaching adult attends). Re-deriving would re-enrol
     // the parent teaching that hour and silently overwrite their choice. So the
     // prune may only DROP mids for people who have left the family.
     //
-    // Filtered by EXISTENCE, never by eligibility. `memberEligibleForProgram`
-    // can depend on age and therefore on the clock, so an eligibility-filtered
-    // manual list could empty itself on a date boundary with no user action -
-    // the adult-class gate would re-fire and the family would be asked to
-    // re-choose for no reason. A member who merely became ineligible staying
-    // enrolled is the far milder failure, and it is visible and fixable.
+    // Placed AFTER the program-active guard on purpose: "a paused or removed
+    // program never mutates rosters" is an invariant of this whole function, and
+    // a manual enrollment is not an exception to it.
+    //
+    // Filtered by EXISTENCE, never by eligibility - and note this DEVIATES from
+    // spec 4.3b step 3, which says manual also prunes the no-longer-eligible.
+    // The spec is wrong: `memberEligibleForProgram` is clock-dependent (age
+    // bounds), so an eligibility-filtered manual list could empty ITSELF on a
+    // birthday with no user action, re-firing the adult-class gate and asking
+    // the family to re-choose for no reason. A member who merely became
+    // ineligible staying enrolled is the far milder failure, and it is visible
+    // and fixable. The spec has been corrected to match.
+    //
+    // Filters `enrolledMids`, NOT `members`: that preserves the ORDER the family
+    // chose. Filtering `members` would silently reorder to Firestore doc order,
+    // and `sameSet` is order-insensitive so nothing would ever flag it - while
+    // load-dashboard maps `enrolledMids` in order for display.
     //
     // Dropping departed members is load-bearing rather than incidental: an
     // emptied list is exactly what makes the gate re-fire (spec 2.1 condition 4)
@@ -116,12 +133,6 @@ export async function syncActiveEnrollmentMemberships(
       }
       continue;
     }
-
-    if (!programByKey.has(e.programKey)) {
-      programByKey.set(e.programKey, await getProgram(e.programKey));
-    }
-    const program = programByKey.get(e.programKey);
-    if (!program || program.status !== 'active') continue;
 
     // Eligible members, in member-doc order (fid-01, fid-02, …) so the child
     // display order on the dashboard stays stable across re-syncs.

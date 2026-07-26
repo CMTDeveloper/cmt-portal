@@ -205,7 +205,9 @@ The $101 lives where every other program's amount lives - the offering's `pricin
 
 1. Add `membershipMode: 'auto' | 'manual'` to the enrollment schema (optional, defaults `'auto'`, so every existing enrollment is unaffected).
 2. Adult Study Class enrollments are written `'manual'` with `enrolledMids` = the selected adults.
-3. `sync-enrollment-members.ts:76-88` **skips recomputation** for `'manual'` enrollments. It still prunes members who no longer exist or are no longer eligible - it just never *adds*.
+3. `sync-enrollment-members.ts` **skips recomputation** for `'manual'` enrollments. It still prunes members who no longer **exist** - it just never *adds*.
+
+   > **CORRECTED 2026-07-26 (was: "no longer exist *or are no longer eligible*").** Pruning a manual list by eligibility is wrong, because `memberEligibleForProgram` is **clock-dependent** (age bounds): an eligibility-filtered manual list could empty **itself** on a birthday, with no user action, re-firing the gate and asking the family to re-choose for no reason. Existence is the only safe filter. A member who merely became ineligible staying enrolled is the far milder failure, and it is visible and fixable. Implemented and tested this way in `4d483bb`; the code carries the same note.
 
 > Without step 3 this feature appears to work, passes tests, and then quietly breaks the first time a family edits any member. Exactly the class of bug the repo's N=2 rule exists to catch - so the E2E must edit an unrelated member and re-assert the selection (§6.3).
 
