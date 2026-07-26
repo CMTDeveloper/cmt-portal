@@ -22,6 +22,15 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
+## 2026-07-26 - `25b8431` - `family` gains `locationNeedsConfirmation` on GET /api/setu/family + /api/setu/dashboard (additive; **mobile action recommended**)
+
+At the Aug 3 cutover, 299 of 867 legacy families carry no recognisable centre in the legacy roster, so the migration parser defaults them to Brampton. Rather than silently filing them under a centre nobody chose, the family doc now carries a marker saying "this location is a guess, ask them".
+
+- **`FamilyDocSchema` gains `locationNeedsConfirmation: boolean | null | undefined`.** It appears in the `family` object of **`GET /api/setu/family`** and **`GET /api/setu/dashboard`**. Purely additive - every existing field is unchanged, and an older client that ignores it still works.
+- **Only the literal `true` means "ask".** `false`, `null` and absent all mean "the centre is confirmed". The portal never writes `false`; it omits the key. Mirror it as optional+nullable and test `=== true`, never truthiness of a missing key.
+- **`location` itself is UNCHANGED and always a valid non-empty string.** It is not nulled out while unconfirmed - it holds the defaulted `'Brampton'`. Do not render the flag as "no centre on file"; the correct reading is "centre not yet confirmed by the family".
+- **Mobile action (recommended, not blocking):** add the field to the family schema. If the mobile has a profile-completion flow, treat a `true` here the way the web does - divert the **manager** (not other members) to pick a centre, and clear it by sending `location` on the family PATCH (see the separate PATCH entry). If the mobile has no completion flow yet, ignoring the field is safe: the family will be asked the next time they use the web portal.
+
 ## 2026-07-25 - `6d1fd0d` - SMS sign-in is REFUSED: new `sms-signin-unsupported` 400 on four `/api/setu/*` routes (**mobile action required**)
 
 SNS is still sandboxed with no Origination Number for Canada, so every OTP SMS the portal "sent" was accepted by AWS and delivered to nobody - leaving families on a code screen forever. Rather than fail silently, every route that accepts `type: 'phone'` now refuses with a typed error while `NEXT_PUBLIC_FEATURE_SMS_OTP` is off (its default). Flipping that flag on restores the old behaviour everywhere at once; nothing was deleted.
