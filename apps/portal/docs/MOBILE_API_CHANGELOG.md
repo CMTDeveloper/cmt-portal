@@ -22,6 +22,14 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
+## 2026-07-26 - `378df10` - POST /api/setu/enrollments behaves differently for `adult-study-class` (**mobile action required**)
+Request and response SHAPES are unchanged. What changed is the BEHAVIOUR when the posted `oid` belongs to an **adult-study-class** offering; every other `programKey` is byte-identical to before.
+- **The fee is waived for a Bala Vihar family.** If the family has an **active Bala Vihar enrollment** (payment NOT required - membership is the test), the enrollment is written with `suggestedAmountOverride: 0`, and the response's **`suggestedAmount` is now the EFFECTIVE amount (0), not the pinned snapshot**. A family with no Bala Vihar enrollment still pays the full amount.
+- **Only non-teaching, non-pending adults are enrolled.** Previously every Adult was auto-enrolled, including teacher-assigned adults and pending invitees. `membershipMode` is now `'manual'`, so a later member edit will NOT re-derive the list.
+- **New `422 { error: 'no-selectable-adults' }`** when every adult in the household is teaching (or there are none) - distinct from the existing `400 no-eligible-members`.
+- **The waiver applies on CREATE only.** An enrollment that already carries a non-null `suggestedAmountOverride` is never rewritten, so an amount the family has already paid cannot be retroactively zeroed.
+  - **Mobile:** if the app enrolls via `POST /api/setu/enrollments` and then starts a checkout from the response's `suggestedAmount`, **it must honour a `0` and NOT open a payment sheet** - the web client's equivalent branch (`amount >= 1`) is what this change exists to satisfy. Add handling for the new `422 no-selectable-adults`. No schema field was added or removed.
+
 ## 2026-07-26 - `47663d1` - donation success page moved to top-level `/donate/success` (**mobile action required IF you match on the path**)
 The Stripe Checkout `successUrl` the portal generates changed from **`{origin}/family/donate/success?did=...`** to **`{origin}/donate/success?did=...`**. No request or response SHAPE changed - `POST /api/setu/donations/checkout` still returns the same body, and the `did` query param is unchanged.
 - **Why:** the page had to leave the `/family` layout. That layout now carries a persistent Adult Study Class gate, which would otherwise redirect a family off their own receipt the moment their Bala Vihar donation read paid.

@@ -799,9 +799,9 @@ using the throwing loader, dropping the flag gate, and removing the way out.
 
 Two doors to one program, and the more discoverable one bills the family the spec says pays nothing. Spec §4.5 row 1 covers "adult class *first*, BV later"; this is the different and more likely case.
 
-- [ ] **Step 1: Write the failing test** - `BV-paid family POSTs /api/setu/enrollments for adult-study-class → override 0`.
+- [x] **Step 1: Write the failing test** - `BV-paid family POSTs /api/setu/enrollments for adult-study-class → override 0`.
 - [ ] **Step 2: Run to verify it fails**
-- [ ] **Step 3: Close BOTH halves of the door, not just the fee**
+- [x] **Step 3: Close BOTH halves of the door, not just the fee**
 
 The waiver alone leaves the other half open. `enroll-family.ts:124-131` still derives `enrolledMids` from `memberEligibleForProgram`, which for `memberType: 'adult'` matches **every** Adult - including teacher-assigned adults (violating spec §4.4 and matrix rows 2-4) and `inviteStatus: 'pending'` invitees. `membershipMode` stays `'auto'`, so the next member edit re-adds everyone. And because `enrolledMids` is non-empty, **condition 4 is satisfied and the gate never fires** - the family never sees the selection screen at all.
 
@@ -815,19 +815,61 @@ membershipMode: 'manual',
 
 Assert that a teacher-assigned adult is **not** in `enrolledMids` after a generic-surface enroll.
 
-- [ ] **Step 3b: Apply the waiver on CREATE only**
+- [x] **Step 3b: Apply the waiver on CREATE only**
 
 Task 3's reconcile fires whenever `suggestedAmountOverride` is explicitly supplied. Combined with this step that silently implements the retroactive exemption Deviation 1 says is **not** being implemented: a childless family enrolls in adult class at `$101` and pays; later they add a child, enroll in Bala Vihar, and pay; they re-POST the adult-class oid; `bvPaid` is now true, the route supplies `0`, the reconcile fires, and **the $101 they already paid is rewritten to an expected of `0`.**
 
 Gate it: apply the waiver only when `created === true`, or only when the stored override is `null`. Test: "an adult-class enrollment that already carries a non-null override is not rewritten by a later BV-paid re-POST."
 
-- [ ] **Step 3c: Decide the BV-enrolled-but-unpaid case**
+- [x] **Step 3c: Decide the BV-enrolled-but-unpaid case**
 
 `bvPaid` is evaluated once at enroll time and never recomputed. A family that enrolls in Bala Vihar, then enrolls in adult class **before** paying, gets `override: null` → `$101`. Paying afterwards never waives it (by design), and the gate never fires because condition 4 is satisfied. They sit at `$601` expected with no in-product recourse.
 
 Either block the generic adult-class enroll while Bala Vihar is unpaid, or write `override: 0` on any Bala Vihar **enrollment** rather than payment and accept the wider waiver. Either is defensible; silence is not.
 
-- [ ] **Step 4: Run and commit**
+- [x] **Step 4: Run and commit**
+
+---
+
+### Task 10 as SHIPPED (`378df10`, `ab47661`)
+
+**STEP 3c DECIDED - and NOT the option I set out to implement.** The plan offered
+blocking the generic enroll while Bala Vihar is unpaid. **Rejected**, because
+`isBalaViharPaid` carries a documented FALSE NEGATIVE: a legacy-paid family whose
+offering doc is missing reads as unpaid (`needs-selection.ts`, "KNOWN LIMIT,
+accepted"). Inside the gate that costs an un-asked question - benign, and
+explicitly the safe direction. Turned into a block it would **refuse a family who
+genuinely paid**. So:
+
+> **The waiver tracks Bala Vihar MEMBERSHIP; the gate's prompt tracks Bala Vihar
+> PAYMENT.** They answer different questions - "should we BILL them?" versus
+> "should we PROMPT them yet?" - and charging for a class included with Bala
+> Vihar is wrong whether or not the payment has landed.
+
+Worst case is now a benign false positive: a family enrolls in BV, never pays,
+gets the adult class free, and still visibly owes the BV donation on the staff
+roster. That beats a harmful false negative.
+
+**THE FEE WAIVER ALONE DID NOT CLOSE THE DOOR** - found by tracing the caller,
+not by any test. `enroll-cta.tsx:85-88` reads the POST response's
+`suggestedAmount` and, when it is `>= 1`, sends the family **straight to Stripe**.
+The route was returning `result.suggestedAmountSnapshot`, the amount pinned at
+enrollment time, so a waived family got an override of 0 on the record and a
+**$101 checkout anyway**. The route now reports `overrideInForce`. The Task 10
+tests could not see this: they asserted what `enrollFamily` was called WITH, never
+what the caller was told back.
+
+**`resolveTeacherAssignedMids` extracted** from the gate loader so both doors
+share one definition of who teaches; two hand-rolled copies would enroll
+different people.
+
+**Accepted limit:** a family enrolling through the generic door does not get to
+CHOOSE which adult attends - `selectableAdults` is auto-derived - and because
+that leaves `enrolledMids` non-empty, condition 4 is satisfied and the gate never
+offers them the choice either. Better than today (every adult, including
+teachers, at $101), and the bespoke door is the one families are steered to.
+
+Five mutations verified, plus one on the response amount.
 
 ---
 
