@@ -489,3 +489,21 @@ describe('Auth-entry pages redirect signed-in users to their dashboard', () => {
     expect(res.headers.get('location')).toBe('http://localhost/welcome');
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// /adult-class is a Setu route, so an expired session lands on /sign-in
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('Unauthenticated /adult-class redirects to /sign-in', () => {
+  // Without /adult-class in isSetuRoute, a manager whose session expired on the
+  // selection screen is bounced to the LEGACY /login - a different app, with
+  // different credentials, and no way back to where they were.
+  it('GET /adult-class → 307 to /sign-in (not the legacy /login)', async () => {
+    const res = await middleware(makeReq('http://localhost/adult-class'));
+    expect(res.status).toBe(307);
+    const location = res.headers.get('location') ?? '';
+    expect(location).toContain('/sign-in');
+    expect(location).not.toContain('/login');
+    expect(location).toContain('from=%2Fadult-class');
+  });
+});

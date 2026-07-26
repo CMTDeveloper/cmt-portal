@@ -1101,3 +1101,32 @@ describe('canAccessRoute — staff family edit (Track B)', () => {
     expect(canAccessRoute(manager, '/api/welcome/families/CMT-X/members/CMT-X-02', 'DELETE')).toBe(false);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Adult Study Class (P4)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('canAccessRoute - /adult-class', () => {
+  // Modelled on /complete-profile and /acknowledgements: any signed-in Setu
+  // family reaches the SCREEN. Only a manager can commit a selection, and the
+  // page sends a non-manager on to /family - denying a member at the middleware
+  // instead would 302 them, which is the ERR_TOO_MANY_REDIRECTS shape.
+  it('grants the screen to a family-manager and a family-member alike', () => {
+    expect(canAccessRoute(manager, '/adult-class')).toBe(true);
+    expect(canAccessRoute(member, '/adult-class')).toBe(true);
+  });
+
+  it('denies the screen to a non-family role', () => {
+    expect(canAccessRoute(teacher, '/adult-class')).toBe(false);
+  });
+
+  // The write is narrower than the screen AND narrower than the /api/setu/
+  // catch-all, which also grants welcome-team and admin. Those roles carry no
+  // fid, so the handler could only ever 400 for them.
+  it('restricts the WRITE to a manager', () => {
+    expect(canAccessRoute(manager, '/api/setu/adult-class', 'POST')).toBe(true);
+    expect(canAccessRoute(member, '/api/setu/adult-class', 'POST')).toBe(false);
+    expect(canAccessRoute(welcomeTeam, '/api/setu/adult-class', 'POST')).toBe(false);
+    expect(canAccessRoute(admin, '/api/setu/adult-class', 'POST')).toBe(false);
+  });
+});

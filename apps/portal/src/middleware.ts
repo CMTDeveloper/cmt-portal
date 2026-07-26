@@ -186,6 +186,7 @@ function deny(req: NextRequest, reason: 'no-session' | 'unauthorized') {
     pathname === '/family' || pathname.startsWith('/family/') ||
     pathname === '/complete-profile' || pathname.startsWith('/complete-profile/') ||
     pathname === '/acknowledgements' || pathname.startsWith('/acknowledgements/') ||
+    pathname === '/adult-class' || pathname.startsWith('/adult-class/') ||
     pathname === '/welcome' || pathname.startsWith('/welcome/') ||
     pathname === '/admin' || pathname.startsWith('/admin/') ||
     pathname === '/docs' || pathname.startsWith('/docs/') ||

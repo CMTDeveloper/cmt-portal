@@ -137,6 +137,17 @@ export function canAccessRoute(
     return isSetuFamily(claims);
   }
 
+  // Adult Study Class selection screen — a top-level route (NOT under /family, to
+  // avoid the gate redirect loop) that the /family gate sends a paid Bala Vihar
+  // manager to. Granted to any signed-in Setu family, exactly like the two
+  // screens above: only a manager can actually commit a selection, and the page
+  // itself sends a non-manager on to /family. Denying a member HERE would 302
+  // them at the middleware instead, and an authorization denial is what produces
+  // the ERR_TOO_MANY_REDIRECTS bounce this codebase already has open.
+  if (pathname === '/adult-class' || pathname.startsWith('/adult-class/')) {
+    return isSetuFamily(claims);
+  }
+
   // Coordinator: roster browse + read-only family detail. `/welcome` root is
   // included because it redirects to /welcome/roster - denying it would block
   // the redirect itself. `/welcome/family/*` is included because EVERY roster
@@ -273,6 +284,15 @@ export function canAccessRoute(
     if (!isSetuFamily(claims)) return false;
     if (method === 'POST' || method === 'DELETE') return isSetuManager(claims);
     return true;
+  }
+
+  // Setu API — adult-class selection: manager-only, and narrower than the
+  // /api/setu/ catch-all below, which also grants welcome-team and admin. Those
+  // roles have no `fid` of their own, so the handler (which binds fid from the
+  // session) could only ever 400 for them — better to deny at the edge than to
+  // let a staff session reach a family-scoped write at all.
+  if (pathname === '/api/setu/adult-class') {
+    return isSetuManager(claims);
   }
 
   // Setu API — donations: GET list is any setu family; POST (checkout) is

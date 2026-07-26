@@ -57,6 +57,24 @@ export const PostEnrollmentBodySchema = z.object({
 
 export type PostEnrollmentBody = z.infer<typeof PostEnrollmentBodySchema>;
 
+// POST /api/setu/adult-class - the family names which non-teaching adult(s)
+// attend the Adult Study Class. `.strict()` because `fid` MUST come from the
+// session: a body that silently carried one would let a manager write another
+// family's enrollment. Duplicates are rejected rather than deduped - enrollFamily
+// writes `enrolledMids` verbatim, so `['a','a']` would list the same person twice
+// on the teacher roster, and a UI checkbox list cannot produce them anyway.
+export const PostAdultClassBodySchema = z
+  .object({
+    mids: z.array(z.string().min(1)).min(1),
+  })
+  .strict()
+  .refine((b) => new Set(b.mids).size === b.mids.length, {
+    message: 'mids must not contain duplicates',
+    path: ['mids'],
+  });
+
+export type PostAdultClassBody = z.infer<typeof PostAdultClassBodySchema>;
+
 export const WelcomePostEnrollmentBodySchema = z.object({
   fid: z.string().min(1),
   oid: z.string().min(1),

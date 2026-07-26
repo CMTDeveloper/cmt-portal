@@ -31,6 +31,12 @@ export const flags = {
   // /disclaimers route, and the dashboard disclaimersPending field. The
   // /admin/disclaimers editor is admin-only and available regardless of this flag.
   setuDisclaimers: process.env.NEXT_PUBLIC_FEATURE_SETU_DISCLAIMERS === 'true',
+  // Adult Study Class selection (P4, 2026-07-26). OFF by default - ships dark.
+  // Gates BOTH the /adult-class screen and the /family AdultClassGate that
+  // redirects to it. It must gate the SCREEN too, not just the gate: a route
+  // reachable in prod before the feature is announced lets a family enroll into
+  // an offering nobody has told them about.
+  setuAdultClass: process.env.NEXT_PUBLIC_FEATURE_SETU_ADULT_CLASS === 'true',
   // SMS sign-in (2026-07-25). OFF by default, and that is the honest state:
   // SNS is still in the sandbox with no Origination Number for Canada, so every
   // SMS the portal "sends" is accepted by AWS and delivered to nobody. Rather
