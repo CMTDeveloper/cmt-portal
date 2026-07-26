@@ -22,7 +22,7 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
-## 2026-07-25 - `PENDING` - SMS sign-in is REFUSED: new `sms-signin-unsupported` 400 on four `/api/setu/*` routes (**mobile action required**)
+## 2026-07-25 - `6d1fd0d` - SMS sign-in is REFUSED: new `sms-signin-unsupported` 400 on four `/api/setu/*` routes (**mobile action required**)
 
 SNS is still sandboxed with no Origination Number for Canada, so every OTP SMS the portal "sent" was accepted by AWS and delivered to nobody - leaving families on a code screen forever. Rather than fail silently, every route that accepts `type: 'phone'` now refuses with a typed error while `NEXT_PUBLIC_FEATURE_SMS_OTP` is off (its default). Flipping that flag on restores the old behaviour everywhere at once; nothing was deleted.
 
