@@ -478,9 +478,9 @@ All six risky lines were mutation-tested; each mutation fails the suite.
 
 ## Task 7: The `/adult-class` route
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 - [x] **Step 2: Run to verify they fail**
-- [ ] **Step 3: Build `app/adult-class/page.tsx`**
+- [x] **Step 3: Build `app/adult-class/page.tsx`**
 
 Top-level, outside `/family` (**R1**). Multi-select, minimum one, preselected when there is exactly one. Copy must explain **why** - one parent needs to be present during Bala Vihar classes - per spec §4.3; a family reading "you must pick an adult" with no reason reads it as bureaucracy. Exact wording is spec open item O7.
 
@@ -488,22 +488,81 @@ Server component needs `await connection()` (repo pattern, e.g. `app/family/page
 
 Save, then leave with `window.location.assign('/family')` (**R2**). Do not re-read to decide whether the gate is satisfied (**R3**).
 
-- [ ] **Step 4: Add `app/adult-class/error.tsx`**
+- [x] **Step 4: Add `app/adult-class/error.tsx`**
 
 CLAUDE.md discipline 3: every top-level route segment has its own. Both `/complete-profile` and `/acknowledgements` do.
 
-- [ ] **Step 5: Add `/adult-class` to middleware's `isSetuRoute`**
+- [x] **Step 5: Add `/adult-class` to middleware's `isSetuRoute`**
 
 `middleware.ts:179-188` lists `/complete-profile` and `/acknowledgements` - the two routes this one is modelled on - and `/adult-class` is not there. Without it, an expired-session manager hitting `/adult-class` is bounced to the **legacy `/login`**, not `/sign-in`. Add a middleware test.
 
-- [ ] **Step 6: Build `POST /api/setu/adult-class` - the handler the Save button calls**
+- [x] **Step 6: Build `POST /api/setu/adult-class` - the handler the Save button calls**
 
 An earlier draft granted this path in `canAccessRoute` and wrote it into the mobile changelog **without any task creating it**. Executed literally that ships a selection screen whose Save does nothing, and Task 8 then redirects every paid Bala Vihar manager to it - a permanent lockout, the exact failure Task 3 exists to prevent.
 
 The handler: manager-only in-handler check; `fid` from the **session**, never the body; body is `{ mids: string[] }` with `.strict()`; validates every mid is in `selectableAdults`; calls `enrollFamily` with `enrolledMids: mids`, `suggestedAmountOverride: bvPaid ? 0 : null`, `membershipMode: 'manual'`, and the current offering's `oid` from Step 5's definition.
 
-- [ ] **Step 7: Add the `canAccessRoute` rules** for `/adult-class` and `/api/setu/adult-class` (any Setu family; the handler binds `fid` from the session). The `/api/setu/` catch-all is manager-only, so a member-reachable path needs its own clause.
-- [ ] **Step 8: Run and commit**
+- [x] **Step 7: Add the `canAccessRoute` rules** for `/adult-class` and `/api/setu/adult-class` (any Setu family; the handler binds `fid` from the session). The `/api/setu/` catch-all is manager-only, so a member-reachable path needs its own clause.
+- [x] **Step 8: Run and commit**
+
+---
+
+### Task 7 as SHIPPED (`6fb832c` prerequisites, `cdb72b6` route + screen, `bea3d65` changelog)
+
+**⚠️ Task 8 Step 1 is ALREADY DONE.** `flags.setuAdultClass` + the `turbo.json`
+entry shipped here, because the flag has to gate the SCREEN too, not just the
+gate - a route reachable in prod before the feature is announced lets a family
+enroll into an offering nobody has told them about. Task 8 starts at Step 2.
+
+**Two prerequisites the plan did not anticipate, both in `6fb832c`:**
+
+1. **`loadAdultClassGateData` now THROWS on a read failure**, and
+   `loadAdultClassGateDataFailSoft` is the gate's variant. They must stay
+   distinguishable. The gate redirects here; if this screen ALSO collapsed a read
+   failure to "nothing to select, go back to `/family`", an INTERMITTENT failure
+   would bounce the two routes off each other - `ERR_TOO_MANY_REDIRECTS`, already
+   an open issue in this codebase. The throw reaches `error.tsx` instead, so the
+   family gets a retry. **Task 8's gate MUST use the FailSoft variant**; the
+   screen and the route must not.
+2. **`isBalaViharPaid` is extracted and exported** from `needs-selection.ts`.
+   Three sites must agree: the gate's condition 3, this route's waiver, and
+   **Task 10 Step 3**. A third hand-written copy is how the `>=` threshold bug
+   got in. **Task 10 must import it, not re-derive it.**
+
+**The screen is deliberately NOT gated on `needsAdultClassSelection`.** It is
+both the gate's destination and the only way to CHANGE a selection later, so
+redirecting away once the gate is satisfied would make the choice irreversible -
+and would add a second route redirecting on the same predicate the gate uses,
+which is the surface the ping-pong lives on. It renders whenever a manager has an
+offering and a selectable adult, pre-filled with the current choice.
+
+**Authorization, all three layers, each mutation-verified:**
+
+| Layer | Rule |
+|---|---|
+| `canAccessRoute` `/adult-class` | **any Setu family** (like `/complete-profile`, `/acknowledgements`). Denying a member HERE would 302 them at the middleware, which is the `ERR_TOO_MANY_REDIRECTS` shape; the page sends them to `/family` instead. |
+| `canAccessRoute` `/api/setu/adult-class` | **manager-only, NARROWER than the `/api/setu/` catch-all**, which also grants welcome-team and admin - roles with no `fid`, so the handler could only ever 400 for them. |
+| in-handler | `isSetuManager` + `fid` from the session, never the body. |
+
+**Closes plan finding 3 (`enrolledMids` is never validated).** `enroll-family.ts:223-224`
+takes a supplied list VERBATIM and skips the member read, so this route is the
+ONLY place a mid is checked. It validates against `selectableAdults` -
+**all-or-nothing (422)**, never a partial enroll that silently drops someone -
+which covers a child, a pending invitee, a teaching parent and another family's
+mid in one rule. The body schema adds two things the plan did not ask for:
+`.strict()` (so a body carrying `fid` is a 400 rather than something we must
+remember not to read) and **duplicate rejection** (`enrolledMids` is written
+verbatim, so `['a','a']` lists one person twice on the teacher roster).
+
+**Finding 9b (NOT_FOUND → 409) did not apply.** `enrollFamily` never surfaces a
+raw Firestore `NOT_FOUND`: the reconcile path uses `txn.update` only after
+`enrollmentSnap.exists`, and a missing family/offering already throws the typed
+`family-not-found` / `offering-not-found`, both mapped to 404 here.
+
+**A closed offering does not strand anyone**, as Task 3 intended: the reconcile
+sits above the enrollment-window gates, so an already-enrolled family can still
+change their choice after registration closes. Only a FIRST enrollment can hit
+`offering-disabled` (422), which is the admin-closed-it-mid-flow race.
 
 ---
 
