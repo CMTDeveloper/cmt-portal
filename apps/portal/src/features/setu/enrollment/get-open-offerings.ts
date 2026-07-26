@@ -144,11 +144,16 @@ export function resolveCurrentOffering(
   familyLocation: Location | null | undefined,
 ): OpenOffering | null {
   if (offerings.length === 0) return null;
-  // Compared against the family's location rather than `location != null`: the
-  // merged array is only ever "at this location" plus "location-less", but a
-  // future third case must not silently read as the family's own.
+  // BOTH branches name the location they accept, rather than trusting the input
+  // to contain only "ours" and "nobody's". `getOpenOfferingsForFamily` does
+  // guarantee that, but this is exported for reuse and `getOpenOfferings({
+  // programKey })` with no location arg returns EVERY centre's - hand that in
+  // for a family whose own centre runs nothing and an unfiltered fallback
+  // resolves to another centre's IN-PERSON class, which is worse than the
+  // "earliest" bug this function exists to fix. No match in either branch means
+  // no offering for this family, which is the honest answer.
   const located =
     familyLocation != null ? offerings.filter((o) => o.location === familyLocation) : [];
-  const pool = located.length > 0 ? located : offerings;
+  const pool = located.length > 0 ? located : offerings.filter((o) => o.location == null);
   return [...pool].sort(byStartDateThenOid)[0] ?? null;
 }

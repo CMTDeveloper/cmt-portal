@@ -34,6 +34,19 @@ export interface AdultClassGateSubject {
  * the whole portal. `getLegacyPaymentStatus` already fails soft the same way
  * (`legacy-payment.ts:71-74`), as do load-dashboard's cosmetic reads.
  *
+ * Precisely: **every Firestore/RTDB read fails soft** - not "this function never
+ * throws". The two in-memory exits below run OUTSIDE the try deliberately. They
+ * only walk an already-loaded `members` array, so the sole way they can throw is
+ * a caller passing something that is not a well-formed `MemberDoc[]` - a
+ * programming error that should fail loudly in dev, not be laundered into
+ * "nothing to ask this family".
+ *
+ * **A consumer that RENDERS rather than gates must not reuse this `null` as its
+ * own truth.** If `/adult-class` treated null as "nothing to select" and
+ * redirected back to `/family`, an intermittent read failure would ping-pong the
+ * two routes - the `ERR_TOO_MANY_REDIRECTS` shape this codebase has hit before.
+ * That screen needs its own error state.
+ *
  * **Takes the family, not a fid** (the plan said `(fid)`). `isManager` comes from
  * the session claims and cannot be derived from a fid at all, and the caller has
  * already loaded family+members from the React-`cache()`d `getCurrentFamily()`.

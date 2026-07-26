@@ -89,6 +89,23 @@ describe('resolveCurrentOffering', () => {
     expect(resolveCurrentOffering([a, b], 'Brampton')?.oid).toBe('asc-a');
   });
 
+  // The fallback branch must be "location-less only", not "everything left".
+  // getOpenOfferingsForFamily can only ever hand this function offerings at the
+  // family's own location plus location-less ones - but this is exported for
+  // reuse, and getOpenOfferings({programKey}) with no location arg returns EVERY
+  // centre's. A caller passing that, for a family whose own centre runs nothing,
+  // must get null - never another centre's in-person class.
+  it('never falls back to ANOTHER centre in-person offering', () => {
+    const scarborough = o({ oid: 'asc-scarborough', location: 'Scarborough', startDate: new Date('2026-09-06T00:00:00Z') });
+    expect(resolveCurrentOffering([scarborough], 'Brampton')).toBeNull();
+  });
+
+  it('falls back past another centre to the location-less offering', () => {
+    const scarborough = o({ oid: 'asc-scarborough', location: 'Scarborough', startDate: new Date('2026-09-06T00:00:00Z') });
+    const online = o({ oid: 'asc-online', location: null, startDate: new Date('2026-09-20T00:00:00Z') });
+    expect(resolveCurrentOffering([scarborough, online], 'Brampton')?.oid).toBe('asc-online');
+  });
+
   it('resolves over the location-less set for a family with no location', () => {
     const online = o({ oid: 'asc-online', location: null, startDate: new Date('2026-09-06T00:00:00Z') });
     expect(resolveCurrentOffering([online], null)?.oid).toBe('asc-online');
