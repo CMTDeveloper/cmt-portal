@@ -114,7 +114,7 @@ describe('POST /api/setu/donations/checkout', () => {
     // customerEmail must come from the member record, not the client
     const fetchBody = JSON.parse(lastFetchInit().body);
     expect(fetchBody.customerEmail).toBe('raj@example.com');
-    expect(fetchBody.successUrl).toContain('/family/donate/success?did=don_generated');
+    expect(fetchBody.successUrl).toContain('/donate/success?did=don_generated');
   });
 
   it('enforces the suggested-amount floor for an enrollment donation', async () => {
@@ -232,6 +232,6 @@ describe('POST /api/setu/donations/checkout', () => {
     const res = await POST(req);
     expect(res.status).toBe(200);
     const fetchBody = JSON.parse(lastFetchInit().body);
-    expect(fetchBody.successUrl).toBe('https://cmt-setu.vercel.app/family/donate/success?did=don_generated');
+    expect(fetchBody.successUrl).toBe('https://cmt-setu.vercel.app/donate/success?did=don_generated');
   });
 });

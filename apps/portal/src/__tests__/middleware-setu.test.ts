@@ -507,3 +507,16 @@ describe('Unauthenticated /adult-class redirects to /sign-in', () => {
     expect(location).toContain('from=%2Fadult-class');
   });
 });
+
+describe('Unauthenticated /donate/success redirects to /sign-in', () => {
+  // Moved out of /family in P4 Task 8, so it needs its own isSetuRoute entry or
+  // a family whose session expired mid-donation lands on the legacy /login.
+  it('GET /donate/success → 307 to /sign-in (not the legacy /login)', async () => {
+    const res = await middleware(makeReq('http://localhost/donate/success?did=don_1'));
+    expect(res.status).toBe(307);
+    const location = res.headers.get('location') ?? '';
+    expect(location).toContain('/sign-in');
+    expect(location).not.toContain('/login');
+  });
+});
+

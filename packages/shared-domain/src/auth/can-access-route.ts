@@ -148,6 +148,17 @@ export function canAccessRoute(
     return isSetuFamily(claims);
   }
 
+  // Donation success — top-level, OUTSIDE the /family layout, and that placement
+  // is the point: a family returning from Stripe must land on their receipt, not
+  // be redirected away by the adult-class gate. Exempting a path from INSIDE the
+  // layout is not an option (a server component has no pathname, and the header
+  // workaround is what caused the /complete-profile redirect loop), so the page
+  // moved out instead. Any signed-in Setu family; the page binds the donation to
+  // the session's own fid.
+  if (pathname === '/donate' || pathname.startsWith('/donate/')) {
+    return isSetuFamily(claims);
+  }
+
   // Coordinator: roster browse + read-only family detail. `/welcome` root is
   // included because it redirects to /welcome/roster - denying it would block
   // the redirect itself. `/welcome/family/*` is included because EVERY roster

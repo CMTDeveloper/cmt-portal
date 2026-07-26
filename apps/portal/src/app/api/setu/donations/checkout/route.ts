@@ -193,7 +193,7 @@ export async function POST(req: Request) {
     lineItems,
     customerEmail: donor.email,
     client_reference_id: donation.did,
-    successUrl: `${origin}/family/donate/success?did=${donation.did}`,
+    successUrl: `${origin}/donate/success?did=${donation.did}`,
     cancelUrl: `${origin}/family/donate/cancel?did=${donation.did}`,
     metadata: { campaign: 'setu', category: input.type, fid: session.fid },
     branding_settings: { display_name: 'Chinmaya Mission Toronto' },

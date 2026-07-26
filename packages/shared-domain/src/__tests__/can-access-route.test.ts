@@ -1130,3 +1130,17 @@ describe('canAccessRoute - /adult-class', () => {
     expect(canAccessRoute(admin, '/api/setu/adult-class', 'POST')).toBe(false);
   });
 });
+
+describe('canAccessRoute - /donate/success (moved out of the /family layout)', () => {
+  // The whole reason this page is top-level: a family returning from Stripe must
+  // reach their receipt rather than be redirected away by the adult-class gate.
+  it('grants it to any signed-in Setu family', () => {
+    expect(canAccessRoute(manager, '/donate/success')).toBe(true);
+    expect(canAccessRoute(member, '/donate/success')).toBe(true);
+  });
+
+  it('denies it to a non-family role', () => {
+    expect(canAccessRoute(teacher, '/donate/success')).toBe(false);
+  });
+});
+
