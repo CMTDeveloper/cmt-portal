@@ -303,7 +303,16 @@ describe('enrollFamily - reconcile on an active enrollment', () => {
     await enrollFamily({ ...base, enrolledMids: [`${FID}-03`] });
 
     const written = updates.find((u) => u.ref.__kind === 'enrollment')!.data;
-    expect(Object.keys(written)).toEqual(['enrolledMids']);
+    // Assert the DANGEROUS fields are absent rather than pinning an exact key
+    // list: `updatedAt` is legitimately added (matching the staff override
+    // route), and a key-list assertion would forbid that for no good reason.
+    for (const forbidden of [
+      'suggestedAmountSnapshot', 'enrolledAt', 'enrolledVia', 'enrolledByMid',
+      'pid', 'oid', 'fid', 'eid', 'levelSnapshots', 'status', 'programKey', '_test',
+    ]) {
+      expect(written).not.toHaveProperty(forbidden);
+    }
+    expect(written).toHaveProperty('enrolledMids');
     expect(state.enrollment.suggestedAmountOverride).toBe(0);
     expect(state.enrollment.membershipMode).toBe('manual');
   });
@@ -319,5 +328,88 @@ describe('enrollFamily - reconcile on an active enrollment', () => {
     expect(updates).toHaveLength(0);
     expect(writtenEnrollment().status).toBe('active');
     expect(writtenEnrollment().suggestedAmountSnapshot).toBe(101);
+  });
+});
+
+// ── Reachability + write hygiene (found by an independent audit) ─────────────
+describe('enrollFamily - the reconcile must stay reachable', () => {
+  // THE WIDEST BLIND SPOT the audit found: every other fixture here sets
+  // enabled:true / endDate:null, so a reconcile sitting BELOW the
+  // enrollment-window gates would have stayed green forever while being
+  // unreachable in production exactly when it is needed.
+  it('reconciles even when the offering is DISABLED (registration closed)', async () => {
+    state.offering = { ...state.offering, enabled: false };
+    state.enrollment = { status: 'active', suggestedAmountSnapshot: 77, enrolledMids: [`${FID}-01`] };
+
+    const res = await enrollFamily({ ...base, enrolledMids: [`${FID}-03`] });
+
+    expect(res).toMatchObject({ created: false, reconciled: true });
+    expect(state.enrollment.enrolledMids).toEqual([`${FID}-03`]);
+  });
+
+  it('reconciles even when the offering has EXPIRED', async () => {
+    state.offering = { ...state.offering, endDate: new Date('2020-01-01') };
+    state.enrollment = { status: 'active', suggestedAmountSnapshot: 77, enrolledMids: [`${FID}-01`] };
+
+    const res = await enrollFamily({ ...base, enrolledMids: [`${FID}-03`] });
+
+    expect(res).toMatchObject({ created: false, reconciled: true });
+  });
+
+  it('reconciles even when the PROGRAM is not active', async () => {
+    mockGetProgram.mockResolvedValue({ programKey: 'adult-study-class', status: 'archived', eligibility: { memberType: 'adult' } });
+    state.enrollment = { status: 'active', suggestedAmountSnapshot: 77, enrolledMids: [`${FID}-01`] };
+
+    const res = await enrollFamily({ ...base, enrolledMids: [`${FID}-03`] });
+
+    expect(res).toMatchObject({ created: false, reconciled: true });
+  });
+
+  // The window gates must STILL apply to a genuine new enrollment, and to the
+  // plain no-op path - existing callers keep their error behaviour exactly.
+  it('still refuses to CREATE into a disabled offering', async () => {
+    state.offering = { ...state.offering, enabled: false };
+    state.enrollment = null;
+    await expect(enrollFamily({ ...base, enrolledMids: [`${FID}-03`] })).rejects.toThrow('offering-disabled');
+  });
+
+  it('still throws offering-disabled on the plain NO-OP path (nothing supplied)', async () => {
+    // Byte-identical to pre-change behaviour for the four existing callers:
+    // they supply none of the new params, so they still hit the gates first.
+    state.offering = { ...state.offering, enabled: false };
+    state.enrollment = { status: 'active', suggestedAmountSnapshot: 77 };
+    await expect(enrollFamily(base)).rejects.toThrow('offering-disabled');
+  });
+});
+
+describe('enrollFamily - reconcile write hygiene', () => {
+  it('does NOT write when the supplied values already match', async () => {
+    // This doc is also targeted by the member-edit prune; a double-submit or
+    // client retry must not contend on it for nothing.
+    state.enrollment = {
+      status: 'active', suggestedAmountSnapshot: 77,
+      enrolledMids: [`${FID}-03`], membershipMode: 'manual',
+    };
+
+    const res = await enrollFamily({ ...base, enrolledMids: [`${FID}-03`], membershipMode: 'manual' });
+
+    expect(res).toMatchObject({ created: false, reconciled: true });
+    expect(updates).toHaveLength(0);
+  });
+
+  it('stamps updatedAt, matching what the staff override route writes', async () => {
+    state.enrollment = { status: 'active', suggestedAmountSnapshot: 77, enrolledMids: [`${FID}-01`] };
+    await enrollFamily({ ...base, enrolledMids: [`${FID}-03`] });
+    expect(updates[0]!.data).toHaveProperty('updatedAt', 'SERVER_TIMESTAMP');
+  });
+
+  it('returns 0 rather than undefined when an older doc lacks the snapshot', async () => {
+    // Several writers exist (backfill/seed/rollover scripts); a doc missing the
+    // field would otherwise serialise `suggestedAmount: undefined`, which JSON
+    // drops entirely - a blank donate CTA, and a required field absent for the
+    // mobile client that hand-mirrors this shape.
+    state.enrollment = { status: 'active', enrolledMids: [`${FID}-01`] };
+    const res = await enrollFamily({ ...base, enrolledMids: [`${FID}-03`] });
+    expect(res.suggestedAmountSnapshot).toBe(0);
   });
 });

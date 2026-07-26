@@ -116,6 +116,80 @@ export async function enrollFamily(params: EnrollFamilyParams): Promise<EnrollFa
       location: (offeringData['location'] ?? null) as OfferingDoc['location'],
     };
 
+    // ── RECONCILE, ABOVE the enrollment-WINDOW gates ─────────────────────────
+    // Deliberately placed before program-not-available / offering-disabled /
+    // offering-expired. Those gate opening a NEW enrollment; this family is
+    // already in. Below them, changing which adult attends becomes impossible
+    // the moment an admin closes registration - and since the member-edit prune
+    // can empty `enrolledMids` at any time, a family could be diverted to the
+    // adult-class screen, pick someone, get a 422, and be stranded there with no
+    // self-serve exit. That is the exact lockout this reconcile exists to
+    // prevent, so it must not be gated on the window being open.
+    //
+    // Only fires when the caller actually supplies something to reconcile. With
+    // nothing supplied the window gates still apply and the no-op below is
+    // reached exactly as before, so all four existing callers - including the
+    // door kiosk - keep byte-identical behaviour INCLUDING their error cases.
+    const wantsReconcile = midsSupplied || overrideSupplied || modeSupplied;
+    if (wantsReconcile && enrollmentSnap.exists) {
+      const existing = enrollmentSnap.data() as Record<string, unknown>;
+      if (existing['status'] === 'active') {
+        // Patch ONLY what was explicitly supplied. Everything else on an active
+        // enrollment is immutable here by design. `suggestedAmountSnapshot` is
+        // pinned at first enrollment, and `enrolledAt` is load-bearing beyond
+        // ordering: get-enrollments.ts:85-87 resolves the LIVE price from it, so
+        // rewriting it would silently move the pricing tier - i.e. money owed.
+        // `pid` is the roster join key, `levelSnapshots` the sole source of a
+        // child's level history, `enrolledVia` part of the issue-#23
+        // confirmation leg, and `_test` is what the UAT cleanup sweep keys on.
+        const patch: Record<string, unknown> = {};
+        if (midsSupplied) patch['enrolledMids'] = params.enrolledMids;
+        if (overrideSupplied) patch['suggestedAmountOverride'] = params.suggestedAmountOverride;
+        if (modeSupplied) patch['membershipMode'] = params.membershipMode;
+
+        // Never leave an enrollment naming nobody - it would still satisfy the
+        // adult-class gate's "has an active enrollment" test while selecting no
+        // one. (The member-edit prune MAY legitimately leave an empty list: a
+        // different writer with a different job, and it is what makes the gate
+        // re-fire.)
+        if (midsSupplied && params.enrolledMids!.length === 0) {
+          throw new Error('no-eligible-members');
+        }
+
+        // Nothing actually differs ⇒ do not burn a write. This doc is also
+        // targeted by the member-edit prune, and a double-submit or client retry
+        // would otherwise contend on it for no reason. Mirrors the `sameSet`
+        // short-circuit at sync-enrollment-members.ts:90.
+        const unchanged = Object.entries(patch).every(([k, v]) =>
+          Array.isArray(v) && Array.isArray(existing[k])
+            ? v.length === (existing[k] as unknown[]).length &&
+              v.every((x, i) => x === (existing[k] as unknown[])[i])
+            : v === existing[k],
+        );
+
+        // Older docs predate this field; never return `undefined` into a route
+        // that serialises it as a required number.
+        const storedSnapshot = typeof existing['suggestedAmountSnapshot'] === 'number'
+          ? (existing['suggestedAmountSnapshot'] as number)
+          : 0;
+
+        if (!unchanged) {
+          // `updatedAt` matches what the staff override route writes for the
+          // same field (api/welcome/enrollments/[eid]/override/route.ts:55-58),
+          // so one field is never mutated by two paths with different metadata.
+          txn.update(enrollmentRef, { ...patch, updatedAt: FieldValue.serverTimestamp() });
+        }
+
+        return {
+          created: false as const,
+          reconciled: true as const,
+          eid,
+          // The STORED snapshot, never a freshly resolved one.
+          suggestedAmountSnapshot: storedSnapshot,
+        };
+      }
+    }
+
     // Load the program for BOTH the active-gate AND its eligibility rules. Uses
     // the cached reader so it's cheap; failure aborts before any writes.
     const program = await getProgram(offering.programKey);
@@ -133,45 +207,13 @@ export async function enrollFamily(params: EnrollFamilyParams): Promise<EnrollFa
     // Returns 0 for free programs (empty pricingTiers).
     const suggestedAmountSnapshot = resolveSuggestedAmount(offering, now);
 
+    // Plain no-op: an active enrollment and nothing to reconcile. Byte-for-byte
+    // the pre-existing behaviour, which four callers rely on - above all the
+    // door kiosk, whose documented idempotency IS "a re-enroll writes nothing".
     if (enrollmentSnap.exists) {
       const existing = enrollmentSnap.data() as { status: string; suggestedAmountSnapshot: number };
       if (existing.status === 'active') {
-        // RECONCILE. Patch ONLY what the caller explicitly supplied. Anything
-        // else on an active enrollment is immutable here by design:
-        // `suggestedAmountSnapshot` is pinned at first enrollment so a later tier
-        // edit cannot move what an already-enrolled family owes, and `enrolledAt`
-        // / `enrolledVia` / `enrolledByMid` are the historical record of how the
-        // family got in. Re-deriving any of them on a re-POST would silently
-        // rewrite money owed or provenance.
-        const patch: Record<string, unknown> = {};
-        if (midsSupplied) patch['enrolledMids'] = params.enrolledMids;
-        if (overrideSupplied) patch['suggestedAmountOverride'] = params.suggestedAmountOverride;
-        if (modeSupplied) patch['membershipMode'] = params.membershipMode;
-
-        // Nothing supplied ⇒ byte-for-byte the previous no-op. Four existing
-        // callers rely on this, including the door kiosk, whose documented
-        // idempotency is precisely "a re-enroll writes nothing".
-        if (Object.keys(patch).length === 0) {
-          return { created: false as const, eid, suggestedAmountSnapshot: existing.suggestedAmountSnapshot };
-        }
-
-        // Same invariant as the create path: never leave an enrollment naming
-        // nobody. An empty list would still satisfy "has an active enrollment"
-        // for the adult-class gate while selecting no one. (The member-edit
-        // prune MAY legitimately leave an empty list - that is a different
-        // writer with a different job, and it is what makes the gate re-fire.)
-        if (midsSupplied && params.enrolledMids!.length === 0) {
-          throw new Error('no-eligible-members');
-        }
-
-        txn.update(enrollmentRef, patch);
-        return {
-          created: false as const,
-          reconciled: true as const,
-          eid,
-          // The STORED snapshot, never the freshly resolved one above.
-          suggestedAmountSnapshot: existing.suggestedAmountSnapshot,
-        };
+        return { created: false as const, eid, suggestedAmountSnapshot: existing.suggestedAmountSnapshot };
       }
     }
 
