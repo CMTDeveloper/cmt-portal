@@ -869,7 +869,30 @@ that leaves `enrolledMids` non-empty, condition 4 is satisfied and the gate neve
 offers them the choice either. Better than today (every adult, including
 teachers, at $101), and the bespoke door is the one families are steered to.
 
-Five mutations verified, plus one on the response amount.
+**Step 3b was implemented WRONG first, and its test asserted the wrong behaviour**
+(corrected `9d6163e`). The guard was "omit the override when the stored one is
+non-null" - but a stored `null` is AMBIGUOUS. This function always supplies one
+value or the other, so on a create it WRITES `null` for a family with no Bala
+Vihar, which is exactly how they get billed the full amount. A later re-POST then
+read that null as "never priced" and applied the waiver, rewriting an amount the
+family had already PAID down to 0 - the precise scenario Step 3b exists to
+prevent. **Create-only means "no active enrollment for this oid yet", not "no
+override stored".** Worth noting the failure mode: the test was written to match
+the implementation rather than the requirement, so it locked the bug in.
+
+**The new 422 needed client copy.** `enroll-cta.tsx`'s error switch had no case
+for `no-selectable-adults`, so a family where every adult teaches got
+"Enrollment failed - please try again" - wrong twice over, since the condition is
+deterministic and retrying cannot help.
+
+**Known, accepted, and NOT fixed here:** `enroll-cta.tsx:68` shows "Add a child to
+your family before enrolling in Bala Vihar" for `no-eligible-members` regardless
+of program - pre-existing and now reachable via other programs. And the enroll
+page's pre-click price still shows the raw amount, since it cannot preview the
+waiver without duplicating the computation server-side; it self-corrects the
+instant they click, now that the response reports the effective amount.
+
+Six mutations verified, plus one on the response amount and one on the create-only gate.
 
 ---
 
