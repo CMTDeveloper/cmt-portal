@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseLegacyRowsForMigration } from '../legacy-parser';
+import { mapLocationDetailed, parseLegacyRowsForMigration } from '../legacy-parser';
 
 // Each row mirrors the real /roster shape captured from prod RTDB 2026-05-25.
 function row(overrides: Record<string, unknown>): Record<string, unknown> {
@@ -219,5 +219,92 @@ describe('parseLegacyRowsForMigration', () => {
       '42',
     );
     expect(result?.familyName).toBe('Shah family');
+  });
+});
+
+// Dormancy drives the bulk-migration skip (spec 1.9b). Measured against the real
+// snapshot on 2026-07-26: 299 of 867 families are dormant, holding 190
+// grade-mappable children whose grades are years stale. Skipping them keeps those
+// children out of Brampton teachers' "Registered - not enrolled" lists on launch
+// Sunday; the families still enter Setu lazily on their first sign-in.
+describe('parseLegacyRowsForMigration - dormancy', () => {
+  it('is dormant when every row has no centre AND no level', () => {
+    const result = parseLegacyRowsForMigration(
+      [
+        row({ grade: 99, fname: 'Asha', lname: 'Shah', center: 'NULL', level: 'NULL', sid: 1 }),
+        row({ grade: 3, fname: 'Kid', lname: 'Shah', center: 'NULL', level: 'NULL', sid: 2 }),
+      ],
+      '42',
+    );
+    expect(result?.dormant).toBe(true);
+  });
+
+  it('is NOT dormant when any row carries a real centre', () => {
+    const result = parseLegacyRowsForMigration(
+      [
+        row({ grade: 99, fname: 'Asha', lname: 'Shah', center: 'NULL', level: 'NULL', sid: 1 }),
+        row({ grade: 3, fname: 'Kid', lname: 'Shah', center: 'Scarborough', level: 'NULL', sid: 2 }),
+      ],
+      '42',
+    );
+    expect(result?.dormant).toBe(false);
+  });
+
+  it('is NOT dormant when any row carries a real level', () => {
+    const result = parseLegacyRowsForMigration(
+      [
+        row({ grade: 99, fname: 'Asha', lname: 'Shah', center: 'NULL', level: 'NULL', sid: 1 }),
+        row({ grade: 3, fname: 'Kid', lname: 'Shah', center: 'NULL', level: 'Level 2', sid: 2 }),
+      ],
+      '42',
+    );
+    expect(result?.dormant).toBe(false);
+  });
+
+  it('treats the literal strings "NULL" and "null" as absent', () => {
+    // The snapshot holds 574 rows of literal "NULL". Case matters: the check-in
+    // parser at family-lookup.ts:139 catches only the uppercase form, so a
+    // lowercase "null" would survive there. clean() here is case-insensitive.
+    const result = parseLegacyRowsForMigration(
+      [
+        row({ grade: 99, fname: 'Asha', lname: 'Shah', center: 'null', level: 'null', sid: 1 }),
+        row({ grade: 3, fname: 'Kid', lname: 'Shah', center: 'NULL', level: '', sid: 2 }),
+      ],
+      '42',
+    );
+    expect(result?.dormant).toBe(true);
+  });
+
+  it('treats "ALL" as a real centre, so the family is NOT dormant', () => {
+    // 10 rows in the snapshot carry center "ALL". It is not one of the four
+    // valid locations, so mapLocation still defaults it to Brampton and the
+    // family is flagged for confirmation - but it is a PRESENT value, so the
+    // family is not dormant and does migrate. Exactly 2 families (legacy fids
+    // 1016 and 1367) are in this state.
+    const result = parseLegacyRowsForMigration(
+      [row({ grade: 99, fname: 'Asha', lname: 'Shah', center: 'ALL', level: 'NULL', sid: 1 })],
+      '42',
+    );
+    expect(result?.dormant).toBe(false);
+    expect(result?.location).toBe('Brampton');
+    expect(result?.locationDefaulted).toBe(true);
+  });
+});
+
+describe('mapLocationDetailed', () => {
+  it.each(['Brampton', 'Mississauga', 'Scarborough', 'Markham'] as const)(
+    'reports %s as a real centre, not defaulted',
+    (centre) => {
+      expect(mapLocationDetailed(centre)).toEqual({ location: centre, defaulted: false });
+    },
+  );
+
+  it.each([
+    ['the "NULL" sentinel', 'NULL'],
+    ['an empty string', ''],
+    ['a missing value', undefined],
+    ['the unrecognised "ALL"', 'ALL'],
+  ])('defaults to Brampton and reports defaulted=true for %s', (_label, value) => {
+    expect(mapLocationDetailed(value)).toEqual({ location: 'Brampton', defaulted: true });
   });
 });

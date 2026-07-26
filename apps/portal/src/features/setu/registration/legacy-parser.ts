@@ -25,7 +25,10 @@ import { readRtdb } from '@cmt/firebase-shared/admin/rtdb';
 const VALID_LOCATIONS = ['Brampton', 'Mississauga', 'Scarborough', 'Markham'] as const;
 export type LegacyLocation = (typeof VALID_LOCATIONS)[number];
 
-interface LegacyRosterRow {
+// Exported for the dormancy predicate's callers and tests. NOTE there is a
+// second, unrelated `LegacyRosterRow` at
+// `features/check-in/shared/rtdb/classlist.ts:10` - do not conflate them.
+export interface LegacyRosterRow {
   sid?: string | number;
   fid?: string | number;
   fname?: string;
@@ -90,6 +93,19 @@ export interface LegacyFamilyForMigration {
   primaryPhone: string | null;
   adults: LegacyAdult[];
   children: LegacyChild[];
+  // True when NO row of this family carries a centre AND no row carries a
+  // level - i.e. the family has not registered anywhere in years. The bulk
+  // migration skips these (spec 1.9b) so their stale grades stay out of
+  // teachers' grade-eligible lists; they still enter Setu lazily on their
+  // first sign-in, kiosk check-in, or teacher add. Measured 2026-07-26 on the
+  // real snapshot: 299 of 867 families, holding 190 grade-mappable children.
+  dormant: boolean;
+  // True when `mapLocation` could not recognise the legacy `center` and fell
+  // back to the Brampton default, so `location` above is a guess rather than
+  // the family's stated centre. `lazy-migrate` persists this as
+  // `locationNeedsConfirmation` and the family is asked to pick at first
+  // sign-in (spec 1.9c) instead of being silently filed under Brampton.
+  locationDefaulted: boolean;
 }
 
 function clean(value: unknown): string | null {
@@ -109,10 +125,40 @@ function mapGender(value: unknown): LegacyGender {
   return 'PreferNotToSay';
 }
 
-function mapLocation(value: unknown): LegacyLocation {
+/**
+ * Map a legacy `center` value to a portal location, reporting whether we had to
+ * guess. `defaulted: true` means the legacy value was missing, the "NULL"
+ * sentinel, or something we do not recognise (e.g. the 10 snapshot rows reading
+ * "ALL") - so 'Brampton' is a fallback, not the family's stated centre.
+ *
+ * The caller persists that verdict as `locationNeedsConfirmation` so the family
+ * is ASKED for their centre rather than silently filed under Brampton. Without
+ * this reporting, the entire centre-confirmation feature is inert: nothing would
+ * ever set the flag that the gate and the form both key on.
+ */
+export function mapLocationDetailed(value: unknown): {
+  location: LegacyLocation;
+  defaulted: boolean;
+} {
   const s = clean(value);
-  if (s && (VALID_LOCATIONS as readonly string[]).includes(s)) return s as LegacyLocation;
-  return 'Brampton';
+  if (s && (VALID_LOCATIONS as readonly string[]).includes(s)) {
+    return { location: s as LegacyLocation, defaulted: false };
+  }
+  return { location: 'Brampton', defaulted: true };
+}
+
+/**
+ * A family is dormant when NO row carries a centre and NO row carries a level.
+ *
+ * Both halves use `clean()`, so the "NULL"/"null" sentinel and empty strings
+ * count as absent while any real value - including a centre we do not recognise,
+ * such as "ALL" - counts as present. A family with an unrecognised centre is
+ * therefore NOT dormant: it migrates, and `locationDefaulted` gets it asked.
+ */
+function isDormant(rows: readonly LegacyRosterRow[]): boolean {
+  const anyCentre = rows.some((r) => clean(r.center) !== null);
+  const anyLevel = rows.some((r) => clean(r.level) !== null);
+  return !anyCentre && !anyLevel;
 }
 
 // Legacy `grade` is numeric: 1-12 are real grades; 0 and -1 are the JK/SK
@@ -218,16 +264,20 @@ export function parseLegacyRowsForMigration(
     };
   });
 
+  const { location, defaulted } = mapLocationDetailed(first.center);
+
   return {
     legacyFid,
     familyName,
-    location: mapLocation(first.center),
+    location,
     primaryFirstName,
     primaryLastName,
     primaryEmail,
     primaryPhone,
     adults,
     children,
+    dormant: isDormant(rows),
+    locationDefaulted: defaulted,
   };
 }
 
