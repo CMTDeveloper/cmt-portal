@@ -31,6 +31,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'not-found' }, { status: 404 });
   }
 
+  // The LEGACY path, and the one most families still use: /login + /check-in/*
+  // remains the production entry point for existing Bala Vihar families. Leaving
+  // phone live here would leave the silent-nothing bug in place exactly where it
+  // hurts most. Refused before the lookup so a phone gets the same answer
+  // whether or not it is on the roster.
+  if (parsed.data.type === 'phone' && !flags.smsOtp) {
+    return NextResponse.json({ error: 'sms-signin-unsupported' }, { status: 400 });
+  }
+
   const normalized = normalizeContact(parsed.data.type, parsed.data.value);
   const rate = await checkAndRecordOtpRateLimit(normalized);
   if (!rate.allowed) {

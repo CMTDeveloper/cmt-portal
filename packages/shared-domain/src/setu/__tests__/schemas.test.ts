@@ -252,6 +252,18 @@ describe('normalizeContactForKey', () => {
     expect(normalizeContactForKey('phone', '14165552204')).toBe('+14165552204');
   });
 
+  it('phone: every shape a family might type collapses to ONE key', () => {
+    // This is sign-in IDENTITY, not formatting. The contactKey is derived from
+    // this value, so if two shapes of the same number ever produced two keys,
+    // the second one misses the existing family and silently creates a
+    // brand-new auth user. Pinned here because the /api/setu/auth/send-code
+    // route test that used to cover it no longer reaches SNS while SMS sign-in
+    // is refused.
+    const shapes = ['4165551234', '+14165551234', '14165551234', '(416) 555-1234', '416-555-1234', ' 416 555 1234 '];
+    const keys = new Set(shapes.map((s) => normalizeContactForKey('phone', s)));
+    expect(keys).toEqual(new Set(['+14165551234']));
+  });
+
   it('phone: an explicit non-NANP country code is preserved as full E.164', () => {
     // Some families have Indian (and other international) numbers. When the user
     // types a leading '+' with a country code other than +1, keep it verbatim

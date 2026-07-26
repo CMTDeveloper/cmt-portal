@@ -31,6 +31,12 @@ export async function POST(req: Request) {
   }
 
   const { type, value, code } = parsed.data;
+
+  // Pairs with the add-a-phone refusal in this route's send-code sibling.
+  if (type === 'phone' && !flags.smsOtp) {
+    return NextResponse.json({ error: 'sms-signin-unsupported' }, { status: 400 });
+  }
+
   const normalized = normalizeContact(type, value);
   const ok = await verifyCode(normalized, code, type);
   if (!ok) {

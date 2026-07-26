@@ -267,14 +267,28 @@ describe('POST /api/setu/auth/verify-code', () => {
   });
 
   it('does NOT issue a registration grant for a phone with no family (phone reg unsupported v1)', async () => {
+    // The guarantee is unchanged and now enforced earlier: with SMS sign-in off
+    // the phone is refused up front, so no grant can be issued. It used to be a
+    // 200 with the grant merely absent.
     (verifyCode as ReturnType<typeof vi.fn>).mockResolvedValue(true);
     (findSetuFamilyByContact as ReturnType<typeof vi.fn>).mockResolvedValue({
       source: null, fid: null, mid: null, legacyFid: null, family: null,
     });
     const res = await POST(makeRequest({ type: 'phone', value: '4165550000', code: '111111' }));
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(400);
     const body = await res.json();
+    expect(body.error).toBe('sms-signin-unsupported');
     expect(body.registrationGrant).toBeUndefined();
+  });
+
+  it('refuses a phone before consuming a verification attempt', async () => {
+    // Mirrors send-code so nobody burns attempts against a code that was never
+    // sent, and so the message names the channel rather than blaming the family
+    // for an "invalid or expired" code.
+    (verifyCode as ReturnType<typeof vi.fn>).mockResolvedValue(true);
+    const res = await POST(makeRequest({ type: 'phone', value: '4165550000', code: '111111' }));
+    expect(res.status).toBe(400);
+    expect(verifyCode).not.toHaveBeenCalled();
   });
 
   it('creates user if not found in Firebase Auth', async () => {

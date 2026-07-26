@@ -70,11 +70,19 @@ describe('POST /api/setu/contacts/verify-code', () => {
   });
 
   it('returns 409 when the contact is already in use by another member', async () => {
+    // Uses email: the 409 is about contact ownership, not about the channel,
+    // and phone is refused earlier while SMS sign-in is off.
     (addVerifiedContact as ReturnType<typeof vi.fn>).mockRejectedValue(new ContactInUseError());
-    const res = await POST(makeRequest({ type: 'phone', value: '4165550200', code: '123456' }));
+    const res = await POST(makeRequest({ type: 'email', value: 'taken@example.com', code: '123456' }));
     expect(res.status).toBe(409);
     const body = await res.json();
     expect(body.error).toBe('contact-in-use');
+  });
+
+  it('refuses a phone while SMS sign-in is off, pairing with its send-code sibling', async () => {
+    const res = await POST(makeRequest({ type: 'phone', value: '4165550200', code: '123456' }));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('sms-signin-unsupported');
   });
 
   it('returns 404 when feature flag is off', async () => {

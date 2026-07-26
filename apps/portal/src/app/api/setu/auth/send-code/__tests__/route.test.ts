@@ -27,6 +27,7 @@ import { createMagicLink } from '@/features/setu/auth/magic-links';
 
 const mockSendEmail = vi.fn();
 const mockSendSMS = vi.fn();
+const mockSendSesTemplatedEmail = vi.fn();
 
 function makeRequest(body: unknown, extraHeaders: Record<string, string> = {}) {
   return new Request('http://localhost/api/setu/auth/send-code', {
@@ -41,6 +42,7 @@ beforeEach(() => {
   (resolveSender as ReturnType<typeof vi.fn>).mockReturnValue({
     sendEmail: mockSendEmail,
     sendSMS: mockSendSMS,
+    sendSesTemplatedEmail: mockSendSesTemplatedEmail,
   });
   (checkAndRecordOtpRateLimit as ReturnType<typeof vi.fn>).mockResolvedValue({ allowed: true });
   (storeVerificationCode as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
@@ -145,28 +147,66 @@ describe('POST /api/setu/auth/send-code', () => {
     }
   });
 
-  it('accepts phone contact, calls SNS sender with E.164-canonical phone', async () => {
+  it('sends the sign-in code through the PLAIN sender, never an SES-managed template', async () => {
+    // The Setu sign-in OTP is one of the two live OTP paths and it does not go
+    // through sendTemplatedEmail at all - it builds its subject and body inline
+    // here. Routing it through SES would put every sign-in behind a template
+    // edit that ships with no deploy and no review, and a template that fails
+    // to render is accepted by SES and delivered to nobody.
+    (findSetuFamilyByContact as ReturnType<typeof vi.fn>).mockResolvedValue({
+      source: 'setu', fid: 'FAM001', mid: 'FAM001-01', legacyFid: null, family: {},
+    });
+
+    const res = await POST(makeRequest({ type: 'email', value: 'raj@example.com' }));
+
+    expect(res.status).toBe(200);
+    expect(mockSendEmail).toHaveBeenCalled();
+    expect(mockSendSesTemplatedEmail).not.toHaveBeenCalled();
+  });
+
+  // ── SMS sign-in is refused while NEXT_PUBLIC_FEATURE_SMS_OTP is off ────────
+  // These two replace the previous "calls SNS with an E.164-canonical phone"
+  // pair. The canonicalization guarantee they also covered is identity-critical
+  // (changing it re-keys families onto brand-new auth users), so it did NOT go
+  // away with them - it lives on normalizeContactForKey's own tests in
+  // shared-domain, where it belongs.
+
+  it('refuses a phone contact with a typed 400 while SMS sign-in is off', async () => {
     (findSetuFamilyByContact as ReturnType<typeof vi.fn>).mockResolvedValue({
       source: 'legacy', fid: null, mid: null, legacyFid: '42', family: {},
     });
     const res = await POST(makeRequest({ type: 'phone', value: '4165551234' }));
-    expect(res.status).toBe(200);
-    // Phone is canonicalized to +1XXXXXXXXXX before SNS publish so AWS
-    // doesn't misinterpret the country code on raw 10-digit input.
-    expect(mockSendSMS).toHaveBeenCalledWith(expect.objectContaining({ phone: '+14165551234' }));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('sms-signin-unsupported');
+    expect(mockSendSMS).not.toHaveBeenCalled();
     expect(mockSendEmail).not.toHaveBeenCalled();
   });
 
-  it('phone variations all canonicalize to the same E.164 form', async () => {
+  it('refuses BEFORE the family lookup, so a phone reveals nothing about registration', async () => {
+    // The anti-enumeration silent 200 below is what normally hides whether a
+    // contact is known. A refusal placed after the lookup would answer
+    // differently for registered and unregistered numbers.
+    const res = await POST(makeRequest({ type: 'phone', value: '4165551234' }));
+    expect(res.status).toBe(400);
+    expect(findSetuFamilyByContact).not.toHaveBeenCalled();
+  });
+
+  it('still sends SMS when the flag is ON, with the E.164-canonical phone', async () => {
+    // Keeps the flag real: without this, flipping NEXT_PUBLIC_FEATURE_SMS_OTP on
+    // could restore nothing and no test would notice.
+    vi.resetModules();
+    vi.doMock('@/lib/flags', () => ({ flags: { setuAuth: true, smsOtp: true } }));
+    const { POST: flaggedPOST } = await import('../route');
     (findSetuFamilyByContact as ReturnType<typeof vi.fn>).mockResolvedValue({
       source: 'legacy', fid: null, mid: null, legacyFid: '42', family: {},
     });
-    for (const raw of ['4165551234', '+14165551234', '14165551234', '(416) 555-1234', '416-555-1234']) {
-      mockSendSMS.mockClear();
-      const res = await POST(makeRequest({ type: 'phone', value: raw }));
-      expect(res.status).toBe(200);
-      expect(mockSendSMS).toHaveBeenCalledWith(expect.objectContaining({ phone: '+14165551234' }));
-    }
+
+    const res = await flaggedPOST(makeRequest({ type: 'phone', value: '4165551234' }));
+
+    expect(res.status).toBe(200);
+    // Canonicalized to +1XXXXXXXXXX before the SNS publish so AWS does not
+    // misinterpret the country code on raw 10-digit input.
+    expect(mockSendSMS).toHaveBeenCalledWith(expect.objectContaining({ phone: '+14165551234' }));
   });
 
   it('returns 429 with resetAt when rate limited', async () => {

@@ -427,11 +427,30 @@ function RegisterReal() {
               shows their household. (Sign-in, not a direct join POST: OTP
               proves contact ownership and verify-code resolves the family via
               contactKey → family-manager/member claims.) */}
+          {/* A phone match must NOT hand off as ?type=phone while SMS sign-in is
+              off. That handoff pre-selects the Phone tab, fills the number, and
+              deliberately suppresses the saved password preference to force an
+              OTP proof - so the family the portal just recognised would land on
+              a screen that can only refuse them. Send them to the email tab
+              with an explanation instead. */}
           <p style={{ fontSize: 13, color: 'var(--body-text)', margin: '0 0 14px', lineHeight: 1.5 }}>
-            Your <strong>{match.matchedValue}</strong> is linked to an existing family. Sign in to access it — we&apos;ll send a verification code.
+            {match.matchedType === 'phone' && !flags.smsOtp ? (
+              <>
+                Your <strong>{match.matchedValue}</strong> is linked to an existing family. Text-message
+                sign-in is unavailable right now — sign in with the email address on that account.
+              </>
+            ) : (
+              <>
+                Your <strong>{match.matchedValue}</strong> is linked to an existing family. Sign in to access it — we&apos;ll send a verification code.
+              </>
+            )}
           </p>
           <Link
-            href={`/sign-in?type=${match.matchedType}&value=${encodeURIComponent(match.matchedValue)}`}
+            href={
+              match.matchedType === 'phone' && !flags.smsOtp
+                ? '/sign-in?notice=phone-match'
+                : `/sign-in?type=${match.matchedType}&value=${encodeURIComponent(match.matchedValue)}`
+            }
             className="btn btn--p btn--block"
             style={{ marginBottom: 8, display: 'flex' }}
           >

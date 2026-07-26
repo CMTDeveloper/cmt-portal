@@ -67,8 +67,24 @@ describe('POST /api/setu/contacts/send-code', () => {
     expect(mockSendEmail).toHaveBeenCalledWith(expect.objectContaining({ to: 'priya.work@example.com' }));
   });
 
-  it('sends an OTP SMS for a phone contact (E.164-canonical)', async () => {
+  it('refuses to add a phone while SMS sign-in is off', async () => {
+    // Adding a phone is verified BY SMS, so the whole path is dead. Refusing is
+    // better than storing an unverified number, which contactKeys would then
+    // key sign-in on.
     const res = await POST(makeRequest({ type: 'phone', value: '4165550200' }));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('sms-signin-unsupported');
+    expect(mockSendSMS).not.toHaveBeenCalled();
+    expect(storeVerificationCode).not.toHaveBeenCalled();
+  });
+
+  it('still sends the phone OTP when the flag is ON (E.164-canonical)', async () => {
+    vi.resetModules();
+    vi.doMock('@/lib/flags', () => ({ flags: { setuAuth: true, smsOtp: true } }));
+    const { POST: flaggedPOST } = await import('../route');
+
+    const res = await flaggedPOST(makeRequest({ type: 'phone', value: '4165550200' }));
+
     expect(res.status).toBe(200);
     expect(mockSendSMS).toHaveBeenCalledWith(expect.objectContaining({ phone: '+14165550200' }));
   });

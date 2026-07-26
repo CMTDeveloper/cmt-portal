@@ -22,6 +22,24 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
+## 2026-07-25 - `PENDING` - SMS sign-in is REFUSED: new `sms-signin-unsupported` 400 on four `/api/setu/*` routes (**mobile action required**)
+
+SNS is still sandboxed with no Origination Number for Canada, so every OTP SMS the portal "sent" was accepted by AWS and delivered to nobody - leaving families on a code screen forever. Rather than fail silently, every route that accepts `type: 'phone'` now refuses with a typed error while `NEXT_PUBLIC_FEATURE_SMS_OTP` is off (its default). Flipping that flag on restores the old behaviour everywhere at once; nothing was deleted.
+
+- **New error code `sms-signin-unsupported`, HTTP 400**, on:
+  - **`POST /api/setu/auth/send-code`** with `{ type: 'phone' }`
+  - **`POST /api/setu/auth/verify-code`** with `{ type: 'phone' }`
+  - **`POST /api/setu/contacts/send-code`** with `{ type: 'phone' }`
+  - **`POST /api/setu/contacts/verify-code`** with `{ type: 'phone' }`
+- **Request shapes are UNCHANGED.** `type` still accepts `'email' | 'phone'`; a phone is accepted by the schema and then refused by policy. Nothing about the `email` path changed.
+- **The refusal is returned BEFORE the family lookup**, so it is identical for registered and unregistered numbers - it leaks nothing, and it is NOT the anti-enumeration silent 200. Do not treat a 400 here as "number not found".
+- **Mobile action REQUIRED:**
+  1. Add `sms-signin-unsupported` to the error unions for these four routes and map it to copy along the lines of *"Text-message sign-in is unavailable right now. Please sign in with the email address on your account."* Do not surface the raw code, and do not fall through to a generic "something went wrong".
+  2. If the sign-in screen offers an email/phone toggle, either hide the phone option or keep it visible and show that message on submit. The web portal keeps the toggle visible and refuses on submit.
+  3. If there is an add-a-phone flow in profile settings, hide it. Storing an unverified phone is worse than losing the capability: `contactKeys` would key sign-in on a number nobody proved they own.
+  4. Treat this as reversible - gate the copy on the response, not on a hardcoded build-time assumption, so nothing needs a mobile release when the flag flips.
+- Separately and independent of that flag: `lib/aws/sns.ts` now refuses any non-`+1` publish outright (logged, not thrown). This affects no request/response shape, but it means an international number will never receive an SMS from any portal feature, including prasad reminders and join-request notifications, even after SMS sign-in is restored.
+
 ## 2026-07-25 - `d278185` - GET /api/setu/teacher/visitors - `?date=` now means "any day in that week" for PORTAL guests (behavioral; shape UNCHANGED)
 Bug fix: the portal's self-serve guest check-in stamped the **actual Toronto calendar day**, while every teacher surface defaults its `?date=` to the week's Sunday - so a guest who walked in midweek was **invisible to teachers**. Guest docs are now keyed additionally by `sessionDate` (the Sunday that starts their week) and the reader queries that.
 - **`GET /api/setu/teacher/visitors?levelId=&date=`** - request and response **shapes, error codes and required fields are UNCHANGED** (`{ view }`, `VisitorsView` with `doorVisitors: VisitorRow[]` + `confirmed`). Validation is still `/^\d{4}-\d{2}-\d{2}$/`.

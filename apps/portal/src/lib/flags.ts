@@ -31,6 +31,15 @@ export const flags = {
   // /disclaimers route, and the dashboard disclaimersPending field. The
   // /admin/disclaimers editor is admin-only and available regardless of this flag.
   setuDisclaimers: process.env.NEXT_PUBLIC_FEATURE_SETU_DISCLAIMERS === 'true',
+  // SMS sign-in (2026-07-25). OFF by default, and that is the honest state:
+  // SNS is still in the sandbox with no Origination Number for Canada, so every
+  // SMS the portal "sends" is accepted by AWS and delivered to nobody. Rather
+  // than leave families staring at a code screen forever, every surface that
+  // offers phone sign-in now refuses with a typed error while the flag is off.
+  // Flipping it on restores SMS sign-in everywhere at once - which is why it is
+  // ONE public flag read on both the client and the server, not a pair that can
+  // drift.
+  smsOtp: process.env.NEXT_PUBLIC_FEATURE_SMS_OTP === 'true',
 } as const;
 
 export type FeatureFlags = typeof flags;

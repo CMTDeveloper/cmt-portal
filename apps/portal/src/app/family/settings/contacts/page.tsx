@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { SetuIcon, toast } from '@cmt/ui';
+import { flags } from '@/lib/flags';
 import { CspRoot, SectionLabel } from '@/features/family/components/atoms';
 import { getCurrentFamilyClient } from '@/features/setu/members/get-current-family-client';
 import { sendContactCode, verifyContactCode } from '@/features/setu/contacts/contacts-client';
@@ -115,9 +116,22 @@ export default function ContactsSettingsPage() {
             <div key={p} style={{ padding: '10px 12px', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radiusSm)', marginBottom: 6, fontSize: 13 }}>{p}</div>
           ))
         )}
-        <button type="button" className="btn btn--g" style={{ marginTop: 6, fontSize: 13 }} onClick={() => beginAdd('phone')}>
-          Add a phone
-        </button>
+        {/* Adding a phone is verified BY SMS, so with SMS undeliverable the whole
+            path is dead. Hiding the affordance is better than the alternative of
+            storing an unverified number: contactKeys would then key sign-in on a
+            phone nobody proved they own. Reversible with the flag. Phone CAPTURE
+            at registration and member edit is unaffected - it never verified by
+            SMS. */}
+        {flags.smsOtp ? (
+          <button type="button" className="btn btn--g" style={{ marginTop: 6, fontSize: 13 }} onClick={() => beginAdd('phone')}>
+            Add a phone
+          </button>
+        ) : (
+          <div style={{ marginTop: 6, fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>
+            Adding a phone is unavailable right now — we verify new numbers by text message. To change
+            the phone on file, contact the office.
+          </div>
+        )}
       </div>
 
       {stage === 'entering' && (

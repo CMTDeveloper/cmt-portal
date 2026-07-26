@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from 'react';
 import { Button, Input, Label } from '@cmt/ui';
+import { flags } from '@/lib/flags';
 import { OtpCodeInput } from './otp-code-input';
 
 type ContactType = 'email' | 'phone';
@@ -18,6 +19,13 @@ export function FamilyLoginForm() {
   async function onSendCode(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
+    // This is the legacy /login form, still the production entry point for
+    // existing Bala Vihar families - so it is where the silent "code never
+    // arrives" hurt most. Say so rather than advancing to the code screen.
+    if (type === 'phone' && !flags.smsOtp) {
+      setError('Text-message sign-in is unavailable right now. Please use the email on your account.');
+      return;
+    }
     setPending(true);
     try {
       const res = await fetch('/api/auth/family/send-code', {

@@ -234,11 +234,30 @@ function SignInReal() {
   const contactLabel = contactType === 'email' ? 'Email address' : 'Phone number';
   const contactInputType = contactType === 'email' ? 'email' : 'tel';
   const contactPlaceholder = contactType === 'email' ? 'you@example.com' : '(416) 555-0100 or +14165550100';
+  // Set by the register screen when it recognised a returning family by PHONE
+  // and could not hand them off to a phone OTP. Surfaced through the shared
+  // hint so both the mobile and desktop layouts show it without duplicating an
+  // element in two places.
+  const phoneMatchNotice = searchParams?.get('notice') === 'phone-match' && !flags.smsOtp;
+
   const contactHint = contactType === 'phone'
-    ? "Canadian / US numbers — we'll add +1 automatically if you don't type it."
-    : null;
+    ? flags.smsOtp
+      ? "Canadian / US numbers — we'll add +1 automatically if you don't type it."
+      : 'Text-message sign-in is unavailable right now. Please sign in with the email on your account.'
+    : phoneMatchNotice
+      ? 'We recognised your phone number. Text-message sign-in is unavailable right now, so please sign in with the email address on your account.'
+      : null;
 
   async function handleSendCode() {
+    // The refusal lives in the shared handler, not in the copy above. This page
+    // renders the whole form TWICE (a mobile layout and a desktop one), each
+    // with its own submit button and toggle, so a guard placed only on the
+    // labels would leave both submits live and "blocked client-side" would
+    // silently not happen.
+    if (contactType === 'phone' && !flags.smsOtp) {
+      toast.error('Text-message sign-in is unavailable right now. Please use the email on your account.');
+      return;
+    }
     const trimmed = contactValue.trim();
     if (!trimmed) {
       toast.error(`Enter your ${contactLabel.toLowerCase()}`);

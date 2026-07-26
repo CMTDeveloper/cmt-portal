@@ -38,6 +38,14 @@ export async function POST(req: Request) {
   }
 
   const { type, value, code } = parsed.data;
+
+  // Mirrors send-code. Without it a family that somehow reaches the code screen
+  // burns verify attempts against a code that was never sent, and the error
+  // they see blames them ("invalid or expired") rather than the channel.
+  if (type === 'phone' && !flags.smsOtp) {
+    return NextResponse.json({ error: 'sms-signin-unsupported' }, { status: 400 });
+  }
+
   const normalized = normalizeContact(type, value);
   const ok = await verifyCode(normalized, code, type);
   if (!ok) {

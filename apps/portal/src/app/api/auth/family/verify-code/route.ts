@@ -36,6 +36,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'not-found' }, { status: 404 });
   }
 
+  // Pairs with the legacy send-code refusal. Low impact on its own (no code was
+  // ever stored, so it would fail as invalid-or-expired anyway) but the error
+  // should name the real reason rather than blame the family's typing.
+  if (parsed.data.type === 'phone' && !flags.smsOtp) {
+    return NextResponse.json({ error: 'sms-signin-unsupported' }, { status: 400 });
+  }
+
   const normalized = normalizeContact(parsed.data.type, parsed.data.value);
   const ok = await verifyCode(normalized, parsed.data.code, parsed.data.type);
   if (!ok) {

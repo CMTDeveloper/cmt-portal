@@ -45,6 +45,17 @@ export async function POST(req: Request) {
   }
 
   const { type, value, purpose } = parsed.data;
+
+  // Refuse on the SHAPE of the input, before any lookup and before the
+  // anti-enumeration silent 200 below - so every phone gets an identical answer
+  // whether or not it belongs to a registered family. Today an SMS "sent" here
+  // is accepted by SNS and delivered to nobody, leaving the family on the code
+  // screen forever; a typed 400 at least tells them to use email. Flipping
+  // NEXT_PUBLIC_FEATURE_SMS_OTP on restores the old path.
+  if (type === 'phone' && !flags.smsOtp) {
+    return NextResponse.json({ error: 'sms-signin-unsupported' }, { status: 400 });
+  }
+
   const normalized = normalizeContact(type, value);
   const hashPrefix = createHash('sha256').update(normalized).digest('hex').slice(0, 8);
 

@@ -42,6 +42,17 @@ export async function POST(req: Request) {
   }
 
   const { type, value } = parsed.data;
+
+  // Adding a phone to a profile is verified BY SMS, so with SMS undeliverable
+  // the whole add-a-phone path is dead - for every number, not just non-NANP
+  // ones. Refusing is better than the alternative of storing an unverified
+  // phone: contactKeys would then key sign-in on a number nobody proved they
+  // own. The email add-path is untouched, and so is phone CAPTURE at
+  // registration and member edit, which never verified by SMS.
+  if (type === 'phone' && !flags.smsOtp) {
+    return NextResponse.json({ error: 'sms-signin-unsupported' }, { status: 400 });
+  }
+
   const normalized = normalizeContact(type, value);
 
   // OTP rate-limit keyed by the target contact (per-contact, like auth send-code).

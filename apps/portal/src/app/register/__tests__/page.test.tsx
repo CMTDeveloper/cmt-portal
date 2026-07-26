@@ -157,7 +157,7 @@ describe('RegisterPage — lookup returns match', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('RegisterPage — match CTA uses the matched contact', () => {
-  it('sign-in link targets the matched contact when the match came via phone', async () => {
+  it('does NOT hand a phone match to the phone OTP screen while SMS sign-in is off', async () => {
     fetchMock.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
@@ -182,7 +182,15 @@ describe('RegisterPage — match CTA uses the matched contact', () => {
     const joinLinks = screen.getAllByRole('link', { name: /sign in to access my family/i });
     expect(joinLinks.length).toBeGreaterThan(0);
     const href = joinLinks[0]?.getAttribute('href') ?? '';
-    expect(href).toBe('/sign-in?type=phone&value=4165550000');
+    // Was '/sign-in?type=phone&value=4165550000'. That handoff pre-selects the
+    // Phone tab AND deliberately suppresses the saved password preference to
+    // force an OTP proof - so a family the portal had just recognised would
+    // land on the one screen guaranteed to refuse them. Send them to the email
+    // tab with an explanation instead.
+    expect(href).toBe('/sign-in?notice=phone-match');
+    expect(href).not.toContain('type=phone');
+    // And the copy must say why, not just silently change destination.
+    expect(screen.getAllByText(/text-message sign-in is unavailable/i).length).toBeGreaterThan(0);
   });
 });
 

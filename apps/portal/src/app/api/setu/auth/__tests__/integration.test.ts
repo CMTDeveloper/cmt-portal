@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { testApiHandler } from 'next-test-api-route-handler';
 
 // ── Feature flag ──────────────────────────────────────────────────────────────
-const flagsMock = vi.hoisted(() => ({ setuAuth: true }));
+const flagsMock = vi.hoisted(() => ({ setuAuth: true, smsOtp: false }));
 vi.mock('@/lib/flags', () => ({ flags: flagsMock }));
 
 // ── OTP helpers (check-in shared) ─────────────────────────────────────────────
@@ -91,6 +91,7 @@ const noFamily = { source: null, fid: null, mid: null, legacyFid: null, family: 
 beforeEach(() => {
   vi.clearAllMocks();
   flagsMock.setuAuth = true;
+  flagsMock.smsOtp = false;
   (checkAndRecordOtpRateLimit as ReturnType<typeof vi.fn>).mockResolvedValue({ allowed: true });
   (storeVerificationCode as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
   (verifyCode as ReturnType<typeof vi.fn>).mockResolvedValue(true);
@@ -212,7 +213,31 @@ describe('verify-code: no family found', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('phone send-code + verify-code', () => {
-  it('sends SMS on send-code and resolves session on verify-code', async () => {
+  it('refuses both halves while SMS sign-in is off, so nobody waits on a code that never arrives', async () => {
+    (findSetuFamilyByContact as ReturnType<typeof vi.fn>).mockResolvedValue(setuFamily);
+
+    for (const handler of [sendCodeHandler, verifyCodeHandler]) {
+      await testApiHandler({
+        appHandler: handler,
+        test: async ({ fetch }) => {
+          const res = await fetch({
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ type: 'phone', value: '+14165550100', code: '123456' }),
+          });
+          expect(res.status).toBe(400);
+          expect((await res.json()).error).toBe('sms-signin-unsupported');
+        },
+      });
+    }
+    expect(fakeSender.sendSMS).not.toHaveBeenCalled();
+  });
+
+  it('sends SMS on send-code and resolves session on verify-code (flag ON)', async () => {
+    // The end-to-end proof that the block is a switch, not a removal: with
+    // NEXT_PUBLIC_FEATURE_SMS_OTP on, the whole phone flow works exactly as it
+    // did, right through to the /family redirect.
+    flagsMock.smsOtp = true;
     (findSetuFamilyByContact as ReturnType<typeof vi.fn>).mockResolvedValue(setuFamily);
 
     await testApiHandler({

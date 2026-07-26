@@ -152,7 +152,10 @@ describe('POST /api/auth/family/send-code', () => {
     expect(fakeSender.sendEmail).toHaveBeenCalled();
   });
 
-  it('calls sendSMS for phone type', async () => {
+  it('refuses phone type with a typed 400 while SMS sign-in is off', async () => {
+    // The legacy /login path, still the production entry point for existing
+    // Bala Vihar families. An SMS "sent" here is accepted by SNS and delivered
+    // to nobody, so the family waits on a code screen forever.
     (checkAndRecordOtpRateLimit as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       allowed: true,
     });
@@ -168,9 +171,13 @@ describe('POST /api/auth/family/send-code', () => {
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ type: 'phone', value: '+16475550100' }),
         });
-        expect(res.status).toBe(200);
+        expect(res.status).toBe(400);
+        expect((await res.json()).error).toBe('sms-signin-unsupported');
       },
     });
-    expect(fakeSender.sendSMS).toHaveBeenCalled();
+    expect(fakeSender.sendSMS).not.toHaveBeenCalled();
+    // Refused on the shape of the input, before the roster lookup, so a phone
+    // answers identically whether or not it belongs to a family.
+    expect(findFamilyByContact).not.toHaveBeenCalled();
   });
 });
