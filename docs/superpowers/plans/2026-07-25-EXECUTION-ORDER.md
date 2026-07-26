@@ -3,7 +3,18 @@
 **Written 2026-07-25 at HEAD `1c5f31f`, at the end of the planning + rebuild pass.**
 Start here. Read `docs/superpowers/reviews/README.md` second.
 
-**Status: planning complete, implementation not started.** Six `-v2.md` plans, ~59 tasks, eight days.
+**Status as of 2026-07-26 (HEAD `27b71a3`): Phases 0 and 1 are COMPLETE and UAT-verified. ~39 of ~59 tasks remain, 8 days to launch.**
+
+| Plan | Done | Remaining |
+|---|---|---|
+| **P1** roles + cross-family edit | **all 11 tasks** | - |
+| **P3** communications | **Tasks 1-6** | only Task 6 Step 3 (per-template UAT send), blocked on Vaibhav's SES templates |
+| **P2** teacher/visitors/roster | Tasks 1-2 (the two live defects) | **Tasks 3-9** - see items 21-22 below, which this doc previously omitted |
+| **P5** monthly pledge | Task 1 Steps 1-3 (UAT rules) | Tasks 2-13. **Steps 4-5 are now a NO-OP** - see Blockers |
+| **P4** adult study class | - | all 12 |
+| **P6** migration/dormant/centre | - | all 7 |
+
+**▶ NEXT: item 15, P6 Task 1.** P6 is the only remaining cutover-BLOCKING work (it changes what the production migration imports, and its centre prompt is the sole thing stopping 299 unknown-centre families being assigned to Brampton permanently), and **P6 Task 5 must precede P4 Task 8**.
 
 ---
 
@@ -70,6 +81,10 @@ Independent of Track A except Task 9.
 18. **P4 Task 8** - `AdultClassGate`, rebased onto P6's `:76` fix.
 19. **P4 Tasks 9-12** - the move to `/donate/success`, the generic-route waiver, the payment classifier, E2E.
 20. **P6 Tasks 6-7** - the four form edits and E2E.
+21. **P2 Tasks 6-9** - `/welcome/visitors` + nav, the visitor grade filter, the roster Reset button, the guest->teacher E2E.
+22. **P2 Tasks 3-5** - the attendance UI rebuild. **Sequenced last on purpose: this is cut candidate #5** and the single largest piece in the batch. Take it only if the week has room.
+
+> **GAP FIXED 2026-07-26.** Items 21-22 were missing from this document entirely. It placed P2 Tasks 1-2 in Phase 0 and then never mentioned Tasks 3-9, so the teacher attendance rebuild, `/welcome/visitors`, the visitor grade filter, the roster Reset button and the guest->teacher E2E were invisible to the running order - a documentation gap, never a decision to drop them. Anyone reading only the phases would have concluded P2 was finished after Phase 0. It is not: 7 of its 9 tasks remain.
 
 ---
 
@@ -77,9 +92,9 @@ Independent of Track A except Task 9.
 
 Needs P1 Task 7, P3 Tasks 1-3, and P4's `/donate/success` move.
 
-21. **P5 Tasks 2-8** - crypto, schemas, submit, confirm/cancel, routes, indexes, admin list.
-22. **P5 Task 8b** - the form. **This did not exist until the second review.**
-23. **P5 Tasks 9-13** - card, sweep-as-cron, export hardening, the real security tests, UAT.
+23. **P5 Tasks 2-8** - crypto, schemas, submit, confirm/cancel, routes, indexes, admin list.
+24. **P5 Task 8b** - the form. **This did not exist until the second review.**
+25. **P5 Tasks 9-13** - card, sweep-as-cron, export hardening, the real security tests, UAT.
 
 ---
 
@@ -89,7 +104,7 @@ None of these can be closed by writing software. Each blocks something real.
 
 | Blocker | Blocks | Who |
 |---|---|---|
-| **Export the deployed prod `715b8` ruleset as a baseline** | P5 prod rules; the `NEXT_PUBLIC_FEATURE_SETU_PLEDGE` flip | needs the standalone check-in app's owner to confirm its access surface |
+| ~~Export the deployed prod `715b8` ruleset~~ **CLOSED 2026-07-26** | ~~P5 prod rules~~ | Supplied by CMT Developer; committed at `firestore.prod.rules.baseline`. **P5 Task 1 Steps 4-5 need NO new prod deny** - Firestore allow rules are additive, so the `{document=**} if false` block grants nothing and `pledges`/`pledge_secrets` match no rule, i.e. they were never client-writable. The export also revealed an unauthenticated-`create` hole on `verification_codes` that let anyone mint a session as any known contact; fixed in `27b71a3` by moving the portal's OTP store to `setu_verification_codes`. |
 | **SES templates + `SES_CONFIGURATION_SET`** (spec O5, O8) | P3 Task 6, P5's activation email | Vaibhav |
 | **The accounting hand-off**: named recipient, encrypted channel, retention limit (spec O6) | P5 Task 11 Step 2 - the highest residual risk in the feature | unassigned |
 | **`PLEDGE_ENCRYPTION_KEY` backup** (spec O4) | the pledge flag flip | unassigned |
