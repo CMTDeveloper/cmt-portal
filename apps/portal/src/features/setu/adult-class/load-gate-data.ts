@@ -16,6 +16,31 @@ import type { AdultClassGateInput } from './needs-selection';
 /** Nobody is a teacher yet - used to ask selectableAdults "who COULD be picked". */
 const NOBODY: ReadonlySet<string> = new Set();
 
+/**
+ * Which of a family's members are assigned to teach.
+ *
+ * One `teacherAssignments` doc read per CANDIDATE - never per member. A child is
+ * not a teacher-assignable person and a pending invitee cannot be chosen, so
+ * neither is worth a read. Concurrent, so this is one round trip rather than N.
+ *
+ * The candidate list comes from `selectableAdults` itself (with nobody yet
+ * marked as a teacher) rather than a re-implementation of "adult, not pending",
+ * so the read set stays structurally tied to the predicate's own filter: change
+ * who is selectable and this follows automatically instead of desyncing.
+ *
+ * Exported because the GENERIC enroll route needs the same set to derive
+ * `enrolledMids`, and two hand-rolled definitions of "who teaches" would let the
+ * two doors into the adult class enroll different people.
+ */
+export async function resolveTeacherAssignedMids(
+  members: readonly MemberDoc[],
+): Promise<ReadonlySet<string>> {
+  const candidates = selectableAdults(members, NOBODY);
+  if (candidates.length === 0) return NOBODY;
+  const assigned = await Promise.all(candidates.map((m) => isTeacherAssigned(m.mid)));
+  return new Set(candidates.filter((_, i) => assigned[i]).map((m) => m.mid));
+}
+
 export interface AdultClassGateSubject {
   family: FamilyDoc;
   members: readonly MemberDoc[];
@@ -98,14 +123,7 @@ export async function loadAdultClassGateDataOrThrow(
       isLegacyBvPeriod(enrollments)
         ? getLegacyPaymentStatus(family.legacyFid)
         : Promise.resolve('unknown'),
-      // One teacherAssignments doc read per CANDIDATE - never per member. A
-      // child is not a teacher-assignable person and a pending invitee cannot be
-      // chosen, so neither is worth a read. Concurrent, so this is one round
-      // trip rather than N.
-      (async (): Promise<ReadonlySet<string>> => {
-        const flags = await Promise.all(candidates.map((m) => isTeacherAssigned(m.mid)));
-        return new Set(candidates.filter((_, i) => flags[i]).map((m) => m.mid));
-      })(),
+      resolveTeacherAssignedMids(members),
     ]);
 
     return {
