@@ -1,5 +1,5 @@
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
-import { levelGradeSummary, normalizeGrade, type LevelDoc, type LevelKind } from '@cmt/shared-domain';
+import { levelGradeSummary, normalizeGrade, sessionDateFor, type LevelDoc, type LevelKind } from '@cmt/shared-domain';
 import { hashContactKey } from '@/features/setu/registration/hash-contact-key';
 import { readDoorGuestCheckIns, readPortalGuestChildren } from '@/features/setu/attendance/check-in-attendance';
 import { listGuestsDetailed, markGuest, type DetailedGuest } from './guests';
@@ -58,7 +58,13 @@ export async function getLevelVisitorsView(levelId: string, date: string): Promi
   // them; each child is then matched to this level by grade below.
   const [legacyDoor, portalDoor, confirmed] = await Promise.all([
     readDoorGuestCheckIns(date),
-    readPortalGuestChildren(date),
+    // Portal guest docs are keyed to the week's Sunday, so a midweek ?date=
+    // must be normalized or it matches nothing. `date` here is user-supplied
+    // and validated only against /^\d{4}-\d{2}-\d{2}$/ by the page, so it is
+    // not guaranteed to be a Sunday. Without this, the fix would just move the
+    // invisibility from Sunday to midweek. The legacy door reader keeps the raw
+    // calendar date: `guest-families/{id}/checkIns/{date}` has its own key.
+    readPortalGuestChildren(sessionDateFor(date)),
     listGuestsDetailed(levelId, date),
   ]);
   const doorChildren = [...legacyDoor, ...portalDoor];

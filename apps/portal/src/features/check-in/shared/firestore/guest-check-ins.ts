@@ -1,4 +1,5 @@
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
+import { sessionDateFor } from '@cmt/shared-domain';
 
 /** One guest child captured at self-serve check-in: name + grade so a teacher
  *  can match the child to their class. Grade is a CHILD_GRADE_OPTIONS value. */
@@ -21,23 +22,36 @@ export interface GuestCheckInInput {
   notes?: string;
 }
 
-/** Today's date as `YYYY-MM-DD` in America/Toronto — the same key the teacher
- *  attendance/visitors screens query by, so a door guest surfaces on the day
- *  they checked in regardless of the server's UTC clock. */
+/** Today's date as `YYYY-MM-DD` in America/Toronto, regardless of the server's
+ *  UTC clock. This is the actual walk-in day; it is NOT the key the teacher
+ *  screens query by (see `sessionDate` below). */
 function torontoYMD(): string {
   const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Toronto' }));
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 export async function recordGuestCheckIn(input: GuestCheckInInput): Promise<string> {
+  // Read the clock ONCE. Two torontoYMD() calls are two independent reads and
+  // can straddle a Toronto midnight, which would stamp a `sessionDate` that is
+  // not the Sunday of the recorded `date`.
+  const ymd = torontoYMD();
   const ref = await portalFirestore().collection('guest_check_ins').add({
     ...input,
     // Keep the derived count so the admin guest list / stats / reports (which
     // read numberOfChildren) keep working without change.
     numberOfChildren: input.children.length,
-    // `date` (Toronto YMD) is what the teacher visitors query filters on;
+    // `date` is the actual Toronto calendar day the guest walked in. Kept for
+    // forensic value and because rewriting existing docs would destroy it. It
+    // has no PRIMARY reader after this change: its only one was
+    // check-in-attendance.ts, which now queries `sessionDate` and reads `date`
+    // only as a transitional fallback. Do not assume it is load-bearing.
+    date: ymd,
+    // `sessionDate` is the Sunday teachers actually view. Bala Vihar runs on
+    // Sundays and every teacher surface defaults its ?date= to
+    // mostRecentSunday(), so a guest who walked in midweek was invisible to
+    // them. Same normalization mark-door-attendance.ts:64 already does.
+    sessionDate: sessionDateFor(ymd),
     // `checkedInAt` stays a full ISO instant for the admin reports timeline.
-    date: torontoYMD(),
     checkedInAt: new Date().toISOString(),
   });
   return ref.id;

@@ -61,6 +61,17 @@ describe('getLevelVisitorsView', () => {
     expect(view!.confirmed).toEqual([{ mid: 'F-02', fid: 'CMT-F', firstName: 'Arjun', lastName: 'X', status: 'present' }]);
   });
 
+  it('normalizes the portal guest query to the session Sunday, leaving the legacy door key raw', async () => {
+    // `date` reaches here straight from a user-supplied ?date=, validated only
+    // against /^\d{4}-\d{2}-\d{2}$/ by the page - so it is not necessarily a
+    // Sunday. Portal guest docs are keyed to the week's Sunday; the legacy door
+    // reader keeps its own per-calendar-day key. Getting this wrong just moves
+    // the invisibility from Sunday to midweek rather than fixing it.
+    await getLevelVisitorsView('L', '2026-09-09'); // a Wednesday
+    expect(mockReadPortalGuests).toHaveBeenCalledWith('2026-09-06'); // normalized
+    expect(mockReadGuests).toHaveBeenCalledWith('2026-09-09');       // raw
+  });
+
   it('merges PORTAL guest children with legacy door guests and matches both by grade', async () => {
     // Legacy standalone kiosk child (grade 1 → matches) + portal self-serve
     // guest child (grade 1 → matches) + a portal child off-grade (excluded).

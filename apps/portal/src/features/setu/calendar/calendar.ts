@@ -1,5 +1,5 @@
 import { portalFirestore, Timestamp } from '@cmt/firebase-shared/admin/firestore';
-import type { ClassCalendarEntryDoc, WeeklyScheduleDoc, Location } from '@cmt/shared-domain';
+import { sessionDateFor, type ClassCalendarEntryDoc, type WeeklyScheduleDoc, type Location } from '@cmt/shared-domain';
 import { schoolYearDateRange } from '@/features/setu/rollover/school-year';
 
 const ENTRIES = 'classCalendarEntries';
@@ -36,12 +36,17 @@ export function torontoToday(now: Date = new Date()): string {
   }).format(now);
 }
 
-/** The most recent Sunday (today if today is Sunday) as a Toronto YYYY-MM-DD. */
+/**
+ * The most recent Sunday (today if today is Sunday) as a Toronto YYYY-MM-DD.
+ *
+ * Delegates to `sessionDateFor` so the Sunday math has exactly one
+ * implementation. `features/check-in` and the guest backfill call that one
+ * directly (they cannot import from `features/setu`); if this kept its own copy
+ * the two could drift, and a week of drift is invisible until a teacher reports
+ * a missing student.
+ */
 export function mostRecentSunday(now: Date = new Date()): string {
-  const today = torontoToday(now); // Toronto calendar date
-  const d = new Date(`${today}T12:00:00Z`); // noon UTC: weekday is tz-stable
-  d.setUTCDate(d.getUTCDate() - d.getUTCDay()); // getUTCDay 0 = Sunday
-  return d.toISOString().slice(0, 10);
+  return sessionDateFor(torontoToday(now));
 }
 
 /**

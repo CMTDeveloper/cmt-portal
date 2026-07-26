@@ -9,14 +9,21 @@ const { mockGet, dayDocResolver, guestListResolver, guestDayResolver, portalGues
   guestListResolver: { fn: () => ({ docs: [] as Array<{ id: string }> }) as unknown },
   // guest-families/{email}/checkIns/{date} day doc
   guestDayResolver: { fn: (_email: string, _date: string) => ({ exists: false }) as unknown },
-  // portal `guest_check_ins` where('date','==',date): returns docs [{ data() }]
-  portalGuestResolver: { fn: (_date: string) => ({ docs: [] as Array<{ data: () => Record<string, unknown> }> }) as unknown },
+  // portal `guest_check_ins`. readPortalGuestChildren issues TWO queries per
+  // call - where('sessionDate','==',d) and where('date','==',d) - so the
+  // resolver MUST be field-aware. Routing on the value alone would make the two
+  // legs indistinguishable and the de-duplication would appear to work for the
+  // wrong reason. Docs carry an `id` because the de-dup keys on it.
+  portalGuestResolver: {
+    fn: (_field: string, _date: string) =>
+      ({ docs: [] as Array<{ id: string; data: () => Record<string, unknown> }> }) as unknown,
+  },
 }));
 vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
   portalFirestore: () => ({
     collection: (name: string) => {
       if (name === 'guest_check_ins') {
-        return { where: (_f: string, _op: string, val: string) => ({ get: async () => portalGuestResolver.fn(val) }) };
+        return { where: (f: string, _op: string, val: string) => ({ get: async () => portalGuestResolver.fn(f, val) }) };
       }
       return {};
     },
@@ -205,19 +212,19 @@ describe('readDoorGuestCheckIns', () => {
 });
 
 describe('readPortalGuestChildren', () => {
-  it('flattens every portal guest doc child for the date into DoorGuestChild rows', async () => {
-    portalGuestResolver.fn = (date) => {
-      if (date !== '2026-01-04') return { docs: [] };
+  it('flattens every portal guest doc child for the session date into DoorGuestChild rows', async () => {
+    portalGuestResolver.fn = (field, date) => {
+      if (field !== 'sessionDate' || date !== '2026-01-04') return { docs: [] };
       return {
         docs: [
-          { data: () => ({
+          { id: 'g-carol', data: () => ({
             firstName: 'Carol', lastName: 'Visitor', email: 'c@v.com', phone: '+16475550100',
             children: [
               { name: 'Aarav Visitor', grade: '2' },
               { name: 'Diya Visitor', grade: 2 }, // numeric grade coerced to string
             ],
           }) },
-          { data: () => ({
+          { id: 'g-sam', data: () => ({
             firstName: 'Sam', lastName: 'Solo', email: 's@solo.com', phone: '+16475550111',
             children: [], // adults-only visit contributes no children
           }) },
@@ -229,6 +236,40 @@ describe('readPortalGuestChildren', () => {
       { name: 'Aarav Visitor', grade: '2', parentEmail: 'c@v.com', parentName: 'Carol Visitor', phone: '+16475550100' },
       { name: 'Diya Visitor', grade: '2', parentEmail: 'c@v.com', parentName: 'Carol Visitor', phone: '+16475550100' },
     ]);
+  });
+
+  it('still finds a pre-backfill doc that only carries the old `date` key', async () => {
+    // The transitional `date` leg. Without it, every guest recorded before this
+    // change goes invisible between the deploy and the prod backfill run.
+    portalGuestResolver.fn = (field, date) => {
+      if (field !== 'date' || date !== '2026-01-04') return { docs: [] };
+      return {
+        docs: [
+          { id: 'g-old', data: () => ({
+            firstName: 'Old', lastName: 'Guest', email: 'o@g.com', phone: null,
+            children: [{ name: 'Ravi Guest', grade: '3' }],
+          }) },
+        ],
+      };
+    };
+    const out = await readPortalGuestChildren('2026-01-04');
+    expect(out).toEqual([
+      { name: 'Ravi Guest', grade: '3', parentEmail: 'o@g.com', parentName: 'Old Guest', phone: null },
+    ]);
+  });
+
+  it('de-duplicates a doc that matches both query legs', async () => {
+    // A guest who walked in ON the Sunday has date === sessionDate, so the same
+    // doc comes back from both queries. Without the id de-dup their children
+    // would render twice on the teacher's visitors panel.
+    const doc = { id: 'g-both', data: () => ({
+      firstName: 'Both', lastName: 'Keys', email: 'b@k.com', phone: null,
+      children: [{ name: 'Meera Keys', grade: '1' }],
+    }) };
+    portalGuestResolver.fn = (_field, date) => (date === '2026-01-04' ? { docs: [doc] } : { docs: [] });
+    const out = await readPortalGuestChildren('2026-01-04');
+    expect(out).toHaveLength(1);
+    expect(out[0]!.name).toBe('Meera Keys');
   });
 
   it('returns [] (not throw) when the portal query fails', async () => {

@@ -5,6 +5,7 @@ vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
   portalFirestore: vi.fn(() => ({ collection: vi.fn(() => fakeCollection) })),
 }));
 
+import { sessionDateFor } from '@cmt/shared-domain';
 import { recordGuestCheckIn } from '../firestore/guest-check-ins';
 
 beforeEach(() => {
@@ -38,10 +39,17 @@ describe('recordGuestCheckIn', () => {
       { name: 'Diya Visitor', grade: 'JK' },
     ]);
     expect(written.numberOfChildren).toBe(2);
-    // `date` (Toronto YMD) drives the teacher visitors match; checkedInAt is a
-    // full ISO instant.
+    // `date` is the actual Toronto walk-in day; checkedInAt is a full ISO
+    // instant.
     expect(written.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(written.checkedInAt).toMatch(/T/);
+    // `sessionDate` is what the teacher visitors query filters on. Asserting it
+    // against sessionDateFor(written.date) rather than a literal keeps the test
+    // clock-independent while still pinning the relationship - and this file
+    // had NO coverage of the write half before, so a missing sessionDate would
+    // have shipped green.
+    expect(written.sessionDate).toBe(sessionDateFor(written.date));
+    expect(new Date(`${written.sessionDate}T12:00:00Z`).getUTCDay()).toBe(0); // a Sunday
   });
 
   it('derives numberOfChildren = 0 for an adults-only visit', async () => {

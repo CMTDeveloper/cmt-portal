@@ -159,20 +159,42 @@ export async function readDoorGuestCheckIns(date: string): Promise<DoorGuestChil
  * single date. This is the portal counterpart to `readDoorGuestCheckIns` (which
  * reads the legacy standalone app's `guest-families`). The portal's guest kiosk
  * writes `guest_check_ins/{id}` with `{ firstName, lastName, email, phone,
- * children: [{name, grade}], date }`; here we flatten every doc's children into
- * the same `DoorGuestChild` shape so the teacher visitors view can merge both
- * sources and match by grade. Filters by the `date` field (single-field
- * equality — Firestore auto-indexes it, no composite index needed). Tolerant:
+ * children: [{name, grade}], date, sessionDate }`; here we flatten every doc's
+ * children into the same `DoorGuestChild` shape so the teacher visitors view can
+ * merge both sources and match by grade.
+ *
+ * Keyed on `sessionDate` (the Sunday of the walk-in week), NOT the raw `date`:
+ * every teacher surface defaults its ?date= to mostRecentSunday(), so a midweek
+ * guest stamped with their real calendar day was invisible. Callers must pass a
+ * session Sunday - use `sessionDateFor()`.
+ *
+ * Both keys are queried for one release. Pre-backfill docs have only `date`, so
+ * a straight swap would make every existing guest vanish between the deploy and
+ * the prod backfill run - a regression, on a Sunday, introduced by the fix.
+ * Drop the `date` leg once the prod backfill has run (runbook 14).
+ *
+ * Both are single-field equalities on a top-level collection, so both are
+ * auto-indexed: no composite index, no firestore.indexes.json change. Tolerant:
  * returns [] if the query fails so a portal-store hiccup never breaks the view.
  */
-export async function readPortalGuestChildren(date: string): Promise<DoorGuestChild[]> {
+export async function readPortalGuestChildren(sessionDate: string): Promise<DoorGuestChild[]> {
   const db = portalFirestore();
-  let docs: Array<{ data: () => Record<string, unknown> }>;
+  let docs: Array<{ id: string; data: () => Record<string, unknown> }>;
   try {
-    const snap = await db.collection('guest_check_ins').where('date', '==', date).get();
-    docs = snap.docs;
+    const [bySession, byDate] = await Promise.all([
+      db.collection('guest_check_ins').where('sessionDate', '==', sessionDate).get(),
+      db.collection('guest_check_ins').where('date', '==', sessionDate).get(),
+    ]);
+    // A doc written after this change matches BOTH legs whenever the guest
+    // walked in on the Sunday itself, so de-duplicate by doc id.
+    const seen = new Set<string>();
+    docs = [...bySession.docs, ...byDate.docs].filter((d) => {
+      if (seen.has(d.id)) return false;
+      seen.add(d.id);
+      return true;
+    });
   } catch (err) {
-    console.error('[portal-guests] query failed for', date, err);
+    console.error('[portal-guests] query failed for', sessionDate, err);
     return [];
   }
 
