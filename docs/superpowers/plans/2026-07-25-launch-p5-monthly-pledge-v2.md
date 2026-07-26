@@ -1,35 +1,5 @@
 # P5 v2 - Monthly Pledge (Pre-Authorized Debit)
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
-**Goal:** A family can pledge a monthly amount and submit bank details for a pre-authorized debit. The details are encrypted at rest, never returned by any route, never rendered in any UI, handed to accounting through one hardened path, and destroyed the moment the pledge is confirmed.
-
-**Architecture:** Two collections. `pledges/{pid}` holds the non-sensitive record and the PAD authorization, and survives forever. `pledge_secrets/{pid}` holds only the AES-256-GCM ciphertext, has **no read path in the application**, and is deleted by the same transaction that confirms the pledge. A deny-all `firestore.rules` closes the database surface that the application-level design cannot reach.
-
-**Tech Stack:** `node:crypto` AES-256-GCM, Firebase Admin Firestore, Zod, Next.js 16, Vercel Cron.
-
-**Supersedes:** `2026-07-25-launch-p5-monthly-pledge.md`, reviewed as REQUEST CHANGES (2 critical, 10 major, 14 minor). Review: `docs/superpowers/reviews/2026-07-25-review-p5.md`.
-
-**Depends on:** P1 v2's `writeAuditLog(txn, db, entry)` and its `can-access-route.ts` edits; P3 v2's `sendManagedEmail`; **P4 v2 Task 8 Step 4 and Task 9** - Task 9's card lives on the donation success page, which P4 moves to a top-level `/donate/success` and whose ordering P4 owns. Ship P5 first and the card renders for nobody in the gated cohort, with no test failing.
-
----
-
-## Global Constraints
-
-- **The sensitive asset is four bank fields.** Every rule below exists because of them. When a step trades convenience for one fewer place they can appear, take the trade.
-- **`pledge_secrets` has no read path in the application.** No route, no `collectionGroup()`, no `listCollections()`. Exactly two things read it: `confirmPledge` (to delete) and the export script. Task 12 pins this by enumeration, not assertion.
-- **Never log, never email, never render a bank field.** Not in an error message, not in a console line, not in a Sentry event. The Sentry side is already enforced in code as of `7902c63` (`apps/portal/src/lib/sentry/scrub-event.ts` pins `httpBodies: []`, `stackFrameVariables: false` and redacts `bank`/`transit`/`institution`/`accountnumber` keys) - that is defense in depth, not permission to relax the first clause.
-- **Role checks go in the handler as well as `canAccessRoute`.** Middleware is one gate; every comparable financial route in this repo re-checks (`api/setu/donations/route.ts:19-22`). Use `isAdmin` / `isSetuManager`, never `session.role === 'admin'`.
-- **Audit Firestore indexes on every query.** Fake-firestore is index-blind. This plan needs three composite indexes and names them.
-- **All Firestore work targets `chinmaya-setu-uat`.** Rules deploys use `firebase deploy --only firestore:rules` - **not** `firestore:indexes`, so the repo's never-`--force`-indexes rule does not apply to them, but confirm the standalone check-in app is Admin-SDK-only before deploying rules to shared prod `715b8`.
-- No em dashes. Commit author `CMT Developer <developer@chinmayatoronto.org>`. Never `--no-verify`.
-
-### What shipped already
-
-**Sentry privacy hardening is done** (`7902c63`), closing what the review filed as CRITICAL-1. The review's stated mechanism was wrong - request bodies were never being captured, because `resolveDataCollectionOptions` uses the restrictive branch when `dataCollection` is absent - but the underlying gap (no `beforeSend`, no pinned posture) was real. Do not re-do it; do not relax it.
-
----
-
 > # ⛔ STOP - THIS PLAN IS SUPERSEDED IN PART (2026-07-26)
 >
 > **Vaibhav, 2026-07-26: the portal no longer collects or stores bank details.**
@@ -61,6 +31,43 @@
 > **BLOCKED on O9** - how the portal learns a mandate was really established. Do
 > not start Tasks 3-6 until Vaibhav's integration contract lands; the answer
 > changes their shape. Tasks will be renumbered in a v3 once it does.
+
+---
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal (REVISED 2026-07-26):** A family can pledge a monthly amount and is sent to a **Stripe-hosted** page to authorise the pre-authorized debit. **The portal collects, stores and transmits no bank details whatsoever.** It records status only.
+
+~~*Original goal: a family submits bank details, encrypted at rest, never returned by any route, handed to accounting through one hardened path, destroyed on confirmation.*~~ **Superseded - see the banner below.**
+
+**Architecture (REVISED 2026-07-26):** **One** collection. `pledges/{pid}` holds a status-only record (`started` | `active` | `cancelled`, amount, timestamps, an opaque `providerRef`). The start route forwards a PAD payload to CMT's existing Stripe Cloud Run proxy and returns a hosted URL - the same path the one-time Bala Vihar donation already uses. A deny-all `firestore.rules` (shipped) closes the client-SDK surface.
+
+~~*Original: two collections, `pledge_secrets/{pid}` holding AES-256-GCM ciphertext with no read path, purged by the confirm transaction.*~~ **Deleted.**
+
+**Tech Stack:** Firebase Admin Firestore, Zod, Next.js 16, and the existing Stripe proxy client. **No `node:crypto`, no AES-256-GCM, no Vercel Cron** - all three were deleted with the bank-detail model.
+
+**Supersedes:** `2026-07-25-launch-p5-monthly-pledge.md`, reviewed as REQUEST CHANGES (2 critical, 10 major, 14 minor). Review: `docs/superpowers/reviews/2026-07-25-review-p5.md`.
+
+**Depends on:** P1 v2's `writeAuditLog(txn, db, entry)` and its `can-access-route.ts` edits; P3 v2's `sendManagedEmail`; **P4 v2 Task 8 Step 4 and Task 9** - Task 9's card lives on the donation success page, which P4 moves to a top-level `/donate/success` and whose ordering P4 owns. Ship P5 first and the card renders for nobody in the gated cohort, with no test failing.
+
+---
+
+## Global Constraints
+
+- ~~**The sensitive asset is four bank fields.**~~ **VOID 2026-07-26 - there is no sensitive asset.** The portal never receives a bank field, so every rule that existed to contain them is moot. **The remaining risk is entirely different: unverified money counted as real.** A recurring mandate must never be shown as active on an unverified client claim - see spec §6.2 / O9.
+- ~~**`pledge_secrets` has no read path.**~~ **VOID** - the collection does not exist.
+- **Pledge routes still get EXPLICIT `canAccessRoute` rules**, outside the welcome-team-granting `/api/setu/*` catch-all. Not because they hold secrets any more, but because a financial write must never inherit its authorization by accident.
+- ~~**Never log, never email, never render a bank field.**~~ **Moot, and keep the habit:** Not in an error message, not in a console line, not in a Sentry event. The Sentry side is already enforced in code as of `7902c63` (`apps/portal/src/lib/sentry/scrub-event.ts` pins `httpBodies: []`, `stackFrameVariables: false` and redacts `bank`/`transit`/`institution`/`accountnumber` keys) - that is defense in depth, not permission to relax the first clause.
+- **Role checks go in the handler as well as `canAccessRoute`.** Middleware is one gate; every comparable financial route in this repo re-checks (`api/setu/donations/route.ts:19-22`). Use `isAdmin` / `isSetuManager`, never `session.role === 'admin'`.
+- **Audit Firestore indexes on every query.** Fake-firestore is index-blind. This plan needs three composite indexes and names them.
+- **All Firestore work targets `chinmaya-setu-uat`.** Rules deploys use `firebase deploy --only firestore:rules` - **not** `firestore:indexes`, so the repo's never-`--force`-indexes rule does not apply to them, but confirm the standalone check-in app is Admin-SDK-only before deploying rules to shared prod `715b8`.
+- No em dashes. Commit author `CMT Developer <developer@chinmayatoronto.org>`. Never `--no-verify`.
+
+### What shipped already
+
+**Sentry privacy hardening is done** (`7902c63`), closing what the review filed as CRITICAL-1. The review's stated mechanism was wrong - request bodies were never being captured, because `resolveDataCollectionOptions` uses the restrictive branch when `dataCollection` is absent - but the underlying gap (no `beforeSend`, no pinned posture) was real. Do not re-do it; do not relax it.
+
+---
 
 
 ## Task 1: `firestore.rules` deny-all - ships before any pledge code
@@ -142,6 +149,11 @@ Task 6's `NEXT_PUBLIC_FEATURE_SETU_PLEDGE` must not go true in production until 
 
 ## Task 2: The crypto module
 
+> ### ❌ DELETED 2026-07-26 - DO NOT IMPLEMENT
+> **Nothing is encrypted any more.** No `pledge_secrets`, no `PLEDGE_ENCRYPTION_KEY`, no AES-256-GCM, no key rotation or custody. This entire task is void.
+> Portal no longer collects or stores bank details; PAD is authorised on a Stripe-hosted page. See the spec's revision banner: `docs/superpowers/specs/2026-07-25-monthly-pledge-pad-design.md`.
+
+
 **Files:** create `apps/portal/src/features/setu/pledge/crypto.ts` + tests.
 
 - [ ] **Step 1: Write the failing tests**
@@ -211,6 +223,11 @@ Never put `details` in a thrown error message. The function that holds it should
 
 ## Task 3: Schemas, including the PAD authorization
 
+> ### ⚠️ REWRITE REQUIRED 2026-07-26 - DO NOT IMPLEMENT AS WRITTEN
+> **No bank fields.** Status-only: `started` | `active` | `cancelled`, plus `monthlyAmount`, timestamps and an opaque `providerRef`. Every PAD-authorization/bank-detail field in this task is void.
+> Portal no longer collects or stores bank details; PAD is authorised on a Stripe-hosted page. See the spec's revision banner: `docs/superpowers/specs/2026-07-25-monthly-pledge-pad-design.md`.
+
+
 **A Canadian pre-authorized debit requires a payor's PAD agreement (Payments Canada Rule H1), and the payor must be able to prove what they agreed to.** v1 collected four bank fields and an amount and stored no agreement, no version, no acceptance timestamp. If a family disputes a debit there is nothing to show, and accounting's processor will very likely ask for it before the first PAD is set up.
 
 The repo already has the right pattern: `app_config/disclaimers` stores versioned content and records acceptance against that version.
@@ -250,6 +267,11 @@ padAgreementText: string;      // snapshot of exactly what was shown, so a later
 
 ## Task 4: `submitPledge`, with a duplicate guard
 
+> ### ⚠️ REWRITE REQUIRED 2026-07-26 - DO NOT IMPLEMENT AS WRITTEN
+> Becomes **`startPledge`**: validate the amount, write `status:'started'`, forward a PAD payload to CMT's existing Stripe proxy, return the hosted URL. Nothing sensitive is posted or stored. The duplicate guard is still wanted.
+> Portal no longer collects or stores bank details; PAD is authorised on a Stripe-hosted page. See the spec's revision banner: `docs/superpowers/specs/2026-07-25-monthly-pledge-pad-design.md`.
+
+
 **Nothing in v1 rejected a second submission while a pending one existed.** A double-clicked button, a retry on a flaky connection, or a family that "tries again" because verification is manual and slow each mints a new `pledges/{pid}` **and a new `pledge_secrets/{pid}` holding real bank data**. The admin confirms one; the rest sit for 90 days.
 
 - [ ] **Step 1: Write the failing tests** - including the N=2 case: a second submit while pending → **409**, and exactly one live secret.
@@ -275,6 +297,11 @@ Client-side, disable the submit button on first click - necessary, not sufficien
 ---
 
 ## Task 5: `confirmPledge` / `cancelPledge`, fail-closed on a purged secret
+
+> ### ⚠️ REWRITE REQUIRED 2026-07-26 - DO NOT IMPLEMENT AS WRITTEN
+> **The purge half is void** - there is no secret to purge, so 'fail-closed on a purged secret' is meaningless. How a pledge becomes `active` is now **spec open item O9** and BLOCKED on Vaibhav's integration contract. The one rule that survives: the client may never write `active`.
+> Portal no longer collects or stores bank details; PAD is authorised on a Stripe-hosted page. See the spec's revision banner: `docs/superpowers/specs/2026-07-25-monthly-pledge-pad-design.md`.
+
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -314,6 +341,11 @@ Use P1's `writeAuditLog(txn, db, entry)` so the status flip, the secret delete a
 ---
 
 ## Task 6: Routes - handler checks, feature flag, kill switch
+
+> ### ⚠️ REWRITE REQUIRED 2026-07-26 - DO NOT IMPLEMENT AS WRITTEN
+> Keep the shape - explicit `canAccessRoute` rules outside the welcome-team-granting `/api/setu/*` catch-all, in-handler role checks, flag + kill switch. Drop everything secret-related. Route names change with Task 4.
+> Portal no longer collects or stores bank details; PAD is authorised on a Stripe-hosted page. See the spec's revision banner: `docs/superpowers/specs/2026-07-25-monthly-pledge-pad-design.md`.
+
 
 - [ ] **Step 1: Add `flags.setuPledge`, default OFF**
 
@@ -370,6 +402,11 @@ Send **outside** the confirm transaction so a template problem cannot roll back 
 
 ## Task 7: The three composite indexes
 
+> ### ⚠️ REWRITE REQUIRED 2026-07-26 - DO NOT IMPLEMENT AS WRITTEN
+> **RE-DERIVE from the new queries.** The old set was sized for a two-collection model with a purge sweep; `pledge_secrets` and the sweep are both gone, so at least one of the three has no query left to serve. Do not deploy these as written.
+> Portal no longer collects or stores bank details; PAD is authorised on a Stripe-hosted page. See the spec's revision banner: `docs/superpowers/specs/2026-07-25-monthly-pledge-pad-design.md`.
+
+
 v1 did not mention `firestore.indexes.json` once. Three query shapes need entries, and fake-firestore will pass without them - this is the `/family/seva` 500 pattern exactly.
 
 | Query | Index |
@@ -388,6 +425,11 @@ The first is the same shape as `getDonations`, which documents its index at `get
 
 ## Task 8: The admin list endpoint
 
+> ### ✅ STILL WANTED, but read the revision first
+> Simpler now - there is nothing sensitive to withhold, so this is an ordinary list. Status values change (`started`, not `pending`).
+> Portal no longer collects or stores bank details; PAD is authorised on a Stripe-hosted page. See the spec's revision banner: `docs/superpowers/specs/2026-07-25-monthly-pledge-pad-design.md`.
+
+
 **Without it the confirm workflow forces staff into the Firestore console**, one click from `pledge_secrets`, in a console whose audit trail is Google's rather than the app's. The design's entire premise is that no human browses this data; a workflow that supplies no other way to obtain a `pid` guarantees they will, every time.
 
 - [ ] **Step 1: Write the failing tests** - admin-only; returns `PledgeDoc` fields only; never touches `pledge_secrets`.
@@ -398,6 +440,11 @@ The first is the same shape as `getDonations`, which documents its index at `get
 ---
 
 ## Task 8b: The form the family actually types into, and the config behind it
+
+> ### ⚠️ REWRITE REQUIRED 2026-07-26 - DO NOT IMPLEMENT AS WRITTEN
+> **Amount only. No bank fields at all** - no bank number, transit, institution or account input is ever rendered or posted. The `app_config/pledge` half of this task is unchanged.
+> Portal no longer collects or stores bank details; PAD is authorised on a Stripe-hosted page. See the spec's revision banner: `docs/superpowers/specs/2026-07-25-monthly-pledge-pad-design.md`.
+
 
 **Walk the earlier draft task by task and a family can never submit a pledge.** Task 3 was schemas, Task 4 the server function, Task 6 the routes, Task 9 the *card*, Task 11 the export. Spec §6.1 steps 1-2 - "Family opens the pledge form... enters bank number, transit number, institution number, account number" - had **no task**, and the self-review claimed coverage and stopped.
 
@@ -431,6 +478,11 @@ Follow the disclaimers pattern: a `PledgeConfigSchema`, a `DEFAULT_PLEDGE_CONFIG
 
 ## Task 9: The family card
 
+> ### ✅ STILL WANTED, but read the revision first
+> Still wanted. Two changes: the success page moved to a top-level **`/donate/success`** (P4 v2 Task 8 Step 4), and the `started` copy **must not claim success** if activation is unverified - see spec §5.1 and O9.
+> Portal no longer collects or stores bank details; PAD is authorised on a Stripe-hosted page. See the spec's revision banner: `docs/superpowers/specs/2026-07-25-monthly-pledge-pad-design.md`.
+
+
 Spec §5.1's state-driven treatment, on the donation success page **below** the adult-class ask (P4 v2 Task 9 owns the ordering) and on the dashboard.
 
 **`cancelled` returns the card to the ask; `pending` does not.** Combined with Task 5's purge-sets-`cancelled`, a family whose secret was swept gets the ask back rather than sitting on "we're setting up your monthly gift" forever.
@@ -443,6 +495,11 @@ Spec §5.1's state-driven treatment, on the donation success page **below** the 
 ---
 
 ## Task 10: The sweep, as a cron
+
+> ### ❌ DELETED 2026-07-26 - DO NOT IMPLEMENT
+> **Nothing to purge.** A stale-`started` report is still worth having, but as an operational signal that the hosted flow is failing, not as a data-protection control. Do not build this cron as written.
+> Portal no longer collects or stores bank details; PAD is authorised on a Stripe-hosted page. See the spec's revision banner: `docs/superpowers/specs/2026-07-25-monthly-pledge-pad-design.md`.
+
 
 v1 made it a manual CLI script run twice-remembered (script + `--commit`), forever. **That is the same human-forgetfulness failure the sweep exists to catch.**
 
@@ -482,6 +539,11 @@ Setting `cancelled` returns the card to the ask, which is the correct family-fac
 
 ## Task 11: The export script and the accounting hand-off
 
+> ### ❌ DELETED 2026-07-26 - DO NOT IMPLEMENT
+> **Void.** There are no bank details to export, decrypt, transmit or destroy. This task carried what the plan called the highest residual risk in the feature; it no longer exists.
+> Portal no longer collects or stores bank details; PAD is authorised on a Stripe-hosted page. See the spec's revision banner: `docs/superpowers/specs/2026-07-25-monthly-pledge-pad-design.md`.
+
+
 **This is where the data actually leaves, and v1 left it undefined.** Spec §8's proudest row is "Nothing sensitive is ever emailed" - true of the portal, and false of the last mile if the operator then emails the CSV.
 
 - [ ] **Step 1: Harden the file handling**
@@ -519,6 +581,11 @@ This is the highest-residual-risk part of the feature and it currently has no ow
 ---
 
 ## Task 12: The security tests that actually test something
+
+> ### ⚠️ REWRITE REQUIRED 2026-07-26 - DO NOT IMPLEMENT AS WRITTEN
+> The crypto round-trip, purge and no-read-path tests are void with the data they protected. **The live risk is now 'unverified money counted as real'** - test that the client cannot write `active`, and that `started` counts as payment nowhere. See spec §10.
+> Portal no longer collects or stores bank details; PAD is authorised on a Stripe-hosted page. See the spec's revision banner: `docs/superpowers/specs/2026-07-25-monthly-pledge-pad-design.md`.
+
 
 **Two of v1's three headline tests were no-ops.**
 
@@ -562,6 +629,11 @@ expect(res.status).toBe(400);                 // .strict() rejects the extra key
 
 ## Task 13: Verify against deployed UAT
 
+> ### ✅ STILL WANTED, but read the revision first
+> Still required, against the new flow. Needs a Stripe **test mode** for PAD (spec O9) so UAT never moves real money.
+> Portal no longer collects or stores bank details; PAD is authorised on a Stripe-hosted page. See the spec's revision banner: `docs/superpowers/specs/2026-07-25-monthly-pledge-pad-design.md`.
+
+
 - [ ] **Step 1: Set a SEPARATE UAT encryption key.** `PLEDGE_ENCRYPTION_KEY` is spec'd Production-only (§4.3), so submit throws on `cmt-setu.vercel.app` without one. **Never reuse the prod key** - UAT data has looser handling. Use `vercel env add --value` (stdin is silently ignored for agents) and verify with `vercel env pull`.
 - [ ] **Step 2: Add both collections to both cleanup sweeps.** `src/__tests__/e2e/helpers/firestore.ts`'s `cleanupTestData()` and `scripts/wipe-uat-leaks.ts` know nothing about `pledges` / `pledge_secrets`, so the E2E would leave real-shaped secrets in UAT indefinitely. Mark E2E docs `_test: true`.
 - [ ] **Step 3: Walk the flow** - submit, admin list, confirm, the activation email, the card states, the duplicate 409, and the purged-secret 409.
@@ -573,6 +645,12 @@ expect(res.status).toBe(400);                 // .strict() rejects the extra key
 ---
 
 ## Self-review
+
+> ⚠️ **STALE 2026-07-26.** This section maps the plan to the PRE-revision spec - it
+> credits crypto, AAD, key rotation, the purge and the export script, none of which
+> will be built. It is retained only as a record of what the plan once claimed to
+> cover. **Do not use it as a coverage checklist.** The current coverage list is
+> spec §10.
 
 **Spec coverage.** §4.3 crypto → Task 2, with rotation and AAD now real rather than asserted. §4.4 kill switch → Task 6 Step 2. §5.1 card states → Task 9. §8 threat model → Tasks 1, 11, 12, with the database and hand-off surfaces it omitted now covered. §10.1-10.7 verification → Tasks 12 and 13, including §10.7 which v1 claimed and did not test. O6 hand-off → Task 11 Step 2. O7 field list → Task 3 Step 3 (`bankNumber` dropped).
 

@@ -10,7 +10,7 @@ Start here. Read `docs/superpowers/reviews/README.md` second.
 | **P1** roles + cross-family edit | **all 11 tasks** | - |
 | **P3** communications | **Tasks 1-6** | only Task 6 Step 3 (per-template UAT send), blocked on Vaibhav's SES templates |
 | **P2** teacher/visitors/roster | Tasks 1-2 (the two live defects) | **Tasks 3-9** - see items 21-22 below, which this doc previously omitted |
-| **P5** monthly pledge | Task 1 Steps 1-3 (UAT rules) | Tasks 2-13. **Steps 4-5 are now a NO-OP** - see Blockers |
+| **P5** monthly pledge | Task 1 Steps 1-3 (UAT rules) | **RESCOPED 2026-07-26** - no bank details, Stripe-hosted PAD. Tasks 2, 10, 11 DELETED; 3-8b, 12 need rewrite. **BLOCKED on spec O9.** Steps 4-5 are a NO-OP. |
 | **P4** adult study class | - | all 12 |
 | **P6** migration/dormant/centre | **all 7 tasks** | - |
 
@@ -90,9 +90,18 @@ Independent of Track A except Task 9.
 
 ## Phase 3 - the pledge (P5 v2), last
 
+> **⚠️ RESCOPED 2026-07-26.** Vaibhav: the portal collects **no** bank details; monthly
+> PAD is authorised on a **Stripe-hosted** page through CMT's existing Stripe service.
+> The crypto module, the export script and the accounting hand-off are **deleted**, and
+> with them two of the three unassigned launch blockers. The build is much smaller but
+> now **BLOCKED on spec open item O9** (how the portal learns a mandate was really
+> established) and on Vaibhav's integration contract. Item numbering below is stale and
+> will be reissued as a v3 once O9 lands. Spec:
+> `docs/superpowers/specs/2026-07-25-monthly-pledge-pad-design.md`.
+
 Needs P1 Task 7, P3 Tasks 1-3, and P4's `/donate/success` move.
 
-23. **P5 Tasks 2-8** - crypto, schemas, submit, confirm/cancel, routes, indexes, admin list.
+23. ~~**P5 Tasks 2-8** - crypto, schemas, submit, confirm/cancel, routes, indexes, admin list.~~ **Task 2 (crypto) DELETED.** The rest need rewriting against the Stripe model.
 24. **P5 Task 8b** - the form. **This did not exist until the second review.**
 25. **P5 Tasks 9-13** - card, sweep-as-cron, export hardening, the real security tests, UAT.
 
@@ -106,8 +115,9 @@ None of these can be closed by writing software. Each blocks something real.
 |---|---|---|
 | ~~Export the deployed prod `715b8` ruleset~~ **CLOSED 2026-07-26** | ~~P5 prod rules~~ | Supplied by CMT Developer; committed at `firestore.prod.rules.baseline`. **P5 Task 1 Steps 4-5 need NO new prod deny** - Firestore allow rules are additive, so the `{document=**} if false` block grants nothing and `pledges`/`pledge_secrets` match no rule, i.e. they were never client-writable. The export also revealed an unauthenticated-`create` hole on `verification_codes` that let anyone mint a session as any known contact; fixed in `27b71a3` by moving the portal's OTP store to `setu_verification_codes`. |
 | **SES templates + `SES_CONFIGURATION_SET`** (spec O5, O8) | P3 Task 6, P5's activation email | Vaibhav |
-| **The accounting hand-off**: named recipient, encrypted channel, retention limit (spec O6) | P5 Task 11 Step 2 - the highest residual risk in the feature | unassigned |
-| **`PLEDGE_ENCRYPTION_KEY` backup** (spec O4) | the pledge flag flip | unassigned |
+| ~~**The accounting hand-off**~~ **CLOSED 2026-07-26** | ~~P5 Task 11 Step 2~~ | **Deleted with the feature's bank-detail collection.** No decrypted file, no recipient, no retention limit - there is nothing to hand off. |
+| ~~**`PLEDGE_ENCRYPTION_KEY` backup**~~ **CLOSED 2026-07-26** | ~~the pledge flag flip~~ | **Deleted - nothing is encrypted any more.** |
+| **Stripe PAD integration contract** (spec O9) - how the portal learns a mandate was established, the PAD payload, cancellation, and test-mode creds | ALL of P5's remaining build | **Vaibhav** |
 | **Adult-class screen copy** (spec O7) | P4 Task 7 | Vaibhav |
 
 ---
