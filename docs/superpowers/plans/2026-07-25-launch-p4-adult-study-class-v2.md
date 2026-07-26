@@ -764,8 +764,31 @@ mocking BOTH variants and asserting which one is called.
 "Back to family" link**, naming the required order and why. P5 v3 Task 5 Step 4
 lands there.
 
+**Two gaps closed after audit (`81f5fec`):**
+
+- **The DOM ordering was enforced by a COMMENT only.** The ask-above-pledge order
+  is the entire point of Task 9, and nothing asserted it - P5's implementer could
+  paste the card above the ask, or nest it inside the `ask &&` block where it
+  renders for nobody, with the whole suite green. Same trap that made the loader
+  variants get distinct names instead of a shared name plus a comment. **Now
+  test-locked before P5 touches the file**: thank-you < ask < way-out, plus a test
+  proving the pledge slot survives when the ask does not render (i.e. it is a
+  sibling, not inside the conditional).
+- **`markDonationStatus` was uncaught, which made this task's own comment untrue.**
+  It claims a transient error costs the ask and never the receipt - but an
+  uncaught WRITE failure took down both. The function is documented best-effort
+  and explicitly not authoritative, and Stripe already has the money, so a failed
+  status write is recoverable where a receipt the family never sees is not.
+  Pre-existing (inherited with the page in `47663d1`), fixed here because Task 9's
+  stated invariant depends on it.
+
+**A stale SPEC line, deliberately not implemented:** spec §4.3 asks for a
+dashboard card. The plan's Task 9 Step 4 already overrides it in writing ("card +
+gate + skip cannot coexist... no dashboard card"), so the plan wins over the
+spec here - not a dropped requirement.
+
 The page had **no test file at all** before this (it moved in `47663d1` and none
-came with it); it has ten now. Four mutations verified: ignoring the predicate,
+came with it); it has **thirteen** now. Four mutations verified: ignoring the predicate,
 using the throwing loader, dropping the flag gate, and removing the way out.
 
 ---
