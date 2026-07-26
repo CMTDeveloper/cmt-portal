@@ -57,6 +57,7 @@ vi.mock('../member-roles', () => ({
 }));
 
 import { listSevaks } from '../manage-roles';
+import { GRANTABLE_ROLES } from '@cmt/shared-domain';
 
 // --- member docs keyed by `${fid}/${mid}` ---
 const MEMBERS: Record<string, FirebaseFirestore.DocumentData> = {
@@ -245,5 +246,53 @@ describe('listSevaks — merged + deduped', () => {
     const sevaks = await listSevaks();
     const names = sevaks.map((s) => s.name);
     expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b)));
+  });
+});
+
+describe('listSevaks — every grantable role, not just two', () => {
+  // manage-roles had three hardcoded admin|welcome-team sites. The roleAssignments
+  // fan-out never QUERIED coordinator, and the auth-claim loop `continue`d past
+  // any standalone coordinator - so a coordinator grant could not appear in
+  // /admin/users no matter what ROLE_ORDER said.
+
+  it('includes a coordinator granted via roleAssignments', async () => {
+    mockListMembersWithRole.mockImplementation(async (role: string) =>
+      role === 'coordinator'
+        ? [{ mid: 'CMT-FAM1-01', fid: 'CMT-FAM1', grantedVia: 'asha@example.com' }]
+        : [],
+    );
+    mockListUsers.mockResolvedValue({ users: [], pageToken: undefined });
+
+    const rows = await listSevaks();
+    expect(rows.find((r) => r.roles.includes('coordinator'))).toBeDefined();
+  });
+
+  it('includes a standalone coordinator granted via auth claims', async () => {
+    mockListMembersWithRole.mockImplementation(async () => []);
+    mockListUsers.mockResolvedValue({
+      users: [
+        {
+          uid: 'uid-coord@example.com',
+          email: 'coord@example.com',
+          customClaims: { role: 'coordinator', email: 'coord@example.com' },
+          metadata: { lastSignInTime: '2026-07-01T09:00:00.000Z' },
+        },
+      ],
+      pageToken: undefined,
+    });
+
+    const rows = await listSevaks();
+    expect(rows.find((r) => r.roles.includes('coordinator'))).toBeDefined();
+  });
+
+  it('queries roleAssignments for EVERY grantable role', async () => {
+    // Guards the fan-out itself: a hardcoded pair here means a newly grantable
+    // role is silently never read, with nothing failing to say so.
+    mockListMembersWithRole.mockImplementation(async () => []);
+    mockListUsers.mockResolvedValue({ users: [], pageToken: undefined });
+
+    await listSevaks();
+    const queried = mockListMembersWithRole.mock.calls.map((c) => c[0]);
+    for (const role of GRANTABLE_ROLES) expect(queried).toContain(role);
   });
 });

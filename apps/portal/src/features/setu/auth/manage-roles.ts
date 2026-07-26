@@ -3,7 +3,7 @@ import { portalAuth } from '@cmt/firebase-shared/admin/auth';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { sha256Hex } from '@/features/check-in/shared';
 import { normalizeContactForKey } from '@cmt/shared-domain/setu';
-import type { GrantableRole, SevakRow } from '@cmt/shared-domain';
+import { GRANTABLE_ROLES, type GrantableRole, type SevakRow } from '@cmt/shared-domain';
 import {
   addCapability,
   removeCapability,
@@ -220,25 +220,23 @@ export async function listSevaks(): Promise<SevakRow[]> {
     return row;
   }
 
-  // 1. roleAssignments — admins + welcome-team, accumulated per mid.
-  const [admins, welcomeTeam] = await Promise.all([
-    listMembersWithRole('admin'),
-    listMembersWithRole('welcome-team'),
-  ]);
+  // 1. roleAssignments — EVERY grantable role, accumulated per mid. Derived
+  // from GRANTABLE_ROLES rather than a hardcoded fan-out: a role missing from
+  // this query is simply never seen, so the grant would be written and then be
+  // invisible in /admin/users with nothing failing to say so.
+  const assignmentsByRole = await Promise.all(
+    GRANTABLE_ROLES.map((role) => listMembersWithRole(role)),
+  );
 
   const roleByMid = new Map<string, { fid: string; roles: Set<GrantableRole> }>();
-  for (const a of admins) {
-    const entry = roleByMid.get(a.mid) ?? { fid: a.fid, roles: new Set<GrantableRole>() };
-    entry.roles.add('admin');
-    if (!entry.fid && a.fid) entry.fid = a.fid;
-    roleByMid.set(a.mid, entry);
-  }
-  for (const w of welcomeTeam) {
-    const entry = roleByMid.get(w.mid) ?? { fid: w.fid, roles: new Set<GrantableRole>() };
-    entry.roles.add('welcome-team');
-    if (!entry.fid && w.fid) entry.fid = w.fid;
-    roleByMid.set(w.mid, entry);
-  }
+  GRANTABLE_ROLES.forEach((role, i) => {
+    for (const a of assignmentsByRole[i] ?? []) {
+      const entry = roleByMid.get(a.mid) ?? { fid: a.fid, roles: new Set<GrantableRole>() };
+      entry.roles.add(role);
+      if (!entry.fid && a.fid) entry.fid = a.fid;
+      roleByMid.set(a.mid, entry);
+    }
+  });
 
   // Resolve member name/contact for each role-assigned mid.
   await Promise.all(
@@ -355,9 +353,12 @@ export async function listSevaks(): Promise<SevakRow[]> {
         lastSignInByUid.set(u.uid, new Date(u.metadata.lastSignInTime).toISOString());
       }
       const claims = (u.customClaims as ClaimsShape | undefined) ?? null;
-      const claimRoles: GrantableRole[] = [];
-      if (hasCapability(claims, 'admin')) claimRoles.push('admin');
-      if (hasCapability(claims, 'welcome-team')) claimRoles.push('welcome-team');
+      // Derived, not hardcoded: this `continue` skipped every standalone
+      // auth-claim holder of any role outside the pair, so such a sevak was
+      // dropped from the listing entirely.
+      const claimRoles: GrantableRole[] = GRANTABLE_ROLES.filter((role) =>
+        hasCapability(claims, role as Capability),
+      );
       if (claimRoles.length === 0) continue;
 
       const claimsEmail = typeof claims?.email === 'string' ? claims.email : null;
@@ -403,7 +404,7 @@ export async function listSevaks(): Promise<SevakRow[]> {
     token = page.pageToken;
   } while (token);
 
-  const ROLE_ORDER: GrantableRole[] = ['admin', 'welcome-team'];
+  const ROLE_ORDER: GrantableRole[] = [...GRANTABLE_ROLES];
   const out: SevakRow[] = [...rows.values()].map((r) => {
     // The person's auth uid: a standalone auth-claim sevak carries it directly;
     // a family member's is the canonical sha256(normalizedContact) — the same
