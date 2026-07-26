@@ -10,8 +10,16 @@ export type AutoEnrollResult =
 
 /**
  * Auto-enroll a resolved kiosk family into the CURRENT Bala Vihar offering.
- * Idempotent (enrollFamily no-ops an already-active enrollment). Swallows the
- * two expected skip cases; real offering/family errors bubble to the caller.
+ *
+ * Idempotent, and it must stay that way - this runs repeatedly at the door on
+ * Sunday mornings. enrollFamily's already-active branch writes NOTHING when the
+ * caller supplies none of `enrolledMids` / `suggestedAmountOverride` /
+ * `membershipMode`, which is exactly what this call does. If you ever add one
+ * of those here, this stops being a no-op and starts issuing a write per
+ * check-in scan.
+ *
+ * Swallows the two expected skip cases; real offering/family errors bubble to
+ * the caller.
  */
 export async function autoEnrollBalaVihar(
   family: { fid: string; location: Location | null },

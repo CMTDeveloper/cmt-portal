@@ -115,8 +115,17 @@ beforeEach(() => {
   mockRunTransaction.mockImplementation(async (fn: (txn: unknown) => Promise<unknown>) =>
     fn({
       get: async (ref: Tagged) => snapFor(ref),
-      set: (ref: Tagged, data: Record<string, unknown>) => { sets.push({ ref, data }); },
-      update: (ref: Tagged, data: Record<string, unknown>) => { updates.push({ ref, data }); },
+      set: (ref: Tagged, data: Record<string, unknown>) => {
+        sets.push({ ref, data });
+        // Reflect the write back into state so a SECOND enrollFamily call in the
+        // same test sees the doc it just created - which is what makes the
+        // reconcile path testable at all.
+        if (ref.__kind === 'enrollment') state.enrollment = { ...data };
+      },
+      update: (ref: Tagged, data: Record<string, unknown>) => {
+        updates.push({ ref, data });
+        if (ref.__kind === 'enrollment') state.enrollment = { ...state.enrollment, ...data };
+      },
     }),
   );
 });
@@ -236,5 +245,79 @@ describe('enrollFamily - existing callers are unaffected', () => {
     expect(res).toEqual({ created: false, eid: EID, suggestedAmountSnapshot: 77 });
     expect(sets).toHaveLength(0);
     expect(updates).toHaveLength(0);
+  });
+});
+
+// ── Task 3: reconcile an existing ACTIVE enrollment ──────────────────────────
+// Without this the family is locked out of the portal permanently. eid is
+// deterministic, so a re-enroll hits the already-active branch. The sequence:
+// the selected parent leaves -> the member-edit prune empties enrolledMids ->
+// the adult-class gate fires (an empty list must re-fire) -> the family picks
+// someone -> POST 200 -> NOTHING is written -> the gate fires again. The manager
+// never reaches /family again.
+describe('enrollFamily - reconcile on an active enrollment', () => {
+  it('a second enroll with different mids updates the existing active enrollment', async () => {
+    await enrollFamily({ ...base, enrolledMids: [`${FID}-02`], membershipMode: 'manual' });
+    expect(state.enrollment!.enrolledMids).toEqual([`${FID}-02`]);
+
+    const res = await enrollFamily({ ...base, enrolledMids: [`${FID}-03`], membershipMode: 'manual' });
+
+    expect(state.enrollment!.enrolledMids).toEqual([`${FID}-03`]);
+    expect(res.created).toBe(false);
+  });
+
+  it('reports that it reconciled, so callers can tell it apart from a no-op', async () => {
+    state.enrollment = { status: 'active', suggestedAmountSnapshot: 77 };
+    const res = await enrollFamily({ ...base, enrolledMids: [`${FID}-03`] });
+    expect(res).toMatchObject({ created: false, reconciled: true, eid: EID });
+  });
+
+  it('NEVER recomputes suggestedAmountSnapshot on reconcile', async () => {
+    // The snapshot is pinned at first enrollment by design so a later tier edit
+    // cannot move what an already-enrolled family owes. The live offering here
+    // is 101; the stored snapshot is 77 and must stay 77.
+    state.enrollment = { status: 'active', suggestedAmountSnapshot: 77, enrolledMids: [`${FID}-01`] };
+
+    const res = await enrollFamily({ ...base, enrolledMids: [`${FID}-03`] });
+
+    expect(res.suggestedAmountSnapshot).toBe(77);
+    const written = updates.find((u) => u.ref.__kind === 'enrollment')!.data;
+    expect(written).not.toHaveProperty('suggestedAmountSnapshot');
+  });
+
+  it('reconciles an override of 0 onto an existing enrollment', async () => {
+    state.enrollment = { status: 'active', suggestedAmountSnapshot: 101, suggestedAmountOverride: null };
+    await enrollFamily({ ...base, suggestedAmountOverride: 0 });
+    expect(state.enrollment.suggestedAmountOverride).toBe(0);
+  });
+
+  it('touches ONLY the fields explicitly supplied', async () => {
+    // A reconcile that supplies just the mids must not reset the override or the
+    // mode, or picking a different parent would silently re-bill a family whose
+    // fee had been waived.
+    state.enrollment = {
+      status: 'active', suggestedAmountSnapshot: 101,
+      suggestedAmountOverride: 0, membershipMode: 'manual', enrolledMids: [`${FID}-01`],
+    };
+
+    await enrollFamily({ ...base, enrolledMids: [`${FID}-03`] });
+
+    const written = updates.find((u) => u.ref.__kind === 'enrollment')!.data;
+    expect(Object.keys(written)).toEqual(['enrolledMids']);
+    expect(state.enrollment.suggestedAmountOverride).toBe(0);
+    expect(state.enrollment.membershipMode).toBe('manual');
+  });
+
+  it('does NOT reconcile a CANCELLED enrollment - it re-creates instead', async () => {
+    // A cancelled enrollment must go through the full create path (fresh
+    // snapshot, fresh enrolledAt, status back to active), not be patched.
+    state.enrollment = { status: 'cancelled', suggestedAmountSnapshot: 77 };
+
+    const res = await enrollFamily({ ...base, enrolledMids: [`${FID}-03`] });
+
+    expect(res.created).toBe(true);
+    expect(updates).toHaveLength(0);
+    expect(writtenEnrollment().status).toBe('active');
+    expect(writtenEnrollment().suggestedAmountSnapshot).toBe(101);
   });
 });

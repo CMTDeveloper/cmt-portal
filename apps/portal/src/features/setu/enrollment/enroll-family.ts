@@ -33,7 +33,10 @@ export type EnrollFamilyParams = {
 
 export type EnrollFamilyResult =
   | { created: true; eid: string; suggestedAmountSnapshot: number }
-  | { created: false; eid: string; suggestedAmountSnapshot: number };
+  // `reconciled` is present only when an existing ACTIVE enrollment was updated
+  // in place. Omitted (not `false`) on the plain no-op, so a caller that only
+  // checks `created` behaves exactly as it always has.
+  | { created: false; reconciled?: true; eid: string; suggestedAmountSnapshot: number };
 
 /**
  * Idempotent enrollment transaction.
@@ -56,8 +59,11 @@ export type EnrollFamilyResult =
 export async function enrollFamily(params: EnrollFamilyParams): Promise<EnrollFamilyResult> {
   const { fid, oid, enrolledVia, enrolledByMid } = params;
   // Presence, not truthiness: an explicitly supplied `[]` must still reach the
-  // no-eligible-members guard rather than silently falling back to deriving.
+  // no-eligible-members guard rather than silently falling back to deriving, and
+  // a supplied `0` override is a real value (the Bala-Vihar-paid exemption).
   const midsSupplied = params.enrolledMids !== undefined;
+  const overrideSupplied = params.suggestedAmountOverride !== undefined;
+  const modeSupplied = params.membershipMode !== undefined;
   const db = portalFirestore();
   const eid = `${fid}-${oid}`;
 
@@ -130,7 +136,42 @@ export async function enrollFamily(params: EnrollFamilyParams): Promise<EnrollFa
     if (enrollmentSnap.exists) {
       const existing = enrollmentSnap.data() as { status: string; suggestedAmountSnapshot: number };
       if (existing.status === 'active') {
-        return { created: false as const, eid, suggestedAmountSnapshot: existing.suggestedAmountSnapshot };
+        // RECONCILE. Patch ONLY what the caller explicitly supplied. Anything
+        // else on an active enrollment is immutable here by design:
+        // `suggestedAmountSnapshot` is pinned at first enrollment so a later tier
+        // edit cannot move what an already-enrolled family owes, and `enrolledAt`
+        // / `enrolledVia` / `enrolledByMid` are the historical record of how the
+        // family got in. Re-deriving any of them on a re-POST would silently
+        // rewrite money owed or provenance.
+        const patch: Record<string, unknown> = {};
+        if (midsSupplied) patch['enrolledMids'] = params.enrolledMids;
+        if (overrideSupplied) patch['suggestedAmountOverride'] = params.suggestedAmountOverride;
+        if (modeSupplied) patch['membershipMode'] = params.membershipMode;
+
+        // Nothing supplied ⇒ byte-for-byte the previous no-op. Four existing
+        // callers rely on this, including the door kiosk, whose documented
+        // idempotency is precisely "a re-enroll writes nothing".
+        if (Object.keys(patch).length === 0) {
+          return { created: false as const, eid, suggestedAmountSnapshot: existing.suggestedAmountSnapshot };
+        }
+
+        // Same invariant as the create path: never leave an enrollment naming
+        // nobody. An empty list would still satisfy "has an active enrollment"
+        // for the adult-class gate while selecting no one. (The member-edit
+        // prune MAY legitimately leave an empty list - that is a different
+        // writer with a different job, and it is what makes the gate re-fire.)
+        if (midsSupplied && params.enrolledMids!.length === 0) {
+          throw new Error('no-eligible-members');
+        }
+
+        txn.update(enrollmentRef, patch);
+        return {
+          created: false as const,
+          reconciled: true as const,
+          eid,
+          // The STORED snapshot, never the freshly resolved one above.
+          suggestedAmountSnapshot: existing.suggestedAmountSnapshot,
+        };
       }
     }
 

@@ -19,7 +19,10 @@ function sameSet(a: readonly string[], b: readonly string[]): boolean {
  * set of program-eligible members.
  *
  * `enrolledMids` is a denormalized snapshot frozen at enroll time (see
- * `enrollFamily`, whose already-active branch is a strict no-op). Without this
+ * `enrollFamily`, whose already-active branch writes nothing UNLESS the caller
+ * explicitly supplies `enrolledMids` / `suggestedAmountOverride` /
+ * `membershipMode` - the Adult Study Class does, to let a family change which
+ * adult attends). Without this
  * it goes stale the moment family membership changes — a child added AFTER the
  * family enrolled never joins the enrollment, so the dashboard/roster/attendance
  * (all of which read `enrolledMids`) silently omit them. That is the N=2 bug.
