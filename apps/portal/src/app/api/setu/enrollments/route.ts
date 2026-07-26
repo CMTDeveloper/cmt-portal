@@ -140,7 +140,12 @@ export async function POST(req: Request) {
   return NextResponse.json(
     {
       eid: result.eid,
-      suggestedAmount: result.suggestedAmountSnapshot,
+      // The EFFECTIVE amount, not the pinned snapshot. enroll-cta.tsx:85-88 reads
+      // this and, when it is >= 1, sends the family straight to Stripe - so
+      // reporting the 101 snapshot while an override of 0 is in force would waive
+      // the record and charge them anyway. A 0 falls through to the donate page,
+      // which owns the $0 flow.
+      suggestedAmount: adultClass?.overrideInForce ?? result.suggestedAmountSnapshot,
       donateUrl: `/family/donate?eid=${result.eid}`,
     },
     { status },

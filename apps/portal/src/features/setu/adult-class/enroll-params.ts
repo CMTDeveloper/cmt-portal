@@ -13,6 +13,18 @@ export interface AdultClassEnrollParams {
    * actively writes "no override".
    */
   waiver: { suggestedAmountOverride: number | null } | null;
+  /**
+   * The override that will be IN FORCE after this call - the waiver's value when
+   * one is supplied, otherwise the one already stored.
+   *
+   * The route must report this as the amount owed, NOT
+   * `result.suggestedAmountSnapshot`. `enroll-cta.tsx:85-88` reads the response's
+   * `suggestedAmount` and, when it is >= 1, sends the family STRAIGHT to Stripe
+   * at that number - so returning the pinned 101 snapshot while writing an
+   * override of 0 would waive the record and charge the family anyway. The fee
+   * waiver is not closed until the amount the client is told matches it.
+   */
+  overrideInForce: number | null;
 }
 
 /**
@@ -68,11 +80,16 @@ export function resolveAdultClassEnrollParams(
   const existing = input.enrollments.find((e) => e.status === 'active' && e.oid === oid);
   const alreadyPriced = existing != null && existing.suggestedAmountOverride != null;
 
+  const waiver = alreadyPriced ? null : { suggestedAmountOverride: hasBalaVihar ? 0 : null };
+
   return {
     enrolledMids,
     // Freezes the selection against the member-edit prune, exactly as the
     // bespoke route does - otherwise the next edit re-derives "every adult".
     membershipMode: 'manual',
-    waiver: alreadyPriced ? null : { suggestedAmountOverride: hasBalaVihar ? 0 : null },
+    waiver,
+    overrideInForce: waiver
+      ? waiver.suggestedAmountOverride
+      : (existing?.suggestedAmountOverride ?? null),
   };
 }

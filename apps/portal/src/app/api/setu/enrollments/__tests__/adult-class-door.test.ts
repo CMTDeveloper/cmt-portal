@@ -71,10 +71,31 @@ describe('POST /api/setu/enrollments - the adult-class door', () => {
     });
   });
 
+  // THE LAST INCH. enroll-cta.tsx:85-88 reads this number and, when it is >= 1,
+  // sends the family STRAIGHT to Stripe. Reporting the pinned 101 snapshot while
+  // writing an override of 0 would waive the record and charge them anyway - the
+  // $101 door still open, just one layer further out.
+  it('reports the WAIVED amount, not the pinned snapshot', async () => {
+    const res = await POST(makeRequest(ASC_OID));
+    expect(await res.json()).toMatchObject({ suggestedAmount: 0 });
+  });
+
+  it('reports the stored override when one is already in force', async () => {
+    getEnrollments.mockResolvedValue([
+      bvEnrollment(),
+      { eid: `${FID}-${ASC_OID}`, oid: ASC_OID, programKey: 'adult-study-class', status: 'active', enrolledMids: [`${FID}-01`], suggestedAmountOverride: 101, offering: {} },
+    ]);
+    enrollFamily.mockResolvedValue({ created: false, reconciled: true, eid: `${FID}-${ASC_OID}`, suggestedAmountSnapshot: 101 });
+    const res = await POST(makeRequest(ASC_OID));
+    expect(await res.json()).toMatchObject({ suggestedAmount: 101 });
+  });
+
   it('bills a family with no Bala Vihar enrollment', async () => {
     getEnrollments.mockResolvedValue([]);
-    await POST(makeRequest(ASC_OID));
+    const res = await POST(makeRequest(ASC_OID));
     expect(enrollFamily.mock.calls[0]![0].suggestedAmountOverride).toBeNull();
+    // No waiver in force -> the snapshot stands, and the family pays.
+    expect(await res.json()).toMatchObject({ suggestedAmount: 101 });
   });
 
   // Step 3b: never retroactively rewrite an amount the family already paid.
