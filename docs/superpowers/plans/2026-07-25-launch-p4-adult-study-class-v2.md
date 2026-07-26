@@ -672,6 +672,16 @@ mobile changelog entry** the plan did not anticipate: the Stripe redirect target
 changed, and a mobile client matching on `/family/donate/success` to detect
 payment completion would strand the user. Recorded at `47663d1`.
 
+**The plan's "the move is nearly free" was WRONG, and the pre-push build caught
+it.** It reasoned from the page rendering its own `CspRoot` and using no layout
+chrome - but the `/family` layout also wrapped children in a `<Suspense>`
+boundary, and the ROOT layout does not. Under `cacheComponents` that fails the
+Vercel prerender outright: *"Route /donate/success: Uncached data was accessed
+outside of `<Suspense>`."* Moving a page out of a layout means taking over
+everything that layout provided, not just the visible chrome. The default export
+is now a synchronous shell, the same shape as `/acknowledgements` and
+`/adult-class`. **Any future route move must check this first.**
+
 **P5 v3 already references `/donate/success`** (its Task 5), so no cross-plan
 edit was needed - v2's reference was the stale one and v2 is superseded.
 

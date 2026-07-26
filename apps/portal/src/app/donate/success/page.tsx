@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { connection } from 'next/server';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
@@ -5,10 +6,11 @@ import { SetuIcon } from '@cmt/ui';
 import { CspRoot } from '@/features/family/components/atoms';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 import { markDonationStatus } from '@/features/setu/donations/mark-donation-status';
+import { LoadingOm } from '@/components/chrome/loading-om';
 
 export const metadata = { title: 'Thank you' };
 
-export default async function DonateSuccessPage({
+async function DonateSuccessBody({
   searchParams,
 }: {
   searchParams: Promise<{ did?: string }>;
@@ -48,5 +50,30 @@ export default async function DonateSuccessPage({
         </div>
       </div>
     </CspRoot>
+  );
+}
+
+// This page used to live under `/family`, whose layout wraps children in a
+// <Suspense> boundary. The ROOT layout does NOT, and under cacheComponents
+// uncached data accessed outside <Suspense> fails the build prerender
+// ("Uncached data was accessed outside of <Suspense>"). Moving the page out of
+// the gated layout therefore also meant taking over the Suspense the layout used
+// to provide - the default export is now a synchronous shell, exactly like
+// /acknowledgements and /adult-class.
+export default function DonateSuccessPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ did?: string }>;
+}) {
+  return (
+    <Suspense
+      fallback={
+        <CspRoot style={{ minHeight: '100dvh' }}>
+          <LoadingOm padding={48} />
+        </CspRoot>
+      }
+    >
+      <DonateSuccessBody searchParams={searchParams} />
+    </Suspense>
   );
 }
