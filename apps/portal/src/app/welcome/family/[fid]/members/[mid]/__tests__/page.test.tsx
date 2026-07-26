@@ -30,11 +30,16 @@ vi.mock('@/features/setu/members/child-profile-view', () => ({
   ),
 }));
 
-// Stub the admin grade editor — this test asserts the page mounts it only for
-// admins; the editor's own behaviour is covered by member-grade-editor.test.
+// Stub the grade editor — this test asserts WHO the page mounts it for and
+// which endpoint it hands them; the editor's own behaviour is covered by
+// member-grade-editor.test. `staff` is surfaced because it selects the endpoint,
+// so a page that rendered the control with the wrong value would send a
+// welcome-team volunteer at the admin-only route and 403.
 vi.mock('@/features/setu/rollover/member-grade-editor', () => ({
-  MemberGradeEditor: ({ childName }: { childName: string }) => (
-    <div data-testid="member-grade-editor">{childName}</div>
+  MemberGradeEditor: ({ childName, staff }: { childName: string; staff?: boolean }) => (
+    <div data-testid="member-grade-editor" data-staff={String(!!staff)}>
+      {childName}
+    </div>
   ),
 }));
 
@@ -91,20 +96,48 @@ describe('WelcomeMemberProfileBody — happy path', () => {
   });
 });
 
-describe('WelcomeMemberProfileBody — admin grade editor gate', () => {
-  it('renders the admin grade editor when the session is an admin', async () => {
+describe('WelcomeMemberProfileBody — grade editor gate', () => {
+  it('renders the grade editor on the ADMIN endpoint for an admin session', async () => {
     mockVerifyPortalSessionCookie.mockResolvedValueOnce({ uid: 'a-1', role: 'admin' } as never);
     const page = await WelcomeMemberProfileBody({ params: Promise.resolve({ fid: 'FAM001', mid: 'FAM001-02' }) });
     render(page as React.ReactElement);
-    expect(screen.getAllByTestId('member-grade-editor').length).toBeGreaterThan(0);
+    const editors = screen.getAllByTestId('member-grade-editor');
+    expect(editors.length).toBeGreaterThan(0);
+    // Admins keep /api/admin/school-year/set-grade, which is also the rollover
+    // preview's path — moving them onto the staff route would be a silent
+    // reroute of a working admin surface.
+    expect(editors[0]!.getAttribute('data-staff')).toBe('false');
   });
 
-  it('does NOT render the admin grade editor for a non-admin welcome-team session', async () => {
-    // default beforeEach session is welcome-team (non-admin) — page stays read-only.
+  it('renders the grade editor on the STAFF endpoint for a welcome-team session', async () => {
+    // The capability welcome-team was previously missing: the control used to
+    // be gated on `admin &&`, so a volunteer never saw it. Repointing the POST
+    // target without widening this gate would have been a no-op.
+    const page = await WelcomeMemberProfileBody({ params: Promise.resolve({ fid: 'FAM001', mid: 'FAM001-02' }) });
+    render(page as React.ReactElement);
+    const editors = screen.getAllByTestId('member-grade-editor');
+    expect(editors.length).toBeGreaterThan(0);
+    expect(editors[0]!.getAttribute('data-staff')).toBe('true');
+  });
+
+  it('does NOT render the grade editor for a coordinator', async () => {
+    // Coordinator reads this page (every roster row links here) but must not
+    // edit: isWelcomeTeam does not inherit coordinator, and the staff route
+    // would 403 anyway. Rendering a control that cannot work is the bug.
+    mockVerifyPortalSessionCookie.mockResolvedValueOnce({ uid: 'c-1', role: 'coordinator' } as never);
     const page = await WelcomeMemberProfileBody({ params: Promise.resolve({ fid: 'FAM001', mid: 'FAM001-02' }) });
     render(page as React.ReactElement);
     expect(screen.queryByTestId('member-grade-editor')).toBeNull();
     expect(screen.getAllByTestId('child-profile-view').length).toBeGreaterThan(0);
+  });
+
+  it('does NOT render the grade editor for an Adult member', async () => {
+    // Grade is a child concept; the required-field matrix does not ask adults
+    // for one.
+    mockGetChildProfile.mockResolvedValueOnce({ ...PROFILE, type: 'Adult' as const });
+    const page = await WelcomeMemberProfileBody({ params: Promise.resolve({ fid: 'FAM001', mid: 'FAM001-02' }) });
+    render(page as React.ReactElement);
+    expect(screen.queryByTestId('member-grade-editor')).toBeNull();
   });
 });
 

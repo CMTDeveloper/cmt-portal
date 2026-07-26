@@ -37,9 +37,11 @@ export async function WelcomeMemberProfileBody({
   await connection();
   const cookieStore = await cookies();
   const raw = await verifyPortalSessionCookie(cookieStore.get('__session')?.value ?? '').catch(() => null);
-  // Admins inherit welcome-team (so they reach this page) but ALSO get the
-  // inline grade editor — welcome-team-only volunteers keep the page read-only.
+  // Welcome-team AND admins get the inline grade editor; they save through
+  // different endpoints (admin keeps /api/admin/school-year/set-grade, staff
+  // use the welcome member PATCH), which is what `admin` still distinguishes.
   const admin = !!raw && isAdmin(raw as unknown as WithRole);
+  const canEditGrade = !!raw && isWelcomeTeam(raw as unknown as WithRole);
   // Coordinator gets READ access to this page (every roster row links here) but
   // NOT the grade editor, which stays gated on `admin` below. That split is the
   // whole point of granting family read without family edit.
@@ -66,19 +68,22 @@ export async function WelcomeMemberProfileBody({
         })
       : [];
 
-  // Welcome reads the profile READ-ONLY — no editHref (exactOptionalPropertyTypes
-  // means we omit the prop entirely rather than pass undefined). Admins get one
+  // The profile itself is READ-ONLY here — no editHref (exactOptionalPropertyTypes
+  // means we omit the prop entirely rather than pass undefined). Staff get one
   // exception: an inline grade editor below the read-only view (children only —
   // grade is a child concept), so the rollover "Review →" link is actionable.
+  // A coordinator reaches this page but never this control: isWelcomeTeam does
+  // not inherit coordinator, which is the family-read-without-family-edit split.
   const view = (
     <>
       <ChildProfileView profile={profile} journey={journey} />
-      {admin && profile.type === 'Child' && (
+      {canEditGrade && profile.type === 'Child' && (
         <MemberGradeEditor
           fid={profile.fid}
           mid={profile.mid}
           childName={profile.firstName}
           currentGrade={profile.schoolGrade}
+          staff={!admin}
         />
       )}
     </>

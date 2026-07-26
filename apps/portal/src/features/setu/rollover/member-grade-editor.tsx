@@ -6,6 +6,7 @@ import { toast } from '@cmt/ui';
 import { GRADE_LADDER, normalizeGrade } from '@cmt/shared-domain';
 import { CspRoot } from '@/features/family/components/atoms';
 import { setGradeClient } from './set-grade-client';
+import { setGradeStaffClient } from './set-grade-staff-client';
 
 interface MemberGradeEditorProps {
   fid: string;
@@ -13,6 +14,14 @@ interface MemberGradeEditorProps {
   childName: string;
   /** The member's stored schoolGrade ("Grade 4" / "4" / "JK" / null). */
   currentGrade: string | null;
+  /**
+   * Save through the welcome-team staff route instead of the admin one.
+   *
+   * The endpoint is chosen HERE rather than inside `setGradeClient`, because
+   * that wrapper is also used by the /admin/school-year rollover preview -
+   * teaching it about the staff route would silently reroute admin rollover.
+   */
+  staff?: boolean;
 }
 
 /** Display label for a ladder rung: numeric rungs read "Grade N"; JK/SK as-is. */
@@ -32,8 +41,9 @@ function rungForCurrentGrade(currentGrade: string | null): string {
 }
 
 /**
- * Admin-only inline editor for a single child's `schoolGrade` on the welcome
- * member detail page. Mirrors the rollover preview's inline grade pill (mist
+ * Staff inline editor for a single child's `schoolGrade` on the welcome member
+ * detail page (admins and welcome-team; see `staff`). Mirrors the rollover
+ * preview's inline grade pill (mist
  * surface select + accent Save, both ≥44px) so the two admin surfaces share one
  * visual language. Renders a quiet warn-toned panel — the same warn surface the
  * rollover "Need attention" rows use — so it reads as "the actionable admin fix"
@@ -46,7 +56,13 @@ function rungForCurrentGrade(currentGrade: string | null): string {
  * Wrapped in CspRoot so brand tokens resolve wherever the page mounts it (the
  * desktop branch isn't always inside a .csp ancestor; tokens are .csp-scoped).
  */
-export function MemberGradeEditor({ fid, mid, childName, currentGrade }: MemberGradeEditorProps) {
+export function MemberGradeEditor({
+  fid,
+  mid,
+  childName,
+  currentGrade,
+  staff = false,
+}: MemberGradeEditorProps) {
   const router = useRouter();
   const [grade, setGrade] = useState(() => rungForCurrentGrade(currentGrade));
   const [saving, setSaving] = useState(false);
@@ -57,7 +73,8 @@ export function MemberGradeEditor({ fid, mid, childName, currentGrade }: MemberG
     try {
       // grade is one of GRADE_LADDER (the only options rendered), which is the
       // SetMemberGradeBody.schoolGrade enum the endpoint validates against.
-      await setGradeClient({ fid, mid, schoolGrade: grade as (typeof GRADE_LADDER)[number] });
+      const save = staff ? setGradeStaffClient : setGradeClient;
+      await save({ fid, mid, schoolGrade: grade as (typeof GRADE_LADDER)[number] });
       toast.success(`Grade set for ${childName}`);
       router.refresh();
     } catch {
@@ -88,7 +105,7 @@ export function MemberGradeEditor({ fid, mid, childName, currentGrade }: MemberG
           margin: '0 0 4px',
         }}
       >
-        Admin · Set grade
+        {staff ? 'Staff' : 'Admin'} · Set grade
       </p>
       <p style={{ fontSize: 12.5, lineHeight: 1.5, color: 'var(--body-text)', margin: '0 0 12px' }}>
         Current grade:{' '}
