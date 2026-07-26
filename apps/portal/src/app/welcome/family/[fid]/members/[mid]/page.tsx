@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { cookies } from 'next/headers';
 import { SetuIcon } from '@cmt/ui';
 import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
-import { isWelcomeTeam, isAdmin, type WithRole } from '@cmt/shared-domain';
+import { isWelcomeTeam, isAdmin, isCoordinator, type WithRole } from '@cmt/shared-domain';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { CspRoot } from '@/features/family/components/atoms';
 import { getChildProfile } from '@/features/setu/members/get-child-profile';
@@ -40,7 +40,10 @@ export async function WelcomeMemberProfileBody({
   // Admins inherit welcome-team (so they reach this page) but ALSO get the
   // inline grade editor — welcome-team-only volunteers keep the page read-only.
   const admin = !!raw && isAdmin(raw as unknown as WithRole);
-  if (!raw || !isWelcomeTeam(raw as unknown as WithRole)) {
+  // Coordinator gets READ access to this page (every roster row links here) but
+  // NOT the grade editor, which stays gated on `admin` below. That split is the
+  // whole point of granting family read without family edit.
+  if (!raw || !(isWelcomeTeam(raw as unknown as WithRole) || isCoordinator(raw as unknown as WithRole))) {
     return (
       <div style={{ padding: 32, fontFamily: 'var(--body)' }}>
         <p style={{ color: 'var(--err)', fontSize: 14 }}>Access denied. Welcome-team role required.</p>

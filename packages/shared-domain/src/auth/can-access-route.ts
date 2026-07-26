@@ -1,6 +1,6 @@
 import type { SessionClaims } from './session';
 import { isPublicRoute } from './public-routes';
-import { isAdmin, isTeacher, isFamily, isSetuFamily, isSetuManager, isWelcomeTeam, isKiosk } from './role';
+import { isAdmin, isTeacher, isFamily, isSetuFamily, isSetuManager, isWelcomeTeam, isKiosk, isCoordinator } from './role';
 
 export function canAccessRoute(
   claims: SessionClaims,
@@ -46,6 +46,14 @@ export function canAccessRoute(
   // with `setu` - and would otherwise fall through to the final default-deny).
   if (pathname.startsWith('/api/check-in/setu/')) return isKiosk(claims) || isAdmin(claims);
 
+  // Coordinator: the Programs + Level management PAGES. Explicit narrow clauses
+  // ABOVE the admin page catch-all, never by loosening it.
+  if (pathname === '/admin/programs' || pathname.startsWith('/admin/programs/')) {
+    return isAdmin(claims) || isCoordinator(claims);
+  }
+  if (pathname === '/admin/levels' || pathname.startsWith('/admin/levels/')) {
+    return isAdmin(claims) || isCoordinator(claims);
+  }
   // New /admin/* surface (Setu-themed). Pages and APIs both admin-only.
   if (pathname === '/admin' || pathname.startsWith('/admin/')) return isAdmin(claims);
   // Teacher assignment is writable by admin AND welcome-team (RBB-2 front-desk
@@ -54,7 +62,7 @@ export function canAccessRoute(
     pathname === '/api/admin/teacher-assignments' ||
     pathname.startsWith('/api/admin/teacher-assignments/')
   ) {
-    return isAdmin(claims) || isWelcomeTeam(claims);
+    return isAdmin(claims) || isWelcomeTeam(claims) || isCoordinator(claims);
   }
   // Managed class calendar is published by admin AND welcome-team. Must be
   // checked before the generic admin-only /api/admin/ rule.
@@ -65,13 +73,34 @@ export function canAccessRoute(
   // Distinct prefix from /api/admin/teacher-assignments (handled above). Must be
   // checked before the generic admin-only /api/admin/ rule.
   if (pathname === '/api/admin/teachers/search' || pathname.startsWith('/api/admin/teachers/')) {
-    return isAdmin(claims) || isWelcomeTeam(claims);
+    return isAdmin(claims) || isWelcomeTeam(claims) || isCoordinator(claims);
   }
   // Per-level teacher add/remove — admin + welcome-team (front-desk). Only the
   // `/teachers` sub-path opens up; level CRUD stays admin-only via the catch-all.
   if (/^\/api\/admin\/levels\/[^/]+\/teachers\/?$/.test(pathname)) {
-    return isAdmin(claims) || isWelcomeTeam(claims);
+    return isAdmin(claims) || isWelcomeTeam(claims) || isCoordinator(claims);
   }
+  // Coordinator API surface: programs, offerings (pricing lives in
+  // offering.pricingTiers) and level CRUD.
+  //
+  // PLACEMENT IS LOAD-BEARING. The broad /api/admin/levels clause MUST stay
+  // below the /api/admin/levels/{id}/teachers regex directly above.
+  // canAccessRoute returns at the FIRST match, so hoisting it would swallow the
+  // teachers sub-path and silently revoke welcome-team's per-level teacher
+  // management - a capability that works in production today. A regression test
+  // pins it.
+  if (pathname === '/api/admin/programs' || pathname.startsWith('/api/admin/programs/')) {
+    return isAdmin(claims) || isCoordinator(claims);
+  }
+  if (pathname === '/api/admin/offerings' || pathname.startsWith('/api/admin/offerings/')) {
+    return isAdmin(claims) || isCoordinator(claims);
+  }
+  if (pathname === '/api/admin/levels' || pathname.startsWith('/api/admin/levels/')) {
+    return isAdmin(claims) || isCoordinator(claims);
+  }
+  // Never loosen this catch-all: api/admin/welcome-team has NO in-handler role
+  // check, so this prefix is the only thing stopping a non-admin from granting
+  // welcome-team. Every exception above is an explicit narrow clause.
   if (pathname.startsWith('/api/admin/')) return isAdmin(claims);
 
   // Setu teacher portal — pages + APIs gated on the teacher capability
@@ -108,6 +137,22 @@ export function canAccessRoute(
     return isSetuFamily(claims);
   }
 
+  // Coordinator: roster browse + read-only family detail. `/welcome` root is
+  // included because it redirects to /welcome/roster - denying it would block
+  // the redirect itself. `/welcome/family/*` is included because EVERY roster
+  // row links to it, so without it the one screen the role is granted is a dead
+  // end that 302s on click. Spec 3.1 excludes family EDIT from coordinator, not
+  // family READ, and the roster already exposes the same PII. Reports, seva and
+  // prasad stay welcome-team-only via the catch-all below.
+  if (
+    pathname === '/welcome' ||
+    pathname === '/welcome/roster' ||
+    pathname.startsWith('/welcome/roster/') ||
+    pathname === '/welcome/family' ||
+    pathname.startsWith('/welcome/family/')
+  ) {
+    return isWelcomeTeam(claims) || isCoordinator(claims);
+  }
   // Welcome-team portal pages
   if (pathname === '/welcome' || pathname.startsWith('/welcome/')) {
     return isWelcomeTeam(claims);
@@ -248,8 +293,10 @@ export function canAccessRoute(
   }
 
   // Welcome-team API - single-page roster report (browse/filter dataset + CSV).
+  // Coordinator included: this is the ONLY data endpoint behind /welcome/roster,
+  // the one screen the role is granted, so omitting it leaves the page empty.
   if (pathname === '/api/welcome/roster' || pathname.startsWith('/api/welcome/roster/')) {
-    return isWelcomeTeam(claims);
+    return isWelcomeTeam(claims) || isCoordinator(claims);
   }
 
   // Welcome-team API — prasad day-of lists (read-only).

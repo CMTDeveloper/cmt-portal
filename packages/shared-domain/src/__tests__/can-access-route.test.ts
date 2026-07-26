@@ -988,3 +988,92 @@ describe('canAccessRoute — /api/setu/dashboard (any family role)', () => {
     expect(canAccessRoute(family, '/api/setu/dashboard')).toBe(false);
   });
 });
+
+// ── Coordinator (spec 3.1) ───────────────────────────────────────────────────
+// Siblings with welcome-team, not a hierarchy: coordinator gets Programs /
+// Levels / Offerings, which welcome-team lacks; welcome-team keeps Reports /
+// Seva / Prasad / family-search, which coordinator is explicitly denied.
+const coordinator: SessionClaims = { uid: 'c', role: 'coordinator' };
+
+describe('canAccessRoute — coordinator: granted', () => {
+  it.each([
+    ['/admin/programs', 'GET'],
+    ['/admin/programs/bala-vihar', 'GET'],
+    ['/admin/levels', 'GET'],
+    ['/api/admin/programs', 'POST'],
+    ['/api/admin/programs/bala-vihar', 'PATCH'],
+    ['/api/admin/offerings', 'POST'],
+    ['/api/admin/offerings/off-1', 'PATCH'],
+    ['/api/admin/levels', 'POST'],
+    ['/api/admin/levels/brampton-l2', 'PATCH'],
+    ['/api/admin/levels/brampton-l2/teachers', 'POST'],
+    ['/api/admin/teacher-assignments', 'POST'],
+    ['/api/admin/teachers/search', 'GET'],
+    ['/welcome', 'GET'],
+    ['/welcome/roster', 'GET'],
+    ['/welcome/family/CMT-X', 'GET'],
+    ['/api/welcome/roster/report', 'GET'],
+  ])('allows %s %s', (path, method) => {
+    expect(canAccessRoute(coordinator, path, method)).toBe(true);
+  });
+});
+
+describe('canAccessRoute — coordinator: denied', () => {
+  it.each([
+    ['/admin', 'GET'],
+    ['/admin/users', 'GET'],
+    ['/admin/school-year', 'GET'],
+    ['/admin/locations', 'GET'],
+    ['/api/admin/users', 'GET'],
+    ['/api/admin/welcome-team', 'POST'],
+    ['/api/admin/welcome-team/uid-1', 'DELETE'],
+    ['/api/admin/calendar', 'POST'],
+    ['/api/admin/calendar/weekly', 'POST'],
+    ['/api/admin/school-year/set-grade', 'POST'],
+    ['/welcome/reports', 'GET'],
+    ['/welcome/seva', 'GET'],
+    ['/welcome/prasad', 'GET'],
+    ['/api/welcome/reports', 'GET'],
+    ['/api/setu/family/search', 'GET'],
+    ['/api/welcome/families/CMT-X', 'PATCH'],
+  ])('denies %s %s', (path, method) => {
+    expect(canAccessRoute(coordinator, path, method)).toBe(false);
+  });
+});
+
+describe('canAccessRoute — welcome-team regressions (must stay true)', () => {
+  // A broad /api/admin/levels clause placed ABOVE the levels/{id}/teachers
+  // regex would win on first match and silently revoke a welcome-team
+  // capability that works in production today. That is what these pin.
+  it('keeps per-level teacher add/remove for welcome-team', () => {
+    expect(canAccessRoute(welcomeTeam, '/api/admin/levels/brampton-l2/teachers', 'POST')).toBe(true);
+  });
+
+  it('still denies welcome-team level CRUD', () => {
+    expect(canAccessRoute(welcomeTeam, '/api/admin/levels', 'POST')).toBe(false);
+  });
+
+  it('keeps calendar publish for welcome-team', () => {
+    expect(canAccessRoute(welcomeTeam, '/api/admin/calendar', 'POST')).toBe(true);
+  });
+
+  it('keeps reports for welcome-team', () => {
+    expect(canAccessRoute(welcomeTeam, '/welcome/reports', 'GET')).toBe(true);
+  });
+
+  it('keeps the roster API for welcome-team', () => {
+    expect(canAccessRoute(welcomeTeam, '/api/welcome/roster/report', 'GET')).toBe(true);
+  });
+});
+
+describe('canAccessRoute — staff family edit (Track B)', () => {
+  it('allows welcome-team to PATCH a family', () => {
+    expect(canAccessRoute(welcomeTeam, '/api/welcome/families/CMT-X', 'PATCH')).toBe(true);
+  });
+  it('denies a coordinator - family EDIT is excluded even though family READ is granted', () => {
+    expect(canAccessRoute(coordinator, '/api/welcome/families/CMT-X', 'PATCH')).toBe(false);
+  });
+  it('denies a plain family-manager', () => {
+    expect(canAccessRoute(manager, '/api/welcome/families/CMT-X', 'PATCH')).toBe(false);
+  });
+});

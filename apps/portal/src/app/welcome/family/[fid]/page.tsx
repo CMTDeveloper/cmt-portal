@@ -6,7 +6,7 @@ import { CspRoot } from '@/features/family/components/atoms';
 import { getFamilyForWelcome } from '@/features/setu/search/get-family-for-welcome';
 import { getFamilySevaProgress, type FamilySevaProgress } from '@/features/setu/seva/get-family-seva-progress';
 import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
-import { isWelcomeTeam, type WithRole } from '@cmt/shared-domain';
+import { isWelcomeTeam, isCoordinator, type WithRole } from '@cmt/shared-domain';
 import { displayFid } from '@cmt/shared-domain/setu';
 import type { FamilyDoc, MemberDoc } from '@cmt/shared-domain/setu';
 import { cookies } from 'next/headers';
@@ -41,7 +41,10 @@ export async function WelcomeFamilyDetailBody({
   let allowed = false;
   if (sessionCookie) {
     const raw = await verifyPortalSessionCookie(sessionCookie);
-    if (raw && isWelcomeTeam(raw as unknown as WithRole)) {
+    // Coordinator reaches this page too: every /welcome/roster row links here,
+    // so without it the one screen the role is granted dead-ends on click.
+    // Spec 3.1 excludes family EDIT from coordinator, not family READ.
+    if (raw && (isWelcomeTeam(raw as unknown as WithRole) || isCoordinator(raw as unknown as WithRole))) {
       allowed = true;
     }
   }
