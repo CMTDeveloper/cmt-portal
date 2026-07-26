@@ -10,7 +10,7 @@
 
 **Supersedes:** `2026-07-25-launch-p4-adult-study-class.md`, reviewed as REQUEST CHANGES (3 critical, 8 major, 7 minor). Review: `docs/superpowers/reviews/2026-07-25-review-p4.md`.
 
-> **PROGRESS: Tasks 1, 2, 3, 4 COMPLETE 2026-07-26** (`efc9b74`, `75e8423`, `40f78c4`, `6bf05ef`).
+> **PROGRESS: Tasks 1, 2, 3, 4, 5 COMPLETE 2026-07-26** (`efc9b74`, `75e8423`, `40f78c4`, `6bf05ef`).
 > Task 2's proof obligation held: the existing suite passes **UNMODIFIED** - only
 > `enroll-family.ts` changed plus ONE NEW test file, and the kiosk's exact-object
 > matcher (`auto-enroll-bala-vihar.test.ts:22`) is untouched and green. The plan's
@@ -304,10 +304,10 @@ Note the asymmetric invariant deliberately: `enroll-family.ts:135-137` refuses t
 
 ## Task 5: Selectable adults are the non-teaching ones
 
-- [ ] **Step 1: Write the failing tests** - one per scenario-matrix row, including **row 5** (single non-teaching parent → exactly one selectable, preselected), which v1 had no test for despite spec §6.6 asking for one per row.
-- [ ] **Step 2: Run to verify they fail**
-- [ ] **Step 3: Implement `selectableAdults(members, teacherAssignedMids)`** - adults, excluding teacher-assigned, excluding `inviteStatus: 'pending'` invitees.
-- [ ] **Step 4: Run and commit**
+- [x] **Step 1: Write the failing tests** - one per scenario-matrix row, including **row 5** (single non-teaching parent → exactly one selectable, preselected), which v1 had no test for despite spec §6.6 asking for one per row.
+- [x] **Step 2: Run to verify they fail**
+- [x] **Step 3: Implement `selectableAdults(members, teacherAssignedMids)`** - adults, excluding teacher-assigned, excluding `inviteStatus: 'pending'` invitees.
+- [x] **Step 4: Run and commit**
 
 ---
 
