@@ -36,7 +36,19 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  // ALWAYS single-worker, not just in CI. Every setu spec drives the SAME
+  // seeded UAT family through the SAME shared storageState, and several specs
+  // (dashboard-slice1, enrollment-state, the registration specs) reseed that
+  // family mid-run. The seed calls `auth.updateUser(uid, { password })`, which
+  // bumps the Firebase user's `tokensValidAfterTime` and kills the session
+  // SERVER-side - so every concurrently-running spec loses its auth mid-flight,
+  // no matter which storageState file it loaded from.
+  //
+  // That is not theoretical: `playwright test --project=setu dashboard` failed
+  // 6 tests on 2026-07-25, three of them in admin/dashboard-ia.spec.ts, which
+  // passes cleanly on its own. Parallel workers against one mutable fixture in
+  // a real database cannot be made safe by anything short of serializing.
+  workers: 1,
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
     baseURL: process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3001',

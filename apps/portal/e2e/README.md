@@ -32,8 +32,21 @@ Browser-level regression net for the Setu family/admin flows. On-demand only
 - One project: `pnpm --filter @cmt/portal exec playwright test --project=setu dashboard`
 - Report on failure: `pnpm --filter @cmt/portal exec playwright show-report`
 
-All 7 specs (setup + dashboard×2 + enroll-wording×2 + programs + unauth) are
-verified green against `https://cmt-setu.vercel.app`.
+> **The suite runs single-worker (`workers: 1`), always — not just in CI.** Every
+> setu spec authenticates as the SAME seeded UAT family, and several specs
+> (`dashboard-slice1`, `enrollment-state`, the registration specs) reseed it
+> mid-run. The seed's `auth.updateUser(uid, { password })` invalidates that
+> family's session **server-side**, so any spec running concurrently loses its
+> auth mid-flight and fails with assertions that look like UI regressions but
+> are not. On 2026-07-25 a combined `--project=setu dashboard` run failed three
+> `admin/dashboard-ia` tests that pass cleanly on their own. Do not raise the
+> worker count while one shared mutable fixture backs the whole suite.
+
+> **Mind the sign-in limiter.** `password-sign-in` is rate-limited to 5 per 15
+> minutes and it is shared across every spec and every re-auth. A few
+> back-to-back full runs will 429 (`too-many-requests`), which surfaces as
+> `password-sign-in failed: 429` in a `beforeAll`. That is the limiter, not a
+> broken fixture — wait it out rather than reseeding again.
 
 ## Known local-dev caveat (`/family` hang under `next dev`)
 At the time of writing, the **`/family` dashboard hangs (~120s, `RangeError:

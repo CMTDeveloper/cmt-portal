@@ -40,12 +40,21 @@ import { signInFamilyAndSaveStorage } from '../auth-helpers';
  * `.filter({ visible: true })` pick the visible copy (both layouts share the same
  * BV-section JSX, so "Complete donation" / "Manage family" exist twice in the DOM).
  *
- * SHARED-FIXTURE NOTE: this spec and enrollment-state.spec.ts (issue #23) both
- * reseed the SAME E2E family. Run this spec on its own (the owner-gate command
- * targets `dashboard-slice1`); do NOT run it in the same invocation as
- * enrollment-state.spec.ts, or the two files' reseeds would race. Phase B leaves
- * the fixture in the plain "Registered" ground state, so no afterAll reset is
- * needed.
+ * SHARED-FIXTURE NOTE: this spec reseeds the ONE shared E2E family mid-run, and
+ * the seed's `auth.updateUser(uid, { password })` invalidates that family's
+ * session SERVER-side. So the blast radius is not just enrollment-state.spec.ts
+ * (which also reseeds) - it is EVERY setu spec, because they all authenticate as
+ * this same family. A concurrently-running spec loses its session mid-flight and
+ * fails with assertions that look like UI regressions but are not: on 2026-07-25
+ * a combined `--project=setu dashboard` run failed three admin/dashboard-ia
+ * tests that pass cleanly on their own.
+ *
+ * playwright.config.ts therefore pins `workers: 1` unconditionally, which makes
+ * files run to completion one at a time and is what actually makes this safe.
+ * Prefer running this spec on its own anyway (the owner-gate command targets
+ * `dashboard-slice1`) to keep the password-sign-in limiter headroom. Phase B
+ * leaves the fixture in the plain "Registered" ground state, so no afterAll
+ * reset is needed.
  *
  * PRECONDITION (flags OFF in UAT): the Seva/Prasad "not rendered" assertions rely
  * on NEXT_PUBLIC_FEATURE_SETU_SEVA / NEXT_PUBLIC_FEATURE_SETU_PRASAD being unset
@@ -132,8 +141,12 @@ test.describe.serial('Slice 1 dashboard', () => {
 
     test('shows the Family card and the Manage family link', async ({ page }) => {
       await page.goto('/family');
-      // Desktop Family card heading: "Family · N members".
-      await expect(visibleText(page, /^Family · \d+ member/).first()).toBeVisible();
+      // a04ab2b folded the old "Family · N members" heading into the Family ID
+      // card: a "Family members" label over separate Adults / Children count
+      // rows (page.tsx:218-226). Assert a count row too, not just the label, so
+      // this still fails if the counts stop rendering.
+      await expect(visibleText(page, /^Family members$/).first()).toBeVisible();
+      await expect(visibleText(page, /^\d+ (Adult|Adults)$/).first()).toBeVisible();
       const manage = page
         .getByRole('link', { name: /manage family/i })
         .filter({ visible: true })
