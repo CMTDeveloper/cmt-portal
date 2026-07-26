@@ -155,14 +155,17 @@ test.describe('registration — unknown-centre confirmation', () => {
     }
   });
 
-  // ── 4. The control: an UNFLAGGED family is untouched ───────────────────────
-  // The launch population is ~568 bulk-migrated families that carry a real
-  // centre and no flag. If the gate or the Save predicate keyed on absence
-  // rather than the literal `true`, every one of them would be diverted to a
-  // question with no answer to give - so this negative is the important one.
-  test('a family that was never flagged is not asked at all', async ({ browser }) => {
-    // Test 2 cleared the flag, so this same family is now the control: it must
-    // reach /family and show no centre selector anywhere.
+  // ── 4. The control: a family that is not being asked is left alone ─────────
+  // If the gate or the Save predicate keyed on anything other than the literal
+  // `true`, families that should never be asked would be diverted to a question
+  // with no answer to give - so this negative is the important one.
+  //
+  // NOTE ON WHAT THIS COVERS: test 2 set the flag to `false`, so this asserts
+  // the ANSWERED state, not the ABSENT one. The ~568 bulk-migrated families with
+  // a real centre carry NO field at all. Absent is covered by unit tests
+  // (needsCentreConfirmation + the gate suites) and implicitly by every other
+  // deployed-UAT spec, whose families have no flag and reach /family normally.
+  test('a family whose centre is already settled is not asked again', async ({ browser }) => {
     const ctx = await managerContext(browser);
     const page = await ctx.newPage();
     try {

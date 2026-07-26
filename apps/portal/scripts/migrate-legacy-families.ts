@@ -117,9 +117,22 @@ async function main() {
   // still enter Setu via lazyMigrateLegacyFamily the moment they sign in, check
   // in at the kiosk, or are added by a teacher - at which point they are asked
   // for their real centre and the parent re-confirms the grade.
-  const dormantFids = args.includeDormant ? new Set<string>() : await listDormantLegacyFids();
+  //
+  // `--fid X` is an explicit, single-family instruction (the debugging path), so
+  // it overrides the skip. Otherwise asking for a dormant family by id would
+  // report "0 matched" and look like the family does not exist, when in fact it
+  // was filtered a step earlier.
+  const skipDormant = !args.includeDormant && args.fid === null;
+  const dormantFids = skipDormant ? await listDormantLegacyFids() : new Set<string>();
   const dormantRows: Row[] = [];
-  if (!args.includeDormant) {
+  if (!skipDormant) {
+    console.log(
+      args.includeDormant
+        ? `  → --include-dormant: dormant families will NOT be skipped`
+        : `  → --fid given: the dormant skip is bypassed for this single family`,
+    );
+  }
+  if (skipDormant) {
     const before = families.length;
     const skipped = families.filter((f) => dormantFids.has(String(f.fid)));
     families = families.filter((f) => !dormantFids.has(String(f.fid)));
@@ -134,8 +147,6 @@ async function main() {
     }
     console.log(`  → ${skipped.length} dormant families skipped (no centre and no level on any row)`);
     console.log(`  → ${families.length} to migrate (of ${before})`);
-  } else {
-    console.log(`  → --include-dormant: dormant families will NOT be skipped`);
   }
 
   if (args.fid !== null) {

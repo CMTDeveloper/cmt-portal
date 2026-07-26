@@ -53,6 +53,15 @@ export async function GET(req: Request) {
         publicFid: fam.family.publicFid ?? null,
         name: fam.family.name,
         location: fam.family.location,
+        // A THIRD hand-written family projection (narrower than FamilyDoc on
+        // purpose). Like the other two it has no spread, so a field must be
+        // added here explicitly or the mobile never sees it.
+        //
+        // This is a mobile GATE SIGNAL, the same category as
+        // `disclaimersAccepted` above: `true` means `location` is a migration
+        // guess and the MANAGER should be asked to confirm it before the
+        // dashboard is trusted. Only the literal `true` means "ask".
+        locationNeedsConfirmation: fam.family.locationNeedsConfirmation ?? null,
         // Child/adult split for the mobile Family block (Task 5). Additive.
         counts: familyCounts,
       },

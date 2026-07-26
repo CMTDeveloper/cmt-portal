@@ -9,6 +9,9 @@ vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
   FieldValue: { serverTimestamp: vi.fn(() => 'SERVER_TIMESTAMP') },
 }));
 
+const mockGetLocationOptions = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/locations', () => ({ getLocationOptions: mockGetLocationOptions }));
+
 import { PATCH } from '../route';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { makeFakeDb, auditRows } from '@/features/setu/members/__tests__/fake-member-db';
@@ -66,6 +69,7 @@ function seed(family: Record<string, unknown> = {}) {
 }
 
 beforeEach(() => {
+  mockGetLocationOptions.mockResolvedValue(['Brampton', 'Scarborough']);
   vi.clearAllMocks();
 });
 
@@ -196,5 +200,41 @@ describe('PATCH /api/welcome/families/[fid]', () => {
     const { PATCH: flagged } = await import('../route');
     const res = await flagged(makeRequest({ location: 'Scarborough' }, staffHeaders()), ctx);
     expect(res.status).toBe(404);
+  });
+
+  // The centre a family attends drives level matching, teacher rosters and the
+  // roster filters. The family's OWN PATCH route validates it against the
+  // admin-managed options; this sibling route reaches the same field, so
+  // without the same check the validation is simply bypassable one route over.
+  describe('location', () => {
+    it('rejects a centre that is not in the admin-managed options', async () => {
+      const fake = useDb(seed());
+      const res = await PATCH(makeRequest({ location: 'Atlantis' }, staffHeaders()), ctx);
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toBe('unknown-location');
+      expect(fake.writes.length).toBe(0);
+    });
+
+    // Spec 1.9c: welcome-team correcting a wrongly-migrated centre is the stated
+    // remedy for an ACTIVE family whose legacy centre is wrong. If the staff fix
+    // leaves the flag set, the family is still diverted to /complete-profile at
+    // next sign-in and asked to pick again - overriding what staff just set.
+    it('clears locationNeedsConfirmation when staff set the centre', async () => {
+      const fake = useDb(seed({ locationNeedsConfirmation: true }));
+      const res = await PATCH(makeRequest({ location: 'Scarborough' }, staffHeaders()), ctx);
+      expect(res.status).toBe(200);
+      const familyWrite = fake.writes.find((w) => w.path === `families/${TARGET_FID}`);
+      expect(familyWrite?.data).toMatchObject({
+        location: 'Scarborough',
+        locationNeedsConfirmation: false,
+      });
+    });
+
+    it('leaves the flag untouched on a patch that does not mention location', async () => {
+      const fake = useDb(seed({ locationNeedsConfirmation: true }));
+      await PATCH(makeRequest({ name: 'Renamed' }, staffHeaders()), ctx);
+      const familyWrite = fake.writes.find((w) => w.path === `families/${TARGET_FID}`);
+      expect(familyWrite?.data).not.toHaveProperty('locationNeedsConfirmation');
+    });
   });
 });

@@ -9,6 +9,7 @@ import {
 } from '@cmt/shared-domain';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
 import { flags } from '@/lib/flags';
+import { getLocationOptions } from '@/lib/locations';
 import { writeAuditLog } from '@/features/setu/audit/audit-log';
 
 type RouteContext = { params: Promise<{ fid: string }> };
@@ -58,6 +59,17 @@ export async function PATCH(req: Request, ctx: RouteContext) {
     return NextResponse.json({ error: 'bad-request' }, { status: 400 });
   }
 
+  // Same validation the family's own PATCH route applies. This route reaches the
+  // same field, so without it the check is simply bypassable one route over, and
+  // an arbitrary string here corrupts level matching, teacher rosters and the
+  // roster filters.
+  if (data.location !== undefined) {
+    const allowed = await getLocationOptions();
+    if (!allowed.includes(data.location)) {
+      return NextResponse.json({ error: 'unknown-location' }, { status: 400 });
+    }
+  }
+
   const db = portalFirestore();
   const actorUid = session.uid;
 
@@ -74,6 +86,13 @@ export async function PATCH(req: Request, ctx: RouteContext) {
       // Only write the keys the caller actually sent, so a location-only patch
       // never wipes the address (same rule as the family's own PATCH route).
       const updates: Record<string, unknown> = { ...data };
+
+      // Staff setting the centre IS the answer to the confirmation prompt - spec
+      // 1.9c names welcome-team as the remedy for an active family whose legacy
+      // centre is wrong. Leaving the flag set would divert that family to
+      // /complete-profile at their next sign-in and ask them to pick again,
+      // letting them silently override what staff just corrected.
+      if (data.location !== undefined) updates['locationNeedsConfirmation'] = false;
 
       // searchKeys is what welcome-team family search matches on
       // (array-contains). A rename that does not extend it leaves the family

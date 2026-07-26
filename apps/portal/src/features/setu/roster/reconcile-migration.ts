@@ -19,11 +19,13 @@ const MISSING_SAMPLE_CAP = 200;
  * migration persisted, so the two can never disagree - see listDormantLegacyFids.
  */
 export async function getMigrationStatus(opts: { checkedAt: string }): Promise<MigrationStatusResponse> {
-  const [legacy, setuLegacyFids, dormantFids] = await Promise.all([
-    listAllFamilies(),
-    listSetuLegacyFids(),
-    listDormantLegacyFids(),
-  ]);
+  // listAllFamilies() and listDormantLegacyFids() both read RTDB `/roster`, and
+  // readRtdb's TTL cache stores only the RESOLVED value - it does not dedupe
+  // in-flight requests. Running them concurrently on a cold cache would
+  // therefore download the whole roster TWICE (~1.6 MB each, billed per GB).
+  // Awaiting the first makes the second a free in-memory cache hit.
+  const [legacy, setuLegacyFids] = await Promise.all([listAllFamilies(), listSetuLegacyFids()]);
+  const dormantFids = await listDormantLegacyFids();
   // Guard against a malformed RTDB family lacking `fid`: String(undefined) is the
   // truthy string 'undefined', which would otherwise count as a spurious missing fid.
   const allLegacyFids = [
