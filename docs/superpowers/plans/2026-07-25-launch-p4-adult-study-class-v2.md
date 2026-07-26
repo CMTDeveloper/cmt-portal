@@ -10,6 +10,20 @@
 
 **Supersedes:** `2026-07-25-launch-p4-adult-study-class.md`, reviewed as REQUEST CHANGES (3 critical, 8 major, 7 minor). Review: `docs/superpowers/reviews/2026-07-25-review-p4.md`.
 
+> **PROGRESS: Task 1 COMPLETE 2026-07-26** (`efc9b74`, `75e8423`). Verified: the plan's
+> cited pin `enrollment-integration.test.ts:704` (`-50 -> 400`) is real and exact.
+> Two additions beyond the plan: (a) the neighbouring test's NAME said "positive
+> number required" and would have become untrue, so it was corrected; (b) a
+> regression test pins that a `0` override survives `effectiveSuggestedAmount`
+> (`get-enrollments.ts:86`) - the schema relaxation is worthless if that read
+> collapses `0` back to the offering rate. Mutation-checked (`??` -> `||` fails
+> exactly that test). Audited all other reads of the field: `build-csv-rows.ts:66`
+> and `report-dataset.ts:95` use `typeof === 'number'`, so the portal has NO
+> truthiness trap - only the mobile mirror does, and the changelog flags it.
+> One gotcha for later tasks: the override describe-block's 409 test uses a
+> persistent `mockResolvedValue`, so its cancelled doc leaks into every test
+> after it - seed your own state.
+
 **Spec:** `docs/superpowers/specs/2026-07-25-adult-study-class-design.md`. **Depends on:** P1 v2's `can-access-route.ts` edits having landed (not merely its offerings grant) - three plans touch that file.
 
 ---
@@ -58,14 +72,14 @@
 
 `suggestedAmountOverride: z.number().int().positive().nullable()` (`enrollment.ts:26`) cannot store `0`, so the exemption is unrepresentable.
 
-- [ ] **Step 1: Write the failing tests** - a doc with `suggestedAmountOverride: 0` parses; `-1` still rejects.
-- [ ] **Step 2: Run to verify they fail**
-- [ ] **Step 3: Relax `:26` to `nonnegative()`**
-- [ ] **Step 4: Relax `OverrideEnrollmentBodySchema` at `:53` too, and pin the contract change**
+- [x] **Step 1: Write the failing tests** - a doc with `suggestedAmountOverride: 0` parses; `-1` still rejects.
+- [x] **Step 2: Run to verify they fail**
+- [x] **Step 3: Relax `:26` to `nonnegative()`**
+- [x] **Step 4: Relax `OverrideEnrollmentBodySchema` at `:53` too, and pin the contract change**
 
 This widens the welcome-team `PATCH /api/welcome/enrollments/[eid]/override` contract (`route.ts:56`) to accept `0`. The existing suite pins `-50 → 400` (`enrollment-integration.test.ts:704`) and nothing pins `0`. Add a test for `0 → 200` and note the behaviour change in the commit - staff can now zero an override deliberately, which is a feature, but it is a contract change.
 
-- [ ] **Step 5: Add `membershipMode` to `EnrollmentDocSchema` too**
+- [x] **Step 5: Add `membershipMode` to `EnrollmentDocSchema` too**
 
 Spec §4.3b step 1 asks for it and no earlier draft did it. `EnrollmentDocSchema` (`enrollment.ts:13-35`) has no such field, and it is the type `get-enrollments.ts:15` casts raw docs to - the shape `GET /api/setu/enrollments` returns raw (`enrollments/route.ts:26`). Without it, Task 12's mobile-changelog entry documents a field the schema does not declare, and any future `.parse()` strips it silently.
 
@@ -75,8 +89,8 @@ membershipMode: z.enum(['auto', 'manual']).optional(),
 
 **Bare `.optional()`, no `.default()`.** The repo has two recorded burns here: a `.default()` on a write schema erases the field for partial writers, and doc schemas validate on read so required-ness belongs at the write routes.
 
-- [ ] **Step 6: `MOBILE_API_CHANGELOG.md` entry.** This is a `@cmt/shared-domain` schema change consumed by `/api/setu/enrollments`, so CLAUDE.md requires one.
-- [ ] **Step 7: Run and commit**
+- [x] **Step 6: `MOBILE_API_CHANGELOG.md` entry.** This is a `@cmt/shared-domain` schema change consumed by `/api/setu/enrollments`, so CLAUDE.md requires one.
+- [x] **Step 7: Run and commit**
 
 ---
 
