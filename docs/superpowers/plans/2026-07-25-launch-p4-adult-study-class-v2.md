@@ -222,6 +222,46 @@ as merely ordering. It is not - `get-enrollments.ts:85-87` resolves the LIVE
 price from `enrolledAt`, so preserving `suggestedAmountSnapshot` alone does NOT
 preserve money owed.
 
+### Second audit (Task 4 pre-implementation, 2026-07-26) - fixed in `b863bd0`
+
+- **Manual-mode check ran BEFORE the program-active guard**, so a paused/removed
+  program still mutated manual enrollments, breaking this function's own stated
+  invariant. Real bug in `4d483bb`; the new test fails against it.
+- **The SPEC was wrong, not the test.** 4.3b step 3 said a manual list also
+  prunes the no-longer-eligible. `memberEligibleForProgram` is clock-dependent,
+  so that would let a manual list empty ITSELF on a birthday. Spec corrected
+  in place with the reasoning, so nobody "restores" the eligibility filter.
+- **Order was unpinned.** `sameSet` is order-insensitive, so filtering `members`
+  instead of `enrolledMids` would silently reorder with nothing flagging it.
+  Implementation was already correct; a regression guard now exists.
+
+### ⚠️ MUST-DO FOR TASK 7 - the feature is INERT until then
+
+**Nothing sets `membershipMode: 'manual'` in production today.** Only
+`enrollFamily` writes the field and no caller passes it, so every Task 4 test
+can stay green while the prune honours a flag that is never set. **The test that
+closes this is not in `sync-enrollment-members.test.ts`** - it is one that drives
+the real `POST /api/setu/adult-class` route (Task 7 Step 6) and asserts the
+persisted doc carries `membershipMode: 'manual'`. Same blind-spot shape as the
+`enabled:true` fixtures that hid the reconcile-unreachable bug.
+
+### Considered and NOT taken (with reasons)
+
+- **Tighten `hasActiveEnrollment` (`teacher/guests.ts:23-26`) to require a
+  non-empty `enrolledMids`.** The diagnosis is right - an active-but-empty
+  enrollment is a zombie that first-attendance never repairs - but the proposed
+  one-line fix does not achieve the repair: first-attendance would then call
+  `enrollFamily`, which hits the already-active branch with nothing supplied and
+  **no-ops**, so the empty list survives. A real repair needs the enroll path to
+  re-derive. **Open item, not a half-fix.**
+- **A `lastUpdateTime` Precondition on the prune's batch write** (to turn silent
+  last-writer-wins into a loud `FAILED_PRECONDITION`). Declined for now: the
+  prune writes MANY enrollments in ONE batch, so a single stale doc would fail
+  the entire batch, and `syncEnrollments` (`write-member.ts:231-237`) swallows
+  errors best-effort - turning a narrow race into a silent total sync failure.
+  Doing it properly needs per-doc writes with individual error handling, which
+  is more than Task 4 warrants this close to launch.
+
 ### STILL OPEN - carry into the tasks below
 
 | # | Finding | Where it belongs |
