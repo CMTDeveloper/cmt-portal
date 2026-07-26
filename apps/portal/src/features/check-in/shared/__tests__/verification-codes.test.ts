@@ -75,9 +75,26 @@ describe('hashContact', () => {
 });
 
 describe('storeVerificationCode', () => {
-  it('writes to verification_codes/{hash} with verifyAttempts=0', async () => {
+  it('NEVER writes to the client-writable `verification_codes` collection', async () => {
+    // The prod ruleset on 715b8 allows `create` on verification_codes/{any id}
+    // with NO request.auth condition, and its `hasAll` check does not forbid
+    // extra keys. Since the doc id here is sha256(normalizeContact(...)) - which
+    // for an email is just trim().toLowerCase(), so it is computable by anyone
+    // who knows the address - a document written from the public client SDK
+    // would be read back by verifyCode() as genuine, and the caller would be
+    // handed a session as that person.
+    //
+    // Nothing else defends this: verifyCode trusts the document's own fields,
+    // and the Admin SDK bypasses rules entirely, so the ONLY thing keeping the
+    // store out of an attacker's reach is that its collection is not one the
+    // ruleset exposes. That makes the name load-bearing, hence this test.
     await storeVerificationCode('a@b.com', '123456', 'email');
-    expect(fakeFirestore.collection).toHaveBeenCalledWith('verification_codes');
+    expect(fakeFirestore.collection).not.toHaveBeenCalledWith('verification_codes');
+  });
+
+  it('writes to setu_verification_codes/{hash} with verifyAttempts=0', async () => {
+    await storeVerificationCode('a@b.com', '123456', 'email');
+    expect(fakeFirestore.collection).toHaveBeenCalledWith('setu_verification_codes');
     expect(fakeCollection.doc).toHaveBeenCalledWith(hashContact('a@b.com'));
     const calls = (fakeDoc.set as unknown as ReturnType<typeof vi.fn>).mock.calls;
     expect(calls[0]).toBeDefined();

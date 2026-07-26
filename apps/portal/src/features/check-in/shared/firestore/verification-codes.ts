@@ -4,6 +4,31 @@ import { FieldValue, portalFirestore } from '@cmt/firebase-shared/admin/firestor
 export const CODE_TTL_MS = 10 * 60 * 1000;
 export const MAX_VERIFY_ATTEMPTS = 5;
 
+/**
+ * Where sign-in codes live. The NAME is a security control, not a label.
+ *
+ * The live prod ruleset on 715b8 allows `create` on `verification_codes/{any}`
+ * with **no `request.auth` condition at all**, and its `hasAll(['code',
+ * 'expires', 'type'])` check does not forbid additional keys. The document id
+ * used here is `sha256(normalizeContact(...))`, and for an email
+ * `normalizeContact` is just `trim().toLowerCase()` - so the id is computable
+ * by anyone who knows the address, with no secret involved.
+ *
+ * Put together: anyone holding the public Firebase API key could write
+ * `{ code, expires: <Timestamp>, type, expiresAt: <future ms> }` to that path -
+ * `expires` to satisfy the rule, `expiresAt` to satisfy `verifyCode` below -
+ * and then present that code to /api/setu/auth/verify-code and be handed a
+ * session as the victim. Nothing else stops it: `verifyCode` trusts the
+ * document's own fields, and the Admin SDK bypasses rules entirely.
+ *
+ * So the portal deliberately does NOT use `verification_codes`. Everything
+ * outside `family-check-ins/**`, `guest-families/**` and `verification_codes/*`
+ * is denied to the client SDK by that ruleset, which is exactly what this name
+ * buys. Renaming it back, or reusing this collection anywhere a client can
+ * reach, reopens a pre-auth account takeover.
+ */
+const CODES_COLLECTION = 'setu_verification_codes';
+
 export function hashContact(normalized: string): string {
   return createHash('sha256').update(normalized).digest('hex');
 }
@@ -24,7 +49,7 @@ export async function storeVerificationCode(
   const now = Date.now();
 
   await portalFirestore()
-    .collection('verification_codes')
+    .collection(CODES_COLLECTION)
     .doc(hash)
     .set({
       code,
@@ -41,7 +66,7 @@ export async function verifyCode(
   type: 'email' | 'phone',
 ): Promise<boolean> {
   const hash = hashContact(contact);
-  const ref = portalFirestore().collection('verification_codes').doc(hash);
+  const ref = portalFirestore().collection(CODES_COLLECTION).doc(hash);
   const snap = await ref.get();
   if (!snap.exists) return false;
 
