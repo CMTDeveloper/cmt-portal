@@ -22,6 +22,15 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
+## 2026-07-26 - `efc9b74` - enrollments: `suggestedAmountOverride` accepts `0`, and `membershipMode` is now declared (**mobile action required**)
+
+Groundwork for the Adult Study Class. Two `@cmt/shared-domain` changes on `EnrollmentDocSchema`, which is what **`GET /api/setu/enrollments`** returns raw.
+
+- **`suggestedAmountOverride` widened from positive-or-null to NON-NEGATIVE-or-null.** `0` is now a real, meaningful value, not "unset": it is how the adult-class exemption is stored for a family that has already paid its Bala Vihar donation. **Mobile action REQUIRED if any code treats this field as truthy** - `override || snapshot` is now WRONG and will bill a family that owes nothing. The correct read is `override ?? snapshot` (null-coalescing), i.e. test `!== null`/`!= null`, never truthiness. This is the one change here that can produce a visibly wrong number.
+- **`membershipMode?: 'auto' | 'manual'`** is a new optional field on the enrollment doc. `'manual'` means the family explicitly chose `enrolledMids` and the server will not re-derive them on a member edit; **absent means `'auto'`** (every enrollment that exists today). Read-only from the mobile's perspective - no endpoint accepts it as input. Mirror it as optional and default your interpretation to `'auto'` when missing.
+- **`PATCH /api/welcome/enrollments/[eid]/override`** now accepts `0` where it previously returned `400`. That route is **welcome-team-only and has no mobile mirror** - noted so the contract-sync cron does not read the silence as an oversight.
+- No response envelope, error code, or required field changed. An older client keeps working **unless** it does the truthiness read above.
+
 ## 2026-07-26 - `634d158` - PATCH /api/setu/family accepts `location` (request shape; **mobile action recommended**)
 
 The companion write path to the `locationNeedsConfirmation` entry below. Previously this route's body schema had only `familyEmergencyContact` and `familyAddress`, and Zod strips unknown keys - so sending `location` did nothing.

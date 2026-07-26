@@ -91,6 +91,23 @@ describe('getEnrollments — effectiveSuggestedAmount', () => {
     expect(result[0]!.effectiveSuggestedAmount).toBe(250);
   });
 
+  // The single line the entire Adult Study Class fee rule rests on. The exemption
+  // for a Bala-Vihar-paid family is stored as an override of 0, so if this read
+  // were ever "simplified" from `??` to `||`, the 0 would fall through to the
+  // live offering rate and the family would be billed the full amount - a
+  // silently wrong number on a screen that asks for money.
+  it('honours an override of ZERO — it must not fall through to the offering rate', async () => {
+    enrollmentsGet.mockResolvedValue({
+      empty: false,
+      docs: [{ data: () => enrollmentData({ suggestedAmountOverride: 0 }) }],
+    });
+    offeringGet.mockResolvedValue({ exists: true, id: 'tabla-2026', data: () => offeringData() });
+
+    const result = await getEnrollments('CMT-MATTA');
+
+    expect(result[0]!.effectiveSuggestedAmount).toBe(0);
+  });
+
   it('falls back to the enroll-time snapshot when the offering doc is gone', async () => {
     enrollmentsGet.mockResolvedValue({ empty: false, docs: [{ data: () => enrollmentData() }] });
     offeringGet.mockResolvedValue({ exists: false });
