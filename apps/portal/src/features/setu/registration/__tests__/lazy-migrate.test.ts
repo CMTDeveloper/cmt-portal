@@ -193,6 +193,56 @@ describe('lazyMigrateLegacyFamily — happy path', () => {
   });
 });
 
+// This is the test that catches a broken WRITER. The get-family-by-fid
+// round-trip test seeds the Firestore doc directly, so it passes green even if
+// nothing ever writes the flag - which is exactly how the read path and the
+// write path each shipped inert in earlier drafts of this work.
+describe('lazyMigrateLegacyFamily — locationNeedsConfirmation', () => {
+  function captureFamilyDoc(): { calls: [unknown, Record<string, unknown>][] } {
+    const txnSetCalls: [unknown, Record<string, unknown>][] = [];
+    mockRunTransaction.mockImplementation(async (fn: (txn: unknown) => Promise<unknown>) => {
+      const txn = {
+        get: vi.fn().mockResolvedValue({ empty: true, docs: [] }),
+        set: vi.fn().mockImplementation((ref: unknown, data: Record<string, unknown>) => {
+          txnSetCalls.push([ref, data]);
+        }),
+      };
+      return fn(txn);
+    });
+    return { calls: txnSetCalls };
+  }
+
+  it('persists locationNeedsConfirmation: true when the parser defaulted the centre', async () => {
+    mockFetchLegacy.mockResolvedValue({ ...legacyShahFamily, locationDefaulted: true });
+    const { calls } = captureFamilyDoc();
+
+    await lazyMigrateLegacyFamily('42');
+
+    const familyDoc = calls.find(([, data]) => 'managers' in data)![1];
+    expect(familyDoc.locationNeedsConfirmation).toBe(true);
+    // location itself stays a valid non-empty string: FamilyDocSchema.location
+    // is a read-validated z.string().min(1), so null/'' would fail validation on
+    // EVERY subsequent read of this family.
+    expect(familyDoc.location).toBe('Brampton');
+  });
+
+  it('OMITS the key entirely when the legacy centre was real', async () => {
+    mockFetchLegacy.mockResolvedValue({
+      ...legacyShahFamily,
+      location: 'Scarborough' as const,
+      locationDefaulted: false,
+    });
+    const { calls } = captureFamilyDoc();
+
+    await lazyMigrateLegacyFamily('42');
+
+    const familyDoc = calls.find(([, data]) => 'managers' in data)![1];
+    // Omitted, never `false` - exactOptionalPropertyTypes is on, and the gate
+    // and form both test `=== true`, so absence and false mean the same thing.
+    expect('locationNeedsConfirmation' in familyDoc).toBe(false);
+  });
+});
+
 describe('lazyMigrateLegacyFamily — portalAccess gating', () => {
   // 1 primary + 2 other adults — exercises the N=2 non-manager case so a second
   // gated adult can't be masked by code that only handled a single spouse.

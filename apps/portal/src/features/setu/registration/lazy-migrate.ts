@@ -198,6 +198,13 @@ export async function lazyMigrateLegacyFamily(legacyFid: string): Promise<LazyMi
       createdAt: now,
       managers: managerIds,
       searchKeys: searchKeysFor(legacy, fid),
+      // The legacy roster had no recognisable centre, so `location` above is the
+      // parser's Brampton default rather than this family's stated centre. Flag
+      // it so the profile gate asks them to pick instead of silently filing them
+      // under Brampton. Spread-omitted (never written as `false`) when the
+      // centre was real - exactOptionalPropertyTypes, and every reader tests
+      // `=== true`, so absent and false mean the same thing.
+      ...(legacy.locationDefaulted ? { locationNeedsConfirmation: true } : {}),
     });
 
     // ContactKey docs — primary tuple plus each adult's own email/phone. The

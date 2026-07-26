@@ -41,6 +41,12 @@ export async function getFamilyByFid(fid: string): Promise<FamilyAndMembers | nu
           acceptedByMid: familyData.disclaimersAccepted.acceptedByMid,
         }
       : null,
+    // Centre-confirmation marker. Same rule as inviteStatus below: this map has
+    // no spread, so a field missing here is `undefined` forever regardless of
+    // what FamilyDocSchema says. Dropping it makes the profile gate and
+    // /complete-profile both read "nothing to confirm", and a family migrated on
+    // a guessed centre stays silently filed under Brampton.
+    locationNeedsConfirmation: familyData.locationNeedsConfirmation ?? null,
   };
 
   const members: MemberDoc[] = membersSnap.docs.map((doc) => {

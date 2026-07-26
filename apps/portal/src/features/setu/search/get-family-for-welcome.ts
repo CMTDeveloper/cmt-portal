@@ -47,6 +47,11 @@ export async function getFamilyForWelcome(fid: string): Promise<FamilyForWelcome
     createdAt: familyData.createdAt?.toDate() ?? new Date(),
     managers: familyData.managers ?? [],
     searchKeys: familyData.searchKeys ?? [],
+    // The SECOND hand-map (this one backs /welcome/family/[fid]). It already
+    // drops familyEmergencyContact, familyAddress and disclaimersAccepted, so
+    // it would have dropped this too - killing the flag's second purpose as a
+    // welcome-team work queue of families whose centre is still unconfirmed.
+    locationNeedsConfirmation: familyData.locationNeedsConfirmation ?? null,
   };
 
   const members: MemberDoc[] = membersSnap.docs.map((doc) => {

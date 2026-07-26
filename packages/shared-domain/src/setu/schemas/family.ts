@@ -72,6 +72,17 @@ export const FamilyDocSchema = z.object({
   // Slice 2: version-tracked disclaimer acceptance (per-family; the manager
   // accepts). Optional + nullable — absence reads as "never accepted".
   disclaimersAccepted: DisclaimerAcceptanceSchema.nullable().optional(),
+  // True when `location` above is a MIGRATION GUESS rather than the family's
+  // stated centre: the legacy roster carried no recognisable `center`, so the
+  // parser defaulted to Brampton. The profile gate diverts such a manager to
+  // /complete-profile to pick their real centre, and the PATCH clears this.
+  //
+  // Carried as an additive marker rather than by emptying `location`, because
+  // `location` is a read-validated z.string().min(1) and many consumers
+  // (grade-eligible, roster filters, level matching, search) assume a string.
+  // Nullable + optional so it is safe on read for every pre-existing doc: only
+  // the literal `true` means "ask".
+  locationNeedsConfirmation: z.boolean().nullable().optional(),
 });
 
 export type FamilyDoc = z.infer<typeof FamilyDocSchema>;

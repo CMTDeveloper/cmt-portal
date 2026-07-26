@@ -101,6 +101,39 @@ describe('getFamilyByFid — multi-contact defaults', () => {
   // Regression: this hand-map is the REAL data source for /family + the gate. A
   // deployed-UAT E2E caught inviteStatus being dropped here (a pending co-manager
   // rendered as a normal member, no "Invite pending" badge). Keep it mapped.
+  // Same class of defect as inviteStatus above, for the centre-confirmation
+  // flag. This hand-map has no spread, so a field added to FamilyDocSchema but
+  // not to the map is `undefined` forever - the profile gate and
+  // /complete-profile would both read it as "nothing to confirm" and the family
+  // would stay silently filed under the defaulted Brampton. Asserted against
+  // getFamilyByFid itself, NOT a mocked gate, because a mocked-gate test passes
+  // green against exactly the inert wiring this guards.
+  it('round-trips locationNeedsConfirmation from the Firestore doc', async () => {
+    mockFamilyGet.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        fid: 'CMT-AB12CD34',
+        legacyFid: '1016',
+        name: 'Patel',
+        location: 'Brampton',
+        createdAt: { toDate: () => new Date() },
+        managers: ['CMT-AB12CD34-01'],
+        searchKeys: ['patel'],
+        locationNeedsConfirmation: true,
+      }),
+    });
+    mockMembersGet.mockResolvedValue({ docs: [] });
+
+    const result = await getFamilyByFid('CMT-AB12CD34');
+    expect(result!.family.locationNeedsConfirmation).toBe(true);
+  });
+
+  it('defaults locationNeedsConfirmation to null for a family that never had it', async () => {
+    mockMembersGet.mockResolvedValue({ docs: [] });
+    const result = await getFamilyByFid('CMT-AB12CD34');
+    expect(result!.family.locationNeedsConfirmation).toBeNull();
+  });
+
   it('maps inviteStatus for a pending co-manager, and defaults it to null when absent', async () => {
     mockMembersGet.mockResolvedValue({
       docs: [
