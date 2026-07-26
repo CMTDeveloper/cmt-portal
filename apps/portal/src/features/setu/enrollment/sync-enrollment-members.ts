@@ -33,6 +33,19 @@ function sameSet(a: readonly string[], b: readonly string[]): boolean {
  * family or became ineligible (e.g. a deleted child, or a child edited to
  * Adult). Call it after every member add / edit / delete.
  *
+ * EXCEPT when the enrollment carries `membershipMode: 'manual'`, where the
+ * family named its members deliberately and only DEPARTED members are dropped.
+ * Absent mode = `'auto'` = the behaviour above, which is every enrollment that
+ * existed before the Adult Study Class.
+ *
+ * ⚠️ ASYMMETRY, ON PURPOSE - do not "fix" it. `enrollFamily` refuses to ever
+ * WRITE an empty `enrolledMids` (it throws `no-eligible-members` on both the
+ * create and reconcile paths), but this prune may legitimately LEAVE one: when
+ * the last enrolled member departs, the truthful state is an active enrollment
+ * naming nobody. Keeping stale mids instead would put a departed child on a
+ * teacher's roster, which is strictly worse. The empty list is also the signal
+ * the adult-class gate keys on to ask the family to choose again.
+ *
  * Idempotent: only enrollments whose member set actually changed are written,
  * and the whole reconcile is a no-op when the family has no active enrollment.
  * Enrollments whose program doc is missing or not `active` are left untouched
@@ -64,9 +77,45 @@ export async function syncActiveEnrollmentMemberships(
   const batch = db.batch();
   const updated: string[] = [];
 
+  // Every mid that currently exists on the family, regardless of eligibility.
+  // A MANUAL selection is filtered by EXISTENCE only - see below.
+  const existingMids = new Set(
+    members.map((m) => m.mid).filter((mid): mid is string => typeof mid === 'string'),
+  );
+
   for (const enrDoc of enrSnap.docs) {
-    const e = enrDoc.data() as { eid?: string; programKey?: string; enrolledMids?: string[] };
+    const e = enrDoc.data() as {
+      eid?: string;
+      programKey?: string;
+      enrolledMids?: string[];
+      membershipMode?: 'auto' | 'manual';
+    };
     if (!e.programKey) continue;
+
+    // MANUAL: the family named these members deliberately (the Adult Study
+    // Class asks which non-teaching adult attends). Re-deriving would re-enrol
+    // the parent teaching that hour and silently overwrite their choice. So the
+    // prune may only DROP mids for people who have left the family.
+    //
+    // Filtered by EXISTENCE, never by eligibility. `memberEligibleForProgram`
+    // can depend on age and therefore on the clock, so an eligibility-filtered
+    // manual list could empty itself on a date boundary with no user action -
+    // the adult-class gate would re-fire and the family would be asked to
+    // re-choose for no reason. A member who merely became ineligible staying
+    // enrolled is the far milder failure, and it is visible and fixable.
+    //
+    // Dropping departed members is load-bearing rather than incidental: an
+    // emptied list is exactly what makes the gate re-fire (spec 2.1 condition 4)
+    // so the family is asked to choose someone still in the household.
+    if (e.membershipMode === 'manual') {
+      const stored = e.enrolledMids ?? [];
+      const kept = stored.filter((mid) => existingMids.has(mid));
+      if (!sameSet(stored, kept)) {
+        batch.update(enrDoc.ref, { enrolledMids: kept });
+        updated.push(e.eid ?? enrDoc.id);
+      }
+      continue;
+    }
 
     if (!programByKey.has(e.programKey)) {
       programByKey.set(e.programKey, await getProgram(e.programKey));
