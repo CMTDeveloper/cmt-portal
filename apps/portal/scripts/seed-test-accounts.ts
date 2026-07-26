@@ -147,6 +147,31 @@ const PERSONAS: Persona[] = [
   },
   {
     kind: 'family',
+    key: 'parent-volunteer',
+    email: `setu-test-parent-volunteer@${DOMAIN}`,
+    phone: '+15195550208',
+    familyName: 'Test Family Volunteer',
+    location: 'Brampton',
+    manager: { firstName: 'Test', lastName: 'Parent Volunteer', gender: 'Female' },
+    children: [
+      { firstName: 'Test', lastName: 'Child Five', gender: 'Female', schoolGrade: 'Grade 2', birthMonthYear: '2018-06' },
+    ],
+    enrollOid: 'bv-brampton-2025-26',
+    // welcome-team granted mid-keyed, so this persona signs in as
+    // role='family-manager' with extraRoles=['welcome-team'].
+    //
+    // This is the shape PRODUCTION sees most often - welcome-team volunteers
+    // are almost always parents too - and until this persona existed nothing
+    // exercised it end to end. `parent-brampton` looks similar but carries
+    // COORDINATOR, which is deliberately denied family edit, so it proves the
+    // opposite thing. The standalone `sevak` account cannot exercise it either:
+    // its primary role already IS welcome-team, so any code that reads only the
+    // primary role passes for it and fails here.
+    sevakRoles: ['welcome-team'],
+    landing: '/family (+ welcome-team: /welcome/roster, staff family edit)',
+  },
+  {
+    kind: 'family',
     key: 'teacher-brampton',
     email: `setu-test-teacher-brampton@${DOMAIN}`,
     phone: '+15195550203',
