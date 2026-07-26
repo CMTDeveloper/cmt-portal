@@ -7,10 +7,55 @@ import { CspRoot } from '@/features/family/components/atoms';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 import { markDonationStatus } from '@/features/setu/donations/mark-donation-status';
 import { LoadingOm } from '@/components/chrome/loading-om';
+import { flags } from '@/lib/flags';
+import { loadAdultClassGateDataFailSoft } from '@/features/setu/adult-class/load-gate-data';
+import { needsAdultClassSelection, isBalaViharPaid } from '@/features/setu/adult-class/needs-selection';
+import { selectableAdults } from '@/features/setu/adult-class/selectable-adults';
+import { selectBalaViharEnrollment } from '@/app/family/_helpers/select-bv-enrollment';
+import { AdultClassForm } from '@/features/setu/adult-class/components/adult-class-form';
 
 export const metadata = { title: 'Thank you' };
 
-async function DonateSuccessBody({
+type Ask = { adults: { mid: string; name: string }[]; bvPaid: boolean };
+
+/**
+ * Whether to ask this family to name an Adult Study Class attendee, and who they
+ * may pick. `null` = do not ask.
+ *
+ * Gated on the SAME `needsAdultClassSelection` predicate `AdultClassGate` uses,
+ * so the ask here and the redirect there can never disagree about who owes a
+ * selection - a family shown the ask must be exactly a family the gate would
+ * catch, or the two surfaces contradict each other.
+ */
+async function resolveAsk(
+  familyData: Awaited<ReturnType<typeof getCurrentFamily>>,
+): Promise<Ask | null> {
+  if (!flags.setuAdultClass || !familyData) return null;
+
+  const gate = await loadAdultClassGateDataFailSoft(familyData);
+  if (!gate || !needsAdultClassSelection(gate)) return null;
+
+  const bv = selectBalaViharEnrollment(gate.enrollments);
+  return {
+    adults: selectableAdults(gate.members, gate.teacherAssignedMids).map((m) => ({
+      mid: m.mid,
+      name: `${m.firstName} ${m.lastName}`,
+    })),
+    // Necessarily true whenever the predicate fired (its condition 3), but
+    // derived rather than hardcoded so the fee line cannot drift from the rule.
+    bvPaid: bv
+      ? isBalaViharPaid({
+          bv,
+          donations: gate.donations,
+          legacyPaymentStatus: gate.legacyPaymentStatus,
+        })
+      : false,
+  };
+}
+
+// Exported for tests: an async server component does not resolve under jsdom, so
+// the suite awaits this directly rather than trying to drive the Suspense shell.
+export async function DonateSuccessBody({
   searchParams,
 }: {
   searchParams: Promise<{ did?: string }>;
@@ -28,6 +73,17 @@ async function DonateSuccessBody({
     await markDonationStatus(did, familyData.family.fid, 'completed');
   }
 
+  // The Adult Study Class ask (spec 4.3). Loaded AFTER markDonationStatus on
+  // purpose: the predicate's condition 3 asks whether the Bala Vihar donation is
+  // paid, and the write above is what makes it so. Reversing these two lines
+  // means the family who JUST paid is the one family never asked.
+  //
+  // FAIL-SOFT, never loadAdultClassGateDataOrThrow. This is a receipt page and
+  // the ask is an enhancement on it - a transient Firestore error must cost the
+  // ask, never the family's confirmation that their ~$500 arrived. (The opposite
+  // call is right on /adult-class, where the whole page IS the ask.)
+  const ask = await resolveAsk(familyData);
+
   return (
     <CspRoot style={{ minHeight: '100dvh', display: 'grid', placeItems: 'center', padding: 24 }}>
       <div style={{ maxWidth: 460, textAlign: 'center' }}>
@@ -43,7 +99,38 @@ async function DonateSuccessBody({
         <p style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.6, marginBottom: 24 }}>
           Your official CRA tax receipt will be mailed by <strong>accounting@chinmayatoronto.org</strong> each February for the prior calendar year.
         </p>
+        {/* ── The Adult Study Class ask. FIRST, above the pledge (spec 4.3).
+            Quick, free, and part of finishing enrollment - so it leads. ────── */}
+        {ask && (
+          <section
+            style={{ textAlign: 'left', borderTop: '1px solid var(--hairline, #e5e0d8)', paddingTop: 24, marginBottom: 24 }}
+          >
+            <h2 style={{ fontSize: 20, fontWeight: 400, marginBottom: 8 }}>
+              One last thing
+            </h2>
+            <p style={{ fontSize: 14, color: 'var(--body-text)', lineHeight: 1.6, marginBottom: 16 }}>
+              One parent stays on site while Bala Vihar is running, so we ask each family to name
+              who will join the Adult Study Class during that hour. Pick anyone who is not already
+              teaching - it takes a moment, and there is nothing more to pay.
+            </p>
+            <AdultClassForm adults={ask.adults} initialSelected={[]} bvPaid={ask.bvPaid} />
+          </section>
+        )}
+
+        {/* ══ P5 MONTHLY PLEDGE CARD GOES HERE - BELOW the adult-class ask ══
+            Spec 4.3 fixes this order and P5 v3 Task 5 Step 4 repeats it: the
+            adult-class ask is first because it is quick and free; the pledge is
+            second and quieter, because leading with a money ask straight after a
+            ~$500 payment reads badly. Insert BETWEEN this comment and the "Back
+            to family" link below - do not put it above the <section> above. */}
+
         <div style={{ display: 'flex', justifyContent: 'center' }}>
+          {/* This link IS the "not now" path (Task 9 Step 4). Deliberately NOT
+              labelled "Skip": skipping writes nothing, so the next /family visit
+              trips AdultClassGate and lands the family on /adult-class anyway. A
+              button promising to skip something it cannot skip is worse than an
+              honest "Back to family" that happens to defer it. The gate remains
+              the persistence mechanism, exactly as Step 4 requires. */}
           <Link href="/family" className="btn btn--p" style={{ padding: '12px 20px', textDecoration: 'none' }}>
             Back to family
           </Link>
