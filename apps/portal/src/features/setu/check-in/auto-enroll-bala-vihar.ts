@@ -1,7 +1,7 @@
 import 'server-only';
 import { BALA_VIHAR } from '@cmt/shared-domain';
 import type { Location } from '@cmt/shared-domain';
-import { getOpenOfferingsForFamily } from '@/features/setu/enrollment/get-open-offerings';
+import { getOpenOfferingsForFamily, resolveCurrentOffering } from '@/features/setu/enrollment/get-open-offerings';
 import { enrollFamily } from '@/features/setu/enrollment/enroll-family';
 
 export type AutoEnrollResult =
@@ -25,7 +25,11 @@ export async function autoEnrollBalaVihar(
   family: { fid: string; location: Location | null },
 ): Promise<AutoEnrollResult> {
   const offerings = await getOpenOfferingsForFamily(BALA_VIHAR, family.location);
-  const oid = offerings[0]?.oid;
+  // NOT `offerings[0]`: that array merges this centre's offerings with the
+  // location-less (online) ones, so `[0]` means "earliest" and would auto-enroll
+  // a family standing at the Brampton door into an online class that starts
+  // sooner. resolveCurrentOffering makes the centre win outright.
+  const oid = resolveCurrentOffering(offerings, family.location)?.oid;
   if (!oid) return { enrolled: false, reason: 'no-open-offering' };
 
   try {

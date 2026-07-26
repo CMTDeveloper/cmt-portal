@@ -22,7 +22,85 @@ vi.mock('@cmt/firebase-shared/admin/firestore', () => {
   };
 });
 
-import { getOpenOfferings, getOpenOfferingsForFamily } from '../get-open-offerings';
+import {
+  getOpenOfferings,
+  getOpenOfferingsForFamily,
+  resolveCurrentOffering,
+  type OpenOffering,
+} from '../get-open-offerings';
+
+// ── resolveCurrentOffering - pure, and the tie-break must be DELIBERATE ───────
+describe('resolveCurrentOffering', () => {
+  const SAME = new Date('2026-09-13T00:00:00Z');
+
+  function o(over: Partial<OpenOffering> & { oid: string }): OpenOffering {
+    return {
+      programKey: 'adult-study-class',
+      location: 'Brampton',
+      startDate: SAME,
+      endDate: null,
+      enabled: true,
+      ...over,
+    } as unknown as OpenOffering;
+  }
+
+  it('returns null when there are no open offerings', () => {
+    expect(resolveCurrentOffering([], 'Brampton')).toBeNull();
+  });
+
+  // THE ACCIDENT TEST. getOpenOfferingsForFamily merges located + location-less
+  // and sorts by startDate; on an exact tie the winner was decided by the dedupe
+  // Map's insertion order (located first) - an accident nothing stated. Both
+  // input orderings must now resolve to the SAME offering, or reordering two
+  // lines in get-open-offerings.ts silently retargets every caller.
+  it('prefers the family location over a location-less offering with the SAME startDate', () => {
+    const located = o({ oid: 'asc-brampton', location: 'Brampton' });
+    const online = o({ oid: 'asc-online', location: null });
+    expect(resolveCurrentOffering([located, online], 'Brampton')?.oid).toBe('asc-brampton');
+    expect(resolveCurrentOffering([online, located], 'Brampton')?.oid).toBe('asc-brampton');
+  });
+
+  // "Earliest" alone is WRONG here: an online class starting a week before the
+  // family's own centre's would otherwise capture every located family.
+  it('prefers the family location even when a location-less offering starts EARLIER', () => {
+    const located = o({ oid: 'asc-brampton', startDate: new Date('2026-09-20T00:00:00Z') });
+    const online = o({ oid: 'asc-online', location: null, startDate: new Date('2026-09-06T00:00:00Z') });
+    expect(resolveCurrentOffering([online, located], 'Brampton')?.oid).toBe('asc-brampton');
+  });
+
+  it('falls back to the earliest location-less offering when the centre runs none', () => {
+    const late = o({ oid: 'asc-online-late', location: null, startDate: new Date('2026-10-01T00:00:00Z') });
+    const early = o({ oid: 'asc-online-early', location: null, startDate: new Date('2026-09-06T00:00:00Z') });
+    expect(resolveCurrentOffering([late, early], 'Brampton')?.oid).toBe('asc-online-early');
+  });
+
+  it('picks the earliest when the centre runs two', () => {
+    const fall = o({ oid: 'asc-fall', startDate: new Date('2026-09-13T00:00:00Z') });
+    const spring = o({ oid: 'asc-spring', startDate: new Date('2027-01-10T00:00:00Z') });
+    expect(resolveCurrentOffering([spring, fall], 'Brampton')?.oid).toBe('asc-fall');
+  });
+
+  // Two located offerings on the same day would otherwise resolve by Firestore
+  // document order, i.e. non-deterministically across environments.
+  it('breaks an exact tie between two located offerings deterministically by oid', () => {
+    const b = o({ oid: 'asc-b' });
+    const a = o({ oid: 'asc-a' });
+    expect(resolveCurrentOffering([b, a], 'Brampton')?.oid).toBe('asc-a');
+    expect(resolveCurrentOffering([a, b], 'Brampton')?.oid).toBe('asc-a');
+  });
+
+  it('resolves over the location-less set for a family with no location', () => {
+    const online = o({ oid: 'asc-online', location: null, startDate: new Date('2026-09-06T00:00:00Z') });
+    expect(resolveCurrentOffering([online], null)?.oid).toBe('asc-online');
+  });
+
+  it('does not mutate the caller array', () => {
+    const list = [o({ oid: 'z', startDate: new Date('2027-01-01T00:00:00Z') }), o({ oid: 'a' })];
+    const before = list.map((x) => x.oid);
+    resolveCurrentOffering(list, 'Brampton');
+    expect(list.map((x) => x.oid)).toEqual(before);
+  });
+});
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 

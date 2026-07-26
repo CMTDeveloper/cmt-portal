@@ -76,7 +76,10 @@ vi.mock('@/features/setu/members/get-current-family', () => ({
 vi.mock('@/features/setu/enrollment/get-enrollments', () => ({
   getEnrollments: (...args: unknown[]) => mockGetEnrollments(...args),
 }));
-vi.mock('@/features/setu/enrollment/get-open-offerings', () => ({
+// Only the QUERY is mocked - `resolveCurrentOffering` (which picks the default
+// offering) stays real, so these tests exercise the actual centre-wins rule.
+vi.mock('@/features/setu/enrollment/get-open-offerings', async (orig) => ({
+  ...(await orig<typeof import('@/features/setu/enrollment/get-open-offerings')>()),
   getOpenOfferingsForFamily: (...args: unknown[]) => mockGetOpenOfferingsForFamily(...args),
 }));
 vi.mock('@/features/setu/programs/get-programs', () => ({

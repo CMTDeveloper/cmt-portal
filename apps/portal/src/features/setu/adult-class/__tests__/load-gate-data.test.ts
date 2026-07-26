@@ -19,13 +19,19 @@ const {
   getLegacyPaymentStatus: vi.fn(),
   isTeacherAssigned: vi.fn(),
 }));
-vi.mock('@/features/setu/enrollment/get-open-offerings', () => ({ getOpenOfferingsForFamily }));
+// Only the QUERY is mocked - `resolveCurrentOffering` stays real, so the loader
+// is exercised against the actual tie-break rule (which has its own tests in
+// enrollment/__tests__/get-open-offerings.test.ts) rather than a stub of it.
+vi.mock('@/features/setu/enrollment/get-open-offerings', async (orig) => ({
+  ...(await orig<typeof import('@/features/setu/enrollment/get-open-offerings')>()),
+  getOpenOfferingsForFamily,
+}));
 vi.mock('@/features/setu/enrollment/get-enrollments', () => ({ getEnrollments }));
 vi.mock('@/features/setu/donations/get-donations', () => ({ getDonations }));
 vi.mock('@/features/setu/donations/legacy-payment', () => ({ getLegacyPaymentStatus }));
 vi.mock('@/features/setu/teacher/assignments', () => ({ isTeacherAssigned }));
 
-import { loadAdultClassGateData, resolveCurrentOffering } from '../load-gate-data';
+import { loadAdultClassGateData } from '../load-gate-data';
 
 const BV_OID = 'bala-vihar-brampton-2026-27';
 
@@ -71,70 +77,6 @@ beforeEach(() => {
   getDonations.mockReset().mockResolvedValue([]);
   getLegacyPaymentStatus.mockReset().mockResolvedValue('paid');
   isTeacherAssigned.mockReset().mockResolvedValue(false);
-});
-
-// ───────────────────────────────────────────────────────────────────────────
-// resolveCurrentOffering - the tie-break, which must be DELIBERATE
-// ───────────────────────────────────────────────────────────────────────────
-describe('resolveCurrentOffering', () => {
-  const SAME = new Date('2026-09-13T00:00:00Z');
-
-  it('returns null when there are no open offerings', () => {
-    expect(resolveCurrentOffering([], 'Brampton')).toBeNull();
-  });
-
-  // THE ACCIDENT TEST. getOpenOfferingsForFamily merges located + location-less
-  // and sorts by startDate; on an exact tie the winner is decided by the dedupe
-  // Map's insertion order (located first) - an accident nothing stated. Both
-  // orderings must resolve to the SAME offering or the gate silently retargets
-  // when someone reorders two lines in get-open-offerings.ts.
-  it('prefers the family location over a location-less offering with the SAME startDate', () => {
-    const located = offering({ oid: 'asc-brampton', location: 'Brampton', startDate: SAME });
-    const online = offering({ oid: 'asc-online', location: null, startDate: SAME });
-    expect(resolveCurrentOffering([located, online], 'Brampton')?.oid).toBe('asc-brampton');
-    expect(resolveCurrentOffering([online, located], 'Brampton')?.oid).toBe('asc-brampton');
-  });
-
-  // "Earliest" alone is WRONG here: an online class starting a week before the
-  // family's own centre's would capture every located family.
-  it('prefers the family location even when a location-less offering starts EARLIER', () => {
-    const located = offering({ oid: 'asc-brampton', location: 'Brampton', startDate: new Date('2026-09-20T00:00:00Z') });
-    const online = offering({ oid: 'asc-online', location: null, startDate: new Date('2026-09-06T00:00:00Z') });
-    expect(resolveCurrentOffering([online, located], 'Brampton')?.oid).toBe('asc-brampton');
-  });
-
-  it('falls back to the earliest location-less offering when the centre runs none', () => {
-    const a = offering({ oid: 'asc-online-late', location: null, startDate: new Date('2026-10-01T00:00:00Z') });
-    const b = offering({ oid: 'asc-online-early', location: null, startDate: new Date('2026-09-06T00:00:00Z') });
-    expect(resolveCurrentOffering([a, b], 'Brampton')?.oid).toBe('asc-online-early');
-  });
-
-  it('picks the earliest when the centre runs two', () => {
-    const fall = offering({ oid: 'asc-fall', startDate: new Date('2026-09-13T00:00:00Z') });
-    const spring = offering({ oid: 'asc-spring', startDate: new Date('2027-01-10T00:00:00Z') });
-    expect(resolveCurrentOffering([spring, fall], 'Brampton')?.oid).toBe('asc-fall');
-  });
-
-  // Two located offerings on the same day would otherwise resolve by Firestore
-  // document order, i.e. non-deterministically across environments.
-  it('breaks an exact tie between two located offerings deterministically by oid', () => {
-    const a = offering({ oid: 'asc-b', startDate: SAME });
-    const b = offering({ oid: 'asc-a', startDate: SAME });
-    expect(resolveCurrentOffering([a, b], 'Brampton')?.oid).toBe('asc-a');
-    expect(resolveCurrentOffering([b, a], 'Brampton')?.oid).toBe('asc-a');
-  });
-
-  it('resolves over the location-less set for a family with no location', () => {
-    const online = offering({ oid: 'asc-online', location: null, startDate: new Date('2026-09-06T00:00:00Z') });
-    expect(resolveCurrentOffering([online], null)?.oid).toBe('asc-online');
-  });
-
-  it('does not mutate the caller array', () => {
-    const list = [offering({ oid: 'z', startDate: new Date('2027-01-01T00:00:00Z') }), offering({ oid: 'a' })];
-    const before = list.map((o) => o.oid);
-    resolveCurrentOffering(list, 'Brampton');
-    expect(list.map((o) => o.oid)).toEqual(before);
-  });
 });
 
 // ───────────────────────────────────────────────────────────────────────────

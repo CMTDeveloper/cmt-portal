@@ -3,7 +3,7 @@ import { ADULT_STUDY_CLASS } from '@cmt/shared-domain';
 import type { FamilyDoc, MemberDoc } from '@cmt/shared-domain/setu';
 import {
   getOpenOfferingsForFamily,
-  type OpenOffering,
+  resolveCurrentOffering,
 } from '@/features/setu/enrollment/get-open-offerings';
 import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
 import { getDonations } from '@/features/setu/donations/get-donations';
@@ -15,56 +15,6 @@ import type { AdultClassGateInput } from './needs-selection';
 
 /** Nobody is a teacher yet - used to ask selectableAdults "who COULD be picked". */
 const NOBODY: ReadonlySet<string> = new Set();
-
-function byStartDateThenOid(a: OpenOffering, b: OpenOffering): number {
-  const d = a.startDate.getTime() - b.startDate.getTime();
-  return d !== 0 ? d : a.oid.localeCompare(b.oid);
-}
-
-/**
- * THE current adult-study-class offering for a family, or `null`.
- *
- * `getOpenOfferingsForFamily` deliberately merges two result sets - the family's
- * own centre's offerings and the location-less (online) ones - deduped through a
- * Map and sorted by `startDate` ascending. Taking `[0]` therefore means
- * "earliest", and that is wrong twice over:
- *
- * 1. **On an exact startDate tie the winner is decided by Map insertion order**
- *    (`get-open-offerings.ts:100-101` fills located first). Nothing states or
- *    tests that, so swapping those two lines would silently retarget the gate
- *    and the `/adult-class` screen with it.
- * 2. **"Earliest" hands a located family to the online class** whenever the
- *    online one starts first. The family is then gated on, and enrolled into, a
- *    class that is not their centre's.
- *
- * So the rule is explicit: **the family's own centre wins outright; `startDate`
- * only orders within a group.** Location is a hard attendance constraint - a
- * Brampton family attends in Brampton - while start date is a soft heuristic.
- * The two failure directions are not symmetric: preferring the centre can at
- * worst enroll a family into their own centre's later term (benign, and
- * visible), whereas preferring the earliest can put them in the wrong class
- * entirely. Location-less offerings remain the fallback for a family whose
- * centre runs none, which is the case this merge exists to serve.
- *
- * `oid` breaks a remaining exact tie so two same-day offerings resolve the same
- * way in every environment rather than by Firestore document order.
- *
- * Exported because the `/adult-class` route MUST enroll into the same `oid` this
- * gate fired on. Two independent resolutions would drift.
- */
-export function resolveCurrentOffering(
-  offerings: readonly OpenOffering[],
-  familyLocation: string | null | undefined,
-): OpenOffering | null {
-  if (offerings.length === 0) return null;
-  // Compared against the family's location rather than `location != null`: the
-  // merged array is only ever "at this location" plus "location-less", but a
-  // future third case must not silently read as the family's own.
-  const located =
-    familyLocation != null ? offerings.filter((o) => o.location === familyLocation) : [];
-  const pool = located.length > 0 ? located : offerings;
-  return [...pool].sort(byStartDateThenOid)[0] ?? null;
-}
 
 export interface AdultClassGateSubject {
   family: FamilyDoc;

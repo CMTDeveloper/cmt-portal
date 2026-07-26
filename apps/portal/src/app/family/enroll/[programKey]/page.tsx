@@ -12,7 +12,7 @@ import type { OfferingDoc, PaymentSource } from '@cmt/shared-domain';
 import { getProgram } from '@/features/setu/programs/get-programs';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
-import { getOpenOfferingsForFamily } from '@/features/setu/enrollment/get-open-offerings';
+import { getOpenOfferingsForFamily, resolveCurrentOffering } from '@/features/setu/enrollment/get-open-offerings';
 import { getLegacyPaymentStatus } from '@/features/setu/donations/legacy-payment';
 import { getDonations } from '@/features/setu/donations/get-donations';
 
@@ -158,8 +158,14 @@ export default async function ProgramEnrollPage({ params }: Props) {
     getDonations(family.fid),
   ]);
 
-  // Auto-select the first (or only) open offering. For BV this is always one.
-  const defaultOffering = openOfferings[0] ?? null;
+  // Auto-select the family's offering. NOT `openOfferings[0]`: that array merges
+  // this centre's offerings with the location-less (online) ones, so `[0]` means
+  // "earliest" and silently defaults a located family to an online class that
+  // happens to start first. It also has to agree with the adult-class gate,
+  // which fires on one specific oid and sends the family to /adult-class to
+  // enroll in it - two different answers would ask them to choose, then default
+  // this page to a different class.
+  const defaultOffering = resolveCurrentOffering(openOfferings, family.location);
 
   // Find the active enrollment for THIS program that matches an open offering.
   // A stale enrollment from a prior term (oid not in openOfferings) must not

@@ -102,3 +102,53 @@ export async function getOpenOfferingsForFamily(
 
   return [...byOid.values()].sort((a, b) => a.startDate.getTime() - b.startDate.getTime());
 }
+
+function byStartDateThenOid(a: OpenOffering, b: OpenOffering): number {
+  const d = a.startDate.getTime() - b.startDate.getTime();
+  return d !== 0 ? d : a.oid.localeCompare(b.oid);
+}
+
+/**
+ * THE one offering a family should be enrolled into, out of `getOpenOfferingsForFamily`.
+ *
+ * Every caller used to write `openOfferings[0]`, i.e. "earliest", which is wrong
+ * twice over because that array is a MERGE of the family's own centre's
+ * offerings and the location-less (online) ones:
+ *
+ * 1. **On an exact `startDate` tie the winner is decided by Map insertion
+ *    order** (`:100-101` fills located first). Nothing stated or tested that, so
+ *    swapping those two lines would silently retarget every caller.
+ * 2. **"Earliest" hands a located family to the online class** whenever the
+ *    online one starts first - they are then shown, and enrolled into, a class
+ *    that is not their centre's.
+ *
+ * The rule is therefore explicit: **the family's own centre wins outright;
+ * `startDate` only orders within a group.** Location is a hard attendance
+ * constraint - a Brampton family attends in Brampton - while start date is a
+ * soft heuristic. The failure directions are not symmetric: preferring the
+ * centre can at worst pick that centre's later term (benign and visible),
+ * whereas preferring the earliest can pick an entirely different class.
+ * Location-less offerings stay the fallback for a family whose centre runs
+ * none, which is the case this merge exists to serve.
+ *
+ * `oid` breaks a remaining exact tie so two same-day offerings resolve the same
+ * way in every environment rather than by Firestore document order.
+ *
+ * **Use this instead of `[0]` anywhere the answer must agree with somewhere
+ * else.** The adult-class gate fires on this oid and `/adult-class` enrolls into
+ * it; if the generic enroll page disagreed, a family could be asked to choose,
+ * then land on a page defaulted to a different offering.
+ */
+export function resolveCurrentOffering(
+  offerings: readonly OpenOffering[],
+  familyLocation: Location | null | undefined,
+): OpenOffering | null {
+  if (offerings.length === 0) return null;
+  // Compared against the family's location rather than `location != null`: the
+  // merged array is only ever "at this location" plus "location-less", but a
+  // future third case must not silently read as the family's own.
+  const located =
+    familyLocation != null ? offerings.filter((o) => o.location === familyLocation) : [];
+  const pool = located.length > 0 ? located : offerings;
+  return [...pool].sort(byStartDateThenOid)[0] ?? null;
+}
