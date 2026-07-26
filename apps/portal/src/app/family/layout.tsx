@@ -8,17 +8,10 @@ import { MobileBottomNav } from '@/features/family/components/mobile-bottom-nav'
 import { LoadingOm } from '@/components/chrome/loading-om';
 import { SchoolYearBadge } from '@/components/chrome/school-year-badge';
 import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
-import {
-  isAdmin,
-  isTeacher,
-  incompleteMembers,
-  membersRequiringCompletion,
-  isFamilyAddressComplete,
-  needsCentreConfirmation,
-  type WithRole,
-} from '@cmt/shared-domain';
-import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
-import { getDisclaimerStateForFamily } from '@/features/setu/disclaimers/acceptance';
+import { isAdmin, isTeacher, type WithRole } from '@cmt/shared-domain';
+import { profileGatePending, earlierGatesPending, getDisclaimerStateCached } from './_helpers/gates';
+import { loadAdultClassGateDataFailSoft } from '@/features/setu/adult-class/load-gate-data';
+import { needsAdultClassSelection } from '@/features/setu/adult-class/needs-selection';
 import { flags } from '@/lib/flags';
 
 // Route the gate redirects an incomplete family to. It lives at a TOP-LEVEL
@@ -49,17 +42,13 @@ export async function ProfileCompletionGate() {
   // Scope through the shared helper so this gate and the /complete-profile form
   // can never disagree on who blocks whom. A manager is responsible for their own
   // record + non-manager dependents (NOT invited co-managers, who self-complete),
-  // plus the required family home address.
-  const scope = membersRequiringCompletion(data.members, data.currentMid, data.isManager);
-  const incomplete =
-    incompleteMembers(scope).length > 0 ||
-    (data.isManager && !isFamilyAddressComplete(data.family)) ||
-    // Migrated on a guessed centre (spec 1.9c). Manager-scoped via the shared
-    // helper, like the address check above. WHENEVER YOU ADD A CONDITION HERE,
-    // ADD IT TO DisclaimerGate BELOW TOO - see the invariant stated there.
-    needsCentreConfirmation(data.family, data.isManager);
-
-  if (incomplete) redirect(COMPLETE_PROFILE_PATH);
+  // plus the required family home address and an unconfirmed migrated centre.
+  //
+  // The condition list itself lives in profileGatePending() because every gate
+  // ordered after this one has to ask the same question, and a per-gate copy is
+  // what let P6's centre-confirmation condition be added to one place and missed
+  // in another. Add new conditions THERE, not here.
+  if (profileGatePending(data)) redirect(COMPLETE_PROFILE_PATH);
   return null;
 }
 
@@ -79,20 +68,44 @@ export async function DisclaimerGate() {
   // member fields, the required family home address, OR an unconfirmed centre —
   // all three are profile data collected before disclaimers).
   //
-  // THIS TEST IS A DELIBERATE MIRROR of ProfileCompletionGate's, so Suspense
-  // resolution order cannot decide where the user lands. Every condition there
-  // must appear here. Miss one and the two desynchronise: a manager who needs
-  // centre confirmation AND has a stale disclaimer looks "profile complete" to
-  // this gate, which redirects to /acknowledgements, and whichever gate throws
-  // first wins the race.
-  if (
-    incompleteMembers(data.members).length > 0 ||
-    !isFamilyAddressComplete(data.family) ||
-    needsCentreConfirmation(data.family, data.isManager)
-  ) return null;
+  // The SAME function ProfileCompletionGate uses, not a mirror of it, so Suspense
+  // resolution order cannot decide where the user lands and the two cannot
+  // desynchronise. This previously hand-copied the condition list AND used a
+  // wider member scope than the profile gate; see profileGatePending() for what
+  // that disagreement was hiding.
+  if (profileGatePending(data)) return null;
 
-  const state = await getDisclaimerStateForFamily(portalFirestore(), data.family);
+  const state = await getDisclaimerStateCached(data.family);
   if (!state.accepted) redirect('/acknowledgements');
+  return null;
+}
+
+// Adult Study Class gate (P4). Runs on every /family/* render AFTER the profile
+// and disclaimer gates. Per-family: only the MANAGER chooses. Redirects to the
+// top-level /adult-class (OUTSIDE this layout, like /complete-profile and
+// /acknowledgements) when the family still owes a selection. Flag-gated OFF by
+// default.
+export async function AdultClassGate() {
+  if (!flags.setuAdultClass) return null;
+
+  const data = await getCurrentFamily();
+  if (!data) return null; // unauthenticated — middleware handles it
+
+  // Defer to BOTH earlier gates. Not a hand-copied mirror: earlierGatesPending
+  // composes profileGatePending with the disclaimer read, and respects the
+  // setuDisclaimers flag so turning disclaimers OFF cannot silently disable this
+  // gate too.
+  if (await earlierGatesPending(data)) return null;
+
+  // The FAIL-SOFT loader, never loadAdultClassGateDataOrThrow. This gate
+  // redirects on every /family/* render, so a transient Firestore error must
+  // cost the family an un-asked question rather than a 500 across the portal.
+  // The two variants have identical signatures, so nothing but this line and its
+  // test stops the wrong one being pasted here.
+  const gate = await loadAdultClassGateDataFailSoft(data);
+  if (!gate) return null;
+
+  if (needsAdultClassSelection(gate)) redirect('/adult-class');
   return null;
 }
 
@@ -162,6 +175,16 @@ export default function FamilyLayout({ children }: { children: React.ReactNode }
           /disclaimers (a not-yet-accepted manager) or no-ops. */}
       <Suspense fallback={null}>
         <DisclaimerGate />
+      </Suspense>
+
+      {/* Adult Study Class gate (P4). Its own Suspense boundary; ordered AFTER
+          the disclaimer gate. Renders nothing — it either redirects to
+          /adult-class or no-ops. MOUNTING IS THE WHOLE FEATURE: every predicate
+          and route test passes while this element is absent, so
+          __tests__/adult-class-gate.test.tsx asserts this JSX exists and sits
+          after <DisclaimerGate />. */}
+      <Suspense fallback={null}>
+        <AdultClassGate />
       </Suspense>
 
       {/* Mobile: pass-through. Each page renders its own mobile chrome.

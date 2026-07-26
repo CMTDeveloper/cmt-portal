@@ -144,3 +144,36 @@ describe('DisclaimerGate', () => {
     await expect(DisclaimerGate()).rejects.toThrow('NEXT_REDIRECT:/acknowledgements');
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BEHAVIOUR CHANGE (P4 Task 8): this gate now uses membersRequiringCompletion,
+// the same narrow scope as ProfileCompletionGate, instead of incompleteMembers
+// over ALL members. The two used to disagree, and the disagreement was a hole.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('DisclaimerGate - pending-invite scope (was a hole)', () => {
+  // A pending co-manager invitee has no session and completes their own profile
+  // after accepting, so they are nobody's completion task. Under the OLD wide
+  // scope this gate saw their incomplete row and deferred to a profile gate that
+  // - using the narrow scope - was never going to fire. Neither gate ran, and
+  // the family never accepted the disclaimers at all.
+  it('redirects a manager whose only incomplete member is a PENDING invitee', async () => {
+    const pending = adult({
+      mid: 'm-invitee', uid: null, manager: true, inviteStatus: 'pending',
+      foodAllergies: null, volunteeringSkills: [],
+    });
+    mockGetCurrentFamily.mockResolvedValue(family([adult(), pending]));
+    mockGetState.mockResolvedValue({ accepted: false });
+
+    await expect(DisclaimerGate()).rejects.toThrow('NEXT_REDIRECT:/acknowledgements');
+  });
+
+  // The narrow scope must still block on a REAL incomplete member.
+  it('still defers when a non-pending member is incomplete', async () => {
+    mockGetCurrentFamily.mockResolvedValue(family([adult({ foodAllergies: null })]));
+    mockGetState.mockResolvedValue({ accepted: false });
+
+    expect(await DisclaimerGate()).toBeNull();
+    expect(mockRedirect).not.toHaveBeenCalled();
+  });
+});
+
