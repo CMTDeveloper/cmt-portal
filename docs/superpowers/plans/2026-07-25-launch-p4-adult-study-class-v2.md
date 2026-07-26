@@ -4,7 +4,7 @@
 
 **Goal:** A family that has paid its Bala Vihar donation picks at least one non-teaching adult for the Adult Study Class at no cost; a family with no children pays a configurable `$101`. The ask lives on the donation success page, with a persistent gate as the fallback.
 
-**Architecture:** `enrollFamily` gains explicit `enrolledMids`, `suggestedAmountOverride` and `membershipMode` parameters, and learns to **reconcile** an existing active enrollment rather than no-op on it. A pure `needsAdultClassSelection(family)` predicate implements the spec's conditions plus an "is there an offering at all" precondition. The ask renders on `/family/donate/success` first; `AdultClassGate` - flag-gated, ordered after the profile and disclaimer gates, and exempting the success page - redirects skippers to a top-level `/adult-class`.
+**Architecture:** `enrollFamily` gains explicit `enrolledMids`, `suggestedAmountOverride` and `membershipMode` parameters, and learns to **reconcile** an existing active enrollment rather than no-op on it. A pure `needsAdultClassSelection(family)` predicate implements the spec's conditions plus an "is there an offering at all" precondition. The ask renders on `/donate/success` first - a TOP-LEVEL route, moved out of the `/family` layout by Task 8 Step 4, because a gate cannot safely exempt a path from inside a layout (a server component has no pathname). `AdultClassGate` - flag-gated, ordered after the profile and disclaimer gates - redirects skippers to a top-level `/adult-class`.
 
 **Tech Stack:** Next.js 16 App Router, Firebase Admin Firestore, Zod, Vitest, Playwright.
 
@@ -74,7 +74,7 @@
 | `packages/shared-domain/src/auth/can-access-route.ts` | `/adult-class` + `/api/setu/adult-class` | 7 |
 | `apps/portal/src/lib/flags.ts`, `turbo.json` | `flags.setuAdultClass`, default off | 8 |
 | `apps/portal/src/app/family/layout.tsx` | `AdultClassGate`, ordered and deferring | 8 |
-| `apps/portal/src/app/family/donate/success/page.tsx` | the ask, **first**, above the pledge | 9 |
+| `apps/portal/src/app/donate/success/page.tsx` **(moved out of `/family` by Task 8 Step 4)** | the ask, **first**, above the pledge | 9 |
 | `apps/portal/src/app/api/setu/enrollments/route.ts:52-62` | BV waiver on the generic surface | 10 |
 | `apps/portal/src/features/setu/roster/payment.ts:7-10` + callers | `expected === 0` classification | 11 |
 
@@ -468,7 +468,7 @@ All six risky lines were mutation-tested; each mutation fails the suite.
 | Finding | Where it belongs |
 |---|---|
 | **The `[0]` divergence in the enroll page and the kiosk.** CONFIRMED at `enroll/[programKey]/page.tsx:162` (no picker - it commits silently) and `auto-enroll-bala-vihar.ts:28`. Codex called it a permanent loop; verified it is not (the `/adult-class` screen enrolls into the resolved oid, so the gate does clear) but it does double-enroll and mis-default. **FIXED in `e2e6238`** - both adopted the shared resolver. | closed |
-| **Caching `getEnrollments`/`getDonations` is NOT the same risk as caching a display read.** This loader's output drives a REDIRECT. If the tag is not invalidated precisely on Stripe-webhook completion and on enroll/member-edit writes, a family who just paid gets re-gated until it fires - a visible, confusing bounce, far worse than a stale dashboard number. | **the caching task's acceptance criteria** |
+| **Caching `getEnrollments`/`getDonations` is NOT the same risk as caching a display read.** This loader's output drives a REDIRECT. If the tag is not invalidated precisely on Stripe-webhook completion and on enroll/member-edit writes, a family who just paid gets re-gated until it fires - a visible, confusing bounce, far worse than a stale dashboard number. **Both are uncached TODAY, which is the only reason the post-save render is correct**: after Save, `AdultClassGate` re-queries fresh, sees the new `enrolledMids`, and condition 4 clears. Add `'use cache'` without exact invalidation and that becomes a redirect loop straight back to `/adult-class`. Also note the loader has **no already-answered fast path** - condition 4 is evaluated at the END of the fan-out, so a family who has ALREADY chosen still pays 6-10 uncached round trips on every `/family/*` render, permanently, once the flag is on. | **the caching task's acceptance criteria** |
 | **`resolveCurrentOffering`'s fallback branch trusted its input.** `pool = located.length > 0 ? located : offerings` fell back to the WHOLE array, not the location-less subset. `getOpenOfferingsForFamily` upholds that invariant, but the function is exported for reuse and `getOpenOfferings({programKey})` returns every centre's - hand that in for a family whose own centre runs nothing and it resolves to **another centre's in-person class**, worse than the "earliest" bug it exists to fix. Invisible to mutation testing: no fixture contained a third real location, so the distinction was not constructible. **FIXED `61778c3`** - both branches now name the location they accept, plus two Scarborough fixtures. | closed |
 | **Task 7's screen must NOT reuse the loader's `null` as its own truth.** The gate fails open on a read error (correct - never 500 the portal). If `/adult-class` also treated `null` as "nothing to select" and redirected back to `/family`, an INTERMITTENT read failure would ping-pong the two routes - the `ERR_TOO_MANY_REDIRECTS` shape already seen in this codebase. The screen needs its own error state. | **Task 7 Step 3** |
 | No `await connection()` needed in the loader - but only because its caller resolves `getCurrentFamily()` (which calls `cookies()`, Next's own dynamic bailout) first. That is a property of the CALLER's order, not of the loader. | **Task 8** - state it in the gate |
@@ -672,6 +672,18 @@ mobile changelog entry** the plan did not anticipate: the Stripe redirect target
 changed, and a mobile client matching on `/family/donate/success` to detect
 payment completion would strand the user. Recorded at `47663d1`.
 
+**Why Step 4 could not be deferred, quantified.** Independent audit worked out the
+race precisely: `DonateSuccessPage` marks the donation completed with ONE
+Firestore write, while `AdultClassGate` on the SAME render spends 6-10 round
+trips. The gate's chain is strictly slower, so by the time its fresh
+`getDonations()` resolves the donation is already `completed`, `bvPaid` flips
+true, and a family with a selectable adult is redirected to `/adult-class`
+**without ever seeing "Thank you for your donation"**. The asymmetry makes that
+the LIKELY outcome, not an edge case. Shipping Task 8 Steps 1-3 without Step 4 -
+even just to smoke-test the flag in UAT - would have eaten the receipt page the
+gate was supposed to leave alone. Both shipped in one push; the intermediate
+state never reached `origin` (the first push attempt failed the build).
+
 **The plan's "the move is nearly free" was WRONG, and the pre-push build caught
 it.** It reasoned from the page rendering its own `CspRoot` and using no layout
 chrome - but the `/family` layout also wrapped children in a `<Suspense>`
@@ -700,7 +712,7 @@ the move (each authorization entry). All fail the suite.
 
 - [ ] **Step 1: Write the failing tests**
 - [x] **Step 2: Run to verify they fail**
-- [ ] **Step 3: Render the ask on `/family/donate/success`, above the pledge ask**
+- [ ] **Step 3: Render the ask on `/donate/success`, above the pledge ask** (top-level since Task 8 Step 4 - the old `/family/donate/success` no longer exists)
 
 Adult-class selection **first** - quick, free, part of completing enrollment. The pledge ask **second and quieter**. Reversing them leads with a money ask straight after a $500 payment.
 
