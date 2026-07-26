@@ -346,18 +346,18 @@ Note the asymmetric invariant deliberately: `enroll-family.ts:135-137` refuses t
 
 **Two things v1 left undefined, both of which decide whether families get stuck.**
 
-- [ ] **Step 1: Write the failing tests - all seven matrix rows plus the two preconditions**
+- [x] **Step 1: Write the failing tests - all seven matrix rows plus the two preconditions**
 
 Rows 3, 4 and 7 all resolve through the empty selectable set. **Row 7 must be asserted twice over** (no BV enrollment **and** no selectable adults), independently - spec §2.3 says so explicitly, because a later change to one could silently start prompting a childless teacher couple.
 
-- [ ] **Step 2: Run to verify they fail**
-- [ ] **Step 3: Implement condition 0 - is there an offering at all**
+- [x] **Step 2: Run to verify they fail**
+- [x] **Step 3: Implement condition 0 - is there an offering at all**
 
 Spec §2.1's five conditions never check that a current adult-study-class offering is **reachable**. Resolve it first via `getOpenOfferingsForFamily('adult-study-class', family.location)` and return `false` when there is none.
 
 Without this: the day the launch offering expires, or someone toggles `enabled` off, or a location is missed, **every paid Bala Vihar manager at that location is redirected to `/adult-class`, cannot enroll, and cannot reach `/family` at all.** There is no escape hatch in the design without it.
 
-- [ ] **Step 4: Define condition 3 - "the BV donation is paid"**
+- [x] **Step 4: Define condition 3 - "the BV donation is paid"**
 
 v1 named this and never defined it, and the two obvious helpers are both wrong:
 
@@ -385,7 +385,7 @@ const bvPaid = bvPaidByDonation || legacyPaid || source === 'teacher-managed';
 
 Note `getLegacyPaymentStatus` reads the **entire prod RTDB roster** (`legacy-payment.ts:26-38`). It is `use cache`-backed, but it is a real cost on a gate that runs on every `/family/*` render - see Step 6.
 
-- [ ] **Step 5: Implement conditions 1, 2, 4, 5, and define "current term" concretely**
+- [x] **Step 5: Implement conditions 1, 2, 4, 5, and define "current term" concretely**
 
 Spec §4.6.1 says condition 4 is "no active enrollment **for the current term**" and never says what identifies a term. `getOpenOfferingsForFamily` returns `OfferingDoc[]` and deliberately **merges two result sets** - located (`get-open-offerings.ts:96`) and location-less (`:90`), deduped at `:99-103` - so it can return more than one open adult-class offering the moment an admin creates a location-less one alongside a per-centre one.
 
@@ -395,7 +395,7 @@ With two open offerings and no definition, a family enrolled in offering A is st
 
 Select Bala Vihar via `selectBalaViharEnrollment`, never "the first active enrollment".
 
-- [ ] **Step 6: Give the predicate a real signature, and budget the reads**
+- [x] **Step 6: Give the predicate a real signature, and budget the reads**
 
 This plan's own architecture line calls it "a **pure** `needsAdultClassSelection(family)` predicate", and Task 8 criticises `DisclaimerGate` for "an extra Firestore read on every `/family/*` render". As specified it is neither pure nor cheap - per render of every `/family/*` page it needs:
 
@@ -411,14 +411,73 @@ Roughly 7+ Firestore ops added to every family page load, against the ~1 the pla
 
 Split it: a genuinely pure `needsAdultClassSelection({ family, members, enrollments, donations, currentOffering, teacherAssignedMids })`, and one `loadAdultClassGateData(fid)` that does the I/O. State the render-cost budget in Task 8 and measure it in Task 12.
 
-- [ ] **Step 7: Run and commit**
+- [x] **Step 7: Run and commit**
+
+---
+
+### Task 6 as SHIPPED (`42ca6c8` predicate, `2b087ae` loader, `e2e6238` resolver)
+
+**Step 5's "current term" definition was WRONG and is superseded.** The plan said
+*"`openOfferings[0]` (earliest `startDate`) is THE current offering"*. That array
+MERGES the family's own centre's offerings with the location-less (online) ones,
+so `[0]` resolves an exact tie by the dedupe Map's insertion order and, worse,
+hands a located family to an online class whenever that one starts first - the
+family would be gated on, and enrolled into, a class that is not their centre's.
+
+The shipped rule is **`resolveCurrentOffering`: the family's own centre wins
+OUTRIGHT; `startDate` only orders within a group; `oid` breaks an exact tie.**
+Location is a hard attendance constraint, start date a soft heuristic, and the
+two failure directions are not symmetric - preferring the centre can at worst
+pick that centre's later term (benign, visible), preferring the earliest picks a
+different class entirely. It lives in `enrollment/get-open-offerings.ts`, beside
+the query it interprets, NOT in `adult-class/`, because two other callers had the
+same `[0]` bug (`family/enroll/[programKey]/page.tsx:162`, which has no picker,
+and `check-in/auto-enroll-bala-vihar.ts:28` at the door) and a second resolver
+that disagreed with the gate's would ask a family to choose and then default them
+elsewhere. **Task 7 MUST use `resolveCurrentOffering`, never `[0]`.**
+
+**Step 6's signature was impossible as written.** `loadAdultClassGateData(fid)`
+cannot work: `isManager` comes from the session claims and is not derivable from
+a fid. Shipped as `loadAdultClassGateData({ family, members, isManager })`,
+matching `loadFamilyDashboard(family, members)`.
+
+**It returns `null` on any read failure**, logged - this gate REDIRECTS on every
+`/family/*` render, so a transient Firestore error must cost an un-asked question
+rather than a 500 across the portal. `null` therefore means "do not gate" for
+both reasons. **Task 7's route must do its OWN in-handler manager check first**
+(it must anyway, per the three-gate rule), so by the time it calls the loader a
+`null` means no-offering / nobody-selectable / read-failure → refuse, don't 500.
+
+**Read budget as shipped**, cheapest exits first: non-manager → 0 reads; nobody
+selectable → 0 reads; no open offering → 2 queries and stop. Only a manager with
+an eligible adult and an open offering pays the full fan-out. Two corrections to
+the audit's estimate: `getEnrollments` is **unbounded**, not constant (1 doc read
+per distinct `oid` across the family's whole history, no year/status filter), and
+`getLegacyPaymentStatus` is skipped entirely unless the BV offering is
+legacy-sourced (`isLegacyBvPeriod`, the same predicate `load-dashboard.ts:98`
+uses) and is `use cache`-backed even then.
+
+`ADULT_STUDY_CLASS` is now a shared-domain constant, because the resolver, Task
+7's route and Task 10's fee rule must agree and a typo in any one is invisible -
+the query just returns nothing and the family is never asked.
+
+All six risky lines were mutation-tested; each mutation fails the suite.
+
+### Fourth audit (Task 6 loader, Codex 2026-07-26) - carry forward
+
+| Finding | Where it belongs |
+|---|---|
+| **The `[0]` divergence in the enroll page and the kiosk.** CONFIRMED at `enroll/[programKey]/page.tsx:162` (no picker - it commits silently) and `auto-enroll-bala-vihar.ts:28`. Codex called it a permanent loop; verified it is not (the `/adult-class` screen enrolls into the resolved oid, so the gate does clear) but it does double-enroll and mis-default. **FIXED in `e2e6238`** - both adopted the shared resolver. | closed |
+| **Caching `getEnrollments`/`getDonations` is NOT the same risk as caching a display read.** This loader's output drives a REDIRECT. If the tag is not invalidated precisely on Stripe-webhook completion and on enroll/member-edit writes, a family who just paid gets re-gated until it fires - a visible, confusing bounce, far worse than a stale dashboard number. | **the caching task's acceptance criteria** |
+| No `await connection()` needed in the loader - but only because its caller resolves `getCurrentFamily()` (which calls `cookies()`, Next's own dynamic bailout) first. That is a property of the CALLER's order, not of the loader. | **Task 8** - state it in the gate |
+| `getOpenOfferings:60` branches on `!== undefined`, not `!= null`, so a leaked `undefined` location would drop the location filter and return EVERY centre's offerings. The loader coerces `family.location ?? null` at its boundary (`get-family-by-fid.ts:31` maps location with no fallback, so `undefined` is reachable despite the type). | closed - covered by a test |
 
 ---
 
 ## Task 7: The `/adult-class` route
 
 - [ ] **Step 1: Write the failing tests**
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 - [ ] **Step 3: Build `app/adult-class/page.tsx`**
 
 Top-level, outside `/family` (**R1**). Multi-select, minimum one, preselected when there is exactly one. Copy must explain **why** - one parent needs to be present during Bala Vihar classes - per spec §4.3; a family reading "you must pick an adult" with no reason reads it as bureaucracy. Exact wording is spec open item O7.
@@ -487,7 +546,7 @@ This is what makes the owner's requirement work: **the gate stays persistent, an
 **v1 implemented a hard redirect gate only, and spec §4.3 asks for something else.** The consequences are concrete: `app/family/donate/success/page.tsx` is **inside** the `/family` layout, so once the BV donation reads paid, v1's gate redirects away from it - and P5's monthly-pledge card, which is added to that exact file, **would never render for a gated family**. Spec §4.3's own "the order matters, adult-class first, pledge second" becomes unimplementable.
 
 - [ ] **Step 1: Write the failing tests**
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 - [ ] **Step 3: Render the ask on `/family/donate/success`, above the pledge ask**
 
 Adult-class selection **first** - quick, free, part of completing enrollment. The pledge ask **second and quieter**. Reversing them leads with a money ask straight after a $500 payment.
@@ -563,7 +622,7 @@ Traced against the fee rule:
 This is not a truthiness bug - the `?? 0` and `typeof === 'number'` reads all preserve a literal `0` correctly. It is the `expected <= 0` classifier.
 
 - [ ] **Step 1: Write the failing tests** with a **2-enrollment** fixture (N=2 rule), covering BV+ASC, ASC-only-after-BV-cancelled, and ASC-only-never-BV.
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 - [ ] **Step 3: Decide and implement, across all FOUR callers**
 
 Recommended: `expected === 0 && activeCount > 0` classifies as `paid` - the family owes nothing and has paid nothing, which is settled, not unknown.
