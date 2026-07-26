@@ -3,7 +3,7 @@
 **Written 2026-07-25 at HEAD `1c5f31f`, at the end of the planning + rebuild pass.**
 Start here. Read `docs/superpowers/reviews/README.md` second.
 
-**Status as of 2026-07-26 (HEAD `27b71a3`): Phases 0 and 1 are COMPLETE and UAT-verified. ~39 of ~59 tasks remain, 8 days to launch.**
+**Status as of 2026-07-26 (HEAD `f65e8c7`): Phases 0 and 1 COMPLETE, and P6 COMPLETE - all UAT-verified. ~32 of ~59 tasks remain, 8 days to launch.**
 
 | Plan | Done | Remaining |
 |---|---|---|
@@ -12,9 +12,9 @@ Start here. Read `docs/superpowers/reviews/README.md` second.
 | **P2** teacher/visitors/roster | Tasks 1-2 (the two live defects) | **Tasks 3-9** - see items 21-22 below, which this doc previously omitted |
 | **P5** monthly pledge | Task 1 Steps 1-3 (UAT rules) | Tasks 2-13. **Steps 4-5 are now a NO-OP** - see Blockers |
 | **P4** adult study class | - | all 12 |
-| **P6** migration/dormant/centre | - | all 7 |
+| **P6** migration/dormant/centre | **all 7 tasks** | - |
 
-**▶ NEXT: item 15, P6 Task 1.** P6 is the only remaining cutover-BLOCKING work (it changes what the production migration imports, and its centre prompt is the sole thing stopping 299 unknown-centre families being assigned to Brampton permanently), and **P6 Task 5 must precede P4 Task 8**.
+**▶ NEXT: item 17, P4 Task 1.** P6 is done, so **no cutover-BLOCKING work remains**. P6 Task 5 shipped the `layout.tsx:76` fix that **P4 Task 8 must rebase onto** - if you extract a shared `earlierGatesPending(data)` there, it MUST include `needsCentreConfirmation(data.family, data.isManager)` or a family needing centre confirmation gets routed to `/adult-class`.
 
 ---
 
@@ -75,12 +75,12 @@ Independent of Track A except Task 9.
 
 **P6 Task 5 must land before P4 Task 8.** Both edit `family/layout.tsx`, and if P6 lands without fixing the mirrored guard at `:76`, P4 copies the incomplete version. Both also edit `family/__tests__/layout.test.tsx` and will conflict textually in parallel worktrees.
 
-15. **P6 Tasks 1-4** - dormancy predicate + the parser's `locationDefaulted` (Task 1 Step 3b - without it the whole centre half is inert), the flag through **both** hand-maps, the migration skip, the PATCH.
-16. **P6 Task 5** - the gate, **both copies**.
+15. ~~**P6 Tasks 1-4**~~ **DONE 2026-07-26** - dormancy predicate + `mapLocationDetailed`, the flag through **both** hand-maps, the migration skip (+ the reconciler fix so the roster does not read 299-missing forever), the PATCH.
+16. ~~**P6 Task 5**~~ **DONE** - the gate, both copies, via a shared `needsCentreConfirmation()` predicate.
 17. **P4 Tasks 1-7** - schema, `enrollFamily` params, reconcile, prune, selectable adults, the predicate, the route.
 18. **P4 Task 8** - `AdultClassGate`, rebased onto P6's `:76` fix.
 19. **P4 Tasks 9-12** - the move to `/donate/success`, the generic-route waiver, the payment classifier, E2E.
-20. **P6 Tasks 6-7** - the four form edits and E2E.
+20. ~~**P6 Tasks 6-7**~~ **DONE** - the four form edits and a 5/5 deployed-UAT E2E. (Ran ahead of P4 rather than after it: they are P6-internal and share no files with P4.)
 21. **P2 Tasks 6-9** - `/welcome/visitors` + nav, the visitor grade filter, the roster Reset button, the guest->teacher E2E.
 22. **P2 Tasks 3-5** - the attendance UI rebuild. **Sequenced last on purpose: this is cut candidate #5** and the single largest piece in the batch. Take it only if the week has room.
 
@@ -120,7 +120,7 @@ Each is written into its plan as an explicit open decision, not silently resolve
 2. **P4** - Task 11 makes free-program families read **Paid** instead of `unknown` on the default `/welcome/roster` view. That is a visible change to the primary staff screen.
 3. **P4** - is "Skip" on the success page a real dismissal (needs persistence) or just "not now" (the gate brings them back)? Currently the latter.
 4. **P3** - emails and phone numbers are interpolated into `console.log` in `resolve-sender.ts`, `sns.ts`, `send-code/route.ts` and become Sentry breadcrumb **messages**. Key-based redaction cannot reach positional string args. Open half of a Medium audit finding.
-5. **P6** - the 299 skipped dormant families are **not findable by welcome-team** at the desk (staff search has no legacy fallback). Recorded as an accepted limit.
+5. ~~**P6** - the 299 skipped dormant families are **not findable by welcome-team** at the desk~~ **ACCEPTED + RECORDED 2026-07-26** in runbook §6 step 2. Confirmed in code: `searchFamilies` and `/welcome/roster` query only `collection('families')` with no legacy fallback, unlike sign-in and the kiosk. All 299 are dormant with no active child, so expected desk traffic is near zero.
 6. **The date.** See below.
 
 ---

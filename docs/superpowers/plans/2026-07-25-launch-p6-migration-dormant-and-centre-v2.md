@@ -12,6 +12,20 @@
 
 **Spec:** `docs/superpowers/specs/2026-07-24-aug-3-launch-batch-design.md` §1.9a-c. **Both halves are cutover-blocking.**
 
+> **STATUS: ✅ COMPLETE 2026-07-26.** All 7 tasks shipped and verified against deployed UAT (E2E 5/5). Commits `cd2ca2c`, `25b8431`, `05ef885`, `634d158`, `f775828`, `f65e8c7`. Runbook §3/§6/§10/§14 updated.
+>
+> **Deviations from this plan, all verified against the code rather than assumed:**
+> 1. **`mapLocation` had NO other callers.** The plan kept it as a thin wrapper "so no existing caller changes"; `:224` was its only call site, so the wrapper was dead code and lint failed. Deleted.
+> 2. **The gate tests are in TWO files**, `profile-completion-gate.test.tsx` and `disclaimer-gate.test.tsx` - not the single `app/family/__tests__/layout.test.tsx` the plan named. Better for the P4 conflict the plan worried about: the two tasks touch different files.
+> 3. **Task 3 Step 4 mechanism: option 2 (recompute), not option 1 (persist).** A persisted skip set goes stale or partial after any `--limit`/`--fid` run, and a reconciler that silently depends on a script having been run correctly is worse than one that recomputes. Recomputing is nearly free - `/roster` is a single TTL-cached read `listAllFamilies()` already makes. Both consumers now share `listDormantLegacyFids()`, so they cannot disagree.
+> 4. **The centre condition is a SHARED predicate**, `needsCentreConfirmation(family, isManager)` in shared-domain, rather than the expression being written out at each of the six sites. Task 6 Step 4 asked that the four form sites not drift; extending that to the two gates costs nothing and removes the drift risk entirely.
+> 5. **The locations fetch is conditional on the flag.** An existing test asserts a plain member triggers no fetch at all, so an unconditional mount fetch would have broken it - and the majority of visitors are never asked anyway.
+> 6. **The flag clears as an explicit `false`, not `FieldValue.delete()`**, so "asked and answered" stays distinguishable from "never asked" - which is what makes it usable as the welcome-team queue the spec describes as a bonus.
+>
+> **Measured facts, re-verified against the real snapshot before coding** (the plan's numbers all reproduced exactly): 867 families, **299 dormant**, 568 migrate, 124 dormant families with a child row, 119 grade-mappable, **190 children**, contacts 299 email / 238 phone / 0 neither. The two `"ALL"`-centre families are legacy fids **1016 and 1367** - not dormant, so they migrate AND carry the flag, making them the only 2 families flagged at bulk-migration time; the other 299 get flagged lazily at first sign-in.
+>
+> **⚠️ Live-vs-snapshot drift is real:** the deployed-UAT migration-status check (live RTDB, no snapshot at runtime) reports the live roster at **869 families vs the snapshot's 867**. Refresh before the prod migration.
+
 ---
 
 ## Global Constraints
@@ -46,7 +60,7 @@
 
 **Files:** `apps/portal/src/features/setu/registration/legacy-parser.ts` (`:28` export, `:83-93` the `LegacyFamilyForMigration` interface, `:237-239`) + its tests.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Use the real export - **`parseLegacyRowsForMigration(rows, legacyFid)`, two required arguments** (`legacy-parser.ts:147-150`). v1's snippets called a nonexistent `parseLegacyFamily([row({...})])` and would not compile. The existing `row()` helper (`__tests__/legacy-parser.test.ts:5-31`) is real and correct - only the call site was wrong.
 
@@ -61,12 +75,12 @@ it('treats the literal strings "NULL" and "null" as absent', () => {
 it('treats "ALL" as a real centre', () => { /* 10 rows in the snapshot */ });
 ```
 
-- [ ] **Step 2: Run to verify they fail**
-- [ ] **Step 3: Implement and carry it out**
+- [x] **Step 2: Run to verify they fail**
+- [x] **Step 3: Implement and carry it out**
 
 Export `LegacyRosterRow`. Add `dormant: boolean` to `LegacyFamilyForMigration` (the interface spans `:83-93`), set from the same rows the parser already filtered.
 
-- [ ] **Step 3b: Make `mapLocation` report the fallback - without this the WHOLE centre half is inert**
+- [x] **Step 3b: Make `mapLocation` report the fallback - without this the WHOLE centre half is inert**
 
 An earlier draft referred to "Task 1's existing `locationDefaulted`". **There is no such field.** Verified: `locationDefaulted` and `mapLocationDetailed` appear nowhere in `apps/` or `packages/`. `mapLocation` (`legacy-parser.ts:111-116`) returns a bare `LegacyLocation` and reports nothing:
 
@@ -95,7 +109,7 @@ export function mapLocationDetailed(value: unknown): { location: LegacyLocation;
 
 Add `locationDefaulted: boolean` to `LegacyFamilyForMigration`, set it at `:224`, and test `defaulted === true` for `center` of `'NULL'`, `''`, missing and `'ALL'`, `false` for `'Brampton'` and `'Scarborough'`.
 
-- [ ] **Step 4: Run and commit**
+- [x] **Step 4: Run and commit**
 
 ---
 
@@ -111,7 +125,7 @@ Add `locationDefaulted: boolean` to `LegacyFamilyForMigration`, set it at `:224`
 - `apps/portal/src/features/setu/registration/lazy-migrate.ts:193-201` - the family `txn.set`
 - `apps/portal/docs/MOBILE_API_CHANGELOG.md`
 
-- [ ] **Step 1: Write the failing test - against `getFamilyByFid`, not a mocked gate**
+- [x] **Step 1: Write the failing test - against `getFamilyByFid`, not a mocked gate**
 
 ```ts
 it('round-trips locationNeedsConfirmation from the Firestore doc', async () => {
@@ -123,12 +137,12 @@ it('round-trips locationNeedsConfirmation from the Firestore doc', async () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
-- [ ] **Step 3: Add to the schema**
+- [x] **Step 2: Run to verify it fails**
+- [x] **Step 3: Add to the schema**
 
 `locationNeedsConfirmation: z.boolean().nullable().optional()`. **Never add `.min(1)`-style required-ness to a doc schema** - these validate on read.
 
-- [ ] **Step 4: Add to BOTH hand-maps**
+- [x] **Step 4: Add to BOTH hand-maps**
 
 ```ts
 locationNeedsConfirmation: familyData.locationNeedsConfirmation ?? null,
@@ -136,11 +150,11 @@ locationNeedsConfirmation: familyData.locationNeedsConfirmation ?? null,
 
 in `get-family-by-fid.ts:27-45` **and** `get-family-for-welcome.ts:41-50`. `get-session-family` and `get-current-family` delegate and need no edit.
 
-- [ ] **Step 5: Write it during migration** - `lazy-migrate.ts:193-201` sets it `true` when Task 1 Step 3b's `locationDefaulted` is true, and **omits the key entirely otherwise** (never `false`, per `exactOptionalPropertyTypes`).
+- [x] **Step 5: Write it during migration** - `lazy-migrate.ts:193-201` sets it `true` when Task 1 Step 3b's `locationDefaulted` is true, and **omits the key entirely otherwise** (never `false`, per `exactOptionalPropertyTypes`).
 
 Add a `lazyMigrateLegacyFamily` test asserting the written family doc carries `locationNeedsConfirmation: true` for a defaulted-centre legacy family and omits it for a real-centre one. **This is the test that catches a broken writer** - Step 1's `getFamilyByFid` round-trip seeds the doc directly and would pass green against a writer that never runs.
-- [ ] **Step 6: `MOBILE_API_CHANGELOG.md` entry.** `FamilyDocSchema` is the `family` object returned by `GET /api/setu/family` (`route.ts:16-21`) and `/api/setu/dashboard`, and the mobile repo hand-mirrors it. Precedent entries at `:52`, `:62`.
-- [ ] **Step 7: Run and commit**
+- [x] **Step 6: `MOBILE_API_CHANGELOG.md` entry.** `FamilyDocSchema` is the `family` object returned by `GET /api/setu/family` (`route.ts:16-21`) and `/api/setu/dashboard`, and the mobile repo hand-mirrors it. Precedent entries at `:52`, `:62`.
+- [x] **Step 7: Run and commit**
 
 ---
 
@@ -148,13 +162,13 @@ Add a `lazyMigrateLegacyFamily` test asserting the written family doc carries `l
 
 **Files:** `apps/portal/scripts/migrate-legacy-families.ts`; `apps/portal/src/features/setu/roster/reconcile-migration.ts:24`.
 
-- [ ] **Step 1: Write the failing tests**
-- [ ] **Step 2: Run to verify they fail**
-- [ ] **Step 3: Skip, and report**
+- [x] **Step 1: Write the failing tests**
+- [x] **Step 2: Run to verify they fail**
+- [x] **Step 3: Skip, and report**
 
 Call `fetchLegacyFamilyForMigration(legacyFid)` (or give `lazyMigrateLegacyFamily` a `skipDormant` option) so the script gets Task 1's `dormant` flag rather than trying to derive it from the check-in shape. Count skips in the run summary and write them to `--csv-out` so the set is auditable.
 
-- [ ] **Step 4: Stop `/welcome/roster` reporting "299 missing" forever**
+- [x] **Step 4: Stop `/welcome/roster` reporting "299 missing" forever**
 
 `reconcile-migration.ts:24` diffs **every** legacy roster fid against Setu:
 
@@ -174,7 +188,7 @@ Two workable mechanisms - pick one and write it down:
 
 The first is cheaper and keeps the roster-parsing in one place. If `MigrationStatusResponse` changes shape, add a mobile changelog entry.
 
-- [ ] **Step 5: Run and commit**
+- [x] **Step 5: Run and commit**
 
 ---
 
@@ -191,16 +205,16 @@ const patchSchema = z.object({
 
 Zod strips unknown keys, so `{ location: 'Scarborough' }` parses to `{}`, copies nothing, and **400s**. Sent alongside `familyAddress`, `location` is silently dropped and the family stays Brampton with the flag still set - the "re-divert forever" case.
 
-- [ ] **Step 1: Write the failing tests** - `location` alone succeeds and clears the flag; `location` + `familyAddress` together both land; an unknown centre string is **rejected**.
-- [ ] **Step 2: Run to verify they fail**
-- [ ] **Step 3: Implement**
+- [x] **Step 1: Write the failing tests** - `location` alone succeeds and clears the flag; `location` + `familyAddress` together both land; an unknown centre string is **rejected**.
+- [x] **Step 2: Run to verify they fail**
+- [x] **Step 3: Implement**
 
 Add `location: z.string().min(1).optional()`, copy it to `update.location`, and set `update.locationNeedsConfirmation = false` explicitly (or `FieldValue.delete()`).
 
 **Validate the value against `getLocationOptions()`.** Without it a crafted PATCH writes an arbitrary string into the field that drives level matching and teacher rosters.
 
-- [ ] **Step 4: `MOBILE_API_CHANGELOG.md`** - this is a `/api/setu/**` **request**-shape change.
-- [ ] **Step 5: Run and commit**
+- [x] **Step 4: `MOBILE_API_CHANGELOG.md`** - this is a `/api/setu/**` **request**-shape change.
+- [x] **Step 5: Run and commit**
 
 ---
 
@@ -208,9 +222,9 @@ Add `location: z.string().min(1).optional()`, copy it to `update.location`, and 
 
 **Files:** `apps/portal/src/app/family/layout.tsx:53-56` **and `:76`**.
 
-- [ ] **Step 1: Write the failing tests** - the gate fires for a flagged manager; does not for a member; does not once cleared.
-- [ ] **Step 2: Run to verify they fail**
-- [ ] **Step 3: Add the condition to BOTH gates**
+- [x] **Step 1: Write the failing tests** - the gate fires for a flagged manager; does not for a member; does not once cleared.
+- [x] **Step 2: Run to verify they fail**
+- [x] **Step 3: Add the condition to BOTH gates**
 
 `ProfileCompletionGate` at `:53-56` **and** the mirrored profile test inside `DisclaimerGate` at `:76`:
 
@@ -222,7 +236,7 @@ Adding it only at `:53-56` desynchronises them: a manager who needs centre confi
 
 **Cross-plan:** P4 v2 Task 8 inserts `AdultClassGate` after `DisclaimerGate` and extracts a shared `earlierGatesPending(data)`. If P6 lands first without fixing `:76`, P4 copies the incomplete guard and a family needing centre confirmation can be routed to `/adult-class`. **Land this `:76` fix before P4's gate task**, and sequence the two rather than running them in parallel worktrees - both also edit `app/family/__tests__/layout.test.tsx`, which will conflict textually.
 
-- [ ] **Step 4: Run and commit**
+- [x] **Step 4: Run and commit**
 
 ---
 
@@ -241,7 +255,7 @@ if (scoped.every((m) => isMemberComplete(m)) && addressDone) {
 
 The target family for §1.9c is a *returning* family: members complete, address complete, only the centre unknown. Gate → `/complete-profile` → short-circuit → hard nav to `/family` → gate → … permanently. And because it is a **hard** navigation the gate re-runs server-side on fresh data every time, so this is worse than the stale-cache bounce, not better.
 
-- [ ] **Step 1: Write the failing tests - including the negative cases, which are the ones that matter**
+- [x] **Step 1: Write the failing tests - including the negative cases, which are the ones that matter**
 
 Positive: a members-complete, address-complete, centre-unknown manager **stays on the form**; the selector starts unselected; Save sends `location`; the flag clears.
 
@@ -252,8 +266,8 @@ Positive: a members-complete, address-complete, centre-unknown manager **stays o
 - a flagged manager **cannot** Save until they pick
 
 Without these three, a `centreReady` that is unsatisfiable for unflagged families ships green and locks out the entire launch population.
-- [ ] **Step 2: Run to verify they fail**
-- [ ] **Step 3: Extend the load short-circuit (`:227`)**
+- [x] **Step 2: Run to verify they fail**
+- [x] **Step 3: Extend the load short-circuit (`:227`)**
 
 ```ts
 const centreDone = !result.isManager || result.family.locationNeedsConfirmation !== true;
@@ -263,7 +277,7 @@ if (scoped.every((m) => isMemberComplete(m)) && addressDone && centreDone) {
 }
 ```
 
-- [ ] **Step 4: Add `centreReady` to `allReady` (`:288-295`), defined so it cannot deadlock Save**
+- [x] **Step 4: Add `centreReady` to `allReady` (`:288-295`), defined so it cannot deadlock Save**
 
 Today `allReady` is `membersOk && addressReady`, so a manager with everything else complete is "all set", Save proceeds, and the flag is never cleared.
 
@@ -276,11 +290,11 @@ const centreReady = !centreNeeded || centre !== '';
 
 `=== true` matters: the field is `boolean | null | undefined`, and only the literal `true` means "ask". Use the **same** `centreNeeded` expression in Step 3's short-circuit, Step 5's PATCH condition and Step 6's render condition, so the four sites cannot drift.
 
-- [ ] **Step 5: Include `location` in the manager PATCH (`:372-391`)**
+- [x] **Step 5: Include `location` in the manager PATCH (`:372-391`)**
 
 Today it sends `{ familyAddress: {...} }` only.
 
-- [ ] **Step 6: The selector starts UNSELECTED**
+- [x] **Step 6: The selector starts UNSELECTED**
 
 v1 said "follow the existing family-level field pattern" - but that pattern **seeds from the stored value** (`:238-243`, e.g. `setProvince(addr?.province ?? 'ON')`). Applied here it seeds the selector with `family.location`, which for every flagged family is the **defaulted `'Brampton'`**. The family clicks Save without touching it, the flag clears, and they are silently confirmed as Brampton - precisely what §1.9c exists to prevent, now with a false audit trail saying they chose it.
 
@@ -290,29 +304,29 @@ v1 said "follow the existing family-level field pattern" - but that pattern **se
 
 `centreReady` requires a non-empty explicit choice.
 
-- [ ] **Step 7: Run and commit**
+- [x] **Step 7: Run and commit**
 
 ---
 
 ## Task 7: Verify against deployed UAT, and the runbook
 
-- [ ] **Step 1: Seed** a dormant family, a flagged-centre returning family (members + address complete, centre unknown), and an unflagged control.
-- [ ] **Step 2: E2E**
+- [x] **Step 1: Seed** a dormant family, a flagged-centre returning family (members + address complete, centre unknown), and an unflagged control.
+- [x] **Step 2: E2E**
   - the flagged family signs in → lands on `/complete-profile` → **no bounce-back loop** → picks a centre → reaches `/family` → the flag is clear and does not re-fire on reload
   - the control family is unaffected
   - a dormant family signs in and is lazily migrated with a real centre
-- [ ] **Step 3: Run against deployed UAT**
+- [x] **Step 3: Run against deployed UAT**
 
 ```bash
 PLAYWRIGHT_BASE_URL=https://cmt-setu.vercel.app pnpm --filter @cmt/portal exec playwright test --project=setu centre-confirmation
 ```
 
-- [ ] **Step 4: Runbook**
+- [x] **Step 4: Runbook**
   - **§6: refresh the RTDB snapshot immediately before the prod migration**, then diff the family count against 867 so the drift is measured, not assumed
   - the expected `skippedDormant` count so nobody reads it as breakage
   - **the staff-findability limit** from Deviation 1
   - `locationNeedsConfirmation` in §3, and a dated §14 entry
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ---
 

@@ -46,3 +46,14 @@ export const PC_MANAGER_EMAIL =
   process.env.E2E_PC_MANAGER_EMAIL ?? 'e2e-pc-manager@chinmayatoronto.org';
 export const PC_PASSWORD = process.env.E2E_PC_PASSWORD ?? process.env.E2E_FAMILY_PASSWORD;
 export const hasProfileCompletionCreds = Boolean(PC_PASSWORD);
+
+// Dedicated fixture for the centre-confirmation prompt (spec 1.9c), seeded by
+// scripts/seed-centre-confirmation-family.ts (UAT). A manager whose family is
+// COMPLETE in every other respect - members and home address both done - with
+// only `locationNeedsConfirmation: true` outstanding. That exact shape is what
+// produced the permanent /complete-profile <-> /family loop, and a fixture
+// incomplete in any other way would not exercise it.
+export const CENTRE_MANAGER_EMAIL =
+  process.env.E2E_CENTRE_MANAGER_EMAIL ?? 'e2e-centre-manager@chinmayatoronto.org';
+export const CENTRE_PASSWORD = process.env.E2E_CENTRE_PASSWORD ?? process.env.E2E_FAMILY_PASSWORD;
+export const hasCentreConfirmationCreds = Boolean(CENTRE_PASSWORD);
