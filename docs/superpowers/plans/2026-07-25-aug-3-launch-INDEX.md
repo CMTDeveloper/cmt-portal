@@ -1,5 +1,10 @@
 # Aug 3 2026 Launch - Plan Index
 
+> **Starting a session? Read [`2026-07-25-EXECUTION-ORDER.md`](./2026-07-25-EXECUTION-ORDER.md) first.**
+> It sequences every task across all six plans, lists the non-code blockers and the
+> decisions still open, and says what to ship today. This file is the plan catalogue;
+> that one is the running order.
+
 > **For agentic workers:** each plan below is independently executable. Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` per plan. Execute in the order given - later plans consume interfaces earlier ones produce.
 
 **Goal:** ship the production cutover plus four feature specs for Monday 2026-08-03.
