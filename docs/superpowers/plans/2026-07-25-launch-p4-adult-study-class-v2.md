@@ -10,6 +10,18 @@
 
 **Supersedes:** `2026-07-25-launch-p4-adult-study-class.md`, reviewed as REQUEST CHANGES (3 critical, 8 major, 7 minor). Review: `docs/superpowers/reviews/2026-07-25-review-p4.md`.
 
+> **PROGRESS: Tasks 1, 2, 3 COMPLETE 2026-07-26** (`efc9b74`, `75e8423`, `40f78c4`, `6bf05ef`).
+> Task 2's proof obligation held: the existing suite passes **UNMODIFIED** - only
+> `enroll-family.ts` changed plus ONE NEW test file, and the kiosk's exact-object
+> matcher (`auto-enroll-bala-vihar.test.ts:22`) is untouched and green. The plan's
+> "four real callers" claim VERIFIED exactly, at exactly the cited lines.
+> Beyond the plan: three extra reconcile tests that guard money - the pinned
+> `suggestedAmountSnapshot` is never recomputed, only supplied fields are touched
+> (else re-picking a parent silently re-bills a waived family), and a CANCELLED
+> enrollment re-creates rather than gets patched. Also corrected two stale
+> docstrings that asserted the old unconditional no-op
+> (`auto-enroll-bala-vihar.ts`, `sync-enrollment-members.ts`).
+>
 > **PROGRESS: Task 1 COMPLETE 2026-07-26** (`efc9b74`, `75e8423`). Verified: the plan's
 > cited pin `enrollment-integration.test.ts:704` (`-50 -> 400`) is real and exact.
 > Two additions beyond the plan: (a) the neighbouring test's NAME said "positive
@@ -100,7 +112,7 @@ membershipMode: z.enum(['auto', 'manual']).optional(),
 
 So without this task: all adults enrolled, `$101` billed to a Bala Vihar family, `membershipMode` absent (treated as `'auto'`), and the selection overwritten on the next member edit - the exact failure the design exists to prevent.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 it('enrolls exactly the supplied mids, not every eligible member', async () => { /* 3 adults, supply 1 */ });
@@ -129,8 +141,8 @@ Plus `src/__tests__/e2e/enrollments.e2e.test.ts:203,211`, which runs against rea
 
 Assert the kiosk and first-attendance paths explicitly - both are already mocked and testable. Note that `features/setu/check-in/__tests__/auto-enroll-bala-vihar.test.ts:22` pins the call with an **exact-object** matcher, so any caller that later gains a parameter fails there rather than where you are looking. `sync-enrollment-members.ts:22` also carries a comment asserting the no-op semantics; update it in Task 3.
 
-- [ ] **Step 2: Run to verify they fail**
-- [ ] **Step 3: Extend `EnrollFamilyParams`**
+- [x] **Step 2: Run to verify they fail**
+- [x] **Step 3: Extend `EnrollFamilyParams`**
 
 ```ts
 export type EnrollFamilyParams = {
@@ -147,11 +159,11 @@ export type EnrollFamilyParams = {
 };
 ```
 
-- [ ] **Step 4: Thread them into the `txn.set` at `:139-157`**
+- [x] **Step 4: Thread them into the `txn.set` at `:139-157`**
 
 Use the supplied list when present, else the derived one. Apply the `no-eligible-members` guard (`:135-137`) to whichever list is used. Default `membershipMode` to `'auto'` so every existing doc and caller keeps today's semantics.
 
-- [ ] **Step 5: Run - existing enroll tests must pass unmodified**, then commit
+- [x] **Step 5: Run - existing enroll tests must pass unmodified**, then commit
 
 ---
 
@@ -170,7 +182,7 @@ if (enrollmentSnap.exists) {
 
 The sequence: the selected parent leaves → Task 4's prune sets `enrolledMids: []` → the gate fires (spec §2.1 condition 4 is explicit that an empty list must re-fire) → the family picks someone → POST 200 → **nothing is written** → the gate fires again. The manager never reaches `/family` again. The same trap catches any future "change which parent attends".
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 it('a second enroll with different mids updates the existing active enrollment', async () => {
@@ -181,14 +193,14 @@ it('a second enroll with different mids updates the existing active enrollment',
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
-- [ ] **Step 3: Reconcile in place**
+- [x] **Step 2: Run to verify it fails**
+- [x] **Step 3: Reconcile in place**
 
 When the enrollment exists and is `active` **and** any of `enrolledMids` / `suggestedAmountOverride` / `membershipMode` was explicitly supplied, update those fields in the same transaction and return `{ created: false, reconciled: true, eid, suggestedAmountSnapshot }`. When none was supplied, keep today's exact no-op so no existing caller changes behaviour.
 
 **Never recompute `suggestedAmountSnapshot` on reconcile** - it is pinned at first enrollment by design (`:106`) so later tier edits cannot move it.
 
-- [ ] **Step 4: Run and commit**
+- [x] **Step 4: Run and commit**
 
 ---
 
