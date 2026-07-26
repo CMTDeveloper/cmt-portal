@@ -20,9 +20,22 @@ export interface AdultClassGateInput {
   donations: readonly GateDonation[];
   /**
    * Condition 0. THE current adult-study-class offering, or `null` when none is
-   * reachable. Defined as `getOpenOfferingsForFamily(...)[0]` - that function
-   * orders by `startDate` ascending in Firestore, so [0] is the earliest open
-   * one, and the `/adult-class` screen must enroll into this same `oid`.
+   * reachable. The `/adult-class` screen must enroll into this same `oid`.
+   *
+   * ⚠️ **The resolver owes two things this type cannot enforce** (loader task):
+   *
+   * 1. **A deliberate tie-break.** `getOpenOfferingsForFamily` merges a located
+   *    and a location-less result set and sorts by `startDate` ascending, so a
+   *    naive `[0]` means "earliest". Equal start dates currently resolve to the
+   *    LOCATED offering only because the dedupe Map is filled located-first -
+   *    an accident of insertion order that nothing states or tests. Reversing
+   *    those two lines would silently retarget the whole gate.
+   * 2. **"Earliest" is wrong when an online (location-less) class starts before
+   *    the family's own centre's.** Then `[0]` is the online offering and the
+   *    family is gated on, and enrolled into, the wrong one. Resolve as
+   *    *"earliest startDate, the family's own location winning a tie"*, and
+   *    test the equal-startDate located-vs-location-less pair - two different
+   *    start dates pass under any ordering and prove nothing.
    */
   currentOffering: { oid: string } | null;
   teacherAssignedMids: ReadonlySet<string>;
@@ -65,15 +78,27 @@ export function needsAdultClassSelection(input: AdultClassGateInput): boolean {
   // ── Condition 3: that Bala Vihar donation is PAID ────────────────────────
   // A three-way disjunction, and two of the three legs are easy to get wrong.
   //
-  // (a) Donations, scoped to THIS enrollment's eid. `sumCompletedDonations(fid)`
-  //     exists but is program-BLIND - it sums every completed donation for the
-  //     family - so using it would let a Tabla or general gift satisfy the Bala
-  //     Vihar amount and waive the fee for a family that never paid Bala Vihar.
-  const expected = bv.effectiveSuggestedAmount ?? 0;
-  const paidForBv = input.donations
-    .filter((d) => d.status === 'completed' && d.eid != null && d.eid === bv.eid)
-    .reduce((sum, d) => sum + (typeof d.amountCAD === 'number' ? d.amountCAD : 0), 0);
-  const bvPaidByDonation = paidForBv >= expected;
+  // (a) ANY completed donation scoped to THIS enrollment's eid. **No amount
+  //     threshold** - that is an explicit owner decision (2026-07-02, issue
+  //     #23), already implemented by `isEnrollmentConfirmed`
+  //     (enrollment-confirmation.ts:38) and stated in its docstring: *"any
+  //     completed donation tied to its eid ... Amount is irrelevant (donations
+  //     are suggestions, not fees)."*
+  //
+  //     A `>=` threshold here would silently exempt every PARTIAL donor from the
+  //     policy this feature exists to enforce, and would additionally make the
+  //     gate a function of pricing edits made months later:
+  //     `effectiveSuggestedAmount` is recomputed LIVE from the current offering
+  //     (get-enrollments.ts:85-87), not from the pinned snapshot, so raising a
+  //     tier in November would retroactively un-pay a family who paid in full in
+  //     September. Being threshold-free makes both impossible.
+  //
+  //     The eid scoping still matters: `sumCompletedDonations(fid)` exists but
+  //     is program-BLIND, so using it would let a Tabla or general gift satisfy
+  //     Bala Vihar for a family that never paid it.
+  const bvPaidByDonation = input.donations.some(
+    (d) => d.status === 'completed' && d.eid != null && d.eid === bv.eid,
+  );
 
   // (b) Legacy, GATED on the offering actually being legacy-sourced. Ungated, a
   //     family whose 2025-26 legacy row reads `paid` would be treated as having
@@ -84,6 +109,13 @@ export function needsAdultClassSelection(input: AdultClassGateInput): boolean {
   // enroll/[programKey]/page.tsx:33, checkout/route.ts:137): passing the
   // offering directly fails because its `paymentSource` is `T | undefined`,
   // which is not assignable to an exact-optional `paymentSource?: T`.
+  //
+  // KNOWN LIMIT, accepted: `bv.offering` is `null` whenever the offering doc is
+  // missing (get-enrollments.ts falls back to null), and the source then
+  // defaults to 'portal'. A legacy family who genuinely paid is therefore not
+  // recognised through leg (b) and is simply never ASKED - a missed offer, not
+  // a lockout, which is the safe direction. Guessing the source instead would
+  // reopen the ungated-legacy problem leg (b) exists to prevent.
   const source = paymentSourceOf(
     bv.offering?.paymentSource !== undefined ? { paymentSource: bv.offering.paymentSource } : {},
   );

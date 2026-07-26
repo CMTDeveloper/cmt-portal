@@ -98,9 +98,31 @@ describe('needsAdultClassSelection - condition 3: the BV donation is paid', () =
     expect(needsAdultClassSelection(base({ donations: [] }))).toBe(false);
   });
 
-  it('does not fire when the donation is short of the expected amount', () => {
-    const input = base({ donations: [{ status: 'completed', eid: `F-${BV_OID}`, amountCAD: 100 }] });
-    expect(needsAdultClassSelection(input)).toBe(false);
+  // AMOUNT IS IRRELEVANT. This is an explicit owner decision (2026-07-02,
+  // issue #23), implemented by isEnrollmentConfirmed at
+  // enrollment-confirmation.ts:38 and stated in its docstring: "any completed
+  // donation tied to its eid ... Amount is irrelevant (donations are
+  // suggestions, not fees)."
+  //
+  // A `>=` threshold here would systematically exempt every PARTIAL donor from
+  // an org policy this whole feature exists to enforce - silently, permanently,
+  // and invisibly to any test whose fixture pays in full.
+  it('FIRES on a partial donation - donations are suggestions, not fees', () => {
+    const input = base({ donations: [{ status: 'completed', eid: `F-${BV_OID}`, amountCAD: 50 }] });
+    expect(needsAdultClassSelection(input)).toBe(true);
+  });
+
+  // A threshold would also make the gate a function of pricing edits made months
+  // later: effectiveSuggestedAmount is recomputed LIVE from the current offering
+  // (get-enrollments.ts:85-87), not from the pinned snapshot, so raising a tier
+  // in November would retroactively un-pay a family who paid in full in
+  // September. Being threshold-free is what makes that impossible.
+  it('is immune to a later tier increase - a $1 donation still counts', () => {
+    const input = base({
+      donations: [{ status: 'completed', eid: `F-${BV_OID}`, amountCAD: 1 }],
+      enrollments: [enrollment({ oid: BV_OID, programKey: 'bala-vihar', effectiveSuggestedAmount: 9999 })],
+    });
+    expect(needsAdultClassSelection(input)).toBe(true);
   });
 
   it('does not fire when the donation is not completed', () => {
@@ -121,11 +143,12 @@ describe('needsAdultClassSelection - condition 3: the BV donation is paid', () =
     expect(needsAdultClassSelection(input)).toBe(false);
   });
 
-  it('sums MULTIPLE completed donations for the same enrollment', () => {
+  it('counts one completed donation among several unrelated ones', () => {
     const input = base({
       donations: [
-        { status: 'completed', eid: `F-${BV_OID}`, amountCAD: 250 },
-        { status: 'completed', eid: `F-${BV_OID}`, amountCAD: 250 },
+        { status: 'pending', eid: `F-${BV_OID}`, amountCAD: 500 },
+        { status: 'completed', eid: 'F-tabla-2026-27', amountCAD: 500 },
+        { status: 'completed', eid: `F-${BV_OID}`, amountCAD: 25 },
       ],
     });
     expect(needsAdultClassSelection(input)).toBe(true);
