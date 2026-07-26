@@ -87,6 +87,23 @@ export const portalEnvSchema = z.object({
   SETU_EMAIL_REDIRECT_TO: z.string().optional(),
   SETU_PHONE_REDIRECT_TO: z.string().optional(),
 
+  // SES-managed email templates. Each names a template on the SES side; when a
+  // var is unset the portal renders that email in code instead, so the
+  // migration is one template at a time with no flag day. Read through
+  // lib/aws/email-templates-config.ts; listed here for schema completeness.
+  //
+  // SES_CONFIGURATION_SET names a configuration set carrying a RENDERING_FAILURE
+  // event destination. It is the ONLY way a template that fails to render
+  // becomes visible: SES accepts the message, returns a MessageId, and delivers
+  // nothing. It must exist in AWS_SES_REGION - configuration sets are
+  // region-scoped like templates.
+  SES_TEMPLATE_PAYMENT_REMINDER: z.string().optional(),
+  SES_TEMPLATE_DONATION_THANK_YOU: z.string().optional(),
+  SES_TEMPLATE_SETU_INVITE: z.string().optional(),
+  SES_TEMPLATE_SETU_JOIN_REQUEST: z.string().optional(),
+  SES_TEMPLATE_PLEDGE_ACTIVATED: z.string().optional(),
+  SES_CONFIGURATION_SET: z.string().optional(),
+
 });
 
 export type PortalEnv = z.infer<typeof portalEnvSchema>;

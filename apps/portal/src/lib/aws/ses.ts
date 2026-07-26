@@ -1,5 +1,10 @@
 import 'server-only';
-import { SESClient, SendEmailCommand, SendTemplatedEmailCommand } from '@aws-sdk/client-ses';
+import {
+  SESClient,
+  SendEmailCommand,
+  SendTemplatedEmailCommand,
+  ConfigurationSetDoesNotExistException,
+} from '@aws-sdk/client-ses';
 import { sesRegion } from './region';
 
 let cached: SESClient | undefined;
@@ -43,15 +48,45 @@ export async function sendSesTemplatedEmail(args: SendSesTemplatedEmailArgs): Pr
   if (!from) {
     throw new Error('[aws/ses] AWS_SES_FROM_EMAIL is required');
   }
-  await client().send(
-    new SendTemplatedEmailCommand({
-      Source: from,
-      Destination: { ToAddresses: [args.to] },
-      Template: args.templateName,
-      // A JSON STRING, not an object. SES rejects anything else.
-      TemplateData: JSON.stringify(args.data),
-    }),
-  );
+
+  const base = {
+    Source: from,
+    Destination: { ToAddresses: [args.to] },
+    Template: args.templateName,
+    // A JSON STRING, not an object. SES rejects anything else.
+    TemplateData: JSON.stringify(args.data),
+  };
+
+  // The configuration set is the ONLY thing that makes a render failure
+  // visible. SES accepts a message whose template fails to render, returns a
+  // MessageId, and delivers nothing - so without a RENDERING_FAILURE event
+  // destination the loss is silent to this process and to everyone else. The
+  // key is omitted entirely when unset; `undefined` riding in on a spread is
+  // not the same thing to the SDK's serializer.
+  const configurationSet = (process.env.SES_CONFIGURATION_SET ?? '').trim();
+  if (!configurationSet) {
+    await client().send(new SendTemplatedEmailCommand(base));
+    return;
+  }
+
+  try {
+    await client().send(
+      new SendTemplatedEmailCommand({ ...base, ConfigurationSetName: configurationSet }),
+    );
+  } catch (err) {
+    if (!(err instanceof ConfigurationSetDoesNotExistException)) throw err;
+    // Configuration sets are region-scoped exactly like templates, so a typo or
+    // one created outside AWS_SES_REGION would otherwise make every managed
+    // email throw - a failure that is impossible without this observability
+    // feature, and worst where a throw is expensive: the invite (a 500 with the
+    // row already written) and the payment-reminder cron (which retries forever
+    // because lastReminderSentAt is written after the send). Losing the alarm
+    // is bad; losing the email to gain the alarm is worse.
+    console.error(
+      `[aws/ses] SES_CONFIGURATION_SET "${configurationSet}" does not exist in this region - sending without it. Render failures will NOT be reported until this is fixed.`,
+    );
+    await client().send(new SendTemplatedEmailCommand(base));
+  }
 }
 
 export async function sendEmail(args: SendEmailArgs): Promise<void> {
