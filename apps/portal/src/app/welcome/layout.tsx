@@ -1,7 +1,7 @@
 import { Suspense } from 'react';
 import { cookies } from 'next/headers';
 import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
-import { isWelcomeTeam, isAdmin, isTeacher, type WithRole } from '@cmt/shared-domain';
+import { isWelcomeTeam, isAdmin, isTeacher, isCoordinator, type WithRole } from '@cmt/shared-domain';
 import { flags } from '@/lib/flags';
 import { CspRoot } from '@/features/family/components/atoms';
 import { DesktopSidebarLive } from '@/features/family/components/desktop-sidebar';
@@ -27,12 +27,18 @@ async function WelcomeChromeAndChildren({ children }: { children: React.ReactNod
   let allowed = false;
   let showTeacher = false;
   let admin = false;
+  // A coordinator who is NOT welcome-team: reaches the shell, but sees a
+  // Roster-only nav. Both roles are siblings, so this cannot be derived from
+  // isWelcomeTeam alone.
+  let coordinatorOnly = false;
   let hasFamily = false;
   let email: string | undefined;
   if (sessionCookie) {
     const raw = await verifyPortalSessionCookie(sessionCookie);
-    if (raw && isWelcomeTeam(raw as unknown as WithRole)) {
+    if (raw && (isWelcomeTeam(raw as unknown as WithRole) || isCoordinator(raw as unknown as WithRole))) {
       allowed = true;
+      coordinatorOnly =
+        !isWelcomeTeam(raw as unknown as WithRole) && isCoordinator(raw as unknown as WithRole);
       showTeacher = flags.setuTeacher && isTeacher(raw as unknown as WithRole);
       // Admins inherit welcome-team and reach /welcome (search, seva) via the
       // admin nav — keep them in the ADMIN sidebar so the menu doesn't swap out.
@@ -56,9 +62,15 @@ async function WelcomeChromeAndChildren({ children }: { children: React.ReactNod
     <CspRoot style={{ display: 'flex', width: '100%', minHeight: '100dvh' }}>
       {allowed ? (
         admin ? (
-          <AdminSidebarLive displayEmail={email ?? 'Admin'} hasFamily={hasFamily} showTeacher={showTeacher} />
+          <AdminSidebarLive displayEmail={email ?? 'Admin'} hasFamily={hasFamily} showTeacher={showTeacher} canSeeAdminOnly />
         ) : (
-          <DesktopSidebarLive role="welcome-team" displayName="Welcome team" subtitle="Welcome team" showSignOut showTeacher={showTeacher} />
+          <DesktopSidebarLive
+            role={coordinatorOnly ? 'coordinator' : 'welcome-team'}
+            displayName={coordinatorOnly ? 'Coordinator' : 'Welcome team'}
+            subtitle={coordinatorOnly ? 'Coordinator' : 'Welcome team'}
+            showSignOut
+            showTeacher={showTeacher}
+          />
         )
       ) : (
         <div style={{ width: 248, background: 'var(--surface)', borderRight: '1px solid var(--line)' }}/>
@@ -72,7 +84,7 @@ async function WelcomeChromeAndChildren({ children }: { children: React.ReactNod
           </>
         ) : (
           <div style={{ padding: 32, fontFamily: 'var(--body)' }}>
-            <p style={{ color: 'var(--err)', fontSize: 14 }}>Access denied. Welcome-team role required.</p>
+            <p style={{ color: 'var(--err)', fontSize: 14 }}>Access denied. Welcome-team or coordinator role required.</p>
           </div>
         )}
       </main>
@@ -87,11 +99,20 @@ async function WelcomeMobileNavWithIdentity() {
   const sessionCookie = cookieStore.get('__session')?.value;
   if (!sessionCookie) return null;
   const raw = await verifyPortalSessionCookie(sessionCookie).catch(() => null);
-  if (!raw || !isWelcomeTeam(raw as unknown as WithRole)) return null;
+  if (!raw || !(isWelcomeTeam(raw as unknown as WithRole) || isCoordinator(raw as unknown as WithRole))) return null;
   const admin = isAdmin(raw as unknown as WithRole);
+  const coordinatorOnly =
+    !isWelcomeTeam(raw as unknown as WithRole) && isCoordinator(raw as unknown as WithRole);
   const hasFamily = typeof (raw as { fid?: unknown }).fid === 'string';
   const showTeacher = flags.setuTeacher && isTeacher(raw as unknown as WithRole);
-  return <WelcomeMobileNav isAdmin={admin} hasFamily={hasFamily} showTeacher={showTeacher} />;
+  return (
+    <WelcomeMobileNav
+      isAdmin={admin}
+      hasFamily={hasFamily}
+      showTeacher={showTeacher}
+      role={coordinatorOnly ? 'coordinator' : 'welcome-team'}
+    />
+  );
 }
 
 // Mobile scope bar for the welcome section — mirrors the admin mobile chrome so
@@ -102,7 +123,7 @@ async function WelcomeMobileScopeBar() {
   const sessionCookie = cookieStore.get('__session')?.value;
   if (!sessionCookie) return null;
   const raw = await verifyPortalSessionCookie(sessionCookie).catch(() => null);
-  if (!raw || !isWelcomeTeam(raw as unknown as WithRole)) return null;
+  if (!raw || !(isWelcomeTeam(raw as unknown as WithRole) || isCoordinator(raw as unknown as WithRole))) return null;
   const admin = isAdmin(raw as unknown as WithRole);
   const db = portalFirestore();
   const liveYear = await getLiveSchoolYearCached();

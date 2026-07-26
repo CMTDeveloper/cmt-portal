@@ -11,16 +11,23 @@ interface AdminSidebarProps {
   displayEmail: string;
   hasFamily: boolean;
   showTeacher?: boolean;
+  /** False for a coordinator: hides every admin-only entry. OPTIONAL with a
+   *  `true` default because AdminSidebarLive has two call sites and welcome's
+   *  admin branch does not pass it. */
+  canSeeAdminOnly?: boolean;
 }
 
-const NAV_GROUPS: Array<{ heading: string; items: Array<{ label: string; href: string; legacy?: boolean }> }> = [
+// `coordinator: true` marks the ONLY two entries a coordinator may see. Every
+// other href is denied by canAccessRoute, so rendering it would be a link that
+// 302s to /sign-in on click.
+const NAV_GROUPS: Array<{ heading: string; items: Array<{ label: string; href: string; legacy?: boolean; coordinator?: true }> }> = [
   { heading: 'People & access', items: [
     { label: 'Family search', href: '/welcome' },
     { label: 'Users & roles', href: '/admin/users' },
   ]},
   { heading: 'Bala Vihar', items: [
-    { label: 'Programs', href: '/admin/programs' },
-    { label: 'Level management', href: '/admin/levels' },
+    { label: 'Programs', href: '/admin/programs', coordinator: true },
+    { label: 'Level management', href: '/admin/levels', coordinator: true },
     { label: 'Class calendar', href: '/admin/calendar' },
     { label: 'School year rollover', href: '/admin/school-year' },
     { label: 'Prasad rotation', href: '/admin/prasad' },
@@ -69,7 +76,7 @@ export function deriveAdminActive(pathname: string): string {
 // Pure — no hooks — so it can render inside a Suspense fallback (prerendered
 // statically under Next 16 cacheComponents). For pathname-driven highlighting
 // use AdminSidebarLive.
-export function AdminSidebar({ active = '', displayEmail, hasFamily, showTeacher = false }: AdminSidebarProps) {
+export function AdminSidebar({ active = '', displayEmail, hasFamily, showTeacher = false, canSeeAdminOnly = true }: AdminSidebarProps) {
   return (
     <aside style={{ width: 248, background: 'var(--surface)', borderRight: '1px solid var(--line)', padding: '22px 18px', display: 'flex', flexDirection: 'column' }}>
       <div style={{ marginBottom: 28 }}><SetuLogo size={20}/></div>
@@ -105,7 +112,9 @@ export function AdminSidebar({ active = '', displayEmail, hasFamily, showTeacher
             <div style={{ height: 1, background: 'var(--line)', margin: '8px 12px' }}/>
           </>
         )}
-        {(() => {
+        {canSeeAdminOnly && (() => {
+          // Rendered outside NAV_GROUPS, so the group filter below misses it.
+          // /admin itself is denied to a coordinator.
           const dashboardActive = active !== '' && active === '/admin';
           return (
             <Link
@@ -123,7 +132,13 @@ export function AdminSidebar({ active = '', displayEmail, hasFamily, showTeacher
             </Link>
           );
         })()}
-        {NAV_GROUPS.map((group, i) => (
+        {NAV_GROUPS.map((group) => ({
+          ...group,
+          items: group.items.filter((item) => canSeeAdminOnly || item.coordinator),
+        }))
+          // Drop any group left empty so no bare heading renders.
+          .filter((group) => group.items.length > 0)
+          .map((group, i) => (
           <div
             key={group.heading}
             style={{

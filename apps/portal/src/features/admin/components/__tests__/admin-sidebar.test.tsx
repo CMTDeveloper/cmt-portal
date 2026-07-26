@@ -66,3 +66,35 @@ describe('AdminSidebar', () => {
     }
   });
 });
+
+describe('AdminSidebar — coordinator', () => {
+  // displayEmail and hasFamily are REQUIRED props; omitting them is a compile
+  // error rather than the missing-prop warning you might expect.
+  const base = { displayEmail: 'a@b.c', hasFamily: false };
+
+  it('shows only Programs and Level management', () => {
+    render(<AdminSidebar {...base} canSeeAdminOnly={false} />);
+    expect(screen.getAllByText('Programs').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Level management').length).toBeGreaterThan(0);
+    expect(screen.queryAllByText('Users & roles')).toHaveLength(0);
+    expect(screen.queryAllByText('School year rollover')).toHaveLength(0);
+    expect(screen.queryAllByText('Locations')).toHaveLength(0);
+    expect(screen.queryAllByText('Class calendar')).toHaveLength(0);
+    // Rendered OUTSIDE NAV_GROUPS, so the group filter alone misses it, and
+    // /admin itself is denied to a coordinator.
+    expect(screen.queryAllByText('Dashboard')).toHaveLength(0);
+  });
+
+  it('shows everything for an admin', () => {
+    render(<AdminSidebar {...base} canSeeAdminOnly />);
+    expect(screen.getAllByText('Users & roles').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Dashboard').length).toBeGreaterThan(0);
+  });
+
+  it('defaults to the full nav when the prop is omitted', () => {
+    // AdminSidebarLive has two call sites and welcome/layout's admin branch
+    // relies on the default, so this must stay permissive-by-default.
+    render(<AdminSidebar {...base} />);
+    expect(screen.getAllByText('Users & roles').length).toBeGreaterThan(0);
+  });
+});

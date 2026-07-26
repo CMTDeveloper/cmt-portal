@@ -1,7 +1,7 @@
 import { Suspense } from 'react';
 import { cookies } from 'next/headers';
 import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
-import { isAdmin, isTeacher, type WithRole } from '@cmt/shared-domain';
+import { isAdmin, isTeacher, isCoordinator, type WithRole } from '@cmt/shared-domain';
 import { flags } from '@/lib/flags';
 import { CspRoot } from '@/features/family/components/atoms';
 import { LoadingOm } from '@/components/chrome/loading-om';
@@ -18,6 +18,9 @@ import { SchoolYearScopeBar } from '@/features/setu/rollover/components/school-y
 
 interface AdminIdentity {
   allowed: boolean;
+  /** True only for a real admin. Coordinators reach the shell but see a
+   *  filtered nav and no school-year management. */
+  adminOnly: boolean;
   displayEmail: string;
   hasFamily: boolean;
   showTeacher: boolean;
@@ -27,6 +30,7 @@ async function resolveAdminIdentity(): Promise<AdminIdentity> {
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get('__session')?.value;
   let allowed = false;
+  let adminOnly = false;
   let displayEmail = 'Admin';
   let hasFamily = false;
   let showTeacher = false;
@@ -34,7 +38,13 @@ async function resolveAdminIdentity(): Promise<AdminIdentity> {
     const raw = await verifyPortalSessionCookie(sessionCookie).catch(() => null);
     // isAdmin() checks role OR extraRoles — a family-manager with
     // extraRoles=['admin'] passes here even though primary role is family.
-    if (raw && isAdmin(raw as unknown as WithRole)) {
+    // Staff-SHELL gate only. WHICH /admin/* pages a coordinator may reach is
+    // decided by canAccessRoute in middleware, whose matcher covers every
+    // non-static path and runs on pages as well as APIs. Duplicating that
+    // allow-list here would invert ~15 admin pages from deny-by-default to
+    // allow-by-default.
+    if (raw && (isAdmin(raw as unknown as WithRole) || isCoordinator(raw as unknown as WithRole))) {
+      adminOnly = isAdmin(raw as unknown as WithRole);
       allowed = true;
       const email = (raw as { email?: string }).email;
       if (email) displayEmail = email;
@@ -47,19 +57,19 @@ async function resolveAdminIdentity(): Promise<AdminIdentity> {
       showTeacher = flags.setuTeacher && isTeacher(raw as unknown as WithRole);
     }
   }
-  return { allowed, displayEmail, hasFamily, showTeacher };
+  return { allowed, adminOnly, displayEmail, hasFamily, showTeacher };
 }
 
 function AccessDenied() {
   return (
     <div style={{ padding: 32, fontFamily: 'var(--body)' }}>
-      <p style={{ color: 'var(--err)', fontSize: 14 }}>Access denied. Admin role required.</p>
+      <p style={{ color: 'var(--err)', fontSize: 14 }}>Access denied. Admin or coordinator role required.</p>
     </div>
   );
 }
 
 async function AdminChromeAndChildren({ children }: { children: React.ReactNode }) {
-  const { allowed, displayEmail, hasFamily, showTeacher } = await resolveAdminIdentity();
+  const { allowed, adminOnly, displayEmail, hasFamily, showTeacher } = await resolveAdminIdentity();
   if (!allowed) return <AccessDenied />;
 
   const db = portalFirestore();
@@ -68,9 +78,9 @@ async function AdminChromeAndChildren({ children }: { children: React.ReactNode 
 
   return (
     <CspRoot style={{ display: 'flex', width: '100%', minHeight: '100dvh' }}>
-      <AdminSidebarLive displayEmail={displayEmail} hasFamily={hasFamily} showTeacher={showTeacher} />
+      <AdminSidebarLive displayEmail={displayEmail} hasFamily={hasFamily} showTeacher={showTeacher} canSeeAdminOnly={adminOnly} />
       <main style={{ flex: 1, padding: '32px 40px', overflow: 'auto' }}>
-        <SchoolYearScopeBar years={years} liveYear={liveYear} canManage />
+        <SchoolYearScopeBar years={years} liveYear={liveYear} canManage={adminOnly} />
         {children}
       </main>
     </CspRoot>
@@ -82,7 +92,7 @@ async function AdminChromeAndChildren({ children }: { children: React.ReactNode 
 // fixed bottom nav. Sign out + Back-to-family live in the nav's "More" sheet,
 // mirroring the family mobile chrome.
 async function AdminMobileChrome({ children }: { children: React.ReactNode }) {
-  const { allowed, hasFamily, showTeacher } = await resolveAdminIdentity();
+  const { allowed, adminOnly, hasFamily, showTeacher } = await resolveAdminIdentity();
   if (!allowed) return <AccessDenied />;
 
   const db = portalFirestore();
@@ -92,10 +102,10 @@ async function AdminMobileChrome({ children }: { children: React.ReactNode }) {
   return (
     <CspRoot style={{ minHeight: '100dvh' }}>
       <div style={{ padding: '18px 18px 90px' }}>
-        <SchoolYearScopeBar years={years} liveYear={liveYear} canManage />
+        <SchoolYearScopeBar years={years} liveYear={liveYear} canManage={adminOnly} />
         {children}
       </div>
-      <AdminMobileNav hasFamily={hasFamily} showTeacher={showTeacher} />
+      <AdminMobileNav hasFamily={hasFamily} showTeacher={showTeacher} canSeeAdminOnly={adminOnly} />
     </CspRoot>
   );
 }

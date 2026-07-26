@@ -10,7 +10,7 @@ type SidebarTab = 'home' | 'family' | 'bv' | 'programs' | 'calendar' | 'giving' 
 
 interface DesktopSidebarProps {
   active?: SidebarTab;
-  role?: 'family' | 'welcome-team' | 'teacher';
+  role?: 'family' | 'welcome-team' | 'teacher' | 'coordinator';
   displayName?: string | undefined;
   subtitle?: string | undefined;
   showSignOut?: boolean;
@@ -73,6 +73,13 @@ const WELCOME_NAV_ITEMS: [SidebarTab, string, keyof typeof SetuIcon, string, boo
   ['bv',     'Donation periods','calendar','/welcome', true],
 ];
 
+// A DEDICATED list, not a filtered mirror of WELCOME_NAV_ITEMS: four of those
+// seven (Reports, Levels & rosters, Seva, Prasad) point at paths spec 3.1
+// denies a coordinator, so each would 302 to /sign-in on click.
+const COORDINATOR_NAV_ITEMS: [SidebarTab, string, keyof typeof SetuIcon, string, boolean?][] = [
+  ['home', 'Roster', 'search', '/welcome/roster'],
+];
+
 function deriveActiveFromPathname(pathname: string): SidebarTab {
   // Teacher area: every /teacher/* route is the "My classes" (home) tab.
   if (pathname.startsWith('/teacher')) return 'home';
@@ -99,10 +106,17 @@ function deriveActiveFromPathname(pathname: string): SidebarTab {
 // For pathname-driven self-highlighting, use DesktopSidebarLive instead.
 export function DesktopSidebar({ active, role = 'family', displayName, subtitle, showSignOut, isAdmin, showTeacher = false, yearBadge }: DesktopSidebarProps) {
   const navItems =
-    role === 'welcome-team' ? WELCOME_NAV_ITEMS : role === 'teacher' ? TEACHER_NAV_ITEMS : familyNavItems();
+    role === 'welcome-team' ? WELCOME_NAV_ITEMS
+      : role === 'coordinator' ? COORDINATOR_NAV_ITEMS
+      : role === 'teacher' ? TEACHER_NAV_ITEMS
+      : familyNavItems();
   const trimmed = (displayName ?? '').trim();
   const name =
-    trimmed || (role === 'welcome-team' ? 'Welcome team' : role === 'teacher' ? 'Teacher' : 'Family member');
+    trimmed
+    || (role === 'welcome-team' ? 'Welcome team'
+      : role === 'coordinator' ? 'Coordinator'
+      : role === 'teacher' ? 'Teacher'
+      : 'Family member');
   // Show the "Admin" shortcut whenever the signed-in user is an admin — in BOTH
   // the family and welcome-team sidebars. /welcome pages (search, seva) are
   // shared admin surfaces an admin reaches from the admin nav; without this link

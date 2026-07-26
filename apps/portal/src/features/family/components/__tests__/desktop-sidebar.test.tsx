@@ -40,3 +40,34 @@ describe('DesktopSidebar — teacher role', () => {
     expect(screen.getByRole('link', { name: 'Admin' }).getAttribute('href')).toBe('/admin');
   });
 });
+
+describe('DesktopSidebar — coordinator', () => {
+  // jsdom renders both responsive branches, so use getAllByText/queryAllByText.
+  it('shows the Roster link', () => {
+    render(<DesktopSidebar role="coordinator" displayName="Coordinator" showSignOut />);
+    expect(screen.getAllByText('Roster').length).toBeGreaterThan(0);
+  });
+
+  it.each(['Reports', 'Levels & rosters', 'Seva', 'Prasad'])(
+    'does NOT show the %s link, which a coordinator is denied',
+    (label) => {
+      // Not cosmetic: each of these 302s to /sign-in at middleware for this
+      // role, so rendering them is a nav full of dead links.
+      render(<DesktopSidebar role="coordinator" displayName="Coordinator" showSignOut />);
+      expect(screen.queryAllByText(label)).toHaveLength(0);
+    },
+  );
+
+  it('falls back to "Coordinator", not "Family member", with no displayName', () => {
+    render(<DesktopSidebar role="coordinator" showSignOut />);
+    expect(screen.getAllByText('Coordinator').length).toBeGreaterThan(0);
+    expect(screen.queryAllByText('Family member')).toHaveLength(0);
+  });
+
+  it('still shows every welcome-team link for welcome-team', () => {
+    render(<DesktopSidebar role="welcome-team" displayName="Welcome team" showSignOut />);
+    for (const label of ['Roster', 'Reports', 'Levels & rosters', 'Seva', 'Prasad']) {
+      expect(screen.getAllByText(label).length).toBeGreaterThan(0);
+    }
+  });
+});

@@ -8,10 +8,12 @@ import { signOut } from '@/features/family/components/sign-out-button';
 
 type Tab = 'home' | 'programs' | 'levels' | 'calendar' | 'more';
 
-const TABS: { id: Tab; label: string; icon: keyof typeof SetuIcon; href: string }[] = [
+// `coordinator: true` marks the ONLY entries a coordinator may see. Home and
+// Calendar are both denied to that role, so two of these four must disappear.
+const TABS: { id: Tab; label: string; icon: keyof typeof SetuIcon; href: string; coordinator?: true }[] = [
   { id: 'home',     label: 'Home',     icon: 'home',     href: '/admin' },
-  { id: 'programs', label: 'Programs', icon: 'people',   href: '/admin/programs' },
-  { id: 'levels',   label: 'Levels',   icon: 'check',    href: '/admin/levels' },
+  { id: 'programs', label: 'Programs', icon: 'people',   href: '/admin/programs', coordinator: true },
+  { id: 'levels',   label: 'Levels',   icon: 'check',    href: '/admin/levels', coordinator: true },
   { id: 'calendar', label: 'Calendar', icon: 'calendar', href: '/admin/calendar' },
 ];
 
@@ -19,7 +21,7 @@ const TABS: { id: Tab; label: string; icon: keyof typeof SetuIcon; href: string 
 // the bottom tabs, then the legacy door-app tools.
 // Reports is its OWN top-level section on desktop/sidebar — keep it out of the
 // "Legacy tools" group here so the mobile IA matches (parity finding).
-const MORE_THEMED: { label: string; icon: keyof typeof SetuIcon; href: string }[] = [
+const MORE_THEMED: { label: string; icon: keyof typeof SetuIcon; href: string; coordinator?: true }[] = [
   { label: 'Family search', icon: 'search', href: '/welcome' },
   { label: 'Users & roles', icon: 'people', href: '/admin/users' },
   { label: 'School year rollover', icon: 'check', href: '/admin/school-year' },
@@ -45,10 +47,17 @@ function activeTab(pathname: string): Tab {
   return 'more';
 }
 
-export function AdminMobileNav({ hasFamily = false, showTeacher = false }: { hasFamily?: boolean; showTeacher?: boolean }) {
+export function AdminMobileNav({ hasFamily = false, showTeacher = false, canSeeAdminOnly = true }: { hasFamily?: boolean; showTeacher?: boolean; canSeeAdminOnly?: boolean }) {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
   const active = activeTab(pathname);
+  // Every href not marked `coordinator` is denied by canAccessRoute, so leaving
+  // them rendered would be a tab bar that 302s to /sign-in on tap.
+  const tabs = TABS.filter((t) => canSeeAdminOnly || t.coordinator);
+  const moreThemed = MORE_THEMED.filter((m) => canSeeAdminOnly || m.coordinator);
+  const moreLegacy = canSeeAdminOnly ? MORE_LEGACY : [];
+  // With nothing behind it, the More trigger opens an empty sheet.
+  const showMore = moreThemed.length > 0 || moreLegacy.length > 0 || hasFamily || showTeacher;
 
   // minHeight/minWidth keep every tab ≥44px (a11y tap target); inactive uses
   // --body-text not --muted (the latter ≈2.9:1 on white, below AA at 11px).
@@ -80,7 +89,7 @@ export function AdminMobileNav({ hasFamily = false, showTeacher = false }: { has
           >
             <div style={{ width: 36, height: 4, borderRadius: 99, background: 'var(--line2)', margin: '6px auto 10px' }} />
             <div className="col" style={{ gap: 2 }}>
-              {MORE_THEMED.map((m) => {
+              {moreThemed.map((m) => {
                 const Icon = SetuIcon[m.icon];
                 const on = pathname.startsWith(m.href);
                 return (
@@ -90,7 +99,7 @@ export function AdminMobileNav({ hasFamily = false, showTeacher = false }: { has
                 );
               })}
               <div style={{ padding: '12px 14px 4px', fontSize: 10, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--muted)' }}>Legacy tools</div>
-              {MORE_LEGACY.map((m) => (
+              {moreLegacy.map((m) => (
                 <Link key={m.href} href={m.href} onClick={() => setMoreOpen(false)} style={{ ...sheetLink, color: 'var(--body-text)' }}>
                   <SetuIcon.shield /> <span>{m.label}</span>
                 </Link>
@@ -125,7 +134,7 @@ export function AdminMobileNav({ hasFamily = false, showTeacher = false }: { has
           display: 'flex', justifyContent: 'space-around', padding: '10px 8px max(16px, env(safe-area-inset-bottom))',
         }}
       >
-        {TABS.map((t) => {
+        {tabs.map((t) => {
           const Icon = SetuIcon[t.icon];
           return (
             <Link key={t.id} href={t.href} style={itemStyle(t.id === active)}>
@@ -133,15 +142,17 @@ export function AdminMobileNav({ hasFamily = false, showTeacher = false }: { has
             </Link>
           );
         })}
-        <button
-          type="button"
-          aria-label="More"
-          aria-expanded={moreOpen}
-          onClick={() => setMoreOpen((v) => !v)}
-          style={itemStyle(active === 'more' || moreOpen)}
-        >
-          <SetuIcon.dots /> More
-        </button>
+        {showMore && (
+          <button
+            type="button"
+            aria-label="More"
+            aria-expanded={moreOpen}
+            onClick={() => setMoreOpen((v) => !v)}
+            style={itemStyle(active === 'more' || moreOpen)}
+          >
+            <SetuIcon.dots /> More
+          </button>
+        )}
       </div>
     </>
   );

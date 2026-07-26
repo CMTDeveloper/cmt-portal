@@ -12,7 +12,11 @@ function isRosterActive(pathname: string): boolean {
   return !pathname.startsWith('/welcome/levels') && !pathname.startsWith('/welcome/seva') && !pathname.startsWith('/welcome/reports') && !pathname.startsWith('/welcome/prasad');
 }
 
-export function WelcomeMobileNav({ isAdmin = false, hasFamily = false, showTeacher = false }: { isAdmin?: boolean; hasFamily?: boolean; showTeacher?: boolean }) {
+export function WelcomeMobileNav({ isAdmin = false, hasFamily = false, showTeacher = false, role = 'welcome-team' }: { isAdmin?: boolean; hasFamily?: boolean; showTeacher?: boolean; role?: 'welcome-team' | 'coordinator' }) {
+  // Levels / Seva / Prasad / Reports are welcome-team-only per spec 3.1, so for
+  // a coordinator each would 302 to /sign-in on tap. The Admin link below is
+  // denied too, but it is already gated on isAdmin, which a coordinator is not.
+  const welcomeOnly = role !== 'coordinator';
   const pathname = usePathname();
   const rosterActive = isRosterActive(pathname);
   const reportsActive = pathname.startsWith('/welcome/reports');
@@ -37,18 +41,22 @@ export function WelcomeMobileNav({ isAdmin = false, hasFamily = false, showTeach
       <Link href="/welcome/roster" style={itemStyle(rosterActive)}>
         <SetuIcon.search /> Roster
       </Link>
-      <Link href="/welcome/levels" style={itemStyle(pathname.startsWith('/welcome/levels'))}>
-        <SetuIcon.people /> Levels
-      </Link>
-      <Link href="/welcome/seva" style={itemStyle(pathname.startsWith('/welcome/seva'))}>
-        <SetuIcon.heart /> Seva
-      </Link>
-      <Link href="/welcome/prasad" style={itemStyle(prasadActive)}>
-        <SetuIcon.bell /> Prasad
-      </Link>
-      <Link href="/welcome/reports" style={itemStyle(reportsActive)}>
-        <SetuIcon.info /> Reports
-      </Link>
+      {welcomeOnly && (
+        <>
+          <Link href="/welcome/levels" style={itemStyle(pathname.startsWith('/welcome/levels'))}>
+            <SetuIcon.people /> Levels
+          </Link>
+          <Link href="/welcome/seva" style={itemStyle(pathname.startsWith('/welcome/seva'))}>
+            <SetuIcon.heart /> Seva
+          </Link>
+          <Link href="/welcome/prasad" style={itemStyle(prasadActive)}>
+            <SetuIcon.bell /> Prasad
+          </Link>
+          <Link href="/welcome/reports" style={itemStyle(reportsActive)}>
+            <SetuIcon.info /> Reports
+          </Link>
+        </>
+      )}
       {showTeacher && (
         <Link href="/teacher" style={itemStyle(false)}>
           <SetuIcon.people /> Teacher
