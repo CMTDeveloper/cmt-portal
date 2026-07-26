@@ -1,0 +1,59 @@
+rules_version = '2';
+
+// =============================================================================
+//  ⛔ THIS FILE IS FOR chinmaya-setu-uat ONLY. NEVER DEPLOY IT TO PROD 715b8. ⛔
+// =============================================================================
+//
+//  Deploying this to prod takes the door operation down on a Sunday:
+//
+//    firebase deploy --only firestore:rules --project chinmaya-setu-uat   ✅
+//    firebase deploy --only firestore:rules --project chinmaya-setu-715b8 ❌ OUTAGE
+//    firebase deploy                        --project chinmaya-setu-715b8 ❌ OUTAGE
+//      (a bare `deploy` includes rules, because firebase.json now points here)
+//
+//  Why prod is different. Prod `chinmaya-setu-715b8` is SHARED with the
+//  standalone `chinmaya-family-check-in` app, which talks to it through the
+//  CLIENT SDK from 'use client' pages, not the Admin SDK:
+//    chinmaya-family-check-in/app/lib/firebase/config.ts:26  getFirestore(app)
+//  It reads and writes `family-check-ins` and `guest-families` - the two
+//  collections the cutover runbook marks DO NOT TOUCH - for kiosk check-in,
+//  family self check-in, the teacher check-in screen, the teacher report and
+//  guest check-in. Per CLAUDE.md that path is still the production entry point.
+//
+//  A rules deploy REPLACES the project's ruleset; it does not merge. So a
+//  deny-all breaks every one of those flows at once. Neither repo tracks a
+//  rules file, which means there is no rollback artifact: recovery would be
+//  hand-retyping rules into the Firebase console mid-Sunday.
+//
+//  The prod path is deliberately NOT this file. It is:
+//    1. export the deployed 715b8 ruleset and commit it as a baseline,
+//    2. add targeted `pledges` / `pledge_secrets` denies on top of it,
+//    3. diff against the baseline and deploy only with the door app's owner
+//       confirming its access surface is unchanged.
+//  See docs/superpowers/plans/2026-07-25-launch-p5-monthly-pledge-v2.md Task 1
+//  Steps 4-5, and the runbook's section 14 entry for 2026-07-25.
+//
+// =============================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // chinmaya-setu-uat is portal-only, and the portal reaches Firestore
+    // exclusively through the Admin SDK, which bypasses rules entirely.
+    //
+    // Verified at the time of writing: getClientFirestore / getClientAuth /
+    // getClientDatabase (packages/firebase-shared/src/client.ts:38,42,46) have
+    // ZERO call sites in this monorepo outside their own definitions, and the
+    // only `from 'firebase/...'` imports anywhere are that same file's 1-4.
+    //
+    // So this denies nothing that legitimately exists today. Its job is to make
+    // a future client-side read fail LOUDLY at development time instead of
+    // succeeding silently against real data - the public Firebase API key ships
+    // in every bundle and every family holds an authenticated session, so
+    // without a ruleset the database's entire surface is governed by whatever
+    // happens to be deployed in the console.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
