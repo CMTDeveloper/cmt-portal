@@ -5,6 +5,7 @@ import {
   FamilyDocSchema,
   FamilyAddressSchema,
   isFamilyAddressComplete,
+  needsCentreConfirmation,
   CANADIAN_PROVINCES,
   CANADIAN_POSTAL_RE,
 } from '../family';
@@ -209,5 +210,31 @@ describe('FamilyDocSchema - familyAddress', () => {
     });
     expect(parsed.familyAddress?.street).toBe('123 Main St');
     expect(parsed.familyAddress?.province).toBe('ON');
+  });
+});
+
+// Six sites depend on this one expression agreeing with itself: both gates in
+// app/family/layout.tsx and four in complete-profile-form. The two ways to get
+// it wrong are opposite and both bad - too strict and every family loops on the
+// completion screen, too loose and nobody is ever asked for their centre.
+describe('needsCentreConfirmation', () => {
+  it('asks a manager whose centre is flagged', () => {
+    expect(needsCentreConfirmation({ locationNeedsConfirmation: true }, true)).toBe(true);
+  });
+
+  it('never asks a non-manager, who cannot edit family-level data anyway', () => {
+    expect(needsCentreConfirmation({ locationNeedsConfirmation: true }, false)).toBe(false);
+  });
+
+  it('treats absent and null as "never flagged", not as "unknown so ask"', () => {
+    // The launch shape: ~568 bulk-migrated families with a real centre carry no
+    // such field. If absence asked, every one of them would be diverted to a
+    // question with no answer to give.
+    expect(needsCentreConfirmation({}, true)).toBe(false);
+    expect(needsCentreConfirmation({ locationNeedsConfirmation: null }, true)).toBe(false);
+  });
+
+  it('treats false as answered', () => {
+    expect(needsCentreConfirmation({ locationNeedsConfirmation: false }, true)).toBe(false);
   });
 });

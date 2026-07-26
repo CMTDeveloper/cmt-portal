@@ -106,4 +106,41 @@ describe('DisclaimerGate', () => {
     expect(await DisclaimerGate()).toBeNull();
     expect(mockRedirect).not.toHaveBeenCalled();
   });
+
+  // The mirrored guard. This gate repeats the profile-completeness test on
+  // purpose (the invariant is stated in layout.tsx) so Suspense resolution order
+  // cannot decide where the user lands. Adding a new profile condition to the
+  // profile gate and NOT here desynchronises them: a manager who needs centre
+  // confirmation AND has a stale disclaimer looks "profile complete" to this
+  // gate, it redirects to /acknowledgements, and whichever gate throws first
+  // wins the race.
+  it('defers to the profile gate when the centre is unconfirmed', async () => {
+    mockGetCurrentFamily.mockResolvedValue(
+      family([adult(), child()], {
+        family: {
+          fid: 'CMT-1', name: 'Rao', disclaimersAccepted: null,
+          familyAddress: COMPLETE_ADDRESS, location: 'Brampton', locationNeedsConfirmation: true,
+        } as FamilyWithMembers['family'],
+      }),
+    );
+    mockGetState.mockResolvedValue({ accepted: false, version: 3, schoolYear: '2026-27', sections: [] });
+
+    expect(await DisclaimerGate()).toBeNull();
+    expect(mockGetState).not.toHaveBeenCalled();
+    expect(mockRedirect).not.toHaveBeenCalled();
+  });
+
+  it('still gates disclaimers once the centre has been confirmed', async () => {
+    mockGetCurrentFamily.mockResolvedValue(
+      family([adult(), child()], {
+        family: {
+          fid: 'CMT-1', name: 'Rao', disclaimersAccepted: null,
+          familyAddress: COMPLETE_ADDRESS, location: 'Scarborough', locationNeedsConfirmation: false,
+        } as FamilyWithMembers['family'],
+      }),
+    );
+    mockGetState.mockResolvedValue({ accepted: false, version: 3, schoolYear: '2026-27', sections: [] });
+
+    await expect(DisclaimerGate()).rejects.toThrow('NEXT_REDIRECT:/acknowledgements');
+  });
 });

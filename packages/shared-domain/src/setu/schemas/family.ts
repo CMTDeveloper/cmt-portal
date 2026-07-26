@@ -48,6 +48,31 @@ export function isFamilyAddressComplete(family: { familyAddress?: FamilyAddress 
   return !!(a && a.street && a.city && a.province && a.postalCode);
 }
 
+/**
+ * Whether this viewer must be asked to confirm the family's centre.
+ *
+ * THE single expression for that question. It is consumed by six sites that
+ * must agree exactly - both gates in app/family/layout.tsx, and four places in
+ * complete-profile-form (the load short-circuit, the Save-enable predicate, the
+ * PATCH body, and the selector's render condition). They drifted apart trivially
+ * when each spelled it out, and the two failure modes are opposite and both bad:
+ * too strict and every family loops on the completion screen, too loose and
+ * nobody is ever asked.
+ *
+ * Manager-scoped, because only a manager can edit family-level data - gating a
+ * plain member on it would strand them on a form with no control they can use.
+ *
+ * `=== true` is deliberate. The field is `boolean | null | undefined`: absent or
+ * null means the family was never flagged, `false` means they were asked and
+ * have answered, and only `true` means "still needs asking".
+ */
+export function needsCentreConfirmation(
+  family: { locationNeedsConfirmation?: boolean | null | undefined },
+  isManager: boolean,
+): boolean {
+  return isManager && family.locationNeedsConfirmation === true;
+}
+
 export const FamilyDocSchema = z.object({
   fid: z.string().min(1),
   legacyFid: z.string().nullable(),

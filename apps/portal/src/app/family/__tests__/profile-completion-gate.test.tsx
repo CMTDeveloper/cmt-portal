@@ -204,4 +204,55 @@ describe('ProfileCompletionGate', () => {
     expect(result).toBeNull();
     expect(mockRedirect).not.toHaveBeenCalled();
   });
+
+  // Centre confirmation (spec 1.9c). The target family is a RETURNING one:
+  // members complete, address complete, only the centre unknown - so every
+  // other condition here already passes and this is the sole thing diverting
+  // them. Migrated families whose legacy roster had no recognisable centre were
+  // defaulted to Brampton, and this is what stops that guess becoming permanent.
+  describe('unconfirmed centre', () => {
+    function flagged(over: Partial<FamilyWithMembers> = {}): FamilyWithMembers {
+      return family([adult(), child()], {
+        family: {
+          fid: 'CMT-1', name: 'Rao Family', familyAddress: COMPLETE_ADDRESS,
+          location: 'Brampton', locationNeedsConfirmation: true,
+        } as FamilyWithMembers['family'],
+        ...over,
+      });
+    }
+
+    it('redirects an otherwise-complete manager whose centre is unconfirmed', async () => {
+      mockGetCurrentFamily.mockResolvedValue(flagged());
+      await expect(ProfileCompletionGate()).rejects.toThrow(`NEXT_REDIRECT:${COMPLETE}`);
+      expect(mockRedirect).toHaveBeenCalledWith(COMPLETE);
+    });
+
+    it('does NOT gate a plain member on it - they cannot edit family-level data', async () => {
+      mockGetCurrentFamily.mockResolvedValue(flagged({ isManager: false, currentMid: 'm-adult' }));
+      expect(await ProfileCompletionGate()).toBeNull();
+      expect(mockRedirect).not.toHaveBeenCalled();
+    });
+
+    it('does NOT redirect once the centre has been confirmed (false)', async () => {
+      mockGetCurrentFamily.mockResolvedValue(
+        family([adult(), child()], {
+          family: {
+            fid: 'CMT-1', name: 'Rao Family', familyAddress: COMPLETE_ADDRESS,
+            location: 'Scarborough', locationNeedsConfirmation: false,
+          } as FamilyWithMembers['family'],
+        }),
+      );
+      expect(await ProfileCompletionGate()).toBeNull();
+      expect(mockRedirect).not.toHaveBeenCalled();
+    });
+
+    // The launch population: ~568 bulk-migrated families with a real centre, who
+    // never carry this field at all. If absence gated them, every one of them
+    // would be diverted for a question that has no answer to give.
+    it('does NOT redirect a family that was never flagged (field absent)', async () => {
+      mockGetCurrentFamily.mockResolvedValue(family([adult(), child()]));
+      expect(await ProfileCompletionGate()).toBeNull();
+      expect(mockRedirect).not.toHaveBeenCalled();
+    });
+  });
 });

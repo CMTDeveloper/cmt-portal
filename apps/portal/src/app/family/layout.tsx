@@ -14,6 +14,7 @@ import {
   incompleteMembers,
   membersRequiringCompletion,
   isFamilyAddressComplete,
+  needsCentreConfirmation,
   type WithRole,
 } from '@cmt/shared-domain';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
@@ -52,7 +53,11 @@ export async function ProfileCompletionGate() {
   const scope = membersRequiringCompletion(data.members, data.currentMid, data.isManager);
   const incomplete =
     incompleteMembers(scope).length > 0 ||
-    (data.isManager && !isFamilyAddressComplete(data.family));
+    (data.isManager && !isFamilyAddressComplete(data.family)) ||
+    // Migrated on a guessed centre (spec 1.9c). Manager-scoped via the shared
+    // helper, like the address check above. WHENEVER YOU ADD A CONDITION HERE,
+    // ADD IT TO DisclaimerGate BELOW TOO - see the invariant stated there.
+    needsCentreConfirmation(data.family, data.isManager);
 
   if (incomplete) redirect(COMPLETE_PROFILE_PATH);
   return null;
@@ -71,9 +76,20 @@ export async function DisclaimerGate() {
   if (!data) return null; // unauthenticated — middleware handles it
   if (!data.isManager) return null; // per-family: members aren't gated
   // Defer to ProfileCompletionGate if the profile is still incomplete (missing
-  // member fields OR the required family home address — both are profile data
-  // collected before disclaimers).
-  if (incompleteMembers(data.members).length > 0 || !isFamilyAddressComplete(data.family)) return null;
+  // member fields, the required family home address, OR an unconfirmed centre —
+  // all three are profile data collected before disclaimers).
+  //
+  // THIS TEST IS A DELIBERATE MIRROR of ProfileCompletionGate's, so Suspense
+  // resolution order cannot decide where the user lands. Every condition there
+  // must appear here. Miss one and the two desynchronise: a manager who needs
+  // centre confirmation AND has a stale disclaimer looks "profile complete" to
+  // this gate, which redirects to /acknowledgements, and whichever gate throws
+  // first wins the race.
+  if (
+    incompleteMembers(data.members).length > 0 ||
+    !isFamilyAddressComplete(data.family) ||
+    needsCentreConfirmation(data.family, data.isManager)
+  ) return null;
 
   const state = await getDisclaimerStateForFamily(portalFirestore(), data.family);
   if (!state.accepted) redirect('/acknowledgements');
