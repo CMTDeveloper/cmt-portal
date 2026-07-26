@@ -105,9 +105,19 @@ function family(members: MemberDoc[], over: Partial<FamilyWithMembers> = {}): Fa
 
 const save = () => screen.getAllByTestId('complete-profile-save')[0]!;
 
+// The form makes two kinds of fetch: the centre options (GET, needs a body) and
+// the family PATCH (only `ok` is read). Route by URL so both are satisfied.
+function routedFetch(locations: string[] = ['Brampton', 'Scarborough']) {
+  return vi.fn((url: string) =>
+    String(url).startsWith('/api/setu/locations')
+      ? Promise.resolve({ ok: true, json: () => Promise.resolve({ options: locations }) })
+      : Promise.resolve({ ok: true }),
+  );
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
-  fetchMock.mockResolvedValue({ ok: true });
+  fetchMock.mockImplementation(routedFetch());
   vi.stubGlobal('fetch', fetchMock);
 });
 
@@ -401,5 +411,130 @@ describe('CompleteProfileForm — required family home address (manager-only)', 
     await waitFor(() => expect(patchMember).toHaveBeenCalledTimes(1));
     expect(fetchMock).not.toHaveBeenCalled(); // family address never written by a member
     await waitFor(() => expect(navigateTo).toHaveBeenCalledWith('/family'));
+  });
+});
+
+// ── Centre confirmation (spec 1.9c) ──────────────────────────────────────────
+// The dangerous part of this feature. Two lines fail in opposite directions:
+// the load short-circuit (too strict and everyone loops, too loose and the
+// centre is never asked) and centreReady (too broad and NOBODY can Save). Every
+// one of the ~568 bulk-migrated managers passes through this screen at first
+// sign-in, so a Save that cannot be satisfied locks out the launch population.
+describe('CompleteProfileForm — centre confirmation', () => {
+  const FLAGGED_FAMILY = {
+    fid: 'CMT-1', name: 'PC Family', familyAddress: COMPLETE_ADDRESS,
+    location: 'Brampton', locationNeedsConfirmation: true,
+  } as FamilyWithMembers['family'];
+
+  const centreSelect = () => screen.getAllByLabelText(/centre/i)[0]! as HTMLSelectElement;
+
+  it('keeps a members-complete, address-complete, centre-unknown manager ON the form', async () => {
+    // The exact returning-family shape. Before the load short-circuit knew about
+    // the centre it hard-navigated to /family here, the gate sent them back, and
+    // because it is a HARD navigation the loop was permanent.
+    getFamily.mockResolvedValue(family([adult()], { family: FLAGGED_FAMILY }));
+    render(<CompleteProfileForm />);
+
+    await waitFor(() => expect(centreSelect()).toBeInTheDocument());
+    expect(navigateTo).not.toHaveBeenCalled();
+  });
+
+  it('starts the selector UNSELECTED, not seeded with the defaulted Brampton', async () => {
+    // Seeding from family.location (the pattern the other family-level fields
+    // use) would prefill the guess. The family clicks Save without touching it,
+    // the flag clears, and they are recorded as having CHOSEN Brampton - the
+    // precise outcome this feature exists to prevent, now with a false trail.
+    getFamily.mockResolvedValue(family([adult()], { family: FLAGGED_FAMILY }));
+    render(<CompleteProfileForm />);
+
+    await waitFor(() => expect(centreSelect()).toBeInTheDocument());
+    expect(centreSelect().value).toBe('');
+  });
+
+  it('offers the admin-managed centres', async () => {
+    fetchMock.mockImplementation(routedFetch(['Brampton', 'Scarborough', 'Markham']));
+    getFamily.mockResolvedValue(family([adult()], { family: FLAGGED_FAMILY }));
+    render(<CompleteProfileForm />);
+
+    await waitFor(() => expect(centreSelect()).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getAllByRole('option', { name: 'Markham' }).length).toBeGreaterThan(0),
+    );
+  });
+
+  it('BLOCKS Save until a flagged manager picks a centre, then sends location', async () => {
+    getFamily.mockResolvedValue(family([adult()], { family: FLAGGED_FAMILY }));
+    const user = userEvent.setup();
+    render(<CompleteProfileForm />);
+    await waitFor(() => expect(centreSelect()).toBeInTheDocument());
+
+    await user.click(save());
+    expect(toastMock.error).toHaveBeenCalled();
+    const patchCalls = () => fetchMock.mock.calls.filter((c) => c[0] === '/api/setu/family');
+    expect(patchCalls()).toHaveLength(0);
+    expect(navigateTo).not.toHaveBeenCalled();
+
+    await waitFor(() =>
+      expect(screen.getAllByRole('option', { name: 'Scarborough' }).length).toBeGreaterThan(0),
+    );
+    await user.selectOptions(centreSelect(), 'Scarborough');
+    await user.click(save());
+
+    await waitFor(() => expect(patchCalls()).toHaveLength(1));
+    const body = JSON.parse(String(patchCalls()[0]![1]!.body));
+    expect(body.location).toBe('Scarborough');
+    // The address rides along in the same PATCH; the route must land both.
+    expect(body.familyAddress).toBeTruthy();
+    await waitFor(() => expect(navigateTo).toHaveBeenCalledWith('/family'));
+  });
+
+  // ── The three negatives. Without these, a centreReady that is unsatisfiable
+  // for unflagged families ships green and locks out the entire launch
+  // population, because the selector that would satisfy it renders only when
+  // the flag is set - visibility and enablement gated on opposite states.
+  it('does NOT block an UNFLAGGED manager who has an incomplete member', async () => {
+    getFamily.mockResolvedValue(family([adult({ foodAllergies: null })]));
+    const user = userEvent.setup();
+    render(<CompleteProfileForm />);
+    await waitFor(() => expect(screen.getAllByTestId('member-card-CMT-1-01').length).toBeGreaterThan(0));
+
+    expect(screen.queryByLabelText(/centre/i)).toBeNull(); // no selector at all
+    await user.type(screen.getAllByLabelText(/Food allergies for PC/i)[0]!, 'Peanuts');
+    await user.click(save());
+
+    await waitFor(() => expect(patchMember).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(navigateTo).toHaveBeenCalledWith('/family'));
+  });
+
+  it('does NOT block a NON-MANAGER, who cannot set family-level data', async () => {
+    getFamily.mockResolvedValue(
+      family([adult({ foodAllergies: null })], {
+        isManager: false,
+        family: FLAGGED_FAMILY, // flagged, but this viewer is not a manager
+      }),
+    );
+    const user = userEvent.setup();
+    render(<CompleteProfileForm />);
+    await waitFor(() => expect(screen.getAllByTestId('member-card-CMT-1-01').length).toBeGreaterThan(0));
+
+    expect(screen.queryByLabelText(/centre/i)).toBeNull();
+    await user.type(screen.getAllByLabelText(/Food allergies for PC/i)[0]!, 'Peanuts');
+    await user.click(save());
+
+    await waitFor(() => expect(navigateTo).toHaveBeenCalledWith('/family'));
+  });
+
+  it('does NOT render the selector once the centre has been confirmed', async () => {
+    getFamily.mockResolvedValue(
+      family([adult({ foodAllergies: null })], {
+        family: {
+          fid: 'CMT-1', name: 'PC Family', familyAddress: COMPLETE_ADDRESS,
+          location: 'Scarborough', locationNeedsConfirmation: false,
+        } as FamilyWithMembers['family'],
+      }),
+    );
+    render(<CompleteProfileForm />);
+    await waitFor(() => expect(screen.getAllByTestId('member-card-CMT-1-01').length).toBeGreaterThan(0));
+    expect(screen.queryByLabelText(/centre/i)).toBeNull();
   });
 });

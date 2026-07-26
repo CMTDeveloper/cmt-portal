@@ -6,6 +6,7 @@ import {
   whatsMissingForMember,
   isMemberComplete,
   isFamilyAddressComplete,
+  needsCentreConfirmation,
   membersRequiringCompletion,
   CANADIAN_POSTAL_RE,
   CHILD_GRADE_OPTIONS,
@@ -202,6 +203,12 @@ export function CompleteProfileForm() {
   const [city, setCity] = useState('');
   const [province, setProvince] = useState('ON');
   const [postalCode, setPostalCode] = useState('');
+  // Manager-only CMT centre, asked ONLY when the family was migrated on a
+  // guessed centre (spec 1.9c). Deliberately NOT seeded from family.location:
+  // for every flagged family that value is the defaulted 'Brampton', so seeding
+  // would let them Save without choosing and record the guess as their answer.
+  const [centre, setCentre] = useState('');
+  const [centreOptions, setCentreOptions] = useState<string[]>([]);
   // Inline validation only surfaces AFTER a blocked Save attempt, then clears
   // live as each field becomes valid (so the user sees progress, not nagging).
   const [showErrors, setShowErrors] = useState(false);
@@ -225,9 +232,29 @@ export function CompleteProfileForm() {
         // short-circuit to /family — otherwise the gate would bounce them right
         // back here (a redirect loop) even though every member is complete.
         const addressDone = !result.isManager || isFamilyAddressComplete(result.family);
-        if (scoped.every((m) => isMemberComplete(m)) && addressDone) {
+        // ...and the centre, for the same reason. The target family for spec
+        // 1.9c is a RETURNING one - members complete, address complete, only the
+        // centre unknown - so without this they satisfy every other condition,
+        // hard-navigate to /family, get sent back by the gate, and loop. Because
+        // it is a HARD navigation the gate re-runs on fresh data every time, so
+        // the loop is permanent rather than a one-off stale-cache bounce.
+        const centreDone = !needsCentreConfirmation(result.family, result.isManager);
+        if (scoped.every((m) => isMemberComplete(m)) && addressDone && centreDone) {
           navigateTo('/family');
           return;
+        }
+        // Only fetch the centre list when we are actually going to ask. Every
+        // other visitor - the overwhelming majority - makes no extra request.
+        if (!centreDone) {
+          fetch('/api/setu/locations')
+            .then((r) => (r.ok ? r.json() : { options: [] }))
+            .then((body: { options?: string[] }) => {
+              if (!cancelled) setCentreOptions(body.options ?? []);
+            })
+            .catch(() => {
+              /* the selector renders empty; Save stays blocked rather than
+                 silently accepting a centre the family never picked */
+            });
         }
         setData(result);
         const seeded: Record<string, MemberDraft> = {};
@@ -281,6 +308,25 @@ export function CompleteProfileForm() {
     );
   }, [data, street, city, province, postalCode]);
 
+  // Whether this manager is being asked to confirm their centre. THE single
+  // source for that question on this screen - the load short-circuit above, the
+  // Save gate, the PATCH body and the selector's render condition all derive
+  // from it (via the same shared helper the /family gates use), so the four
+  // cannot drift apart.
+  const centreNeeded = useMemo(
+    () => (data ? needsCentreConfirmation(data.family, data.isManager) : false),
+    [data],
+  );
+
+  // CONDITIONAL ON THE FLAG, NOT ON THE VALUE. Written as `centre !== ''` it
+  // would block Save for every manager who is NOT flagged - essentially the
+  // whole launch population - because the selector that would satisfy it renders
+  // only when the flag is set. That is the mutually-exclusive-conditions trap:
+  // a control whose visibility and whose enablement are gated on opposite states
+  // is never satisfiable. allReady is a hard block, so getting this wrong locks
+  // ~568 bulk-migrated managers out at first sign-in.
+  const centreReady = !centreNeeded || centre !== '';
+
   // Whether everything in scope is now saveable (drives the "all set" note). The
   // Save button itself is ALWAYS enabled (except while saving) so a click on an
   // incomplete form gives feedback instead of doing nothing. For a manager the
@@ -291,8 +337,8 @@ export function CompleteProfileForm() {
       const draft = drafts[member.mid];
       return draft ? memberReady(member, draft) : isMemberComplete(member);
     });
-    return membersOk && addressReady;
-  }, [data, scopedMembers, drafts, addressReady]);
+    return membersOk && addressReady && centreReady;
+  }, [data, scopedMembers, drafts, addressReady, centreReady]);
 
   function update(mid: string, patch: Partial<MemberDraft>) {
     setDrafts((prev) => {
@@ -382,6 +428,11 @@ export function CompleteProfileForm() {
               province: province.trim(),
               postalCode: postalCode.trim().toUpperCase(),
             },
+            // Only when we asked. The route clears locationNeedsConfirmation
+            // whenever `location` is present, so sending it unconditionally
+            // would mark unflagged families as "confirmed" without them ever
+            // having been shown the question.
+            ...(centreNeeded ? { location: centre } : {}),
           }),
         });
         if (!res.ok) {
@@ -737,6 +788,37 @@ export function CompleteProfileForm() {
           message={showErrors && !CANADIAN_POSTAL_RE.test(postalCode.trim()) ? 'Enter a valid postal code (A1A 1A1).' : undefined}
         />
       </div>
+
+      {/* The CMT centre, asked only when the migration had to guess it. Kept in
+          the family-level card because that is what it is - and next to the home
+          address on purpose, since the two are easy to confuse. They are NOT the
+          same thing: a family living in Mississauga may attend either centre,
+          which is exactly why the address cannot be used to infer this. */}
+      {centreNeeded && (
+        <div className="field" style={{ marginTop: 14 }} data-testid="family-centre-field">
+          <label htmlFor="family-centre">Which centre does your family attend? <span className="req">·</span></label>
+          <select
+            id="family-centre"
+            className="input"
+            aria-label="Centre"
+            value={centre}
+            onChange={(e) => setCentre(e.target.value)}
+          >
+            {/* Starts UNSELECTED. Seeding from family.location - the pattern the
+                other family-level fields use - would prefill the defaulted
+                'Brampton' for every flagged family, letting them Save without
+                choosing and recording the guess as their answer. */}
+            <option value="" disabled>Select your centre…</option>
+            {centreOptions.map((o) => (
+              <option key={o} value={o}>{o}</option>
+            ))}
+          </select>
+          <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6, lineHeight: 1.5 }}>
+            We could not tell which centre you attend from our old records, so please pick it here.
+          </p>
+          <FieldError message={showErrors && !centre ? 'Please choose your centre.' : undefined} />
+        </div>
+      )}
     </div>
   ) : null;
 
