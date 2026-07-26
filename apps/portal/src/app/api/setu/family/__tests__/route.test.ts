@@ -18,6 +18,9 @@ vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
   }),
 }));
 
+const mockGetLocationOptions = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/locations', () => ({ getLocationOptions: mockGetLocationOptions }));
+
 import { GET, PATCH } from '../route';
 import { revalidateTag } from 'next/cache';
 
@@ -85,6 +88,7 @@ function makePatchRequest(
 beforeEach(() => {
   vi.clearAllMocks();
   mockGetFamilyByFid.mockResolvedValue({ family: familyDoc, members: [memberDoc] });
+  mockGetLocationOptions.mockResolvedValue(['Brampton', 'Scarborough']);
 });
 
 describe('GET /api/setu/family', () => {
@@ -227,5 +231,75 @@ describe('PATCH /api/setu/family', () => {
     const body = await res.json();
     expect(body.error).toBe('bad-request');
     expect(mockSet).not.toHaveBeenCalled();
+  });
+
+  // Zod strips unknown keys, so before this existed `{ location: 'Scarborough' }`
+  // parsed to `{}` and 400'd, and sent alongside familyAddress it was silently
+  // dropped - the family saved their address, stayed Brampton, kept the flag,
+  // and got diverted to /complete-profile again on every visit.
+  describe('location', () => {
+    it('accepts location on its own and clears the confirmation flag', async () => {
+      const res = await PATCH(makePatchRequest(manager, { location: 'Scarborough' }));
+      expect(res.status).toBe(200);
+      expect(mockSet).toHaveBeenCalledWith(
+        { location: 'Scarborough', locationNeedsConfirmation: false },
+        { merge: true },
+      );
+      expect(revalidateTag).toHaveBeenCalledWith('family-FAM001ABCD12', 'max');
+    });
+
+    it('lands BOTH when location and familyAddress are sent together', async () => {
+      const res = await PATCH(
+        makePatchRequest(manager, { location: 'Scarborough', familyAddress: validAddress }),
+      );
+      expect(res.status).toBe(200);
+      expect(mockSet).toHaveBeenCalledWith(
+        {
+          familyAddress: validAddress,
+          location: 'Scarborough',
+          locationNeedsConfirmation: false,
+        },
+        { merge: true },
+      );
+    });
+
+    // Without this, a crafted PATCH writes an arbitrary string into the field
+    // that drives level matching, teacher rosters, and roster filters.
+    it('rejects a centre that is not in the admin-managed options', async () => {
+      const res = await PATCH(makePatchRequest(manager, { location: 'Atlantis' }));
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe('unknown-location');
+      expect(mockSet).not.toHaveBeenCalled();
+    });
+
+    it('rejects an empty-string location', async () => {
+      const res = await PATCH(makePatchRequest(manager, { location: '' }));
+      expect(res.status).toBe(400);
+      expect(mockSet).not.toHaveBeenCalled();
+    });
+
+    it('follows the admin-managed list, not a hardcoded one', async () => {
+      mockGetLocationOptions.mockResolvedValue(['Brampton', 'Scarborough', 'Markham']);
+      const res = await PATCH(makePatchRequest(manager, { location: 'Markham' }));
+      expect(res.status).toBe(200);
+      expect(mockSet).toHaveBeenCalledWith(
+        { location: 'Markham', locationNeedsConfirmation: false },
+        { merge: true },
+      );
+    });
+
+    it('stays manager-only', async () => {
+      const res = await PATCH(makePatchRequest(member, { location: 'Scarborough' }));
+      expect(res.status).toBe(403);
+      expect(mockSet).not.toHaveBeenCalled();
+    });
+
+    // A PATCH that does not mention location must not touch the flag, or an
+    // address edit would silently mark an unconfirmed centre as confirmed.
+    it('leaves locationNeedsConfirmation alone on an address-only PATCH', async () => {
+      await PATCH(makePatchRequest(manager, { familyAddress: validAddress }));
+      expect(mockSet).toHaveBeenCalledWith({ familyAddress: validAddress }, { merge: true });
+    });
   });
 });

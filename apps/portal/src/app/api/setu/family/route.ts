@@ -5,6 +5,7 @@ import { flags } from '@/lib/flags';
 import { getSessionFamily } from '@/features/setu/members/get-session-family';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { FamilyEmergencyContactSchema, FamilyAddressSchema } from '@cmt/shared-domain';
+import { getLocationOptions } from '@/lib/locations';
 
 // Header-based session (works for cookie AND Bearer/mobile callers) — the
 // cookie-only getCurrentFamily() silently 401'd valid Bearer requests.
@@ -28,6 +29,11 @@ export async function GET(req: Request) {
 const patchSchema = z.object({
   familyEmergencyContact: FamilyEmergencyContactSchema.nullable().optional(),
   familyAddress: FamilyAddressSchema.optional(),
+  // The CMT centre. Sent by /complete-profile when the family was migrated on a
+  // guessed centre. Validated against the admin-managed options below, not just
+  // by this schema - `location` drives level matching, teacher rosters and
+  // roster filters, so an arbitrary string here would corrupt all three.
+  location: z.string().min(1).optional(),
 });
 
 export async function PATCH(req: Request) {
@@ -54,6 +60,20 @@ export async function PATCH(req: Request) {
   const update: Record<string, unknown> = {};
   if ('familyEmergencyContact' in parsed.data) update.familyEmergencyContact = parsed.data.familyEmergencyContact;
   if (parsed.data.familyAddress !== undefined) update.familyAddress = parsed.data.familyAddress;
+
+  if (parsed.data.location !== undefined) {
+    const allowed = await getLocationOptions();
+    if (!allowed.includes(parsed.data.location)) {
+      return NextResponse.json({ error: 'unknown-location' }, { status: 400 });
+    }
+    update.location = parsed.data.location;
+    // The family has now stated their centre, so it is no longer a guess.
+    // Written as an explicit `false` rather than deleted: it distinguishes
+    // "asked and answered" from "never asked" (absent), which is what makes the
+    // flag usable as a welcome-team follow-up queue. Only `true` gates anything.
+    update.locationNeedsConfirmation = false;
+  }
+
   if (Object.keys(update).length === 0) {
     return NextResponse.json({ error: 'bad-request' }, { status: 400 });
   }
