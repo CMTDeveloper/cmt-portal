@@ -6,6 +6,13 @@ export const programKeySchema = z.string().regex(/^[a-z0-9-]+$/, 'programKey mus
 
 export const BALA_VIHAR = 'bala-vihar';
 
+// The Adult Study Class. Named here rather than inlined because THREE sites must
+// agree on it or the feature silently half-works: the gate's offering resolver,
+// the /adult-class route that enrolls into that same offering, and the Bala
+// Vihar fee rule that exempts it. A typo in any one of them is invisible - the
+// query simply returns nothing and the family is never asked.
+export const ADULT_STUDY_CLASS = 'adult-study-class';
+
 export const PROGRAM_TERM_TYPES = ['term', 'one-time', 'rolling'] as const;
 export type ProgramTermType = (typeof PROGRAM_TERM_TYPES)[number];
 
