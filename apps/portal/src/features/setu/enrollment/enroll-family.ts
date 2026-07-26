@@ -10,6 +10,25 @@ export type EnrollFamilyParams = {
   oid: string;
   enrolledVia: EnrollVia;
   enrolledByMid: string | null;
+  /**
+   * Explicit member selection. OMIT to keep the derive-from-eligibility
+   * behaviour every existing caller relies on. Supplied by the Adult Study
+   * Class, where the family names which non-teaching adult attends rather than
+   * enrolling every adult in the household.
+   */
+  enrolledMids?: string[];
+  /**
+   * Per-family price override. OMIT to keep the hardcoded `null`. `0` is a
+   * meaningful value (the Bala-Vihar-paid exemption), so this is distinguished
+   * from "not supplied" by `undefined`, never by falsiness.
+   */
+  suggestedAmountOverride?: number | null;
+  /**
+   * `'manual'` freezes `enrolledMids` against the member-edit auto-prune, so a
+   * family's explicit choice is not silently re-derived. OMIT → `'auto'`, which
+   * is what absence has always meant.
+   */
+  membershipMode?: 'auto' | 'manual';
 };
 
 export type EnrollFamilyResult =
@@ -36,6 +55,9 @@ export type EnrollFamilyResult =
  */
 export async function enrollFamily(params: EnrollFamilyParams): Promise<EnrollFamilyResult> {
   const { fid, oid, enrolledVia, enrolledByMid } = params;
+  // Presence, not truthiness: an explicitly supplied `[]` must still reach the
+  // no-eligible-members guard rather than silently falling back to deriving.
+  const midsSupplied = params.enrolledMids !== undefined;
   const db = portalFirestore();
   const eid = `${fid}-${oid}`;
 
@@ -112,26 +134,36 @@ export async function enrollFamily(params: EnrollFamilyParams): Promise<EnrollFa
       }
     }
 
-    // Read members AFTER early-exit checks so we only pay the cost when actually enrolling.
-    const membersSnap = await txn.get(
-      db.collection('families').doc(fid).collection('members'),
-    );
+    // An explicit selection needs no member read at all; only derive when the
+    // caller did not name the members.
+    let enrolledMids: string[];
+    if (midsSupplied) {
+      enrolledMids = params.enrolledMids!;
+    } else {
+      // Read members AFTER early-exit checks so we only pay the cost when actually enrolling.
+      const membersSnap = await txn.get(
+        db.collection('families').doc(fid).collection('members'),
+      );
 
-    // Enroll exactly the members that pass the program's eligibility — the same
-    // set the family sees on the enroll page (memberEligibleForProgram). BV
-    // (memberType 'child') → children only (unchanged); 'any'/'adult' programs →
-    // all matching members. Replaces the old children-only hardcode.
-    const enrolledMids: string[] = [];
-    for (const memberDoc of membersSnap.docs) {
-      const m = memberDoc.data() as { type?: 'Adult' | 'Child'; mid?: string; birthMonthYear?: string | null };
-      if (!m.mid || !m.type) continue;
-      if (memberEligibleForProgram({ type: m.type, birthMonthYear: m.birthMonthYear ?? null }, program.eligibility, now)) {
-        enrolledMids.push(m.mid);
+      // Enroll exactly the members that pass the program's eligibility — the same
+      // set the family sees on the enroll page (memberEligibleForProgram). BV
+      // (memberType 'child') → children only (unchanged); 'any'/'adult' programs →
+      // all matching members. Replaces the old children-only hardcode.
+      enrolledMids = [];
+      for (const memberDoc of membersSnap.docs) {
+        const m = memberDoc.data() as { type?: 'Adult' | 'Child'; mid?: string; birthMonthYear?: string | null };
+        if (!m.mid || !m.type) continue;
+        if (memberEligibleForProgram({ type: m.type, birthMonthYear: m.birthMonthYear ?? null }, program.eligibility, now)) {
+          enrolledMids.push(m.mid);
+        }
       }
     }
 
     // Enrolling zero members is always meaningless (an adult-only family enrolling
     // in child-only Bala Vihar). Program-agnostic - never write an empty enrollment.
+    // Deliberately applied to the SUPPLIED list too: an empty explicit selection
+    // would otherwise write an enrollment that satisfies the adult-class gate's
+    // "has an active enrollment" condition while naming nobody.
     if (enrolledMids.length === 0) {
       throw new Error('no-eligible-members');
     }
@@ -150,10 +182,15 @@ export async function enrollFamily(params: EnrollFamilyParams): Promise<EnrollFa
       enrolledByMid,
       enrolledMids,
       suggestedAmountSnapshot,
-      suggestedAmountOverride: null,
+      // `?? null`, never `|| null`: a supplied `0` is the Bala-Vihar-paid
+      // exemption and must survive. Absent → null, exactly as before.
+      suggestedAmountOverride: params.suggestedAmountOverride ?? null,
       status: 'active',
       cancelledAt: null,
       cancelledReason: null,
+      // Always written, defaulting to 'auto' - which is exactly what absence has
+      // always meant, so this is additive rather than a behaviour change.
+      membershipMode: params.membershipMode ?? 'auto',
     });
 
     return { created: true as const, eid, suggestedAmountSnapshot };
