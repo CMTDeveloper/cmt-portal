@@ -204,6 +204,38 @@ When the enrollment exists and is `active` **and** any of `enrolledMids` / `sugg
 
 ---
 
+## Independent audit findings (Codex, 2026-07-26, against `6bf05ef`)
+
+An independent read-only audit of Tasks 2-3 produced 10 findings. **Fixed in
+`c787ef0`:** the reconcile sat BELOW the enrollment-window gates and was
+therefore unreachable exactly when needed (an admin closing registration
+stranded any family whose `enrolledMids` the prune had emptied); no no-change
+short-circuit; no `updatedAt`; and `suggestedAmountSnapshot` could return
+`undefined` on an older doc. Every fixture in the suite used
+`enabled:true/endDate:null`, so **none of that could ever have failed a test** -
+there is now a `enabled:false` reachability test, and all six new tests fail
+against the pre-fix code.
+
+**Also corrected my own analysis:** I had listed the immutable-on-reconcile
+fields as snapshot/enrolledAt/enrolledVia/enrolledByMid but treated `enrolledAt`
+as merely ordering. It is not - `get-enrollments.ts:85-87` resolves the LIVE
+price from `enrolledAt`, so preserving `suggestedAmountSnapshot` alone does NOT
+preserve money owed.
+
+### STILL OPEN - carry into the tasks below
+
+| # | Finding | Where it belongs |
+|---|---|---|
+| 1 | **`membershipMode` has ZERO readers.** `syncActiveEnrollmentMemberships` (`sync-enrollment-members.ts:64-93`) recomputes `enrolledMids` without ever reading it, so the schema/param docs currently promise a guarantee the code does not provide. Family picks parent A → anyone edits any member → both parents re-enrolled, including one teaching that hour. | **Task 4 - next, and it closes findings 5 and 6 too** |
+| 3 | **Supplied `enrolledMids` is never validated** (`enroll-family.ts` skips the members read when mids are supplied). No cross-family leak (consumers path-scope by fid), but phantom or ineligible people reach rosters and CSVs. | **Task 7 Step 6 - MUST ship with the route that supplies mids, not after** |
+| 4 | **A reconcile retroactively rewrites the year.** `enrolledMids` is read everywhere as current membership, never history: `teacher/roster.ts:82` drops the previously-named person and their recorded attendance; `report-dataset.ts:221` can silently flip a family confirmed→registered; `load-dashboard.ts:108-111` flips the family's own "Enrolled" pill with no user action. | **Accepted limit - record in Task 12's runbook entry** |
+| 5 | **The prune writes `enrolledMids: []` onto ACTIVE enrollments** (`sync-enrollment-members.ts:90-91`), which `enrollFamily` refuses to write at both `:163` and `:208`. Two writers, contradictory invariants on one field. `teacher/guests.ts:23-26` then reports `hasActiveEnrollment` true (status-only) so first-attendance never repairs it. | **Task 4** |
+| 6 | **The prune races the reconcile and wins.** The prune reads outside any txn and commits a `db.batch()` (no version precondition); the reconcile holds no lock a member edit conflicts with. Both "succeed", the prune's value stands. | **Task 4** (a `manual` skip removes the batch's authority entirely) |
+| 8 | **Cancelled → re-create uses a bare `txn.set` (no merge)**, wiping `levelSnapshots` - written only by the rollover (`promote-families.ts:313-322`) and the sole source for `get-child-journey.ts:73-88`. Re-enrolling into the same oid destroys that child's prior-year level history. Also strips `_test`. **Pre-existing, NOT introduced here**, but my Task 3 test now pins the re-create path as correct, so fix or annotate. | **Separate issue - raise before launch, do not silently inherit** |
+| 9b | Map Firestore `NOT_FOUND` (a deleted doc between read and update) to **409**, not the current unhandled 500. `txn.update` is the right primitive - it carries an exists-precondition, where `set(merge)` would silently resurrect a fragment that every `collectionGroup('enrollments')` sweep then picks up. | **Task 7, with the routes** |
+
+---
+
 ## Task 4: `membershipMode` survives the member-edit prune
 
 - [ ] **Step 1: Write the failing tests**
