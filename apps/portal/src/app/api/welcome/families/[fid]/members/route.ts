@@ -45,7 +45,7 @@ export async function POST(req: Request, ctx: RouteContext) {
   const result = await addMember({
     fid,
     body: raw,
-    actor: { uid: session.uid, mid: session.mid, role: session.role },
+    actor: { uid: session.uid, mid: session.mid, role: session.role, extraRoles: session.extraRoles },
   });
   if (!result.ok) {
     return NextResponse.json(result.body, { status: result.status });

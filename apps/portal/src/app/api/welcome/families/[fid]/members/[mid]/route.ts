@@ -20,7 +20,7 @@ function authorize(req: Request): Actor | NextResponse {
   if (!isWelcomeTeam({ role: session.role, extraRoles: session.extraRoles })) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
-  return { uid: session.uid, mid: session.mid, role: session.role };
+  return { uid: session.uid, mid: session.mid, role: session.role, extraRoles: session.extraRoles };
 }
 
 export async function PATCH(req: Request, ctx: RouteContext) {

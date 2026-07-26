@@ -99,6 +99,7 @@ export async function PATCH(req: Request, ctx: RouteContext) {
         actorUid,
         actorMid: session.mid,
         actorRole: session.role,
+        actorExtraRoles: session.extraRoles,
         action: 'family.update',
         fid,
         mid: null,

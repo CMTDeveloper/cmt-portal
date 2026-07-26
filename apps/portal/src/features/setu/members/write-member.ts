@@ -37,7 +37,14 @@ import {
 export interface Actor {
   uid: string;
   mid: string | null;
+  /** The session's PRIMARY role. */
   role: string;
+  /**
+   * The actor's other roles. A welcome-team volunteer is usually also a parent,
+   * so `role` alone is `family-manager` and the staff capability that actually
+   * authorized this write lives here.
+   */
+  extraRoles: string[];
 }
 
 /** A refused write, carrying the exact response body the routes return. */
@@ -392,6 +399,7 @@ export async function addMember(args: {
           actorUid: actor.uid,
           actorMid: actor.mid,
           actorRole: actor.role,
+          actorExtraRoles: actor.extraRoles,
           action: 'member.create',
           fid,
           mid: newMid,
@@ -649,6 +657,7 @@ export async function updateMember(args: {
           actorUid: actor.uid,
           actorMid: actor.mid,
           actorRole: actor.role,
+          actorExtraRoles: actor.extraRoles,
           action: 'member.update',
           fid,
           mid: targetMid,
@@ -787,6 +796,7 @@ export async function deleteMember(args: {
           actorUid: actor.uid,
           actorMid: actor.mid,
           actorRole: actor.role,
+          actorExtraRoles: actor.extraRoles,
           action: 'member.delete',
           fid,
           mid: targetMid,

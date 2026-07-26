@@ -44,7 +44,7 @@ import {
 import { makeFakeDb, auditRows } from './fake-member-db';
 
 const FID = 'FAM001ABCD12';
-const STAFF: Actor = { uid: 'uid-staff', mid: null, role: 'welcome-team' };
+const STAFF: Actor = { uid: 'uid-staff', mid: null, role: 'welcome-team', extraRoles: [] };
 
 // The fake Firestore is shared with the staff route suites (fake-member-db.ts)
 // so both exercise the same document model.

@@ -3,7 +3,18 @@ import { FieldValue } from '@cmt/firebase-shared/admin/firestore';
 export interface AuditEntry {
   actorUid: string;
   actorMid: string | null;
+  /** The session's PRIMARY role. See `actorExtraRoles` before reading it alone. */
   actorRole: string;
+  /**
+   * The rest of the actor's roles.
+   *
+   * Load-bearing, not decorative: welcome-team volunteers are usually parents,
+   * so their primary role is `family-manager` and the staff capability rides in
+   * extraRoles. A row saying only `actorRole: 'family-manager'` against another
+   * family's child reads as a family manager reaching across families - a
+   * security incident - when it is in fact routine staff work.
+   */
+  actorExtraRoles: string[];
   action: string;
   fid: string;
   mid: string | null;

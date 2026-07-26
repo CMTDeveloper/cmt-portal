@@ -10,6 +10,7 @@ const ENTRY: AuditEntry = {
   actorUid: 'u1',
   actorMid: null,
   actorRole: 'welcome-team',
+  actorExtraRoles: [],
   action: 'member.update',
   fid: 'CMT-X',
   mid: 'CMT-X-02',
@@ -44,6 +45,21 @@ describe('writeAuditLog', () => {
       mid: 'CMT-X-02',
       actorRole: 'welcome-team',
       at: 'SERVER_TS',
+    });
+  });
+
+  it('records the actor extra roles, not just the primary one', () => {
+    // A welcome-team volunteer is usually also a parent, so their PRIMARY role
+    // is family-manager. A row saying only that, against another family's
+    // child, reads as a family manager reaching across families - a security
+    // incident - when it is routine staff work.
+    const { set, txn, db } = harness();
+
+    writeAuditLog(txn, db, { ...ENTRY, actorRole: 'family-manager', actorExtraRoles: ['welcome-team'] });
+
+    expect(set.mock.calls[0]![1]).toMatchObject({
+      actorRole: 'family-manager',
+      actorExtraRoles: ['welcome-team'],
     });
   });
 

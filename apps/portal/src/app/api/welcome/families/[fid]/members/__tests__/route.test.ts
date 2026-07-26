@@ -161,6 +161,20 @@ describe('POST /api/welcome/families/[fid]/members', () => {
     });
   });
 
+  it('records the STAFF capability on the audit row, not just the primary role', async () => {
+    // The realistic shape: a volunteer parent's primary role is family-manager,
+    // so a row carrying only that - against another family's child - reads as a
+    // family manager reaching across families, which is a security incident
+    // rather than the routine staff work it actually is.
+    const { writes } = useDb(seed());
+    await POST(makeRequest(CHILD, volunteerParentHeaders()), ctx);
+
+    expect(auditRows(writes)[0]).toMatchObject({
+      actorRole: 'family-manager',
+      actorExtraRoles: ['welcome-team'],
+    });
+  });
+
   it('returns 400 grade-required for a Child with no schoolGrade', async () => {
     // The shared matrix must run on the staff path too: a staff-created Child
     // with no grade immediately traps that family on /complete-profile.
