@@ -76,8 +76,52 @@ export function needsAdultClassSelection(input: AdultClassGateInput): boolean {
   if (!bv) return false;
 
   // ── Condition 3: that Bala Vihar donation is PAID ────────────────────────
-  // A three-way disjunction, and two of the three legs are easy to get wrong.
+  if (
+    !isBalaViharPaid({
+      bv,
+      donations: input.donations,
+      legacyPaymentStatus: input.legacyPaymentStatus,
+    })
+  ) {
+    return false;
+  }
+
+  // ── Condition 4: no active ASC enrollment FOR THE CURRENT TERM ────────────
+  // Scoped to `currentOffering.oid`, not "any adult-class enrollment ever":
+  // checking history would silently exempt every returning family after year
+  // one (spec 4.6.1).
   //
+  // "…carrying at least one adult" is deliberate. When the chosen adult later
+  // leaves the family, the member-edit prune empties `enrolledMids`, and that
+  // family still needs to choose someone - so an empty list must RE-FIRE the
+  // gate rather than read as satisfied.
+  const currentAsc = input.enrollments.find(
+    (e) => e.status === 'active' && e.oid === input.currentOffering!.oid,
+  );
+  if (currentAsc && (currentAsc.enrolledMids?.length ?? 0) > 0) return false;
+
+  // ── Condition 5: at least one adult is eligible to attend ────────────────
+  // Resolves matrix rows 3, 4 and 7 through one mechanism - an empty set.
+  return selectableAdults(input.members, input.teacherAssignedMids).length > 0;
+}
+
+/**
+ * Whether a family's Bala Vihar enrollment counts as PAID.
+ *
+ * Exported because THREE places must agree: this gate's condition 3, the
+ * `/adult-class` route (which waives the adult-class donation for a BV-paid
+ * family via `suggestedAmountOverride: 0`), and Task 10's Bala Vihar fee rule.
+ * A third hand-written copy is how the `>=` threshold bug got in.
+ *
+ * A three-way disjunction, and two of the three legs are easy to get wrong.
+ */
+export function isBalaViharPaid(args: {
+  /** The family's ACTIVE Bala Vihar enrollment, selected by programKey. */
+  bv: Pick<EnrollmentWithOffering, 'eid' | 'offering'>;
+  donations: readonly GateDonation[];
+  /** Meaningful ONLY when the offering is legacy-sourced - see leg (b). */
+  legacyPaymentStatus: string;
+}): boolean {
   // (a) ANY completed donation scoped to THIS enrollment's eid. **No amount
   //     threshold** - that is an explicit owner decision (2026-07-02, issue
   //     #23), already implemented by `isEnrollmentConfirmed`
@@ -87,7 +131,7 @@ export function needsAdultClassSelection(input: AdultClassGateInput): boolean {
   //
   //     A `>=` threshold here would silently exempt every PARTIAL donor from the
   //     policy this feature exists to enforce, and would additionally make the
-  //     gate a function of pricing edits made months later:
+  //     result a function of pricing edits made months later:
   //     `effectiveSuggestedAmount` is recomputed LIVE from the current offering
   //     (get-enrollments.ts:85-87), not from the pinned snapshot, so raising a
   //     tier in November would retroactively un-pay a family who paid in full in
@@ -96,8 +140,8 @@ export function needsAdultClassSelection(input: AdultClassGateInput): boolean {
   //     The eid scoping still matters: `sumCompletedDonations(fid)` exists but
   //     is program-BLIND, so using it would let a Tabla or general gift satisfy
   //     Bala Vihar for a family that never paid it.
-  const bvPaidByDonation = input.donations.some(
-    (d) => d.status === 'completed' && d.eid != null && d.eid === bv.eid,
+  const bvPaidByDonation = args.donations.some(
+    (d) => d.status === 'completed' && d.eid != null && d.eid === args.bv.eid,
   );
 
   // (b) Legacy, GATED on the offering actually being legacy-sourced. Ungated, a
@@ -117,30 +161,13 @@ export function needsAdultClassSelection(input: AdultClassGateInput): boolean {
   // a lockout, which is the safe direction. Guessing the source instead would
   // reopen the ungated-legacy problem leg (b) exists to prevent.
   const source = paymentSourceOf(
-    bv.offering?.paymentSource !== undefined ? { paymentSource: bv.offering.paymentSource } : {},
+    args.bv.offering?.paymentSource !== undefined
+      ? { paymentSource: args.bv.offering.paymentSource }
+      : {},
   );
-  const bvPaidByLegacy = source === 'legacy' && input.legacyPaymentStatus === 'paid';
+  const bvPaidByLegacy = source === 'legacy' && args.legacyPaymentStatus === 'paid';
 
   // (c) Teacher-managed offerings are never paid in-portal, so a family on one
   //     would otherwise be gated forever.
-  const bvPaid = bvPaidByDonation || bvPaidByLegacy || source === 'teacher-managed';
-  if (!bvPaid) return false;
-
-  // ── Condition 4: no active ASC enrollment FOR THE CURRENT TERM ────────────
-  // Scoped to `currentOffering.oid`, not "any adult-class enrollment ever":
-  // checking history would silently exempt every returning family after year
-  // one (spec 4.6.1).
-  //
-  // "…carrying at least one adult" is deliberate. When the chosen adult later
-  // leaves the family, the member-edit prune empties `enrolledMids`, and that
-  // family still needs to choose someone - so an empty list must RE-FIRE the
-  // gate rather than read as satisfied.
-  const currentAsc = input.enrollments.find(
-    (e) => e.status === 'active' && e.oid === input.currentOffering!.oid,
-  );
-  if (currentAsc && (currentAsc.enrolledMids?.length ?? 0) > 0) return false;
-
-  // ── Condition 5: at least one adult is eligible to attend ────────────────
-  // Resolves matrix rows 3, 4 and 7 through one mechanism - an empty set.
-  return selectableAdults(input.members, input.teacherAssignedMids).length > 0;
+  return bvPaidByDonation || bvPaidByLegacy || source === 'teacher-managed';
 }

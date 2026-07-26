@@ -27,25 +27,9 @@ export interface AdultClassGateSubject {
  * The I/O half of the Adult Study Class gate: everything
  * `needsAdultClassSelection` needs, or `null` when the gate cannot apply.
  *
- * **`null` means "do not gate."** It covers both "no adult-class question exists
- * for this family" and "a read failed". Both resolve the same way on purpose:
- * this gate REDIRECTS and runs on every `/family/*` render, so a transient
- * Firestore error must cost the family an un-asked question, never a 500 across
- * the whole portal. `getLegacyPaymentStatus` already fails soft the same way
- * (`legacy-payment.ts:71-74`), as do load-dashboard's cosmetic reads.
- *
- * Precisely: **every Firestore/RTDB read fails soft** - not "this function never
- * throws". The two in-memory exits below run OUTSIDE the try deliberately. They
- * only walk an already-loaded `members` array, so the sole way they can throw is
- * a caller passing something that is not a well-formed `MemberDoc[]` - a
- * programming error that should fail loudly in dev, not be laundered into
- * "nothing to ask this family".
- *
- * **A consumer that RENDERS rather than gates must not reuse this `null` as its
- * own truth.** If `/adult-class` treated null as "nothing to select" and
- * redirected back to `/family`, an intermittent read failure would ping-pong the
- * two routes - the `ERR_TOO_MANY_REDIRECTS` shape this codebase has hit before.
- * That screen needs its own error state.
+ * **`null` means "there is no adult-class question for this family."** Read
+ * failures are NOT folded in here - they throw. See `loadAdultClassGateDataFailSoft`
+ * for the gate's variant and why the two must stay distinguishable.
  *
  * **Takes the family, not a fid** (the plan said `(fid)`). `isManager` comes from
  * the session claims and cannot be derived from a fid at all, and the caller has
@@ -88,7 +72,7 @@ export async function loadAdultClassGateData(
   const candidates = selectableAdults(members, NOBODY);
   if (candidates.length === 0) return null;
 
-  try {
+  {
     // `location` is mapped with NO fallback at get-family-by-fid.ts:31, so it is
     // `undefined` at runtime for a doc that lacks it however FamilyDocSchema
     // types it. Normalize: getOpenOfferingsForFamily branches on `== null`, but
@@ -133,6 +117,36 @@ export async function loadAdultClassGateData(
       teacherAssignedMids,
       legacyPaymentStatus,
     };
+  }
+}
+
+/**
+ * `loadAdultClassGateData` with every read failure swallowed into `null`.
+ *
+ * **Only a GATE may use this.** The gate REDIRECTS and runs on every `/family/*`
+ * render, so a transient Firestore error must cost the family an un-asked
+ * question rather than a 500 across the whole portal - the same fail-soft
+ * philosophy as `getLegacyPaymentStatus` (`legacy-payment.ts:71-74`) and
+ * load-dashboard's cosmetic reads.
+ *
+ * **A screen that RENDERS must NOT use it**, and that is the entire reason the
+ * two are separate functions. `/adult-class` is where the gate sends the family.
+ * If it also collapsed a read failure to `null` and read that as "nothing to
+ * select, go back to /family", an INTERMITTENT failure would bounce the two
+ * routes off each other - the `ERR_TOO_MANY_REDIRECTS` shape this codebase has
+ * already hit. Letting the throw reach `app/adult-class/error.tsx` gives the
+ * family a real error with a retry instead of a loop.
+ *
+ * Note this catches strictly less than it looks: the two in-memory exits in
+ * `loadAdultClassGateData` can only throw if a caller passes something that is
+ * not a well-formed `MemberDoc[]`, which is a programming error that should fail
+ * loudly rather than be laundered into "nothing to ask this family".
+ */
+export async function loadAdultClassGateDataFailSoft(
+  subject: AdultClassGateSubject,
+): Promise<AdultClassGateInput | null> {
+  try {
+    return await loadAdultClassGateData(subject);
   } catch (err) {
     console.error('[adult-class] gate data load failed - not gating this render', err);
     return null;

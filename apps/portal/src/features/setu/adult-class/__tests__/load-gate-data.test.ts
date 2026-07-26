@@ -31,7 +31,7 @@ vi.mock('@/features/setu/donations/get-donations', () => ({ getDonations }));
 vi.mock('@/features/setu/donations/legacy-payment', () => ({ getLegacyPaymentStatus }));
 vi.mock('@/features/setu/teacher/assignments', () => ({ isTeacherAssigned }));
 
-import { loadAdultClassGateData } from '../load-gate-data';
+import { loadAdultClassGateData, loadAdultClassGateDataFailSoft } from '../load-gate-data';
 
 const BV_OID = 'bala-vihar-brampton-2026-27';
 
@@ -210,13 +210,26 @@ describe('loadAdultClassGateData', () => {
     expect(data!.legacyPaymentStatus).toBe('paid');
   });
 
-  // ── Fail-soft. This gate REDIRECTS and runs on every /family/* render, so a
-  //    transient read failure must cost the family an un-asked question, never
-  //    a 500 on the whole portal. ─────────────────────────────────────────
+  // ── Read failures THROW here. Folding them into `null` would make a screen
+  //    that renders indistinguishable from one that has nothing to show - see
+  //    the fail-soft variant below. ──────────────────────────────────────────
+  it('throws when a read fails, rather than reporting "nothing to ask"', async () => {
+    getEnrollments.mockRejectedValue(new Error('FAILED_PRECONDITION: index'));
+    await expect(
+      loadAdultClassGateData({ family: family(), members: [adult('CMT-F-01')], isManager: true }),
+    ).rejects.toThrow('FAILED_PRECONDITION');
+  });
+});
+
+// ── The gate's variant. This gate REDIRECTS and runs on every /family/* render,
+//    so a transient read failure must cost an un-asked question, not a 500 on
+//    the whole portal. The SCREEN the gate redirects to must not use this, or an
+//    intermittent failure ping-pongs the two routes. ────────────────────────
+describe('loadAdultClassGateDataFailSoft', () => {
   it('returns null instead of throwing when a read fails', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
     getEnrollments.mockRejectedValue(new Error('FAILED_PRECONDITION: index'));
-    const r = await loadAdultClassGateData({
+    const r = await loadAdultClassGateDataFailSoft({
       family: family(),
       members: [adult('CMT-F-01')],
       isManager: true,
@@ -224,5 +237,14 @@ describe('loadAdultClassGateData', () => {
     expect(r).toBeNull();
     expect(spy).toHaveBeenCalled();
     spy.mockRestore();
+  });
+
+  it('passes a successful load straight through', async () => {
+    const data = await loadAdultClassGateDataFailSoft({
+      family: family(),
+      members: [adult('CMT-F-01')],
+      isManager: true,
+    });
+    expect(data?.currentOffering?.oid).toBe('asc-2026');
   });
 });
