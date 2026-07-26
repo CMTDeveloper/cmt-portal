@@ -1076,4 +1076,28 @@ describe('canAccessRoute — staff family edit (Track B)', () => {
   it('denies a plain family-manager', () => {
     expect(canAccessRoute(manager, '/api/welcome/families/CMT-X', 'PATCH')).toBe(false);
   });
+
+  // The member sub-paths did not exist when the clause was written; they are
+  // covered by the same `/api/welcome/families/` prefix, and pinning them means
+  // a future narrowing of that clause cannot silently strand the staff editor.
+  it.each([
+    ['/api/welcome/families/CMT-X/members', 'POST'],
+    ['/api/welcome/families/CMT-X/members/CMT-X-02', 'PATCH'],
+    ['/api/welcome/families/CMT-X/members/CMT-X-02', 'DELETE'],
+  ])('allows welcome-team %s %s', (path, method) => {
+    expect(canAccessRoute(welcomeTeam, path, method)).toBe(true);
+  });
+
+  it.each([
+    ['/api/welcome/families/CMT-X/members', 'POST'],
+    ['/api/welcome/families/CMT-X/members/CMT-X-02', 'PATCH'],
+    ['/api/welcome/families/CMT-X/members/CMT-X-02', 'DELETE'],
+  ])('denies a coordinator %s %s', (path, method) => {
+    expect(canAccessRoute(coordinator, path, method)).toBe(false);
+  });
+
+  it('denies a plain family-manager the member sub-paths', () => {
+    expect(canAccessRoute(manager, '/api/welcome/families/CMT-X/members', 'POST')).toBe(false);
+    expect(canAccessRoute(manager, '/api/welcome/families/CMT-X/members/CMT-X-02', 'DELETE')).toBe(false);
+  });
 });

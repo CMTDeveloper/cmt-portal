@@ -41,89 +41,13 @@ import {
   firstMissingRequiredFieldForPatch,
   type Actor,
 } from '../write-member';
+import { makeFakeDb, auditRows } from './fake-member-db';
 
 const FID = 'FAM001ABCD12';
 const STAFF: Actor = { uid: 'uid-staff', mid: null, role: 'welcome-team' };
 
-// ── Fake Firestore ────────────────────────────────────────────────────────────
-// Keyed by collection path so a test can seed exactly the docs a transaction
-// reads, in any order, rather than relying on a mockResolvedValueOnce sequence
-// that silently mis-binds when the read order changes.
-
-interface Ref {
-  __path: string;
-  id: string;
-  collection(name: string): Col;
-}
-interface Col {
-  __path: string;
-  doc(id?: string): Ref;
-}
-
-interface Written {
-  path: string;
-  data: Record<string, unknown>;
-}
-
-function makeDb(docs: Record<string, unknown>) {
-  const writes: Written[] = [];
-  const deletes: string[] = [];
-  let autoId = 0;
-
-  function col(path: string): Col {
-    return {
-      __path: path,
-      doc(id?: string): Ref {
-        const docId = id ?? `auto-${++autoId}`;
-        return {
-          __path: `${path}/${docId}`,
-          id: docId,
-          collection: (name: string) => col(`${path}/${docId}/${name}`),
-        };
-      },
-    };
-  }
-
-  function snapFor(path: string) {
-    const data = docs[path];
-    return data === undefined
-      ? { exists: false, data: () => undefined }
-      : { exists: true, data: () => data };
-  }
-
-  const txn = {
-    get: vi.fn(async (target: Ref | Col) => {
-      // A collection read (the members subcollection) returns docs; a doc read
-      // returns a snapshot.
-      if (!('id' in target)) {
-        const prefix = `${target.__path}/`;
-        const ids = Object.keys(docs)
-          .filter((p) => p.startsWith(prefix) && !p.slice(prefix.length).includes('/'))
-          .map((p) => p.slice(prefix.length));
-        return { size: ids.length, docs: ids.map((id) => ({ id, data: () => docs[`${prefix}${id}`] })) };
-      }
-      return snapFor(target.__path);
-    }),
-    set: vi.fn((ref: Ref, data: Record<string, unknown>) => {
-      writes.push({ path: ref.__path, data });
-    }),
-    delete: vi.fn((ref: Ref) => {
-      deletes.push(ref.__path);
-    }),
-    update: vi.fn(),
-  };
-
-  const db = {
-    collection: (name: string) => col(name),
-    runTransaction: vi.fn(async (fn: (t: typeof txn) => unknown) => fn(txn)),
-  };
-
-  return { db, txn, writes, deletes };
-}
-
-function auditRows(writes: Written[]): Record<string, unknown>[] {
-  return writes.filter((w) => w.path.startsWith('audit_log/')).map((w) => w.data);
-}
+// The fake Firestore is shared with the staff route suites (fake-member-db.ts)
+// so both exercise the same document model.
 
 function seedFamily(extra: Record<string, unknown> = {}) {
   return {
@@ -157,12 +81,10 @@ const CHILD_DOC = {
   foodAllergies: 'None',
 };
 
-let current: ReturnType<typeof makeDb>;
-
 function useDb(docs: Record<string, unknown>) {
-  current = makeDb(docs);
-  (portalFirestore as ReturnType<typeof vi.fn>).mockReturnValue(current.db);
-  return current;
+  const fake = makeFakeDb(docs);
+  (portalFirestore as ReturnType<typeof vi.fn>).mockReturnValue(fake.db);
+  return fake;
 }
 
 beforeEach(() => {
