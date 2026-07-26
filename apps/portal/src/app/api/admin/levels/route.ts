@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { portalFirestore, FieldValue, Timestamp } from '@cmt/firebase-shared/admin/firestore';
-import { CreateLevelSchema, isAdmin } from '@cmt/shared-domain';
+import { CreateLevelSchema, isAdmin, isCoordinator } from '@cmt/shared-domain';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
 import { levelIdFor } from '@/features/setu/teacher/levels';
 import { findNameConflict, normalizeLevelName } from '@/features/setu/teacher/level-name-conflict';
@@ -38,7 +38,7 @@ async function nextLevelOrder(
 
 export async function GET(req: Request) {
   const session = readSessionFromHeaders(req);
-  if (!session || !isAdmin(session)) {
+  if (!session || (!isAdmin(session) && !isCoordinator(session))) {
     return NextResponse.json({ error: 'admin-required' }, { status: 403 });
   }
 
@@ -64,7 +64,7 @@ export async function POST(req: Request) {
   if (!session || !session.uid) {
     return NextResponse.json({ error: 'no-session' }, { status: 401 });
   }
-  if (!isAdmin(session)) {
+  if (!isAdmin(session) && !isCoordinator(session)) {
     return NextResponse.json({ error: 'admin-required' }, { status: 403 });
   }
 

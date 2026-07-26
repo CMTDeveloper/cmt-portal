@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { revalidateTag } from 'next/cache';
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
-import { UpdateProgramSchema, isAdmin } from '@cmt/shared-domain';
+import { UpdateProgramSchema, isAdmin, isCoordinator } from '@cmt/shared-domain';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
 import { getProgram } from '@/features/setu/programs/get-programs';
 
@@ -13,7 +13,7 @@ export async function PATCH(
   if (!session || !session.uid) {
     return NextResponse.json({ error: 'no-session' }, { status: 401 });
   }
-  if (!isAdmin(session)) {
+  if (!isAdmin(session) && !isCoordinator(session)) {
     return NextResponse.json({ error: 'admin-required' }, { status: 403 });
   }
 

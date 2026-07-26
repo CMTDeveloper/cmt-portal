@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { revalidateTag } from 'next/cache';
 import { portalFirestore, FieldValue, Timestamp } from '@cmt/firebase-shared/admin/firestore';
-import { CreateProgramSchema, isAdmin, toSafeSlug } from '@cmt/shared-domain';
+import { CreateProgramSchema, isAdmin, isCoordinator, toSafeSlug } from '@cmt/shared-domain';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
 
 export async function GET(req: Request) {
@@ -9,7 +9,7 @@ export async function GET(req: Request) {
   if (!session) {
     return NextResponse.json({ error: 'no-session' }, { status: 401 });
   }
-  if (!isAdmin(session)) {
+  if (!isAdmin(session) && !isCoordinator(session)) {
     return NextResponse.json({ error: 'admin-required' }, { status: 403 });
   }
 
@@ -31,7 +31,7 @@ export async function POST(req: Request) {
   if (!session || !session.uid) {
     return NextResponse.json({ error: 'no-session' }, { status: 401 });
   }
-  if (!isAdmin(session)) {
+  if (!isAdmin(session) && !isCoordinator(session)) {
     return NextResponse.json({ error: 'admin-required' }, { status: 403 });
   }
 

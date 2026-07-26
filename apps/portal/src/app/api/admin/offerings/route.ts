@@ -1,14 +1,14 @@
 import { NextResponse } from 'next/server';
 import { revalidateTag } from 'next/cache';
 import { portalFirestore, FieldValue, Timestamp } from '@cmt/firebase-shared/admin/firestore';
-import { CreateOfferingSchema, isAdmin, toSafeSlug } from '@cmt/shared-domain';
+import { CreateOfferingSchema, isAdmin, isCoordinator, toSafeSlug } from '@cmt/shared-domain';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
 import { getProgram } from '@/features/setu/programs/get-programs';
 import { findOverlappingEnabledOffering, offeringOverlapPayload } from './overlap';
 
 export async function GET(req: Request) {
   const session = readSessionFromHeaders(req);
-  if (!session || !isAdmin(session)) {
+  if (!session || (!isAdmin(session) && !isCoordinator(session))) {
     return NextResponse.json({ error: 'admin-required' }, { status: 403 });
   }
 
@@ -34,7 +34,7 @@ export async function POST(req: Request) {
   if (!session || !session.uid) {
     return NextResponse.json({ error: 'no-session' }, { status: 401 });
   }
-  if (!isAdmin(session)) {
+  if (!isAdmin(session) && !isCoordinator(session)) {
     return NextResponse.json({ error: 'admin-required' }, { status: 403 });
   }
 

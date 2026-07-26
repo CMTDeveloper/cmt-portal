@@ -68,3 +68,34 @@ describe('GET /api/welcome/roster/report', () => {
     expect(body).not.toContain('Harshita Rana'); // Level 2 kid filtered out
   });
 });
+
+describe('GET /api/welcome/roster/report - coordinator (gate 2 of 3)', () => {
+  // This endpoint is the coordinator's ONLY data source. /welcome/roster is the
+  // single screen the role is granted, and fetchRosterReportClient throws on a
+  // non-OK response - so a 403 here renders an EMPTY roster rather than an
+  // error, and the role looks granted while reaching nothing.
+  beforeEach(() => buildRosterReportDataset.mockResolvedValue(SAMPLE));
+
+  it('allows a primary coordinator', async () => {
+    const res = await GET(req('/api/welcome/roster/report', { 'x-portal-role': 'coordinator', 'x-portal-extra-roles': '' }));
+    expect(res.status).not.toBe(403);
+  });
+
+  it('allows a coordinator whose PRIMARY role is family-manager', async () => {
+    // The realistic shape: staff are usually parents too, so the family role
+    // takes the primary slot and coordinator lands in extraRoles. A handler
+    // comparing the raw x-portal-role string would 403 real staff.
+    const res = await GET(
+      req('/api/welcome/roster/report', {
+        'x-portal-role': 'family-manager',
+        'x-portal-extra-roles': 'coordinator',
+      }),
+    );
+    expect(res.status).not.toBe(403);
+  });
+
+  it('still denies a plain family-manager', async () => {
+    const res = await GET(req('/api/welcome/roster/report', { 'x-portal-role': 'family-manager', 'x-portal-extra-roles': '' }));
+    expect(res.status).toBe(403);
+  });
+});

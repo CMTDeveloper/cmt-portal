@@ -275,3 +275,36 @@ describe('PATCH /api/admin/programs/[key]', () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe('POST /api/admin/programs - coordinator (gate 2 of 3)', () => {
+  // canAccessRoute is only the FIRST gate. This handler re-checks the role
+  // independently, so without widening it a coordinator authorized by the
+  // middleware still gets a 403 - just from here instead.
+  function coordinatorReq(headers: Record<string, string>): Request {
+    return new Request('http://localhost/api/admin/programs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-portal-uid': 'u1', ...headers },
+      body: JSON.stringify({ programKey: 'tabla', label: 'Tabla' }),
+    });
+  }
+
+  it('allows a primary coordinator', async () => {
+    const { POST } = await import('../route');
+    expect((await POST(coordinatorReq({ 'x-portal-role': 'coordinator' }))).status).not.toBe(403);
+  });
+
+  it('allows a coordinator whose PRIMARY role is family-manager', async () => {
+    // The realistic shape - staff are usually parents too - and exactly what a
+    // raw x-portal-role string comparison would wrongly 403.
+    const { POST } = await import('../route');
+    const res = await POST(
+      coordinatorReq({ 'x-portal-role': 'family-manager', 'x-portal-extra-roles': 'coordinator' }),
+    );
+    expect(res.status).not.toBe(403);
+  });
+
+  it('still denies a plain family-manager', async () => {
+    const { POST } = await import('../route');
+    expect((await POST(coordinatorReq({ 'x-portal-role': 'family-manager' }))).status).toBe(403);
+  });
+});

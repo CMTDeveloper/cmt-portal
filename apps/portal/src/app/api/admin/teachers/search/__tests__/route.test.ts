@@ -56,3 +56,32 @@ describe('GET /api/admin/teachers/search', () => {
     expect(mockSearchTeachers).toHaveBeenCalledWith('');
   });
 });
+
+describe('GET /api/admin/teachers/search - coordinator (gate 2 of 3)', () => {
+  // The shared admin+welcome-team guard shape. Coordinator is added as a third
+  // allowed role, not by loosening the /api/admin/ prefix.
+  function coordReq(headers: Record<string, string>): Request {
+    return new Request('http://localhost/api/admin/teachers/search?q=Sharma', {
+      method: 'GET',
+      headers: { 'x-portal-uid': 'u1', ...headers },
+    });
+  }
+
+  it('allows a primary coordinator', async () => {
+    const { GET } = await import('../route');
+    expect((await GET(coordReq({ 'x-portal-role': 'coordinator' }))).status).not.toBe(403);
+  });
+
+  it('allows a coordinator whose PRIMARY role is family-manager', async () => {
+    const { GET } = await import('../route');
+    const res = await GET(
+      coordReq({ 'x-portal-role': 'family-manager', 'x-portal-extra-roles': 'coordinator' }),
+    );
+    expect(res.status).not.toBe(403);
+  });
+
+  it('still denies a plain family-manager', async () => {
+    const { GET } = await import('../route');
+    expect((await GET(coordReq({ 'x-portal-role': 'family-manager' }))).status).toBe(403);
+  });
+});

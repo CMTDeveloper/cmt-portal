@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
-import { isAdmin, UpdateLevelSchema, type LevelDoc } from '@cmt/shared-domain';
+import { isAdmin, isCoordinator, UpdateLevelSchema, type LevelDoc } from '@cmt/shared-domain';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
 import {
   assertWritableYear,
@@ -13,7 +13,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ levelI
   if (!session || !session.uid) {
     return NextResponse.json({ error: 'no-session' }, { status: 401 });
   }
-  if (!isAdmin(session)) {
+  if (!isAdmin(session) && !isCoordinator(session)) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
 

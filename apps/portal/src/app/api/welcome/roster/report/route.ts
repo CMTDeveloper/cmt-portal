@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { isWelcomeTeam, matchesRosterFilters, type RosterReportFilters, ROSTER_PAYMENTS } from '@cmt/shared-domain';
+import { isWelcomeTeam, isCoordinator, matchesRosterFilters, type RosterReportFilters, ROSTER_PAYMENTS } from '@cmt/shared-domain';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
 import { flags } from '@/lib/flags';
 import { buildRosterReportDataset } from '@/features/setu/roster/report-dataset';
@@ -16,7 +16,12 @@ export async function GET(req: Request) {
 
   const session = readSessionFromHeaders(req);
   if (!session) return NextResponse.json({ error: 'no-session' }, { status: 401 });
-  if (!isWelcomeTeam({ role: session.role, extraRoles: session.extraRoles })) {
+  // Coordinator included: this is the ONLY data source behind /welcome/roster,
+  // the single screen the role is granted. fetchRosterReportClient throws on a
+  // non-OK response, so a 403 here renders an empty roster rather than an error
+  // - the failure mode looks like "there is no data" instead of "denied".
+  const claims = { role: session.role, extraRoles: session.extraRoles };
+  if (!isWelcomeTeam(claims) && !isCoordinator(claims)) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
 
