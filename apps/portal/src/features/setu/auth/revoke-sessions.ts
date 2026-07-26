@@ -2,6 +2,7 @@ import 'server-only';
 import { portalAuth } from '@cmt/firebase-shared/admin/auth';
 import { sha256Hex } from '@/features/check-in/shared';
 import { normalizeContactForKey } from '@cmt/shared-domain/setu';
+import { GRANTABLE_ROLES } from '@cmt/shared-domain';
 import {
   hasCapability,
   removeCapability,
@@ -30,7 +31,13 @@ import {
  * custom claims. These must be stripped from a member's auth uids when their
  * role/membership is removed — not just have their roleAssignment deleted.
  */
-export const RESURRECTABLE_SEVAK_CAPS: Capability[] = ['admin', 'welcome-team'];
+// DERIVED from GRANTABLE_ROLES, deliberately not a literal. Any role that can
+// be granted must also be stripped when the member it was granted to is
+// deleted, or the claim outlives the person: build-session-claims OR's the
+// persisted extraRoles back in on next sign-in, and for a member with no family
+// left that mints a STANDALONE session carrying the surviving capability.
+// A literal list silently fails to cover the next role added.
+export const RESURRECTABLE_SEVAK_CAPS: Capability[] = [...GRANTABLE_ROLES];
 
 function uidForContact(contact: string): string {
   const type = contact.includes('@') ? 'email' : 'phone';

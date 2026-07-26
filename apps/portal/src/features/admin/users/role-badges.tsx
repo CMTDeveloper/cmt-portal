@@ -9,6 +9,7 @@ import type { GrantableRole } from '@cmt/shared-domain';
 const ROLE_CHIP: Record<GrantableRole, { label: string; bg: string; fg: string }> = {
   admin: { label: 'Admin', bg: 'var(--accentSoft)', fg: 'var(--accentDeep)' },
   'welcome-team': { label: 'Welcome team', bg: 'var(--info-soft)', fg: 'var(--info-deep)' },
+  coordinator: { label: 'Coordinator', bg: 'var(--ok-soft)', fg: 'var(--ok-deep)' },
 };
 
 export function RoleChip({ role }: { role: GrantableRole }) {

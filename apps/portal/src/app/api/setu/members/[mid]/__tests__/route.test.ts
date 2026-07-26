@@ -20,12 +20,21 @@ vi.mock('@/features/setu/registration/hash-contact-key', () => ({
 }));
 
 const mockRevokeMemberSessions = vi.hoisted(() => vi.fn());
-vi.mock('@/features/setu/auth/revoke-sessions', () => ({
-  revokeMemberSessions: mockRevokeMemberSessions,
-  RESURRECTABLE_SEVAK_CAPS: ['admin', 'welcome-team'],
-}));
+// The mock's RESURRECTABLE_SEVAK_CAPS is DERIVED from the real GRANTABLE_ROLES,
+// never a hardcoded copy. A hardcoded list here would keep this suite green
+// while the production strip-list silently failed to cover a newly grantable
+// role - which is precisely the escalation the constant exists to prevent.
+// Only `revoke-sessions` itself is stubbed; shared-domain is imported for real.
+vi.mock('@/features/setu/auth/revoke-sessions', async () => {
+  const { GRANTABLE_ROLES } = await vi.importActual<typeof import('@cmt/shared-domain')>('@cmt/shared-domain');
+  return {
+    revokeMemberSessions: mockRevokeMemberSessions,
+    RESURRECTABLE_SEVAK_CAPS: [...GRANTABLE_ROLES],
+  };
+});
 
 import { PATCH, DELETE } from '../route';
+import { GRANTABLE_ROLES } from '@cmt/shared-domain';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { assertNotLastManager, LastManagerError } from '@/features/setu/members';
 import { revalidateTag } from 'next/cache';
@@ -538,8 +547,16 @@ describe('DELETE /api/setu/members/[mid]', () => {
     expect(mockRevokeMemberSessions).toHaveBeenCalledWith({
       email: 'diya@example.com',
       phone: '4165559999',
-      stripCaps: ['admin', 'welcome-team'],
+      stripCaps: [...GRANTABLE_ROLES],
     });
+    // Named explicitly, because `coordinator` is the case that made this
+    // dangerous: a coordinator needs no family, so a surviving claim on a
+    // deleted member re-mints as a STANDALONE session holding every family's
+    // roster PII plus program/level/pricing writes.
+    const { stripCaps } = mockRevokeMemberSessions.mock.calls[0]![0] as { stripCaps: string[] };
+    expect(stripCaps).toContain('coordinator');
+    expect(stripCaps).toContain('admin');
+    expect(stripCaps).toContain('welcome-team');
   });
 
   it('does NOT delete a contactKey owned by a relative (shared contact — lockout fix)', async () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isAdmin, isTeacher, isFamily, isSetuFamily, isSetuManager, isWelcomeTeam, isKiosk, ROLES } from '../auth/role';
+import { isAdmin, isTeacher, isFamily, isSetuFamily, isSetuManager, isWelcomeTeam, isKiosk, isCoordinator, ROLES } from '../auth/role';
 
 describe('ROLES', () => {
   it('includes all known roles', () => {
@@ -112,5 +112,37 @@ describe('multi-role via extraRoles', () => {
   });
   it('isAdmin: false when only welcome-team is in extraRoles', () => {
     expect(isAdmin({ role: 'family-manager', extraRoles: ['welcome-team'] })).toBe(false);
+  });
+});
+
+describe('isCoordinator', () => {
+  it('is true for a primary coordinator', () => {
+    expect(isCoordinator({ role: 'coordinator' })).toBe(true);
+  });
+
+  it('is true for a coordinator via extraRoles', () => {
+    expect(isCoordinator({ role: 'family-manager', extraRoles: ['coordinator'] })).toBe(true);
+  });
+
+  it('is true for an admin (admin inherits coordinator)', () => {
+    expect(isCoordinator({ role: 'admin' })).toBe(true);
+  });
+
+  it('is false for welcome-team', () => {
+    expect(isCoordinator({ role: 'welcome-team' })).toBe(false);
+  });
+
+  it('does NOT make a coordinator a welcome-team member', () => {
+    // Siblings, not a hierarchy. Their grants are disjoint by design:
+    // spec 3.1 excludes reports / seva / prasad / family-search from coordinator.
+    expect(isWelcomeTeam({ role: 'coordinator' })).toBe(false);
+  });
+
+  it('does not make a coordinator an admin', () => {
+    expect(isAdmin({ role: 'coordinator' })).toBe(false);
+  });
+
+  it('is in ROLES', () => {
+    expect(ROLES).toContain('coordinator');
   });
 });

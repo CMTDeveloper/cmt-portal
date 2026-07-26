@@ -31,7 +31,12 @@ const {
 
 vi.mock('server-only', () => ({}));
 vi.mock('@/features/check-in/shared', () => ({ sha256Hex: (s: string) => `uid-${s}` }));
-vi.mock('@cmt/shared-domain/setu', () => ({
+// Spread the REAL module and override only the normalizer. A bare object blanks
+// every other export, and because the package root barrels `export * from
+// './setu'`, that also emptied GRANTABLE_ROLES for `@cmt/shared-domain` - which
+// revoke-sessions derives RESURRECTABLE_SEVAK_CAPS from at module load.
+vi.mock('@cmt/shared-domain/setu', async () => ({
+  ...(await vi.importActual<typeof import('@cmt/shared-domain/setu')>('@cmt/shared-domain/setu')),
   normalizeContactForKey: (_t: string, v: string) => v,
 }));
 vi.mock('@cmt/firebase-shared/admin/auth', () => ({

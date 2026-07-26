@@ -15,12 +15,19 @@ vi.mock('@cmt/firebase-shared/admin/auth', () => ({
   }),
 }));
 vi.mock('@/features/check-in/shared', () => ({ sha256Hex: (s: string) => `uid:${s}` }));
-vi.mock('@cmt/shared-domain/setu', () => ({
+// Spread the REAL module and override only the normalizer. A bare object here
+// blanks everything else the module exports - and since the package root
+// barrels `export * from './setu'`, that silently emptied GRANTABLE_ROLES for
+// `@cmt/shared-domain` too, which revoke-sessions now derives
+// RESURRECTABLE_SEVAK_CAPS from.
+vi.mock('@cmt/shared-domain/setu', async () => ({
+  ...(await vi.importActual<typeof import('@cmt/shared-domain/setu')>('@cmt/shared-domain/setu')),
   // real normalizer lowercases emails; identity is fine for the phone case here
   normalizeContactForKey: (_t: string, v: string) => v.toLowerCase(),
 }));
 
-import { revokeMemberSessions, revokeUidSessions } from '../revoke-sessions';
+import { revokeMemberSessions, revokeUidSessions, RESURRECTABLE_SEVAK_CAPS } from '../revoke-sessions';
+import { GRANTABLE_ROLES } from '@cmt/shared-domain';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -91,5 +98,28 @@ describe('revokeMemberSessions', () => {
   it('dedupes when email and phone normalize to the same uid', async () => {
     await revokeMemberSessions({ email: 'same', phone: 'same' });
     expect(mockRevoke).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('RESURRECTABLE_SEVAK_CAPS', () => {
+  // This is the assertion with teeth. The member-DELETE route test mocks this
+  // module, so it can only prove the route PASSES the constant through - it
+  // cannot prove the constant is right. Only a test importing the real module
+  // can, and this is that test.
+  it('covers EVERY grantable role', () => {
+    for (const role of GRANTABLE_ROLES) {
+      expect(
+        RESURRECTABLE_SEVAK_CAPS,
+        `"${role}" is grantable but would NOT be stripped when the member holding it is deleted. ` +
+          'build-session-claims OR\'s persisted extraRoles back in on the next sign-in, so the claim ' +
+          'outlives the person and re-mints as a standalone session.',
+      ).toContain(role);
+    }
+  });
+
+  it('includes coordinator specifically', () => {
+    // Called out by name because coordinator needs no family, which is what
+    // turns a surviving claim into a full standalone staff session.
+    expect(RESURRECTABLE_SEVAK_CAPS).toContain('coordinator');
   });
 });

@@ -19,6 +19,17 @@ export interface RoleReference {
 }
 
 export const ROLE_REFERENCE: Record<Role, RoleReference> = {
+  coordinator: {
+    label: 'Coordinator',
+    summary: 'Manages Bala Vihar programs, class levels and the family roster. No access to users, roles, reports or family records.',
+    grants: [
+      'Browse and filter the family roster at /welcome/roster (read-only)',
+      'Create and edit programs at /admin/programs',
+      'Create and edit class levels at /admin/levels',
+      'Set program pricing through offerings',
+      'Assign teachers to class levels (shared with admin and welcome-team)',
+    ],
+  },
   admin: {
     label: 'Admin',
     summary: 'Full access to every admin tool. Inherits welcome-team and teacher capabilities.',
@@ -93,6 +104,7 @@ export const ROLE_REFERENCE: Record<Role, RoleReference> = {
 export const ROLE_REFERENCE_ORDER: Role[] = [
   'admin',
   'welcome-team',
+  'coordinator',
   'teacher',
   'family-manager',
   'family-member',

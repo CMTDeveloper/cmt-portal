@@ -1,4 +1,10 @@
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
+import { GRANTABLE_ROLES, type GrantableRole } from '@cmt/shared-domain';
+
+// Re-exported so existing importers of this module keep working. The type is
+// the SHARED one now - this file used to declare its own narrower copy, which
+// meant widening GRANTABLE_ROLES broke manage-roles.ts at the call boundary.
+export type { GrantableRole };
 
 /**
  * Member-id-keyed role assignments. Decouples "is this person an admin?"
@@ -20,8 +26,6 @@ import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestor
  * legacy auth-claim path — that's handled separately in verify-code.
  */
 
-export type GrantableRole = 'admin' | 'welcome-team';
-
 const COLLECTION = 'roleAssignments';
 
 interface RoleAssignmentDoc {
@@ -36,8 +40,11 @@ export async function getMemberRoles(mid: string): Promise<GrantableRole[]> {
   const snap = await portalFirestore().collection(COLLECTION).doc(mid).get();
   if (!snap.exists) return [];
   const data = snap.data() as RoleAssignmentDoc | undefined;
-  return (data?.roles ?? []).filter(
-    (r): r is GrantableRole => r === 'admin' || r === 'welcome-team',
+  // Derived from GRANTABLE_ROLES, not a hardcoded pair: this filter used to
+  // silently DROP any newly grantable role on read, so the grant would be
+  // written and then vanish on the next sign-in with nothing to show for it.
+  return (data?.roles ?? []).filter((r): r is GrantableRole =>
+    (GRANTABLE_ROLES as readonly string[]).includes(r),
   );
 }
 

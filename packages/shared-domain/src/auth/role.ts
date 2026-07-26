@@ -1,4 +1,4 @@
-export const ROLES = ['admin', 'teacher', 'family', 'family-manager', 'family-member', 'welcome-team', 'kiosk'] as const;
+export const ROLES = ['admin', 'teacher', 'family', 'family-manager', 'family-member', 'welcome-team', 'kiosk', 'coordinator'] as const;
 export type Role = (typeof ROLES)[number];
 
 export interface WithRole {
@@ -57,4 +57,12 @@ export function isWelcomeTeam(claims: WithRole): boolean {
 // grant. Nothing else inherits kiosk - it is intentionally narrow.
 export function isKiosk(claims: WithRole): boolean {
   return hasRole(claims, 'kiosk') || hasRole(claims, 'admin');
+}
+
+// Programs + Levels + Roster coordinator. Deliberately inherits NOTHING from
+// welcome-team and grants nothing to it: the two are siblings with disjoint
+// grants (spec 3.1 excludes reports / seva / prasad / family-search from
+// coordinator). Admins inherit it, same pattern as isTeacher/isWelcomeTeam.
+export function isCoordinator(claims: WithRole): boolean {
+  return hasRole(claims, 'coordinator') || hasRole(claims, 'admin');
 }

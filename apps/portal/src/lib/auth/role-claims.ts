@@ -13,7 +13,7 @@
  * welcome-team get pushed to extras when stacked on a family.
  */
 
-export type Capability = 'admin' | 'welcome-team' | 'kiosk';
+export type Capability = 'admin' | 'welcome-team' | 'kiosk' | 'coordinator';
 const FAMILY_ROLES = new Set(['family-manager', 'family-member', 'family']);
 
 export interface ClaimsShape {

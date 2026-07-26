@@ -1,9 +1,13 @@
 import { z } from 'zod';
 
-// The two roles an admin can grant/revoke through the Users & Roles screen.
+// The roles an admin can grant/revoke through the Users & Roles screen.
 // Teacher is read-only here (managed via /admin/levels), and family roles are
 // derived from family membership — neither is grantable through this surface.
-export const GRANTABLE_ROLES = ['admin', 'welcome-team'] as const;
+//
+// Anything added here is automatically covered by RESURRECTABLE_SEVAK_CAPS
+// (revoke-sessions.ts), which derives from this list precisely so a new
+// grantable role cannot outlive the member it was granted to.
+export const GRANTABLE_ROLES = ['admin', 'welcome-team', 'coordinator'] as const;
 export const GrantableRoleSchema = z.enum(GRANTABLE_ROLES);
 export type GrantableRole = z.infer<typeof GrantableRoleSchema>;
 

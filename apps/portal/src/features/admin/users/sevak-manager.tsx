@@ -65,7 +65,15 @@ function InlineError({ children, style, id }: { children: React.ReactNode; style
 const GRANT_NOTE = 'Applies at their next sign-in.';
 
 function snapshotRoles(row: SevakRow): Record<GrantableRole, boolean> {
-  return { admin: row.roles.includes('admin'), 'welcome-team': row.roles.includes('welcome-team') };
+  // Every key must READ from the row, never default to false. saveDraft computes
+  // its revoke set as GRANTABLE_ROLES.filter((r) => !draft[r] && row.roles.includes(r)),
+  // so a hardcoded false here means opening an existing holder's drawer and
+  // pressing Save silently revokes that grant.
+  return {
+    admin: row.roles.includes('admin'),
+    'welcome-team': row.roles.includes('welcome-team'),
+    coordinator: row.roles.includes('coordinator'),
+  };
 }
 
 /** ISO → "Jun 22" (Toronto), with the year when it isn't the current one; "Never" for null. */
@@ -113,7 +121,7 @@ export function SevakManager({ initialSevaks, self }: SevakManagerProps) {
   // click can never mutate a role — only an explicit Save calls grant/revoke.
   const [drawerKey, setDrawerKey] = useState<string | null>(null);
   const [drawerMode, setDrawerMode] = useState<'view' | 'edit'>('view');
-  const [draft, setDraft] = useState<Record<GrantableRole, boolean>>({ admin: false, 'welcome-team': false });
+  const [draft, setDraft] = useState<Record<GrantableRole, boolean>>({ admin: false, 'welcome-team': false, coordinator: false });
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [, startRefresh] = useTransition();
