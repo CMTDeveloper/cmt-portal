@@ -22,6 +22,17 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
+## 2026-07-26 - `634d158` - PATCH /api/setu/family accepts `location` (request shape; **mobile action recommended**)
+
+The companion write path to the `locationNeedsConfirmation` entry below. Previously this route's body schema had only `familyEmergencyContact` and `familyAddress`, and Zod strips unknown keys - so sending `location` did nothing.
+
+- **`PATCH /api/setu/family` request body gains an optional `location: string`.** All existing keys are unchanged and still optional; this is purely a relaxation, so an older client is unaffected.
+- **The value must be one of the admin-managed centres** returned by `GET /api/setu/locations` (already family-readable). Anything else is a **`400 { error: 'unknown-location' }`** - a NEW error code on this route. Do not hardcode the centre list in the mobile; read it from the locations endpoint, because admins can change it at `/admin/locations`.
+- **Sending `location` also clears `locationNeedsConfirmation` (to `false`) server-side.** The client does not send the flag and must not try to.
+- **A PATCH that omits `location` leaves both fields untouched**, so an address-only edit never marks an unconfirmed centre as confirmed. Partial-update semantics are unchanged: only keys you send are written.
+- **Still manager-only** (`403 not-manager` for a non-manager), unchanged.
+- **Mobile action:** add optional `location` to the family PATCH request schema and add `unknown-location` to its error union. If the mobile implements the centre-confirmation prompt, send `location` on save; otherwise no change is needed.
+
 ## 2026-07-26 - `25b8431` - `family` gains `locationNeedsConfirmation` on GET /api/setu/family + /api/setu/dashboard (additive; **mobile action recommended**)
 
 At the Aug 3 cutover, 299 of 867 legacy families carry no recognisable centre in the legacy roster, so the migration parser defaults them to Brampton. Rather than silently filing them under a centre nobody chose, the family doc now carries a marker saying "this location is a guess, ask them".
