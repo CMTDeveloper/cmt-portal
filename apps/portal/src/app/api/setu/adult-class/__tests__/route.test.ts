@@ -3,13 +3,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('@/lib/flags', () => ({ flags: { setuAuth: true, setuAdultClass: true } }));
 vi.mock('next/cache', () => ({ revalidateTag: vi.fn() }));
 
-const { getFamilyByFid, loadAdultClassGateData, enrollFamily } = vi.hoisted(() => ({
+const { getFamilyByFid, loadAdultClassGateDataOrThrow, enrollFamily } = vi.hoisted(() => ({
   getFamilyByFid: vi.fn(),
-  loadAdultClassGateData: vi.fn(),
+  loadAdultClassGateDataOrThrow: vi.fn(),
   enrollFamily: vi.fn(),
 }));
 vi.mock('@/features/setu/members/get-family-by-fid', () => ({ getFamilyByFid }));
-vi.mock('@/features/setu/adult-class/load-gate-data', () => ({ loadAdultClassGateData }));
+vi.mock('@/features/setu/adult-class/load-gate-data', () => ({ loadAdultClassGateDataOrThrow }));
 vi.mock('@/features/setu/enrollment/enroll-family', () => ({ enrollFamily }));
 
 import { revalidateTag } from 'next/cache';
@@ -70,7 +70,7 @@ function makeRequest(body: unknown, session: typeof MANAGER | null = MANAGER) {
 beforeEach(() => {
   vi.clearAllMocks();
   getFamilyByFid.mockResolvedValue({ family: { fid: FID, location: 'Brampton' }, members: MEMBERS });
-  loadAdultClassGateData.mockResolvedValue(gateData());
+  loadAdultClassGateDataOrThrow.mockResolvedValue(gateData());
   enrollFamily.mockResolvedValue({ created: true, eid: `${FID}-${ASC_OID}`, suggestedAmountSnapshot: 0 });
 });
 
@@ -162,14 +162,14 @@ describe('POST /api/setu/adult-class - the enrollment', () => {
   });
 
   it('leaves the override null when Bala Vihar is NOT paid', async () => {
-    loadAdultClassGateData.mockResolvedValue(gateData({ donations: [] }));
+    loadAdultClassGateDataOrThrow.mockResolvedValue(gateData({ donations: [] }));
     await POST(makeRequest({ mids: [`${FID}-01`] }));
     expect(enrollFamily.mock.calls[0]![0].suggestedAmountOverride).toBeNull();
   });
 
   // Threshold-free (owner decision, issue #23): a PARTIAL donation still counts.
   it('waives on a partial donation - amount is irrelevant', async () => {
-    loadAdultClassGateData.mockResolvedValue(
+    loadAdultClassGateDataOrThrow.mockResolvedValue(
       gateData({ donations: [{ status: 'completed', eid: BV_EID, amountCAD: 5 }] }),
     );
     await POST(makeRequest({ mids: [`${FID}-01`] }));
@@ -191,9 +191,18 @@ describe('POST /api/setu/adult-class - nothing to enroll into', () => {
   // The loader returns null for "no open offering" or "nobody selectable". It
   // THROWS on a read failure, so null here is never a transient error.
   it('409 when the loader reports there is no adult-class question', async () => {
-    loadAdultClassGateData.mockResolvedValue(null);
+    loadAdultClassGateDataOrThrow.mockResolvedValue(null);
     const res = await POST(makeRequest({ mids: [`${FID}-01`] }));
     expect(res.status).toBe(409);
+    expect(enrollFamily).not.toHaveBeenCalled();
+  });
+
+  // The route deliberately has NO try/catch around the loader: a read failure
+  // must 500 and be retried, never masquerade as "there is nothing to enroll
+  // into" and leave the family on a screen whose Save silently refuses.
+  it('lets a loader READ FAILURE propagate rather than reporting 409', async () => {
+    loadAdultClassGateDataOrThrow.mockRejectedValue(new Error('FAILED_PRECONDITION: index'));
+    await expect(POST(makeRequest({ mids: [`${FID}-01`] }))).rejects.toThrow('FAILED_PRECONDITION');
     expect(enrollFamily).not.toHaveBeenCalled();
   });
 

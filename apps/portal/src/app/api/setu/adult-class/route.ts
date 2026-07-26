@@ -4,7 +4,7 @@ import { flags } from '@/lib/flags';
 import { isSetuManager, PostAdultClassBodySchema } from '@cmt/shared-domain';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
 import { getFamilyByFid } from '@/features/setu/members/get-family-by-fid';
-import { loadAdultClassGateData } from '@/features/setu/adult-class/load-gate-data';
+import { loadAdultClassGateDataOrThrow } from '@/features/setu/adult-class/load-gate-data';
 import { isBalaViharPaid } from '@/features/setu/adult-class/needs-selection';
 import { selectableAdults } from '@/features/setu/adult-class/selectable-adults';
 import { selectBalaViharEnrollment } from '@/app/family/_helpers/select-bv-enrollment';
@@ -51,7 +51,7 @@ export async function POST(req: Request) {
   // The THROWING loader, not the fail-soft one: on a read failure this must 500
   // and be retried, never silently report "there is nothing to enroll into" and
   // leave the family staring at a screen that refuses to save.
-  const data = await loadAdultClassGateData({
+  const data = await loadAdultClassGateDataOrThrow({
     family: cached.family,
     members: cached.members,
     isManager: true,

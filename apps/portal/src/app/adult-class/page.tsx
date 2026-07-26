@@ -3,7 +3,7 @@ import { connection } from 'next/server';
 import { redirect } from 'next/navigation';
 import { flags } from '@/lib/flags';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
-import { loadAdultClassGateData } from '@/features/setu/adult-class/load-gate-data';
+import { loadAdultClassGateDataOrThrow } from '@/features/setu/adult-class/load-gate-data';
 import { isBalaViharPaid } from '@/features/setu/adult-class/needs-selection';
 import { selectableAdults } from '@/features/setu/adult-class/selectable-adults';
 import { selectBalaViharEnrollment } from '@/app/family/_helpers/select-bv-enrollment';
@@ -29,7 +29,7 @@ async function AdultClassSelection() {
   // failure would make /family redirect here while this screen read "nothing to
   // select" and redirected back. A throw reaches error.tsx, where the family
   // gets a retry instead of a loop.
-  const gate = await loadAdultClassGateData({
+  const gate = await loadAdultClassGateDataOrThrow({
     family: data.family,
     members: data.members,
     isManager: true,

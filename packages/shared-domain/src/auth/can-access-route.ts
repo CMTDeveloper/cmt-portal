@@ -291,6 +291,10 @@ export function canAccessRoute(
   // roles have no `fid` of their own, so the handler (which binds fid from the
   // session) could only ever 400 for them — better to deny at the edge than to
   // let a staff session reach a family-scoped write at all.
+  // EXACT match, not the `|| startsWith(x + '/')` shape its siblings use: no
+  // sub-path handler exists, and this file's own note above the welcome-donations
+  // gap says authorizing paths without handlers "silently passes requests that
+  // should get 404/501". Widen it when a sub-path actually ships.
   if (pathname === '/api/setu/adult-class') {
     return isSetuManager(claims);
   }

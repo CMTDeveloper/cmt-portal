@@ -580,6 +580,27 @@ clauses, the middleware entry, no `public-routes` entry, no new indexes,
 | **Firestore auto-retry makes finding 8 worse than a 500.** The Admin SDK retries the whole transaction callback, so a doc deleted mid-window makes the RETRY see `exists === false` and fall through to the bare `txn.set`, silently recreating the doc rather than surfacing NOT_FOUND. | **CONFIRMED but NARROWER than stated for this route.** `levelSnapshots` is written ONLY by the annual rollover (`promote-families.ts:319`) and read only for CHILD level history, so an adult-class enrollment has none to lose; the exposure here is `_test`, i.e. UAT sweep hygiene. Verified no in-app path hard-deletes an enrollment - `DELETE /api/setu/enrollments/[eid]` only flips `status` to `cancelled`. Finding 8 stays a pre-existing separate issue, NOT worsened by this route. |
 | **Task 12 Step 4 asks for "three" mobile-changelog entries, but `efc9b74` already covers Tasks 1 AND 2 in one.** | **CORRECT.** Two entries total, and both now exist: `efc9b74` + `cdb72b6`. **Task 12 Step 4 is already satisfied.** |
 
+**Sixth pass, against the SHIPPED code.** Confirmed the ping-pong fix converges
+(a genuine state change makes BOTH sides read the same new reality and agree, so
+there is no bounce), that a cross-family mid is structurally impossible rather
+than accidentally rejected (`getFamilyByFid` is scoped to the session fid by
+construction, and every member-mutating route revalidates its `family-${fid}`
+tag), that the Save button cannot stick (`saving` resets on every path except the
+success path, which unmounts via a full navigation), and that the flag is a
+literal `process.env` read so page and route cannot disagree. Two real gaps, both
+now closed:
+
+| Gap | Fix |
+|---|---|
+| **Nothing bound Task 8 to the FailSoft variant.** Both functions returned the identical `Promise<AdultClassGateInput \| null>`, so a copy-paste of the wrong name compiles clean, type-checks green, and silently reopens the ping-pong. And the plain name `loadAdultClassGateData` was the obvious one to reach for - the WRONG one for a gate. | **Renamed to `loadAdultClassGateDataOrThrow`.** Neither variant is now the innocuous default, so the choice is deliberate at every call site. A comment would not have survived a copy-paste; a name that does not exist cannot be pasted. |
+| **No test made the loader throw**, so the route's deliberate absence of a try/catch around it was documented but unverified. | Added; mutation-checked (adding a `.catch(() => null)` fails it). |
+
+**Accepted and left alone:** `data.currentOffering!.oid` is re-resolved fresh at
+save time rather than pinned from what the page rendered, so an admin publishing
+an earlier-dated offering at the family's centre inside a multi-second window
+could enroll them in a term they never saw. The alternative - trusting a
+client-supplied oid - is a tamperable field, which is strictly worse.
+
 Also corrected a framing of mine that reached the plan: the `/api/setu/` catch-all
 is `manager || welcome-team || admin`, not manager-only. The explicit clause is
 still right - it denies the two staff roles, which carry no `fid`.

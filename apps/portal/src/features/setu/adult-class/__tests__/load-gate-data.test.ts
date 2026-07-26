@@ -31,7 +31,7 @@ vi.mock('@/features/setu/donations/get-donations', () => ({ getDonations }));
 vi.mock('@/features/setu/donations/legacy-payment', () => ({ getLegacyPaymentStatus }));
 vi.mock('@/features/setu/teacher/assignments', () => ({ isTeacherAssigned }));
 
-import { loadAdultClassGateData, loadAdultClassGateDataFailSoft } from '../load-gate-data';
+import { loadAdultClassGateDataOrThrow, loadAdultClassGateDataFailSoft } from '../load-gate-data';
 
 const BV_OID = 'bala-vihar-brampton-2026-27';
 
@@ -80,14 +80,14 @@ beforeEach(() => {
 });
 
 // ───────────────────────────────────────────────────────────────────────────
-// loadAdultClassGateData - the I/O half
+// loadAdultClassGateDataOrThrow - the I/O half
 // ───────────────────────────────────────────────────────────────────────────
-describe('loadAdultClassGateData', () => {
+describe('loadAdultClassGateDataOrThrow', () => {
   it('assembles every field the predicate needs for a gated family', async () => {
     const members = [adult('CMT-F-01'), adult('CMT-F-02'), child('CMT-F-03')];
     getDonations.mockResolvedValue([{ status: 'completed', eid: `CMT-F-${BV_OID}`, amountCAD: 500 }]);
 
-    const data = await loadAdultClassGateData({ family: family(), members, isManager: true });
+    const data = await loadAdultClassGateDataOrThrow({ family: family(), members, isManager: true });
 
     expect(getOpenOfferingsForFamily).toHaveBeenCalledWith('adult-study-class', 'Brampton');
     expect(data).not.toBeNull();
@@ -102,7 +102,7 @@ describe('loadAdultClassGateData', () => {
   // ── Cheap exits: these run on EVERY /family/* render, so a family that can
   //    never be gated must cost zero Firestore reads. ──────────────────────
   it('returns null for a non-manager without issuing a single read', async () => {
-    const r = await loadAdultClassGateData({
+    const r = await loadAdultClassGateDataOrThrow({
       family: family(),
       members: [adult('CMT-F-01')],
       isManager: false,
@@ -115,7 +115,7 @@ describe('loadAdultClassGateData', () => {
   });
 
   it('returns null without a read when no adult could ever be selected', async () => {
-    const r = await loadAdultClassGateData({
+    const r = await loadAdultClassGateDataOrThrow({
       family: family(),
       members: [child('CMT-F-03'), adult('CMT-F-02', { inviteStatus: 'pending' })],
       isManager: true,
@@ -127,7 +127,7 @@ describe('loadAdultClassGateData', () => {
 
   it('stops after the offering query when no adult-class offering is open', async () => {
     getOpenOfferingsForFamily.mockResolvedValue([]);
-    const r = await loadAdultClassGateData({
+    const r = await loadAdultClassGateDataOrThrow({
       family: family(),
       members: [adult('CMT-F-01')],
       isManager: true,
@@ -144,7 +144,7 @@ describe('loadAdultClassGateData', () => {
   describe('teacherAssignedMids resolution', () => {
     it('is keyed by mid and contains exactly the assigned adults', async () => {
       isTeacherAssigned.mockImplementation(async (ref: string) => ref === 'CMT-F-02');
-      const data = await loadAdultClassGateData({
+      const data = await loadAdultClassGateDataOrThrow({
         family: family(),
         members: [adult('CMT-F-01'), adult('CMT-F-02')],
         isManager: true,
@@ -153,7 +153,7 @@ describe('loadAdultClassGateData', () => {
     });
 
     it('never asks about a CHILD - teacherAssignments/{mid} is an adult concept', async () => {
-      await loadAdultClassGateData({
+      await loadAdultClassGateDataOrThrow({
         family: family(),
         members: [adult('CMT-F-01'), child('CMT-F-03')],
         isManager: true,
@@ -163,7 +163,7 @@ describe('loadAdultClassGateData', () => {
     });
 
     it('never asks about a pending invitee - one doc read per adult is the cost here', async () => {
-      await loadAdultClassGateData({
+      await loadAdultClassGateDataOrThrow({
         family: family(),
         members: [adult('CMT-F-01'), adult('CMT-F-02', { inviteStatus: 'pending' })],
         isManager: true,
@@ -177,7 +177,7 @@ describe('loadAdultClassGateData', () => {
   //    FamilyDocSchema types it, and getOpenOfferingsForFamily then takes the
   //    single-query (location-less only) branch. ───────────────────────────
   it('passes null - never undefined - when the family has no location', async () => {
-    await loadAdultClassGateData({
+    await loadAdultClassGateDataOrThrow({
       family: family({ location: undefined as unknown as string }),
       members: [adult('CMT-F-01')],
       isManager: true,
@@ -188,7 +188,7 @@ describe('loadAdultClassGateData', () => {
   // ── The legacy leg. getLegacyPaymentStatus reads the WHOLE prod RTDB roster;
   //    it only means anything when the BV offering is legacy-sourced. ──────
   it('skips the whole-roster RTDB read when the BV offering is not legacy-sourced', async () => {
-    const data = await loadAdultClassGateData({
+    const data = await loadAdultClassGateDataOrThrow({
       family: family(),
       members: [adult('CMT-F-01')],
       isManager: true,
@@ -201,7 +201,7 @@ describe('loadAdultClassGateData', () => {
     getEnrollments.mockResolvedValue([
       bvEnrollment({ offering: { oid: BV_OID, paymentSource: 'legacy' } as never }),
     ]);
-    const data = await loadAdultClassGateData({
+    const data = await loadAdultClassGateDataOrThrow({
       family: family(),
       members: [adult('CMT-F-01')],
       isManager: true,
@@ -216,7 +216,7 @@ describe('loadAdultClassGateData', () => {
   it('throws when a read fails, rather than reporting "nothing to ask"', async () => {
     getEnrollments.mockRejectedValue(new Error('FAILED_PRECONDITION: index'));
     await expect(
-      loadAdultClassGateData({ family: family(), members: [adult('CMT-F-01')], isManager: true }),
+      loadAdultClassGateDataOrThrow({ family: family(), members: [adult('CMT-F-01')], isManager: true }),
     ).rejects.toThrow('FAILED_PRECONDITION');
   });
 });

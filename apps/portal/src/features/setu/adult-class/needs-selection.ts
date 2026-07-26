@@ -46,7 +46,7 @@ export interface AdultClassGateInput {
 /**
  * Whether this family must be asked to choose an adult for the Adult Study Class.
  *
- * PURE. All I/O is the caller's job (`loadAdultClassGateData`), because this runs
+ * PURE. All I/O is the caller's job (`loadAdultClassGateDataOrThrow`), because this runs
  * behind a gate on every `/family/*` render and the inputs cost roughly seven
  * Firestore reads - including one `teacherAssignments` doc read PER adult.
  *

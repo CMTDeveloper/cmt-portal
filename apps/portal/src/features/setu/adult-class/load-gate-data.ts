@@ -53,7 +53,7 @@ export interface AdultClassGateSubject {
  * `getDonations` are NOT cached and are the real lever - a separate task, since
  * caching them changes `/family` too.
  */
-export async function loadAdultClassGateData(
+export async function loadAdultClassGateDataOrThrow(
   subject: AdultClassGateSubject,
 ): Promise<AdultClassGateInput | null> {
   const { family, members, isManager } = subject;
@@ -121,7 +121,14 @@ export async function loadAdultClassGateData(
 }
 
 /**
- * `loadAdultClassGateData` with every read failure swallowed into `null`.
+ * `loadAdultClassGateDataOrThrow` with every read failure swallowed into `null`.
+ *
+ * **Neither of these two is named as the default, deliberately.** They return the
+ * identical `Promise<AdultClassGateInput | null>`, so picking the wrong one
+ * compiles clean and type-checks green - the mistake is invisible to everything
+ * except a reader. A plain `loadAdultClassGateData` would have been the obvious
+ * thing to reach for, and it would have been the WRONG one for a gate. Both
+ * names now force the choice to be deliberate at every call site.
  *
  * **Only a GATE may use this.** The gate REDIRECTS and runs on every `/family/*`
  * render, so a transient Firestore error must cost the family an un-asked
@@ -138,7 +145,7 @@ export async function loadAdultClassGateData(
  * family a real error with a retry instead of a loop.
  *
  * Note this catches strictly less than it looks: the two in-memory exits in
- * `loadAdultClassGateData` can only throw if a caller passes something that is
+ * `loadAdultClassGateDataOrThrow` can only throw if a caller passes something that is
  * not a well-formed `MemberDoc[]`, which is a programming error that should fail
  * loudly rather than be laundered into "nothing to ask this family".
  */
@@ -146,7 +153,7 @@ export async function loadAdultClassGateDataFailSoft(
   subject: AdultClassGateSubject,
 ): Promise<AdultClassGateInput | null> {
   try {
-    return await loadAdultClassGateData(subject);
+    return await loadAdultClassGateDataOrThrow(subject);
   } catch (err) {
     console.error('[adult-class] gate data load failed - not gating this render', err);
     return null;
