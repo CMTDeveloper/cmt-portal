@@ -90,6 +90,19 @@ describe('/donate/success - the receipt itself', () => {
     expect(mockMarkDonation).toHaveBeenCalledWith('don_1', 'CMT-1', 'completed');
   });
 
+  // The write is best-effort and NOT authoritative (accounting's notification
+  // is), and Stripe already has the money. A failed status write is recoverable;
+  // a receipt the family never sees is not. Uncaught, this hid the thank-you AND
+  // the ask together.
+  it('still shows the receipt when the completion write fails', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mockMarkDonation.mockRejectedValue(new Error('UNAVAILABLE'));
+    await renderPage();
+    expect(screen.getByText(/Thank you for your donation/i)).toBeTruthy();
+    expect(spy).toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
   it('does not mark anything when there is no did', async () => {
     await renderPage(null);
     expect(mockMarkDonation).not.toHaveBeenCalled();
@@ -149,5 +162,41 @@ describe('/donate/success - the "not now" path', () => {
   it('offers no control promising to skip, since nothing can be persisted', async () => {
     await renderPage();
     expect(screen.queryByText(/^Skip/i)).toBeNull();
+  });
+});
+
+// ── DOM ORDER. Spec 4.3 fixes it: adult-class ask FIRST (quick, free), pledge
+//    SECOND and quieter, because leading with a money ask straight after a ~$500
+//    payment reads badly. P5 v3 Task 5 lands its card in THIS file, and until
+//    now that order was enforced by a comment alone - which is exactly the
+//    "a comment does not survive a copy-paste" trap that made the two loader
+//    variants get distinct names. Test-lock it BEFORE P5 touches the file. ────
+describe('/donate/success - the ordering Task 9 exists to guarantee', () => {
+  it('renders the ask AFTER the thank-you and BEFORE the way out', async () => {
+    const body = await DonateSuccessBody({ searchParams: Promise.resolve({ did: 'don_1' }) });
+    const { container } = render(body);
+    const text = container.textContent ?? '';
+
+    const thanks = text.indexOf('Thank you for your donation');
+    const ask = text.indexOf('One last thing');
+    const out = text.indexOf('Back to family');
+
+    expect(thanks).toBeGreaterThan(-1);
+    expect(ask).toBeGreaterThan(thanks);
+    expect(out).toBeGreaterThan(ask);
+  });
+
+  // The pledge card must be a SIBLING after the ask, never nested inside it -
+  // nested, it would inherit the adult-class predicate and render for nobody.
+  it('leaves the pledge slot outside the conditional ask block', async () => {
+    mockNeedsSelection.mockReturnValue(false);
+    const body = await DonateSuccessBody({ searchParams: Promise.resolve({ did: 'don_1' }) });
+    const { container } = render(body);
+    const text = container.textContent ?? '';
+    // With no ask, the way out must still render - proving the slot between them
+    // is not inside the `ask &&` block.
+    expect(text.indexOf('Thank you for your donation')).toBeGreaterThan(-1);
+    expect(text.indexOf('Back to family')).toBeGreaterThan(-1);
+    expect(text.indexOf('One last thing')).toBe(-1);
   });
 });

@@ -43,6 +43,10 @@ async function resolveAsk(
     })),
     // Necessarily true whenever the predicate fired (its condition 3), but
     // derived rather than hardcoded so the fee line cannot drift from the rule.
+    // Yes, this recomputes what needsAdultClassSelection already decided - over
+    // the SAME `gate` object, so the two cannot disagree. Do NOT "DRY" it by
+    // threading a value in from somewhere else: the whole point is that this
+    // reads the rule rather than trusting a caller's copy of the answer.
     bvPaid: bv
       ? isBalaViharPaid({
           bv,
@@ -70,7 +74,16 @@ export async function DonateSuccessBody({
   // Best-effort: mark the donation completed. The cross-family guard lives in
   // markDonationStatus. Not authoritative — accounting's notification is.
   if (familyData && did) {
-    await markDonationStatus(did, familyData.family.fid, 'completed');
+    try {
+      await markDonationStatus(did, familyData.family.fid, 'completed');
+    } catch (err) {
+      // Best-effort, as its own docstring says, and NOT authoritative -
+      // accounting's notification is. Stripe already has the money, so a failed
+      // status write is recoverable; a receipt the family never sees is not.
+      // Uncaught, this hid the thank-you AND the ask together, which would have
+      // made the fail-soft claim below untrue.
+      console.error('[donate/success] markDonationStatus failed - showing the receipt anyway', err);
+    }
   }
 
   // The Adult Study Class ask (spec 4.3). Loaded AFTER markDonationStatus on
