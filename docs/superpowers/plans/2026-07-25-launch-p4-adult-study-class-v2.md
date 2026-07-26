@@ -566,6 +566,26 @@ change their choice after registration closes. Only a FIRST enrollment can hit
 
 ---
 
+### Fifth audit (Task 7, Codex 2026-07-26) - what it found AFTER the code shipped
+
+Most of its recommendations were already implemented independently (the loader
+split, the `isBalaViharPaid` extraction, duplicate rejection, both `canAccessRoute`
+clauses, the middleware entry, no `public-routes` entry, no new indexes,
+`connection()` + `CspRoot`). Four findings were new; each verified before acting.
+
+| Finding | Verdict |
+|---|---|
+| **"Task 3 fixed the closed-offering stranding" is only HALF true.** The reconcile-above-the-window-gates fix covers RE-selecting on an already-active enrollment. A family's very FIRST Save takes the CREATE path (`enroll-family.ts:195-203`), which is still gated - so an admin closing registration between the gate redirect and the Save click gives a first-time family a 422 with no reconcile fallback. | **CONFIRMED, already handled.** The form maps `offering-disabled`/`offering-expired`/`program-not-available`/`no-adult-class-offering` to "Registration has closed. Please contact the centre." Codex suggested "try again shortly"; that is wrong copy for a deliberate admin toggle. |
+| **The teacher-assignment TOCTOU.** `isTeacherAssigned` is a point-in-time read and `enrollFamily`'s transaction has no concept of a teacher, so an adult assigned to teach between validation and commit still lands in `enrolledMids`. | **ACCEPTED**, now commented in the route. No money, no access; worst case a teacher is listed as attending the class they run, which a human notices at once. |
+| **Firestore auto-retry makes finding 8 worse than a 500.** The Admin SDK retries the whole transaction callback, so a doc deleted mid-window makes the RETRY see `exists === false` and fall through to the bare `txn.set`, silently recreating the doc rather than surfacing NOT_FOUND. | **CONFIRMED but NARROWER than stated for this route.** `levelSnapshots` is written ONLY by the annual rollover (`promote-families.ts:319`) and read only for CHILD level history, so an adult-class enrollment has none to lose; the exposure here is `_test`, i.e. UAT sweep hygiene. Verified no in-app path hard-deletes an enrollment - `DELETE /api/setu/enrollments/[eid]` only flips `status` to `cancelled`. Finding 8 stays a pre-existing separate issue, NOT worsened by this route. |
+| **Task 12 Step 4 asks for "three" mobile-changelog entries, but `efc9b74` already covers Tasks 1 AND 2 in one.** | **CORRECT.** Two entries total, and both now exist: `efc9b74` + `cdb72b6`. **Task 12 Step 4 is already satisfied.** |
+
+Also corrected a framing of mine that reached the plan: the `/api/setu/` catch-all
+is `manager || welcome-team || admin`, not manager-only. The explicit clause is
+still right - it denies the two staff roles, which carry no `fid`.
+
+---
+
 ## Task 8: `AdultClassGate`, flag-gated and ordered
 
 - [ ] **Step 1: Add `flags.setuAdultClass`, default off**

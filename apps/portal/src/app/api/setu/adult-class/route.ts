@@ -72,9 +72,23 @@ export async function POST(req: Request) {
   );
   // All-or-nothing: a partial enroll would silently drop someone the family
   // believes they signed up.
+  //
+  // The mids come from THIS family's own members, loaded from the session's fid
+  // - never echoed from the body - which is what makes a foreign mid fail here
+  // rather than reaching enrollFamily. Keep it that way: enrollFamily skips the
+  // member read entirely when mids are supplied, so this set IS the boundary.
   if (!parsed.data.mids.every((mid) => selectable.has(mid))) {
     return NextResponse.json({ error: 'mid-not-selectable' }, { status: 422 });
   }
+
+  // ACCEPTED RACE: `isTeacherAssigned` is a point-in-time read and enrollFamily's
+  // transaction has no concept of a teacher, so an adult assigned to teach in the
+  // seconds between this check and the commit still lands in `enrolledMids`.
+  // Not worth a fix: no money and no access is involved, the worst outcome is a
+  // teacher being listed as attending the class they run - which a human notices
+  // immediately - and closing it properly would mean teaching the enrollment
+  // transaction about teacherAssignments. Consistent with the comparable narrow
+  // races Tasks 3 and 4 accepted for the same reason.
 
   // A family who has paid Bala Vihar attends the Adult Study Class at no further
   // cost (spec 4.5). `0` is a real override and survives because enrollFamily
