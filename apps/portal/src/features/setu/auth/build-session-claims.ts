@@ -121,12 +121,20 @@ export async function buildSessionClaimsForContact(
   // claims (a generic tablet account with no family/member), so it comes solely
   // from allExistingRoles - never from a member-role or family resolution.
   const isKioskUser = allExistingRoles.has('kiosk');
+  // Coordinator is GRANTABLE, unlike kiosk, so it can arrive either on the
+  // account's own claims or mid-keyed through roleAssignments - read both, the
+  // same way admin and welcome-team do.
+  const isCoordinatorUser =
+    allExistingRoles.has('coordinator') || memberRoles.includes('coordinator');
 
   function preservedExtras(): string[] {
     const extras: string[] = [];
     if (isAdminUser) extras.push('admin');
     if (isWelcomeTeamUser && !isAdminUser) extras.push('welcome-team');
     if (isTeacherUser && !isAdminUser) extras.push('teacher');
+    // Admin already implies coordinator via isCoordinator(), so skip the
+    // duplicate extra for an admin - same guard the other extras use.
+    if (isCoordinatorUser && !isAdminUser) extras.push('coordinator');
     return extras;
   }
 
@@ -136,7 +144,8 @@ export async function buildSessionClaimsForContact(
     !hasPendingInvite &&
     !isWelcomeTeamUser &&
     !isAdminUser &&
-    !isKioskUser
+    !isKioskUser &&
+    !isCoordinatorUser
   ) {
     return { redirectTo: '/register?contact=verified' };
   }
@@ -214,6 +223,13 @@ export async function buildSessionClaimsForContact(
     } else if (isWelcomeTeamUser) {
       claims = { role: 'welcome-team', ...contactClaim };
       redirectTo = '/welcome';
+    } else if (isCoordinatorUser) {
+      // Standalone coordinator (no family). Ordered AFTER welcome-team on
+      // purpose: the two are siblings with disjoint grants, and welcome-team is
+      // the broader existing surface, so it keeps the primary slot when someone
+      // holds both. Lands on the roster, the coordinator's main screen.
+      claims = { role: 'coordinator', ...contactClaim };
+      redirectTo = '/welcome/roster';
     } else if (isKioskUser) {
       // Generic kiosk tablet account: mint a kiosk session and land on the
       // check-in kiosk. isKiosk() inherits admin, so an admin above wins first.

@@ -130,6 +130,19 @@ describe('middleware - auth-entry redirects', () => {
     expect(res.status).toBe(307);
     expect(res.headers.get('location')).toContain('/check-in');
   });
+
+  it('sends a signed-in coordinator session on / to /welcome/roster', async () => {
+    // dashboardForRole returning null for coordinator is not a no-op: the
+    // coordinator would sit on the marketing page holding a valid session, and
+    // every authorization denial would strand them on /sign-in.
+    (verifyPortalSessionCookie as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      uid: 'c1',
+      role: 'coordinator',
+    });
+    const res = await middleware(makeReq('http://localhost/', { cookie: 'good' }));
+    expect(res.status).toBe(307);
+    expect(res.headers.get('location')).toContain('/welcome/roster');
+  });
 });
 
 describe('middleware — bearer auth', () => {

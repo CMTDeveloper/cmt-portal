@@ -147,6 +147,12 @@ function dashboardForRole(role: unknown): string | null {
   if (role === 'admin') return '/admin';
   if (role === 'welcome-team') return '/welcome';
   if (role === 'kiosk') return '/check-in';
+  // Separate code path from build-session-claims' redirectTo. Returning null
+  // here does NOT mean "no dashboard" - it means a signed-in coordinator
+  // visiting /, /sign-in or /register is never sent anywhere and just sees the
+  // marketing page while holding a valid session, and every authorization
+  // denial strands them on /sign-in. That reads as "it signs me out at random".
+  if (role === 'coordinator') return '/welcome/roster';
   return null;
 }
 
