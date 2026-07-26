@@ -10,7 +10,7 @@ Start here. Read `docs/superpowers/reviews/README.md` second.
 | **P1** roles + cross-family edit | **all 11 tasks** | - |
 | **P3** communications | **Tasks 1-6** | only Task 6 Step 3 (per-template UAT send), blocked on Vaibhav's SES templates |
 | **P2** teacher/visitors/roster | Tasks 1-2 (the two live defects) | **Tasks 3-9** - see items 21-22 below, which this doc previously omitted |
-| **P5** monthly pledge | Task 1 Steps 1-3 (UAT rules) | **RESCOPED 2026-07-26** - no bank details, Stripe-hosted PAD. Tasks 2, 10, 11 DELETED; 3-8b, 12 need rewrite. **BLOCKED on spec O9.** Steps 4-5 are a NO-OP. |
+| **P5** monthly pledge → **v3 plan** `2026-07-26-launch-p5-monthly-pledge-v3.md` | Task 1 Steps 1-3 (UAT rules) | **REPLANNED 2026-07-26 - 8 tasks, UNBLOCKED, ships DARK** - no bank details, Stripe-hosted PAD. Tasks 2, 10, 11 DELETED; 3-8b, 12 need rewrite. **BLOCKED on spec O9.** Steps 4-5 are a NO-OP. |
 | **P4** adult study class | - | all 12 |
 | **P6** migration/dormant/centre | **all 7 tasks** | - |
 
@@ -96,7 +96,7 @@ Independent of Track A except Task 9.
 > with them two of the three unassigned launch blockers. The build is much smaller but
 > now **BLOCKED on spec open item O9** (how the portal learns a mandate was really
 > established) and on Vaibhav's integration contract. Item numbering below is stale and
-> will be reissued as a v3 once O9 lands. Spec:
+> **✅ v3 PLAN NOW EXISTS: `2026-07-26-launch-p5-monthly-pledge-v3.md` - implement that, not the v2.** The Stripe contract arrived and every blocker is closed: fixed $51/month (TEST price `price_1TxTuwRNUSAfwnFqdXBP8Opi`), step 4 safe to retry, delayed outcomes reconciled by cron, cancellation manual by the temple, and the whole feature **SHIPS DARK** (`/pad/*` is TEST-only). Spec:
 > `docs/superpowers/specs/2026-07-25-monthly-pledge-pad-design.md`.
 
 Needs P1 Task 7, P3 Tasks 1-3, and P4's `/donate/success` move.

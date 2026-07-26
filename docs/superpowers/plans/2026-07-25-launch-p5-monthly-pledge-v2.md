@@ -1,6 +1,13 @@
 # P5 v2 - Monthly Pledge (Pre-Authorized Debit)
 
-> # ⛔ STOP - THIS PLAN IS SUPERSEDED IN PART (2026-07-26)
+> # ⛔ FULLY SUPERSEDED 2026-07-26 - IMPLEMENT `2026-07-26-launch-p5-monthly-pledge-v3.md` INSTEAD
+>
+> **A complete v3 plan now exists and matches the real Stripe contract.** This file is
+> kept only as a record of the pre-Stripe design. **Do not implement any task below.**
+>
+> ---
+>
+> (original partial-supersession notice follows)
 >
 > **Vaibhav, 2026-07-26: the portal no longer collects or stores bank details.**
 > Monthly PAD is authorised on a **Stripe-hosted page** via CMT's existing Stripe
