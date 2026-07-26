@@ -150,7 +150,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   emailSpy = vi.fn<(args: SendEmailArgs) => Promise<void>>().mockResolvedValue(undefined);
   smsSpy = vi.fn<(args: SendSMSArgs) => Promise<void>>().mockResolvedValue(undefined);
-  mockResolveSender.mockReturnValue({ sendEmail: emailSpy, sendSMS: smsSpy });
+  mockResolveSender.mockReturnValue({ sendEmail: emailSpy, sendSMS: smsSpy, sendSesTemplatedEmail: vi.fn() });
 });
 
 describe('sendDuePrasadReminders', () => {
@@ -441,7 +441,7 @@ describe('sendDuePrasadReminders', () => {
       .mockRejectedValueOnce(new Error('SES timeout'))
       .mockResolvedValue(undefined);
     const silentSms = vi.fn<(args: SendSMSArgs) => Promise<void>>().mockResolvedValue(undefined);
-    mockResolveSender.mockReturnValue({ sendEmail: errorSpy, sendSMS: silentSms });
+    mockResolveSender.mockReturnValue({ sendEmail: errorSpy, sendSMS: silentSms, sendSesTemplatedEmail: vi.fn() });
 
     mockFirestore.mockReturnValue(
       makeDb(

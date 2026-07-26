@@ -1,11 +1,17 @@
 import 'server-only';
-import { sendEmail as realSendEmail, type SendEmailArgs } from './ses';
+import {
+  sendEmail as realSendEmail,
+  sendSesTemplatedEmail as realSendSesTemplatedEmail,
+  type SendEmailArgs,
+  type SendSesTemplatedEmailArgs,
+} from './ses';
 import { sendSMS as realSendSMS, type SendSMSArgs } from './sns';
 import { mockSender } from '@/features/check-in/shared';
 
 export interface ResolvedSender {
   sendEmail(args: SendEmailArgs): Promise<void>;
   sendSMS(args: SendSMSArgs): Promise<void>;
+  sendSesTemplatedEmail(args: SendSesTemplatedEmailArgs): Promise<void>;
 }
 
 // UAT safety net. Each list is a comma-separated allowlist of recipients
@@ -92,6 +98,47 @@ export function resolveSender(): ResolvedSender {
       } catch (e) {
         const err = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
         console.error(`[resolveSender] SES send FAILED → ${args.to}: ${err}`);
+        throw e;
+      }
+    },
+    sendSesTemplatedEmail: async (args) => {
+      if (emailRedirectTo) {
+        console.log(
+          `[resolveSender] TEMPLATED EMAIL REDIRECT (test): ${args.to} → ${emailRedirectTo} (template: ${args.templateName})`,
+        );
+        try {
+          await realSendSesTemplatedEmail({
+            ...args,
+            to: emailRedirectTo,
+            // Reserved variable. The plain-email redirect marks the intended
+            // recipient by rewriting the subject, but a templated send has no
+            // subject in code - it lives in SES. Without this, every redirected
+            // email lands in one inbox with an identical subject and no way to
+            // tell who each was really for, which is the entire signal
+            // SETU_EMAIL_REDIRECT_TO exists to provide. Templates render it
+            // when present; see docs/runbooks/ses-email-templates.md.
+            data: { ...args.data, _testRecipient: args.to },
+          });
+          console.log(`[resolveSender] SES templated redirect send OK → ${emailRedirectTo}`);
+        } catch (e) {
+          const err = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+          console.error(`[resolveSender] SES templated redirect send FAILED → ${emailRedirectTo}: ${err}`);
+          throw e;
+        }
+        return;
+      }
+      if (!isEmailAllowed(args.to, emailAllowlist)) {
+        console.log(`[resolveSender] email allowlist filter: skipping templated ${args.to} → mock`);
+        await mockSender.sendSesTemplatedEmail(args);
+        return;
+      }
+      console.log(`[resolveSender] real SES templated send → ${args.to} (template: ${args.templateName})`);
+      try {
+        await realSendSesTemplatedEmail(args);
+        console.log(`[resolveSender] SES templated send OK → ${args.to}`);
+      } catch (e) {
+        const err = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+        console.error(`[resolveSender] SES templated send FAILED → ${args.to}: ${err}`);
         throw e;
       }
     },

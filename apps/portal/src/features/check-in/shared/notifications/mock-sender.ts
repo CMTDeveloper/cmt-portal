@@ -10,9 +10,16 @@ export interface SendSMSArgs {
   message: string;
 }
 
+export interface SendSesTemplatedEmailArgs {
+  to: string;
+  templateName: string;
+  data: Record<string, unknown>;
+}
+
 export interface NotificationSender {
   sendEmail(args: SendEmailArgs): Promise<void>;
   sendSMS(args: SendSMSArgs): Promise<void>;
+  sendSesTemplatedEmail(args: SendSesTemplatedEmailArgs): Promise<void>;
 }
 
 function redactDigitRuns(s: string): string {
@@ -31,6 +38,15 @@ export const mockSender: NotificationSender = {
     console.log('[mock-sms]', {
       phone: args.phone,
       preview: redactDigitRuns(args.message.slice(0, 80)),
+    });
+  },
+  async sendSesTemplatedEmail(args) {
+    // Keys only, never values: template data carries family names, amounts and
+    // invite URLs, and this line goes to the Vercel log.
+    console.log('[mock-templated-email]', {
+      to: args.to,
+      templateName: args.templateName,
+      dataKeys: Object.keys(args.data),
     });
   },
 };

@@ -1,15 +1,19 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-vi.mock('../ses', () => ({ sendEmail: vi.fn() }));
+// Whole-module replacements: every export resolve-sender.ts reads must be
+// listed here, or vitest raises "No <name> export is defined on the mock" the
+// first time the new branch touches it.
+vi.mock('../ses', () => ({ sendEmail: vi.fn(), sendSesTemplatedEmail: vi.fn() }));
 vi.mock('../sns', () => ({ sendSMS: vi.fn() }));
 vi.mock('@/features/check-in/shared', () => ({
   mockSender: {
     sendEmail: vi.fn(),
     sendSMS: vi.fn(),
+    sendSesTemplatedEmail: vi.fn(),
   },
 }));
 
-import { sendEmail as realSendEmail } from '../ses';
+import { sendEmail as realSendEmail, sendSesTemplatedEmail as realSendSesTemplatedEmail } from '../ses';
 import { sendSMS as realSendSMS } from '../sns';
 import { mockSender } from '@/features/check-in/shared';
 import { resolveSender } from '../resolve-sender';
@@ -199,5 +203,63 @@ describe('resolveSender — test-mode redirects', () => {
     expect(realSendSMS).not.toHaveBeenCalled();
     expect(mockSender.sendEmail).toHaveBeenCalled();
     expect(mockSender.sendSMS).toHaveBeenCalled();
+  });
+});
+
+// The whole reason the templated send joins this interface rather than being
+// called directly: it must inherit the same three governance branches, or a
+// migrated email quietly bypasses the UAT safety net that the in-code one
+// respects.
+describe('resolveSender — sendSesTemplatedEmail governance', () => {
+  const ARGS = { to: 'real-family@example.com', templateName: 'cmt-setu-invite', data: { familyName: 'Patel' } };
+
+  it('routes to mock when the NOTIFY flag is off', async () => {
+    process.env.NEXT_PUBLIC_FEATURE_CHECK_IN_NOTIFY = 'false';
+    await resolveSender().sendSesTemplatedEmail(ARGS);
+    expect(mockSender.sendSesTemplatedEmail).toHaveBeenCalled();
+    expect(realSendSesTemplatedEmail).not.toHaveBeenCalled();
+  });
+
+  it('routes a non-allowlisted recipient to mock', async () => {
+    process.env.NEXT_PUBLIC_FEATURE_CHECK_IN_NOTIFY = 'true';
+    process.env.SETU_EMAIL_ALLOWLIST = 'dineshdm7@gmail.com';
+    await resolveSender().sendSesTemplatedEmail(ARGS);
+    expect(realSendSesTemplatedEmail).not.toHaveBeenCalled();
+    expect(mockSender.sendSesTemplatedEmail).toHaveBeenCalled();
+  });
+
+  it('sends for real when allowlisted', async () => {
+    process.env.NEXT_PUBLIC_FEATURE_CHECK_IN_NOTIFY = 'true';
+    process.env.SETU_EMAIL_ALLOWLIST = 'real-family@example.com';
+    await resolveSender().sendSesTemplatedEmail(ARGS);
+    expect(realSendSesTemplatedEmail).toHaveBeenCalledWith(ARGS);
+    expect(mockSender.sendSesTemplatedEmail).not.toHaveBeenCalled();
+  });
+
+  it('carries the intended recipient as _testRecipient when redirecting', async () => {
+    // The in-code redirect marks the intended recipient by rewriting the
+    // subject. A templated send has NO subject in code - it lives in SES - so
+    // copying that branch literally would land every redirected email in one
+    // inbox with identical subjects and no way to tell who each was for,
+    // destroying the signal SETU_EMAIL_REDIRECT_TO exists to give.
+    process.env.NEXT_PUBLIC_FEATURE_CHECK_IN_NOTIFY = 'true';
+    process.env.SETU_EMAIL_REDIRECT_TO = 'developer@chinmayatoronto.org';
+    await resolveSender().sendSesTemplatedEmail(ARGS);
+    expect(realSendSesTemplatedEmail).toHaveBeenCalledWith({
+      to: 'developer@chinmayatoronto.org',
+      templateName: 'cmt-setu-invite',
+      data: { familyName: 'Patel', _testRecipient: 'real-family@example.com' },
+    });
+  });
+
+  it('redirect overrides the allowlist, as it does for plain email', async () => {
+    process.env.NEXT_PUBLIC_FEATURE_CHECK_IN_NOTIFY = 'true';
+    process.env.SETU_EMAIL_ALLOWLIST = 'someone-allowed@example.com';
+    process.env.SETU_EMAIL_REDIRECT_TO = 'developer@chinmayatoronto.org';
+    await resolveSender().sendSesTemplatedEmail(ARGS);
+    expect(realSendSesTemplatedEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ to: 'developer@chinmayatoronto.org' }),
+    );
+    expect(mockSender.sendSesTemplatedEmail).not.toHaveBeenCalled();
   });
 });
