@@ -258,6 +258,37 @@ Flags live in `apps/portal/src/lib/flags.ts`, read from `NEXT_PUBLIC_FEATURE_*` 
 
 Source of truth: `turbo.json` `tasks.build.env` (must list every var or Vercel builds strip it from the sandbox). Set all on **Vercel Production**.
 
+### 9.0 Vercel environment split (established 2026-07-27)
+
+**Until 2026-07-27 there was no split**: Vercel **Preview** and **Production** both pointed at `chinmaya-setu-uat`, and `https://cmt-setu.vercel.app` — the URL everyone calls production — was UAT with a nicer name. Preview also held only 36 of the 62 variables, so preview deploys ran with **every feature flag off and no Stripe config at all**.
+
+**Now:**
+
+| | Vercel **Preview** | Vercel **Production** |
+|---|---|---|
+| `PORTAL_FIREBASE_*` | `chinmaya-setu-uat` | `chinmaya-setu-uat` **→ `chinmaya-setu-715b8` on Aug 3** |
+| `MASTER_FIREBASE_*` | `chinmaya-setu-715b8` (read-only) | `chinmaya-setu-715b8` (read-only) |
+| Feature flags | all on | all on |
+| Stripe | test host, `STRIPE_USE_TEST_CHECKOUT=true` | test host today; **live on Aug 3 — blocked, see §8** |
+| `SETU_*_ALLOWLIST` | **set** (must stay set — a preview deploy must never email a real family) | set today; **cleared on Aug 3** |
+| `NEXT_PUBLIC_PORTAL_BASE_URL` | **deliberately unset** — preview URLs are per-deployment, so a fixed value would put the wrong host in preview emails | the custom domain, from Aug 3 |
+| `SETU_*_REDIRECT_TO` | unset (optional) | unset (optional) |
+
+Preview is otherwise identical to Production (59 of 62 vars; the 3 above are the whole difference).
+
+### 9.1 The Aug 3 Production delta — the ONLY things that change
+
+The cutover is a **config flip, not a data migration**: prod Setu fills lazily from the legacy RTDB roster on first engagement (§6), and **no UAT→prod copy exists or is needed**, so the `_test:true` E2E fixtures in UAT can never reach production.
+
+1. `PORTAL_FIREBASE_PROJECT_ID` / `_CLIENT_EMAIL` / `_PRIVATE_KEY` → the **715b8** service account. Also the three `NEXT_PUBLIC_PORTAL_FIREBASE_*` client values.
+2. **Clear `SETU_EMAIL_ALLOWLIST` and `SETU_PHONE_ALLOWLIST`.** ⚠️ **Empty means NO filter — clearing them is what turns sign-in on for real families.** They currently hold 3 emails / 2 phones, so *today a real family would never receive their OTP*. This is the single switch that opens the portal to the public, and its polarity is the opposite of what "allowlist" suggests.
+3. Stripe → live mode. **BLOCKED**: no live-mode service exists (§8).
+4. `NEXT_PUBLIC_PORTAL_BASE_URL` → the custom domain, and add that domain in Vercel → cmt-setu → Domains.
+5. Decide `NEXT_PUBLIC_FEATURE_SETU_PLEDGE` (§14 2026-07-27) — on today, but `lib/flags.ts` says it must be off at launch.
+6. **Redeploy.** `NEXT_PUBLIC_*` is inlined at BUILD time; an env change alone does nothing.
+
+> **Vercel CLI ≥ 58 is required.** 54.6.0 refuses every preview-scoped `env add` with `action_required: git_branch_required`, even when given its own suggested command verbatim, and it reports sensitive values as empty strings rather than saying so. 58 writes preview fine and prints `[SENSITIVE]` explicitly.
+
 **Firebase (server SA):** `PORTAL_FIREBASE_PROJECT_ID`, `PORTAL_FIREBASE_CLIENT_EMAIL`, `PORTAL_FIREBASE_PRIVATE_KEY`, `MASTER_FIREBASE_PROJECT_ID`, `MASTER_FIREBASE_CLIENT_EMAIL`, `MASTER_FIREBASE_PRIVATE_KEY`, `MASTER_FIREBASE_DATABASE_URL`
 **Firebase (public client):** `NEXT_PUBLIC_PORTAL_FIREBASE_PROJECT_ID`, `NEXT_PUBLIC_PORTAL_FIREBASE_API_KEY`, `NEXT_PUBLIC_PORTAL_FIREBASE_AUTH_DOMAIN`
 **Auth/session:** `TEACHER_PASSPHRASE`, `SESSION_COOKIE_EXPIRES_DAYS` (≤14)
@@ -382,6 +413,14 @@ pnpm --filter @cmt/portal exec tsx --env-file=.env.local scripts/grant-admin.ts 
 ## 14. Change log (UAT) — keep this current
 
 > **Rule:** any important UAT DB change (new collection/field, new index + deploy, new ops/migration/seed/backfill script or run, schema change, new env var/flag, corrective write) gets a dated entry here **and** an update to the relevant section above, in the same change. Prod replays this log additively (never `--force`, never touch the door-app collections).
+
+- **2026-07-27** - ✅ **VERCEL PREVIEW AND PRODUCTION ARE NOW SEPARATE ENVIRONMENTS** (CMT Developer: *"let's separate vercel preview and production env, on August 3rd we will use vercel prod env for actual production where we will point our custom domain to it"*). See the new §9.0 / §9.1.
+  **What was actually true before this:** both environments pointed at `chinmaya-setu-uat`, so "production" was UAT with a nicer URL - and **Preview held only 36 of Production's 62 variables**, missing every `NEXT_PUBLIC_FEATURE_*` flag and all Stripe config, so preview deploys silently ran with the whole Setu feature set OFF. Preview is now 59/62; the 3 remaining differences are deliberate and listed in §9.0.
+  **Preview also still had the DEAD Stripe host** in `STRIPE_API_BASE_URL` - the earlier fix that day reached Production only, because the CLI silently refused the preview write (below). Corrected.
+  **⚠️ Vercel CLI 54.6.0 cannot write preview-scoped env vars at all** - it returns `action_required: git_branch_required` even when given its own suggested "all Preview branches" command verbatim, and it reports sensitive values as empty strings instead of saying they are hidden. Upgraded to 58.0.0, which does both correctly (`[SENSITIVE]`). **Anything below CLI 58 will appear to work and change nothing.**
+  **The Aug 3 flip is a CONFIG change, not a data migration** - §6's lazy model means prod Setu fills from the legacy RTDB roster on first engagement, and no UAT→prod copy exists, so UAT's `_test:true` fixtures cannot reach prod. The exact delta is §9.1. **The item most likely to be missed: clearing `SETU_EMAIL_ALLOWLIST` / `SETU_PHONE_ALLOWLIST`.** They currently hold 3 emails / 2 phones, so **a real family signing in today would never receive their OTP**; clearing them (empty = no filter) is the single switch that opens the portal to the public, and its polarity is the opposite of what the name suggests.
+
+- **2026-07-27** - ✅ **ADULT-CLASS: a teaching adult is now SHOWN, greyed out and labelled, instead of hidden** (`6bc2640`). Reverses the presentation half of §6.6 at CMT Developer's request after a real two-adult family (one a teacher) saw a single name and read it as their family record being wrong. **The selection rule is unchanged** - `selectableAdults()` is still the sole authority, the write route still rejects a teaching mid with `mid-not-selectable`, the checkbox is `disabled` so it is neither checkable nor submitted, and an all-teaching household still yields an empty selectable set so the gate still never fires. A unit test asserts `selectableAdults` and the new `teachingAdults` **partition** the eligible adults (disjoint + covering), so nobody can be shown twice or silently vanish again. The E2E's checkbox helper now scopes to `:not([disabled])` - without that the greyed row inflates every "how many adults may this family pick" count in the file. Spec §2.3 / §4.4 / §6 updated in the same commit.
 
 - **2026-07-27** - 🔴 **THE LIVE-MODE STRIPE CHECKOUT SERVICE DOES NOT EXIST, AND PRODUCTION IS ISSUING `cs_test_` SESSIONS.** Found while diagnosing the pledge's 503.
   **What was measured, not assumed.** `POST /api/setu/donations/checkout` on `cmt-setu.vercel.app` returns **200** with a real `https://checkout.stripe.com/c/pay/**cs_test_**…` URL — so one-time donations WORK, but in **Stripe test mode** (`STRIPE_USE_TEST_CHECKOUT=true` in prod). Meanwhile the live-mode host named in `STRIPE_CHECKOUT_URL` returns Google's front-end 404 on **every** path including `GET /`; only the test host is alive, and it serves all of `/checkout-link`, `/pad/setup-link`, `/pad/monthly-subscription`, `/checkout-session-result`, `/subscription-result` (400 on an empty body = route exists). **Consequence: the go-live step "set `STRIPE_USE_TEST_CHECKOUT=false`" would break donations rather than arm them.** See the ⛔ note in §8. **Owner action (Vaibhav): deploy or name a live-mode service URL.**
