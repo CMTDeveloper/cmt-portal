@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Rosette, SetuIcon } from '@cmt/ui';
+import { flags } from '@/lib/flags';
 
 export const metadata = { title: 'Admin' };
 
@@ -38,6 +39,11 @@ const GROUPS: Array<{
     heading: 'Reports',
     tiles: [
       { href: '/welcome/reports', title: 'Reports', icon: 'info', tone: 'primary', sub: 'Enrollment, attendance, donations + legacy check-in exports.' },
+      // Hidden while the feature is dark, matching the page itself (which 404s)
+      // and the routes. A tile leading to a 404 is worse than no tile.
+      ...(flags.setuPledge
+        ? ([{ href: '/admin/pledges', title: 'Monthly pledges', icon: 'heart', tone: 'primary', sub: 'Families giving a fixed amount monthly by pre-authorized debit. Cancelling here updates the record only - the debit is stopped in Stripe.' }] as const)
+        : []),
     ],
   },
   {
