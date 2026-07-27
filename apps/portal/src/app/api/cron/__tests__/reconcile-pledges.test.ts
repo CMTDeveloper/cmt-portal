@@ -10,7 +10,7 @@ import { reconcilePledges } from '@/features/setu/pledges/reconcile-pledges';
 import * as appHandler from '../reconcile-pledges/route';
 
 const SECRET = 'a'.repeat(32);
-const EMPTY = { scanned: 0, activated: 0, failed: 0, processing: 0, errored: 0, stale: [] };
+const EMPTY = { scanned: 0, activated: 0, failed: 0, processing: 0, errored: 0, stale: [], unverified: [] };
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -81,12 +81,13 @@ describe('/api/cron/reconcile-pledges - the run', () => {
     vi.mocked(reconcilePledges).mockResolvedValue({
       scanned: 3, activated: 1, failed: 1, processing: 1, errored: 0,
       stale: [{ pid: 'PLG-OLD', fid: 'CMT-A', daysStarted: 20 }],
+      unverified: ['PLG-ORPHAN'],
     });
     await testApiHandler({
       appHandler,
       test: async ({ fetch }) => {
         const res = await fetch({ method: 'GET', headers: { authorization: `Bearer ${SECRET}` } });
-        expect(await res.json()).toMatchObject({ success: true, scanned: 3, activated: 1, stale: 1 });
+        expect(await res.json()).toMatchObject({ success: true, scanned: 3, activated: 1, stale: 1, unverified: 1 });
       },
     });
   });

@@ -181,6 +181,32 @@ describe('advancePledge - a late answer must never stomp a settled pledge', () =
     expect(out).toBe('processing');
   });
 
+  it('FLAGS a subscription created after the pledge left started', async () => {
+    // The residual window the re-read above cannot close: the cancel lands
+    // between that read and the provider call returning. The subscription is
+    // real and billing, so the id must still be recorded - but a recorded id
+    // that nothing ever surfaces is not "findable by a human", it is just
+    // present. The flag is what makes the claim true.
+    mockStep4.mockImplementation(async () => {
+      fs.pledge!['status'] = 'cancelled';
+      return { subscriptionId: 'sub_new', status: 'active', customerId: 'cus_1' };
+    });
+    await advancePledge(db, ref, { ...staleSnapshot(), subscriptionId: null }, 'PLG-1');
+    expect(fs.pledge!['subscriptionId'], 'the live subscription was not recorded at all').toBe('sub_new');
+    expect(fs.pledge!['needsStripeVerification']).toBe(true);
+    expect(String(fs.pledge!['lastError'])).toMatch(/verify in stripe/i);
+    // And it did NOT relabel the temple's decision.
+    expect(fs.pledge!['status']).toBe('cancelled');
+  });
+
+  it('does NOT flag on the ordinary path', async () => {
+    // Guard the guard: a flag written unconditionally would fire on every
+    // healthy pledge, and a monitor that always fires is one nobody reads.
+    await advancePledge(db, ref, { ...staleSnapshot(), subscriptionId: null }, 'PLG-1');
+    expect(fs.pledge!['needsStripeVerification']).toBeUndefined();
+    expect(fs.pledge!['lastError']).toBeUndefined();
+  });
+
   it('DOES create the subscription on the ordinary path, so the guard is not just a block', async () => {
     // Guard the guard: a re-read that always bailed would pass both tests above
     // and quietly break the entire feature.

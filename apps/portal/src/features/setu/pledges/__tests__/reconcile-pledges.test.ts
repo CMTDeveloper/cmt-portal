@@ -20,6 +20,7 @@ const { fs } = vi.hoisted(() => ({
     docs: [] as Doc[],
     updates: [] as Array<{ id: string; data: Record<string, unknown> }>,
     queries: [] as string[],
+    throwOnField: null as string | null,
     family: { managers: ['CMT-A-01'] } as Record<string, unknown> | null,
     member: { email: 'a@b.com' } as Record<string, unknown> | null,
   },
@@ -57,9 +58,14 @@ vi.mock('@cmt/firebase-shared/admin/firestore', () => {
         where: (field: string, op: string, value: unknown) => {
           fs.queries.push(`${field}${op}${String(value)}`);
           return {
-            get: async () => ({
-              docs: fs.docs.filter((d) => d[field] === value).map((d) => ({ id: d.id, data: () => d })),
-            }),
+            get: async () => {
+              // Keyed on the FIELD so a test can break the secondary query
+              // without breaking the reconciliation it must not be able to cost.
+              if (fs.throwOnField === field) throw new Error('FAILED_PRECONDITION');
+              return {
+                docs: fs.docs.filter((d) => d[field] === value).map((d) => ({ id: d.id, data: () => d })),
+              };
+            },
           };
         },
       };
@@ -106,7 +112,7 @@ function orphan(id: string, over: Partial<Doc> = {}): Doc {
 }
 
 beforeEach(() => {
-  fs.docs = []; fs.updates = []; fs.queries = [];
+  fs.docs = []; fs.updates = []; fs.queries = []; fs.throwOnField = null;
   fs.family = { managers: ['CMT-A-01'] };
   fs.member = { email: 'a@b.com' };
   mockStep3.mockReset(); mockStep4.mockReset(); mockStep5.mockReset(); mockEmail.mockReset();
@@ -121,11 +127,13 @@ beforeEach(() => {
 describe('reconcilePledges - the query', () => {
   it('scans ONLY started pledges, with a single-field equality', async () => {
     await reconcilePledges();
-    // One `where`, one field. A second where (e.g. a startedAt range for the
-    // stale report) would demand a `pledges(status, startedAt)` composite index
+    // TWO queries, each a SINGLE-FIELD equality. Neither combines a `where`
+    // with an `orderBy` or a second `where`, so neither needs a composite index
     // that firestore.indexes.json does not declare - and this suite is
-    // index-blind, so the FAILED_PRECONDITION would only appear in production.
-    expect(fs.queries).toEqual(['status==started']);
+    // index-blind, so a FAILED_PRECONDITION would only appear in production.
+    // The stale report deliberately does NOT add a `startedAt` range: it
+    // filters in memory over rows this scan already loaded.
+    expect(fs.queries).toEqual(['status==started', 'needsStripeVerification==true']);
   });
 });
 
@@ -235,7 +243,7 @@ describe('reconcilePledges - one family per failure, never the whole run', () =>
     // a mutation that also counted this row as `processing` left the counts
     // summing to more than `scanned`, and every assertion on a single field
     // still passed. Whoever reads the cron output would double-count.
-    expect(out).toEqual({ scanned: 1, activated: 0, failed: 0, processing: 0, errored: 1, stale: [] });
+    expect(out).toEqual({ scanned: 1, activated: 0, failed: 0, processing: 0, errored: 1, stale: [], unverified: [] });
     spy.mockRestore();
   });
 
@@ -249,7 +257,7 @@ describe('reconcilePledges - one family per failure, never the whole run', () =>
     });
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const out = await reconcilePledges();
-    expect(out).toEqual({ scanned: 2, activated: 1, failed: 0, processing: 0, errored: 1, stale: [] });
+    expect(out).toEqual({ scanned: 2, activated: 1, failed: 0, processing: 0, errored: 1, stale: [], unverified: [] });
     expect(fs.docs.find((d) => d.id === 'PLG-GOOD')!['status']).toBe('active');
     expect(fs.docs.find((d) => d.id === 'PLG-BAD')!['status']).toBe('started');
     spy.mockRestore();
@@ -300,11 +308,15 @@ describe('reconcilePledges - the stale report', () => {
     expect(out.stale[0]!.daysStarted).toBeGreaterThanOrEqual(STALE_AFTER_DAYS);
   });
 
-  it('reports staleness from the scan it already did, needing no second query', async () => {
+  it('reports staleness from the scan it already did, adding no startedAt query', async () => {
     mockStep3.mockResolvedValue('pending');
     fs.docs = [orphan('PLG-OLD', { startedAt: { toDate: () => daysAgo(30) } })];
     await reconcilePledges();
-    expect(fs.queries).toEqual(['status==started']);
+    // The point is specifically that NO query touches `startedAt` - that is what
+    // would have demanded a `pledges(status, startedAt)` composite index. The
+    // unverified report's own query is a separate single-field equality.
+    expect(fs.queries.some((q) => q.includes('startedAt'))).toBe(false);
+    expect(fs.queries).toEqual(['status==started', 'needsStripeVerification==true']);
   });
 
   it('reports a pledge that just crossed the boundary, not one just short of it', async () => {
@@ -335,5 +347,41 @@ describe('reconcilePledges - the stale report', () => {
     // Unknown age is not evidence of staleness, and must not crash the run.
     expect(out.stale).toEqual([]);
     expect(out.scanned).toBe(1);
+  });
+});
+
+describe('reconcilePledges - the unverified-subscription report', () => {
+  it('reports a pledge whose subscription was created after it left started', async () => {
+    // The residual window advancePledge's pre-step-4 read cannot close: a real
+    // recurring debit exists at Stripe against a pledge nobody expected to be
+    // debited. advancePledge flags it; this is what makes the flag visible to
+    // a human instead of merely present in Firestore.
+    fs.docs = [
+      orphan('PLG-ORPHAN', { status: 'cancelled', needsStripeVerification: true, subscriptionId: 'sub_live' }),
+      orphan('PLG-NORMAL', { status: 'cancelled', subscriptionId: 'sub_ok' }),
+    ];
+    const out = await reconcilePledges();
+    // NOT keyed on `cancelled/failed AND subscriptionId != null`: that is the
+    // NORMAL steady state (cancel-pledge does not clear the handle, and a step-5
+    // failure keeps it), so it would report PLG-NORMAL too and the signal would
+    // drown. Only the flag means "we created a debit nobody expected".
+    expect(out.unverified).toEqual(['PLG-ORPHAN']);
+  });
+
+  it('reports nothing when no pledge is flagged', async () => {
+    fs.docs = [orphan('PLG-1', { status: 'cancelled', subscriptionId: 'sub_ok' })];
+    expect((await reconcilePledges()).unverified).toEqual([]);
+  });
+
+  it('a failure of the secondary query never costs the reconciliation', async () => {
+    // The whole point of the run is repairing orphan mandates. A monitoring
+    // query must not be able to take that down.
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    fs.throwOnField = 'needsStripeVerification';
+    fs.docs = [orphan('PLG-1')];
+    const out = await reconcilePledges();
+    expect(out.activated).toBe(1);
+    expect(out.unverified).toEqual([]);
+    spy.mockRestore();
   });
 });

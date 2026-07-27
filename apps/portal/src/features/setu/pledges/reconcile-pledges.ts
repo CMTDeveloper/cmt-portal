@@ -28,6 +28,12 @@ export interface ReconcileResult {
   /** The provider was unreachable for this row. Status untouched. */
   errored: number;
   stale: StalePledge[];
+  /**
+   * Pledge ids where a subscription was created AFTER the pledge left
+   * `started` - i.e. the portal created a recurring debit nobody expected.
+   * A human must verify these in Stripe; nothing here can stop a debit.
+   */
+  unverified: string[];
 }
 
 function toDateOrNull(v: unknown): Date | null {
@@ -81,6 +87,7 @@ export async function reconcilePledges(): Promise<ReconcileResult> {
     processing: 0,
     errored: 0,
     stale: [],
+    unverified: [],
   };
 
   const now = Date.now();
@@ -122,6 +129,30 @@ export async function reconcilePledges(): Promise<ReconcileResult> {
         });
       }
     }
+  }
+
+  // ── The unverified-subscription report ─────────────────────────────────────
+  // Keyed on the FLAG that `advancePledge` raises, deliberately NOT on
+  // `status IN (cancelled, failed) AND subscriptionId != null`. That combination
+  // is the NORMAL steady state - `cancel-pledge.ts` does not clear the handle,
+  // and a step-5 failure keeps it too - so it would report almost every settled
+  // pledge, and a monitor that always fires is one nobody reads.
+  //
+  // Single-field equality, auto-indexed, no composite index. FAIL-SOFT: this is
+  // monitoring, and it must never be able to cost the reconciliation that is the
+  // whole point of the run.
+  try {
+    const flagged = await db.collection('pledges').where('needsStripeVerification', '==', true).get();
+    result.unverified = flagged.docs.map((d) => d.id);
+    if (result.unverified.length > 0) {
+      console.warn(
+        '[pledge] %d subscription(s) created after the pledge left started - VERIFY IN STRIPE: %s',
+        result.unverified.length,
+        result.unverified.join(', '),
+      );
+    }
+  } catch (err) {
+    console.error('[pledge] the unverified-subscription report failed - reconciliation was unaffected', err);
   }
 
   if (result.stale.length > 0) {

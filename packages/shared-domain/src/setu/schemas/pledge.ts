@@ -50,6 +50,14 @@ export const PledgeDocSchema = z.object({
   lastCheckedAt: z.date().nullable().optional(),
   /** Last provider error, for the stale-pledge report. Never shown to a family. */
   lastError: z.string().nullable().optional(),
+  /**
+   * A subscription was created AFTER this pledge left `started` - the portal
+   * created a recurring debit nobody expected. A human must verify it in
+   * Stripe; nothing in the portal can stop a debit. Bare `.optional()`, never
+   * `.default()`: doc schemas validate on READ, and a default would make every
+   * legacy document claim it had been checked.
+   */
+  needsStripeVerification: z.boolean().optional(),
 });
 
 export type PledgeDoc = z.infer<typeof PledgeDocSchema>;

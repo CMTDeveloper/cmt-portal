@@ -116,18 +116,46 @@ export async function advancePledge(
     // the same derived idempotency key, so a retry resumes rather than duplicates.
     const sub = await createMonthlySubscription({ setupSessionId: pledge.setupSessionId, pid });
     subscriptionId = sub.subscriptionId;
-    // Persist the handle IMMEDIATELY, and DELIBERATELY UNGUARDED - the only
-    // write here that is not compare-and-swapped.
+    // Persist the handle IMMEDIATELY, and NEVER conditionally on status.
     //
     // If the process dies before step 5, the next pass needs this to finish the
     // job; without it the subscription exists at Stripe with nothing here
-    // pointing at it. And in the racing case the guard above cannot fully close,
-    // a subscription may exist against a pledge that is no longer `started` -
-    // recording its id is then the ONLY thing that makes that live debit
-    // findable by a human. Guarding this write would make an untracked recurring
-    // charge invisible, which is strictly worse than a document whose handle and
-    // status disagree.
-    await ref.update({ subscriptionId, customerId: sub.customerId ?? null, lastCheckedAt: new Date() });
+    // pointing at it. And in the racing window the guard above cannot close, a
+    // subscription may exist against a pledge that is no longer `started` -
+    // recording its id is then the only trace of a live debit. Refusing that
+    // write would make an untracked recurring charge invisible, which is
+    // strictly worse than a document whose handle and status disagree.
+    //
+    // But a recorded id that nothing ever surfaces is not "findable", it is
+    // merely present. So the same transaction that records it also RAISES A
+    // FLAG when the pledge is no longer `started` - the one genuinely anomalous
+    // case, meaning the portal created a debit nobody expected. A transaction
+    // rather than a read-then-write because the flag must describe the same
+    // instant as the write it annotates.
+    //
+    // NOTE the flag is keyed on THAT event, deliberately not on
+    // `status IN (cancelled, failed) AND subscriptionId != null`. That
+    // combination is the NORMAL steady state - `cancel-pledge.ts` does not clear
+    // the handle, and a step-5 failure keeps it too - so it would match almost
+    // every settled pledge. A monitor that always fires is one nobody reads.
+    await db.runTransaction(async (txn) => {
+      const snap = await txn.get(ref);
+      if (!snap.exists) return;
+      const now = (snap.data() as { status?: PledgeStatus }).status;
+      const flag =
+        now === 'started'
+          ? {}
+          : {
+              needsStripeVerification: true,
+              lastError: `subscription ${subscriptionId} created after status left started (${now ?? 'missing'}) - verify in Stripe`,
+            };
+      txn.update(ref, {
+        subscriptionId,
+        customerId: sub.customerId ?? null,
+        lastCheckedAt: new Date(),
+        ...flag,
+      });
+    });
   }
 
   // ── Step 5: is that subscription actually live? ───────────────────────────

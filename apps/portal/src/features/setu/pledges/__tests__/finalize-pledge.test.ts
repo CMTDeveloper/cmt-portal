@@ -87,12 +87,22 @@ describe('finalizePledge - the happy path', () => {
     // If the process dies between step 4 and step 5, the reconciler needs this
     // handle; without it the subscription exists at Stripe with nothing here
     // pointing at it.
-    const order: string[] = [];
-    mockStep5.mockImplementation(async () => { order.push('step5'); return 'success'; });
+    // Checks BOTH write logs: the handle is persisted in a transaction now (it
+    // also raises a flag when the pledge left `started`), so a test looking only
+    // at plain updates would pass on ordering it never actually measured.
+    const persisted = () =>
+      fs.updates.some((u) => u['subscriptionId'] === 'sub_1') ||
+      fs.txnUpdates.some((u) => u['subscriptionId'] === 'sub_1');
+
+    let alreadyPersisted = false;
+    mockStep5.mockImplementation(async () => { alreadyPersisted = persisted(); return 'success'; });
     await finalizePledge(args);
-    const idxWrite = fs.updates.findIndex((u) => u['subscriptionId'] === 'sub_1');
-    expect(idxWrite).toBeGreaterThanOrEqual(0);
-    expect(order).toEqual(['step5']);
+
+    // The real assertion, and stronger than the one this replaced: the original
+    // compared an index from one array against an unrelated array, so it could
+    // not actually detect the write happening AFTER step 5.
+    expect(alreadyPersisted, 'step 5 ran before the subscriptionId was persisted').toBe(true);
+    expect(persisted()).toBe(true);
   });
 });
 
@@ -183,8 +193,14 @@ describe('finalizePledge - the client cannot force activation', () => {
 describe('finalizePledge - the activation race with the cron', () => {
   it('activates through a TRANSACTION, not a plain read-then-write', async () => {
     await finalizePledge(args);
-    expect(fs.txnRuns).toBe(1);
-    expect(fs.txnUpdates.at(-1)!['status']).toBe('active');
+    // Asserts the PROPERTY, not a transaction count. The count was 1 and is now
+    // 2 (the subscriptionId write became transactional too), so counting would
+    // break on changes that have nothing to do with what this test guards.
+    expect(fs.txnUpdates.some((u) => u['status'] === 'active')).toBe(true);
+    expect(
+      fs.updates.some((u) => u['status'] === 'active'),
+      'the activation status was written outside a transaction',
+    ).toBe(false);
   });
 
   it('does not send a second email when the cron already activated it mid-flight', async () => {

@@ -13,6 +13,12 @@ export interface AdminPledgeRow {
   cancelledAt: Date | null;
   /** Whether the portal's own record can still be marked cancelled. */
   cancellable: boolean;
+  /**
+   * A subscription was created after this pledge left `started`. The id itself
+   * is still not projected - an admin cannot act on it from here - but the FACT
+   * must be visible, or the flag is recorded and never seen.
+   */
+  needsStripeVerification: boolean;
 }
 
 const MAX_ROWS = 200;
@@ -57,6 +63,7 @@ export async function listPledgesForAdmin(): Promise<AdminPledgeRow[]> {
       activatedAt: toDateOrNull(raw['activatedAt']),
       cancelledAt: toDateOrNull(raw['cancelledAt']),
       cancellable: status === 'started' || status === 'active',
+      needsStripeVerification: raw['needsStripeVerification'] === true,
     };
   });
 

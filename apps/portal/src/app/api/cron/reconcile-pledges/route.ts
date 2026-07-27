@@ -35,17 +35,20 @@ async function handle(req: Request) {
 
   if (!flags.setuPledge) {
     return NextResponse.json(
-      { success: true, disabled: true, scanned: 0, activated: 0, failed: 0, processing: 0, errored: 0, stale: 0 },
+      { success: true, disabled: true, scanned: 0, activated: 0, failed: 0, processing: 0, errored: 0, stale: 0, unverified: 0 },
       { status: 200 },
     );
   }
 
   try {
     const result = await reconcilePledges();
-    // `stale` is reduced to a COUNT here. The pids are in the server log for a
-    // human; a cron response body is not the place to enumerate which families
-    // are stuck.
-    return NextResponse.json({ success: true, ...result, stale: result.stale.length }, { status: 200 });
+    // `stale` and `unverified` are reduced to COUNTS here. The pids are in the
+    // server log for a human; a cron response body is not the place to
+    // enumerate which families are stuck.
+    return NextResponse.json(
+      { success: true, ...result, stale: result.stale.length, unverified: result.unverified.length },
+      { status: 200 },
+    );
   } catch (err) {
     // 500, never a quiet success. A cron reporting {success:true} while throwing
     // would be invisible, and the orphan mandates it exists to repair would pile

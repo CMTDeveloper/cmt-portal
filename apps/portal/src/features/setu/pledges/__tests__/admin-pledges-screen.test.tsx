@@ -14,7 +14,7 @@ function row(over: Partial<AdminPledgeRow> = {}): AdminPledgeRow {
   return {
     pid: 'PLG-1', fid: 'CMT-A', familyName: 'Rao', status: 'active', monthlyAmountCAD: 51,
     startedAt: new Date('2026-02-01T12:00:00Z'), activatedAt: new Date('2026-02-03T12:00:00Z'),
-    cancelledAt: null, cancellable: true,
+    cancelledAt: null, cancellable: true, needsStripeVerification: false,
     ...over,
   };
 }
@@ -77,6 +77,28 @@ describe('AdminPledgesScreen - the rows', () => {
     // from starting a new one, so staff must be able to clear it.
     render(<AdminPledgesScreen rows={[row({ status: 'started', activatedAt: null })]} />);
     expect(screen.getByRole('button', { name: /cancel the record for Rao/i })).toBeTruthy();
+  });
+
+  it('surfaces a subscription created after the pledge left started', async () => {
+    // The flag exists because a recorded subscriptionId that nothing displays is
+    // not "findable by a human", it is merely present in Firestore. This is the
+    // screen where someone would act on it, so this is where it has to appear -
+    // and through the a11y tree, so hiding it fails.
+    render(<AdminPledgesScreen rows={[row({ status: 'cancelled', needsStripeVerification: true })]} />);
+    const flag = screen.getByRole('status', { name: /verify in stripe/i });
+    expect(flag.textContent).toMatch(/verify in stripe/i);
+  });
+
+  it('shows no such flag on an ordinary row', async () => {
+    // A badge on every row is a badge nobody reads.
+    render(<AdminPledgesScreen rows={[row(), row({ pid: 'PLG-2', status: 'cancelled' })]} />);
+    expect(screen.queryByRole('status', { name: /verify in stripe/i })).toBeNull();
+  });
+
+  it('still does not print the subscription id itself', async () => {
+    // The FACT is actionable; the handle is not, and this page renders to HTML.
+    render(<AdminPledgesScreen rows={[row({ status: 'cancelled', needsStripeVerification: true })]} />);
+    expect(document.body.textContent ?? '').not.toMatch(/sub_/);
   });
 
   it('never renders a provider handle - they are not in the row type at all', async () => {

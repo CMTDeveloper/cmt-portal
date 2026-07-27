@@ -114,6 +114,24 @@ function PledgeRow({ row }: { row: AdminPledgeRow }) {
       <td style={{ padding: '10px', fontVariantNumeric: 'tabular-nums' }}>${row.monthlyAmountCAD}/mo</td>
       <td style={{ padding: '10px' }}>
         <span className="pill" style={{ background: style.bg, color: style.fg }}>{status}</span>
+        {row.needsStripeVerification && (
+          // The portal created a recurring debit against a pledge that had
+          // already left `started`. Nothing here can stop it - only a human in
+          // Stripe can. `role="status"` so it is in the accessibility tree: a
+          // flag recorded in Firestore and never displayed is not findable, and
+          // this is the screen where someone would act on it.
+          <span
+            role="status"
+            aria-label="Verify in Stripe"
+            title="A subscription was created after this pledge left 'started'. Check Stripe for a live debit."
+            style={{
+              display: 'inline-block', marginLeft: 6, padding: '2px 8px', borderRadius: 999,
+              background: '#fdefe7', color: 'var(--warn)', fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap',
+            }}
+          >
+            Verify in Stripe
+          </span>
+        )}
       </td>
       <td style={{ padding: '10px', color: 'var(--muted)' }}>{fmt(row.activatedAt ?? row.startedAt)}</td>
       <td style={{ padding: '10px', textAlign: 'right' }}>
