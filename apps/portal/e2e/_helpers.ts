@@ -57,3 +57,29 @@ export const CENTRE_MANAGER_EMAIL =
   process.env.E2E_CENTRE_MANAGER_EMAIL ?? 'e2e-centre-manager@chinmayatoronto.org';
 export const CENTRE_PASSWORD = process.env.E2E_CENTRE_PASSWORD ?? process.env.E2E_FAMILY_PASSWORD;
 export const hasCentreConfirmationCreds = Boolean(CENTRE_PASSWORD);
+
+// Dedicated fixtures for the Adult Study Class gate (spec §2.3's scenario
+// matrix), seeded by scripts/seed-adult-class-fixtures.ts (UAT). ONE FAMILY PER
+// ROW, not one family reshaped between phases, for two reasons: the sign-in rate
+// limit is keyed on the normalized email (mint-password-session.ts:49), so
+// separate emails mean separate 5-per-15-minute budgets rather than one shared
+// one; and §2.3 is explicit that "a fixture that happens to satisfy both proves
+// neither", which reshaping in place cannot honour.
+//
+//   row1  Bala Vihar, 2 adults, neither teaches  → gate fires, both selectable
+//   row2  Bala Vihar, 2 adults, co-adult teaches → gate fires, ONE selectable
+//   row3  Bala Vihar, 2 adults, both teach       → silent (empty selectable set)
+//   row5  Bala Vihar, 1 adult, does not teach    → gate fires, preselected
+//   row6  no Bala Vihar, 2 adults, neither teaches → silent (may enroll at $101)
+//   row7  no Bala Vihar, 2 adults, both teach    → silent, failing BOTH conditions
+export const ADULT_CLASS_EMAILS = {
+  row1: 'e2e-ac-row1@chinmayatoronto.org',
+  row2: 'e2e-ac-row2@chinmayatoronto.org',
+  row3: 'e2e-ac-row3@chinmayatoronto.org',
+  row5: 'e2e-ac-row5@chinmayatoronto.org',
+  row6: 'e2e-ac-row6@chinmayatoronto.org',
+  row7: 'e2e-ac-row7@chinmayatoronto.org',
+} as const;
+export const ADULT_CLASS_PASSWORD =
+  process.env.E2E_ADULT_CLASS_PASSWORD ?? process.env.E2E_FAMILY_PASSWORD;
+export const hasAdultClassCreds = Boolean(ADULT_CLASS_PASSWORD);
