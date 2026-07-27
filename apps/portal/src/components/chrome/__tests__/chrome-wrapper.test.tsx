@@ -33,6 +33,12 @@ describe('ChromeWrapper suppression', () => {
     '/complete-profile',
     '/acknowledgements',
     '/acknowledgements/',
+    // /adult-class is the same shape as /acknowledgements: a top-level gate
+    // screen a signed-in manager is SENT to and must answer before continuing.
+    // The public "Home / About" bar on top of it offers a way out of a gate and
+    // reads as the marketing site, not the family's portal.
+    '/adult-class',
+    '/adult-class/',
     '/sign-in',
     '/welcome',
     '/admin',

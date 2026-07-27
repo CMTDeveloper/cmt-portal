@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { MemberDoc } from '@cmt/shared-domain/setu';
-import { selectableAdults } from '../selectable-adults';
+import { selectableAdults, hiddenTeachingAdultCount } from '../selectable-adults';
 
 /**
  * One test per row of the spec's scenario matrix (2.3), plus the two exclusions.
@@ -115,5 +115,46 @@ describe('selectableAdults - exclusions', () => {
 
   it('handles an empty family without throwing', () => {
     expect(selectableAdults([], new Set())).toEqual([]);
+  });
+});
+
+/**
+ * The count behind the "someone in your family is teaching, so they are not
+ * listed" line. It exists because §6.6 removes a teaching adult ENTIRELY, and an
+ * adult who silently vanishes from their own household's list reads as a data
+ * bug - a real family reported exactly that. The screen may say WHY, but must
+ * still not say WHO, so this is a count and never a name list.
+ */
+describe('hiddenTeachingAdultCount', () => {
+  it('counts the adults §6.6 removed, and nobody else', () => {
+    const members = [
+      member({ mid: 'f-01' }),
+      member({ mid: 'f-02' }),
+      member({ mid: 'f-03', type: 'Child' }),
+    ];
+    expect(hiddenTeachingAdultCount(members, new Set(['f-01']))).toBe(1);
+  });
+
+  it('is 0 when nobody teaches, so the explanation line never shows unprompted', () => {
+    const members = [member({ mid: 'f-01' }), member({ mid: 'f-02' })];
+    expect(hiddenTeachingAdultCount(members, new Set())).toBe(0);
+  });
+
+  it('never counts a CHILD, even one somehow in the teacher set', () => {
+    const members = [member({ mid: 'f-01', type: 'Child' })];
+    expect(hiddenTeachingAdultCount(members, new Set(['f-01']))).toBe(0);
+  });
+
+  it('never counts a pending invitee - they are absent for a different reason', () => {
+    // Otherwise the family is told someone is "teaching" when in truth they
+    // simply have not accepted their invite yet.
+    const members = [member({ mid: 'f-01', inviteStatus: 'pending' } as Partial<MemberDoc> & { mid: string })];
+    expect(hiddenTeachingAdultCount(members, new Set(['f-01']))).toBe(0);
+  });
+
+  it('agrees with selectableAdults: shown + hidden never exceeds the adults present', () => {
+    const members = [member({ mid: 'f-01' }), member({ mid: 'f-02' }), member({ mid: 'f-03' })];
+    const teaching = new Set(['f-02']);
+    expect(selectableAdults(members, teaching).length + hiddenTeachingAdultCount(members, teaching)).toBe(3);
   });
 });

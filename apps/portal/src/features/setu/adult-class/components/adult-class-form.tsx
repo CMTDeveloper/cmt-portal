@@ -14,13 +14,25 @@ export interface AdultClassFormProps {
   initialSelected: string[];
   /** Whether Bala Vihar is paid - decides the fee line. */
   bvPaid: boolean;
+  /**
+   * How many adults spec §6.6 removed from the list because they are teaching
+   * during that hour. A COUNT, not names: §6.6 requires the teaching adult be
+   * absent from the selection, so rendering their name here would defeat the
+   * rule. The count only drives whether the "why is someone missing" line shows.
+   */
+  hiddenTeachingCount: number;
 }
 
 /**
  * The selection itself. Multi-select, minimum one, preselected when there is
  * exactly one selectable adult (spec 4.4, scenario-matrix row 5).
  */
-export function AdultClassForm({ adults, initialSelected, bvPaid }: AdultClassFormProps) {
+export function AdultClassForm({
+  adults,
+  initialSelected,
+  bvPaid,
+  hiddenTeachingCount,
+}: AdultClassFormProps) {
   const [selected, setSelected] = useState<string[]>(() =>
     // Row 5: a single non-teaching parent has no decision to make - preselect
     // them so the family just confirms.
@@ -61,32 +73,52 @@ export function AdultClassForm({ adults, initialSelected, bvPaid }: AdultClassFo
 
   return (
     <div>
-      <fieldset style={{ border: 0, padding: 0, margin: '0 0 24px' }}>
-        <legend className="sr-only">Adults attending the Adult Study Class</legend>
-        {adults.map((a) => (
-          <label
-            key={a.mid}
-            style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', cursor: 'pointer' }}
-          >
-            <input
-              type="checkbox"
-              checked={selected.includes(a.mid)}
-              onChange={() => toggle(a.mid)}
-              disabled={saving}
-            />
-            <span>{a.name}</span>
-          </label>
-        ))}
-      </fieldset>
+      <div className="card" style={{ padding: 6, marginBottom: 14 }}>
+        <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
+          <legend className="sr-only">Adults attending the Adult Study Class</legend>
+          {adults.map((a, i) => (
+            <label
+              key={a.mid}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                padding: '14px 12px',
+                cursor: saving ? 'default' : 'pointer',
+                fontSize: 15,
+                borderTop: i === 0 ? undefined : '1px solid var(--line)',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={selected.includes(a.mid)}
+                onChange={() => toggle(a.mid)}
+                disabled={saving}
+                style={{ width: 18, height: 18, flexShrink: 0 }}
+              />
+              <span>{a.name}</span>
+            </label>
+          ))}
+        </fieldset>
+      </div>
+
+      {/* Without this, an adult who is teaching simply is not there, and the
+          household reads their own family list as wrong. Says WHY, names nobody. */}
+      {hiddenTeachingCount > 0 && (
+        <p style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.5, margin: '0 0 14px' }}>
+          {hiddenTeachingCount === 1 ? 'One adult in your family is' : 'Some adults in your family are'}{' '}
+          teaching during that hour, so they are not listed here.
+        </p>
+      )}
 
       {!bvPaid && (
-        <p style={{ marginBottom: 16 }}>
+        <p style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.5, margin: '0 0 16px' }}>
           A suggested donation applies for the Adult Study Class. You can give after you continue.
         </p>
       )}
 
       {error && (
-        <p role="alert" style={{ marginBottom: 16 }}>
+        <p role="alert" style={{ fontSize: 13, color: 'var(--err)', margin: '0 0 14px', lineHeight: 1.5 }}>
           {error}
         </p>
       )}

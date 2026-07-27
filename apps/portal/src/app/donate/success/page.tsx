@@ -10,7 +10,10 @@ import { LoadingOm } from '@/components/chrome/loading-om';
 import { flags } from '@/lib/flags';
 import { loadAdultClassGateDataFailSoft } from '@/features/setu/adult-class/load-gate-data';
 import { needsAdultClassSelection, isBalaViharPaid } from '@/features/setu/adult-class/needs-selection';
-import { selectableAdults } from '@/features/setu/adult-class/selectable-adults';
+import {
+  selectableAdults,
+  hiddenTeachingAdultCount,
+} from '@/features/setu/adult-class/selectable-adults';
 import { selectBalaViharEnrollment } from '@/app/family/_helpers/select-bv-enrollment';
 import { AdultClassForm } from '@/features/setu/adult-class/components/adult-class-form';
 import { PledgeCard } from '@/features/family/components/pledge-card';
@@ -19,7 +22,11 @@ import { finalizePledge } from '@/features/setu/pledges/finalize-pledge';
 
 export const metadata = { title: 'Thank you' };
 
-type Ask = { adults: { mid: string; name: string }[]; bvPaid: boolean };
+type Ask = {
+  adults: { mid: string; name: string }[];
+  bvPaid: boolean;
+  hiddenTeachingCount: number;
+};
 
 /**
  * Whether to ask this family to name an Adult Study Class attendee, and who they
@@ -44,6 +51,10 @@ async function resolveAsk(
       mid: m.mid,
       name: `${m.firstName} ${m.lastName}`,
     })),
+    // Same absence, same explanation, as on /adult-class - a family who reaches
+    // the ask here rather than through the gate is no less confused by a parent
+    // missing from their own list.
+    hiddenTeachingCount: hiddenTeachingAdultCount(gate.members, gate.teacherAssignedMids),
     // Necessarily true whenever the predicate fired (its condition 3), but
     // derived rather than hardcoded so the fee line cannot drift from the rule.
     // Yes, this recomputes what needsAdultClassSelection already decided - over
@@ -166,7 +177,12 @@ export async function DonateSuccessBody({
               who will join the Adult Study Class during that hour. Pick anyone who is not already
               teaching - it takes a moment, and there is nothing more to pay.
             </p>
-            <AdultClassForm adults={ask.adults} initialSelected={[]} bvPaid={ask.bvPaid} />
+            <AdultClassForm
+              adults={ask.adults}
+              initialSelected={[]}
+              bvPaid={ask.bvPaid}
+              hiddenTeachingCount={ask.hiddenTeachingCount}
+            />
           </section>
         )}
 

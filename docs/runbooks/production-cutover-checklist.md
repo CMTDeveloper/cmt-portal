@@ -84,6 +84,18 @@
 - [ ] **AWS SES**: prod `AWS_SES_FROM_EMAIL` identity verified in `AWS_SES_REGION`; out of the SES sandbox (or all recipients verified).
 - [ ] **AWS SNS**: `AWS_SNS_REGION` has an **Origination Number** for Canadian (+1) SMS; account out of the SNS sandbox; spend limit raised; no stuck opt-outs. Diagnose with `pnpm --filter @cmt/portal exec tsx scripts/debug-sns-config.ts` and set defaults with `scripts/sns-set-defaults.ts`. (Module-cached SNS client needs a **cold redeploy** when region changes.)
 - [ ] **Stripe**: live `STRIPE_API_KEY`, prod `STRIPE_CHECKOUT_URL` (Cloud Run proxy), `STRIPE_USE_TEST_CHECKOUT=false`, `WEBHOOK_API_KEY` set.
+  ⛔ **DO NOT flip `STRIPE_USE_TEST_CHECKOUT=false` until the live-mode host is proven to exist.** Measured 2026-07-27: the host in `STRIPE_CHECKOUT_URL`
+  (`stripe-checkout-api-195790402763.northamerica-northeast1.run.app`) answers **Google's front-end 404 on every path including `GET /`** — no Cloud Run
+  service is deployed there. Only the **test** host (`cmt-stripe-checkout-api-test-…`) is alive. Flipping the flag today would take one-time donations from
+  working to broken, on launch day, at the moment families pay. Prove any candidate host BEFORE flipping — an empty body creates nothing, and the two
+  answers are unambiguous (**400 = right host, route exists; 404 = wrong host**):
+  ```bash
+  curl -s -o /dev/null -w "%{http_code}\n" -X POST "<BASE>/checkout-link" \
+    -H 'Content-Type: application/json' -H "x-api-key: $STRIPE_API_KEY" -d '{}'
+  ```
+  Distinguish the two 404s by body, not status: Google's `<h1>Error: Page not found</h1>` means **no service**; Express's `Cannot GET /` means the app is up.
+  `STRIPE_API_BASE_URL` (pledge) and `STRIPE_CHECKOUT_URL` (donations) point at the SAME service and must move to live mode **together** — one left behind
+  is a half-live payment path.
 - [ ] **`CRON_SECRET`** set (Vercel Cron: daily cache-reset, weekly payment reminders).
 - [ ] **Session**: `SESSION_COOKIE_EXPIRES_DAYS` ≤ 14 (Firebase hard cap — never exceed).
 - [ ] **`NEXT_PUBLIC_PORTAL_BASE_URL`** = the prod domain (`https://cmt-setu.vercel.app` or the custom domain) — used in invite-email links.
@@ -370,6 +382,13 @@ pnpm --filter @cmt/portal exec tsx --env-file=.env.local scripts/grant-admin.ts 
 ## 14. Change log (UAT) — keep this current
 
 > **Rule:** any important UAT DB change (new collection/field, new index + deploy, new ops/migration/seed/backfill script or run, schema change, new env var/flag, corrective write) gets a dated entry here **and** an update to the relevant section above, in the same change. Prod replays this log additively (never `--force`, never touch the door-app collections).
+
+- **2026-07-27** - 🔴 **THE LIVE-MODE STRIPE CHECKOUT SERVICE DOES NOT EXIST, AND PRODUCTION IS ISSUING `cs_test_` SESSIONS.** Found while diagnosing the pledge's 503.
+  **What was measured, not assumed.** `POST /api/setu/donations/checkout` on `cmt-setu.vercel.app` returns **200** with a real `https://checkout.stripe.com/c/pay/**cs_test_**…` URL — so one-time donations WORK, but in **Stripe test mode** (`STRIPE_USE_TEST_CHECKOUT=true` in prod). Meanwhile the live-mode host named in `STRIPE_CHECKOUT_URL` returns Google's front-end 404 on **every** path including `GET /`; only the test host is alive, and it serves all of `/checkout-link`, `/pad/setup-link`, `/pad/monthly-subscription`, `/checkout-session-result`, `/subscription-result` (400 on an empty body = route exists). **Consequence: the go-live step "set `STRIPE_USE_TEST_CHECKOUT=false`" would break donations rather than arm them.** See the ⛔ note in §8. **Owner action (Vaibhav): deploy or name a live-mode service URL.**
+  **`STRIPE_API_BASE_URL` set** on Production + Preview to the verified test host `https://cmt-stripe-checkout-api-test-195790402763.northamerica-northeast1.run.app` (no trailing slash, no `/checkout-link`), and deliberately stored **`--no-sensitive`** so it can be read back — see the pull caveat below. The pledge 503 was this var pointing at the dead host.
+  **⚠️ `vercel env pull` SILENTLY RETURNS EMPTY STRINGS for sensitive vars.** The pull showed `STRIPE_API_BASE_URL=""`, `NEXT_PUBLIC_FEATURE_SETU_PLEDGE=""` and `NEXT_PUBLIC_FEATURE_SETU_DONATIONS=""` — all three are in fact set. Proven behaviourally: the donations route 404s when its flag is off and returned 200, and `/api/pledges/start` returns 503 (flag ON) rather than 404 (flag off), on a build deployed AFTER those vars were written. **Never conclude "unset" from a pulled blank; probe the running app.** This supersedes the "verify via env pull" half of the `vercel env add --value` note.
+  **Also recorded:** `NEXT_PUBLIC_FEATURE_SETU_PLEDGE` is currently **ON in production**, which `lib/flags.ts` says it must not be at launch (a family through that flow authorises a mandate against a TEST price). Either flip it off before Aug 3 or move the price to live — it is a decision, not an oversight, and it is not yet made.
+  **Method note:** the dead host was caught only because the probe included a **known-good control** (`/checkout-link`, used by the live donation flow). Without it the 404 read as "the vendor never deployed `/pad/*`", which was wrong and was nearly reported as such. Always probe a third party with a path you know works.
 
 - **2026-07-27** - ✅ **ADULT-CLASS E2E: RUN FOR THE FIRST TIME, DIAGNOSED, AND NOW 12/12 GREEN.** The spec had been authored-but-unrun since 2026-07-26. On its first execution against the deployed app it failed at row 1's first assertion; **both causes turned out to be FIXTURE bugs. The adult-class gate itself was correct throughout and no product code was changed.**
   **Cause 1 - the fixtures had never accepted the disclaimers.** `AdultClassGate` defers to `earlierGatesPending`, which is `profileGatePending` OR the disclaimer read. With `NEXT_PUBLIC_FEATURE_SETU_DISCLAIMERS` now ON and `app_config/disclaimers` at version 16, the six fixture families had `disclaimersAccepted: null`, so `DisclaimerGate` redirected them to `/acknowledgements` and the adult-class gate **correctly** never fired. The seed's own comment shows the author reasoned about the PROFILE half of that deferral and stopped there. `seed:adult-class-fixtures` now records acceptance, reading the version and school year **live** (a pinned version would rot the fixture the next time an admin publishes new content and re-gates everyone).

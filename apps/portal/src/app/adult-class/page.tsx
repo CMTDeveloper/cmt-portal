@@ -5,9 +5,13 @@ import { flags } from '@/lib/flags';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 import { loadAdultClassGateDataOrThrow } from '@/features/setu/adult-class/load-gate-data';
 import { isBalaViharPaid } from '@/features/setu/adult-class/needs-selection';
-import { selectableAdults } from '@/features/setu/adult-class/selectable-adults';
+import {
+  selectableAdults,
+  hiddenTeachingAdultCount,
+} from '@/features/setu/adult-class/selectable-adults';
 import { selectBalaViharEnrollment } from '@/app/family/_helpers/select-bv-enrollment';
 import { AdultClassForm } from '@/features/setu/adult-class/components/adult-class-form';
+import { SetuLogo } from '@cmt/ui';
 import { CspRoot } from '@/features/family/components/atoms';
 import { LoadingOm } from '@/components/chrome/loading-om';
 
@@ -57,21 +61,51 @@ async function AdultClassSelection() {
     ? isBalaViharPaid({ bv, donations: gate.donations, legacyPaymentStatus: gate.legacyPaymentStatus })
     : false;
 
+  // Lets the form explain an absence §6.6 would otherwise leave unexplained.
+  const hiddenTeachingCount = hiddenTeachingAdultCount(gate.members, gate.teacherAssignedMids);
+
   return (
-    <CspRoot style={{ minHeight: '100dvh', padding: 24 }}>
-      <h1>Who will attend the Adult Study Class?</h1>
-      {/* The WHY, per spec 4.3. A family reading "you must pick an adult" with
-          no reason reads it as bureaucracy rather than as the point of the
-          programme. */}
-      <p>
-        One parent stays on site while Bala Vihar is running, so we ask each family to name who
-        will join the Adult Study Class during that hour. Pick anyone who is not already teaching.
-      </p>
-      <AdultClassForm
-        adults={adults.map((m) => ({ mid: m.mid, name: `${m.firstName} ${m.lastName}` }))}
-        initialSelected={current?.enrolledMids ?? []}
-        bvPaid={bvPaid}
-      />
+    <CspRoot style={{ minHeight: '100dvh' }}>
+      <div style={{ maxWidth: 620, margin: '0 auto', padding: '48px 20px 40px' }}>
+        <div style={{ marginBottom: 26 }}>
+          <SetuLogo size={22} />
+        </div>
+        <p
+          style={{
+            fontSize: 11,
+            letterSpacing: '.16em',
+            textTransform: 'uppercase',
+            color: 'var(--muted)',
+            margin: 0,
+          }}
+        >
+          Before you continue
+        </p>
+        <h1 style={{ fontSize: 26, fontWeight: 600, marginTop: 8, letterSpacing: '-0.02em' }}>
+          Who will attend the Adult Study Class?
+        </h1>
+        {/* The WHY, per spec 4.3. A family reading "you must pick an adult" with
+            no reason reads it as bureaucracy rather than as the point of the
+            programme. */}
+        <p
+          style={{
+            fontSize: 14,
+            color: 'var(--body-text)',
+            marginTop: 12,
+            lineHeight: 1.6,
+            marginBottom: 22,
+          }}
+        >
+          One parent stays on site while Bala Vihar is running, so we ask each family to name who
+          will join the Adult Study Class during that hour.
+        </p>
+        <AdultClassForm
+          adults={adults.map((m) => ({ mid: m.mid, name: `${m.firstName} ${m.lastName}` }))}
+          initialSelected={current?.enrolledMids ?? []}
+          bvPaid={bvPaid}
+          hiddenTeachingCount={hiddenTeachingCount}
+        />
+      </div>
     </CspRoot>
   );
 }
