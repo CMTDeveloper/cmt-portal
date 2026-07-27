@@ -31,6 +31,7 @@ vi.mock('@/lib/aws/send-managed-email', () => ({ sendManagedEmail: mockEmail }))
 
 const ref = {
   id: 'PLG-1',
+  get: async () => ({ exists: fs.pledge !== null, data: () => fs.pledge }),
   update: async (d: Doc) => {
     fs.updates.push(d);
     Object.assign(fs.pledge ?? {}, d);
@@ -136,6 +137,57 @@ describe('advancePledge - a late answer must never stomp a settled pledge', () =
     const out = await advancePledge(db, ref, { ...staleSnapshot(), setupSessionId: null }, 'PLG-1');
     expect(fs.pledge!['status']).toBe('cancelled');
     expect(out).toBe('failed');
+  });
+
+  // ── Step 4 creates a REAL recurring bank debit. It is the single most
+  //    consequential call in the feature, and the only one that cannot be
+  //    undone from inside the portal - the temple has to cancel it by hand in
+  //    Stripe. The claim protects every status WRITE, but a claim cannot
+  //    un-charge anybody, so the CALL needs its own guard. ─────────────────────
+  it('does not create a subscription for a pledge cancelled mid-flight', async () => {
+    // The early-return guards read the caller's SNAPSHOT, taken before a step-3
+    // round trip that may take hundreds of ms. An admin cancel landing in that
+    // window used to sail straight past them and bill a family the temple had
+    // just stopped - and the portal would then correctly show `cancelled` while
+    // Stripe debited them monthly.
+    mockStep3.mockImplementation(async () => { fs.pledge!['status'] = 'cancelled'; return 'success'; });
+    const out = await advancePledge(db, ref, { ...staleSnapshot(), subscriptionId: null }, 'PLG-1');
+    expect(mockStep4, 'a monthly bank debit was created for a cancelled pledge').not.toHaveBeenCalled();
+    expect(out).toBe('failed');
+    expect(fs.pledge!['status']).toBe('cancelled');
+  });
+
+  it('does not create a SECOND subscription when another pass already activated', async () => {
+    // The orphan-mandate case hit at the moment the family also returns: both
+    // callers see `subscriptionId: null` and both would call step 4. This does
+    // not close that race on its own - two callers can both pass this read -
+    // but it removes the wide window, which is why the idempotency key still
+    // has to be honoured by the payment service.
+    mockStep3.mockImplementation(async () => { fs.pledge!['status'] = 'active'; return 'success'; });
+    const out = await advancePledge(db, ref, { ...staleSnapshot(), subscriptionId: null }, 'PLG-1');
+    expect(mockStep4).not.toHaveBeenCalled();
+    expect(out).toBe('active');
+  });
+
+  it('does not create a subscription for a pledge that was DELETED mid-flight', async () => {
+    // A missing document must read as "not ours to advance", NOT as `started`.
+    // A mutation defaulting the absent status to `started` sailed through every
+    // other test here and would have created a real recurring bank debit
+    // against a pledge that no longer exists - the one case where nothing
+    // downstream could ever find it again, because there is no row to find.
+    mockStep3.mockImplementation(async () => { fs.pledge = null; return 'success'; });
+    const out = await advancePledge(db, ref, { ...staleSnapshot(), subscriptionId: null }, 'PLG-1');
+    expect(mockStep4, 'a bank debit was created for a pledge that no longer exists').not.toHaveBeenCalled();
+    expect(out).toBe('processing');
+  });
+
+  it('DOES create the subscription on the ordinary path, so the guard is not just a block', async () => {
+    // Guard the guard: a re-read that always bailed would pass both tests above
+    // and quietly break the entire feature.
+    mockStep3.mockResolvedValue('success');
+    const out = await advancePledge(db, ref, { ...staleSnapshot(), subscriptionId: null }, 'PLG-1');
+    expect(mockStep4).toHaveBeenCalledWith({ setupSessionId: 'cs_1', pid: 'PLG-1' });
+    expect(out).toBe('active');
   });
 
   it('reports UNRESOLVED, not failed, when the document vanishes mid-flight', async () => {

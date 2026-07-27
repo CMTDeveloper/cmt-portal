@@ -90,6 +90,25 @@ export async function advancePledge(
       return 'processing';
     }
 
+    // ── Is this pledge STILL ours to advance? ────────────────────────────────
+    // Every status WRITE below is compare-and-swapped, but a claim cannot
+    // un-charge anybody - and step 4 creates a REAL recurring bank debit that
+    // only the temple can stop, by hand, in Stripe. So the CALL gets its own
+    // guard, not just the write that follows it.
+    //
+    // The early returns at the top of this function read the CALLER'S SNAPSHOT,
+    // taken before a step-3 round trip that may have taken hundreds of ms. An
+    // admin cancel, or a concurrent pass, landing in that window sails straight
+    // past them. A fresh read here narrows the window from a whole provider
+    // round trip to a single Firestore read.
+    //
+    // It cannot close the window - two callers can both pass this read - which
+    // is exactly why the deterministic idempotency key matters, and why the
+    // payment service honouring it is on the pre-flip checklist.
+    const fresh = await ref.get();
+    const freshStatus = (fresh.data() as { status?: PledgeStatus } | undefined)?.status ?? null;
+    if (freshStatus !== 'started') return outcomeOf(freshStatus);
+
     // ── Step 4: turn the confirmed mandate into the subscription ─────────────
     // THIS is the orphan-mandate repair. If the browser died here, the family
     // has a live mandate at Stripe and no subscription - no money moves, and
@@ -97,9 +116,17 @@ export async function advancePledge(
     // the same derived idempotency key, so a retry resumes rather than duplicates.
     const sub = await createMonthlySubscription({ setupSessionId: pledge.setupSessionId, pid });
     subscriptionId = sub.subscriptionId;
-    // Persist the handle IMMEDIATELY. If the process dies before step 5, the
-    // next pass needs this to finish the job; without it the subscription exists
-    // at Stripe with nothing here pointing at it.
+    // Persist the handle IMMEDIATELY, and DELIBERATELY UNGUARDED - the only
+    // write here that is not compare-and-swapped.
+    //
+    // If the process dies before step 5, the next pass needs this to finish the
+    // job; without it the subscription exists at Stripe with nothing here
+    // pointing at it. And in the racing case the guard above cannot fully close,
+    // a subscription may exist against a pledge that is no longer `started` -
+    // recording its id is then the ONLY thing that makes that live debit
+    // findable by a human. Guarding this write would make an untracked recurring
+    // charge invisible, which is strictly worse than a document whose handle and
+    // status disagree.
     await ref.update({ subscriptionId, customerId: sub.customerId ?? null, lastCheckedAt: new Date() });
   }
 
