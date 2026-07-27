@@ -40,6 +40,18 @@ export interface RosterMember {
   legacyFid: string | null;
 }
 
+/** One family's active enrollment for this level's period, reduced to what a
+ *  payment verdict needs. Populated only by `deriveRoster`. */
+export interface RosterEnrollmentMeta {
+  eid: string;
+  oid: string;
+  enrolledVia: LevelEnrollment['enrolledVia'];
+  enrolledMids: string[];
+  enrolledAt: Date;
+  suggestedAmountOverride: number | null;
+  suggestedAmountSnapshot: number | null;
+}
+
 export interface RosterResult {
   levelId: string;
   levelName: string;
@@ -52,6 +64,28 @@ export interface RosterResult {
   markedCount: number;
   total: number;
   previousTotal: number;
+  /**
+   * OPTIONAL because `RosterResult` is returned by TWO functions: the pure
+   * `buildRoster`, whose `RosterFamily` input carries no enrollment or family
+   * doc at all, and `deriveRoster`, which reads both. Making either required
+   * would break `buildRoster`'s return and every one of its test call sites for
+   * no gain - they are lookup maps for callers that need them, not roster data.
+   */
+  enrMetaByFid?: Map<string, RosterEnrollmentMeta>;
+  /** fid → the family's FIRST manager mid (null when it has none). Free: the
+   *  family docs are already batch-read here for `legacyFid`. */
+  managerMidByFid?: Map<string, string | null>;
+}
+
+/** Firestore `Timestamp` | `Date` | ISO string → `Date`. Same helper the other
+ *  payment surfaces use (`build-csv-rows.ts:10-15`). A bare
+ *  `new Date(timestamp as string)` yields `Invalid Date`, and the tier lookup
+ *  inside `resolveSuggestedAmount` then silently picks the FIRST tier. */
+function toDate(v: unknown): Date {
+  if (v && typeof v === 'object' && typeof (v as { toDate?: unknown }).toDate === 'function') {
+    return (v as { toDate: () => Date }).toDate();
+  }
+  return v instanceof Date ? v : new Date(v as string);
 }
 
 /**
@@ -141,15 +175,30 @@ export async function deriveRoster(
   // fid → enrolledMids for this offering. A family normally has one active
   // enrollment per pid; if somehow more than one, union their enrolledMids.
   const enrolledMidsByFid = new Map<string, string[]>();
-  const enrMetaByFid = new Map<string, { eid: string; oid: string; enrolledVia: LevelEnrollment['enrolledVia']; enrolledMids: string[] }>();
+  const enrMetaByFid = new Map<string, RosterEnrollmentMeta>();
   for (const d of enrollSnap.docs) {
-    const e = d.data() as { fid?: string; location?: string; enrolledMids?: string[]; eid?: string; oid?: string; enrolledVia?: LevelEnrollment['enrolledVia'] };
+    const e = d.data() as {
+      fid?: string; location?: string; enrolledMids?: string[]; eid?: string; oid?: string;
+      enrolledVia?: LevelEnrollment['enrolledVia'];
+      // Already in the documents being read — carrying them costs ZERO extra reads.
+      enrolledAt?: unknown;
+      suggestedAmountOverride?: number | null;
+      suggestedAmountSnapshot?: number | null;
+    };
     if (e.location !== level.location || typeof e.fid !== 'string') continue;
     const mids = e.enrolledMids ?? [];
     const existing = enrolledMidsByFid.get(e.fid) ?? [];
     const merged = new Set([...existing, ...mids]);
     enrolledMidsByFid.set(e.fid, [...merged]);
-    enrMetaByFid.set(e.fid, { eid: e.eid ?? `${e.fid}-${e.oid ?? level.pid}`, oid: e.oid ?? level.pid, enrolledVia: e.enrolledVia ?? 'promotion', enrolledMids: mids });
+    enrMetaByFid.set(e.fid, {
+      eid: e.eid ?? `${e.fid}-${e.oid ?? level.pid}`,
+      oid: e.oid ?? level.pid,
+      enrolledVia: e.enrolledVia ?? 'promotion',
+      enrolledMids: mids,
+      enrolledAt: toDate(e.enrolledAt),
+      suggestedAmountOverride: e.suggestedAmountOverride ?? null,
+      suggestedAmountSnapshot: e.suggestedAmountSnapshot ?? null,
+    });
   }
   const fids = [...enrolledMidsByFid.keys()];
 
@@ -174,7 +223,16 @@ export async function deriveRoster(
   ]);
 
   const legacyFidByFid = new Map<string, string | null>();
-  for (const fd of famDocs) legacyFidByFid.set(fd.id, (fd.data()?.legacyFid as string | undefined) ?? null);
+  // The family's FIRST manager mid, read off the same docs. 893 of 904 UAT
+  // families have exactly one manager, 11 have two or three, none have zero
+  // (measured 2026-07-26); when there are several, the first is the family's
+  // primary contact - the same one the welcome roster shows.
+  const managerMidByFid = new Map<string, string | null>();
+  for (const fd of famDocs) {
+    legacyFidByFid.set(fd.id, (fd.data()?.legacyFid as string | undefined) ?? null);
+    const managers = fd.data()?.managers as string[] | undefined;
+    managerMidByFid.set(fd.id, Array.isArray(managers) && managers.length > 0 ? managers[0]! : null);
+  }
 
   const membersByFid = new Map<string, RosterMemberInput[]>();
   for (const md of memberDocs) {
@@ -226,5 +284,7 @@ export async function deriveRoster(
     confirmedFids = new Set(fids2);
   }
 
-  return buildRoster(level, families, events, date, now, confirmedFids);
+  // Spread rather than widen buildRoster: the pure builder has neither map, and
+  // making them required on RosterResult would break it and all its call sites.
+  return { ...buildRoster(level, families, events, date, now, confirmedFids), enrMetaByFid, managerMidByFid };
 }

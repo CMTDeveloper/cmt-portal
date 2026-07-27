@@ -86,15 +86,18 @@ beforeEach(() => {
       { id: 'brampton-level-2-bv-brampton-2026-27', levelId: 'brampton-level-2-bv-brampton-2026-27', levelName: 'Level 2', location: 'Brampton', pid: 'bv-brampton-2026-27', levelKind: 'level', gradeBand: ['2', '3'] },
     ],
     // Two enrolled families at this pid+location, one at a different location (must be excluded).
+    // `enrolledAt` arrives from a raw read as a Firestore Timestamp (a
+    // {toDate()} object), NOT a Date or a string — the shape that silently
+    // becomes Invalid Date under a naive cast.
     enrollments: [
-      { id: 'e1', __fid: 'CMT-A', fid: 'CMT-A', pid: 'bv-brampton-2026-27', status: 'active', location: 'Brampton', enrolledMids: ['CMT-A-02'], eid: 'CMT-A-off', oid: 'off', enrolledVia: 'promotion' },
-      { id: 'e2', __fid: 'CMT-B', fid: 'CMT-B', pid: 'bv-brampton-2026-27', status: 'active', location: 'Brampton', enrolledMids: ['CMT-B-03'], eid: 'CMT-B-off', oid: 'off', enrolledVia: 'promotion' },
+      { id: 'e1', __fid: 'CMT-A', fid: 'CMT-A', pid: 'bv-brampton-2026-27', status: 'active', location: 'Brampton', enrolledMids: ['CMT-A-02'], eid: 'CMT-A-off', oid: 'off', enrolledVia: 'promotion', enrolledAt: { toDate: () => new Date('2026-09-01T12:00:00Z') }, suggestedAmountOverride: 40, suggestedAmountSnapshot: 100 },
+      { id: 'e2', __fid: 'CMT-B', fid: 'CMT-B', pid: 'bv-brampton-2026-27', status: 'active', location: 'Brampton', enrolledMids: ['CMT-B-03'], eid: 'CMT-B-off', oid: 'off', enrolledVia: 'promotion', enrolledAt: { toDate: () => new Date('2026-09-02T12:00:00Z') } },
       { id: 'e3', __fid: 'CMT-C', fid: 'CMT-C', pid: 'bv-brampton-2026-27', status: 'active', location: 'Scarborough', enrolledMids: ['CMT-C-02'], eid: 'CMT-C-off', oid: 'off', enrolledVia: 'promotion' },
     ],
     families: [
-      { id: 'CMT-A', legacyFid: 'legacy-A' },
-      { id: 'CMT-B', legacyFid: null },
-      { id: 'CMT-C', legacyFid: 'legacy-C' },
+      { id: 'CMT-A', legacyFid: 'legacy-A', managers: ['CMT-A-01'] },
+      { id: 'CMT-B', legacyFid: null, managers: [] }, // no manager on file
+      { id: 'CMT-C', legacyFid: 'legacy-C', managers: ['CMT-C-01'] },
     ],
     // member doc id === mid (universal convention). Include a non-enrolled sibling
     // to prove only enrolledMids members are pulled.
@@ -121,6 +124,36 @@ describe('deriveRoster (bulk fetch, no per-family fan-out)', () => {
     expect(r!.members.find((m) => m.mid === 'CMT-A-02')!.legacyFid).toBe('legacy-A');
     // The date's attendance event merged in.
     expect(r!.members.find((m) => m.mid === 'CMT-A-02')!.status).toBe('present');
+  });
+
+  it('exposes enrMetaByFid with a real Date and the amount fields the payment verdict needs', async () => {
+    const r = await deriveRoster('brampton-level-2-bv-brampton-2026-27', '2026-07-12', new Date('2026-07-12T17:00:00Z'), { withConfirmation: false });
+    const a = r!.enrMetaByFid!.get('CMT-A')!;
+    // A Timestamp must arrive as a usable Date. `new Date(timestamp as string)`
+    // yields Invalid Date, and resolveSuggestedAmount then silently picks the
+    // FIRST pricing tier for every family - a wrong price, with no error.
+    expect(a.enrolledAt).toBeInstanceOf(Date);
+    expect(Number.isNaN(a.enrolledAt.getTime())).toBe(false);
+    expect(a.enrolledAt.toISOString()).toBe('2026-09-01T12:00:00.000Z');
+    expect(a.suggestedAmountOverride).toBe(40);
+    expect(a.suggestedAmountSnapshot).toBe(100);
+    // Absent amount fields read as null, never as 0 - "nobody priced this" and
+    // "this is free" are different answers downstream.
+    const b = r!.enrMetaByFid!.get('CMT-B')!;
+    expect(b.suggestedAmountOverride).toBeNull();
+    expect(b.suggestedAmountSnapshot).toBeNull();
+    // The fields it already carried are untouched.
+    expect(a.eid).toBe('CMT-A-off');
+    expect(a.oid).toBe('off');
+  });
+
+  it('exposes managerMidByFid from the family docs it already reads', async () => {
+    const r = await deriveRoster('brampton-level-2-bv-brampton-2026-27', '2026-07-12', new Date('2026-07-12T17:00:00Z'), { withConfirmation: false });
+    expect(r!.managerMidByFid!.get('CMT-A')).toBe('CMT-A-01');
+    // A family with no manager on file maps to null, not to another family's mid.
+    expect(r!.managerMidByFid!.get('CMT-B')).toBeNull();
+    // Costs nothing: still no extra reads beyond the batched getAlls.
+    expect(fs.perFamilyMemberSubGets).toBe(0);
   });
 
   it('does ZERO per-family member subcollection reads (uses batched getAll instead)', async () => {
