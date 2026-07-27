@@ -1,5 +1,22 @@
 # P5 v3 - Monthly Pledge (Stripe-hosted PAD)
 
+> ## ✅ SHIPPED 2026-07-27 - all 8 tasks. What this plan got wrong.
+>
+> Commits: `d4fda47` (1) · `e1f2143` (2) · `07533d2` (3) · `310c25c` (4) · `8dd6407` (5) · `22b6573` (6) · `34cb977` (7) · `b4a756e` (8). **The flag remains OFF.**
+>
+> **1. Task 6 Step 5 does NOT need the composite index it implies.** A stale report written as `status ==` plus a `startedAt` range would have required `pledges(status, startedAt)`, and `firestore.indexes.json` has zero `pledges` entries. It is computed **in memory from the reconciler's own scan** - every row it names was already loaded, so the second query buys nothing but an index to deploy and a `FAILED_PRECONDITION` to find in production. **Every query in the shipped feature is a single-field equality (or a single-field orderBy). No index was added.**
+>
+> **2. The plan gave Task 4 and Task 6 two copies of the same state machine.** Steps 3→4→5 are driven by both the returning browser and the cron. Two copies of a state machine that decides whether money is moving eventually disagree, so they were extracted to one `advance-pledge.ts`; `finalize-pledge`'s existing tests were the safety net for the extraction. Likewise activation is a **transactional claim** (`activate-pledge.ts`) - the plan's Task 4 Step 4 says "idempotent, never re-send", but both callers see the same `started → active` window, and read-then-write in two places double-mails a family about their money.
+>
+> **3. `idempotencyKey` is `pledge-${pid}`, NOT the plan's `` `${pid}-${priceId}` ``.** If the Price changed between the family authorising and the cron retrying step 4, a price-dependent key would silently create a SECOND subscription at the new amount.
+>
+> **4. Task 7 needed a SCREEN the File Structure never lists.** The plan demands the "this only updates the record" copy be asserted, which presupposes somewhere to assert it - and a cancel route with no caller is not delivered. `/admin/pledges` was built, tiled under Reports, hidden while dark.
+>
+> **5. Task 5's `/donate/success` placement is only half the job.** That page is ALSO the pledge success URL (`start-pledge.ts` points Stripe at `/donate/success?pledge=<pid>`), so it must finalize on arrival - before reading the pledge back, or a family whose mandate just confirmed is told it is still being set up.
+>
+> **6. Task 8 Steps 1-3 could not be done and were NOT faked.** They need the UAT flag flipped plus a rebuild, the two Stripe env vars, and `/pad/*` live. `e2e/setu/pledge.spec.ts` exists, collects, and **has never been executed**. Steps 4-5 were instead made into standing tests (`pledge-isolation.test.ts`), and the reconciler was verified live on deployed UAT (200 `{success:true,disabled:true}` with the real `CRON_SECRET`; a nonexistent cron path with the same bearer gets 401, which is what makes it proof). See runbook §14 2026-07-27 (F).
+
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** A family opts into a **fixed $51/month** pre-authorized debit, authorised entirely on a **Stripe-hosted page**. The portal stores status only, never a bank detail.

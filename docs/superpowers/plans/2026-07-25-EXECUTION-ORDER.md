@@ -3,18 +3,18 @@
 **Written 2026-07-25 at HEAD `1c5f31f`, at the end of the planning + rebuild pass.**
 Start here. Read `docs/superpowers/reviews/README.md` second.
 
-**Status as of 2026-07-26: Phases 0, 1 and 2 are COMPLETE.** P1, P3 (bar one step blocked on Vaibhav), P2, P4 and P6 are all shipped and UAT-verified. **What remains is the whole of P5 v3** (the monthly pledge, which ships DARK) plus two carried items: the UNRUN adult-class E2E and the deferred half of P2 Task 5. 8 days to launch.
+**Status as of 2026-07-27: ALL SIX PLANS ARE SHIPPED.** P1, P2, P3 (bar one step blocked on Vaibhav), P4, P5 v3 and P6 are merged to `main`. **No build work remains for launch.** What is left is three carried verification items, none cutover-blocking: the UNRUN adult-class E2E, the UNRUN pledge E2E (both need an owner flag flip on UAT), and the deferred half of P2 Task 5. 7 days to launch.
 
 | Plan | Done | Remaining |
 |---|---|---|
 | **P1** roles + cross-family edit | **all 11 tasks** | - |
 | **P3** communications | **Tasks 1-6** | only Task 6 Step 3 (per-template UAT send), blocked on Vaibhav's SES templates |
 | **P2** teacher/visitors/roster | **Tasks 1-9** | Task 5's desktop-table/mobile-card split + detail drawer only - deferred, see the plan's Task 5 block |
-| **P5** monthly pledge → **v3 plan** `2026-07-26-launch-p5-monthly-pledge-v3.md` | Task 1 Steps 1-3 (UAT rules) | **REPLANNED 2026-07-26 - 8 tasks, UNBLOCKED, ships DARK** - no bank details, Stripe-hosted PAD. Tasks 2, 10, 11 DELETED; 3-8b, 12 need rewrite. **BLOCKED on spec O9.** Steps 4-5 are a NO-OP. |
+| **P5** monthly pledge → **v3 plan** `2026-07-26-launch-p5-monthly-pledge-v3.md` | **all 8 tasks, SHIPPED 2026-07-27** (`d4fda47`, `e1f2143`, `07533d2`, `310c25c`, `8dd6407`, `22b6573`, `34cb977`, `b4a756e`) - see the SHIPPED block at the top of that plan for the six things the plan got wrong | **The flag stays OFF at launch.** `e2e/setu/pledge.spec.ts` is authored but **UNRUN** - it needs `NEXT_PUBLIC_FEATURE_SETU_PLEDGE=true` on UAT + a rebuild, the two Stripe env vars, and `/pad/*` live. **No new Firestore index** was needed. |
 | **P4** adult study class | **all 12 tasks** | the E2E `e2e/setu/adult-class.spec.ts` is authored + fixtures seeded but **UNRUN** - it needs `NEXT_PUBLIC_FEATURE_SETU_ADULT_CLASS=true` on the UAT deploy, which diverts the shared E2E family (runbook §14 C2) |
 | **P6** migration/dormant/centre | **all 7 tasks** | - |
 
-**▶ NEXT: Phase 3 / P5 v3** (the monthly pledge, 8 tasks, ships DARK) - the only substantial build left. **No cutover-BLOCKING work remains.** Historical note: P6 Task 5 shipped the `layout.tsx:76` fix that **P4 Task 8 must rebase onto** - if you extract a shared `earlierGatesPending(data)` there, it MUST include `needsCentreConfirmation(data.family, data.isManager)` or a family needing centre confirmation gets routed to `/adult-class`.
+**▶ NEXT: nothing is building. The remaining work is OWNER-GATED verification.** In priority order: (1) flip `NEXT_PUBLIC_FEATURE_SETU_ADULT_CLASS` on UAT + rebuild and run `adult-class.spec.ts` (note runbook §14 C2 - it diverts the shared E2E family); (2) same for `NEXT_PUBLIC_FEATURE_SETU_PLEDGE` + `pledge.spec.ts`, which additionally needs `/pad/*` live and **the Stripe dashboard opened to confirm the price**; (3) P2 Task 5's deferred desktop/mobile split, which is optional. **No cutover-BLOCKING work remains.** Historical note: P6 Task 5 shipped the `layout.tsx:76` fix that **P4 Task 8 must rebase onto** - if you extract a shared `earlierGatesPending(data)` there, it MUST include `needsCentreConfirmation(data.family, data.isManager)` or a family needing centre confirmation gets routed to `/adult-class`.
 
 ---
 
