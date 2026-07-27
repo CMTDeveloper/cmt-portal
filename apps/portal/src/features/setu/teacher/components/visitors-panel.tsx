@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { toast } from '@cmt/ui';
-import { CHILD_GRADE_OPTIONS } from '@cmt/shared-domain';
+import { CHILD_GRADE_OPTIONS, gradeLabel } from '@cmt/shared-domain';
 
 interface VisitorRow {
   name: string;
@@ -87,6 +87,8 @@ export function VisitorsPanel({ levelId, levelName, date }: VisitorsPanelProps) 
   const [first, setFirst] = useState('');
   const [last, setLast] = useState('');
   const [grade, setGrade] = useState('');
+  /** The door-list filter. Distinct from `grade` above, which is the add form's. */
+  const [gradeFilter, setGradeFilter] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
 
@@ -165,6 +167,26 @@ export function VisitorsPanel({ levelId, levelName, date }: VisitorsPanelProps) 
 
   const doorCount = view?.doorVisitors.length ?? 0;
   const pendingDoor = view?.doorVisitors.filter((g) => !g.alreadyConfirmed).length ?? 0;
+
+  // ── Grade filter (spec §5.4) ───────────────────────────────────────────────
+  // Named `gradeFilter`, NOT `grade`: `grade` is already taken by the add-visitor
+  // form's own state above, and reusing it would make filtering the list quietly
+  // rewrite the form the teacher is halfway through typing.
+  //
+  // Applies to the DOOR list only. `confirmed` rows are ConfirmedRow, which
+  // carries no grade at all, so filtering them is not a decision we get to make.
+  // The two lists are separate <section>s with their own headings, so the scope
+  // reads correctly - and the control sits in the door section's header rather
+  // than above both.
+  //
+  // Options come from the guests actually present, not CHILD_GRADE_OPTIONS: a
+  // level's gradeBand spans a range, so the canonical list would offer grades
+  // that are guaranteed to filter to nothing.
+  const gradeOptions = [...new Set((view?.doorVisitors ?? []).map((g) => g.grade).filter(Boolean))].sort();
+  const visibleDoorVisitors = (view?.doorVisitors ?? []).filter(
+    (g) => gradeFilter === '' || g.grade === gradeFilter,
+  );
+  const filterHidByGrade = doorCount > 0 && visibleDoorVisitors.length === 0;
   const confirmedCount = view?.confirmed.length ?? 0;
 
   return (
@@ -330,15 +352,54 @@ export function VisitorsPanel({ levelId, levelName, date }: VisitorsPanelProps) 
       <section style={{ marginBottom: 22 }}>
         <div className="between" style={{ marginBottom: 10, gap: 8 }}>
           <h2 style={sectionHeading}>Checked in at the door</h2>
-          {!loading && pendingDoor > 0 && (
-            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--accentDeep)' }}>
-              {pendingDoor} to confirm
-            </span>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {/* Only when there is more than one grade to choose between - a
+                single-option filter is a control that cannot change anything. */}
+            {!loading && gradeOptions.length > 1 && (
+              <select
+                value={gradeFilter}
+                onChange={(e) => setGradeFilter(e.target.value)}
+                aria-label="Filter by grade"
+                style={{
+                  minHeight: 32, padding: '0 8px', fontSize: 13,
+                  border: '1px solid var(--line)', borderRadius: 'var(--radiusSm)',
+                  background: 'var(--surface)', color: 'var(--ink)',
+                }}
+              >
+                <option value="">All grades</option>
+                {gradeOptions.map((g) => (
+                  <option key={g} value={g}>{gradeLabel(g)}</option>
+                ))}
+              </select>
+            )}
+            {!loading && pendingDoor > 0 && (
+              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--accentDeep)' }}>
+                {pendingDoor} to confirm
+              </span>
+            )}
+          </div>
         </div>
 
         {loading ? (
           <div className="card" style={{ padding: 18, color: 'var(--muted)', fontSize: 14 }}>Loading…</div>
+        ) : filterHidByGrade ? (
+          // Distinct from the no-guests message on purpose. Telling a teacher
+          // "no door guests match this class" when their own filter is what
+          // emptied the list sends them to check the door tablet for a problem
+          // that does not exist.
+          <div
+            className="card"
+            style={{ padding: '20px', textAlign: 'center', color: 'var(--muted)', fontSize: 14, lineHeight: 1.5 }}
+          >
+            No {gradeLabel(gradeFilter)} guests checked in at the door today.{' '}
+            <button
+              type="button"
+              onClick={() => setGradeFilter('')}
+              style={{ background: 'none', border: 0, padding: 0, color: 'var(--accentDeep)', fontWeight: 600, fontSize: 14, cursor: 'pointer', textDecoration: 'underline' }}
+            >
+              Show all {doorCount}
+            </button>
+          </div>
         ) : !view || view.doorVisitors.length === 0 ? (
           <div
             className="card"
@@ -365,7 +426,7 @@ export function VisitorsPanel({ levelId, levelName, date }: VisitorsPanelProps) 
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {view.doorVisitors.map((g, i) => {
+            {visibleDoorVisitors.map((g, i) => {
               const settled = g.alreadyConfirmed;
               return (
                 <div
