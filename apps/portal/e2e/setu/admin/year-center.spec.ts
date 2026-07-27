@@ -35,8 +35,16 @@ test.describe('Admin — Year center', () => {
       page.getByRole('heading', { name: /school year rollover/i }).filter({ visible: true }).first(),
     ).toBeVisible({ timeout: 20_000 });
 
-    // Live-year badge in the admin chrome.
-    await expect(visibleText(page, new RegExp(`School year ${currentYear}`)).first()).toBeVisible();
+    // Live-year badge in the admin chrome. getByRole, NOT getByText: since
+    // `ae75705` the badge is a button whose VISIBLE text is just "2026-27" +
+    // "LIVE"; the phrase "School year 2026-27" exists only in its aria-label, so
+    // a text query finds nothing and reports a missing badge that is right there.
+    await expect(
+      page
+        .getByRole('button', { name: new RegExp(`School year ${currentYear}`) })
+        .filter({ visible: true })
+        .first(),
+    ).toBeVisible({ timeout: 20_000 });
 
     // Step 3 readiness checklist — the six item labels.
     for (const label of ['Offerings', 'Levels', 'Class calendar', 'Teachers', 'Prasad', 'Seva']) {

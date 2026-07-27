@@ -109,10 +109,36 @@ describe('createPadSetupLink (call 1)', () => {
     }
   });
 
+  it('sends a non-empty branding_settings.display_name', async () => {
+    // REGRESSION (2026-07-27, found in production): this sent
+    // `branding_settings: {}` and the payment service answered
+    // `400 Invalid branding_settings.display_name`, so EVERY pledge failed
+    // before the family ever saw Stripe. The one-time donation route had always
+    // sent the display name; only this path omitted it. The name is also what
+    // the family reads on the Stripe-hosted mandate page - an empty one would
+    // ask them to authorise a recurring debit to nobody in particular.
+    const fetchFn = mockFetch(200, { checkoutUrl: 'u', sessionId: 's', customerId: 'c' });
+    await createPadSetupLink(setupArgs);
+    const { body } = lastCall(fetchFn);
+    const branding = body['branding_settings'] as { display_name?: unknown } | undefined;
+    expect(branding, 'no branding_settings sent').toBeDefined();
+    expect(typeof branding!.display_name).toBe('string');
+    expect((branding!.display_name as string).length).toBeGreaterThan(0);
+  });
+
   it('throws a typed error on a non-2xx, carrying the status', async () => {
     mockFetch(502, { error: 'upstream' });
     await expect(createPadSetupLink(setupArgs)).rejects.toBeInstanceOf(PadClientError);
     await expect(createPadSetupLink(setupArgs)).rejects.toThrow(/502/);
+  });
+
+  it("carries the provider's own error text, not just the status code", async () => {
+    // The reason the branding bug above cost a live debugging session: the
+    // client threw `/pad/setup-link failed with 400` and DROPPED the response
+    // body, so `lastError` on the pledge doc named a status and nothing else.
+    // The service had said exactly what was wrong; we threw it away.
+    mockFetch(400, { error: 'Invalid branding_settings.display_name' });
+    await expect(createPadSetupLink(setupArgs)).rejects.toThrow(/Invalid branding_settings\.display_name/);
   });
 
   it('throws when a 200 body is missing the checkout url', async () => {

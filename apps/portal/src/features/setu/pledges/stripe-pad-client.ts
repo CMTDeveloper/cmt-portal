@@ -1,4 +1,5 @@
 import 'server-only';
+import { ORG_NAME } from '@/lib/branding';
 
 /**
  * The ONLY place the portal talks to the payment service about pledges.
@@ -70,7 +71,22 @@ async function post(path: string, body: Record<string, unknown>): Promise<Record
     body: JSON.stringify(body),
   });
   if (!res.ok) {
-    throw new PadClientError(`${path} failed with ${res.status}`, 'http', res.status);
+    // Carry the provider's OWN words, not just the status. A bare
+    // "failed with 400" is what turned a one-line payload bug (a missing
+    // `branding_settings.display_name`) into a live debugging session: the
+    // service had named the offending field and this line discarded it, so the
+    // pledge doc's `lastError` said only "400". Truncated because it lands in a
+    // Firestore field, and best-effort because a body we cannot read must never
+    // replace the status we can.
+    const detail = await res
+      .text()
+      .then((t) => t.trim().slice(0, 300))
+      .catch(() => '');
+    throw new PadClientError(
+      detail ? `${path} failed with ${res.status}: ${detail}` : `${path} failed with ${res.status}`,
+      'http',
+      res.status,
+    );
   }
   return (await res.json().catch(() => ({}))) as Record<string, unknown>;
 }
@@ -128,7 +144,12 @@ export async function createPadSetupLink(args: PadSetupLinkArgs): Promise<PadSet
     customerEmail: args.customerEmail,
     customerName: args.customerName,
     client_reference_id: args.clientReferenceId,
-    branding_settings: {},
+    // REQUIRED by the payment service - an empty object is rejected with
+    // `400 Invalid branding_settings.display_name`, which failed every pledge
+    // before the family reached Stripe. It is also the name the family reads on
+    // the hosted mandate page while authorising a recurring debit, so it must be
+    // the charity's, and it matches what the one-time donation route sends.
+    branding_settings: { display_name: ORG_NAME },
     successUrl: args.successUrl,
     cancelUrl: args.cancelUrl,
     metadata: args.metadata,
