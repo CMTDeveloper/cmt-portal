@@ -74,9 +74,29 @@ export async function claimPledgeTransition(
  */
 export async function activatePledgeAndNotify(
   db: FirebaseFirestore.Firestore,
-  args: { pid: string; toEmail: string | null; monthlyAmountCAD: number },
+  args: {
+    pid: string;
+    toEmail: string | null;
+    monthlyAmountCAD: number;
+    /**
+     * The subscription this caller actually confirmed was live.
+     *
+     * Normally the same as the document's `subscriptionId`. It differs only
+     * when the provider's idempotency failed and two subscriptions exist for
+     * one pledge: the document keeps the FIRST id, but the one verified here
+     * may be the second. `subscriptionId` is singular and reads as "the"
+     * subscription, so without this a human summoned by the verification flag
+     * could cancel the wrong one in Stripe while the other keeps billing.
+     */
+    verifiedSubscriptionId?: string | null;
+  },
 ): Promise<ClaimResult> {
-  const claim = await claimPledgeTransition(db, args.pid, 'active', { activatedAt: new Date() });
+  const claim = await claimPledgeTransition(db, args.pid, 'active', {
+    activatedAt: new Date(),
+    // Conditional spread, not `?? undefined`: exactOptionalPropertyTypes is on,
+    // and Firestore would reject an explicit undefined anyway.
+    ...(args.verifiedSubscriptionId ? { verifiedSubscriptionId: args.verifiedSubscriptionId } : {}),
+  });
   if (!claim.won) return claim;
 
   if (args.toEmail) {

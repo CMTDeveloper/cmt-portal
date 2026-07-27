@@ -216,7 +216,16 @@ export async function advancePledge(
   // Activation goes through the shared transactional claim, so this path and a
   // concurrent one cannot both announce the same activation to the same family.
   const email = pledge.fid ? await managerEmailFor(db, pledge.fid) : null;
-  const claim = await activatePledgeAndNotify(db, { pid, toEmail: email, monthlyAmountCAD });
+  // `subscriptionId` here is THIS caller's own, and step 5 above confirmed it
+  // live. In the divergent case the document keeps a different (first-written)
+  // id, so recording which one was actually verified is what stops a human
+  // acting on the wrong subscription.
+  const claim = await activatePledgeAndNotify(db, {
+    pid,
+    toEmail: email,
+    monthlyAmountCAD,
+    verifiedSubscriptionId: subscriptionId,
+  });
   // NOT a hardcoded 'active'. Losing the claim can mean someone else activated
   // it (fine, still active) or that a concurrent pass settled it `failed` or the
   // temple cancelled it - and reporting `active` for those told the family's

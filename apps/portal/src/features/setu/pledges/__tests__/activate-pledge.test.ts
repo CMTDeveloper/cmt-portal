@@ -115,6 +115,28 @@ describe('activatePledgeAndNotify', () => {
     expect(mockEmail.mock.calls[0]![0]).toMatchObject({ name: 'pledge-activated', to: 'a@b.com' });
   });
 
+  it('never writes an explicit undefined, which real Firestore REJECTS', async () => {
+    // This harness's `Object.assign` happily stores `undefined`; Firestore
+    // throws "Cannot use undefined as a Firestore value" and the activation
+    // write fails outright. So the mock is MORE PERMISSIVE than production, and
+    // a test that only checked the write "succeeded" would prove nothing -
+    // assert the payload shape instead.
+    //
+    // Found by a mutation making the optional field's spread unconditional,
+    // which every behavioural test passed.
+    await activatePledgeAndNotify(db, { pid: 'PLG-1', toEmail: null, monthlyAmountCAD: 51 });
+    const written = fs.txnUpdates.at(-1)!;
+    expect(Object.values(written).every((v) => v !== undefined)).toBe(true);
+    expect('verifiedSubscriptionId' in written, 'an absent optional was written as a key').toBe(false);
+  });
+
+  it('records the verified subscription when the caller names one', async () => {
+    await activatePledgeAndNotify(db, {
+      pid: 'PLG-1', toEmail: null, monthlyAmountCAD: 51, verifiedSubscriptionId: 'sub_X',
+    });
+    expect(fs.txnUpdates.at(-1)!['verifiedSubscriptionId']).toBe('sub_X');
+  });
+
   it('sends NOTHING when it lost the claim', async () => {
     fs.pledge!['status'] = 'active';
     expect(await activatePledgeAndNotify(db, { pid: 'PLG-1', toEmail: 'a@b.com', monthlyAmountCAD: 51 }))

@@ -58,6 +58,14 @@ export const PledgeDocSchema = z.object({
    * legacy document claim it had been checked.
    */
   needsStripeVerification: z.boolean().optional(),
+  /**
+   * The subscription that was actually confirmed live at activation. Normally
+   * identical to `subscriptionId`; it differs only when the provider's
+   * idempotency failed and two subscriptions exist, in which case the document
+   * keeps the FIRST id while this names the one that was verified. Read them
+   * together before cancelling anything in Stripe.
+   */
+  verifiedSubscriptionId: z.string().nullable().optional(),
 });
 
 export type PledgeDoc = z.infer<typeof PledgeDocSchema>;

@@ -256,6 +256,39 @@ describe('advancePledge - a late answer must never stomp a settled pledge', () =
     expect(String(fs.pledge!['lastError'])).toMatch(/sub_SECOND/);
   });
 
+  it('records WHICH subscription was actually confirmed live', async () => {
+    // `subscriptionId` is singular and reads as "the" subscription. On the
+    // ordinary path it is also the one that was verified - stating that
+    // explicitly is what makes the divergent case below unambiguous.
+    await advancePledge(db, ref, beforeStep4(), 'PLG-1');
+    expect(fs.pledge!['status']).toBe('active');
+    expect(fs.pledge!['verifiedSubscriptionId']).toBe('sub_1');
+  });
+
+  it('names the VERIFIED subscription when it is not the one kept in the field', async () => {
+    // The divergent case, played out fully. Caller A creates sub_A, records it
+    // (first write, no flag), and its own check comes back pending. Caller B
+    // creates sub_B, detects the divergence, flags it, and keeps sub_A - then
+    // checks ITS OWN sub_B, which is live, and wins the claim.
+    //
+    // The document then says `subscriptionId: sub_A` while sub_B is the one
+    // actually billing. Both ids are in lastError, so nothing is lost - but a
+    // human summoned by our own flag, reading the singular field, could go and
+    // cancel sub_A in Stripe while sub_B keeps charging the family. Naming the
+    // verified id removes that reading.
+    fs.pledge!['subscriptionId'] = 'sub_A';
+    mockStep4.mockResolvedValue({ subscriptionId: 'sub_B', status: 'active', customerId: 'cus_1' });
+    mockStep5.mockResolvedValue('success');
+
+    await advancePledge(db, ref, { ...staleSnapshot(), subscriptionId: null }, 'PLG-1');
+
+    expect(fs.pledge!['subscriptionId'], 'the first id should still be kept').toBe('sub_A');
+    expect(fs.pledge!['needsStripeVerification']).toBe(true);
+    expect(String(fs.pledge!['lastError'])).toMatch(/sub_A.*sub_B/);
+    // The point of this test: which one did we actually confirm was live?
+    expect(fs.pledge!['verifiedSubscriptionId']).toBe('sub_B');
+  });
+
   it('SHOUTS when the document vanishes AFTER the subscription was created', async () => {
     // The one outcome with no trace anywhere: a real recurring debit at Stripe
     // and no row to record it against. Nothing in the shipped code deletes a
