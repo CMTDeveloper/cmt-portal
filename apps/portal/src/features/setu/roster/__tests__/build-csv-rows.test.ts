@@ -4,14 +4,6 @@ vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
   portalFirestore: vi.fn(),
 }));
 
-// Seed offerings so the effective amount is deterministic: every offering
-// resolves to 100 regardless of date. The bulk builder only uses the resolved
-// number, so this keeps the payment math (expected = activeCount * 100) clear.
-vi.mock('@cmt/shared-domain', async (orig) => ({
-  ...(await orig<typeof import('@cmt/shared-domain')>()),
-  resolveSuggestedAmount: vi.fn(() => 100),
-}));
-
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { buildRosterCsvRows } from '../build-csv-rows';
 
@@ -31,6 +23,11 @@ interface EnrollmentSeed {
   programLabel: string;
   status: string;
   suggestedAmountOverride?: number;
+  /** Offering with no pricing tiers - a genuinely free program. */
+  free?: boolean;
+  /** The offering doc does not exist, so nothing can price this enrollment. */
+  offeringMissing?: boolean;
+  paymentSource?: string;
 }
 interface DonationSeed {
   status: string;
@@ -64,9 +61,21 @@ interface DocSnap {
  *   resolves each ref to an offering snapshot (existence keyed off the oid set).
  */
 function makeDb(families: FamilySeed[]) {
-  const offeringIds = new Set(
-    families.flatMap((f) => f.enrollments.map((e) => e.oid)).filter(Boolean),
-  );
+  // Every seeded enrollment gets a real offering doc priced at 100, unless the
+  // seed says otherwise: `free` gives it no tiers, `offeringMissing` gives it no
+  // doc at all. Those two look identical downstream if the fixture is lazy about
+  // it, which is exactly the distinction the classifier has to make.
+  const offeringByOid = new Map<string, Json>();
+  for (const f of families) {
+    for (const e of f.enrollments) {
+      if (!e.oid || e.offeringMissing) continue;
+      offeringByOid.set(e.oid, {
+        oid: e.oid,
+        pricingTiers: e.free ? [] : [{ effectiveFrom: '2025-01-01', amountCAD: 100, label: 'Full year' }],
+        ...(e.paymentSource ? { paymentSource: e.paymentSource } : {}),
+      });
+    }
+  }
 
   function familyData(f: FamilySeed): Json {
     return { fid: f.fid, name: f.name, location: f.location, legacyFid: f.legacyFid };
@@ -152,8 +161,8 @@ function makeDb(families: FamilySeed[]) {
     getAll: vi.fn(async (...refs: Array<{ oid: string }>): Promise<DocSnap[]> =>
       refs.map((r) => ({
         id: r.oid,
-        exists: offeringIds.has(r.oid),
-        data: () => (offeringIds.has(r.oid) ? { oid: r.oid, pricingTiers: [] } : undefined),
+        exists: offeringByOid.has(r.oid),
+        data: () => offeringByOid.get(r.oid),
       })),
     ),
   };
@@ -253,6 +262,59 @@ describe('buildRosterCsvRows', () => {
     expect(byFid('CMT-PAID').payment).toBe('paid');
     expect(byFid('CMT-SHORT').payment).toBe('outstanding');
     expect(byFid('CMT-NONE').payment).toBe('unknown');
+  });
+
+  // The CSV is a live surface for this: it is what staff hand around, so the
+  // three ways of owing nothing must not collapse into one column value.
+  it('payment: free/waived → not-applicable, unpriceable → unknown', async () => {
+    const families = [
+      fam({
+        fid: 'CMT-FREE',
+        name: 'A Free',
+        enrollments: [
+          { oid: 'off-free', programKey: 'om-chanting', programLabel: 'Om Chanting', status: 'active', free: true },
+        ],
+      }),
+      fam({
+        fid: 'CMT-WAIVED',
+        name: 'B Waived',
+        enrollments: [
+          { oid: 'off-asc', programKey: 'adult-study-class', programLabel: 'Adult Study Class', status: 'active', suggestedAmountOverride: 0 },
+        ],
+      }),
+      fam({
+        fid: 'CMT-GHOST',
+        name: 'C Ghost Offering',
+        enrollments: [
+          { oid: 'off-gone', programKey: 'bala-vihar', programLabel: 'Bala Vihar', status: 'active', offeringMissing: true },
+        ],
+      }),
+      fam({
+        fid: 'CMT-TEACHER',
+        name: 'D Teacher Collects',
+        enrollments: [
+          { oid: 'off-tm', programKey: 'tabla', programLabel: 'Tabla', status: 'active', free: true, paymentSource: 'teacher-managed' },
+        ],
+      }),
+      // N=2: a priced enrollment beside a free one still owes money.
+      fam({
+        fid: 'CMT-MIXED',
+        name: 'E Mixed',
+        enrollments: [
+          { oid: 'off-free-2', programKey: 'om-chanting', programLabel: 'Om Chanting', status: 'active', free: true },
+          { oid: 'off-bv-2', programKey: 'bala-vihar', programLabel: 'Bala Vihar', status: 'active' },
+        ],
+      }),
+    ];
+    mockFirestore.mockReturnValue(makeDb(families) as never);
+
+    const rows = await buildRosterCsvRows({});
+    const byFid = (fid: string) => rows.find((r) => r.fid === fid)!;
+    expect(byFid('CMT-FREE').payment).toBe('not-applicable');
+    expect(byFid('CMT-WAIVED').payment).toBe('not-applicable');
+    expect(byFid('CMT-GHOST').payment).toBe('unknown');
+    expect(byFid('CMT-TEACHER').payment).toBe('unknown');
+    expect(byFid('CMT-MIXED').payment).toBe('outstanding');
   });
 
   it('program filter: only families with an active enrollment in that programKey appear', async () => {

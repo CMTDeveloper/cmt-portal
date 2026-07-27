@@ -1,6 +1,10 @@
 import { z } from 'zod';
 
-export const ROSTER_PAYMENTS = ['paid', 'outstanding', 'unknown'] as const;
+// The welcome-desk payment verdict. 'paid' means money actually arrived, so the
+// two ways a family can owe nothing are kept apart: 'not-applicable' (a free
+// program or a waiver - settled) and 'unknown' (we could not determine a price,
+// or the fee is collected off-portal by a teacher). See classifyRosterPayment.
+export const ROSTER_PAYMENTS = ['paid', 'outstanding', 'not-applicable', 'unknown'] as const;
 export type RosterPayment = (typeof ROSTER_PAYMENTS)[number];
 
 // NOTE: the paginated browse contract (RosterFamilyRow / RosterListResponse /

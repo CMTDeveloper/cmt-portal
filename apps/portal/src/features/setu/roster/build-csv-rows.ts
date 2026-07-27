@@ -1,8 +1,7 @@
 import 'server-only';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
-import { resolveSuggestedAmount } from '@cmt/shared-domain';
 import type { OfferingDoc, RosterPersonCsvRow } from '@cmt/shared-domain';
-import { paymentFromAmounts } from './payment';
+import { classifyBulkPayment } from './payment';
 
 const EXPORT_FAMILY_CAP = 2000;
 const OFFERING_CHUNK = 300;
@@ -110,12 +109,7 @@ export async function buildRosterCsvRows(filters: { location?: string; program?:
     const fam = meta.get(fid)!;
     const active = activeByFid.get(fid) ?? [];
     const programs = [...new Set(active.map((a) => a.programLabel).filter(Boolean))].join('; ');
-    const expected = active.reduce((sum, a) => {
-      const off = offerings.get(a.oid) ?? null;
-      const eff = a.override ?? (off ? resolveSuggestedAmount(off, a.enrolledAt) : a.snapshot);
-      return sum + (eff ?? 0);
-    }, 0);
-    const payment = paymentFromAmounts(active.length, expected, paidByFid.get(fid) ?? 0);
+    const payment = classifyBulkPayment(active, offerings, paidByFid.get(fid) ?? 0);
     for (const m of membersByFid.get(fid) ?? []) {
       rows.push({
         familyName: fam.name, fid, legacyFid: fam.legacyFid,

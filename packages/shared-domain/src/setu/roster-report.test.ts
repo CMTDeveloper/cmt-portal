@@ -41,6 +41,16 @@ describe('matchesRosterFilters', () => {
   it('payment filter', () => {
     expect(rows.filter((r) => matchesRosterFilters(r, { payment: 'paid' }))).toEqual([rana]);
   });
+  // N/A is its own filterable state, NOT a synonym for paid or unknown - a
+  // volunteer filtering for Paid must not be shown a family who never owed
+  // anything, and one filtering for Unknown must not be shown them either.
+  it('payment filter treats not-applicable as a distinct state', () => {
+    const free = row({ fid: 'CMT-FREE', name: 'Free', payment: 'not-applicable' });
+    const all = [...rows, free];
+    expect(all.filter((r) => matchesRosterFilters(r, { payment: 'not-applicable' }))).toEqual([free]);
+    expect(all.filter((r) => matchesRosterFilters(r, { payment: 'paid' }))).toEqual([rana]);
+    expect(all.filter((r) => matchesRosterFilters(r, { payment: 'unknown' }))).toEqual([]);
+  });
   it('level filter: family with a child in that level', () => {
     expect(rows.filter((r) => matchesRosterFilters(r, { level: 'Level 5' }))).toEqual([rana]);
   });
@@ -85,9 +95,15 @@ describe('summarizeRoster', () => {
       { levelName: 'Level 2', childCount: 2 },
       { levelName: 'Level 5', childCount: 1 },
     ]);
-    expect(s.byPayment).toEqual({ paid: 1, outstanding: 1, unknown: 0 });
+    expect(s.byPayment).toEqual({ paid: 1, outstanding: 1, notApplicable: 0, unknown: 0 });
     // rana is confirmed (Enrolled), shah is registered.
     expect(s.byEngagement).toEqual({ enrolled: 1, registered: 1, notEnrolled: 0 });
+  });
+
+  it('tallies not-applicable families separately from paid and unknown', () => {
+    const free = row({ fid: 'CMT-FREE', name: 'Free', payment: 'not-applicable' });
+    const s = summarizeRoster([...rows, free], {});
+    expect(s.byPayment).toEqual({ paid: 1, outstanding: 1, notApplicable: 1, unknown: 0 });
   });
   it('level filter narrows childCount to matching children only', () => {
     const s = summarizeRoster(rows, { level: 'Level 2' });

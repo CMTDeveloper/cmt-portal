@@ -17,6 +17,7 @@ export * from './schemas/achievement';
 export * from './schemas/sevak';
 export * from './schemas/disclaimers';
 export * from './roster';
+export * from './roster-payment';
 export * from './roster-report';
 export * from './family-display-name';
 export * from './reports';

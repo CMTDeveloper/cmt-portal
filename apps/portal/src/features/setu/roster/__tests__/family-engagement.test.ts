@@ -26,9 +26,16 @@ function bvEnrollment(over: AnyRec = {}) {
     status: 'active',
     enrolledMids: ['CMT-1-m-0'],
     effectiveSuggestedAmount: 100,
+    // The payment verdict prices the offering itself rather than reading the
+    // precomputed effectiveSuggestedAmount, so the tiers have to be here: an
+    // offering with none is a FREE program, which classifies as N/A.
+    suggestedAmountOverride: null,
+    suggestedAmountSnapshot: 100,
+    enrolledAt: new Date('2025-09-01T04:00:00.000Z'),
     offering: {
       startDate: new Date('2025-09-01T04:00:00.000Z'),
       endDate: new Date('2026-06-30T03:59:59.000Z'),
+      pricingTiers: [{ effectiveFrom: '2025-09-01', amountCAD: 100, label: 'Full year' }],
       // paymentSource omitted ⇒ 'portal' (not legacy)
     },
     ...over,

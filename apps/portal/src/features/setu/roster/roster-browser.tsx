@@ -20,9 +20,14 @@ import { MigrationStrip } from './migration-strip';
 const INITIAL_SHOWN = 50;
 
 // ── Payment chip tones ────────────────────────────────────────────────────────
+// 'N/A' is a settled state, not a warning: the family owes nothing because the
+// program is free or their fee was waived. It reads in body text so it is
+// clearly a stated fact, and stays visually distinct from the muted 'Unknown',
+// which means we could not work out what they owe.
 const PAYMENT_STYLE: Record<RosterPayment, { bg: string; fg: string; label: string }> = {
   paid: { bg: 'var(--accentSoft)', fg: 'var(--ok)', label: 'Paid' },
   outstanding: { bg: 'var(--accentSoft)', fg: 'var(--warn)', label: 'Outstanding' },
+  'not-applicable': { bg: 'var(--surface2)', fg: 'var(--body-text)', label: 'N/A' },
   unknown: { bg: 'var(--surface2)', fg: 'var(--muted)', label: 'Unknown' },
 };
 
@@ -216,6 +221,7 @@ function SummaryStrip({ summary }: { summary: RosterReportSummary }) {
         <span style={{ color: 'var(--muted)', fontWeight: 600 }}>Payment:</span>
         <span style={{ fontFeatureSettings: '"tnum"' }}>Paid · {summary.byPayment.paid}</span>
         <span style={{ fontFeatureSettings: '"tnum"' }}>Outstanding · {summary.byPayment.outstanding}</span>
+        <span style={{ fontFeatureSettings: '"tnum"' }}>N/A · {summary.byPayment.notApplicable}</span>
         <span style={{ fontFeatureSettings: '"tnum"' }}>Unknown · {summary.byPayment.unknown}</span>
       </div>
     </div>
@@ -368,7 +374,7 @@ function RosterContent({ year, locationOptions }: { year?: string; locationOptio
             )}
             <FilterSelect
               label="Payment" value={payment ?? ''} onChange={(v) => setPayment((v || null) as RosterPayment | null)}
-              options={ROSTER_PAYMENTS.map((p) => ({ value: p, label: p[0]!.toUpperCase() + p.slice(1) }))}
+              options={ROSTER_PAYMENTS.map((p) => ({ value: p, label: PAYMENT_STYLE[p].label }))}
             />
             <FilterSelect
               label="Enrollment" value={engagement ?? ''}

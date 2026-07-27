@@ -53,7 +53,7 @@ export interface RosterReportSummary {
   familyCount: number;
   childCount: number;
   byLevel: Array<{ levelName: string; childCount: number }>;
-  byPayment: { paid: number; outstanding: number; unknown: number };
+  byPayment: { paid: number; outstanding: number; notApplicable: number; unknown: number };
   byEngagement: { enrolled: number; registered: number; notEnrolled: number };
 }
 
@@ -82,11 +82,14 @@ const NO_LEVEL = '(no level)';
 export function summarizeRoster(rows: RosterReportRow[], f: RosterReportFilters): RosterReportSummary {
   const included = rows.filter((r) => matchesRosterFilters(r, f));
   const byLevelMap = new Map<string, number>();
-  const byPayment = { paid: 0, outstanding: 0, unknown: 0 };
+  const byPayment = { paid: 0, outstanding: 0, notApplicable: 0, unknown: 0 };
   const byEngagement = { enrolled: 0, registered: 0, notEnrolled: 0 };
   let childCount = 0;
   for (const r of included) {
-    byPayment[r.payment]++;
+    // Keyed explicitly rather than by `byPayment[r.payment]++` — the enum value
+    // is 'not-applicable' and the tally key cannot be.
+    if (r.payment === 'not-applicable') byPayment.notApplicable++;
+    else byPayment[r.payment]++;
     const eng = rosterEngagementOf(r);
     if (eng === 'enrolled') byEngagement.enrolled++;
     else if (eng === 'registered') byEngagement.registered++;

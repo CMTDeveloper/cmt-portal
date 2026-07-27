@@ -7,7 +7,8 @@ import { getLegacyPaymentStatus } from '@/features/setu/donations/legacy-payment
 import { getFamilyBalaViharAttendance } from '@/features/setu/attendance/get-family-attendance';
 import { isEnrollmentConfirmed } from '@/app/family/_helpers/enrollment-confirmation';
 import { isoToTorontoDateInput } from '@/lib/toronto-date';
-import { paymentFromAmounts } from './payment';
+import { classifyRosterPayment } from '@cmt/shared-domain/setu';
+import { chargeFromEnrollment } from './payment';
 
 /** null = no active Bala Vihar enrollment; 'confirmed'/'registered' per issue #23. */
 export type BvEngagement = 'confirmed' | 'registered' | null;
@@ -43,11 +44,10 @@ export async function deriveFamilyRosterSignals(
   try {
     const [enrollments, donations] = await Promise.all([getEnrollments(fid), getDonations(fid)]);
     const active = enrollments.filter((e) => e.status === 'active');
-    const expected = active.reduce((sum, e) => sum + (e.effectiveSuggestedAmount ?? 0), 0);
     const paid = donations
       .filter((d) => d.status === 'completed')
       .reduce((sum, d) => sum + (typeof d.amountCAD === 'number' ? d.amountCAD : 0), 0);
-    const payment = paymentFromAmounts(active.length, expected, paid);
+    const payment = classifyRosterPayment(active.map(chargeFromEnrollment), paid);
 
     // Pin to the active *Bala Vihar* enrollment so a newer non-BV enrollment
     // can't hijack the signal (same rule as selectBalaViharEnrollment).

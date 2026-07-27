@@ -1,8 +1,8 @@
 import 'server-only';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
-import { resolveSuggestedAmount, formatFamilyParentNames } from '@cmt/shared-domain';
+import { formatFamilyParentNames } from '@cmt/shared-domain';
 import type { OfferingDoc, RosterPersonCsvRow, RosterReportRow, RosterReportChild } from '@cmt/shared-domain';
-import { paymentFromAmounts } from './payment';
+import { classifyBulkPayment } from './payment';
 
 export type RosterReportFamilyFull = { row: RosterReportRow; personRows: RosterPersonCsvRow[] };
 
@@ -175,12 +175,7 @@ export async function buildRosterReportDataset(params: { year?: string }): Promi
     const active = activeByFid.get(fid) ?? [];
     const members = membersByFid.get(fid) ?? [];
 
-    const expected = active.reduce((sum, a) => {
-      const off = offerings.get(a.oid) ?? null;
-      const eff = a.override ?? (off ? resolveSuggestedAmount(off, a.enrolledAt) : a.snapshot);
-      return sum + (eff ?? 0);
-    }, 0);
-    const payment = paymentFromAmounts(active.length, expected, paidByFid.get(fid) ?? 0);
+    const payment = classifyBulkPayment(active, offerings, paidByFid.get(fid) ?? 0);
 
     const programs = [...new Set(active.map((a) => a.programLabel).filter(Boolean))];
     const programKeys = [...new Set(active.map((a) => a.programKey).filter(Boolean))];
