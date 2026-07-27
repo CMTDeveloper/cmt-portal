@@ -22,6 +22,27 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
+## 2026-07-26 - `2db63e6` - GET /api/setu/teacher/levels/[levelId]/roster rows gain contact, payment and allergy text (**additive - no mobile action required to keep working**)
+
+The route returns `{ view }` verbatim, so widening `AttendanceViewRow` is a response-shape change. **Five new fields on every element of `view.rows`.** Nothing was removed or renamed, no field changed type, and no error code changed - an unmodified mobile client keeps working and simply ignores them.
+
+```ts
+// view.rows[]  — ADDED
+parentName:  string | null   // the family's primary manager, null when none is on file
+parentPhone: string | null
+parentEmail: string | null
+payment: 'paid' | 'outstanding' | 'not-applicable' | 'unknown'
+safetyNotes: string | null   // allergy / medical FREE TEXT
+```
+
+**What the mobile should do:**
+- Add the five fields to its `AttendanceViewRow` mirror. All five are **required** on the portal type - every row always carries them, using `null` / `'unknown'` rather than omitting the key - so mirror them as required-but-nullable, not optional.
+- **`payment` has FOUR states and the web row deliberately renders a chip for only TWO of them** (`paid`, `outstanding`). `not-applicable` means no fee applies and `unknown` means we could not determine one; both render as **no chip at all**. Do NOT collapse them into a boolean or into "unpaid" - that would tell a teacher a family owes money when we either know they owe nothing or cannot tell.
+- `payment` is scoped to **this class's** enrollment, while the amount paid is family-wide. For a family enrolled in a second program this can differ from the whole-family verdict on the welcome roster. Do not present it as the family's overall balance.
+- `hasSafetyInfo` (existing boolean) and `safetyNotes` (new text) are kept consistent by the server: whitespace-only text yields `hasSafetyInfo: false` **and** `safetyNotes: null`, so a lit dot always has text behind it.
+
+**⚠️ PRIVACY DELTA, stated deliberately.** Until now this route exposed only `hasSafetyInfo: boolean`; it now ships each child's **allergy/medical free-text** to any client that calls it. Spec §4.6 authorised parent contact and payment status for teachers; medical text was not part of that decision, and it was taken separately by CMT Developer on 2026-07-26 (teachers **and** welcome-team, web and mobile). Treat `safetyNotes` as sensitive: do not log it, do not cache it beyond the session, and do not surface it outside a signed-in teacher context.
+
 ## 2026-07-26 - `378df10` - POST /api/setu/enrollments behaves differently for `adult-study-class` (**mobile action required**)
 Request and response SHAPES are unchanged. What changed is the BEHAVIOUR when the posted `oid` belongs to an **adult-study-class** offering; every other `programKey` is byte-identical to before.
 - **The fee is waived for a Bala Vihar family.** If the family has an **active Bala Vihar enrollment** (payment NOT required - membership is the test), the enrollment is written with `suggestedAmountOverride: 0`, and the response's **`suggestedAmount` is now the EFFECTIVE amount (0), not the pinned snapshot**. A family with no Bala Vihar enrollment still pays the full amount.
