@@ -25,15 +25,30 @@ import { TEST_ACCOUNT_EMAILS, TEST_ACCOUNTS_PASSWORD, hasTestAccounts, hasFamily
  * `recordGuestCheckIn` reads the SERVER clock (guest-check-ins.ts:27) - the spec
  * cannot choose the guest's date. On a Sunday `date === sessionDate`, so a spec
  * that only submits the form and looks at today would pass even with the date-key
- * fix reverted. So the fix is pinned from both ends, neither depending on the day
- * the suite happens to run:
- *   - the WRITER: the doc the form produced must carry `sessionDate ===
- *     sessionDateFor(date)` (test 1).
- *   - the READER: a guest stamped with a deliberately MIDWEEK date must be visible
- *     on the Sunday the teacher actually looks at - and the spec first proves that
- *     doc is invisible to the pre-fix `where('date','==',sunday)` query, so the
- *     fixture is known to distinguish the bug rather than merely coexist with it
- *     (test 2).
+ * fix reverted.
+ *
+ * ⚠️ **The writer half below is NOT day-independent, and an earlier version of
+ * this comment wrongly claimed it was.** `sessionDateFor` is a no-op on a Sunday
+ * input, so on a Sunday run `expect(sessionDate).toBe(sessionDateFor(date))`
+ * degenerates to `X === X`: a regression that skipped the helper and wrote
+ * `sessionDate: ymd` verbatim - the whole original bug class - would satisfy it.
+ * No assertion on the produced document can do better, because on a Sunday the
+ * correct output and the naive output are byte-identical.
+ *
+ * The day-independent proof therefore lives where the clock CAN be controlled:
+ * `features/check-in/shared/__tests__/guest-check-ins.test.ts` freezes the clock
+ * to a Wednesday, a Saturday and a Monday and asserts `sessionDate !== date`.
+ * Verified: reverting the writer to `sessionDate: ymd` fails those three.
+ *
+ * What this file pins, accurately:
+ *   - the WRITER, on the six non-Sunday days: `sessionDate === sessionDateFor(date)`
+ *     (test 1). Real coverage most of the week, tautological on Sundays.
+ *   - the READER, on every day: a guest stamped with a deliberately MIDWEEK date
+ *     is visible on the Sunday the teacher actually looks at - and the spec first
+ *     proves that doc is invisible to the pre-fix `where('date','==',sunday)`
+ *     query, so the fixture is known to distinguish the bug rather than merely
+ *     coexist with it (test 2). This half is genuinely day-independent because
+ *     the fixture supplies the differing dates itself.
  *
  * Read-only on the teacher side: the spec never clicks Confirm, so no pending
  * family, enrollment or guest mark is created. Cleanup is therefore just the
