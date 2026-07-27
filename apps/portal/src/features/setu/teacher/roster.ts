@@ -34,6 +34,10 @@ export interface RosterMember {
   lastName: string;
   type: 'Adult' | 'Child';
   schoolGrade: string | null;
+  /** The allergy/medical free-text itself. `hasSafetyInfo` below stays the
+   *  derived boolean the safety dot uses, so nothing downstream had to change;
+   *  this is the text the teacher and welcome-team screens render (spec §4.3). */
+  foodAllergies: string | null;
   hasSafetyInfo: boolean; // allergy/emergency → safety dot on the marker
   status: RosterStatus;
   legacySid: string | null;
@@ -123,6 +127,10 @@ export function buildRoster(
         lastName: m.lastName,
         type: m.type,
         schoolGrade: m.schoolGrade,
+        // Whitespace-only text is not a safety note: it must not light the dot
+        // and it must not render as an empty "Safety & medical" block either,
+        // so both fields agree on what counts.
+        foodAllergies: m.foodAllergies && m.foodAllergies.trim().length > 0 ? m.foodAllergies : null,
         hasSafetyInfo: Boolean(m.foodAllergies && m.foodAllergies.trim().length > 0),
         status,
         legacySid: m.legacySid,

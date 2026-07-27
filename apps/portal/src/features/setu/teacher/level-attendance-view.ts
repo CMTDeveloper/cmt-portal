@@ -1,5 +1,8 @@
 import type { SetuAttendanceStatus } from '@cmt/shared-domain';
+import type { RosterPayment } from '@cmt/shared-domain/setu';
+import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { deriveRoster } from './roster';
+import { buildAttendanceDetailIndex } from './attendance-detail';
 import { readDoorPresentSids } from '@/features/setu/attendance/check-in-attendance';
 
 export type AttendanceRowSource = 'portal' | 'door' | 'default';
@@ -14,6 +17,24 @@ export interface AttendanceViewRow {
   status: SetuAttendanceStatus | null; // present | late | absent — null = unmarked
   source: AttendanceRowSource;
   checkedInAtDoor: boolean;
+  // ── spec §4.4 / §4.3 ────────────────────────────────────────────────────────
+  // REQUIRED, not optional: an optional field silently reads `undefined` at a
+  // construction site nobody updated, and the row would render blank contact
+  // with no error anywhere. Required makes every caller state an answer.
+  /** The family's primary manager. Null when none is on file. */
+  parentName: string | null;
+  parentPhone: string | null;
+  parentEmail: string | null;
+  /**
+   * Four states, but the ROW shows a chip only for `paid` / `outstanding` -
+   * those are the two a teacher can act on. `not-applicable` and `unknown` are
+   * carried honestly and rendered as no chip at all, because labelling either
+   * one would assert something we cannot stand behind.
+   */
+  payment: RosterPayment;
+  /** Allergy / medical free-text, or null. `hasSafetyInfo` remains the boolean
+   *  the safety dot uses; this is the text behind it. */
+  safetyNotes: string | null;
 }
 
 /** A carry-forward (previous) student surfaced inline in the attendance screen's
@@ -53,7 +74,21 @@ export async function getLevelAttendanceView(levelId: string, date: string): Pro
   if (!roster) return null;
 
   const legacyFids = [...new Set(roster.members.map((m) => m.legacyFid).filter((v): v is string => !!v))];
-  const doorSids = legacyFids.length > 0 ? await readDoorPresentSids(legacyFids, date) : new Set<string>();
+  // LEVEL-scoped, from the BUILT roster: `buildRoster` has already applied
+  // memberMatchesLevel. `deriveRoster`'s own fid set is program-and-location
+  // scoped (hundreds at prod), and handing that over would reintroduce the very
+  // fan-out the detail module caps against.
+  const levelFids = [...new Set(roster.members.map((m) => m.fid))];
+
+  const [doorSids, detail] = await Promise.all([
+    legacyFids.length > 0 ? readDoorPresentSids(legacyFids, date) : Promise.resolve(new Set<string>()),
+    buildAttendanceDetailIndex(
+      portalFirestore(),
+      levelFids,
+      roster.enrMetaByFid ?? new Map(),
+      roster.managerMidByFid ?? new Map(),
+    ),
+  ]);
 
   const rows: AttendanceViewRow[] = roster.members.map((m) => {
     const checkedInAtDoor = !!m.legacySid && doorSids.has(m.legacySid);
@@ -69,6 +104,9 @@ export async function getLevelAttendanceView(levelId: string, date: string): Pro
       status = null; // unmarked
       source = 'default';
     }
+    // A family absent from the detail index degrades to "we know nothing" -
+    // never to a crash, and never to a confident `paid`.
+    const d = detail.get(m.fid);
     return {
       mid: m.mid,
       fid: m.fid,
@@ -79,6 +117,13 @@ export async function getLevelAttendanceView(levelId: string, date: string): Pro
       status,
       source,
       checkedInAtDoor,
+      parentName: d?.parentName ?? null,
+      parentPhone: d?.parentPhone ?? null,
+      parentEmail: d?.parentEmail ?? null,
+      payment: d?.payment ?? 'unknown',
+      // `?? null` is required, not defensive: exactOptionalPropertyTypes rejects
+      // the `undefined` a bare read yields against `string | null`.
+      safetyNotes: m.foodAllergies ?? null,
     };
   });
 

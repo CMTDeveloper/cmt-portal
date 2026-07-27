@@ -50,12 +50,23 @@ export default async function WelcomeRosterPage({
             const s = STATUS_STYLE[m.status];
             return (
               <div key={m.mid} className="card" style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  {m.hasSafetyInfo && <span title="Allergy / safety info" style={{ width: 9, height: 9, borderRadius: '50%', background: 'var(--err)' }} />}
-                  <span style={{ fontSize: 14, fontWeight: 500 }}>{m.firstName} {m.lastName}</span>
-                  {m.schoolGrade && <span style={{ fontSize: 12, color: 'var(--muted)' }}>{m.schoolGrade}</span>}
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {m.hasSafetyInfo && <span title="Allergy / safety info" style={{ width: 9, height: 9, borderRadius: '50%', background: 'var(--err)' }} />}
+                    <span style={{ fontSize: 14, fontWeight: 500 }}>{m.firstName} {m.lastName}</span>
+                    {m.schoolGrade && <span style={{ fontSize: 12, color: 'var(--muted)' }}>{m.schoolGrade}</span>}
+                  </div>
+                  {/* The text behind the dot. Owner decision 2026-07-26: the
+                      front desk sees it too, not just teachers - a volunteer
+                      handing out prasad is exactly who needs to know. Spec §4.6
+                      covered teachers only, so this widens it deliberately. */}
+                  {m.foodAllergies && (
+                    <div style={{ fontSize: 12, color: 'var(--err)', marginTop: 3 }}>
+                      Allergy / safety: {m.foodAllergies}
+                    </div>
+                  )}
                 </div>
-                <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 99, background: s.bg, color: s.fg }}>{s.label}</span>
+                <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 99, background: s.bg, color: s.fg }}>{s.label}</span>
               </div>
             );
           })

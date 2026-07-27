@@ -83,12 +83,34 @@ describe('buildRoster', () => {
     expect(rGuest.members[0]!.status).toBe('unaccounted');
   });
 
-  it('surfaces a safety dot for a child with allergies', () => {
+  it('surfaces a safety dot for a child with allergies, and carries the text through', () => {
     const families: RosterFamily[] = [
       { fid: 'CMT-A', legacyFid: 'legacy-A', enrolledMids: ['CMT-A-02'], members: [child('CMT-A-02', 'Apple', 'Grade 2', { foodAllergies: 'Peanuts' })] },
     ];
     const r = buildRoster(level2, families, [], '2026-01-18', NOW, new Set(families.map((f) => f.fid)));
     expect(r.members[0]!.hasSafetyInfo).toBe(true);
+    // The dot is derived from the text, and the text is what the drawer renders.
+    expect(r.members[0]!.foodAllergies).toBe('Peanuts');
+  });
+
+  it('treats whitespace-only allergies as no safety info AT ALL', () => {
+    // The two fields must agree: a lit dot with an empty "Safety & medical"
+    // block reads to a teacher as "there is something here and I cannot see it".
+    const families: RosterFamily[] = [
+      { fid: 'CMT-A', legacyFid: 'legacy-A', enrolledMids: ['CMT-A-02'], members: [child('CMT-A-02', 'Apple', 'Grade 2', { foodAllergies: '   ' })] },
+    ];
+    const r = buildRoster(level2, families, [], '2026-01-18', NOW, new Set(families.map((f) => f.fid)));
+    expect(r.members[0]!.hasSafetyInfo).toBe(false);
+    expect(r.members[0]!.foodAllergies).toBeNull();
+  });
+
+  it('leaves a child with nothing on file null, not the empty string', () => {
+    const families: RosterFamily[] = [
+      { fid: 'CMT-A', legacyFid: 'legacy-A', enrolledMids: ['CMT-A-02'], members: [child('CMT-A-02', 'Apple', 'Grade 2')] },
+    ];
+    const r = buildRoster(level2, families, [], '2026-01-18', NOW, new Set(families.map((f) => f.fid)));
+    expect(r.members[0]!.foodAllergies).toBeNull();
+    expect(r.members[0]!.hasSafetyInfo).toBe(false);
   });
 
   it('parents level matches adults only', () => {

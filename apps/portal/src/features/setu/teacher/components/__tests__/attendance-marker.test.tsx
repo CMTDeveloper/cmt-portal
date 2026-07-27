@@ -10,12 +10,40 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 
 import { AttendanceMarker } from '../attendance-marker';
 import type { SetuAttendanceStatus } from '@cmt/shared-domain';
+import type { AttendanceViewRow } from '../../level-attendance-view';
+
+/**
+ * One row, with the spec §4.4 detail fields defaulted.
+ *
+ * They are REQUIRED on `AttendanceViewRow` on purpose - an optional field reads
+ * `undefined` at a construction site nobody updated and renders blank with no
+ * error - so every fixture must supply them. This factory is where that cost is
+ * paid once, rather than at each of the literals scattered through this file.
+ */
+function mkRow(over: Partial<AttendanceViewRow> & Pick<AttendanceViewRow, 'mid' | 'fid' | 'firstName' | 'lastName'>): AttendanceViewRow {
+  return {
+    schoolGrade: 'Grade 1',
+    hasSafetyInfo: false,
+    status: null as SetuAttendanceStatus | null,
+    source: 'default',
+    checkedInAtDoor: false,
+    parentName: null,
+    parentPhone: null,
+    parentEmail: null,
+    payment: 'unknown',
+    safetyNotes: null,
+    ...over,
+  };
+}
 
 // Binary model: F-02 is unmarked (status null), F-03 checked in at the door
 // (seeded present). So the default render is 1 present, 1 unmarked.
-const ROWS = [
-  { mid: 'F-02', fid: 'F', firstName: 'Aarav', lastName: 'Shah', schoolGrade: 'Grade 1', hasSafetyInfo: false, status: null as SetuAttendanceStatus | null, source: 'default' as const, checkedInAtDoor: false },
-  { mid: 'F-03', fid: 'F', firstName: 'Diya', lastName: 'Patel', schoolGrade: 'Grade 1', hasSafetyInfo: true, status: 'present' as SetuAttendanceStatus | null, source: 'door' as const, checkedInAtDoor: true },
+// Both carry realistic contact + payment: a fixture with the detail fields
+// blank could not tell "the row does not render contact" from "this row has
+// none", which is the shape of bug this whole task adds.
+const ROWS: AttendanceViewRow[] = [
+  mkRow({ mid: 'F-02', fid: 'F', firstName: 'Aarav', lastName: 'Shah', parentName: 'Meera Shah', parentPhone: '416-555-0100', parentEmail: 'meera@example.com', payment: 'outstanding' }),
+  mkRow({ mid: 'F-03', fid: 'F', firstName: 'Diya', lastName: 'Patel', hasSafetyInfo: true, safetyNotes: 'Severe peanut allergy', status: 'present', source: 'door', checkedInAtDoor: true, parentName: 'Nikhil Patel', parentPhone: '416-555-0200', parentEmail: 'nikhil@example.com', payment: 'paid' }),
 ];
 
 // `today` is set AFTER the fixture `date` (2026-01-04) so the default render is
@@ -234,7 +262,7 @@ it('re-seeds a newly-enrolled member as Present when router.refresh() delivers f
   const { rerender } = render(<AttendanceMarker {...props()} />);
   expect(screen.queryByRole('button', { name: /Child6 Family6/i })).toBeNull();
 
-  const newChild = { mid: 'F-99', fid: 'F6', firstName: 'Child6', lastName: 'Family6', schoolGrade: 'Grade 1', hasSafetyInfo: false, status: 'present' as SetuAttendanceStatus | null, source: 'portal' as const, checkedInAtDoor: false };
+  const newChild = mkRow({ mid: 'F-99', fid: 'F6', firstName: 'Child6', lastName: 'Family6', status: 'present', source: 'portal' });
   rerender(<AttendanceMarker {...props({ rows: [...ROWS, newChild], total: 3 })} />);
 
   // The freshly-enrolled child appears AND is pressed (Present), without a remount.
@@ -250,7 +278,7 @@ it('preserves the teacher\'s in-progress taps when router.refresh() delivers fre
 
   // A refresh arrives with a new member; Aarav's local tap must NOT be reverted
   // to his (still-unmarked) server status.
-  const newChild = { mid: 'F-99', fid: 'F6', firstName: 'Child6', lastName: 'Family6', schoolGrade: 'Grade 1', hasSafetyInfo: false, status: null as SetuAttendanceStatus | null, source: 'default' as const, checkedInAtDoor: false };
+  const newChild = mkRow({ mid: 'F-99', fid: 'F6', firstName: 'Child6', lastName: 'Family6' });
   rerender(<AttendanceMarker {...props({ rows: [...ROWS, newChild], total: 3 })} />);
   expect(row('Aarav Shah').getAttribute('aria-pressed')).toBe('true');
 });
