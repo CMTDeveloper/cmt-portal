@@ -28,6 +28,7 @@ const NAV_GROUPS: Array<{ heading: string; items: Array<{ label: string; href: s
   { heading: 'Bala Vihar', items: [
     { label: 'Programs', href: '/admin/programs', coordinator: true },
     { label: 'Level management', href: '/admin/levels', coordinator: true },
+    { label: 'Visitors', href: '/welcome/visitors' },
     { label: 'Class calendar', href: '/admin/calendar' },
     { label: 'School year rollover', href: '/admin/school-year' },
     { label: 'Prasad rotation', href: '/admin/prasad' },
@@ -55,6 +56,9 @@ const NAV_GROUPS: Array<{ heading: string; items: Array<{ label: string; href: s
 export function deriveAdminActive(pathname: string): string {
   if (pathname.startsWith('/welcome/seva')) return '/welcome/seva';
   if (pathname.startsWith('/welcome/reports')) return '/welcome/reports';
+  // Must precede the bare /welcome catch-all below, or Visitors highlights
+  // "Family search" instead of itself.
+  if (pathname.startsWith('/welcome/visitors')) return '/welcome/visitors';
   if (pathname.startsWith('/welcome')) return '/welcome'; // search + family detail
   if (pathname.startsWith('/admin/users')) return '/admin/users';
   if (pathname.startsWith('/admin/programs')) return '/admin/programs';

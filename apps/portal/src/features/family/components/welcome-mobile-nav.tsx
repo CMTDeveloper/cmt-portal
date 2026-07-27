@@ -8,8 +8,10 @@ import { signOut } from './sign-out-button';
 // Bottom nav for the welcome-team section (/welcome). Shown on every welcome
 // page, including the drill-down detail pages (family detail, single-level
 // roster) which also keep their own back arrow.
+// Roster is the DEFAULT tab, so every sibling section must be excluded here by
+// name - a new /welcome/* page that is not listed silently lights up Roster.
 function isRosterActive(pathname: string): boolean {
-  return !pathname.startsWith('/welcome/levels') && !pathname.startsWith('/welcome/seva') && !pathname.startsWith('/welcome/reports') && !pathname.startsWith('/welcome/prasad');
+  return !pathname.startsWith('/welcome/levels') && !pathname.startsWith('/welcome/seva') && !pathname.startsWith('/welcome/reports') && !pathname.startsWith('/welcome/prasad') && !pathname.startsWith('/welcome/visitors');
 }
 
 export function WelcomeMobileNav({ isAdmin = false, hasFamily = false, showTeacher = false, role = 'welcome-team' }: { isAdmin?: boolean; hasFamily?: boolean; showTeacher?: boolean; role?: 'welcome-team' | 'coordinator' }) {
@@ -48,6 +50,9 @@ export function WelcomeMobileNav({ isAdmin = false, hasFamily = false, showTeach
           </Link>
           <Link href="/welcome/seva" style={itemStyle(pathname.startsWith('/welcome/seva'))}>
             <SetuIcon.heart /> Seva
+          </Link>
+          <Link href="/welcome/visitors" style={itemStyle(pathname.startsWith('/welcome/visitors'))}>
+            <SetuIcon.bell /> Visitors
           </Link>
           <Link href="/welcome/prasad" style={itemStyle(prasadActive)}>
             <SetuIcon.bell /> Prasad

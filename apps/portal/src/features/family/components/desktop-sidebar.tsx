@@ -6,7 +6,7 @@ import { SetuLogo, SetuAvatar, SetuIcon } from '@cmt/ui';
 import { flags } from '@/lib/flags';
 import { signOut } from './sign-out-button';
 
-type SidebarTab = 'home' | 'family' | 'bv' | 'programs' | 'calendar' | 'giving' | 'receipts' | 'security' | 'levels' | 'seva' | 'reports' | 'prasad';
+type SidebarTab = 'home' | 'family' | 'bv' | 'programs' | 'calendar' | 'giving' | 'receipts' | 'security' | 'levels' | 'seva' | 'reports' | 'prasad' | 'visitors';
 
 interface DesktopSidebarProps {
   active?: SidebarTab;
@@ -67,6 +67,7 @@ const WELCOME_NAV_ITEMS: [SidebarTab, string, keyof typeof SetuIcon, string, boo
   ['home', 'Roster',            'search',  '/welcome/roster'],
   ['reports', 'Reports',        'info',    '/welcome/reports'],
   ['levels', 'Levels & rosters','people',  '/welcome/levels'],
+  ['visitors','Visitors',       'bell',    '/welcome/visitors'],
   ['seva',   'Seva',            'heart',   '/welcome/seva'],
   ['prasad', 'Prasad',          'bell',    '/welcome/prasad'],
   ['family', 'Pending',         'people',  '/welcome', true],
@@ -97,6 +98,8 @@ function deriveActiveFromPathname(pathname: string): SidebarTab {
   if (pathname.startsWith('/welcome/seva')) return 'seva';
   if (pathname.startsWith('/welcome/reports')) return 'reports';
   if (pathname.startsWith('/welcome/prasad')) return 'prasad';
+  // Above the bare /welcome catch-all below, or Visitors would highlight Roster.
+  if (pathname.startsWith('/welcome/visitors')) return 'visitors';
   if (pathname.startsWith('/welcome')) return 'home';
   return 'home';
 }
