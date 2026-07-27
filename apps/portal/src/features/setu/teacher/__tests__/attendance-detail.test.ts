@@ -31,6 +31,7 @@ const { fs } = vi.hoisted(() => ({
     perFamilyMemberSubGets: 0,
     getAllCalls: 0,
     donationQueries: [] as unknown[][],
+    getAllIds: [] as string[],
   },
 }));
 
@@ -78,8 +79,9 @@ const db = {
       },
     };
   },
-  async getAll(...refs: Array<{ get: () => Promise<unknown> }>) {
+  async getAll(...refs: Array<{ id?: string; get: () => Promise<unknown> }>) {
     fs.getAllCalls++;
+    for (const r of refs) if (r.id) fs.getAllIds.push(r.id);
     return Promise.all(refs.map((r) => r.get()));
   },
 } as unknown as FirebaseFirestore.Firestore;
@@ -103,6 +105,7 @@ beforeEach(() => {
   fs.perFamilyMemberSubGets = 0;
   fs.getAllCalls = 0;
   fs.donationQueries = [];
+  fs.getAllIds = [];
   fs.data = {
     families: [
       { id: 'CMT-A', managers: ['CMT-A-01'] },
@@ -155,16 +158,58 @@ describe('buildAttendanceDetailIndex', () => {
   });
 
   it('uses the LIVE offering amount, not the enrollment snapshot', async () => {
-    // snapshot 100, live tier at ENROLLED_AT = 200, donated 200. Reading the
-    // snapshot would call this family paid at 100 and disagree with the welcome
-    // roster's chip for the same family after any pricing-tier change.
+    // The donation must sit BETWEEN the two candidate expecteds or this test
+    // cannot fail: with the default $200 donation, snapshot=100 and live=200
+    // BOTH yield 'paid' (200 >= 100 and 200 >= 200), so the bug and the fix are
+    // indistinguishable. 150 straddles them - snapshot=100 would read 'paid',
+    // live=200 reads 'outstanding'.
+    fs.data.donations = [{ id: 'd1', fid: 'CMT-A', amountCAD: 150, status: 'completed' }];
     const idx = await buildAttendanceDetailIndex(
       db,
       ['CMT-A'],
       new Map([['CMT-A', meta({ suggestedAmountSnapshot: 100 })]]),
       MGRS,
     );
-    expect(idx.get('CMT-A')!.payment).toBe('paid'); // 200 >= 200
+    expect(idx.get('CMT-A')!.payment).toBe('outstanding'); // 150 < live 200
+  });
+
+  it('ignores a manager who is not an Adult', async () => {
+    // `family.managers` is NOT type-guarded on the write path: write-member.ts:602
+    // pushes any targetMid whose PATCH carries `manager: true`, with no
+    // `type === 'Adult'` check. So a Child can end up as managers[0] - and
+    // surfacing a child's own (usually empty) details to a teacher labelled
+    // "parent contact" is worse than showing nothing. student-detail.ts:65
+    // filters on type for the same reason.
+    fs.data.members = [
+      { id: 'CMT-A-02', __fid: 'CMT-A', mid: 'CMT-A-02', firstName: 'Anil', lastName: 'Apple', type: 'Child', email: 'kid@example.com', phone: '416-555-0999' },
+    ];
+    const idx = await buildAttendanceDetailIndex(
+      db,
+      ['CMT-A'],
+      new Map([['CMT-A', meta()]]),
+      new Map([['CMT-A', 'CMT-A-02']]),
+    );
+    expect(idx.get('CMT-A')).toMatchObject({ parentName: null, parentEmail: null, parentPhone: null });
+    // The payment verdict is unaffected - it does not depend on the contact.
+    expect(idx.get('CMT-A')!.payment).toBe('paid');
+  });
+
+  it('reads offerings only for the families it was asked about', async () => {
+    // `oids` must be derived from `fids`, not from every entry in `enrMeta`:
+    // the caller passes deriveRoster's PROGRAM-scoped map (it is a lookup table,
+    // not a work list), so deriving from its values would batch-read offering
+    // docs for the whole program period. MAX_DETAIL_FIDS guards `fids.length`
+    // and would not catch it.
+    const wide = new Map([
+      ['CMT-A', meta({ oid: 'bv-brampton-2026-27' })],
+      ['OTHER-1', meta({ oid: 'other-oid-1' })],
+      ['OTHER-2', meta({ oid: 'other-oid-2' })],
+    ]);
+    fs.getAllIds = [];
+    await buildAttendanceDetailIndex(db, ['CMT-A'], wide, MGRS);
+    expect(fs.getAllIds).not.toContain('other-oid-1');
+    expect(fs.getAllIds).not.toContain('other-oid-2');
+    expect(fs.getAllIds).toContain('bv-brampton-2026-27');
   });
 
   it('reports outstanding when completed donations fall short of the live amount', async () => {

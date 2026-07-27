@@ -105,7 +105,12 @@ export async function buildAttendanceDetailIndex(
     .filter((x): x is { fid: string; mid: string } => x.mid !== null)
     .map(({ fid, mid }) => ({ fid, ref: db.collection('families').doc(fid).collection('members').doc(mid) }));
 
-  const oids = [...new Set([...enrMeta.values()].map((m) => m.oid).filter(Boolean))];
+  // Derived from `fids`, NOT from `enrMeta.values()`. `enrMeta` is a lookup
+  // table, not a work list: callers pass `deriveRoster`'s map, which is
+  // program-and-location scoped, so reading its values would batch-read offering
+  // docs for the whole period. `MAX_DETAIL_FIDS` guards `fids.length` and would
+  // not catch that.
+  const oids = [...new Set(fids.map((fid) => enrMeta.get(fid)?.oid).filter((o): o is string => !!o))];
 
   const [donSnaps, offDocs, managerDocs] = await Promise.all([
     Promise.all(
@@ -141,7 +146,14 @@ export async function buildAttendanceDetailIndex(
   managerDocs.forEach((d, i) => {
     const fid = managerRefs[i]!.fid;
     if (!d.exists) return;
-    const m = d.data() as { firstName?: unknown; lastName?: unknown; email?: unknown; phone?: unknown };
+    const m = d.data() as { firstName?: unknown; lastName?: unknown; email?: unknown; phone?: unknown; type?: unknown };
+    // `family.managers` is NOT type-guarded on the write path: `write-member.ts:602`
+    // pushes any mid whose PATCH carries `manager: true`, with no `type === 'Adult'`
+    // check, so a Child can end up as `managers[0]`. Showing a child's own
+    // details to a teacher labelled "parent contact" is worse than showing
+    // nothing, so a non-Adult manager resolves to no contact at all.
+    // `student-detail.ts:65` filters on type for the same reason.
+    if (m.type !== 'Adult') return;
     const name = [str(m.firstName), str(m.lastName)].filter(Boolean).join(' ').trim();
     contactByFid.set(fid, {
       name: name === '' ? null : name,
