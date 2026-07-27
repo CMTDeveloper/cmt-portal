@@ -87,6 +87,7 @@ export const PUBLIC_ROUTES = [
   '/api/cron/reset-cache',
   '/api/cron/send-weekly-payment-reminders',
   '/api/cron/send-prasad-reminders',
+  '/api/cron/reconcile-pledges',
 
   // NOTE: /api/webhooks/stripe and /api/cron/archive-pledges remain
   // intentionally absent until their Stripe-signature-verifying and
