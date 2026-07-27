@@ -2,6 +2,7 @@ import 'server-only';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import type { PledgeStatus } from '@cmt/shared-domain/setu';
 import { createPadSetupLink } from './stripe-pad-client';
+import { configuredMonthlyAmountCAD } from './pledge-amount';
 
 /** Statuses that mean "this family already has a pledge in play". */
 const LIVE_STATUSES: readonly PledgeStatus[] = ['started', 'active'];
@@ -48,7 +49,10 @@ export interface StartPledgeActor {
 export async function startPledge(actor: StartPledgeActor): Promise<StartPledgeResult> {
   const db = portalFirestore();
   const col = db.collection('pledges');
-  const monthlyAmountCAD = Number(process.env.PLEDGE_MONTHLY_AMOUNT_CAD ?? 51);
+  // Guarded, not a bare Number(): a mistyped env var would otherwise snapshot
+  // NaN onto the doc, which Firestore rejects outright - the family would see an
+  // opaque failure at the one moment they are trying to give.
+  const monthlyAmountCAD = configuredMonthlyAmountCAD();
 
   const ref = col.doc();
   const pid = ref.id;

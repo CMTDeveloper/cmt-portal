@@ -9,8 +9,15 @@ const mockRedirect = vi.hoisted(() =>
 vi.mock('next/navigation', () => ({ redirect: mockRedirect }));
 vi.mock('next/server', () => ({ connection: vi.fn().mockResolvedValue(undefined) }));
 
-const flagsMock = vi.hoisted(() => ({ setuAuth: true, setuAdultClass: true }));
+const flagsMock = vi.hoisted(() => ({ setuAuth: true, setuAdultClass: true, setuPledge: true }));
 vi.mock('@/lib/flags', () => ({ flags: flagsMock }));
+
+const { mockFinalizePledge, mockGetFamilyPledge } = vi.hoisted(() => ({
+  mockFinalizePledge: vi.fn(),
+  mockGetFamilyPledge: vi.fn(),
+}));
+vi.mock('@/features/setu/pledges/finalize-pledge', () => ({ finalizePledge: mockFinalizePledge }));
+vi.mock('@/features/setu/pledges/get-family-pledge', () => ({ getFamilyPledge: mockGetFamilyPledge }));
 
 const mockGetCurrentFamily = vi.hoisted(() => vi.fn());
 vi.mock('@/features/setu/members/get-current-family', () => ({ getCurrentFamily: mockGetCurrentFamily }));
@@ -71,7 +78,11 @@ async function renderPage(did: string | null = 'don_1') {
 beforeEach(() => {
   vi.clearAllMocks();
   process.env.NEXT_PUBLIC_FEATURE_SETU_DONATIONS = 'true';
+  process.env.PLEDGE_MONTHLY_AMOUNT_CAD = '63';
   flagsMock.setuAdultClass = true;
+  flagsMock.setuPledge = true;
+  mockFinalizePledge.mockResolvedValue({ state: 'active' });
+  mockGetFamilyPledge.mockResolvedValue(null);
   mockGetCurrentFamily.mockResolvedValue(familyData());
   mockMarkDonation.mockResolvedValue(undefined);
   failSoft.mockResolvedValue(gateData());
@@ -198,5 +209,115 @@ describe('/donate/success - the ordering Task 9 exists to guarantee', () => {
     expect(text.indexOf('Thank you for your donation')).toBeGreaterThan(-1);
     expect(text.indexOf('Back to family')).toBeGreaterThan(-1);
     expect(text.indexOf('One last thing')).toBe(-1);
+  });
+});
+
+// ── P5 Task 5: the pledge card, and the return from the Stripe-hosted page ────
+//
+// This page is BOTH the donation receipt and the pledge success URL
+// (`start-pledge.ts` sets successUrl to `/donate/success?pledge=<pid>`), so it
+// has to finish a pledge as well as show one.
+describe('/donate/success - finishing a pledge on return from Stripe', () => {
+  async function renderWith(params: Record<string, string>) {
+    const body = await DonateSuccessBody({ searchParams: Promise.resolve(params) });
+    return render(body);
+  }
+
+  it('finalizes the pledge named in the URL, against the SESSION fid', async () => {
+    await renderWith({ pledge: 'PLG-7' });
+    // fid from the session, never the query. A pid in a URL someone else could
+    // send must not be enough to drive another family's pledge.
+    expect(mockFinalizePledge).toHaveBeenCalledWith({ pid: 'PLG-7', fid: 'CMT-1' });
+  });
+
+  it('finalizes BEFORE reading the pledge for the card', async () => {
+    // The family lands here the instant they leave the hosted page. Reading
+    // first would render the pre-finalize state - a family whose mandate just
+    // confirmed would be told it is still being set up, then have to reload to
+    // learn otherwise.
+    await renderWith({ pledge: 'PLG-7' });
+    const finalizeAt = mockFinalizePledge.mock.invocationCallOrder[0]!;
+    const readAt = mockGetFamilyPledge.mock.invocationCallOrder[0]!;
+    expect(finalizeAt).toBeLessThan(readAt);
+  });
+
+  it('does not finalize when the URL names no pledge', async () => {
+    await renderWith({ did: 'don_1' });
+    expect(mockFinalizePledge).not.toHaveBeenCalled();
+  });
+
+  it('still shows the receipt when finalize throws', async () => {
+    // Stripe being unreachable must not cost the family their donation receipt.
+    // The reconciler cron resolves the pledge either way.
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mockFinalizePledge.mockRejectedValue(new Error('ECONNRESET'));
+    await renderWith({ did: 'don_1', pledge: 'PLG-7' });
+    expect(screen.getByText(/Thank you for your donation/i)).toBeTruthy();
+    expect(spy).toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  it('still shows the receipt when reading the pledge throws', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mockGetFamilyPledge.mockRejectedValue(new Error('UNAVAILABLE'));
+    await renderWith({ did: 'don_1' });
+    expect(screen.getByText(/Thank you for your donation/i)).toBeTruthy();
+    spy.mockRestore();
+  });
+});
+
+describe('/donate/success - the pledge card', () => {
+  async function renderWith(params: Record<string, string> = { did: 'don_1' }) {
+    const body = await DonateSuccessBody({ searchParams: Promise.resolve(params) });
+    return render(body);
+  }
+
+  it('shows the ask at the CONFIGURED amount', async () => {
+    const { container } = await renderWith();
+    // 63, from PLEDGE_MONTHLY_AMOUNT_CAD - not a literal in the page.
+    expect(container.textContent).toMatch(/\$63 a month/);
+  });
+
+  it('renders the pledge card BELOW the adult-class ask', async () => {
+    // Spec 4.3 and P4 Task 9: adult-class first because it is quick and free,
+    // pledge second and quieter. Leading with a money ask straight after a ~$500
+    // payment reads badly.
+    const { container } = await renderWith();
+    const text = container.textContent ?? '';
+    const ask = text.indexOf('One last thing');
+    const pledge = text.indexOf('Monthly giving');
+    const out = text.indexOf('Back to family');
+    expect(ask).toBeGreaterThan(-1);
+    expect(pledge, 'the pledge card is missing entirely').toBeGreaterThan(-1);
+    expect(pledge, 'the pledge card renders ABOVE the adult-class ask').toBeGreaterThan(ask);
+    expect(out, 'the pledge card renders below the way out').toBeGreaterThan(pledge);
+  });
+
+  it('renders the card even when there is no adult-class ask', async () => {
+    // Proves the card is a sibling of the ask, not nested inside `ask && (...)`.
+    mockNeedsSelection.mockReturnValue(false);
+    const { container } = await renderWith();
+    expect(container.textContent).toMatch(/Monthly giving/);
+  });
+
+  it('speaks the pledge\'s own snapshotted amount once one is active', async () => {
+    mockGetFamilyPledge.mockResolvedValue({
+      pid: 'PLG-7', status: 'active', monthlyAmountCAD: 51,
+      startedAt: new Date('2026-02-01T12:00:00Z'), activatedAt: new Date('2026-02-03T12:00:00Z'),
+    });
+    const { container } = await renderWith();
+    expect(container.textContent).toMatch(/\$51 monthly/);
+    // 63 is today's price; this family signed for 51 and must keep being told 51.
+    expect(container.textContent).not.toMatch(/63/);
+  });
+
+  it('renders NOTHING pledge-shaped when the flag is off, and reads nothing', async () => {
+    flagsMock.setuPledge = false;
+    const { container } = await renderWith({ did: 'don_1', pledge: 'PLG-7' });
+    expect(container.textContent).not.toMatch(/Monthly giving/);
+    // Dark means dark: no Firestore read, and above all no provider call for a
+    // pid someone put in the URL.
+    expect(mockGetFamilyPledge).not.toHaveBeenCalled();
+    expect(mockFinalizePledge).not.toHaveBeenCalled();
   });
 });

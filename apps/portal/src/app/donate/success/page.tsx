@@ -13,6 +13,9 @@ import { needsAdultClassSelection, isBalaViharPaid } from '@/features/setu/adult
 import { selectableAdults } from '@/features/setu/adult-class/selectable-adults';
 import { selectBalaViharEnrollment } from '@/app/family/_helpers/select-bv-enrollment';
 import { AdultClassForm } from '@/features/setu/adult-class/components/adult-class-form';
+import { PledgeCard } from '@/features/family/components/pledge-card';
+import { loadPledgeSlot, type PledgeSlot } from '@/features/setu/pledges/load-pledge-slot';
+import { finalizePledge } from '@/features/setu/pledges/finalize-pledge';
 
 export const metadata = { title: 'Thank you' };
 
@@ -57,12 +60,48 @@ async function resolveAsk(
   };
 }
 
+/**
+ * Finish the pledge the family just authorised, then read back what to say
+ * about it.
+ *
+ * This page doubles as the pledge success URL - `start-pledge.ts` points Stripe
+ * at `/donate/success?pledge=<pid>` - so arriving here with a `pledge` param
+ * means the family has just left the hosted mandate page.
+ *
+ * ORDER MATTERS, for the same reason it does with markDonationStatus above:
+ * finalize writes the state the card then reads. Reading first would show a
+ * family whose mandate just confirmed that it is "still being set up".
+ *
+ * FAIL-SOFT throughout. Neither the finalize nor the read may cost the family
+ * their donation receipt, and the reconciler cron resolves the pledge either way
+ * - that is precisely what it exists for.
+ */
+async function resolvePledgeSlot(
+  familyData: Awaited<ReturnType<typeof getCurrentFamily>>,
+  pledgePid: string | undefined,
+): Promise<PledgeSlot | null> {
+  // The flag is re-checked here as well as inside loadPledgeSlot, because with
+  // the feature dark a `?pledge=` in the URL must not reach the provider at all.
+  if (!flags.setuPledge || !familyData) return null;
+
+  if (pledgePid) {
+    try {
+      // fid from the SESSION. A pid in a URL is not authority over a pledge.
+      await finalizePledge({ pid: pledgePid, fid: familyData.family.fid });
+    } catch (err) {
+      console.error('[donate/success] finalizePledge failed - the cron will finish it', err);
+    }
+  }
+
+  return loadPledgeSlot({ fid: familyData.family.fid, isManager: familyData.isManager });
+}
+
 // Exported for tests: an async server component does not resolve under jsdom, so
 // the suite awaits this directly rather than trying to drive the Suspense shell.
 export async function DonateSuccessBody({
   searchParams,
 }: {
-  searchParams: Promise<{ did?: string }>;
+  searchParams: Promise<{ did?: string; pledge?: string }>;
 }) {
   if (process.env.NEXT_PUBLIC_FEATURE_SETU_DONATIONS !== 'true') {
     redirect('/family');
@@ -70,7 +109,7 @@ export async function DonateSuccessBody({
   await connection();
 
   const familyData = await getCurrentFamily();
-  const { did } = await searchParams;
+  const { did, pledge: pledgePid } = await searchParams;
   // Best-effort: mark the donation completed. The cross-family guard lives in
   // markDonationStatus. Not authoritative — accounting's notification is.
   if (familyData && did) {
@@ -96,6 +135,7 @@ export async function DonateSuccessBody({
   // ask, never the family's confirmation that their ~$500 arrived. (The opposite
   // call is right on /adult-class, where the whole page IS the ask.)
   const ask = await resolveAsk(familyData);
+  const pledgeSlot = await resolvePledgeSlot(familyData, pledgePid);
 
   return (
     <CspRoot style={{ minHeight: '100dvh', display: 'grid', placeItems: 'center', padding: 24 }}>
@@ -130,12 +170,22 @@ export async function DonateSuccessBody({
           </section>
         )}
 
-        {/* ══ P5 MONTHLY PLEDGE CARD GOES HERE - BELOW the adult-class ask ══
+        {/* ══ The monthly pledge. BELOW the adult-class ask, deliberately ══
             Spec 4.3 fixes this order and P5 v3 Task 5 Step 4 repeats it: the
             adult-class ask is first because it is quick and free; the pledge is
             second and quieter, because leading with a money ask straight after a
-            ~$500 payment reads badly. Insert BETWEEN this comment and the "Back
-            to family" link below - do not put it above the <section> above. */}
+            ~$500 payment reads badly. A SIBLING of the ask, never nested inside
+            it - nested, it would inherit the adult-class predicate and render
+            for nobody. Both facts are test-locked in this page's spec. */}
+        {pledgeSlot && (
+          <div style={{ textAlign: 'left', marginBottom: 24 }}>
+            <PledgeCard
+              pledge={pledgeSlot.pledge}
+              askAmountCAD={pledgeSlot.askAmountCAD}
+              canStart={pledgeSlot.canStart}
+            />
+          </div>
+        )}
 
         <div style={{ display: 'flex', justifyContent: 'center' }}>
           {/* This link IS the "not now" path (Task 9 Step 4). Deliberately NOT

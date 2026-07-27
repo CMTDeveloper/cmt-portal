@@ -7,6 +7,8 @@ import { flags } from '@/lib/flags';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 import { PendingJoinRequestsPanel } from '@/features/family/components/pending-join-requests-panel';
 import { CompleteDonationButton } from '@/features/family/components/complete-donation-button';
+import { PledgeCard } from '@/features/family/components/pledge-card';
+import { loadPledgeSlot, type PledgeSlot } from '@/features/setu/pledges/load-pledge-slot';
 import { loadFamilyDashboard, type BvChildView } from './_helpers/load-dashboard';
 import { buildFamilyDashboardModel, type FamilyDashboardModel } from './_helpers/dashboard-model';
 
@@ -288,6 +290,7 @@ export default async function FamilyDashboardPage() {
   let familyCounts = { children: 0, adults: 0 };
   let familyFid: string | null = null;
   let familyLegacyId: string | null = null;
+  let pledgeSlot: PledgeSlot | null = null;
 
   if (flags.setuAuth) {
     const data = await getCurrentFamily();
@@ -304,6 +307,9 @@ export default async function FamilyDashboardPage() {
       model = dash.model;
       bvChildren = dash.bvChildren;
       familyCounts = dash.familyCounts;
+      // Null with the flag off, and null on a read error - loadPledgeSlot owns
+      // both, so the dashboard never 500s over an optional ask.
+      pledgeSlot = await loadPledgeSlot({ fid: data.family.fid, isManager: data.isManager });
     }
   }
 
@@ -437,6 +443,21 @@ export default async function FamilyDashboardPage() {
               {childrenList && <div style={{ marginTop: 16 }}>{childrenList}</div>}
             </div>
 
+            {/* Monthly giving. Below Bala Vihar on purpose: enrollment and the
+                donation that confirms it are why the family is here; the
+                recurring ask is secondary and stays quiet. Rendered in BOTH
+                column variants because this page ships mobile and desktop
+                markup side by side - any E2E locator needs
+                `.filter({ visible: true })`. */}
+            {pledgeSlot && (
+              <PledgeCard
+                pledge={pledgeSlot.pledge}
+                askAmountCAD={pledgeSlot.askAmountCAD}
+                canStart={pledgeSlot.canStart}
+                mobile
+              />
+            )}
+
             <KeepIdBanner />
           </div>
         </CspRoot>
@@ -513,6 +534,14 @@ export default async function FamilyDashboardPage() {
           {enrollCta && <div style={{ marginTop: 20 }}>{enrollCta}</div>}
           {childrenList && <div style={{ marginTop: 20 }}>{childrenList}</div>}
         </div>
+
+        {pledgeSlot && (
+          <PledgeCard
+            pledge={pledgeSlot.pledge}
+            askAmountCAD={pledgeSlot.askAmountCAD}
+            canStart={pledgeSlot.canStart}
+          />
+        )}
 
         <KeepIdBanner />
       </div>
