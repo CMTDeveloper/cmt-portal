@@ -282,3 +282,113 @@ it('preserves the teacher\'s in-progress taps when router.refresh() delivers fre
   rerender(<AttendanceMarker {...props({ rows: [...ROWS, newChild], total: 3 })} />);
   expect(row('Aarav Shah').getAttribute('aria-pressed')).toBe('true');
 });
+
+// ─── Task 5: the row restructure + the §4.4 detail on the row ─────────────────
+//
+// `row()` above still resolves the TOGGLE button, which is where `aria-pressed`
+// and the student's accessible name live after the restructure - so all ~18
+// existing usages keep working unchanged. `rowEl()` is the new row CONTAINER,
+// for assertions that need the whole row (the contact line, the chip, the link).
+function rowEl(name: string): HTMLElement {
+  const found = screen.getAllByTestId('att-row').find((r) => new RegExp(name, 'i').test(r.textContent ?? ''));
+  if (!found) throw new Error(`no attendance row for ${name}`);
+  return found;
+}
+
+it('the row is a container, not a button - so it can hold a link', () => {
+  render(<AttendanceMarker {...props()} />);
+  // The container must NOT be a button and must NOT carry role="button": either
+  // would put an <a> inside a button, the invalid nesting this restructure fixes.
+  const el = rowEl('Aarav Shah');
+  expect(el.tagName).not.toBe('BUTTON');
+  expect(el.getAttribute('role')).toBeNull();
+  // aria-pressed lives on the TOGGLE now, so keyboard users reach the toggle and
+  // the link independently. Losing it here would be an a11y regression.
+  expect(el.getAttribute('aria-pressed')).toBeNull();
+  expect(within(el).getByRole('button', { name: /Aarav Shah/i }).getAttribute('aria-pressed')).toBe('false');
+});
+
+it('each row links to the student profile, and following it does NOT toggle', async () => {
+  const user = userEvent.setup();
+  render(<AttendanceMarker {...props()} />);
+  const link = within(rowEl('Aarav Shah')).getByRole('link', { name: /view profile/i });
+  expect(link).toHaveProperty('href');
+  expect(link.getAttribute('href')).toBe('/teacher/students/F-02');
+
+  expect(row('Aarav Shah').getAttribute('aria-pressed')).toBe('false');
+  await user.click(link);
+  // The container's tap-to-mark must not fire for a click that began in a link.
+  expect(row('Aarav Shah').getAttribute('aria-pressed')).toBe('false');
+  expect(global.fetch).not.toHaveBeenCalled();
+});
+
+it('tapping the row body still marks present (the gesture survives the restructure)', async () => {
+  const user = userEvent.setup();
+  render(<AttendanceMarker {...props()} />);
+  await user.click(rowEl('Aarav Shah'));
+  expect(row('Aarav Shah').getAttribute('aria-pressed')).toBe('true');
+});
+
+it('shows the parent contact on the row', () => {
+  render(<AttendanceMarker {...props()} />);
+  const el = rowEl('Aarav Shah');
+  expect(within(el).getByText(/Meera Shah/)).toBeDefined();
+  expect(within(el).getByText(/416-555-0100/)).toBeDefined();
+});
+
+it('shows a payment chip ONLY for paid and outstanding', () => {
+  render(<AttendanceMarker {...props()} />);
+  // The two a teacher can act on.
+  expect(within(rowEl('Aarav Shah')).getByText('Outstanding')).toBeDefined();
+  expect(within(rowEl('Diya Patel')).getByText('Paid')).toBeDefined();
+
+  // `not-applicable` and `unknown` render NO chip - labelling either would
+  // assert something we cannot stand behind (owner decision 2026-07-26).
+  const quiet = [
+    mkRow({ mid: 'Q-01', fid: 'Q', firstName: 'Quiet', lastName: 'One', payment: 'unknown' }),
+    mkRow({ mid: 'Q-02', fid: 'Q2', firstName: 'Quiet', lastName: 'Two', payment: 'not-applicable' }),
+  ];
+  render(<AttendanceMarker {...props({ rows: quiet, total: 2 })} />);
+  for (const name of ['Quiet One', 'Quiet Two']) {
+    const el = rowEl(name);
+    expect(within(el).queryByText('Paid')).toBeNull();
+    expect(within(el).queryByText('Outstanding')).toBeNull();
+    expect(within(el).queryByText(/not.applicable|unknown|N\/A/i)).toBeNull();
+  }
+});
+
+it('gives the safety dot an accessible label instead of leaving it a bare colour', () => {
+  render(<AttendanceMarker {...props()} />);
+  // Diya has safetyNotes; Aarav does not.
+  expect(within(rowEl('Diya Patel')).getByRole('img', { name: /allergy|safety/i })).toBeDefined();
+  expect(within(rowEl('Aarav Shah')).queryByRole('img', { name: /allergy|safety/i })).toBeNull();
+});
+
+it('surfaces the allergy text itself, not only the dot', () => {
+  render(<AttendanceMarker {...props()} />);
+  expect(within(rowEl('Diya Patel')).getByText(/Severe peanut allergy/)).toBeDefined();
+});
+
+it('shows Enrolled / Present / Unmarked stat cards - and no Absent card', () => {
+  render(<AttendanceMarker {...props()} />);
+  // 2 enrolled, 1 present (Diya, door-seeded), 1 unmarked.
+  const stats = screen.getByTestId('att-stats');
+  expect(within(stats).getByText(/^Enrolled$/i)).toBeDefined();
+  expect(within(stats).getByText(/^Present$/i)).toBeDefined();
+  expect(within(stats).getByText(/^Unmarked$/i)).toBeDefined();
+  // Absent is fused with Unmarked in the binary model (owner decision
+  // 2026-07-26), so a fourth card would be a number we cannot compute.
+  expect(within(stats).queryByText(/^Absent$/i)).toBeNull();
+  expect(within(stats).getByTestId('stat-enrolled').textContent).toContain('2');
+  expect(within(stats).getByTestId('stat-present').textContent).toContain('1');
+  expect(within(stats).getByTestId('stat-unmarked').textContent).toContain('1');
+});
+
+it('the stat cards track taps live', async () => {
+  const user = userEvent.setup();
+  render(<AttendanceMarker {...props()} />);
+  await user.click(row('Aarav Shah'));
+  const stats = screen.getByTestId('att-stats');
+  expect(within(stats).getByTestId('stat-present').textContent).toContain('2');
+  expect(within(stats).getByTestId('stat-unmarked').textContent).toContain('0');
+});

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import type { SetuAttendanceStatus } from '@cmt/shared-domain';
 import type { AttendanceViewRow } from '@/features/setu/teacher/level-attendance-view';
+import type { RosterPayment } from '@cmt/shared-domain/setu';
 import { NotInClassSection, type PreviousRow } from './not-in-class-section';
 
 interface AttendanceMarkerProps {
@@ -58,6 +59,28 @@ function avatarPalette(first: string, last: string): readonly [string, string] {
   return AVATAR_PALETTE[idx] ?? AVATAR_PALETTE[0]!;
 }
 
+/**
+ * How a payment verdict renders on a row - and, for two of the four states,
+ * that it does NOT.
+ *
+ * `AttendanceViewRow.payment` carries all four honestly, because
+ * `not-applicable` ("no fee applies") and `unknown` ("we could not price this")
+ * are genuinely different facts and collapsing them was the bug the four-state
+ * model exists to prevent. But a teacher taking Bala Vihar attendance can only
+ * act on two of them, so only those two get a chip; the other two render
+ * nothing. Silence is the honest presentation of "no opinion" - a chip reading
+ * "Unknown" invites a volunteer to chase a family we have no complaint about.
+ *
+ * Keyed by every state so a fifth one added later is a TYPE error here rather
+ * than a silently missing chip.
+ */
+const PAYMENT_CHIP: Record<RosterPayment, { label: string; bg: string; fg: string } | null> = {
+  paid: { label: 'Paid', bg: 'var(--setu-ok-soft)', fg: 'var(--ok)' },
+  outstanding: { label: 'Outstanding', bg: 'var(--setu-warn-soft)', fg: 'var(--warn, #a06410)' },
+  'not-applicable': null,
+  unknown: null,
+};
+
 const CONTENT_MAX = 540;
 
 // Debounce window for the tap-driven autosave: coalesce a burst of taps into one
@@ -88,13 +111,15 @@ interface StatCellProps {
   label: string;
   value: number;
   valueColor: string;
+  testId: string;
 }
 
 /** One compact metric in the 4-up strip: small label on top, big number below.
  *  Hoisted to module scope so it never remounts on the parent's re-renders. */
-function StatCell({ label, value, valueColor }: StatCellProps) {
+function StatCell({ label, value, valueColor, testId }: StatCellProps) {
   return (
     <div
+      data-testid={testId}
       style={{
         flex: 1,
         minWidth: 0,
@@ -399,6 +424,7 @@ export function AttendanceMarker({ levelId, levelName, ageLabel, date, today, ro
               Present), so the door count only surfaces in the banner below. */}
           <div
             role="group"
+            data-testid="att-stats"
             aria-label="Attendance summary"
             style={{
               marginTop: 14,
@@ -410,10 +436,14 @@ export function AttendanceMarker({ levelId, levelName, ageLabel, date, today, ro
               boxShadow: 'var(--setu-elev-1, 0 1px 0 rgba(15,26,34,0.04))',
             }}
           >
-            <StatCell label="Enrolled" value={total} valueColor="var(--ink)" />
-            <StatCell label="Present" value={presentCount} valueColor="var(--ok)" />
+            {/* Three cards, not four. Absent is FUSED with Unmarked in the
+                binary model - anything untapped saves as absent - so a separate
+                Absent count is a number this component cannot compute (owner
+                decision 2026-07-26). */}
+            <StatCell testId="stat-enrolled" label="Enrolled" value={total} valueColor="var(--ink)" />
+            <StatCell testId="stat-present" label="Present" value={presentCount} valueColor="var(--ok)" />
             <span style={{ flex: 1, minWidth: 0, display: 'flex' }}>
-              <StatCell label="Unmarked" value={unmarkedCount} valueColor="var(--accentDeep)" />
+              <StatCell testId="stat-unmarked" label="Unmarked" value={unmarkedCount} valueColor="var(--accentDeep)" />
             </span>
           </div>
 
@@ -505,15 +535,26 @@ export function AttendanceMarker({ levelId, levelName, ageLabel, date, today, ro
             {visibleRows.map((r) => {
               const isP = !!present[r.mid];
               const [avBg, avFg] = avatarPalette(r.firstName, r.lastName);
+              const contact = [r.parentName, r.parentPhone].filter(Boolean).join(' · ');
+              const chip = PAYMENT_CHIP[r.payment];
               return (
-                <button
+                // ── §4.5: a CONTAINER, not a <button> ──────────────────────────
+                // The row used to be a <button>, which made the "View profile"
+                // <a> below invalid nesting. It carries no `role` either - adding
+                // role="button" would reintroduce exactly the problem this fixes.
+                // Tap-to-mark stays on the container; `aria-pressed` and the
+                // student's accessible name move to the toggle, so a keyboard
+                // user reaches the toggle and the link independently.
+                <div
                   key={r.mid}
-                  type="button"
                   data-testid="att-row"
                   data-unmarked={isP ? '0' : '1'}
-                  onClick={() => toggle(r.mid)}
-                  aria-pressed={isP}
-                  aria-label={`${r.firstName} ${r.lastName}${r.hasSafetyInfo ? ' — has allergy / safety info on file' : ''}${isP ? ' — present' : ' — not marked'}`}
+                  onClick={(e) => {
+                    // Widen rather than narrow: the link, the toggle, and any
+                    // future interactive child must not fall through to a toggle.
+                    if ((e.target as HTMLElement).closest('a, button, select, input, [role="button"]')) return;
+                    toggle(r.mid);
+                  }}
                   style={{
                     position: 'relative',
                     width: '100%',
@@ -534,48 +575,107 @@ export function AttendanceMarker({ levelId, levelName, ageLabel, date, today, ro
                   }}
                 >
                   <span aria-hidden style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: isP ? 'var(--ok)' : 'transparent' }} />
-                  <span
-                    aria-hidden
+                  <button
+                    type="button"
+                    onClick={() => toggle(r.mid)}
+                    aria-pressed={isP}
+                    aria-label={`${r.firstName} ${r.lastName}${r.hasSafetyInfo ? ' — has allergy / safety info on file' : ''}${isP ? ' — present' : ' — not marked'}`}
                     style={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: '50%',
-                      flexShrink: 0,
+                      flex: 1,
+                      minWidth: 0,
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: 14,
-                      fontWeight: 700,
-                      position: 'relative',
-                      background: isP ? 'var(--setu-ok-soft)' : avBg,
-                      color: isP ? 'var(--ok)' : avFg,
-                      transition: 'background .15s ease, color .15s ease',
+                      gap: 12,
+                      background: 'transparent',
+                      border: 'none',
+                      padding: 0,
+                      textAlign: 'left',
+                      cursor: 'pointer',
+                      font: 'inherit',
+                      color: 'inherit',
                     }}
                   >
-                    {initialsOf(r.firstName, r.lastName)}
-                    {r.hasSafetyInfo && (
-                      <span
-                        title="Allergy / safety info on file"
-                        style={{ position: 'absolute', top: -2, right: -2, width: 13, height: 13, borderRadius: '50%', background: 'var(--err)', border: '2px solid var(--surface)' }}
-                      />
-                    )}
-                  </span>
-                  <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
-                    <span style={{ fontSize: 15.5, fontWeight: 600, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {r.firstName} {r.lastName}
+                    <span
+                      aria-hidden
+                      style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: '50%',
+                        flexShrink: 0,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 14,
+                        fontWeight: 700,
+                        position: 'relative',
+                        background: isP ? 'var(--setu-ok-soft)' : avBg,
+                        color: isP ? 'var(--ok)' : avFg,
+                        transition: 'background .15s ease, color .15s ease',
+                      }}
+                    >
+                      {initialsOf(r.firstName, r.lastName)}
                     </span>
-                    {showGrade && r.schoolGrade && (
-                      <span style={{ fontSize: 12, color: 'var(--muted)' }}>Gr {r.schoolGrade}</span>
-                    )}
-                  </span>
-                  {isP ? (
-                    <span aria-hidden style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--ok)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 700, flexShrink: 0 }}>
-                      ✓
+                    <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                        <span style={{ fontSize: 15.5, fontWeight: 600, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {r.firstName} {r.lastName}
+                        </span>
+                        {/* §4.3: the dot was a bare colour with no accessible
+                            name. role="img" + a label is what makes it readable
+                            to a screen reader at all. */}
+                        {r.hasSafetyInfo && (
+                          <span
+                            role="img"
+                            aria-label="Allergy / safety info on file"
+                            title="Allergy / safety info on file"
+                            style={{ flexShrink: 0, width: 9, height: 9, borderRadius: '50%', background: 'var(--err)' }}
+                          />
+                        )}
+                        {showGrade && r.schoolGrade && (
+                          <span style={{ flexShrink: 0, fontSize: 12, color: 'var(--muted)' }}>Gr {r.schoolGrade}</span>
+                        )}
+                      </span>
+                      {contact && (
+                        <span style={{ fontSize: 12, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {contact}
+                        </span>
+                      )}
+                      {r.safetyNotes && (
+                        <span style={{ fontSize: 12, color: 'var(--err)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {r.safetyNotes}
+                        </span>
+                      )}
                     </span>
-                  ) : (
-                    <span aria-hidden style={{ width: 26, height: 26, borderRadius: '50%', border: '1.7px solid var(--line2)', background: 'var(--surface)', flexShrink: 0 }} />
-                  )}
-                </button>
+                  </button>
+
+                  <span style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5 }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {/* Only `paid` / `outstanding` get a chip. `not-applicable`
+                          and `unknown` are carried honestly in the data and shown
+                          as nothing at all: labelling either would tell a teacher
+                          a family owes money when we know they owe nothing, or
+                          cannot tell (owner decision 2026-07-26). */}
+                      {chip && (
+                        <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 99, background: chip.bg, color: chip.fg, whiteSpace: 'nowrap' }}>
+                          {chip.label}
+                        </span>
+                      )}
+                      {isP ? (
+                        <span aria-hidden style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--ok)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 700 }}>
+                          ✓
+                        </span>
+                      ) : (
+                        <span aria-hidden style={{ width: 26, height: 26, borderRadius: '50%', border: '1.7px solid var(--line2)', background: 'var(--surface)' }} />
+                      )}
+                    </span>
+                    <Link
+                      href={`/teacher/students/${r.mid}`}
+                      style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--accentDeep)', textDecoration: 'none', whiteSpace: 'nowrap' }}
+                    >
+                      View profile
+                    </Link>
+                  </span>
+                </div>
               );
             })}
           </div>
