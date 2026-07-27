@@ -66,6 +66,19 @@ function staleSnapshot(): AdvancePledgeDoc {
   return { fid: 'CMT-A', status: 'started', setupSessionId: 'cs_1', subscriptionId: 'sub_1', monthlyAmountCAD: 51 };
 }
 
+/**
+ * The pre-step-4 state: no subscription recorded ANYWHERE yet.
+ *
+ * Nulls the live document as well as the snapshot. Nulling only the snapshot -
+ * which an earlier version of these tests did - left the fixture claiming the
+ * caller saw no subscription while the document already held one, a combination
+ * no real caller can produce. The id-comparison logic is what exposed it.
+ */
+function beforeStep4(): AdvancePledgeDoc {
+  fs.pledge!['subscriptionId'] = null;
+  return { ...staleSnapshot(), subscriptionId: null };
+}
+
 beforeEach(() => {
   fs.pledge = { pid: 'PLG-1', fid: 'CMT-A', status: 'started', setupSessionId: 'cs_1', subscriptionId: 'sub_1', monthlyAmountCAD: 51 };
   fs.updates = [];
@@ -151,7 +164,7 @@ describe('advancePledge - a late answer must never stomp a settled pledge', () =
     // just stopped - and the portal would then correctly show `cancelled` while
     // Stripe debited them monthly.
     mockStep3.mockImplementation(async () => { fs.pledge!['status'] = 'cancelled'; return 'success'; });
-    const out = await advancePledge(db, ref, { ...staleSnapshot(), subscriptionId: null }, 'PLG-1');
+    const out = await advancePledge(db, ref, beforeStep4(), 'PLG-1');
     expect(mockStep4, 'a monthly bank debit was created for a cancelled pledge').not.toHaveBeenCalled();
     expect(out).toBe('failed');
     expect(fs.pledge!['status']).toBe('cancelled');
@@ -164,7 +177,7 @@ describe('advancePledge - a late answer must never stomp a settled pledge', () =
     // but it removes the wide window, which is why the idempotency key still
     // has to be honoured by the payment service.
     mockStep3.mockImplementation(async () => { fs.pledge!['status'] = 'active'; return 'success'; });
-    const out = await advancePledge(db, ref, { ...staleSnapshot(), subscriptionId: null }, 'PLG-1');
+    const out = await advancePledge(db, ref, beforeStep4(), 'PLG-1');
     expect(mockStep4).not.toHaveBeenCalled();
     expect(out).toBe('active');
   });
@@ -176,7 +189,7 @@ describe('advancePledge - a late answer must never stomp a settled pledge', () =
     // against a pledge that no longer exists - the one case where nothing
     // downstream could ever find it again, because there is no row to find.
     mockStep3.mockImplementation(async () => { fs.pledge = null; return 'success'; });
-    const out = await advancePledge(db, ref, { ...staleSnapshot(), subscriptionId: null }, 'PLG-1');
+    const out = await advancePledge(db, ref, beforeStep4(), 'PLG-1');
     expect(mockStep4, 'a bank debit was created for a pledge that no longer exists').not.toHaveBeenCalled();
     expect(out).toBe('processing');
   });
@@ -191,7 +204,7 @@ describe('advancePledge - a late answer must never stomp a settled pledge', () =
       fs.pledge!['status'] = 'cancelled';
       return { subscriptionId: 'sub_new', status: 'active', customerId: 'cus_1' };
     });
-    await advancePledge(db, ref, { ...staleSnapshot(), subscriptionId: null }, 'PLG-1');
+    await advancePledge(db, ref, beforeStep4(), 'PLG-1');
     expect(fs.pledge!['subscriptionId'], 'the live subscription was not recorded at all').toBe('sub_new');
     expect(fs.pledge!['needsStripeVerification']).toBe(true);
     expect(String(fs.pledge!['lastError'])).toMatch(/verify in stripe/i);
@@ -199,10 +212,73 @@ describe('advancePledge - a late answer must never stomp a settled pledge', () =
     expect(fs.pledge!['status']).toBe('cancelled');
   });
 
+  it('does NOT flag when a concurrent caller already recorded the SAME subscription', async () => {
+    // The CONVERGENT race, and the one every other concurrency test here misses:
+    // they all race callers toward DIFFERENT outcomes. Here both callers pass
+    // the pre-step-4 read while the pledge is genuinely `started`, both call
+    // step 4, and the idempotency key does exactly its job - both get the same
+    // id back. Caller A lands first and carries the pledge to `active`.
+    //
+    // Caller B's recording write then sees a status that is no longer `started`.
+    // Flagging on that alone would raise "verify in Stripe" on a completely
+    // healthy pledge, under the ordinary cron/browser overlap this feature is
+    // designed around - and a monitor that fires on healthy rows is one nobody
+    // reads, which is the exact trap this flag was built to avoid.
+    mockStep4.mockImplementation(async () => {
+      fs.pledge!['subscriptionId'] = 'sub_SHARED';
+      fs.pledge!['status'] = 'active';
+      return { subscriptionId: 'sub_SHARED', status: 'active', customerId: 'cus_1' };
+    });
+    const out = await advancePledge(db, ref, beforeStep4(), 'PLG-1');
+    expect(fs.pledge!['needsStripeVerification'], 'a healthy pledge was flagged for human verification').toBeUndefined();
+    expect(fs.pledge!['lastError']).toBeUndefined();
+    expect(out).toBe('active');
+  });
+
+  it('FLAGS two DIFFERENT subscription ids, and keeps the first', async () => {
+    // The provider's idempotency did not hold: one pledge, two real recurring
+    // debits. This is the failure item 0 of the pre-flip checklist exists for,
+    // and a status-only check misses it entirely - here the pledge is still
+    // `started` when the second write lands, so nothing about the status is
+    // anomalous. Only comparing the ids catches it.
+    mockStep4.mockImplementation(async () => {
+      fs.pledge!['subscriptionId'] = 'sub_FIRST';
+      return { subscriptionId: 'sub_SECOND', status: 'active', customerId: 'cus_1' };
+    });
+    await advancePledge(db, ref, beforeStep4(), 'PLG-1');
+    expect(fs.pledge!['needsStripeVerification']).toBe(true);
+    // Keep the FIRST - it may already be activated and tracked. Overwriting it
+    // would lose the only pointer to a live debit, which is the same
+    // "permanently invisible subscription" failure in a new place.
+    expect(fs.pledge!['subscriptionId'], 'the first subscription id was overwritten and lost').toBe('sub_FIRST');
+    // BOTH ids must be recoverable from the document.
+    expect(String(fs.pledge!['lastError'])).toMatch(/sub_FIRST/);
+    expect(String(fs.pledge!['lastError'])).toMatch(/sub_SECOND/);
+  });
+
+  it('SHOUTS when the document vanishes AFTER the subscription was created', async () => {
+    // The one outcome with no trace anywhere: a real recurring debit at Stripe
+    // and no row to record it against. Nothing in the shipped code deletes a
+    // pledge, so this is defensive - but "defensive" must not mean "silent",
+    // because with the document gone the log IS the only evidence the debit
+    // exists. A mutation deleting the log survived every other test here.
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const snapshot = beforeStep4();
+    mockStep4.mockImplementation(async () => {
+      fs.pledge = null;
+      return { subscriptionId: 'sub_lost', status: 'active', customerId: 'cus_1' };
+    });
+    await advancePledge(db, ref, snapshot, 'PLG-1');
+    const logged = spy.mock.calls.flat().join(' ');
+    expect(logged, 'a live subscription was created and nothing recorded it anywhere').toMatch(/sub_lost/);
+    expect(logged).toMatch(/PLG-1/);
+    spy.mockRestore();
+  });
+
   it('does NOT flag on the ordinary path', async () => {
     // Guard the guard: a flag written unconditionally would fire on every
     // healthy pledge, and a monitor that always fires is one nobody reads.
-    await advancePledge(db, ref, { ...staleSnapshot(), subscriptionId: null }, 'PLG-1');
+    await advancePledge(db, ref, beforeStep4(), 'PLG-1');
     expect(fs.pledge!['needsStripeVerification']).toBeUndefined();
     expect(fs.pledge!['lastError']).toBeUndefined();
   });
@@ -211,7 +287,7 @@ describe('advancePledge - a late answer must never stomp a settled pledge', () =
     // Guard the guard: a re-read that always bailed would pass both tests above
     // and quietly break the entire feature.
     mockStep3.mockResolvedValue('success');
-    const out = await advancePledge(db, ref, { ...staleSnapshot(), subscriptionId: null }, 'PLG-1');
+    const out = await advancePledge(db, ref, beforeStep4(), 'PLG-1');
     expect(mockStep4).toHaveBeenCalledWith({ setupSessionId: 'cs_1', pid: 'PLG-1' });
     expect(out).toBe('active');
   });
@@ -235,7 +311,7 @@ describe('advancePledge - a late answer must never stomp a settled pledge', () =
     // not just the one a single reproduction happened to reach.
     fs.pledge!['status'] = 'active';
     mockStep3.mockResolvedValue('failed');
-    const out = await advancePledge(db, ref, { ...staleSnapshot(), subscriptionId: null }, 'PLG-1');
+    const out = await advancePledge(db, ref, beforeStep4(), 'PLG-1');
     expect(fs.pledge!['status']).toBe('active');
     expect(out).toBe('active');
   });

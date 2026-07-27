@@ -128,27 +128,71 @@ export async function advancePledge(
     //
     // But a recorded id that nothing ever surfaces is not "findable", it is
     // merely present. So the same transaction that records it also RAISES A
-    // FLAG when the pledge is no longer `started` - the one genuinely anomalous
-    // case, meaning the portal created a debit nobody expected. A transaction
-    // rather than a read-then-write because the flag must describe the same
-    // instant as the write it annotates.
+    // FLAG on the genuinely anomalous cases. A transaction rather than a
+    // read-then-write because the flag must describe the same instant as the
+    // write it annotates.
     //
-    // NOTE the flag is keyed on THAT event, deliberately not on
-    // `status IN (cancelled, failed) AND subscriptionId != null`. That
-    // combination is the NORMAL steady state - `cancel-pledge.ts` does not clear
-    // the handle, and a step-5 failure keeps it too - so it would match almost
-    // every settled pledge. A monitor that always fires is one nobody reads.
+    // ── What counts as anomalous is the SUBSCRIPTION, not the status ─────────
+    // An earlier version flagged whenever the status had left `started`, and
+    // that over-fired on the ordinary CONVERGENT race: cron and browser both
+    // pass the read above while the pledge really is `started`, both call step
+    // 4, the idempotency key holds and hands both the SAME id, and whichever
+    // lands second finds a pledge another caller already carried to `active`.
+    // Nothing is wrong there - one subscription, one email - yet it raised
+    // "verify in Stripe" on a healthy pledge. Under routine cron/browser overlap
+    // that is a monitor firing on healthy rows, which is precisely the trap this
+    // flag exists to avoid.
+    //
+    // Comparing the ids instead is both narrower AND wider: it drops that false
+    // alarm, and it catches a case the status check missed entirely - two
+    // DIFFERENT ids for one pledge, meaning the provider's idempotency did not
+    // hold and the family has two live debits. That can happen while the status
+    // is still `started`, so nothing about the status would have looked wrong.
+    //
+    // (Still deliberately NOT keyed on `status IN (cancelled, failed) AND
+    // subscriptionId != null`: that is the NORMAL steady state, since
+    // `cancel-pledge.ts` does not clear the handle and a step-5 failure keeps
+    // it, so it would match almost every settled pledge.)
     await db.runTransaction(async (txn) => {
       const snap = await txn.get(ref);
-      if (!snap.exists) return;
-      const now = (snap.data() as { status?: PledgeStatus }).status;
+      if (!snap.exists) {
+        // Nothing in the shipped code deletes a pledge, so this is defensive -
+        // but a live subscription with no document to record it is the one
+        // outcome nothing downstream could ever find, so it must not be silent.
+        console.error(
+          '[pledge] subscription %s created for %s but the document is gone - VERIFY IN STRIPE',
+          subscriptionId,
+          pid,
+        );
+        return;
+      }
+      const data = snap.data() as { status?: PledgeStatus; subscriptionId?: string | null };
+      const existing = data.subscriptionId ?? null;
+
+      if (existing !== null && existing !== subscriptionId) {
+        // TWO subscriptions for one pledge. Keep the FIRST id - it may already
+        // be activated and tracked - and carry the second in the message, so
+        // both remain recoverable from the document. Overwriting would lose the
+        // only pointer to one of two live debits.
+        txn.update(ref, {
+          lastCheckedAt: new Date(),
+          needsStripeVerification: true,
+          lastError: `TWO subscriptions for this pledge: ${existing} (kept) and ${subscriptionId} - the idempotency key did not hold. Verify in Stripe.`,
+        });
+        return;
+      }
+
+      // A novel id landing on a pledge that has already settled: the portal
+      // created a debit nobody expected. `existing === subscriptionId` means
+      // someone already recorded this exact subscription - nothing new to
+      // verify, whatever the status now says.
       const flag =
-        now === 'started'
-          ? {}
-          : {
+        existing === null && data.status !== 'started'
+          ? {
               needsStripeVerification: true,
-              lastError: `subscription ${subscriptionId} created after status left started (${now ?? 'missing'}) - verify in Stripe`,
-            };
+              lastError: `subscription ${subscriptionId} created after status left started (${data.status ?? 'missing'}) - verify in Stripe`,
+            }
+          : {};
       txn.update(ref, {
         subscriptionId,
         customerId: sub.customerId ?? null,
