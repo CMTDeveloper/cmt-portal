@@ -52,6 +52,8 @@ import { normalizeContactForKey, NO_ALLERGIES } from '@cmt/shared-domain/setu';
 import { registerFamily } from '@/features/setu/registration/register-family';
 import { hashContactKey } from '@/features/setu/registration/hash-contact-key';
 import { findSetuFamilyByContact } from '@/features/setu/auth/find-family-by-contact';
+import { getDisclaimersConfig } from '@/features/setu/disclaimers/config';
+import { getSchoolYearConfig } from '@/features/setu/rollover/school-year-config';
 
 const PASSWORD = process.env['E2E_ADULT_CLASS_PASSWORD'] ?? process.env['E2E_FAMILY_PASSWORD'];
 const LOCATION = 'Brampton';
@@ -214,6 +216,8 @@ async function seedRow(
   spec: RowSpec,
   bv: { oid: string; label: string },
   levelId: string,
+  disclaimersVersion: number,
+  schoolYear: string,
 ): Promise<void> {
   // 1) Family - reuse when the email already maps to one, else register.
   async function register(): Promise<{ fid: string; managerMid: string }> {
@@ -265,6 +269,28 @@ async function seedRow(
         { name: 'E2E Emergency', phone: '+15195550100', relationship: 'Friend' },
         null,
       ],
+      // DISCLAIMERS ACCEPTED - for exactly the reason stated above, and the one
+      // the original fixture missed.
+      //
+      // `earlierGatesPending` is profileGatePending OR the disclaimer read, and
+      // AdultClassGate defers to BOTH. The comment above accounted for the
+      // profile half and stopped there. With `NEXT_PUBLIC_FEATURE_SETU_DISCLAIMERS`
+      // on and no acceptance recorded, DisclaimerGate redirects to
+      // /acknowledgements and the adult-class gate correctly never fires - so the
+      // spec fails on a URL mismatch that looks like a broken adult-class gate
+      // and is nothing of the kind. That is exactly what happened on this
+      // fixture's first real run.
+      //
+      // Version + school year are read LIVE rather than hardcoded: publishing new
+      // disclaimer content bumps the version and re-gates every family, so a
+      // pinned number would silently rot the fixture the next time an admin
+      // publishes.
+      disclaimersAccepted: {
+        schoolYear: schoolYear,
+        version: disclaimersVersion,
+        acceptedByMid: managerMid,
+        acceptedAt: FieldValue.serverTimestamp(),
+      },
       _test: true,
     },
     { merge: true },
@@ -399,9 +425,20 @@ async function main(): Promise<void> {
   await ensureOffering(db);
   const bv = await findOpenBvOffering(db);
   const levelId = await findLevelId(db);
-  console.log(`bala vihar offering: ${bv.oid}\nteacher level id: ${levelId}\n`);
+  // Read ONCE, not per family: the version re-gates every family when an admin
+  // publishes new disclaimer content, so all six fixtures must agree on it.
+  const [disclaimersCfg, schoolYearCfg] = await Promise.all([
+    getDisclaimersConfig(db),
+    getSchoolYearConfig(db),
+  ]);
+  console.log(
+    `bala vihar offering: ${bv.oid}\nteacher level id: ${levelId}\n` +
+      `disclaimers: accepting version ${disclaimersCfg.version} for school year ${schoolYearCfg.currentYear}\n`,
+  );
 
-  for (const spec of ROWS) await seedRow(db, spec, bv, levelId);
+  for (const spec of ROWS) {
+    await seedRow(db, spec, bv, levelId, disclaimersCfg.version, schoolYearCfg.currentYear);
+  }
 
   console.log(`\n=== done. ${ROWS.length} fixture families, offering ${ASC_OID} at $${ASC_AMOUNT} ===`);
   console.log(`    every family signs in with the same password (E2E_ADULT_CLASS_PASSWORD / E2E_FAMILY_PASSWORD)\n`);

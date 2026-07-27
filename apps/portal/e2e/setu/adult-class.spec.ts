@@ -231,6 +231,15 @@ test.describe('adult study class — the gate, the fee, and the §2.3 matrix', (
       await page.goto(`/family/members/${childMid}/edit`);
       const allergies = page.getByLabel('Food allergies').filter({ visible: true }).first();
       await expect(allergies).toBeVisible({ timeout: 30_000 });
+      // The fixture seeds NO_ALLERGIES, which TICKS "No known allergies" and
+      // DISABLES this input. Without this, `fill` retries against a disabled
+      // element until the test times out, and the failure reads as a broken
+      // member-edit screen rather than a ticked checkbox - which is exactly how
+      // it presented on the first real run.
+      if (!(await allergies.isEnabled())) {
+        await page.getByTestId('no-allergies').filter({ visible: true }).first().uncheck();
+        await expect(allergies).toBeEnabled({ timeout: 10_000 });
+      }
       await allergies.fill(`E2E touch ${Date.now()}`);
       await page.getByRole('button', { name: /Save changes/i }).filter({ visible: true }).first().click();
       // The save leaves the edit screen; wait for that rather than a fixed sleep.
@@ -323,6 +332,15 @@ test.describe('adult study class — the gate, the fee, and the §2.3 matrix', (
       await page.goto(`/family/members/${childMid}/edit`);
       const allergies = page.getByLabel('Food allergies').filter({ visible: true }).first();
       await expect(allergies).toBeVisible({ timeout: 30_000 });
+      // The fixture seeds NO_ALLERGIES, which TICKS "No known allergies" and
+      // DISABLES this input. Without this, `fill` retries against a disabled
+      // element until the test times out, and the failure reads as a broken
+      // member-edit screen rather than a ticked checkbox - which is exactly how
+      // it presented on the first real run.
+      if (!(await allergies.isEnabled())) {
+        await page.getByTestId('no-allergies').filter({ visible: true }).first().uncheck();
+        await expect(allergies).toBeEnabled({ timeout: 10_000 });
+      }
       await allergies.fill(`E2E touch ${Date.now()}`);
       await page.getByRole('button', { name: /Save changes/i }).filter({ visible: true }).first().click();
       await expect(page).not.toHaveURL(/\/edit(\/|$|\?)/, { timeout: 30_000 });
