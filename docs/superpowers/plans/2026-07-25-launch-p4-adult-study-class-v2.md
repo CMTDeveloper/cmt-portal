@@ -896,6 +896,66 @@ Six mutations verified, plus one on the response amount and one on the create-on
 
 ---
 
+### Task 11 as SHIPPED (`8ac2256`) - the owner rejected the recommendation
+
+**The recommended rule (`expected === 0 && activeCount > 0` ⇒ `'paid'`) was NOT
+adopted.** CMT Developer's decision: **`paid` means money actually arrived**, so a
+family who never owed anything must not be labelled paid however much they
+donated. A fourth state `'not-applicable'` (chip **"N/A"**) was added for "no fee
+applies", and `'unknown'` keeps the cases where a zero total is not knowledge.
+
+**Four corrections to this task's own analysis, all verified in code:**
+
+1. **"Four callers" is two live surfaces.** `deriveFamilyPayment` (`payment.ts`)
+   and `deriveFamilyRosterSignals` (`family-engagement.ts`) have **no production
+   caller** - only their own tests. `list-families.ts`, the module they were
+   written for, no longer exists. The live consumers are `buildRosterCsvRows` →
+   `GET /api/welcome/reports/[kind]` and `buildRosterReportDataset` →
+   `GET /api/welcome/roster/report` → `/welcome/roster`. **Both orphans are still
+   wired to the shared classifier rather than deleted; deletion is a separate
+   call.**
+2. **"Starts appearing in the default view" was wrong** - and moot under the
+   chosen design. The default is `payment='paid'` **and** `engagement='enrolled'`
+   (`roster-browser.tsx:250-251`), where enrolled means `bvEngagement ===
+   'confirmed'`. A free non-BV family is `not-enrolled` and was never going to
+   appear. With N/A rather than Paid, **the default view is unchanged**.
+3. **Teacher-managed does not imply `$0`.** `paymentSource` is orthogonal to
+   `pricingTiers` (`offering.ts:28`). A teacher-managed offering with a $300 tier
+   has `expected = 300` and reads **outstanding forever**, because portal
+   donations never arrive for it. Left unchanged, and now pinned by a test so
+   this task cannot be read as having moved it. **Worth its own decision later.**
+4. **A THIRD source of `expected === 0` that this task never listed, and the only
+   one observed in real data: the offering doc is missing.** All 7 UAT families
+   reading as `$0` got there via `oid`s (`e2e-att-period`, `e2e-prev-period`)
+   pointing at deleted offering docs, so `expected` fell back to a snapshot of 0.
+   That is "nobody ever wrote a price", not "free" - and shipping the recommended
+   rule would have labelled exactly those families **Paid**.
+
+**Measured blast radius (UAT, read-only):** 898 families, 45 active enrollments,
+10 offerings. 854 have no active enrollment (unchanged), 37 unchanged, **7 flip -
+all E2E fixtures, all via the missing-offering path. Zero real families move.**
+
+**The design.** `paymentFromAmounts` is **deleted**, not widened: taking a
+pre-summed total is precisely what made the two kinds of zero indistinguishable
+at the point of classification, and each caller carried its own copy of the
+override → offering → snapshot fallback. `classifyRosterPayment` takes the raw
+pieces; `chargeFromEnrollment` and `classifyBulkPayment` are the only two
+adapters. `chargeAmount` returns **`null`**, not 0, for "no override, no offering,
+snapshot 0" - a *positive* snapshot is still honoured as real recorded knowledge.
+One unpriceable enrollment poisons the whole family's verdict.
+
+Seven mutations verified (empty-active guard, null-amount guard, `> 0` vs `>= 0`,
+teacher-managed guard, isFinite/negative guard, `snapshot > 0` vs `>= 0`,
+`override !== null` vs truthy). Fixtures that carried only the precomputed
+`effectiveSuggestedAmount` were made realistic; `build-csv-rows.test.ts` also
+stopped mocking `resolveSuggestedAmount` through a barrel the classifier does not
+cross, and prices its fake offerings for real instead.
+
+**No mobile changelog entry owed** - `/api/welcome/*` is not `/api/setu/*`, and
+`RosterPayment` reaches no setu route.
+
+---
+
 ## Task 11: A `$0` expected total must not read `unknown`
 
 Spec §6 item 5, which v1 claimed as covered and had no task for.
@@ -912,9 +972,9 @@ Traced against the fee rule:
 
 This is not a truthiness bug - the `?? 0` and `typeof === 'number'` reads all preserve a literal `0` correctly. It is the `expected <= 0` classifier.
 
-- [ ] **Step 1: Write the failing tests** with a **2-enrollment** fixture (N=2 rule), covering BV+ASC, ASC-only-after-BV-cancelled, and ASC-only-never-BV.
+- [x] **Step 1: Write the failing tests** with a **2-enrollment** fixture (N=2 rule), covering BV+ASC, ASC-only-after-BV-cancelled, and ASC-only-never-BV.
 - [x] **Step 2: Run to verify they fail**
-- [ ] **Step 3: Decide and implement, across all FOUR callers**
+- [x] **Step 3: Decide and implement, across all FOUR callers**
 
 Recommended: `expected === 0 && activeCount > 0` classifies as `paid` - the family owes nothing and has paid nothing, which is settled, not unknown.
 
@@ -927,7 +987,7 @@ The classifier is shared, so changing it changes every consumer. There are **fou
 
 **And this is a visible product change, not only a correction.** `roster-browser.tsx:250` defaults the payment filter to `'paid'`. Every family whose only active enrollments have empty `pricingTiers` - free and teacher-managed offerings, where `resolveSuggestedAmount` returns 0 (`offering.ts:101`) - starts appearing in the **default** `/welcome/roster` view labelled **Paid**. Today they are filtered out as `unknown`. Confirm that is wanted before shipping it.
 
-- [ ] **Step 4: Run and commit**
+- [x] **Step 4: Run and commit**
 
 ---
 
