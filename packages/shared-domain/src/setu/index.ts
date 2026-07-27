@@ -16,6 +16,7 @@ export * from './schemas/seva';
 export * from './schemas/achievement';
 export * from './schemas/sevak';
 export * from './schemas/disclaimers';
+export * from './schemas/pledge';
 export * from './roster';
 export * from './roster-payment';
 export * from './roster-report';

@@ -60,6 +60,24 @@ export const portalEnvSchema = z.object({
   STRIPE_CHECKOUT_URL_TEST: z.string().url().optional(),
   STRIPE_USE_TEST_CHECKOUT: z.enum(['true', 'false']).default('false'),
 
+  // Monthly pledge / PAD (P5). The same Cloud Run service as above, but the
+  // pledge flow calls FOUR endpoints under it rather than one, so it needs the
+  // BASE url: `STRIPE_CHECKOUT_URL` is that base plus `/checkout-link` and stays
+  // exactly as-is for the one-time flow.
+  //
+  // `STRIPE_PLEDGE_PRICE_ID` and `PLEDGE_MONTHLY_AMOUNT_CAD` are deliberately
+  // BOTH env, and must be changed together. The Price is what actually charges
+  // the family; the amount is only what the portal displays. Splitting them -
+  // say, an admin-editable amount against a fixed Price - would let the portal
+  // state one figure while a different one is debited every month, with nothing
+  // able to detect the discrepancy.
+  //
+  // All optional so local dev and the flag-off state still boot; the PAD client
+  // fails closed at call time rather than at import.
+  STRIPE_API_BASE_URL: z.string().url().optional(),
+  STRIPE_PLEDGE_PRICE_ID: z.string().min(1).optional(),
+  PLEDGE_MONTHLY_AMOUNT_CAD: z.coerce.number().int().positive().default(51),
+
   // Portal public URL (used for invite links, etc.)
   NEXT_PUBLIC_PORTAL_BASE_URL: z.string().url().optional(),
 

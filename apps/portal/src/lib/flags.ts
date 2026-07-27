@@ -46,6 +46,19 @@ export const flags = {
   // ONE public flag read on both the client and the server, not a pair that can
   // drift.
   smsOtp: process.env.NEXT_PUBLIC_FEATURE_SMS_OTP === 'true',
+  // Monthly pledge / pre-authorized debit (P5, 2026-07-27). OFF by default and
+  // it MUST stay off at launch: the payment service's `/pad/*` endpoints are
+  // TEST-mode only, so a family flipping through the flow in production would
+  // authorise a mandate against a test Price. Gates the card, the /api/pledges/*
+  // routes and the reconciler cron together - the flag is the whole feature's
+  // on-switch, not just the UI's.
+  //
+  // Flipping this on is NOT a no-op: the first family through afterwards signs
+  // the first REAL pre-authorized debit. See the plan's "Before the flag is ever
+  // flipped ON" checklist - in particular, open the Stripe dashboard and confirm
+  // the LIVE Price really is $51, because the amount lives at Stripe and nothing
+  // in this codebase can detect a wrong one.
+  setuPledge: process.env.NEXT_PUBLIC_FEATURE_SETU_PLEDGE === 'true',
 } as const;
 
 export type FeatureFlags = typeof flags;
