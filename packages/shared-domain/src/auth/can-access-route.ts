@@ -394,5 +394,18 @@ export function canAccessRoute(
     return isSetuManager(claims) || isWelcomeTeam(claims) || isAdmin(claims);
   }
 
+  // Monthly pledge (P5). FAMILY-MANAGER ONLY - deliberately narrower than every
+  // other family API, and the reason these routes live outside `/api/setu/*`:
+  // that prefix's catch-all above grants welcome-team and admin, and a route
+  // that creates a recurring debit against a family must never inherit
+  // authorization from a prefix. A volunteer at the front desk has no business
+  // starting a monthly gift on a family's behalf, and neither does an admin.
+  //
+  // The admin cancel route is a separate path (`/api/admin/pledges/...`) and is
+  // covered by the admin rules above, not by this one.
+  if (pathname === '/api/pledges' || pathname.startsWith('/api/pledges/')) {
+    return isSetuManager(claims);
+  }
+
   return false;
 }
