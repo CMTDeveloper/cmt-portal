@@ -15,6 +15,8 @@
 > **5. Task 5's `/donate/success` placement is only half the job.** That page is ALSO the pledge success URL (`start-pledge.ts` points Stripe at `/donate/success?pledge=<pid>`), so it must finalize on arrival - before reading the pledge back, or a family whose mandate just confirmed is told it is still being set up.
 >
 > **6. Task 8 Steps 1-3 could not be done and were NOT faked.** They need the UAT flag flipped plus a rebuild, the two Stripe env vars, and `/pad/*` live. `e2e/setu/pledge.spec.ts` exists, collects, and **has never been executed**. Steps 4-5 were instead made into standing tests (`pledge-isolation.test.ts`), and the reconciler was verified live on deployed UAT (200 `{success:true,disabled:true}` with the real `CRON_SECRET`; a nonexistent cron path with the same bearer gets 401, which is what makes it proof). See runbook §14 2026-07-27 (F).
+>
+> **7. POST-REVIEW FIX (`Task 4/6`, commit after `b417cf4`): the plan's design guarded the ACTIVATION transition and left the FAILURE transitions unguarded.** All three `status:'failed'` writes were bare `ref.update` calls, and `advancePledge` returned a hardcoded `'active'` regardless of whether the claim won. Because two callers (returning browser + cron) race by design, a late `failed` could overwrite a committed activation - leaving Stripe debiting the family while the card showed the ask, and, since `failed` deliberately does NOT block a new pledge, offering them a **second** mandate. `claimPledgeActivation` was generalized into `claimPledgeTransition(db, pid, to, extra)` and now settles BOTH terminal statuses; it returns `{won, status}` so callers report what is true rather than what they guessed. Found by the Codex review, reproduced deterministically before fixing.
 
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -231,6 +233,7 @@ export const PledgeDocSchema = z.object({
 
 **This is not a no-op.** The first family through after the flip is the first REAL mandate.
 
+0. ⚠️ **Confirm with Vaibhav that the payment service actually deduplicates on the `idempotencyKey` BODY FIELD** sent to `/pad/monthly-subscription`. This is the single place where correctness depends entirely on an external contract nothing in this repo can test - it is a custom field on CMT's Cloud Run proxy, **not** a native Stripe `Idempotency-Key` header. If the proxy ignores it, two racing step-4 calls each mint a REAL subscription, and because the portal stores one `subscriptionId` (last write wins) the duplicate is permanently invisible to the reconciler - a family debited twice a month, forever, with nothing in the portal showing it. The plan records that Vaibhav confirmed retry-safety; this asks him to confirm it is keyed on that field specifically. (Raised by the 2026-07-27 Codex review, which correctly called it a design tradeoff rather than a code defect.)
 1. A **LIVE** Stripe Price exists, and **you have opened the Stripe dashboard and confirmed it is $51.**
 2. `STRIPE_PLEDGE_PRICE_ID` points at the LIVE id, not the test one.
 3. `/pad/*` is confirmed live on the payment service.

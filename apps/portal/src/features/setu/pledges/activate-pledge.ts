@@ -2,60 +2,82 @@ import 'server-only';
 import type { PledgeStatus } from '@cmt/shared-domain/setu';
 import { sendManagedEmail } from '@/lib/aws/send-managed-email';
 
+/** A terminal status a pledge may be moved to by one pass of the state machine. */
+export type SettledStatus = Extract<PledgeStatus, 'active' | 'failed'>;
+
+export interface ClaimResult {
+  /** Whether THIS caller performed the transition. */
+  won: boolean;
+  /** The pledge's status after the transaction - what is now true, won or lost. */
+  status: PledgeStatus | null;
+}
+
 /**
- * The ONE place a pledge becomes `active`, and the one place the activation
+ * The ONE way a pledge's status is settled, and the one place the activation
  * email is sent.
  *
- * ── Why this has to be a transaction ────────────────────────────────────────
- * TWO independent code paths can observe the same `started → active` transition:
- * the family returning from the hosted page (`finalizePledge`) and the daily
- * reconciler cron. A family who returns just as the cron runs is not a
- * hypothetical - the cron processes every `started` pledge, and "just came back"
- * is exactly the state those rows are in.
+ * ── Why every status write has to be a compare-and-swap ─────────────────────
+ * TWO independent code paths drive the same pledge: the family returning from
+ * the hosted page (`finalizePledge`) and the daily reconciler cron. Both load
+ * the document, then ask the provider, then write. A race is not exotic here -
+ * it is the ordinary shape of the system, and a double-click produces it too.
  *
  * Read-then-write in two places is not idempotent however carefully each side
- * checks: both can read `started`, both can write `active`, and both can send
- * "your monthly gift is set up". A duplicate email about someone's money is a
- * real support call. So activation is a CLAIM: the transaction flips the status
- * only if it is not already `active`, and only the caller that won the claim
- * sends the mail.
+ * checks: both read `started`, both write, and the LATER answer wins on a
+ * document the earlier one already settled. That is not a display bug. A
+ * committed `active` overwritten by a late `failed` leaves Stripe debiting the
+ * family monthly while the portal shows the ask - and because `failed` does NOT
+ * block a new pledge (`start-pledge.ts` LIVE_STATUSES, deliberately, so one bad
+ * attempt cannot lock a family out), the family is then offered a SECOND
+ * monthly mandate on the same bank account.
  *
- * The email is sent OUTSIDE the transaction on purpose - a mail failure must
- * never roll back an activation that really happened at the provider.
+ * So the transition is a CLAIM: only a pledge still `started` may be settled,
+ * and only the caller that won it may announce anything. The three guarantees
+ * that single check carries:
+ *   - `active`    → someone else already settled it. Not an error; not ours to
+ *                   announce, so no second email and no contradicting write.
+ *   - `cancelled` → the temple stopped this pledge. A late finalize or cron pass
+ *                   must NEVER relabel it - `cancelled` is the temple's decision
+ *                   and `failed` is the provider's verdict, and overwriting one
+ *                   with the other destroys the record of which happened (and
+ *                   contradicts the `audit_log` row written with it).
+ *   - `failed`    → terminal at the provider; a late `success` must not
+ *                   resurrect it.
+ *
+ * Returns what is TRUE after the transaction, not merely whether we won, so a
+ * caller can report the real state instead of assuming its own answer stuck. A
+ * boolean alone is what let `advancePledge` return `active` for a pledge that
+ * had just been written `failed` by someone else.
  */
-export async function claimPledgeActivation(db: FirebaseFirestore.Firestore, pid: string): Promise<boolean> {
+export async function claimPledgeTransition(
+  db: FirebaseFirestore.Firestore,
+  pid: string,
+  to: SettledStatus,
+  extra: Record<string, unknown> = {},
+): Promise<ClaimResult> {
   const ref = db.collection('pledges').doc(pid);
   return db.runTransaction(async (txn) => {
     const snap = await txn.get(ref);
-    if (!snap.exists) return false;
-    const status = (snap.data() as { status?: PledgeStatus }).status;
-    // ONLY a `started` pledge may become active. This single check carries three
-    // distinct guarantees, which is why there is no separate `=== 'active'`
-    // branch above it (there was; it was unreachable, and a mutation run proved
-    // it by deleting it with no test noticing):
-    //   - `active`    → someone else already won the claim. Not an error, just
-    //                   not ours to announce, so no second email goes out.
-    //   - `cancelled` → the temple stopped this pledge. A late finalize or a
-    //                   cron pass must NEVER put it back.
-    //   - `failed`    → terminal at the provider; the family starts a new one.
-    if (status !== 'started') return false;
-    txn.update(ref, { status: 'active' satisfies PledgeStatus, activatedAt: new Date() });
-    return true;
+    if (!snap.exists) return { won: false, status: null };
+    const status = (snap.data() as { status?: PledgeStatus }).status ?? null;
+    if (status !== 'started') return { won: false, status };
+    txn.update(ref, { ...extra, status: to });
+    return { won: true, status: to };
   });
 }
 
 /**
  * Claim the activation and, only if this caller won it, tell the family.
  *
- * Returns whether THIS call activated the pledge, so the caller can report a
- * transition rather than a state.
+ * The email is sent OUTSIDE the transaction on purpose - a mail failure must
+ * never roll back an activation that really happened at the provider.
  */
 export async function activatePledgeAndNotify(
   db: FirebaseFirestore.Firestore,
   args: { pid: string; toEmail: string | null; monthlyAmountCAD: number },
-): Promise<boolean> {
-  const won = await claimPledgeActivation(db, args.pid);
-  if (!won) return false;
+): Promise<ClaimResult> {
+  const claim = await claimPledgeTransition(db, args.pid, 'active', { activatedAt: new Date() });
+  if (!claim.won) return claim;
 
   if (args.toEmail) {
     try {
@@ -76,5 +98,5 @@ export async function activatePledgeAndNotify(
       console.error('[pledge] activation email failed for %s', args.pid, err);
     }
   }
-  return true;
+  return claim;
 }

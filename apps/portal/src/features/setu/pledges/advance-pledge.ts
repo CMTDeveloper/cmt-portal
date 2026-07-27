@@ -5,10 +5,24 @@ import {
   createMonthlySubscription,
   getSubscriptionResult,
 } from './stripe-pad-client';
-import { activatePledgeAndNotify } from './activate-pledge';
+import { activatePledgeAndNotify, claimPledgeTransition } from './activate-pledge';
 
 /** What one pass of the state machine concluded. */
 export type AdvanceOutcome = 'active' | 'processing' | 'failed';
+
+/**
+ * What the pledge's PERSISTED status means to a caller reporting an outcome.
+ *
+ * Every settled return goes through this rather than echoing the answer this
+ * pass happened to get, so the caller and the document can never disagree. A
+ * missing document reads as `processing` - unresolved is the honest report for
+ * something we can no longer see, and it is not a state a caller should act on.
+ */
+function outcomeOf(status: PledgeStatus | null): AdvanceOutcome {
+  if (status === 'active') return 'active';
+  if (status === 'failed' || status === 'cancelled') return 'failed';
+  return 'processing';
+}
 
 /** The fields of a pledge document this state machine reads. */
 export interface AdvancePledgeDoc {
@@ -55,8 +69,8 @@ export async function advancePledge(
     // `started` with no session means the provider call never landed at start.
     // There is nothing to ask about, and leaving it `started` would block the
     // family from ever trying again.
-    await ref.update({ status: 'failed' satisfies PledgeStatus, lastError: 'no setup session' });
-    return 'failed';
+    const claim = await claimPledgeTransition(db, pid, 'failed', { lastError: 'no setup session' });
+    return outcomeOf(claim.status);
   }
 
   const monthlyAmountCAD = typeof pledge.monthlyAmountCAD === 'number' ? pledge.monthlyAmountCAD : 51;
@@ -66,8 +80,8 @@ export async function advancePledge(
   if (!subscriptionId) {
     const mandate = await getCheckoutSessionResult(pledge.setupSessionId);
     if (mandate === 'failed') {
-      await ref.update({ status: 'failed' satisfies PledgeStatus, lastCheckedAt: new Date() });
-      return 'failed';
+      const claim = await claimPledgeTransition(db, pid, 'failed', { lastCheckedAt: new Date() });
+      return outcomeOf(claim.status);
     }
     if (mandate === 'pending') {
       // Stays `started`. The card says "we're setting up your monthly gift",
@@ -92,8 +106,8 @@ export async function advancePledge(
   // ── Step 5: is that subscription actually live? ───────────────────────────
   const live = await getSubscriptionResult(subscriptionId);
   if (live === 'failed') {
-    await ref.update({ status: 'failed' satisfies PledgeStatus, lastCheckedAt: new Date() });
-    return 'failed';
+    const claim = await claimPledgeTransition(db, pid, 'failed', { lastCheckedAt: new Date() });
+    return outcomeOf(claim.status);
   }
   if (live === 'pending') {
     await ref.update({ lastCheckedAt: new Date() });
@@ -103,8 +117,12 @@ export async function advancePledge(
   // Activation goes through the shared transactional claim, so this path and a
   // concurrent one cannot both announce the same activation to the same family.
   const email = pledge.fid ? await managerEmailFor(db, pledge.fid) : null;
-  await activatePledgeAndNotify(db, { pid, toEmail: email, monthlyAmountCAD });
-  return 'active';
+  const claim = await activatePledgeAndNotify(db, { pid, toEmail: email, monthlyAmountCAD });
+  // NOT a hardcoded 'active'. Losing the claim can mean someone else activated
+  // it (fine, still active) or that a concurrent pass settled it `failed` or the
+  // temple cancelled it - and reporting `active` for those told the family's
+  // browser their gift was working while the record said otherwise.
+  return outcomeOf(claim.status);
 }
 
 /** The family's first manager's email, for the activation notice. Never throws. */

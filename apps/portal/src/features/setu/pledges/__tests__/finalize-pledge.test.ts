@@ -201,9 +201,30 @@ describe('finalizePledge - the activation race with the cron', () => {
     expect(mockEmail).not.toHaveBeenCalled();
   });
 
-  it('still reports active even when it lost the claim', async () => {
+  // ── "lost the claim" has TWO sub-cases and they need OPPOSITE answers. ─────
+  // This used to be one test covering only the first, asserting `active` - and
+  // the implementation returned a hardcoded `active` for BOTH, so the fixture
+  // could not tell the correct behaviour from the bug. Splitting them is the
+  // whole point; the second case is the one that was wrong.
+  it('reports active when it lost to a pass that ALREADY activated it', async () => {
     mockStep5.mockImplementation(async () => { fs.pledge!['status'] = 'active'; return 'success'; });
     expect(await finalizePledge(args)).toEqual({ state: 'active' });
+  });
+
+  it('reports FAILED when it lost to a pass that settled the pledge failed', async () => {
+    // Our own step 5 said success, but a concurrent pass got `failed` first and
+    // the claim is gated on `started`. Reporting our answer would tell the
+    // family's browser their gift is working while the record says otherwise.
+    mockStep5.mockImplementation(async () => { fs.pledge!['status'] = 'failed'; return 'success'; });
+    expect(await finalizePledge(args)).toEqual({ state: 'failed' });
+    expect(mockEmail).not.toHaveBeenCalled();
+  });
+
+  it('reports FAILED when the temple cancelled it mid-flight', async () => {
+    mockStep5.mockImplementation(async () => { fs.pledge!['status'] = 'cancelled'; return 'success'; });
+    expect(await finalizePledge(args)).toEqual({ state: 'failed' });
+    expect(fs.pledge!['status'], 'a cancelled pledge was relabelled').toBe('cancelled');
+    expect(mockEmail).not.toHaveBeenCalled();
   });
 
   it('a mail failure never undoes an activation', async () => {
