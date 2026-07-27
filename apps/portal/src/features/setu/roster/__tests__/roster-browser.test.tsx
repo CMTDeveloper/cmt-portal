@@ -138,6 +138,71 @@ describe('RosterBrowser', () => {
     await waitFor(() => expect(screen.getAllByText('Ravi Sharma').length).toBeGreaterThanOrEqual(1));
   });
 
+  // ── Reset (P2 Task 8) ──────────────────────────────────────────────────────
+  // RosterBrowser is the independent-state case: it renders <RosterContent>
+  // twice, so each branch owns its own filters and every control must be acted
+  // on. (Contrast AttendanceMarker, where one component owns both branches and
+  // acting twice nets zero.)
+  describe('Reset', () => {
+    it('restores all six filters to their defaults', async () => {
+      render(<RosterBrowser locationOptions={['Brampton', 'Scarborough']} />);
+      await screen.findAllByRole('combobox', { name: 'Payment' });
+
+      // Level and Grade render only when the data supplies options (:357, :363),
+      // so assert they are present before looping - an empty loop would pass
+      // vacuously and this test would silently stop covering them.
+      expect(screen.getAllByRole('combobox', { name: 'Level' }).length).toBeGreaterThan(0);
+      expect(screen.getAllByRole('combobox', { name: 'Grade' }).length).toBeGreaterThan(0);
+
+      for (const sel of screen.getAllByRole('combobox', { name: 'Payment' })) await userEvent.selectOptions(sel, '');
+      for (const sel of screen.getAllByRole('combobox', { name: 'Enrollment' })) await userEvent.selectOptions(sel, '');
+      for (const sel of screen.getAllByRole('combobox', { name: 'Location' })) await userEvent.selectOptions(sel, 'Brampton');
+      for (const sel of screen.getAllByRole('combobox', { name: 'Program' })) await userEvent.selectOptions(sel, 'bala-vihar');
+      for (const sel of screen.getAllByRole('combobox', { name: 'Level' })) await userEvent.selectOptions(sel, 'Level 2');
+      for (const sel of screen.getAllByRole('combobox', { name: 'Grade' })) await userEvent.selectOptions(sel, '2');
+
+      for (const btn of screen.getAllByRole('button', { name: /reset/i })) await userEvent.click(btn);
+
+      for (const sel of screen.getAllByRole('combobox', { name: 'Payment' })) expect(sel).toHaveValue('paid');
+      for (const sel of screen.getAllByRole('combobox', { name: 'Enrollment' })) expect(sel).toHaveValue('enrolled');
+      for (const sel of screen.getAllByRole('combobox', { name: 'Location' })) expect(sel).toHaveValue('');
+      for (const sel of screen.getAllByRole('combobox', { name: 'Program' })) expect(sel).toHaveValue('');
+      for (const sel of screen.getAllByRole('combobox', { name: 'Level' })) expect(sel).toHaveValue('');
+      for (const sel of screen.getAllByRole('combobox', { name: 'Grade' })) expect(sel).toHaveValue('');
+    });
+
+    // The filters and the search cannot both be set: typing unmounts the whole
+    // filter grid. So Reset has to live OUTSIDE that gate, or it could never
+    // clear the one thing it is still visible for.
+    it('stays mounted while searching and clears the search box', async () => {
+      render(<RosterBrowser locationOptions={['Brampton', 'Scarborough']} />);
+      await screen.findAllByRole('combobox', { name: 'Payment' });
+
+      for (const box of screen.getAllByTestId('roster-search-input')) await userEvent.type(box, 'rana');
+      // The filter grid is deliberately unmounted here.
+      expect(screen.queryAllByRole('combobox', { name: 'Payment' })).toHaveLength(0);
+      expect(screen.getAllByRole('button', { name: /reset/i }).length).toBeGreaterThan(0);
+
+      for (const btn of screen.getAllByRole('button', { name: /reset/i })) await userEvent.click(btn);
+      for (const box of screen.getAllByTestId('roster-search-input')) expect(box).toHaveValue('');
+      // Clearing the search brings the grid back.
+      expect(screen.getAllByRole('combobox', { name: 'Payment' }).length).toBeGreaterThan(0);
+    });
+
+    it('is hidden while the filters are untouched, so it never reads as a control that does nothing', async () => {
+      render(<RosterBrowser locationOptions={['Brampton', 'Scarborough']} />);
+      await screen.findAllByRole('combobox', { name: 'Payment' });
+      expect(screen.queryAllByRole('button', { name: /reset/i })).toHaveLength(0);
+    });
+
+    it('appears as soon as any single filter moves off its default', async () => {
+      render(<RosterBrowser locationOptions={['Brampton', 'Scarborough']} />);
+      await screen.findAllByRole('combobox', { name: 'Payment' });
+      for (const sel of screen.getAllByRole('combobox', { name: 'Location' })) await userEvent.selectOptions(sel, 'Brampton');
+      expect(screen.getAllByRole('button', { name: /reset/i }).length).toBeGreaterThan(0);
+    });
+  });
+
   it('shows a "Load more" button when the filtered set exceeds the initial window', async () => {
     const many = Array.from({ length: 60 }, (_, i) =>
       row({ fid: `CMT-${i}`, name: `Fam${i}`, parentName: `Parent ${i}`, programs: ['Bala Vihar'], programKeys: ['bala-vihar'] }),
