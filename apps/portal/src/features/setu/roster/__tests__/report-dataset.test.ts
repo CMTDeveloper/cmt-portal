@@ -71,7 +71,12 @@ beforeEach(() => {
     // Shah has no attendance + no donation → its promotion carry-forward stays Registered.
     attendanceEvents: [],
     offerings: [
-      { id: 'off-bv', oid: 'off-bv', programKey: 'bala-vihar', pricingTiers: [], enabled: true },
+      // A real tier: an offering with EMPTY pricingTiers now means something
+      // specific (a free program → payment 'not-applicable'), so a fixture that
+      // leaves them empty while pinning an override silently stops testing the
+      // pricing path at all.
+      { id: 'off-bv', oid: 'off-bv', programKey: 'bala-vihar', enabled: true,
+        pricingTiers: [{ effectiveFrom: '2026-09-01', amountCAD: 500, label: 'Full year' }] },
     ],
     // Level = child grade matched to a gradeBand, keyed by the enrollment's pid.
     levels: [
@@ -112,6 +117,53 @@ describe('buildRosterReportDataset', () => {
     expect(child).toMatchObject({ type: 'Child', grade: '2', level: 'Level 2' });
     const adult = ranaPeople.find((p) => p.memberName === 'Vaibhav Rana')!;
     expect(adult).toMatchObject({ type: 'Adult', level: '' });
+  });
+
+  // This builder is the live surface behind BOTH the /welcome/roster payload and
+  // the CSV export, so every payment verdict has to be pinned here and not only
+  // in build-csv-rows.test.ts, which exercises a different function over the same
+  // rule. One family per way of owing nothing, plus the N=2 mixed case.
+  it('payment: free and waived read not-applicable; unpriceable and off-portal read unknown', async () => {
+    fs.data.families = [
+      { id: 'CMT-FREE', name: 'Free', location: 'Brampton', legacyFid: '', publicFid: null },
+      { id: 'CMT-WAIVED', name: 'Waived', location: 'Brampton', legacyFid: '', publicFid: null },
+      { id: 'CMT-GHOST', name: 'Ghost', location: 'Brampton', legacyFid: '', publicFid: null },
+      { id: 'CMT-TEACHER', name: 'Teacher', location: 'Brampton', legacyFid: '', publicFid: null },
+      { id: 'CMT-LEGACY', name: 'Legacy', location: 'Brampton', legacyFid: '477', publicFid: null },
+      { id: 'CMT-MIXED', name: 'Mixed', location: 'Brampton', legacyFid: '', publicFid: null },
+    ];
+    fs.data.members = [];
+    fs.data.donations = [];
+    fs.data.attendanceEvents = [];
+    const base = { status: 'active', termLabel: '2026-27', enrolledMids: [], enrolledAt: new Date('2026-09-01') };
+    fs.data.enrollments = [
+      { id: 'x1', __fid: 'CMT-FREE', fid: 'CMT-FREE', ...base, programKey: 'om-chanting', programLabel: 'Om Chanting', oid: 'off-free' },
+      { id: 'x2', __fid: 'CMT-WAIVED', fid: 'CMT-WAIVED', ...base, programKey: 'adult-study-class', programLabel: 'Adult Study Class', oid: 'off-asc', suggestedAmountOverride: 0 },
+      // No offering doc exists for off-gone, and the snapshot is 0.
+      { id: 'x3', __fid: 'CMT-GHOST', fid: 'CMT-GHOST', ...base, programKey: 'bala-vihar', programLabel: 'Bala Vihar', oid: 'off-gone' },
+      { id: 'x4', __fid: 'CMT-TEACHER', fid: 'CMT-TEACHER', ...base, programKey: 'tabla', programLabel: 'Tabla', oid: 'off-tm' },
+      { id: 'x5', __fid: 'CMT-LEGACY', fid: 'CMT-LEGACY', ...base, programKey: 'bala-vihar', programLabel: 'Bala Vihar', oid: 'off-legacy' },
+      { id: 'x6a', __fid: 'CMT-MIXED', fid: 'CMT-MIXED', ...base, programKey: 'om-chanting', programLabel: 'Om Chanting', oid: 'off-free' },
+      { id: 'x6b', __fid: 'CMT-MIXED', fid: 'CMT-MIXED', ...base, programKey: 'bala-vihar', programLabel: 'Bala Vihar', oid: 'off-bv' },
+    ];
+    fs.data.offerings = [
+      ...(fs.data.offerings ?? []),
+      { id: 'off-free', oid: 'off-free', programKey: 'om-chanting', pricingTiers: [], enabled: true },
+      { id: 'off-asc', oid: 'off-asc', programKey: 'adult-study-class', pricingTiers: [{ effectiveFrom: '2026-09-01', amountCAD: 101, label: 'Full year' }], enabled: true },
+      { id: 'off-tm', oid: 'off-tm', programKey: 'tabla', pricingTiers: [], paymentSource: 'teacher-managed', enabled: true },
+      { id: 'off-legacy', oid: 'off-legacy', programKey: 'bala-vihar', pricingTiers: [], paymentSource: 'legacy', enabled: true },
+    ];
+
+    const out = await buildRosterReportDataset({});
+    const pay = (fid: string) => out.find((f) => f.row.fid === fid)!.row.payment;
+    expect(pay('CMT-FREE')).toBe('not-applicable');
+    // The waiver wins over the offering's $101 - that is the whole point of it.
+    expect(pay('CMT-WAIVED')).toBe('not-applicable');
+    expect(pay('CMT-GHOST')).toBe('unknown');
+    expect(pay('CMT-TEACHER')).toBe('unknown');
+    expect(pay('CMT-LEGACY')).toBe('unknown');
+    // N=2: the priced Bala Vihar enrollment still owes $500 beside the free one.
+    expect(pay('CMT-MIXED')).toBe('outstanding');
   });
 
   it('year scope: a non-matching year drops families with no active enrollment that year', async () => {

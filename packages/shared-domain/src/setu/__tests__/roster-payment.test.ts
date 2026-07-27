@@ -146,8 +146,32 @@ describe('classifyRosterPayment - we cannot tell (unknown)', () => {
     expect(classifyRosterPayment(active, 0)).toBe('outstanding');
   });
 
+  // 'legacy' is the OTHER off-portal source: its payment status lives in the prod
+  // RTDB roster (offering.ts:22), which this classifier never reads. Same argument
+  // as teacher-managed, and reachable - CreateOfferingSchema puts no floor on
+  // pricingTiers, so an admin can create a legacy offering with no price at all.
+  it('is unknown for an unpriced LEGACY offering, not N/A', () => {
+    const active = [charge({ offering: offering(null, 'legacy') })];
+    expect(classifyRosterPayment(active, 0)).toBe('unknown');
+  });
+
+  // N=2: one off-portal enrollment is enough, even beside a portal-free one.
+  it('is unknown when ANY of two zero-cost enrollments is off-portal', () => {
+    const active = [charge({ offering: offering(null) }), charge({ offering: offering(null, 'legacy') })];
+    expect(classifyRosterPayment(active, 0)).toBe('unknown');
+  });
+
   it('treats an absent paymentSource as portal-collected', () => {
     expect(classifyRosterPayment([charge({ offering: offering(null) })], 0)).toBe('not-applicable');
+  });
+
+  // A deliberate edge, pinned so it is a decision rather than an accident: with
+  // no offering doc there is no source to read, but an override of 0 is an
+  // explicit human statement that this family owes nothing. The statement wins.
+  // Reaching here at all needs a staff override on an enrollment whose offering
+  // was later deleted.
+  it('honours an override of 0 as N/A even with no offering to read a source from', () => {
+    expect(classifyRosterPayment([charge({ override: 0, offering: null })], 0)).toBe('not-applicable');
   });
 });
 

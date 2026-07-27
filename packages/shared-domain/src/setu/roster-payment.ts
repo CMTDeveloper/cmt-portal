@@ -82,10 +82,17 @@ export function classifyRosterPayment(
 
   if (expected > 0) return paidCAD >= expected ? 'paid' : 'outstanding';
 
-  // expected === 0. "No fee applies" is only honest when the portal is the one
-  // that would have collected. A teacher-managed offering carries its fee
-  // off-system in cash, so a zero here means the portal has no opinion - the one
-  // case where N/A would tell a volunteer a family is settled when it is not.
-  const anyTeacherManaged = active.some((c) => sourceOf(c.offering) === 'teacher-managed');
-  return anyTeacherManaged ? 'unknown' : 'not-applicable';
+  // expected === 0. "No fee applies" is only honest when the PORTAL is the one
+  // that would have collected, because the portal's donations are all this
+  // function can see. Both other sources settle up somewhere we are not looking:
+  // 'teacher-managed' is cash collected by the teacher, and 'legacy' is the prod
+  // RTDB roster's own payment field. A zero from either means "no opinion", not
+  // "settled" - the one case where N/A would tell a volunteer a family is square
+  // when it is not.
+  //
+  // Tested against `!== 'portal'` rather than the two names on purpose: a fourth
+  // payment source added to PAYMENT_SOURCES later inherits the cautious verdict
+  // instead of silently defaulting to "nothing is owed".
+  const anyOffPortal = active.some((c) => sourceOf(c.offering) !== 'portal');
+  return anyOffPortal ? 'unknown' : 'not-applicable';
 }

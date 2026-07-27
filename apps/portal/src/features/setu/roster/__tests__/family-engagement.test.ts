@@ -105,7 +105,17 @@ describe('deriveFamilyRosterSignals', () => {
 
   it("'confirmed' from legacy-paid on a legacy-sourced offering — WITHOUT an attendance read", async () => {
     getEnrollments.mockResolvedValue([
-      bvEnrollment({ offering: { startDate: new Date('2025-09-01'), endDate: null, paymentSource: 'legacy' } }),
+      bvEnrollment({
+        offering: {
+          startDate: new Date('2025-09-01'),
+          endDate: null,
+          paymentSource: 'legacy',
+          // Overriding `offering` replaces the whole object, so the tiers have to
+          // be restated. Without them this reads as a $0 legacy offering, which
+          // is a different case entirely (asserted directly below).
+          pricingTiers: [{ effectiveFrom: '2025-09-01', amountCAD: 100, label: 'Full year' }],
+        },
+      }),
     ]);
     getDonations.mockResolvedValue([]);
     getLegacyPaymentStatus.mockResolvedValue('paid');
@@ -114,6 +124,24 @@ describe('deriveFamilyRosterSignals', () => {
     expect(res.bvEngagement).toBe('confirmed');
     expect(getLegacyPaymentStatus).toHaveBeenCalledWith('715');
     expect(getFamilyBalaViharAttendance).not.toHaveBeenCalled();
+  });
+
+  // Engagement and payment answer different questions off the same read, and a
+  // legacy offering is where they diverge hardest: this family IS confirmed
+  // (the RTDB roster says paid), yet the payment chip must still say unknown,
+  // because the money never passed through the portal for this classifier to see.
+  it("an unpriced LEGACY offering is payment:'unknown' even when legacy-paid confirms engagement", async () => {
+    getEnrollments.mockResolvedValue([
+      bvEnrollment({
+        offering: { startDate: new Date('2025-09-01'), endDate: null, paymentSource: 'legacy', pricingTiers: [] },
+      }),
+    ]);
+    getDonations.mockResolvedValue([]);
+    getLegacyPaymentStatus.mockResolvedValue('paid');
+
+    const res = await deriveFamilyRosterSignals('CMT-1', CTX);
+    expect(res.bvEngagement).toBe('confirmed');
+    expect(res.payment).toBe('unknown');
   });
 
   it('never throws — a read failure yields unknown/null', async () => {

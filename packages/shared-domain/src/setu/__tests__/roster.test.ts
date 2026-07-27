@@ -6,10 +6,12 @@ import {
 } from '../roster';
 
 describe('roster schemas', () => {
-  it('ROSTER_PAYMENTS covers the three payment states', () => {
-    expect(ROSTER_PAYMENTS).toContain('paid');
-    expect(ROSTER_PAYMENTS).toContain('outstanding');
-    expect(ROSTER_PAYMENTS).toContain('unknown');
+  // Asserted as an exact list, not with toContain: a state silently dropped from
+  // the enum would still pass three toContain calls, and every consumer that maps
+  // over ROSTER_PAYMENTS (the roster's Payment filter, the report route's
+  // validator) would quietly lose an option.
+  it('ROSTER_PAYMENTS is exactly the four payment states', () => {
+    expect([...ROSTER_PAYMENTS]).toEqual(['paid', 'outstanding', 'not-applicable', 'unknown']);
   });
 
   it('RosterPersonCsvRowSchema parses a person row incl. the level column', () => {
