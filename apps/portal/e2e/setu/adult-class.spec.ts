@@ -53,6 +53,26 @@ import { ADULT_CLASS_EMAILS, ADULT_CLASS_PASSWORD, hasAdultClassCreds } from '..
  * SEQUENTIAL + MUTATING. Tests enroll real UAT families. The beforeAll reseed
  * resets them; afterAll additionally removes the adult-class enrollments so a
  * re-run without a reseed still starts from an un-gated state.
+ *
+ * ── ⚠️ THE FLAG FLIP AFFECTS OTHER SPECS, NOT JUST THIS ONE ──────────────────
+ * This gate runs on EVERY `/family/*` render, so any fixture family that meets
+ * its five conditions starts bouncing to `/adult-class` the moment the flag goes
+ * on - in specs that have nothing to do with this feature.
+ *
+ * The shared family `CMT-FSWEDU2X` is one of them. Verified in UAT 2026-07-26:
+ * Brampton, one adult (not teacher-assigned), one child, an active Bala Vihar
+ * enrollment - and **zero completed donations**, which is the only reason
+ * condition 3 fails and the gate stays shut today. `enrollment-state.spec.ts`
+ * Phase 2 re-seeds it with `-- --confirm-bv`, which writes precisely that
+ * donation. After that run, with the Brampton adult-class offering this suite's
+ * seed creates, the shared family satisfies all five conditions and every
+ * SUBSEQUENT spec that visits `/family` is diverted.
+ *
+ * That is correct product behaviour, not a bug - it is a paid Bala Vihar family
+ * with a selectable adult. But it will present as unrelated dashboard specs
+ * failing on a URL mismatch. Before flipping the flag, either give the shared
+ * family an adult-class enrollment (satisfying condition 4) or run
+ * `seed:e2e-family` without `--confirm-bv` after any run that used it.
  */
 test.describe('adult study class — the gate, the fee, and the §2.3 matrix', () => {
   test.describe.configure({ mode: 'serial' });
@@ -136,7 +156,13 @@ test.describe('adult study class — the gate, the fee, and the §2.3 matrix', (
     const { ctx, page } = await pageAs(browser, ADULT_CLASS_EMAILS.row1);
     try {
       await page.goto('/family');
-      await expect(page).toHaveURL(/\/adult-class(\/|$|\?)/, { timeout: 30_000 });
+      // The instructive-failure convention (attendance-binary.spec.ts:34-37): with
+      // the flag off this is the FIRST assertion to fail, and a bare URL mismatch
+      // reads as a broken gate rather than an unset env var.
+      await expect(
+        page,
+        'never diverted to /adult-class — set NEXT_PUBLIC_FEATURE_SETU_ADULT_CLASS=true on the target deploy and redeploy (NEXT_PUBLIC_* is inlined at build time)',
+      ).toHaveURL(/\/adult-class(\/|$|\?)/, { timeout: 30_000 });
       // Two adults, neither teaching → both offered, NEITHER preselected (the
       // preselect is row 5's single-adult case only).
       await expect(adultCheckboxes(page)).toHaveCount(2, { timeout: 20_000 });
@@ -175,6 +201,51 @@ test.describe('adult study class — the gate, the fee, and the §2.3 matrix', (
     }
   });
 
+  // ── §6.3 — the B2 test the spec says is most likely to be skipped ──────────
+  //
+  // ORDER IS LOAD-BEARING. This must run while exactly ONE of two adults is
+  // selected, which is why it sits between the pick-one and pick-both tests
+  // rather than after them. Manual mode prunes `enrolledMids` by EXISTENCE only
+  // (sync-enrollment-members.ts:126-134); the bug it guards against is AUTO
+  // mode, which re-derives the list from every eligible member - and for an
+  // adult program `memberEligibleForProgram` matches every Adult. So the
+  // regression is only visible while the stored list is a PROPER SUBSET of the
+  // family's adults. Run this after both adults are selected and the two
+  // behaviours produce an identical list: the test passes under the very bug it
+  // exists to catch.
+  test('row 1: editing an UNRELATED member leaves a PARTIAL selection untouched', async ({ browser }) => {
+    const list = await enrollments(ADULT_CLASS_EMAILS.row1);
+    const before = adultClassEnrollment(list);
+    const mids = [...(before!['enrolledMids'] as string[])].sort();
+    expect(mids.length, 'this test is only meaningful on a partial selection').toBe(1);
+
+    // The CHILD - a member who is not, and cannot be, in the adult class. Taken
+    // from the Bala Vihar enrollment rather than clicked through the member list,
+    // so the test cannot pass because a selector drifted onto the wrong person.
+    const bv = list.find((e) => e['programKey'] === 'bala-vihar' && e['status'] === 'active');
+    const childMid = (bv!['enrolledMids'] as string[])[0]!;
+    expect(mids, 'the child must not be in the adult class to begin with').not.toContain(childMid);
+
+    const { ctx, page } = await pageAs(browser, ADULT_CLASS_EMAILS.row1);
+    try {
+      await page.goto(`/family/members/${childMid}/edit`);
+      const allergies = page.getByLabel('Food allergies').filter({ visible: true }).first();
+      await expect(allergies).toBeVisible({ timeout: 30_000 });
+      await allergies.fill(`E2E touch ${Date.now()}`);
+      await page.getByRole('button', { name: /Save changes/i }).filter({ visible: true }).first().click();
+      // The save leaves the edit screen; wait for that rather than a fixed sleep.
+      await expect(page).not.toHaveURL(/\/edit(\/|$|\?)/, { timeout: 30_000 });
+    } finally {
+      await page.close();
+      await ctx.close();
+    }
+
+    // Auto mode would have re-derived this to BOTH adults on that write.
+    const after = adultClassEnrollment(await enrollments(ADULT_CLASS_EMAILS.row1));
+    expect([...(after!['enrolledMids'] as string[])].sort()).toEqual(mids);
+    expect(after!['membershipMode']).toBe('manual');
+  });
+
   test('row 1: re-visiting shows the saved answer, and picking BOTH is still $0', async ({ browser }) => {
     const { ctx, page } = await pageAs(browser, ADULT_CLASS_EMAILS.row1);
     try {
@@ -199,40 +270,6 @@ test.describe('adult study class — the gate, the fee, and the §2.3 matrix', (
     }
   });
 
-  // ── §6.3 — the B2 test the spec says is most likely to be skipped ──────────
-  test('row 1: editing an UNRELATED member leaves enrolledMids untouched', async ({ browser }) => {
-    const list = await enrollments(ADULT_CLASS_EMAILS.row1);
-    const before = adultClassEnrollment(list);
-    const mids = [...(before!['enrolledMids'] as string[])].sort();
-
-    // The CHILD - a member who is not, and cannot be, in the adult class. Taken
-    // from the Bala Vihar enrollment rather than clicked through the member list,
-    // so the test cannot pass because a selector drifted onto the wrong person.
-    const bv = list.find((e) => e['programKey'] === 'bala-vihar' && e['status'] === 'active');
-    const childMid = (bv!['enrolledMids'] as string[])[0]!;
-    expect(mids, 'the child must not be in the adult class to begin with').not.toContain(childMid);
-
-    const { ctx, page } = await pageAs(browser, ADULT_CLASS_EMAILS.row1);
-    try {
-      await page.goto(`/family/members/${childMid}/edit`);
-      const allergies = page.getByLabel('Food allergies').filter({ visible: true }).first();
-      await expect(allergies).toBeVisible({ timeout: 30_000 });
-      await allergies.fill(`E2E touch ${Date.now()}`);
-      await page.getByRole('button', { name: /Save changes/i }).filter({ visible: true }).first().click();
-      // The save leaves the edit screen; wait for that rather than a fixed sleep.
-      await expect(page).not.toHaveURL(/\/edit(\/|$|\?)/, { timeout: 30_000 });
-    } finally {
-      await page.close();
-      await ctx.close();
-    }
-
-    // A membership derived from eligibility rather than stored would have re-run
-    // on this write and quietly rewritten the family's choice.
-    const after = adultClassEnrollment(await enrollments(ADULT_CLASS_EMAILS.row1));
-    expect([...(after!['enrolledMids'] as string[])].sort()).toEqual(mids);
-    expect(after!['membershipMode']).toBe('manual');
-  });
-
   // ── Row 2 — the teaching adult is NOT OFFERED (§6.6, explicit) ─────────────
   test('row 2: only the non-teaching adult is offered at all', async ({ browser }) => {
     const { ctx, page } = await pageAs(browser, ADULT_CLASS_EMAILS.row2);
@@ -249,6 +286,54 @@ test.describe('adult study class — the gate, the fee, and the §2.3 matrix', (
       await page.close();
       await ctx.close();
     }
+  });
+
+  // The strongest form of §6.3, and the reason row 2 exists as a fixture rather
+  // than only as a rendering assertion. Here the excluded adult is one the family
+  // could never legitimately choose: auto mode re-derives from
+  // `memberEligibleForProgram`, which for an adult program matches EVERY Adult
+  // including the one teaching that hour. So a re-derive on an unrelated write
+  // does not merely widen the family's choice - it enrols the teacher into a
+  // class they are running.
+  test('row 2: an unrelated member edit never re-adds the teaching adult', async ({ browser }) => {
+    // Confirm the preselected non-teacher (row 5's one-adult preselect applies).
+    {
+      const { ctx, page } = await pageAs(browser, ADULT_CLASS_EMAILS.row2);
+      try {
+        await page.goto('/adult-class');
+        await expect(adultCheckboxes(page)).toHaveCount(1, { timeout: 30_000 });
+        await page.getByRole('button', { name: /Continue/i }).click();
+        await expect(page).toHaveURL(/\/family(\/|$|\?)/, { timeout: 30_000 });
+      } finally {
+        await page.close();
+        await ctx.close();
+      }
+    }
+
+    const list = await enrollments(ADULT_CLASS_EMAILS.row2);
+    const before = adultClassEnrollment(list);
+    const mids = [...(before!['enrolledMids'] as string[])].sort();
+    expect(mids.length, 'exactly the one non-teaching adult should be enrolled').toBe(1);
+
+    const bv = list.find((e) => e['programKey'] === 'bala-vihar' && e['status'] === 'active');
+    const childMid = (bv!['enrolledMids'] as string[])[0]!;
+
+    const { ctx, page } = await pageAs(browser, ADULT_CLASS_EMAILS.row2);
+    try {
+      await page.goto(`/family/members/${childMid}/edit`);
+      const allergies = page.getByLabel('Food allergies').filter({ visible: true }).first();
+      await expect(allergies).toBeVisible({ timeout: 30_000 });
+      await allergies.fill(`E2E touch ${Date.now()}`);
+      await page.getByRole('button', { name: /Save changes/i }).filter({ visible: true }).first().click();
+      await expect(page).not.toHaveURL(/\/edit(\/|$|\?)/, { timeout: 30_000 });
+    } finally {
+      await page.close();
+      await ctx.close();
+    }
+
+    const after = adultClassEnrollment(await enrollments(ADULT_CLASS_EMAILS.row2));
+    expect([...(after!['enrolledMids'] as string[])].sort()).toEqual(mids);
+    expect(after!['membershipMode']).toBe('manual');
   });
 
   // ── Row 5 — single non-teaching parent, preselected, one tap ───────────────
