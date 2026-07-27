@@ -29,6 +29,13 @@ function visibleAttRows(page: Page) {
   return page.getByTestId('att-row').filter({ visible: true });
 }
 
+/** The present/not-marked toggle INSIDE an attendance row.
+ *  P2 Task 5 moved `aria-pressed` off the row onto this button: the row had to
+ *  stop being a <button> so it could hold the "View profile" link. */
+function attToggle(row: ReturnType<typeof visibleAttRows>) {
+  return row.getByRole('button', { name: /present|not marked/i });
+}
+
 /** Read the `(N)` count out of a visible "<label> (N)" heading. */
 async function countFromLabel(page: Page, re: RegExp): Promise<number> {
   const loc = page.getByText(re).filter({ visible: true }).first();
@@ -115,7 +122,7 @@ test.describe('Teacher - consolidated "Not in this class yet" section', () => {
     //        Unmarked until a hard page reload (Vaibhav). ─────────────────────────
     const liveRow = visibleAttRows(page).filter({ hasText: 'Psib Threegrade' }).first();
     await expect(liveRow).toHaveCount(1, { timeout: 15_000 });
-    await expect(liveRow).toHaveAttribute('aria-pressed', 'true');
+    await expect(attToggle(liveRow)).toHaveAttribute('aria-pressed', 'true');
 
     // ── (d) Reload: the confirmed family joins the Enrolled roster (+2); the
     //        section's Previous group drops to 1. ────────────────────────────────
@@ -123,7 +130,7 @@ test.describe('Teacher - consolidated "Not in this class yet" section', () => {
     await expect(visibleAttRows(page)).toHaveCount(4, { timeout: 20_000 });
     expect(await countFromLabel(page, /Enrolled students \(\d+\)/), 'Enrolled 2 -> 4 (both CMT-E2E-PSIB siblings)').toBe(4);
     const markedRow = visibleAttRows(page).filter({ hasText: 'Psib Threegrade' }).first();
-    await expect(markedRow).toHaveAttribute('aria-pressed', 'true');
+    await expect(attToggle(markedRow)).toHaveAttribute('aria-pressed', 'true');
     await expandSection(page);
     expect(await countFromLabel(page, /Previous students \(\d+\)/), 'Previous 3 -> 1 (only Psolo Prev)').toBe(1);
 

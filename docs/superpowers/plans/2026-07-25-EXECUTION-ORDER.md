@@ -3,18 +3,18 @@
 **Written 2026-07-25 at HEAD `1c5f31f`, at the end of the planning + rebuild pass.**
 Start here. Read `docs/superpowers/reviews/README.md` second.
 
-**Status as of 2026-07-26: Phases 0, 1 and 2 COMPLETE apart from P2 Tasks 3-5 - P1, P3 (bar one blocked step), P4, P6 and P2 Tasks 1-2 + 6-9 all shipped and UAT-verified. What remains is P2 Tasks 3-5 (cut candidate #5) and the whole of P5 v3. 8 days to launch.**
+**Status as of 2026-07-26: Phases 0, 1 and 2 are COMPLETE.** P1, P3 (bar one step blocked on Vaibhav), P2, P4 and P6 are all shipped and UAT-verified. **What remains is the whole of P5 v3** (the monthly pledge, which ships DARK) plus two carried items: the UNRUN adult-class E2E and the deferred half of P2 Task 5. 8 days to launch.
 
 | Plan | Done | Remaining |
 |---|---|---|
 | **P1** roles + cross-family edit | **all 11 tasks** | - |
 | **P3** communications | **Tasks 1-6** | only Task 6 Step 3 (per-template UAT send), blocked on Vaibhav's SES templates |
-| **P2** teacher/visitors/roster | Tasks 1-2, **6-9** | **Tasks 3-5 only** - the attendance UI rebuild, item 22 below (cut candidate #5) |
+| **P2** teacher/visitors/roster | **Tasks 1-9** | Task 5's desktop-table/mobile-card split + detail drawer only - deferred, see the plan's Task 5 block |
 | **P5** monthly pledge → **v3 plan** `2026-07-26-launch-p5-monthly-pledge-v3.md` | Task 1 Steps 1-3 (UAT rules) | **REPLANNED 2026-07-26 - 8 tasks, UNBLOCKED, ships DARK** - no bank details, Stripe-hosted PAD. Tasks 2, 10, 11 DELETED; 3-8b, 12 need rewrite. **BLOCKED on spec O9.** Steps 4-5 are a NO-OP. |
 | **P4** adult study class | **all 12 tasks** | the E2E `e2e/setu/adult-class.spec.ts` is authored + fixtures seeded but **UNRUN** - it needs `NEXT_PUBLIC_FEATURE_SETU_ADULT_CLASS=true` on the UAT deploy, which diverts the shared E2E family (runbook §14 C2) |
 | **P6** migration/dormant/centre | **all 7 tasks** | - |
 
-**▶ NEXT: item 22, P2 Tasks 3-5** (the attendance UI rebuild), then Phase 3 / P5 v3. P4 and P2 Tasks 6-9 are done; P6 is done, so **no cutover-BLOCKING work remains**. P6 Task 5 shipped the `layout.tsx:76` fix that **P4 Task 8 must rebase onto** - if you extract a shared `earlierGatesPending(data)` there, it MUST include `needsCentreConfirmation(data.family, data.isManager)` or a family needing centre confirmation gets routed to `/adult-class`.
+**▶ NEXT: Phase 3 / P5 v3** (the monthly pledge, 8 tasks, ships DARK) - the only substantial build left. **No cutover-BLOCKING work remains.** Historical note: P6 Task 5 shipped the `layout.tsx:76` fix that **P4 Task 8 must rebase onto** - if you extract a shared `earlierGatesPending(data)` there, it MUST include `needsCentreConfirmation(data.family, data.isManager)` or a family needing centre confirmation gets routed to `/adult-class`.
 
 ---
 
@@ -82,9 +82,9 @@ Independent of Track A except Task 9.
 19. **P4 Tasks 9-12** - the move to `/donate/success`, the generic-route waiver, the payment classifier, E2E.
 20. ~~**P6 Tasks 6-7**~~ **DONE** - the four form edits and a 5/5 deployed-UAT E2E. (Ran ahead of P4 rather than after it: they are P6-internal and share no files with P4.)
 21. ~~**P2 Tasks 6-9**~~ **DONE 2026-07-26** - `/welcome/visitors` + nav (three navs, not one: admins never see `WELCOME_NAV_ITEMS`), the visitor grade filter, the roster Reset button, and the guest->teacher + `/welcome/visitors` E2E (7/7 against deployed UAT). Task 9 closed the rule-7 hole: `/welcome/visitors` had shipped with no end-to-end test at all. **Carry forward:** the guest writer takes its date from the SERVER clock, so a spec authored on a Sunday passes with Task 2's date-key fix reverted - the specs pin the writer and the reader separately for that reason. See the shipped block above Task 9 in the P2 plan.
-22. **P2 Tasks 3-5** - the attendance UI rebuild. **Sequenced last on purpose: this is cut candidate #5** and the single largest piece in the batch. Take it only if the week has room.
+22. ~~**P2 Tasks 3-5**~~ **DONE 2026-07-26** (`6e6cec2`, `2db63e6`, `598cc91`) - parent contact + payment verdict (bounded, index-free, batched getAll instead of the plan's fan-out), the view-model widening (allergy text to teachers AND welcome-team, per the owner), and the row restructure that finally lets a row hold a "View profile" link. **Task 5 is PARTIAL:** the desktop-table/mobile-card split and the detail drawer are deliberately deferred - that split is where every hazard in the plan lives (doubled `att-row` breaks five count assertions; doubled `data-unmarked` silently breaks "Next unmarked" on phones). **Sequenced last on purpose: this is cut candidate #5** and the single largest piece in the batch. Take it only if the week has room.
 
-> **GAP FIXED 2026-07-26.** Items 21-22 were missing from this document entirely. It placed P2 Tasks 1-2 in Phase 0 and then never mentioned Tasks 3-9, so the teacher attendance rebuild, `/welcome/visitors`, the visitor grade filter, the roster Reset button and the guest->teacher E2E were invisible to the running order - a documentation gap, never a decision to drop them. Anyone reading only the phases would have concluded P2 was finished after Phase 0. It is not: 7 of its 9 tasks remain.
+> **GAP FIXED 2026-07-26.** Items 21-22 were missing from this document entirely. It placed P2 Tasks 1-2 in Phase 0 and then never mentioned Tasks 3-9, so the teacher attendance rebuild, `/welcome/visitors`, the visitor grade filter, the roster Reset button and the guest->teacher E2E were invisible to the running order - a documentation gap, never a decision to drop them. Anyone reading only the phases would have concluded P2 was finished after Phase 0. **All 9 tasks have since shipped (2026-07-26); the gap is closed.**
 
 ---
 

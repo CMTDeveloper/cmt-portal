@@ -411,6 +411,48 @@ data once, and a bad run with only skip-if-present idempotence is unrecoverable.
 
 ## Task 3: Parent contact and donation status for a level's students
 
+> **✅ SHIPPED 2026-07-26 (`6e6cec2`).** Three deviations, each deliberate:
+>
+> 1. **`payment: RosterPayment` (four states), not `donationComplete: boolean`.**
+>    This plan is dated 2026-07-25 and predates `classifyRosterPayment`, which
+>    shipped the next day (`8ac2256`/`bdea8ef`) precisely because a zero balance
+>    means either "no fee applies" or "we never found a price". Step 1's
+>    instruction to hand-write `override ?? resolveSuggestedAmount(...) ?? snapshot`
+>    would have been the **fifth** copy of a chain that was just deleted from four
+>    callers. The verdict now comes from `classifyBulkPayment`.
+> 2. **Contacts are a batched `getAll`, not the plan's per-family fan-out.**
+>    `fids.map(fid => families/{fid}/members.get())` is exactly what
+>    `roster-fetch.test.ts:126` forbids. `deriveRoster` already batch-reads the
+>    family docs for `legacyFid`, so it now also returns `managerMidByFid` and the
+>    detail module resolves parents with ONE `getAll` of those member docs -
+>    **zero** extra reads rather than N queries. (`members` docs carry no `fid`
+>    field, so a filtered `collectionGroup` was never available: `build-csv-rows.ts:36`
+>    derives the fid from the parent path.)
+> 3. **`MAX_DETAIL_FIDS = 150`, not 80.** The cap exists to catch a program-scoped
+>    set (~500 at prod for Brampton alone); at 80 a legitimately large class could
+>    trip it and 500 the teacher screen on a Sunday morning. Measured 2026-07-26:
+>    the largest UAT level holds 8 families.
+>
+> **Scope limit, recorded not hidden:** the verdict covers THIS level's enrollment
+> while `paidCAD` is family-wide, so a multi-program family can read `paid` here
+> and `outstanding` on the welcome roster. Agreement would need every active
+> enrollment per family, i.e. a new `enrollments.fid` **collection-group field
+> override** (single-field collection-group queries need one in this repo - see
+> `members.mid`, `enrollments.location`) plus an extra query on a page every
+> teacher loads every Sunday. In UAT today: 48 families have an active enrollment,
+> exactly **1** is multi-program.
+>
+> **A crash the plan did not mention:** `resolveSuggestedAmount` formats
+> `enrolledAt` with `Intl.DateTimeFormat`, which **throws `RangeError`** on an
+> Invalid Date - so one enrollment doc with a missing `enrolledAt` would have
+> taken down the whole attendance page, not one family's chip. Guarded; such an
+> enrollment reads `unknown`. (0 of 687 UAT docs hit it today, but
+> `rawToEnrollment` casts without parsing.)
+>
+> 18 mutations, all killed. **Two tests were added because mutants survived
+> first**: donations not accumulating across two completed payments, and the
+> positive-snapshot fallback never being exercised while an offering exists.
+
 Spec §4.4 wants parent contact and payment status on the attendance screen. Neither is in `level-attendance-view.ts:7-17` today.
 
 **Read budget: bounded and index-free.** v1 proposed three unfiltered `collectionGroup` scans on the eager render (~2,500 members + ~870 enrollments + all donations, forever-growing), duplicating a donations scan `deriveConfirmedFidsForLevel` already performs in the same request, and moving `grade-eligible.ts`'s deliberately **lazy** ~2,500-doc scan onto the eager path. This route is hit by every teacher, on every level, every Sunday morning. Do none of that. Instead:
@@ -638,6 +680,31 @@ welcome roster's chip for the same family after any pricing-tier change."
 
 ## Task 4: Widen the attendance view model
 
+> **✅ SHIPPED 2026-07-26 (`2db63e6`, changelog `7cbd47b`).**
+>
+> **Step 2b's open privacy decision, answered:** CMT Developer 2026-07-26 -
+> **welcome-team see the allergy text too**, not only teachers. So
+> `/welcome/levels/[levelId]` renders it under the name rather than just the dot.
+> Spec §4.6 covered teachers only; this widens it knowingly.
+>
+> **Step 5's mobile question, answered:** ship it. The route is NOT narrowed - the
+> React Native teacher app needs the same information to be useful. The
+> `MOBILE_API_CHANGELOG` entry states the privacy delta explicitly and tells the
+> mobile the two things it must NOT do: collapse the four-state `payment` into a
+> boolean, and present it as the family's whole balance.
+>
+> **The new fields are REQUIRED, not optional** (the plan left the choice open).
+> An optional field reads `undefined` at a construction site nobody updated and
+> the row renders blank with no error anywhere. The marker fixtures moved to an
+> `mkRow()` factory so the next widening costs one line rather than five literals.
+>
+> **A test was moved rather than kept:** the whitespace-only-allergy assertion had
+> been written against a **mocked** `deriveRoster`, feeding the view a value
+> `buildRoster` can never emit - it was testing the mock. It now runs against the
+> real `buildRoster` in `roster.test.ts`, where the guarantee lives, and both
+> `foodAllergies` and `hasSafetyInfo` are derived from the same trim so a lit dot
+> always has text behind it.
+
 **Files:**
 - Modify: `apps/portal/src/features/setu/teacher/level-attendance-view.ts:7-17`
 - Modify: `apps/portal/src/features/setu/teacher/roster.ts:37,92` - **`safetyNotes` cannot be populated without this.** `getLevelAttendanceView` maps from `RosterMember`, which carries only `hasSafetyInfo: boolean`; the underlying `foodAllergies` text is collapsed to a boolean at `:92` and discarded. `RosterMemberInput.foodAllergies` exists at `:12` but never reaches `RosterMember`.
@@ -708,6 +775,43 @@ parent contact and donation status; medical text was not in that decision."
 ---
 
 ## Task 5: Rebuild the attendance UI
+
+> **⚠️ PARTIALLY SHIPPED 2026-07-26 (`598cc91`).** The row restructure (§4.5) and
+> the §4.4/§4.3 data are in and verified against deployed UAT. The
+> desktop-table/mobile-card split and the detail drawer are **not done**.
+>
+> **The decisions the plan told me to make, and the answers:**
+> 1. **Four-state stat cards → NO.** Owner 2026-07-26: keep the binary model,
+>    Absent stays fused with Unmarked. The three cards (Enrolled/Present/Unmarked)
+>    already existed and only needed test ids; no migration of the tap gesture,
+>    `markAllToggle` or the autosave payload.
+> 2. **`data-unmarked` duplication → moot.** Only one branch is rendered, so
+>    `jumpNext()` is untouched. This is a *reason* the split was deferred, not an
+>    oversight.
+> 3. **Drawer "Enrollment Status chip" → dropped.** Confirmed constant:
+>    `roster.ts:80` routes unconfirmed families to `previousStudents`, so every
+>    row is confirmed by construction.
+> 4. **"View registration ↗" → dropped.** No route exists;
+>    `/teacher/students/[mid]` already covers "View full profile" and is what the
+>    row links to.
+> 5. **§4.1 counted `Visitors (n)` / `Previous (n)` + date dropdown → not done.**
+>    Re-adding a previous-students link would contradict the assertion at
+>    `attendance-marker.test.tsx:215` that deliberately removed it.
+>
+> **The migration cost nothing, because of one choice:** the toggle button kept
+> the `aria-label` and `aria-pressed` the row used to carry, so all ~18 `row()`
+> usages resolve the toggle and passed unchanged. **Zero tests deleted, zero
+> rewritten.** `rowEl()` was added for assertions needing the whole row.
+>
+> **The plan missed the E2E layer entirely.** Step 1 enumerates the vitest blast
+> radius but not Playwright: `attendance-binary.spec.ts` and `not-in-class.spec.ts`
+> both read `aria-pressed` straight off `att-row`, which is now the container.
+> Both were migrated to reach the toggle inside the row, and
+> `attendance-binary.spec.ts` gained deployed-UAT assertions that the container is
+> not a button, carries no `role`/`aria-pressed`, and that following "View profile"
+> navigates **without** toggling attendance. All three teacher specs green.
+>
+> 10 mutations, all killed.
 
 Spec §4.1-4.3. Desktop table, mobile cards, detail drawer, stat cards, filter chips, footer bar.
 
