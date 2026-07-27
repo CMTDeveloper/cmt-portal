@@ -22,6 +22,53 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
+## 2026-07-27 - `d4fda47`..`34cb977` - NEW family-facing money routes: `/api/pledges/*` (**additive - nothing existing changed**)
+
+The monthly-pledge feature. **No existing route, schema, error code or field changed** - an unmodified mobile client is unaffected. This entry exists because the routes are family-facing, so the mobile will want to mirror them eventually.
+
+### ⚠️ Read this before mirroring anything
+
+**The feature SHIPS DARK and stays dark at launch.** `NEXT_PUBLIC_FEATURE_SETU_PLEDGE` is unset in production, and while it is unset **every route below returns 404**, not 401 and not an empty result. A mobile client cannot distinguish "feature off" from "route does not exist" - that is deliberate. **Do not ship a pledge UI that a family can reach**: the payment service's `/pad/*` is in Stripe **TEST** mode, and the first family through after the flag flips signs the **first REAL pre-authorized debit**.
+
+**These routes are NOT under `/api/setu/`.** That prefix's `canAccessRoute` catch-all grants welcome-team and admin by default, and a route that creates a recurring financial commitment must never inherit authorization by accident. `/api/pledges/*` is **family-manager ONLY** - welcome-team, coordinator **and admin are all denied**.
+
+### `POST /api/pledges/start`
+Request body: **none** (send `{}`). There is deliberately no amount in the request - the amount lives in server env and at Stripe, and a client-supplied figure could only ever disagree with what is actually charged. `fid` comes from the SESSION, never the body.
+
+```ts
+// 201
+{ pid: string; checkoutUrl: string }   // checkoutUrl is a Stripe-HOSTED page on a third-party origin
+// 409 - a pledge is already `started` or `active`; nothing was created
+{ error: 'already-started' | 'already-active'; pid: string }
+// 404 flag off | 401 no-session / no-family / no-member | 403 manager-required
+// 400 no-email | 404 family-not-found | 503 provider-unavailable
+```
+**The mobile must open `checkoutUrl` in a real browser / web view, not an embedded form.** The bank mandate is authorised entirely on Stripe's page; the portal never sees a bank detail and neither should the app. Treat 409 as "reload and show the state that already exists", not as an error.
+
+### `POST /api/pledges/finalize`
+Called after the family returns from the hosted page. Body is **`.strict()`** - an extra key is a **400**, not silently ignored.
+
+```ts
+// request
+{ pid: string }
+// 200
+{ state: 'active' | 'processing' | 'failed' }
+// 404 flag off | 404 not-found (ALSO returned when the pid is not yours - deliberately
+//   indistinguishable) | 401 | 403 manager-required | 400 bad-request | 503 provider-unavailable
+```
+**`processing` MUST NOT be rendered as success.** It means the mandate has not been confirmed and may still fail days later. Copy for that state must promise nothing - no amount, no date, no thanks. A daily reconciler cron resolves it; the family is emailed on activation. Nothing in the request body can produce `active`.
+
+### The web redirect target
+`start` sets Stripe's success URL to `/donate/success?pledge=<pid>`, and that page finalizes server-side. A mobile flow that uses its own return URL must call `POST /api/pledges/finalize` itself, or the pledge sits in `started` until the cron picks it up.
+
+### Reading pledge state
+There is **no GET endpoint**. The web reads Firestore server-side. If the mobile needs to display pledge state, that endpoint has to be added first - do not invent one from these shapes.
+
+### Fields the mobile must never expect
+`setupSessionId`, `subscriptionId`, `customerId`, `lastError` are provider handles and are **never** returned by any route. `monthlyAmountCAD` is **snapshotted per pledge**: an existing pledge always displays its own amount, never today's price, or a price change would silently rewrite what a family was told they signed up for.
+
+---
+
 ## 2026-07-26 - `2db63e6` - GET /api/setu/teacher/levels/[levelId]/roster rows gain contact, payment and allergy text (**additive - no mobile action required to keep working**)
 
 The route returns `{ view }` verbatim, so widening `AttendanceViewRow` is a response-shape change. **Five new fields on every element of `view.rows`.** Nothing was removed or renamed, no field changed type, and no error code changed - an unmodified mobile client keeps working and simply ignores them.
