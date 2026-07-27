@@ -12,7 +12,7 @@ import { loadAdultClassGateDataFailSoft } from '@/features/setu/adult-class/load
 import { needsAdultClassSelection, isBalaViharPaid } from '@/features/setu/adult-class/needs-selection';
 import {
   selectableAdults,
-  hiddenTeachingAdultCount,
+  teachingAdults,
 } from '@/features/setu/adult-class/selectable-adults';
 import { selectBalaViharEnrollment } from '@/app/family/_helpers/select-bv-enrollment';
 import { AdultClassForm } from '@/features/setu/adult-class/components/adult-class-form';
@@ -25,7 +25,7 @@ export const metadata = { title: 'Thank you' };
 type Ask = {
   adults: { mid: string; name: string }[];
   bvPaid: boolean;
-  hiddenTeachingCount: number;
+  teachingAdults: { mid: string; name: string }[];
 };
 
 /**
@@ -51,10 +51,13 @@ async function resolveAsk(
       mid: m.mid,
       name: `${m.firstName} ${m.lastName}`,
     })),
-    // Same absence, same explanation, as on /adult-class - a family who reaches
-    // the ask here rather than through the gate is no less confused by a parent
-    // missing from their own list.
-    hiddenTeachingCount: hiddenTeachingAdultCount(gate.members, gate.teacherAssignedMids),
+    // Same greyed rows as on /adult-class - a family who reaches the ask here
+    // rather than through the gate is no less confused by a parent missing from
+    // their own list.
+    teachingAdults: teachingAdults(gate.members, gate.teacherAssignedMids).map((m) => ({
+      mid: m.mid,
+      name: `${m.firstName} ${m.lastName}`,
+    })),
     // Necessarily true whenever the predicate fired (its condition 3), but
     // derived rather than hardcoded so the fee line cannot drift from the rule.
     // Yes, this recomputes what needsAdultClassSelection already decided - over
@@ -181,7 +184,7 @@ export async function DonateSuccessBody({
               adults={ask.adults}
               initialSelected={[]}
               bvPaid={ask.bvPaid}
-              hiddenTeachingCount={ask.hiddenTeachingCount}
+              teachingAdults={ask.teachingAdults}
             />
           </section>
         )}

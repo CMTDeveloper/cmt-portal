@@ -7,7 +7,7 @@ import { loadAdultClassGateDataOrThrow } from '@/features/setu/adult-class/load-
 import { isBalaViharPaid } from '@/features/setu/adult-class/needs-selection';
 import {
   selectableAdults,
-  hiddenTeachingAdultCount,
+  teachingAdults,
 } from '@/features/setu/adult-class/selectable-adults';
 import { selectBalaViharEnrollment } from '@/app/family/_helpers/select-bv-enrollment';
 import { AdultClassForm } from '@/features/setu/adult-class/components/adult-class-form';
@@ -61,8 +61,9 @@ async function AdultClassSelection() {
     ? isBalaViharPaid({ bv, donations: gate.donations, legacyPaymentStatus: gate.legacyPaymentStatus })
     : false;
 
-  // Lets the form explain an absence §6.6 would otherwise leave unexplained.
-  const hiddenTeachingCount = hiddenTeachingAdultCount(gate.members, gate.teacherAssignedMids);
+  // Shown greyed out beneath the pickable adults, so a two-parent household
+  // sees both names and learns why one of them cannot be chosen.
+  const teaching = teachingAdults(gate.members, gate.teacherAssignedMids);
 
   return (
     <CspRoot style={{ minHeight: '100dvh' }}>
@@ -103,7 +104,7 @@ async function AdultClassSelection() {
           adults={adults.map((m) => ({ mid: m.mid, name: `${m.firstName} ${m.lastName}` }))}
           initialSelected={current?.enrolledMids ?? []}
           bvPaid={bvPaid}
-          hiddenTeachingCount={hiddenTeachingCount}
+          teachingAdults={teaching.map((m) => ({ mid: m.mid, name: `${m.firstName} ${m.lastName}` }))}
         />
       </div>
     </CspRoot>

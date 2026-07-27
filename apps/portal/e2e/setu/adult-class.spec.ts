@@ -134,9 +134,16 @@ test.describe('adult study class — the gate, the fee, and the §2.3 matrix', (
     return list.find((e) => e['programKey'] === 'adult-study-class' && e['status'] === 'active') ?? null;
   }
 
-  /** The checkboxes on /adult-class, one per SELECTABLE adult. */
+  /**
+   * The checkboxes on /adult-class, one per SELECTABLE adult.
+   *
+   * `:not([disabled])` matters since 2026-07-27: a teaching adult is now RENDERED
+   * (greyed, labelled, with a disabled checkbox) instead of omitted, so a bare
+   * `input[type=checkbox]` would count them and every "how many adults may this
+   * family pick" assertion below would silently start measuring something else.
+   */
   function adultCheckboxes(page: Page) {
-    return page.locator('input[type="checkbox"]');
+    return page.locator('input[type="checkbox"]:not([disabled])');
   }
 
   test.beforeAll(async ({ baseURL: bu }) => {
@@ -279,18 +286,39 @@ test.describe('adult study class — the gate, the fee, and the §2.3 matrix', (
     }
   });
 
-  // ── Row 2 — the teaching adult is NOT OFFERED (§6.6, explicit) ─────────────
-  test('row 2: only the non-teaching adult is offered at all', async ({ browser }) => {
+  // ── Row 2 — the teaching adult is SHOWN but UNPICKABLE (§6.6, revised) ─────
+  //
+  // This assertion was inverted on 2026-07-27. It used to require the teaching
+  // adult be ABSENT from the screen. A real family (two adults, one of them a
+  // teacher) then reported the predictable consequence: they saw one name where
+  // they knew there were two, and read it as their family record being wrong.
+  // The rule itself is unchanged - a teacher still cannot be selected, and the
+  // gate still never fires when EVERY adult teaches. Only the presentation
+  // changed: show them, grey them, say why.
+  test('row 2: the teaching adult is shown, labelled, and cannot be picked', async ({ browser }) => {
     const { ctx, page } = await pageAs(browser, ADULT_CLASS_EMAILS.row2);
     try {
       await page.goto('/family');
       await expect(page).toHaveURL(/\/adult-class(\/|$|\?)/, { timeout: 30_000 });
-      // ONE checkbox, not two-with-one-disabled: the spec requires the teacher be
-      // absent from the selection, not merely unpickable.
+
+      // Exactly ONE adult may be picked - the rule is untouched.
       await expect(adultCheckboxes(page)).toHaveCount(1, { timeout: 20_000 });
-      await expect(page.getByText(/CoAdult/i)).toHaveCount(0);
       // Row 5's preselect rule also applies here - one selectable adult.
       await expect(adultCheckboxes(page).first()).toBeChecked();
+
+      // The teacher IS on the page now, with a reason attached. getByRole, not
+      // getByText: this must be perceivable, not merely present in the DOM.
+      const teachingRow = page.getByTestId('teaching-adult').filter({ visible: true });
+      await expect(teachingRow).toHaveCount(1, { timeout: 20_000 });
+      await expect(teachingRow).toContainText(/CoAdult/i);
+      await expect(teachingRow).toContainText(/Teaching this hour/i);
+
+      // ...and is genuinely unpickable, not merely styled to look that way. A
+      // greyed row that could still be submitted would enrol a teacher into a
+      // class they are running.
+      const teachingBox = teachingRow.locator('input[type="checkbox"]');
+      await expect(teachingBox).toBeDisabled();
+      await expect(teachingBox).not.toBeChecked();
     } finally {
       await page.close();
       await ctx.close();

@@ -33,26 +33,33 @@ export function selectableAdults(
 }
 
 /**
- * How many adults the teaching rule REMOVED from {@link selectableAdults}.
+ * The adults the teaching rule removed from {@link selectableAdults} - shown on
+ * the screen, greyed out and labelled as teaching, but never pickable.
  *
- * §6.6 keeps a teaching adult out of the list entirely rather than showing them
- * unpickable, and that is right - but it means a household with two parents sees
- * one name and reads their own family record as broken. (A real family reported
- * exactly that.) This count lets the screen explain the absence.
+ * **This is a presentation list, NOT a selection list.** `selectableAdults`
+ * remains the sole authority on who may be chosen, and the write route still
+ * rejects any of these mids with `mid-not-selectable`. Nothing about the gate
+ * changes: when every adult teaches, `selectableAdults` is empty and the gate
+ * still never fires, so these rows are only ever seen alongside at least one
+ * pickable adult.
  *
- * A COUNT, deliberately, never the members themselves: §6.6's requirement is
- * that the teaching adult not appear in the selection, and a caller handed the
- * records would be one `.map(name)` away from putting them back on the page.
+ * Originally this returned a bare COUNT, because the spec asked for the teaching
+ * adult to be absent entirely. A real family then reported the obvious problem:
+ * a household with two parents saw one name and read their own family record as
+ * broken. Showing the adult greyed out, with the reason, answers the question
+ * the absence raised. Reversed deliberately with CMT Developer, 2026-07-27.
  *
- * Counts only adults who would OTHERWISE have been offered, so a pending invitee
- * is never counted - they are absent for an entirely different reason, and
- * saying "someone is teaching" about them would be a lie.
+ * Returns only adults who would OTHERWISE have been offered, so a pending
+ * invitee never appears here - they are absent for an entirely different reason,
+ * and labelling them "teaching" would be a lie. Together with
+ * `selectableAdults` this PARTITIONS the family's eligible adults: disjoint, and
+ * covering, so nobody is shown twice and nobody silently disappears.
  */
-export function hiddenTeachingAdultCount(
+export function teachingAdults(
   members: readonly MemberDoc[],
   teacherAssignedMids: ReadonlySet<string>,
-): number {
-  return members.filter((m) => isCandidateAdult(m) && teacherAssignedMids.has(m.mid)).length;
+): MemberDoc[] {
+  return members.filter((m) => isCandidateAdult(m) && teacherAssignedMids.has(m.mid));
 }
 
 /** An adult who is eligible to be offered at all, before the teaching rule. */

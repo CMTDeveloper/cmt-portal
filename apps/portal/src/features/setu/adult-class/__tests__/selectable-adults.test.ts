@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { MemberDoc } from '@cmt/shared-domain/setu';
-import { selectableAdults, hiddenTeachingAdultCount } from '../selectable-adults';
+import { selectableAdults, teachingAdults } from '../selectable-adults';
 
 /**
  * One test per row of the spec's scenario matrix (2.3), plus the two exclusions.
@@ -125,36 +125,42 @@ describe('selectableAdults - exclusions', () => {
  * bug - a real family reported exactly that. The screen may say WHY, but must
  * still not say WHO, so this is a count and never a name list.
  */
-describe('hiddenTeachingAdultCount', () => {
-  it('counts the adults §6.6 removed, and nobody else', () => {
+describe('teachingAdults', () => {
+  it('returns the adults the teaching rule removed, and nobody else', () => {
     const members = [
       member({ mid: 'f-01' }),
       member({ mid: 'f-02' }),
       member({ mid: 'f-03', type: 'Child' }),
     ];
-    expect(hiddenTeachingAdultCount(members, new Set(['f-01']))).toBe(1);
+    expect(mids(teachingAdults(members, new Set(['f-01'])))).toEqual(['f-01']);
   });
 
-  it('is 0 when nobody teaches, so the explanation line never shows unprompted', () => {
+  it('is empty when nobody teaches, so no explanatory row is rendered', () => {
     const members = [member({ mid: 'f-01' }), member({ mid: 'f-02' })];
-    expect(hiddenTeachingAdultCount(members, new Set())).toBe(0);
+    expect(teachingAdults(members, new Set())).toEqual([]);
   });
 
-  it('never counts a CHILD, even one somehow in the teacher set', () => {
+  it('never returns a CHILD, even one somehow in the teacher set', () => {
     const members = [member({ mid: 'f-01', type: 'Child' })];
-    expect(hiddenTeachingAdultCount(members, new Set(['f-01']))).toBe(0);
+    expect(teachingAdults(members, new Set(['f-01']))).toEqual([]);
   });
 
-  it('never counts a pending invitee - they are absent for a different reason', () => {
+  it('never returns a pending invitee - they are absent for a different reason', () => {
     // Otherwise the family is told someone is "teaching" when in truth they
     // simply have not accepted their invite yet.
     const members = [member({ mid: 'f-01', inviteStatus: 'pending' } as Partial<MemberDoc> & { mid: string })];
-    expect(hiddenTeachingAdultCount(members, new Set(['f-01']))).toBe(0);
+    expect(teachingAdults(members, new Set(['f-01']))).toEqual([]);
   });
 
-  it('agrees with selectableAdults: shown + hidden never exceeds the adults present', () => {
+  it('PARTITIONS the adults with selectableAdults - disjoint, and together the whole set', () => {
+    // The screen renders both lists. If they overlapped, a teaching adult would
+    // appear twice (once pickable); if they under-covered, an adult would vanish
+    // from their own family's list - the complaint that prompted this change.
     const members = [member({ mid: 'f-01' }), member({ mid: 'f-02' }), member({ mid: 'f-03' })];
     const teaching = new Set(['f-02']);
-    expect(selectableAdults(members, teaching).length + hiddenTeachingAdultCount(members, teaching)).toBe(3);
+    const pickable = mids(selectableAdults(members, teaching));
+    const shown = mids(teachingAdults(members, teaching));
+    expect(pickable.filter((m) => shown.includes(m))).toEqual([]);
+    expect([...pickable, ...shown].sort()).toEqual(['f-01', 'f-02', 'f-03']);
   });
 });

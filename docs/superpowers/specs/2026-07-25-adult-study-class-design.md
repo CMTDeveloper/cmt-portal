@@ -52,12 +52,14 @@ This dissolves three of the four policy edges that were open in §4.4, using one
 
 ### 2.3 The complete scenario matrix
 
-Confirmed with CMT Developer 2026-07-25. **"All adults" always means all *non-teaching* adults** - a teacher-assigned adult is never offered, because they are running a class at that hour.
+Confirmed with CMT Developer 2026-07-25. **"All adults" always means all *non-teaching* adults** - a teacher-assigned adult is never *selectable*, because they are running a class at that hour.
+
+> **REVISED 2026-07-27 (CMT Developer), presentation only.** A teaching adult is now **shown on the screen, greyed out, with a "Teaching this hour" label and a disabled checkbox** - not omitted. The original rule hid them entirely, and a real two-adult family (one a teacher) reported seeing a single name and reading it as their family record being wrong. **The selection rule is unchanged**: a teaching adult still cannot be picked, the write route still rejects their mid with `mid-not-selectable`, and an all-teaching household still yields an empty selectable set so the gate never fires. `selectableAdults()` remains the sole authority on who may be chosen; `teachingAdults()` is a display-only companion, and the two PARTITION the family's eligible adults - disjoint and covering, so nobody appears twice and nobody silently vanishes.
 
 | # | Family | Children in BV | Adults | Gate fires? | Adult-class cost |
 |---|---|---|---|---|---|
 | 1 | Typical BV family | Yes | 2, neither teaches | **Yes** - select 1 or both | **$0** |
-| 2 | BV family, one parent teaches | Yes | 1 teacher, 1 not | **Yes** - only the non-teacher is offered | **$0** |
+| 2 | BV family, one parent teaches | Yes | 1 teacher, 1 not | **Yes** - only the non-teacher is selectable; the teacher is shown greyed + labelled (rev. 2026-07-27) | **$0** |
 | 3 | BV family, both parents teach | Yes | 2 teachers | **No** - selectable set empty | n/a |
 | 4 | Single parent, teaches | Yes | 1 teacher | **No** - selectable set empty | n/a |
 | 5 | Single parent, does not teach | Yes | 1 non-teacher | **Yes** - preselected, one tap | **$0** |
@@ -304,7 +306,7 @@ Unrelated to the Adult Study Class, cheap, and it removes a visible inconsistenc
 5. **Roster payment isn't corrupted** (B3): a fully-paid BV family that adds an exempt Adult class enrollment must still read **paid**, not `outstanding`.
 6. **Teacher rule - one test per row of the §2.3 matrix.** Rows 3, 4 and 7 must each assert the gate does **not** fire; rows 1, 2 and 5 must assert it **does**, with only non-teaching adults offered.
    - **Row 7 needs two separate assertions**, since it fails the gate twice over: once because the family has no Bala Vihar enrollment, and once because every adult is teacher-assigned. Test each in isolation - a fixture that happens to satisfy both proves neither, and a later change to one condition would silently start prompting a teacher couple to enroll in a class they are teaching.
-   - Row 2 must assert the **teacher adult is not offered at all**, not merely that the non-teacher can be picked.
+   - Row 2 must assert the teacher adult is **shown, labelled "Teaching this hour", and genuinely unpickable** (a `disabled` checkbox, not merely grey styling) - and that exactly one adult remains selectable. *Revised 2026-07-27; this previously required the teacher be absent from the screen.* Count selectable adults with `input[type=checkbox]:not([disabled])`, or the greyed row silently inflates every count.
 7. **Index audit**: this spec adds no new query shape. `enrollments (programKey, status)` already exists. Confirm before shipping.
 
 ---
