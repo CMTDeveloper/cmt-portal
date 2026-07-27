@@ -76,7 +76,38 @@ test.describe('monthly pledge', () => {
       await expect(page.getByText(bankish)).toHaveCount(0);
     }
 
-    await Promise.all([page.waitForURL(/stripe\.com|checkout\./i, { timeout: 30_000 }), start.click()]);
+    // The CLICK is the test - do not pre-call the API here. `startPledge` blocks
+    // a second pledge while one is `started`, so probing first would make the
+    // click 409 and never redirect: the probe would break the very path it is
+    // meant to observe.
+    try {
+      await Promise.all([page.waitForURL(/stripe\.com|checkout\./i, { timeout: 30_000 }), start.click()]);
+    } catch (navFailed) {
+      // ONLY on failure, ask the API to classify what went wrong. Waiting on the
+      // navigation alone yields "waiting for navigation until load" and nothing
+      // else - which is exactly what the first real run produced, while the true
+      // cause was the payment service answering 404 for `/pad/setup-link`
+      // because `/pad/*` was not deployed. One extra pledge row is a fair price
+      // on a path that has already failed.
+      const probe = await page.request.post('/api/pledges/start', { data: {} });
+      const status = probe.status();
+      if (status === 503) {
+        throw new Error(
+          'The button is fine - the payment service is not. POST /api/pledges/start returned 503 ' +
+            'provider-unavailable. Check STRIPE_API_BASE_URL / STRIPE_PLEDGE_PRICE_ID on the ' +
+            'deployment and confirm /pad/* is actually deployed. The route never echoes provider ' +
+            'detail, so the precise error is on the newest `pledges` document in `lastError`.',
+        );
+      }
+      if (status === 409) {
+        throw new Error(
+          'This family already has a live pledge from an earlier run, so the card shows state ' +
+            'rather than an ask and the button was never there to click. Cancel it via ' +
+            'POST /api/admin/pledges/[pid]/cancel, or let the reconciler settle it, then re-run.',
+        );
+      }
+      throw navFailed;
+    }
     // A third-party origin. Assert the host and stop - the mandate form is
     // Stripe's, and driving it would couple this suite to their DOM.
     expect(page.url()).toMatch(/stripe\.com|checkout\./i);
