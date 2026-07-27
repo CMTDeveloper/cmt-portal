@@ -941,19 +941,49 @@ Spec §5.3, and the gap named at `e2e/legacy/b1-kiosk.spec.ts:22`. **v1's self-r
 
 Also required by CLAUDE.md pre-ship rule 7: `/welcome/visitors` is a new user-facing route, and a route with no deployed-UAT E2E is untested - the rule exists because `/family/seva` shipped with zero E2E and 500'd in prod.
 
+> **✅ SHIPPED 2026-07-26. 7/7 green against deployed UAT.** What the plan above got
+> wrong, and what the specs do instead:
+>
+> **The spec cannot choose the guest's date.** `recordGuestCheckIn` reads the SERVER
+> clock (`guest-check-ins.ts:27`); nothing in the request influences `date` or
+> `sessionDate`. This matters because the suite was authored on a **Sunday**, when
+> `sessionDateFor(today) === today` - so "submit the form, look at today" passes
+> with Task 2's fix fully reverted. The plan's one-line Step 1 would have shipped
+> exactly that. The fix is pinned from both ends instead, neither depending on the
+> run day: the **writer** is asserted by reading the doc the form produced back and
+> requiring `sessionDate === sessionDateFor(date)`, and the **reader** by a second
+> guest stamped `sunday + 3` which the spec first proves is invisible to the pre-fix
+> `where('date','==',sunday)` query before asserting the teacher screen shows it.
+>
+> **Both layouts dual-render.** `welcome/layout.tsx:141-166` and the teacher layout
+> each render `{children}` twice (mobile branch + desktop branch), so every element
+> exists twice in the DOM. Every locator filters `visible: true`; the first run died
+> on strict-mode violations, not on the feature.
+>
+> **Three guests, not two.** Two grades in two levels is the N=2 grouping case the
+> plan asked for; the third (grade `Shishu`) is the unmatched bucket, which is the
+> only place a dropped child would ever be noticed. Because the door records no
+> centre, the two matched children produce **four** group rows - so the headline
+> count moving by exactly **3** is what holds `childCount = children.length` in
+> place against the sum-of-groups reading.
+
 **Files:**
 - Create: `apps/portal/e2e/setu/teacher/guest-to-teacher.spec.ts`
 - Create: `apps/portal/e2e/setu/admin/welcome-visitors.spec.ts`
 
-- [ ] **Step 1: Write the UI→UI guest→teacher spec**
+- [x] **Step 1: Write the UI→UI guest→teacher spec**
 
 Against **deployed** UAT. Submit the real guest form (`guest-check-in-form.tsx`) with a child name and grade and the required parent email and phone, then sign in as the teacher persona, open the level matching that grade, and assert the child appears in the visitors panel. This is the flow Task 2's date-key fix exists to make work, so it is also Task 2's real acceptance test.
 
-- [ ] **Step 2: Write the `/welcome/visitors` spec**
+Shipped as two sessions: the door half runs on the shared E2E family (family-manager **+ admin**, which is what `can-access-route.ts:40` needs), the teacher half on `setu-test-teacher-brampton@`, whose only level is `brampton-level-1-bv-brampton-2025-26` (band `['1']`) - a narrow persona, so the test proves a real teacher sees the guest rather than that an admin sees everything.
+
+- [x] **Step 2: Write the `/welcome/visitors` spec**
 
 Two guest families across two levels, so the grouping is exercised with N=2 rather than a single-row fixture.
 
-- [ ] **Step 3: Run against deployed UAT**
+Grades chosen against live UAT level data: `1` → Brampton Level 1 + Scarborough Level A, `6` → Brampton Level 4 + Scarborough Level C, `Shishu` → no class. Counts are asserted as **deltas** against a baseline read before seeding, never absolutes - the page is shared with whoever else checked in that day.
+
+- [x] **Step 3: Run against deployed UAT**
 
 ```bash
 PLAYWRIGHT_BASE_URL=https://cmt-setu.vercel.app pnpm --filter @cmt/portal exec playwright test --project=setu guest-to-teacher welcome-visitors
@@ -961,11 +991,13 @@ PLAYWRIGHT_BASE_URL=https://cmt-setu.vercel.app pnpm --filter @cmt/portal exec p
 
 Password sign-in, never OTP. Never run the whole setu suite - the OTP limiter cascades.
 
-- [ ] **Step 4: Clean up what the specs created**
+- [x] **Step 4: Clean up what the specs created**
 
 Guest check-ins written by the spec must be removed, or they accumulate in UAT and pollute every later visitors run.
 
-- [ ] **Step 5: Commit**
+Each spec collects the doc ids it wrote and deletes them in `afterAll` (loudly, via `console.warn` with the ids, if the delete itself fails). Verified empty after both a failing and a passing run. Nothing else is mutated: the specs never click **Confirm**, which would create a pending family + auto-enrollment.
+
+- [x] **Step 5: Commit**
 
 ---
 
