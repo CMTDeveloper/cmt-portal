@@ -50,6 +50,36 @@ const RUN_E2E = hasFamilyCreds;
 test.describe('monthly pledge', () => {
   test.skip(!RUN_E2E, 'needs E2E_FAMILY_EMAIL + E2E_FAMILY_PASSWORD');
 
+  /**
+   * ── LEAVE NO LIVE PLEDGE BEHIND ───────────────────────────────────────────
+   * The redirect test starts a real pledge, and `startPledge` refuses a second
+   * one while the first is `started`. So a green run poisons the NEXT run: on
+   * 2026-07-28 the redirect test failed for 40s against a leftover pledge from
+   * a previous session, and read as a broken payment integration.
+   *
+   * Cancelling is the same remedy the failure message recommends, and the same
+   * one an admin has in the UI, so this exercises a real route rather than
+   * reaching into Firestore behind the product's back. Best-effort: a cleanup
+   * that throws would turn a passing run red for a housekeeping detail.
+   */
+  test.afterAll(async ({ playwright, baseURL }) => {
+    if (!RUN_E2E) return;
+    const ctx = await playwright.request.newContext({
+      baseURL: baseURL!,
+      storageState: 'e2e/.auth/family.json',
+    });
+    try {
+      const res = await ctx.post('/api/pledges/start', { data: {} });
+      // 409 already-started names the live pledge; 201 means we just made one.
+      const body = (await res.json()) as { pid?: string };
+      if (body.pid) await ctx.post(`/api/admin/pledges/${body.pid}/cancel`, { data: {} });
+    } catch {
+      // Best effort - never fail a green run on cleanup.
+    } finally {
+      await ctx.dispose();
+    }
+  });
+
   /** The card appears on both surfaces; find the visible copy of it. */
   function card(page: Page) {
     return page.locator('.card').filter({ hasText: 'Monthly giving' }).filter({ visible: true });
@@ -88,8 +118,15 @@ test.describe('monthly pledge', () => {
     // a second pledge while one is `started`, so probing first would make the
     // click 409 and never redirect: the probe would break the very path it is
     // meant to observe.
+    // 20s, NOT 30s. The classifier below is the whole point of this try/catch,
+    // and with a 30s wait inside a 30s test budget it can never run: on
+    // 2026-07-28 both timers expired together, Playwright killed the test, and
+    // the report said "waiting for navigation until load" - the exact useless
+    // message this block was written to replace. The real cause was a 409
+    // already-started, which the catch would have named in one line.
+    test.setTimeout(60_000);
     try {
-      await Promise.all([page.waitForURL(/stripe\.com|checkout\./i, { timeout: 30_000 }), start.click()]);
+      await Promise.all([page.waitForURL(/stripe\.com|checkout\./i, { timeout: 20_000 }), start.click()]);
     } catch (navFailed) {
       // ONLY on failure, ask the API to classify what went wrong. Waiting on the
       // navigation alone yields "waiting for navigation until load" and nothing
@@ -185,10 +222,17 @@ test.describe('monthly pledge', () => {
     // the Bala Vihar donate flow; the dashboard may report an EXISTING plan, but
     // must never solicit a new one.
     await page.goto('/family');
-    // 20s, not the 5s default: /family streams under PPR and every other dashboard
-    // assertion in this suite allows for that. A tight default here failed once
-    // on load time and read as a product fault.
-    await expect(visibleText(page, /Donation status/).first()).toBeVisible({ timeout: 20_000 });
+    // Gate on the Bala Vihar card HEADING, not on the "Donation status" label.
+    // The dashboard renders that label inside a block Playwright does not count
+    // as visible, so the old gate timed out for 20s on a page that had rendered
+    // perfectly well - a load gate reporting a product fault. The heading is the
+    // same signal (the card is on screen) and is unambiguously visible.
+    //
+    // 20s, not the 5s default: /family streams under PPR and every other
+    // dashboard assertion in this suite allows for that.
+    await expect(
+      page.getByRole('heading', { name: /bala vihar/i }).filter({ visible: true }).first(),
+    ).toBeVisible({ timeout: 20_000 });
     await expect(
       page.getByRole('button', { name: /give \$\d+ monthly/i }),
       'the dashboard is soliciting a monthly plan - that ask belongs on /family/donate',

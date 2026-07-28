@@ -223,6 +223,18 @@ test.describe('Setu kiosk new-ID lookup + auto-enroll (deployed UAT) — UNRUN',
 
     // The kiosk panel renders the legacy Family shape: fid + students[]. fid is the
     // NEW publicFid (the nudge target), NOT the entered legacy id.
+    // ⚠️ OPEN QUESTION, 2026-07-28 - this asserted 5036 and got 4456 (the legacy
+    // id) against preview. publicFids mint LAZILY, at a family's FIRST
+    // enrollment (`ensurePublicFid`), while THIS fixture is required to have NO
+    // active Bala Vihar enrollment. Those two requirements cannot both hold
+    // once eagerly-minted publicFids have been stripped: a never-enrolled
+    // family simply has no publicFid, so the kiosk falls back to the id typed
+    // in. The later test in this file covers minting AT check-in.
+    //
+    // So the product may be right and this assertion premature. Left failing on
+    // purpose rather than relaxed - which of the two the door should show
+    // before a family's first enrollment is a UX decision, not a test detail,
+    // and silently accepting either answer would bury it.
     expect(body.fid, 'lookup should return the NEW publicFid').toBe(FIXTURE_PUBLIC_FID);
     expect(Array.isArray(body.students)).toBeTruthy();
     for (const s of body.students) {
