@@ -3,6 +3,7 @@ import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { formatFamilyParentNames } from '@cmt/shared-domain';
 import type { OfferingDoc, RosterPersonCsvRow, RosterReportRow, RosterReportChild } from '@cmt/shared-domain';
 import { classifyBulkPayment } from './payment';
+import { loadActivePledgeFids } from '@/features/setu/pledges/active-pledge-fids';
 
 export type RosterReportFamilyFull = { row: RosterReportRow; personRows: RosterPersonCsvRow[] };
 
@@ -150,6 +151,17 @@ export async function buildRosterReportDataset(params: { year?: string }): Promi
   // Key: `${pid}|${grade}` -> levelName. Bands within one pid are disjoint by design;
   // a stray overlap is last-write-wins (rare, non-fatal).
   const levelSnap = await db.collection('levels').get();
+
+  // The monthly pledge IS the Bala Vihar donation, paid monthly (2026-07-27), so
+  // this roster has to see it. ONE query for every pledging family, joined in
+  // memory like every other signal here.
+  //
+  // This file is the ONLY data source behind /welcome/roster (see the route's
+  // own comment). The pledge rework originally wired `family-engagement.ts`
+  // instead, which has had no production caller since f754c61 retired the
+  // paginated browse - so the screen welcome-team uses every day showed a
+  // pledging family as "Registered"/"outstanding" permanently. Caught in review.
+  const pledgedFids = await loadActivePledgeFids();
   const levelByPidGrade = new Map<string, string>();
   for (const d of levelSnap.docs) {
     const x = d.data() as { pid?: unknown; levelName?: unknown; programKey?: unknown; gradeBand?: unknown };
@@ -175,7 +187,11 @@ export async function buildRosterReportDataset(params: { year?: string }): Promi
     const active = activeByFid.get(fid) ?? [];
     const members = membersByFid.get(fid) ?? [];
 
-    const payment = classifyBulkPayment(active, offerings, paidByFid.get(fid) ?? 0);
+    // A live monthly plan reads as paid on the chip, exactly as the family's own
+    // dashboard and the teacher roster report it. Three surfaces, one answer.
+    const payment = pledgedFids.has(fid)
+      ? 'paid'
+      : classifyBulkPayment(active, offerings, paidByFid.get(fid) ?? 0);
 
     const programs = [...new Set(active.map((a) => a.programLabel).filter(Boolean))];
     const programKeys = [...new Set(active.map((a) => a.programKey).filter(Boolean))];
@@ -210,12 +226,18 @@ export async function buildRosterReportDataset(params: { year?: string }): Promi
     let bvEngagement: 'confirmed' | 'registered' | null = null;
     if (activeBv.length > 0) {
       const completedEids = completedEidsByFid.get(fid);
-      const confirmed = activeBv.some((a) =>
-        a.enrolledVia === 'family-initiated' ||
-        a.enrolledVia === 'first-attendance' ||
-        a.enrolledMids.some((mid) => attendedMidsByPid.get(a.pid)?.has(mid)) ||
-        (completedEids?.has(a.eid) ?? false),
-      );
+      // NOTE: this is an inline reimplementation of `isEnrollmentConfirmed`
+      // (kept for the bulk path). It must stay in step with that rule - the
+      // pledge clause below is the second time the two have had to be updated
+      // together, and the first time it was missed.
+      const confirmed =
+        pledgedFids.has(fid) ||
+        activeBv.some((a) =>
+          a.enrolledVia === 'family-initiated' ||
+          a.enrolledVia === 'first-attendance' ||
+          a.enrolledMids.some((mid) => attendedMidsByPid.get(a.pid)?.has(mid)) ||
+          (completedEids?.has(a.eid) ?? false),
+        );
       bvEngagement = confirmed ? 'confirmed' : 'registered';
     }
 

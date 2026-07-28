@@ -158,9 +158,20 @@ export function buildFamilyDashboardModel(input: DashboardModelInput): FamilyDas
   // who cancels at the bank still reads as satisfied until the reconciler or a
   // human notices. Reports therefore over-count monthly givers, deliberately,
   // until invoice polling exists.
+  // `isEnrolled &&` is load-bearing, and its absence was a real bug (found in
+  // review, 2026-07-27). Before the pledge clause existed this was safe by
+  // accident: `suggestedAmount` is null with no BV enrollment, so the comparison
+  // was always false. Adding `hasActivePledge ||` in front bypassed that, and
+  // page.tsx:329 tests `donationPaid` BEFORE `isEnrolled` - so a family who
+  // pledged, then did not re-enroll after the annual rollover (which cancels
+  // enrollments and does not recreate them), saw "Enrollment: Not enrolled" and
+  // "Donation status: Paid" side by side on their own dashboard. Nothing cancels
+  // a pledge at rollover, so that state is reachable every August.
   const donationComplete =
-    input.hasActivePledge || (suggestedAmount !== null && givenForPeriod >= suggestedAmount);
-  const donationPct = input.hasActivePledge
+    isEnrolled && (input.hasActivePledge || (suggestedAmount !== null && givenForPeriod >= suggestedAmount));
+  const donationPct = !isEnrolled
+    ? 0
+    : input.hasActivePledge
     ? 100
     : suggestedAmount && suggestedAmount > 0
       ? Math.min(100, Math.round((givenForPeriod / suggestedAmount) * 100))

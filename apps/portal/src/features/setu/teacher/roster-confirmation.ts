@@ -3,6 +3,7 @@ import type { DonationDoc } from '@cmt/shared-domain';
 import { getLegacyPaymentStatus } from '@/features/setu/donations/legacy-payment';
 import { isEnrollmentConfirmed } from '@/app/family/_helpers/enrollment-confirmation';
 import { loadActivePledgeFids } from '@/features/setu/pledges/active-pledge-fids';
+import { BALA_VIHAR } from '@cmt/shared-domain';
 
 export interface LevelEnrollment {
   fid: string;
@@ -39,10 +40,20 @@ export async function deriveConfirmedFidsForLevel(
 
   // 2. Offering payment source (legacy vs portal) - one doc get.
   const offSnap = await db.collection('offerings').doc(pid).get();
-  const od = (offSnap.exists ? offSnap.data() : {}) as { paymentSource?: unknown };
+  const od = (offSnap.exists ? offSnap.data() : {}) as { paymentSource?: unknown; programKey?: unknown };
   const source = paymentSourceOf(
     od.paymentSource !== undefined ? { paymentSource: od.paymentSource as never } : {},
   );
+
+  // The monthly plan funds BALA VIHAR, so it may only confirm a Bala Vihar
+  // level. Read off the OFFERING rather than trusting the caller: `pid` is the
+  // offering id, and `LevelDoc.programKey` is a free slug, so this helper is
+  // reachable for Tabla / Sanskrit / adult-study levels too. Without this gate a
+  // family paying $51/mo toward Bala Vihar showed as "Confirmed" on the Tabla
+  // teacher's roster, having paid nothing toward it - which also contradicts the
+  // ask-side rule on /family/donate, where the monthly option is offered for
+  // Bala Vihar alone. Caught in review 2026-07-27.
+  const isBalaVihar = String(od.programKey ?? '') === BALA_VIHAR;
 
   // Cheap signals first (no reads): a deliberate enrolledVia, or any attended
   // mid. Whatever is still inconclusive needs the expensive per-family reads.
@@ -73,7 +84,7 @@ export async function deriveConfirmedFidsForLevel(
   // pledging family, in the same bulk spirit as the donation read below - this
   // helper runs on every autosave tap, so a per-family lookup here would be the
   // fan-out that read was written to remove.
-  const pledgedFids = await loadActivePledgeFids();
+  const pledgedFids = isBalaVihar ? await loadActivePledgeFids() : new Set<string>();
 
   const needsReadFids = new Set(needsRead.map((e) => e.fid));
   const donationsByFid = new Map<string, DonationDoc[]>();

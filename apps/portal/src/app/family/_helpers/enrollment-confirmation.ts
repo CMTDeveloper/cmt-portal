@@ -47,6 +47,20 @@ export function isEnrollmentConfirmed(
   if (enrollment.enrolledVia === 'first-attendance') return true;
   if (inputs.attendedCount > 0) return true;
   if (inputs.legacyPaid) return true;
+  // ⚠️ PRECONDITION: `enrollment` must be a BALA VIHAR enrollment.
+  //
+  // The monthly pledge funds Bala Vihar specifically, but this rule is generic,
+  // so passing a Tabla or Om-chanting enrollment here would let a Bala Vihar
+  // pledge mark it confirmed - a family reading as paid for a programme they
+  // have paid nothing toward. Audited 2026-07-27: all four callers are
+  // BV-scoped, three of them structurally (`selectBalaViharEnrollment` in
+  // dashboard-model + family-engagement, `programKey === BV_PROGRAM_KEY` in
+  // enrollment-report) and one by convention (teacher levels are BV). If a
+  // FIFTH caller appears, or a teacher screen ever covers a non-BV programme,
+  // thread `programKey` in and gate this clause on it - do not rely on the
+  // caller remembering. This project has already shipped one bug in this exact
+  // family, which is why `selectBalaViharEnrollment` is lint-guarded.
+  //
   // The monthly pledge IS the enrollment donation, paid a month at a time
   // (Vaibhav, 2026-07-27: "this is an enrollment option one-time vs monthly").
   // Family-level and unscoped by eid on purpose: the plan is continuous until

@@ -87,7 +87,50 @@ describe('the pledge feature is quarantined', () => {
     join('features', 'setu', 'teacher', 'roster-confirmation.ts'),
     // Enrollment report / CSV headcounts.
     join('features', 'setu', 'reports', 'enrollment-report.ts'),
+    // /welcome/roster's ONLY data source - the screen welcome-team works from.
+    join('features', 'setu', 'roster', 'report-dataset.ts'),
+    // The enrollment report's CSV half.
+    join('features', 'setu', 'roster', 'build-csv-rows.ts'),
   ];
+
+  /**
+   * Surfaces that MUST consider a pledge, and would be WRONG to ignore one.
+   *
+   * ── Why this exists, and why the allowlist above was not enough ────────────
+   * The allowlist catches an ADDITION - a new file that reads pledge state
+   * without permission. The bug that actually shipped was an OMISSION: two
+   * existing surfaces that decide whether a family has paid were never updated,
+   * and because they mention nothing pledge-related they were invisible to
+   * every check here. `/welcome/roster` showed a pledging family as
+   * "Registered"/"outstanding" permanently, and `GET
+   * /api/welcome/reports/enrollment` answered "paid" as JSON and "outstanding"
+   * as CSV - the same report, the same screen, two answers.
+   *
+   * No allowlist could have caught that, because absence has no fingerprint. So
+   * this is the mirror: name the surfaces that report payment, and fail if one
+   * stops consulting pledges. Adding a NEW payment-reporting surface still
+   * requires a human to add it here - but the ones we know about can no longer
+   * silently drift apart.
+   */
+  const MUST_CONSIDER_PLEDGE = [
+    join('app', 'family', '_helpers', 'dashboard-model.ts'),
+    join('features', 'setu', 'teacher', 'roster-confirmation.ts'),
+    join('features', 'setu', 'reports', 'enrollment-report.ts'),
+    join('features', 'setu', 'roster', 'report-dataset.ts'),
+    join('features', 'setu', 'roster', 'build-csv-rows.ts'),
+  ];
+
+  it('every surface that reports whether a family has PAID consults the pledge', () => {
+    for (const required of MUST_CONSIDER_PLEDGE) {
+      const file = FILES.find((f) => f.rel.endsWith(required));
+      expect(file, `a payment-reporting surface vanished: ${required}`).toBeDefined();
+      expect(
+        /(loadActivePledgeFids|hasActivePledge|isPledgeGiving|pledgedFids)/.test(file!.body),
+        `${required} decides whether a family has paid but never consults their monthly ` +
+          `pledge - it will disagree with every other surface the moment a family pledges`,
+      ).toBe(true);
+    }
+  });
 
   it('is consulted ONLY by the surfaces explicitly allowed to treat a pledge as payment', () => {
     const DECIDERS = [
@@ -160,7 +203,25 @@ describe('the pledge feature is quarantined', () => {
     // and a CSV is the one artifact that leaves the building.
     const csvFiles = FILES.filter((f) => /csv/i.test(f.rel) && !f.rel.includes(PLEDGE_FEATURE));
     expect(csvFiles.length).toBeGreaterThan(0);
-    const offenders = csvFiles.filter((f) => /pledge/i.test(f.body)).map((f) => f.rel);
-    expect(offenders).toEqual([]);
+
+    // NARROWED 2026-07-27, deliberately, and worth reading before widening it
+    // back. This used to fail on ANY mention of "pledge" in a CSV builder. Since
+    // the monthly plan became a way to PAY the Bala Vihar donation, the CSV's
+    // existing `payment` column must consult it - a plan-payer reads 'paid',
+    // the identical value someone who paid $500 at once gets. That is not a
+    // leak: the column cannot distinguish them, so it reveals nothing about how
+    // a family pays.
+    //
+    // What must never appear is a pledge-SPECIFIC field: the amount, the
+    // status, or any Stripe handle. Those would tell every reader of an exported
+    // spreadsheet that this family is on an instalment plan - which is the
+    // family's business, and a CSV is the one artifact that leaves the building.
+    const LEAKY = /monthlyAmountCAD|subscriptionId|customerId|setupSessionId|PledgeStatus|PledgeDoc|pledgeStatus/;
+    const offenders = csvFiles.filter((f) => LEAKY.test(f.body)).map((f) => f.rel);
+    expect(
+      offenders,
+      'a CSV builder now emits a pledge-specific field - an exported spreadsheet would ' +
+        'reveal which families pay by instalment',
+    ).toEqual([]);
   });
 });

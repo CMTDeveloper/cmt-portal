@@ -405,6 +405,20 @@ describe('an active monthly pledge satisfies the Bala Vihar donation', () => {
     expect(m.actionItems).toEqual([]);
   });
 
+
+  it('a pledge WITHOUT a Bala Vihar enrollment never reads as paid', () => {
+    // Regression, found in review 2026-07-27. After the annual rollover
+    // enrollments are cancelled and NOT recreated, and nothing cancels a pledge
+    // - so a family who pledged last year and has not re-enrolled hits exactly
+    // this state every August. page.tsx checks `donationPaid` BEFORE
+    // `isEnrolled`, so an ungated donationComplete rendered "Enrollment: Not
+    // enrolled" and "Donation status: Paid" together on the family's own screen.
+    const m = buildFamilyDashboardModel(input({ enrollments: [], hasActivePledge: true }));
+    expect(m.isEnrolled).toBe(false);
+    expect(m.donation.complete, 'a family with no BV enrollment read as paid').toBe(false);
+    expect(m.donation.pct).toBe(0);
+  });
+
   it('without a pledge the SAME enrollment reads as pending and only Registered', () => {
     // The control, and it earned its place: run against the default
     // BV_ENROLLMENT it FAILED, because that fixture is 'family-initiated' and

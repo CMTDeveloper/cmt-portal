@@ -2,6 +2,7 @@ import 'server-only';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import type { OfferingDoc, RosterPersonCsvRow } from '@cmt/shared-domain';
 import { classifyBulkPayment } from './payment';
+import { loadActivePledgeFids } from '@/features/setu/pledges/active-pledge-fids';
 
 const EXPORT_FAMILY_CAP = 2000;
 const OFFERING_CHUNK = 300;
@@ -70,6 +71,11 @@ export async function buildRosterCsvRows(filters: { location?: string; program?:
 
   // 4) ALL completed donations (one unfiltered read; sum by fid)
   const donSnap = await db.collectionGroup('donations').get();
+
+  // Families on a monthly plan. One query, joined in memory - the same read the
+  // on-screen report and the roster use, so all three give one answer.
+  const pledgedFids = await loadActivePledgeFids();
+
   const paidByFid = new Map<string, number>();
   for (const dd of donSnap.docs) {
     const d = dd.data() as Record<string, unknown>;
@@ -109,7 +115,13 @@ export async function buildRosterCsvRows(filters: { location?: string; program?:
     const fam = meta.get(fid)!;
     const active = activeByFid.get(fid) ?? [];
     const programs = [...new Set(active.map((a) => a.programLabel).filter(Boolean))].join('; ');
-    const payment = classifyBulkPayment(active, offerings, paidByFid.get(fid) ?? 0);
+    // The monthly plan counts as paid here too. Without this the SAME report
+    // kind answered differently by format: GET /api/welcome/reports/enrollment
+    // returned "paid" as JSON (buildEnrollmentReport) and "outstanding" as CSV
+    // (this file), on one screen, for one family. Caught in review 2026-07-27.
+    const payment = pledgedFids.has(fid)
+      ? 'paid'
+      : classifyBulkPayment(active, offerings, paidByFid.get(fid) ?? 0);
     for (const m of membersByFid.get(fid) ?? []) {
       rows.push({
         familyName: fam.name, fid, legacyFid: fam.legacyFid,
