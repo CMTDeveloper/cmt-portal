@@ -338,6 +338,19 @@ export default async function FamilyDashboardPage() {
   // suppresses it.
   const showDonatePrompt = model.donation.showGive && !donationComplete && !!model.eid;
 
+  // ── A PENDING pledge must not be told to go and pay again ─────────────────
+  // `started` = the family authorised the pre-authorized debit and the bank has
+  // not confirmed it yet (see advance-pledge: mandate `pending` keeps it here).
+  // Nothing is paid, so the donation prompt legitimately still shows - but its
+  // normal copy is an INSTRUCTION ("Complete your donation to confirm your
+  // enrollment"), and a family who follows it ends up paying $500 on top of a
+  // $51/month debit, with no webhook to notice and a manual refund to unwind.
+  //
+  // So while a pledge is pending we reassure instead of instruct, and keep the
+  // one-time path as a quiet fallback rather than removing it - the mandate can
+  // still fail days later, and that family must be able to pay.
+  const pledgePending = pledgeSlot?.pledge?.status === 'started';
+
   // ── The donate CTA must not skip the one-time / monthly choice ─────────────
   // CompleteDonationButton goes STRAIGHT to Stripe at the full suggested amount
   // (owner decision 2026-07-04). That predates the monthly plan, and once the
@@ -352,9 +365,12 @@ export default async function FamilyDashboardPage() {
   // `pledge-isolation` + pledge.spec both hold that line. Sending someone to
   // the decision is not the same as making the ask here.
   //
+  // NOT used while a pledge is pending: that family has already chosen, and
+  // re-offering the plan would only invite a second one (startPledge 409s).
+  //
   // Flag off (production at launch) → byte-identical to today.
   const donateCta = (block: boolean) =>
-    flags.setuPledge ? (
+    flags.setuPledge && !pledgePending ? (
       <Link
         href="/family/enroll/bala-vihar"
         className={block ? 'btn btn--p btn--block' : 'btn btn--p'}
@@ -366,10 +382,41 @@ export default async function FamilyDashboardPage() {
       <CompleteDonationButton
         eid={model.eid!}
         amountCAD={model.suggestedAmount ?? 0}
-        label="Complete donation"
+        label={pledgePending ? 'Complete a one-time donation instead' : 'Complete donation'}
         block={block}
+        variant={pledgePending ? 'quiet' : 'primary'}
       />
     );
+
+  /** The whole donation banner: an instruction normally, reassurance while a
+   *  pledge is still confirming. */
+  const donatePrompt = (block: boolean) => (
+    <div
+      style={{
+        marginTop: block ? 16 : 20,
+        padding: block ? 14 : '14px 18px',
+        background: pledgePending ? 'var(--surface2, #f3f1ec)' : '#fdefe7',
+        border: `1px solid ${pledgePending ? 'var(--line, #e5e0d8)' : 'var(--accentSoft)'}`,
+        borderRadius: 'var(--radiusSm)',
+        display: 'flex',
+        ...(block
+          ? { flexDirection: 'column' as const, gap: 12 }
+          : { gap: 16, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' as const }),
+      }}
+    >
+      <div style={{ display: 'flex', gap: 10, alignItems: block ? 'flex-start' : 'center', ...(block ? {} : { flex: 1, minWidth: 0 }) }}>
+        <span style={{ color: pledgePending ? 'var(--muted)' : 'var(--warn)', ...(block ? { marginTop: 1 } : { display: 'grid', placeItems: 'center' }) }}>
+          <SetuIcon.info width={16} height={16} />
+        </span>
+        <span style={{ fontSize: 13, color: 'var(--body-text)', lineHeight: 1.45 }}>
+          {pledgePending
+            ? "Your monthly gift is being confirmed — there's nothing to do right now. We'll email you once it's set up."
+            : 'Complete your donation to confirm your enrollment and support Bala Vihar.'}
+        </span>
+      </div>
+      {donateCta(block)}
+    </div>
+  );
 
   // Shared Bala Vihar tail: donation banner OR enroll CTA, then the per-child
   // attendance list (kept — it's real, and a prior regression hid attendance).
@@ -464,17 +511,7 @@ export default async function FamilyDashboardPage() {
                 <BvStat icon={<SetuIcon.heart width={20} height={20} />} label="Donation status" value={donationStatus} valueColor={donationColor} />
               </div>
 
-              {showDonatePrompt && model.eid && (
-                <div style={{ marginTop: 16, padding: 14, background: '#fdefe7', border: '1px solid var(--accentSoft)', borderRadius: 'var(--radiusSm)', display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                    <span style={{ color: 'var(--warn)', marginTop: 1 }}><SetuIcon.info width={16} height={16} /></span>
-                    <span style={{ fontSize: 13, color: 'var(--body-text)', lineHeight: 1.45 }}>
-                      Complete your donation to confirm your enrollment and support Bala Vihar.
-                    </span>
-                  </div>
-                  {donateCta(true)}
-                </div>
-              )}
+              {showDonatePrompt && model.eid && donatePrompt(true)}
               {enrollCta && <div style={{ marginTop: 16 }}>{enrollCta}</div>}
               {childrenList && <div style={{ marginTop: 16 }}>{childrenList}</div>}
             </div>
@@ -562,15 +599,7 @@ export default async function FamilyDashboardPage() {
             <BvStat icon={<SetuIcon.heart width={20} height={20} />} label="Donation status" value={donationStatus} valueColor={donationColor} />
           </div>
 
-          {showDonatePrompt && model.eid && (
-            <div style={{ marginTop: 20, padding: '14px 18px', background: '#fdefe7', border: '1px solid var(--accentSoft)', borderRadius: 'var(--radiusSm)', display: 'flex', gap: 16, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
-              <div style={{ display: 'flex', gap: 10, alignItems: 'center', flex: 1, minWidth: 0 }}>
-                <span style={{ color: 'var(--warn)', display: 'grid', placeItems: 'center' }}><SetuIcon.info width={16} height={16} /></span>
-                <span style={{ fontSize: 13, color: 'var(--body-text)' }}>Complete your donation to confirm your enrollment and support Bala Vihar.</span>
-              </div>
-              {donateCta(false)}
-            </div>
-          )}
+          {showDonatePrompt && model.eid && donatePrompt(false)}
           {enrollCta && <div style={{ marginTop: 20 }}>{enrollCta}</div>}
           {childrenList && <div style={{ marginTop: 20 }}>{childrenList}</div>}
         </div>

@@ -214,6 +214,25 @@ test.describe('monthly pledge', () => {
       expect(text, 'the started state claims the gift is working').not.toMatch(/you.re giving|thank you/i);
       // And no second start button, which would risk a SECOND authorised mandate.
       await expect(body.getByRole('button', { name: /give \$\d+ monthly/i })).toHaveCount(0);
+
+      // ── AND THE DONATION BANNER MUST NOT SEND THEM TO PAY AGAIN ────────────
+      // Nothing is paid while the mandate is confirming, so the banner still
+      // shows - but its normal copy is an INSTRUCTION, and a family who obeys
+      // it pays $500 on top of the $51/month they just authorised. There is no
+      // webhook to catch that and the refund is manual.
+      //
+      // The one-time route must stay REACHABLE (the mandate can still fail),
+      // just not phrased as the thing to do. Reported 2026-07-28.
+      await expect(
+        visibleText(page, /Complete your donation to confirm your enrollment/i),
+        'the dashboard is still instructing a family with a pending pledge to pay the full amount',
+      ).toHaveCount(0);
+      await expect(visibleText(page, /monthly gift is being confirmed/i).first()).toBeVisible();
+      // The fallback is still there, just quiet.
+      await expect(
+        page.getByRole('button', { name: /one-time donation instead/i }).filter({ visible: true }).first(),
+        'the one-time fallback disappeared - a family whose mandate fails could not pay',
+      ).toBeVisible();
     }
   });
 

@@ -17,6 +17,16 @@ export interface CompleteDonationButtonProps {
   label: string;
   /** Render full-width (btn--block) — used inside the enroll page's sticky footer. */
   block?: boolean;
+  /**
+   * 'quiet' renders a secondary control instead of the primary one.
+   *
+   * Used where paying once is a FALLBACK rather than the thing we want the
+   * family to do - specifically while a monthly pledge is authorised but not yet
+   * confirmed. There the one-time path must stay reachable (the mandate can
+   * still fail) without reading as an instruction, because a family who follows
+   * it ends up paying $500 AND carrying a $51/month debit.
+   */
+  variant?: 'primary' | 'quiet';
 }
 
 /**
@@ -29,7 +39,7 @@ export interface CompleteDonationButtonProps {
  * regression. If those acknowledgements are ever re-enabled, this button MUST
  * route back to /family/donate?eid= instead of going direct to Stripe.
  */
-export function CompleteDonationButton({ eid, amountCAD, label, block = false }: CompleteDonationButtonProps) {
+export function CompleteDonationButton({ eid, amountCAD, label, block = false, variant = 'primary' }: CompleteDonationButtonProps) {
   const [pending, setPending] = useState(false);
 
   async function handleClick() {
@@ -78,7 +88,7 @@ export function CompleteDonationButton({ eid, amountCAD, label, block = false }:
   return (
     <button
       type="button"
-      className={`btn btn--p${block ? ' btn--block' : ''}`}
+      className={`btn ${variant === 'quiet' ? 'btn--g' : 'btn--p'}${block ? ' btn--block' : ''}`}
       disabled={pending}
       onClick={handleClick}
       style={block ? { display: 'block', width: '100%', opacity: pending ? 0.7 : 1 } : { opacity: pending ? 0.7 : 1 }}
