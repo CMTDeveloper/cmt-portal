@@ -81,8 +81,9 @@ const fetchMock = vi.fn();
 vi.stubGlobal('fetch', fetchMock);
 
 // ── window.location ───────────────────────────────────────────────────────────
+const mockAssign = vi.fn();
 Object.defineProperty(window, 'location', {
-  value: { href: '' },
+  value: { href: '', assign: mockAssign },
   writable: true,
 });
 
@@ -161,6 +162,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   flagsMock.setuAuth = true;
   window.location.href = '';
+  mockAssign.mockClear();
   mockPush.mockClear();
   mockBack.mockClear();
 });
@@ -263,7 +265,7 @@ describe('EditMemberPage — successful PATCH submit', () => {
     });
 
     await waitFor(() => {
-      expect(mockPush).toHaveBeenCalledWith(`/family/members/${MEMBER_MID}`);
+      expect(mockAssign).toHaveBeenCalledWith(`/family/members/${MEMBER_MID}`);
     });
   });
 
@@ -327,7 +329,7 @@ describe('EditMemberPage — remove member (manager-only)', () => {
     });
 
     await waitFor(() => {
-      expect(mockPush).toHaveBeenCalledWith('/family/members');
+      expect(mockAssign).toHaveBeenCalledWith('/family/members');
     });
   });
 
@@ -360,6 +362,7 @@ describe('EditMemberPage — remove member (manager-only)', () => {
 
     expect(fetchMock).not.toHaveBeenCalled();
     expect(mockPush).not.toHaveBeenCalled();
+    expect(mockAssign).not.toHaveBeenCalled();
   });
 });
 
