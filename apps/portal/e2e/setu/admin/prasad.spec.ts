@@ -7,8 +7,24 @@ import { hasFamilyCreds } from '../../_helpers';
 // the past), so the locked state and the 409 'locked' move rejection are
 // DETERMINISTIC assertions rather than calendar-dependent conditionals.
 // The single seeded UAT user is family-manager + admin (welcome-team inherited).
+// ⚠️ YEAR-PINNED FIXTURE. `scripts/seed-test-accounts.ts` writes this prasad
+// config and assignment against a hardcoded 2025-26, so every assertion below
+// is about that year and NOT about whichever year app_config/school_year is
+// currently on. When UAT rolled to 2026-27 the family GET returned undefined
+// and the locked-move check got 404 instead of 409 - five failures that read
+// like a broken prasad module and were nothing but a stale fixture.
+//
+// If these fail with undefined/404, check the live year first:
+//   GET /api/admin/school-year   (admin session)
+// and re-run `pnpm --filter @cmt/portal seed:test-accounts` (UAT only).
+// The durable fix is to make the seed follow the live year; until then, this
+// comment is the fastest route from the failure to the cause.
 const PID = 'bv-brampton-2025-26';
 const FID = 'CMT-FSWEDU2X';
+const STALE_FIXTURE_HINT =
+  `no prasad fixture for ${PID}. That fixture is year-pinned in seed-test-accounts.ts; ` +
+  `if app_config/school_year has moved on, re-seed (UAT only) rather than reading this ` +
+  `as a prasad-module fault.`;
 
 test.describe('Prasad module', () => {
   test.skip(!hasFamilyCreds, 'E2E_FAMILY_EMAIL / E2E_FAMILY_PASSWORD required');
@@ -38,7 +54,7 @@ test.describe('Prasad module', () => {
     const { assignment } = (await res.json()) as {
       assignment: { paid: string; date: string; movable: boolean; reason: string } | null;
     };
-    expect(assignment?.paid).toBe(`${PID}-${FID}`);
+    expect(assignment?.paid, STALE_FIXTURE_HINT).toBe(`${PID}-${FID}`);
     expect(assignment?.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(assignment?.reason).toBe('birthday-month');
     // Seed date is within MOVE_LOCK_DAYS of seeding (and in the past on later runs).

@@ -13,7 +13,6 @@ import { hasFamilyCreds } from '../../_helpers';
 const RUN = Date.now();
 const NAME_A = `E2E Level A ${RUN}`;
 const NAME_B = `E2E Level B ${RUN}`;
-const NAME_C = `E2E Level C ${RUN}`;
 
 // levelIds captured from the create POST responses (module scope so afterAll and
 // both tests share them).
@@ -164,31 +163,17 @@ test.describe('Admin — Level management', () => {
     await editDialog.getByRole('button', { name: /close|cancel/i }).first().click();
   });
 
-  test('inline per-level teacher assign → name pill → remove', async ({ page }) => {
-    const currentYear = await currentSchoolYear(page);
-    await page.goto('/admin/levels');
-    await expect(page.getByRole('heading', { name: /level management/i }).first()).toBeVisible({ timeout: 20_000 });
-
-    // Own, independent level to assign to (no reliance on the other test's state).
-    await createLevel(page, currentYear, NAME_C, ['Grade 2']);
-    const rowC = page.getByRole('row').filter({ hasText: NAME_C });
-    await expect(rowC).toBeVisible({ timeout: 15_000 });
-
-    // Open the inline assign popover and search a teacher by name. Teacher search
-    // reuses family search (searchKeys array-contains, EXACT match), so query the
-    // shared family's full name; its adult manager "E2E Tester" surfaces as a hit.
-    await rowC.getByRole('button', { name: /assign teacher/i }).click();
-    await rowC.getByPlaceholder('Search name or email').fill('E2E Test Family');
-    const hit = rowC.getByRole('button', { name: /E2E Tester/i });
-    await expect(hit).toBeVisible({ timeout: 15_000 });
-    await hit.click();
-
-    // The name PILL (with its remove button) appears on level C's row.
-    const removeBtn = rowC.getByRole('button', { name: 'Remove E2E Tester' });
-    await expect(removeBtn).toBeVisible({ timeout: 15_000 });
-
-    // Remove the pill → gone.
-    await removeBtn.click();
-    await expect(rowC.getByRole('button', { name: 'Remove E2E Tester' })).toHaveCount(0, { timeout: 15_000 });
-  });
+  // ── REMOVED 2026-07-28 ─────────────────────────────────────────────────────
+  // This test drove an inline per-row "Assign teacher" button and a "Remove
+  // <name>" pill. The levels redesign deliberately moved teacher management OUT
+  // of the row and into the master-detail panel: levels-table.test.tsx asserts
+  // "exposes no add/remove teacher controls in the row (panel-only)", and
+  // levels-management.test.tsx asserts the same. The control this test waited
+  // 30s for cannot exist by design.
+  //
+  // The replacement path IS covered, and passes: level-management-redesign.spec
+  // "master-detail teacher add → lead → remove".
+  //
+  // Deleted rather than skipped - a skipped test is a test that has stopped
+  // saying anything while still looking like coverage.
 });

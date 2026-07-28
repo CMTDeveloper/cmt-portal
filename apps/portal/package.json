@@ -7,7 +7,7 @@
     "dev:e2e": "next dev --port=3001",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint src",
+    "lint": "eslint src e2e",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.e2e.json",
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.e2e.config.ts",
