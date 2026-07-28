@@ -84,6 +84,42 @@
 - [ ] **AWS SES**: prod `AWS_SES_FROM_EMAIL` identity verified in `AWS_SES_REGION`; out of the SES sandbox (or all recipients verified).
 - [ ] **AWS SNS**: `AWS_SNS_REGION` has an **Origination Number** for Canadian (+1) SMS; account out of the SNS sandbox; spend limit raised; no stuck opt-outs. Diagnose with `pnpm --filter @cmt/portal exec tsx scripts/debug-sns-config.ts` and set defaults with `scripts/sns-set-defaults.ts`. (Module-cached SNS client needs a **cold redeploy** when region changes.)
 - [ ] **Stripe**: live `STRIPE_API_KEY`, prod `STRIPE_CHECKOUT_URL` (Cloud Run proxy), `STRIPE_USE_TEST_CHECKOUT=false`, `WEBHOOK_API_KEY` set.
+
+  ✅ **RESOLVED 2026-07-28 — the live-mode service EXISTS.** Owner supplied
+  `https://cmt-stripe-checkout-api-**prod**-195790402763.northamerica-northeast1.run.app`.
+  Verified by minting a session through it: returned **`cs_live_…`**, so it holds real Stripe keys. (The earlier dead host,
+  `stripe-checkout-api-195790402763…` with no `-prod-`, is simply obsolete — it has no Cloud Run service at all. And
+  `…-**test**-…` returns `cs_test_`, so it must NEVER be used for `STRIPE_CHECKOUT_URL` in production: it would look
+  correct and collect nothing.)
+
+  **Go-live values — PRODUCTION SCOPE ONLY (Preview must stay on the test host):**
+  ```
+  STRIPE_CHECKOUT_URL      = https://cmt-stripe-checkout-api-prod-195790402763.northamerica-northeast1.run.app/checkout-link
+  STRIPE_USE_TEST_CHECKOUT = false
+  ```
+
+  ⛔ **DO NOT point `STRIPE_API_BASE_URL` at the prod host. `/pad/*` IS NOT DEPLOYED THERE.** Measured 2026-07-28 — on the
+  prod service `/checkout-link` answers 400 (route exists) but **all four of** `/pad/setup-link`,
+  `/pad/monthly-subscription`, `/checkout-session-result` and `/subscription-result` answer **404**. They exist only on the
+  test service. So:
+  - **One-time donations CAN go live on Aug 3.** They only need `/checkout-link`.
+  - **Monthly pledges CANNOT — until `/pad/*` lands on the prod service.** Vaibhav committed 2026-07-28 to deploying it
+    before Aug 3. Until the probe below returns **400 (not 404)** for `/pad/setup-link` on the PROD host,
+    **`NEXT_PUBLIC_FEATURE_SETU_PLEDGE` must be OFF in production**: with the base URL still on the test host a family
+    would authorise a mandate against a TEST price while four surfaces record them as paid (§14 2026-07-27).
+  - **The flag and the base URL must move TOGETHER.** Flipping the flag on while `STRIPE_API_BASE_URL` still points at
+    the test host is the failure above; pointing the base URL at prod before `/pad/*` exists there is a 404 on every
+    pledge. Verify with the probe, then change both, then redeploy.
+  - **Gate for enabling the pledge in production (all three, in order):**
+    1. `POST <PROD>/pad/setup-link` with an empty body returns **400**, not 404.
+    2. `STRIPE_API_BASE_URL` (production scope) → the prod host.
+    3. `STRIPE_PLEDGE_PRICE_ID` → the **live** $51/mo Price, confirmed in the Stripe dashboard. Nothing in this repo can
+       detect a wrong Price; the amount lives at Stripe.
+
+  **The prod service validates more strictly than the test one** — it rejects a request with no `client_reference_id`
+  (`{"error":"Invalid client_reference_id"}`). `api/setu/donations/checkout/route.ts` already sends `client_reference_id:
+  donation.did`, and the full portal payload was verified against the prod host successfully. Re-verify with the probe
+  below after ANY change to that payload.
   ⛔ **DO NOT flip `STRIPE_USE_TEST_CHECKOUT=false` until the live-mode host is proven to exist.** Measured 2026-07-27: the host in `STRIPE_CHECKOUT_URL`
   (`stripe-checkout-api-195790402763.northamerica-northeast1.run.app`) answers **Google's front-end 404 on every path including `GET /`** — no Cloud Run
   service is deployed there. Only the **test** host (`cmt-stripe-checkout-api-test-…`) is alive. Flipping the flag today would take one-time donations from
