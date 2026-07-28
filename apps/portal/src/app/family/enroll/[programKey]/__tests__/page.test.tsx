@@ -198,6 +198,16 @@ const ACTIVE_ENROLLMENT_WITH_OVERRIDE = {
   effectiveSuggestedAmount: 250,
 };
 
+/**
+ * The Adult Study Class fee WAIVED for a family who has paid Bala Vihar
+ * (spec 4.5) - `enrollFamily` writes `suggestedAmountOverride: 0`.
+ */
+const ACTIVE_ENROLLMENT_WAIVED = {
+  ...ACTIVE_ENROLLMENT_WITH_SNAPSHOT,
+  suggestedAmountOverride: 0,
+  effectiveSuggestedAmount: 0,
+};
+
 function makeParams(programKey = 'bala-vihar') {
   return Promise.resolve({ programKey });
 }
@@ -456,6 +466,62 @@ describe('ProgramEnrollPage — legacy-payment bridge is Bala Vihar-only (#3)', 
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// A waived enrollment owes nothing - it must not render a $0 ask
+// ─────────────────────────────────────────────────────────────────────────────
+describe('ProgramEnrollPage - nothing to pay (the Adult Study Class waiver)', () => {
+  // Reported 2026-07-28: the adult-class page showed "$0 · per family" beneath
+  // "Proceed to donate below", with a live "Continue to donation" button. It was
+  // a permanent dead end - `donationComplete` requires the amount to be > 0, so
+  // a waived enrollment is never `paid` and the ask rendered forever; clicking
+  // through looped, since both the button and the checkout API reject under $1.
+  beforeEach(() => {
+    vi.stubEnv('NEXT_PUBLIC_FEATURE_SETU_DONATIONS', 'true');
+    mockGetEnrollments.mockResolvedValue([ACTIVE_ENROLLMENT_WAIVED]);
+    mockGetOpenOfferingsForFamily.mockResolvedValue([ACTIVE_PERIOD]);
+    mockGetDonations.mockResolvedValue([]);
+  });
+
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('never renders a $0 ask', async () => {
+    const page = await ProgramEnrollPage({ params: makeParams() });
+    const { container } = render(page);
+    expect(container.textContent).not.toMatch(/\$0/);
+  });
+
+  it('offers no way to "donate" nothing', async () => {
+    const page = await ProgramEnrollPage({ params: makeParams() });
+    render(page);
+    expect(screen.queryByRole('button', { name: /continue to donation/i })).toBeNull();
+  });
+
+  it('says the Bala Vihar donation covers it, and offers the way out', async () => {
+    const page = await ProgramEnrollPage({ params: makeParams() });
+    const { container } = render(page);
+    expect(container.textContent).toMatch(/nothing to pay/i);
+    expect(screen.getAllByRole('link', { name: /back to dashboard/i }).length).toBeGreaterThan(0);
+  });
+
+  it('does NOT claim the family paid - they gave nothing here', async () => {
+    // Borrowing the "Paid · thank you" copy would be untrue.
+    const page = await ProgramEnrollPage({ params: makeParams() });
+    const { container } = render(page);
+    expect(container.textContent).not.toMatch(/recorded as paid/i);
+    expect(container.textContent).not.toMatch(/Proceed to donate/i);
+  });
+
+  it('still asks normally when the amount is a real one', async () => {
+    // The guard in the other direction: `nothingToPay` must not swallow a
+    // genuine ask just because an override exists.
+    mockGetEnrollments.mockResolvedValue([ACTIVE_ENROLLMENT_WITH_OVERRIDE]);
+    const page = await ProgramEnrollPage({ params: makeParams() });
+    const { container } = render(page);
+    expect(container.textContent).toMatch(/\$250/);
+    expect(screen.getAllByRole('button', { name: /continue to donation/i }).length).toBeGreaterThan(0);
+  });
+});
+
 // The monthly plan must be REACHABLE from the enrollment flow
 // ─────────────────────────────────────────────────────────────────────────────
 
