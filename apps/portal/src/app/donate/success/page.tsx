@@ -69,6 +69,7 @@ async function resolveAsk(
           bv,
           donations: gate.donations,
           legacyPaymentStatus: gate.legacyPaymentStatus,
+          hasActivePledge: gate.hasActivePledge,
         })
       : false,
   };

@@ -260,9 +260,8 @@ export function DonationChoice({
           selected={choice === 'full'}
           onSelect={() => setChoice('full')}
           title="Full donation"
-          badge="RECOMMENDED"
           amount={`$${oneTimeAmountCAD}`}
-          unitTop="one-time payment"
+          unitTop="one-time donation"
           unitBottom="per family"
           body={`A one-time donation of $${oneTimeAmountCAD} supports the entire academic year.`}
         />
@@ -335,7 +334,6 @@ interface OptionProps {
   onSelect: () => void;
   disabled?: boolean;
   title: string;
-  badge?: string;
   amount: string;
   unitTop: string;
   unitBottom: string;
@@ -359,7 +357,6 @@ function Option({
   onSelect,
   disabled = false,
   title,
-  badge,
   amount,
   unitTop,
   unitBottom,
@@ -390,16 +387,12 @@ function Option({
           style={{ accentColor: 'var(--accent)', width: 18, height: 18, marginTop: 2, flexShrink: 0 }}
         />
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 6 }}>
+          {/* No "RECOMMENDED" badge: removed 2026-07-28 at Vaibhav's request. It
+              steered families toward the one-time option, and $51x12 = $612
+              against $500 means the two are not equivalent in the direction the
+              badge implied. "Full donation" is still the preselected default. */}
+          <div style={{ marginBottom: 6 }}>
             <strong style={{ fontSize: 15, color: 'var(--ink)' }}>{title}</strong>
-            {badge && (
-              <span
-                className="pill"
-                style={{ background: 'var(--okSoft, #e7f4ec)', color: 'var(--ok, #1f7a45)', fontSize: 10, letterSpacing: '.08em', padding: '3px 8px' }}
-              >
-                {badge}
-              </span>
-            )}
           </div>
           {/* Amount and unit share a baseline row so the unit reads as a
               qualifier on the number, exactly as drawn. It wraps on narrow

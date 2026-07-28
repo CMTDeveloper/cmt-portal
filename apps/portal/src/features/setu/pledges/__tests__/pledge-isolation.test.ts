@@ -99,6 +99,10 @@ describe('the pledge feature is quarantined', () => {
     // undo either. Added 2026-07-28 after `/family/donate?eid=` was found
     // rendering the full payment form with no pledge awareness at all.
     join('app', 'api', 'setu', 'donations', 'checkout', 'route.ts'),
+    // Feeds the adult-class gate. A pledging family has PAID the Bala Vihar
+    // donation, so they owe the adult-class selection like any other donor -
+    // without this they were never asked at all. Added 2026-07-28.
+    join('features', 'setu', 'adult-class', 'load-gate-data.ts'),
   ];
 
   /**
@@ -121,6 +125,13 @@ describe('the pledge feature is quarantined', () => {
    * silently drift apart.
    */
   const MUST_CONSIDER_PLEDGE = [
+    // 🔴 The third omission of exactly this kind, reported by CMT Developer on
+    // 2026-07-28: `isBalaViharPaid` recognised a donation record, a legacy row
+    // and a teacher-managed offering - but not a pledge. A family who enrolled
+    // and paid MONTHLY was therefore never shown the adult-class step. This list
+    // exists to catch precisely that, and missed it only because it is
+    // hand-enumerated and nobody had added the file.
+    join('features', 'setu', 'adult-class', 'needs-selection.ts'),
     join('app', 'family', '_helpers', 'dashboard-model.ts'),
     join('features', 'setu', 'teacher', 'roster-confirmation.ts'),
     join('features', 'setu', 'reports', 'enrollment-report.ts'),

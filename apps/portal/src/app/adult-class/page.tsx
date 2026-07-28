@@ -58,7 +58,12 @@ async function AdultClassSelection() {
 
   const bv = selectBalaViharEnrollment(gate.enrollments);
   const bvPaid = bv
-    ? isBalaViharPaid({ bv, donations: gate.donations, legacyPaymentStatus: gate.legacyPaymentStatus })
+    ? isBalaViharPaid({
+        bv,
+        donations: gate.donations,
+        legacyPaymentStatus: gate.legacyPaymentStatus,
+        hasActivePledge: gate.hasActivePledge,
+      })
     : false;
 
   // Shown greyed out beneath the pickable adults, so a two-parent household

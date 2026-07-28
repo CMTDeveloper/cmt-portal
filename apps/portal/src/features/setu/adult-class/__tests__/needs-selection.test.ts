@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { MemberDoc } from '@cmt/shared-domain/setu';
 import type { EnrollmentWithOffering } from '@/features/setu/enrollment/get-enrollments';
-import { needsAdultClassSelection, type AdultClassGateInput } from '../needs-selection';
+import { needsAdultClassSelection, isBalaViharPaid, type AdultClassGateInput } from '../needs-selection';
 
 const ASC_OID = 'adult-study-class-brampton-2026-27';
 const BV_OID = 'bala-vihar-brampton-2026-27';
@@ -35,6 +35,7 @@ function base(over: Partial<AdultClassGateInput> = {}): AdultClassGateInput {
     currentOffering: { oid: ASC_OID },
     teacherAssignedMids: new Set(),
     legacyPaymentStatus: 'unknown',
+    hasActivePledge: false,
     ...over,
   };
 }
@@ -178,6 +179,38 @@ describe('needsAdultClassSelection - condition 3: the BV donation is paid', () =
       enrollments: [enrollment({ oid: BV_OID, programKey: 'bala-vihar', offering: { paymentSource: 'teacher-managed' } } as never)],
     });
     expect(needsAdultClassSelection(input)).toBe(true);
+  });
+});
+
+describe('needsAdultClassSelection - condition 3, leg (d): paid by monthly PLEDGE', () => {
+  // 🔴 Reported by CMT Developer 2026-07-28: a family who enrolled and paid by
+  // PLEDGE was never shown the adult-class step. `isBalaViharPaid` recognised a
+  // donation record, a legacy row and a teacher-managed offering - a pledge was
+  // none of those, so condition 3 never passed. The same omission also charged
+  // them the adult-class fee that "has paid Bala Vihar" is meant to waive.
+  it('asks a family whose ONLY payment is a live monthly pledge', () => {
+    expect(
+      needsAdultClassSelection(base({ donations: [], hasActivePledge: true })),
+    ).toBe(true);
+  });
+
+  it('waives the fee for a pledging family - isBalaViharPaid says paid', () => {
+    expect(
+      isBalaViharPaid({
+        bv: { eid: `F-${BV_OID}`, offering: { paymentSource: 'portal' } } as never,
+        donations: [],
+        legacyPaymentStatus: 'unknown',
+        hasActivePledge: true,
+      }),
+    ).toBe(true);
+  });
+
+  it('does NOT count a family with no pledge and no donation', () => {
+    // The regression guard in the other direction: leg (d) must not turn into
+    // "everyone has paid".
+    expect(
+      needsAdultClassSelection(base({ donations: [], hasActivePledge: false })),
+    ).toBe(false);
   });
 });
 

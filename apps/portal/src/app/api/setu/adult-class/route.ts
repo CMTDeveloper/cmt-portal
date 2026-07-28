@@ -100,6 +100,11 @@ export async function POST(req: Request) {
         bv,
         donations: data.donations,
         legacyPaymentStatus: data.legacyPaymentStatus,
+        // A family paying MONTHLY has paid Bala Vihar, so the adult class is
+        // free to them too. Without this they were charged the fee this waiver
+        // exists to remove - the same omission that stopped them ever being
+        // asked. This is the layer that decides the money, so it matters most.
+        hasActivePledge: data.hasActivePledge,
       })
     : false;
 

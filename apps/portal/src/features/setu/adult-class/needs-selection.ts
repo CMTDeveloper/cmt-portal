@@ -41,6 +41,15 @@ export interface AdultClassGateInput {
   teacherAssignedMids: ReadonlySet<string>;
   /** Meaningful ONLY when the BV offering is legacy-sourced. See below. */
   legacyPaymentStatus: string;
+  /**
+   * The family has a LIVE monthly pledge (`status === 'active'`).
+   *
+   * A pledge is the second way to pay the Bala Vihar donation - $500 once or
+   * $51 a month - so a pledging family has paid, and owes the adult-class
+   * selection exactly like a one-time donor. Passed in as a boolean rather than
+   * read here because this predicate is pure; the loader owns the I/O.
+   */
+  hasActivePledge: boolean;
 }
 
 /**
@@ -81,6 +90,7 @@ export function needsAdultClassSelection(input: AdultClassGateInput): boolean {
       bv,
       donations: input.donations,
       legacyPaymentStatus: input.legacyPaymentStatus,
+      hasActivePledge: input.hasActivePledge,
     })
   ) {
     return false;
@@ -121,6 +131,8 @@ export function isBalaViharPaid(args: {
   donations: readonly GateDonation[];
   /** Meaningful ONLY when the offering is legacy-sourced - see leg (b). */
   legacyPaymentStatus: string;
+  /** A LIVE monthly pledge - see leg (d). */
+  hasActivePledge: boolean;
 }): boolean {
   // (a) ANY completed donation scoped to THIS enrollment's eid. **No amount
   //     threshold** - that is an explicit owner decision (2026-07-02, issue
@@ -169,5 +181,25 @@ export function isBalaViharPaid(args: {
 
   // (c) Teacher-managed offerings are never paid in-portal, so a family on one
   //     would otherwise be gated forever.
-  return bvPaidByDonation || bvPaidByLegacy || source === 'teacher-managed';
+
+  // (d) A LIVE monthly pledge. The pledge is the second way to pay this exact
+  //     donation - $500 once or $51 a month (Vaibhav, 2026-07-27) - so a
+  //     pledging family has paid and owes the selection like any other donor.
+  //
+  //     🔴 Omitting this was a real defect, reported 2026-07-28: a family who
+  //     enrolled and paid BY PLEDGE was never shown the adult-class step at all,
+  //     because legs (a)-(c) recognise only a donation record, a legacy row, or
+  //     a teacher-managed offering. `pledge-isolation.test.ts` has a
+  //     MUST_CONSIDER_PLEDGE list built to catch exactly this - a surface that
+  //     decides whether a family has paid but never consults the pledge - and it
+  //     missed this one only because the list is hand-enumerated and nobody had
+  //     added this file. It is on the list now.
+  //
+  //     `active` and NOT `started`, matching `isPledgeGiving()` and therefore
+  //     every other payment-reporting surface. A confirming mandate has moved no
+  //     money yet, and the point of that list is that these surfaces agree.
+  //     Consequence, accepted: a family who pledges is asked once the mandate
+  //     clears (the `/family/*` gate catches them on a later visit), not on the
+  //     success page seconds after pledging.
+  return bvPaidByDonation || bvPaidByLegacy || source === 'teacher-managed' || args.hasActivePledge;
 }
