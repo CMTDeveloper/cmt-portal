@@ -180,6 +180,15 @@ export function DonationChoice({
       window.location.href = '/sign-in?from=%2Ffamily';
       return;
     }
+    if (result.reason === 'pledge-covers-enrollment') {
+      // A pledge was started elsewhere after this page rendered - another tab,
+      // or a co-manager's device. Retrying can never clear it, so the generic
+      // "please try again" would be actively wrong. Reload; the server render
+      // then shows the pending/giving state instead of the choice.
+      toast.error('Your monthly gift already covers this - refreshing.');
+      window.location.reload();
+      return;
+    }
     if (result.reason === 'below-suggested') {
       toast.error(`The suggested amount is $${result.suggested}. Please contact the welcome team to give less.`);
     } else if (result.reason === 'not-configured') {

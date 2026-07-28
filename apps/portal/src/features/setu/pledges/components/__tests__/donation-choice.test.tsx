@@ -183,6 +183,22 @@ describe('DonationChoice - error handling carried over from the two buttons it r
     await waitFor(() => expect(window.location.reload).toHaveBeenCalled());
   });
 
+  it('reloads instead of telling the family to retry when a pledge already covers this', async () => {
+    // The server 409s because a pledge was started elsewhere after this page
+    // rendered - another tab, or a co-manager's device. Retrying can NEVER
+    // clear that, so folding it into "please try again" is wrong advice about
+    // money. A reload re-runs the server render, which shows the pledge state.
+    const user = userEvent.setup();
+    checkoutMock.startEnrollmentCheckout.mockResolvedValueOnce({
+      ok: false,
+      reason: 'pledge-covers-enrollment',
+    });
+    render(<DonationChoice {...base} />);
+    await user.click(screen.getByRole('button', { name: /continue to donation/i }));
+    await waitFor(() => expect(window.location.reload).toHaveBeenCalled());
+    expect(toastMock.error).toHaveBeenCalledWith(expect.stringMatching(/already covers/i));
+  });
+
   it('surfaces a network failure and re-enables the button so the family can retry', async () => {
     const user = userEvent.setup();
     checkoutMock.startEnrollmentCheckout.mockRejectedValueOnce(new Error('offline'));

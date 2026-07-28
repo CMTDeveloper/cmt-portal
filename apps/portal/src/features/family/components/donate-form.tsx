@@ -89,7 +89,17 @@ export function DonateForm({
       const json = (await res.json().catch(() => ({}))) as { url?: string; error?: string; suggested?: number };
 
       if (!res.ok) {
-        if (json.error === 'amount-below-suggested') {
+        if (json.error === 'pledge-covers-enrollment') {
+          // This form does NOT go through start-checkout-client, so it needs the
+          // case handled here too. Reachable when the page rendered without
+          // pledge awareness - a pledge started in another tab since, or the
+          // pledge flag off while the family already holds one (the server guard
+          // is deliberately not flag-gated, so the charge is still refused). A
+          // reload re-runs the server render, which explains it properly.
+          toast.error('Your monthly gift already covers this - refreshing.');
+          window.location.reload();
+          return;
+        } else if (json.error === 'amount-below-suggested') {
           toast.error(`The suggested amount is $${json.suggested}. Please contact the welcome team to give less.`);
         } else if (json.error === 'checkout-not-configured') {
           toast.error('Donations are temporarily unavailable — please try again later.');

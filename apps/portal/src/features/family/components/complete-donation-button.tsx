@@ -63,6 +63,15 @@ export function CompleteDonationButton({ eid, amountCAD, label, block = false }:
       window.location.href = '/sign-in?from=%2Ffamily';
       return;
     }
+    if (result.reason === 'pledge-covers-enrollment') {
+      // Stale screen, not a broken one: a pledge was started elsewhere (another
+      // tab, a co-manager's phone) after this page rendered. Retrying can never
+      // clear it, so the generic "please try again" would be wrong advice. A
+      // hard reload re-runs the server render, which shows the pledge state.
+      toast.error('Your monthly gift already covers this - refreshing.');
+      window.location.reload();
+      return;
+    }
     if (result.reason === 'below-suggested') {
       toast.error(`The suggested amount is $${result.suggested}. Please contact the welcome team to give less.`);
     } else if (result.reason === 'not-configured') {
