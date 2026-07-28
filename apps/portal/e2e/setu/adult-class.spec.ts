@@ -4,8 +4,18 @@ import { test, expect, request, type APIRequestContext, type Browser, type Page 
 import { ADULT_CLASS_EMAILS, ADULT_CLASS_PASSWORD, hasAdultClassCreds } from '../_helpers';
 
 /**
- * ⚠️ OWNER-GATED — deployed-UAT E2E for the Adult Study Class (P4 Tasks 1-11).
- * Authored under Task 12 and NOT YET RUN: it needs the UAT feature flag the owner
+ * ✅ RUN AND GREEN — 12/12 against the deployed app, 2026-07-27, most recently
+ * against commit 6bc2640 (the teaching-adult presentation reversal). The two
+ * failures found on its FIRST-EVER run were both FIXTURE bugs, not product bugs:
+ * the fixtures had never accepted the disclaimers (so DisclaimerGate diverted
+ * them and AdultClassGate correctly never fired), and the fixture seeds
+ * NO_ALLERGIES, which disables the food-allergies input the spec typed into.
+ *
+ * The header below previously read "NOT YET RUN", and stayed that way after the
+ * spec had been run and fixed - a reviewer read it and reported the coverage gap
+ * it described, which no longer existed. Keep this accurate.
+ *
+ * ⚠️ STILL OWNER-GATED to run: it needs the UAT feature flag the owner
  * flips out-of-band (below). Follows kiosk-auto-enroll.spec.ts, which is gated the
  * same way for the same reason.
  *
@@ -43,7 +53,10 @@ import { ADULT_CLASS_EMAILS, ADULT_CLASS_PASSWORD, hasAdultClassCreds } from '..
  *   §6.5  a fully-paid BV family that adds the exempt adult class still reads
  *         `paid` on the welcome roster, not `outstanding`.
  *   §6.6  one test per §2.3 row: rows 1, 2, 5 fire; rows 3, 6, 7 stay silent,
- *         and row 2 asserts the teaching adult is NOT OFFERED AT ALL.
+ *         and row 2 asserts the teaching adult is SHOWN, labelled "Teaching this
+ *         hour", and genuinely unpickable (a `disabled` checkbox, not just grey
+ *         styling). Reversed 2026-07-27 - it previously required the teacher be
+ *         absent entirely, which left a two-adult household looking at one name.
  *
  * Row 7 fails the gate twice over, so on its own it proves neither half. Row 3
  * isolates "every adult teaches" WITH a paid Bala Vihar enrollment, and row 6

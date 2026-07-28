@@ -30,8 +30,18 @@ test.describe('enroll page wording', () => {
   }
 
   test('the Bala Vihar donation page calls the donation a donation, and never a fee', async ({ page }) => {
+    // FAIL, do not skip. This is the only test covering the "a donation is not a
+    // fee" wording on the money page, so a skip here is a SILENT green: the
+    // fixture drifts, the assertion never runs, and a wording regression on the
+    // page where families are asked for ~$500 ships unnoticed. The shared E2E
+    // family is seeded with an active Bala Vihar enrollment, so its absence is
+    // itself a fault worth stopping for.
     const eid = await activeBvEid(page);
-    test.skip(!eid, 'the seeded family has no active Bala Vihar enrollment');
+    expect(
+      eid,
+      'the shared E2E family has no active Bala Vihar enrollment, so the donation-wording ' +
+        'assertion cannot run. Re-seed with `pnpm --filter @cmt/portal seed:e2e-family`.',
+    ).toBeTruthy();
 
     await page.goto(`/family/donate?eid=${eid}`);
     await expect(visibleText(page, /Your donation/i).first()).toBeVisible();
