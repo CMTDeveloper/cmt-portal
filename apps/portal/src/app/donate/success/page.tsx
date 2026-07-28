@@ -99,13 +99,29 @@ async function resolvePledgeSlot(
   // the feature dark a `?pledge=` in the URL must not reach the provider at all.
   if (!flags.setuPledge || !familyData) return null;
 
-  if (pledgePid) {
-    try {
-      // fid from the SESSION. A pid in a URL is not authority over a pledge.
-      await finalizePledge({ pid: pledgePid, fid: familyData.family.fid });
-    } catch (err) {
-      console.error('[donate/success] finalizePledge failed - the cron will finish it', err);
-    }
+  // ── STATUS of a pledge just authorised - never a new ASK ───────────────────
+  //
+  // Only a pledge RETURN gets the card. It used to render on every arrival, so
+  // any completed donation was followed by "Monthly giving - support the mission
+  // with $51 a month". Reported 2026-07-28 by CMT Developer after an adult who
+  // had just paid the $101 adult-class donation was asked for it.
+  //
+  // Wrong on every arrival it reached, for the same reason each time - the
+  // pledge is the Bala Vihar contribution, $500 once or $51 a month, NOT a
+  // general "support the mission" ask (Vaibhav, 2026-07-27: *"This should not be
+  // separate. It's part of Bala Vihar."*). After an adult-class or general gift
+  // it is an unrelated second ask; after the $500 Bala Vihar donation itself it
+  // asks the family to pay monthly for the thing they just paid in full.
+  //
+  // The place to offer the monthly plan is where the family CHOOSES how to pay -
+  // `DonationChoice` on the enroll page. A receipt is not a decision point.
+  if (!pledgePid) return null;
+
+  try {
+    // fid from the SESSION. A pid in a URL is not authority over a pledge.
+    await finalizePledge({ pid: pledgePid, fid: familyData.family.fid });
+  } catch (err) {
+    console.error('[donate/success] finalizePledge failed - the cron will finish it', err);
   }
 
   return loadPledgeSlot({ fid: familyData.family.fid, isManager: familyData.isManager });

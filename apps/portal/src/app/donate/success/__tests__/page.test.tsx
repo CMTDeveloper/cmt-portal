@@ -267,21 +267,23 @@ describe('/donate/success - finishing a pledge on return from Stripe', () => {
 });
 
 describe('/donate/success - the pledge card', () => {
-  async function renderWith(params: Record<string, string> = { did: 'don_1' }) {
+  // The card belongs to a pledge RETURN (`?pledge=`), where it reports the
+  // status of a mandate the family just authorised. It is NOT an ask, and the
+  // `?did=` receipt arrival gets none of it - see the regression block below.
+  async function renderWith(params: Record<string, string> = { pledge: 'PLG-7' }) {
     const body = await DonateSuccessBody({ searchParams: Promise.resolve(params) });
     return render(body);
   }
 
-  it('shows the ask at the CONFIGURED amount', async () => {
+  it('shows the amount from config, not a literal in the page', async () => {
     const { container } = await renderWith();
-    // 63, from PLEDGE_MONTHLY_AMOUNT_CAD - not a literal in the page.
+    // 63, from PLEDGE_MONTHLY_AMOUNT_CAD.
     expect(container.textContent).toMatch(/\$63 a month/);
   });
 
   it('renders the pledge card BELOW the adult-class ask', async () => {
     // Spec 4.3 and P4 Task 9: adult-class first because it is quick and free,
-    // pledge second and quieter. Leading with a money ask straight after a ~$500
-    // payment reads badly.
+    // pledge second and quieter.
     const { container } = await renderWith();
     const text = container.textContent ?? '';
     const ask = text.indexOf('One last thing');
@@ -319,6 +321,43 @@ describe('/donate/success - the pledge card', () => {
     // pid someone put in the URL.
     expect(mockGetFamilyPledge).not.toHaveBeenCalled();
     expect(mockFinalizePledge).not.toHaveBeenCalled();
+  });
+
+  // ── 🔴 A RECEIPT IS NOT A DECISION POINT ─────────────────────────────────
+  //
+  // Reported 2026-07-28: an adult who had just paid the $101 adult-class
+  // donation was shown "Monthly giving - support the mission with $51 a month".
+  // The card used to render on EVERY arrival, so any completed donation was
+  // followed by a monthly ask.
+  //
+  // The pledge is the Bala Vihar contribution - $500 once or $51 a month - not a
+  // general "support the mission" ask (Vaibhav: "It's part of Bala Vihar"). The
+  // place to offer it is where the family chooses how to pay, on the enroll
+  // page. These pin that a one-time receipt never solicits.
+  describe('a one-time donation receipt never asks for a pledge', () => {
+    it('shows no pledge card after an ADULT-CLASS donation', async () => {
+      const { container } = await renderWith({ did: 'don_adult_class' });
+      expect(container.textContent).not.toMatch(/Monthly giving/);
+      expect(container.textContent).not.toMatch(/Give \$\d+ monthly/);
+    });
+
+    it('shows no pledge card after the Bala Vihar donation itself', async () => {
+      // The worst version: asking a family to pay monthly for the very thing
+      // they just paid in full.
+      const { container } = await renderWith({ did: 'don_bala_vihar' });
+      expect(container.textContent).not.toMatch(/Monthly giving/);
+    });
+
+    it('does not even READ the pledge on a receipt arrival', async () => {
+      await renderWith({ did: 'don_1' });
+      expect(mockGetFamilyPledge).not.toHaveBeenCalled();
+    });
+
+    it('still shows the card on a pledge RETURN, which is what it is for', async () => {
+      const { container } = await renderWith({ pledge: 'PLG-7' });
+      expect(container.textContent).toMatch(/Monthly giving/);
+      expect(mockFinalizePledge).toHaveBeenCalled();
+    });
   });
 });
 
