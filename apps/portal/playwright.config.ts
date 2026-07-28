@@ -56,8 +56,19 @@ const STORAGE = 'e2e/.auth/family.json';
  *   PLAYWRIGHT_BASE_URL=http://localhost:3001   -> spins up the local dev server
  *   PLAYWRIGHT_BASE_URL=https://cmt-setu.vercel.app -> production, on purpose
  */
-const PREVIEW_BASE_URL =
-  'https://cmt-setu-git-develop-chinmaya-mission-torontos-projects.vercel.app';
+// Assigned in Vercel to the `develop` BRANCH (not to the Production
+// environment), so it follows every push to develop and cannot go stale.
+// That distinction is the whole ballgame: added the default way - via
+// `vercel domains add`, or via the dashboard without setting the branch - this
+// hostname serves PRODUCTION, and a suite that seeds families and rewrites
+// app_config would have run against it. Both happened on 2026-07-28 before the
+// branch assignment stuck. If this ever needs re-checking, compare
+// `vercel alias ls` source deployments; an HTTP 200 says the name resolves, not
+// which build answered.
+//
+// Equivalent and always correct by construction:
+//   https://cmt-setu-git-develop-chinmaya-mission-torontos-projects.vercel.app
+const PREVIEW_BASE_URL = 'https://cmt-setu-preview.vercel.app';
 const LOCAL_BASE_URL = 'http://localhost:3001';
 const RESOLVED_BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? PREVIEW_BASE_URL;
 
