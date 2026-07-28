@@ -1,34 +1,12 @@
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+// `./e2e/_env` first, for its side effect: it fills process.env from .env.local.
+// It USED to be a loadEnvLocal() function defined here and called below the
+// imports - which broke the moment this file also imported ./e2e/_helpers.
+// ES imports are hoisted, so _helpers evaluated first and captured
+// E2E_FAMILY_EMAIL as undefined; hasFamilyCreds froze false and 14 tests
+// silently self-skipped while the run still reported green.
+import './e2e/_env';
 import { defineConfig, devices } from '@playwright/test';
 import { E2E_BASE_URL, LOCAL_BASE_URL } from './e2e/_helpers';
-
-// Playwright's TEST RUNNER does not auto-load .env.local (only the Next dev
-// webServer does, via Next's own loader). auth.setup reads E2E_FAMILY_EMAIL /
-// E2E_FAMILY_PASSWORD from process.env, so load .env.local here too. Existing
-// env wins. Dependency-free parser — neither dotenv nor @next/env is hoisted as
-// a direct dep under pnpm. Absent file (CI without creds) → specs self-skip.
-function loadEnvLocal(): void {
-  try {
-    const file = readFileSync(resolve(process.cwd(), '.env.local'), 'utf8');
-    for (const raw of file.split('\n')) {
-      const line = raw.trim();
-      if (!line || line.startsWith('#')) continue;
-      const eq = line.indexOf('=');
-      if (eq === -1) continue;
-      const key = line.slice(0, eq).trim();
-      if (!key || key in process.env) continue;
-      let val = line.slice(eq + 1).trim();
-      if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
-        val = val.slice(1, -1);
-      }
-      process.env[key] = val;
-    }
-  } catch {
-    // .env.local absent — fine; specs self-skip when creds are missing.
-  }
-}
-loadEnvLocal();
 
 const STORAGE = 'e2e/.auth/family.json';
 

@@ -1,3 +1,8 @@
+// MUST be first: populates process.env from .env.local before the constants
+// below read it. See e2e/_env.ts for why this is a separate side-effect module.
+import './_env';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type { Locator, Page } from '@playwright/test';
 
 /**
@@ -33,6 +38,40 @@ export const hasFamilyCreds = Boolean(E2E_FAMILY_EMAIL && E2E_FAMILY_PASSWORD);
 // One shared password via TEST_ACCOUNTS_PASSWORD; emails are fixed.
 export const TEST_ACCOUNTS_PASSWORD = process.env.TEST_ACCOUNTS_PASSWORD;
 export const hasTestAccounts = Boolean(TEST_ACCOUNTS_PASSWORD);
+
+// ── A SILENT SKIP MUST NOT BE ABLE TO HIDE A BROKEN SETUP ───────────────────
+//
+// Every `hasFamilyCreds` / `hasTestAccounts` gate above turns a missing
+// credential into `test.skip`, which is correct for CI (no creds, nothing to
+// run) and catastrophic locally: on 2026-07-28 an import-order slip left both
+// false while .env.local held the values, 14 tests self-skipped, and the run
+// printed "5 passed" in green. Nothing failed, so nothing was noticed.
+//
+// So: if .env.local names a credential that we did NOT end up seeing, that is
+// not a missing credential - it is a loading bug. Say so, loudly, instead of
+// quietly skipping. Only runs on the already-broken path.
+if (!hasFamilyCreds || !hasTestAccounts) {
+  try {
+    const envFile = readFileSync(resolve(process.cwd(), '.env.local'), 'utf8');
+    const named = (k: string) => new RegExp(`^${k}=.+$`, 'm').test(envFile);
+    const missed: string[] = [];
+    if (!hasFamilyCreds && named('E2E_FAMILY_EMAIL') && named('E2E_FAMILY_PASSWORD')) {
+      missed.push('E2E_FAMILY_EMAIL/E2E_FAMILY_PASSWORD');
+    }
+    if (!hasTestAccounts && named('TEST_ACCOUNTS_PASSWORD')) missed.push('TEST_ACCOUNTS_PASSWORD');
+    if (missed.length) {
+      throw new Error(
+        `.env.local defines ${missed.join(' and ')}, but this module did not see ` +
+          `them in process.env. Something imported e2e/_helpers before e2e/_env ran. ` +
+          `Left alone this does not fail - it SKIPS the affected tests and the run still ` +
+          `reports green.`,
+      );
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith('.env.local defines')) throw err;
+    // No .env.local at all (CI): the plain self-skip is the correct behaviour.
+  }
+}
 export const TEST_ACCOUNT_EMAILS = {
   parentBrampton: 'setu-test-parent-brampton@chinmayatoronto.org',
   memberBrampton: 'setu-test-member-brampton@chinmayatoronto.org',
