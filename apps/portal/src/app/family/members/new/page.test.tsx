@@ -8,6 +8,11 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: mockPush }),
 }));
 
+// A hard navigation is the FIX for the stranded-form bug below; stub it so the
+// test can assert which kind of navigation the success path performs.
+const mockAssign = vi.fn();
+vi.stubGlobal('location', { ...window.location, assign: mockAssign });
+
 vi.mock('next/link', () => ({
   default: ({
     children,
@@ -189,5 +194,52 @@ describe('AddMemberPage — required validation blocks submit', () => {
     expect(body.birthMonthYear).toBe('2018-09');
     expect(body.birthMonth).toBe(9);
     expect(body.foodAllergies).toBe('None');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Leaving the form after a successful add
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('AddMemberPage — leaving the form after a successful add', () => {
+  /**
+   * ── THE BUG THIS PINS (reported 2026-07-28, preview) ──────────────────────
+   * A manager added an adult, then went to add a child and found the previous
+   * member's name still in the fields and the button stuck on "Adding…" -
+   * permanently, because it is `disabled={saving}`. The form could not be
+   * submitted again at all without a full page reload.
+   *
+   * Cause: the success path called `router.push('/family/members')`, a SOFT
+   * navigation, and deliberately never reset `saving` because it expected to
+   * unmount. But `/family/members` sits under `src/app/family/layout.tsx`,
+   * which has THREE `redirect()` gates. A soft push re-runs them on the client
+   * router; when one bounces (it reads `use cache` data that the just-completed
+   * POST invalidated, so it can be stale), the component never unmounts -
+   * `saving` stays true and every field keeps its value.
+   *
+   * A hard navigation cannot be bounced back into a live component: the
+   * document reloads, the gates re-run server-side on fresh data, and the form
+   * is a new instance. Same rule as CLAUDE.md discipline #9.
+   */
+  it('navigates with a HARD load, so the gates re-run and the form cannot strand', async () => {
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ mid: 'X-03' }) });
+
+    const user = userEvent.setup();
+    render(<AddMemberPage />);
+
+    await user.type(firstByLabel(/^first name/i), 'Dev');
+    await user.type(firstByLabel(/^last name/i), 'Rao');
+    await user.selectOptions(findGenderSelect(), 'Male');
+    await user.selectOptions(firstByLabel(/^school grade/i), '2');
+    await user.selectOptions(firstByLabel(/^birth month/i), '9');
+    await user.selectOptions(firstByLabel(/^birth year/i), '2018');
+    await user.click(screen.getAllByTestId('no-allergies')[0]!);
+    await user.click(screen.getAllByRole('button', { name: /add member/i })[0]!);
+
+    await waitFor(() => {
+      expect(mockAssign).toHaveBeenCalledWith('/family/members');
+    });
+    // router.push is what stranded the form; it must not be the exit route.
+    expect(mockPush).not.toHaveBeenCalled();
   });
 });

@@ -8,6 +8,22 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 
+// ── Feature flags ─────────────────────────────────────────────────────────────
+// Only `setuPledge` is read through this module here; `donationsEnabled` is read
+// straight off process.env by the page, so the existing vi.stubEnv tests are
+// unaffected by this mock.
+const flagsMock = vi.hoisted(() => ({ setuPledge: false }));
+vi.mock('@/lib/flags', () => ({ flags: flagsMock }));
+
+// The monthly option's own copy is covered by the pledge unit tests and the
+// deployed E2E. What is worth pinning HERE is that this page renders it at all.
+vi.mock('@/features/setu/pledges/components/monthly-donation-option', () => ({
+  MonthlyDonationOption: () => <div data-testid="monthly-option" />,
+}));
+vi.mock('@/features/setu/pledges/get-family-pledge', () => ({
+  getFamilyPledge: vi.fn().mockResolvedValue(null),
+}));
+
 vi.mock('next/server', () => ({ connection: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('next/navigation', () => ({
   notFound: () => { throw new Error('NEXT_NOT_FOUND'); },
@@ -430,5 +446,54 @@ describe('ProgramEnrollPage — legacy-payment bridge is Bala Vihar-only (#3)', 
     // The BV-only gate means the legacy bridge is short-circuited for Tabla, so
     // getLegacyPaymentStatus (which reads the BV roster) is never called.
     expect(mockGetLegacyPaymentStatus).not.toHaveBeenCalled();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The monthly plan must be REACHABLE from the enrollment flow
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('ProgramEnrollPage (bala-vihar) — the monthly alternative', () => {
+  /**
+   * ── WHY THIS TEST EXISTS ──────────────────────────────────────────────────
+   * The pledge shipped on /family/donate, and 180 unit tests plus a 6/6 E2E all
+   * passed - because they navigated to that page directly. Nothing asserted
+   * that a family ENROLLING ever arrives there, and they do not: EnrollCta
+   * sends them straight to Stripe at the full amount, and the dashboard's
+   * "Complete donation" does the same. The option existed and was unreachable;
+   * a manager testing on preview reported never seeing it.
+   *
+   * Rendering a component is not the same as a user being able to get to it.
+   * This pins the reachability, which is the part that was actually broken.
+   */
+  beforeEach(() => {
+    vi.stubEnv('NEXT_PUBLIC_FEATURE_SETU_DONATIONS', 'true');
+    flagsMock.setuPledge = true;
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    flagsMock.setuPledge = false;
+  });
+
+  it('offers the monthly option beside the one-time ask', async () => {
+    mockGetEnrollments.mockResolvedValue([]);
+    mockGetOpenOfferingsForFamily.mockResolvedValue([ACTIVE_PERIOD]);
+
+    const page = await ProgramEnrollPage({ params: makeParams() });
+    render(page);
+
+    expect(screen.getAllByTestId('monthly-option').length).toBeGreaterThan(0);
+  });
+
+  it('offers nothing when the pledge flag is off - production at launch', async () => {
+    flagsMock.setuPledge = false;
+    mockGetEnrollments.mockResolvedValue([]);
+    mockGetOpenOfferingsForFamily.mockResolvedValue([ACTIVE_PERIOD]);
+
+    const page = await ProgramEnrollPage({ params: makeParams() });
+    render(page);
+
+    expect(screen.queryByTestId('monthly-option')).toBeNull();
   });
 });

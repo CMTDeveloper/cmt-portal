@@ -97,6 +97,48 @@ test.describe('monthly pledge', () => {
     return rows.find((e) => e.programKey === 'bala-vihar' && e.status === 'active')?.eid;
   }
 
+  test('the dashboard CTA leads to the CHOICE, not straight to a $500 checkout', async ({ page }) => {
+    // ── THE REACHABILITY RULE ─────────────────────────────────────────────────
+    // The monthly plan was unreachable for weeks despite passing unit tests and
+    // a green pledge E2E, because every test opened /family/donate directly and
+    // no test ever asked whether a FAMILY can get there. They could not: both
+    // "Enroll →" and the dashboard's "Complete donation" went straight to
+    // Stripe at the full amount (owner decision 2026-07-04, predating the
+    // pledge). A manager testing on preview reported never seeing the option.
+    //
+    // This asserts the property that was actually broken - that the CTA a
+    // family presses leads somewhere the two options are visible - rather than
+    // that a component renders when handed the right props.
+    await page.goto('/family');
+    // WAIT for the Bala Vihar card before counting anything. /family streams
+    // under PPR, so locators counted straight after goto() find nothing and the
+    // `test.skip` below fires on an empty page - the run then reports "passed"
+    // with this test quietly skipped, which is exactly the failure mode this
+    // suite has been bitten by before. A skip is not a pass.
+    await expect(
+      page.getByRole('heading', { name: /bala vihar/i }).filter({ visible: true }).first(),
+    ).toBeVisible({ timeout: 25_000 });
+
+    const cta = page.getByRole('link', { name: /complete donation/i }).filter({ visible: true }).first();
+    const button = page.getByRole('button', { name: /complete donation/i }).filter({ visible: true }).first();
+
+    const hasLink = (await cta.count()) > 0;
+    test.skip(
+      !hasLink && (await button.count()) === 0,
+      'no outstanding Bala Vihar donation for this family (already paid, or a live pledge already covers it)',
+    );
+
+    await (hasLink ? cta : button).click();
+    await page.waitForLoadState('domcontentloaded');
+
+    // Must NOT have gone straight to a one-time checkout.
+    expect(page.url(), 'the dashboard CTA jumped straight to Stripe, skipping the monthly choice').not.toMatch(
+      /stripe\.com/i,
+    );
+    // And the destination must actually present the monthly alternative.
+    await expect(visibleText(page, /a month instead/i).first()).toBeVisible({ timeout: 20_000 });
+  });
+
   test('starting a pledge redirects to a Stripe-hosted page, and never asks for a bank detail here', async ({ page }) => {
     // The button moved from the dashboard into the Bala Vihar donate flow on
     // 2026-07-27 - the monthly plan is one of two ways to pay THIS donation, so
@@ -172,6 +214,33 @@ test.describe('monthly pledge', () => {
       expect(text, 'the started state claims the gift is working').not.toMatch(/you.re giving|thank you/i);
       // And no second start button, which would risk a SECOND authorised mandate.
       await expect(body.getByRole('button', { name: /give \$\d+ monthly/i })).toHaveCount(0);
+
+      // ── AND THE DONATION BANNER MUST OFFER NO WAY TO PAY AGAIN ─────────────
+      // Nothing is paid while the mandate is confirming, so the banner still
+      // shows - but it must not carry a payment control of any kind.
+      //
+      // The portal cannot undo a double payment: cancelPledgeRecord is
+      // BOOKKEEPING ONLY, and stopping a pre-authorized debit is a manual
+      // action in Stripe by the temple. A family who pays here and whose
+      // mandate then clears is charged $500 AND $51/month, and only a phone
+      // call fixes it.
+      //
+      // Nobody is stranded: a mandate that FAILS is written `failed`
+      // (advance-pledge step 3), so this state ends and the normal control
+      // returns on its own. Reported 2026-07-28.
+      await expect(
+        visibleText(page, /Complete your donation to confirm your enrollment/i),
+        'the dashboard is still instructing a family with a pending pledge to pay the full amount',
+      ).toHaveCount(0);
+      await expect(visibleText(page, /monthly gift is being confirmed/i).first()).toBeVisible();
+      await expect(
+        page.getByRole('button', { name: /complete donation|one-time donation/i }),
+        'a pending pledge still offers a self-serve payment - that is the double-charge path',
+      ).toHaveCount(0);
+      await expect(
+        page.getByRole('link', { name: /complete donation/i }),
+        'a pending pledge still links to the donate flow - that is the double-charge path',
+      ).toHaveCount(0);
     }
   });
 

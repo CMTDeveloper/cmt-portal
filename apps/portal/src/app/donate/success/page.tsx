@@ -151,6 +151,21 @@ export async function DonateSuccessBody({
   const ask = await resolveAsk(familyData);
   const pledgeSlot = await resolvePledgeSlot(familyData, pledgePid);
 
+  // ── WHO IS READING THIS PAGE ──────────────────────────────────────────────
+  // It serves two arrivals. `?did=` is a one-time donation that Stripe has
+  // already collected - "received" is true. `?pledge=` is a family returning
+  // from authorising a pre-authorized debit, where NOTHING has been taken: the
+  // mandate still has to clear, which is why the pledge sits in `started` and
+  // the reconciler exists.
+  //
+  // Until 2026-07-28 the copy was unconditional, so a family finishing a pledge
+  // was told "your donation has been received" and promised a tax receipt, on
+  // the same screen as a card reading "Nothing has been taken from your account
+  // yet". Reported from preview. That contradiction is the exact harm this
+  // feature is built to avoid: a PAD can fail days later, and someone told they
+  // have paid will not look again.
+  const isPledgeReturn = !!pledgePid && !did;
+
   return (
     <CspRoot style={{ minHeight: '100dvh', display: 'grid', placeItems: 'center', padding: 24 }}>
       <div style={{ maxWidth: 460, textAlign: 'center' }}>
@@ -158,14 +173,29 @@ export async function DonateSuccessBody({
           <SetuIcon.check />
         </div>
         <h1 style={{ fontSize: 30, fontWeight: 400, marginBottom: 10 }}>
-          Thank you for your donation
+          {isPledgeReturn ? 'Your monthly gift is being set up' : 'Thank you for your donation'}
         </h1>
-        <p style={{ fontSize: 14, color: 'var(--body-text)', lineHeight: 1.6, marginBottom: 8 }}>
-          Your donation to Chinmaya Mission Toronto has been received. <em className="sa">Hari OM</em> — your seva keeps our programs running.
-        </p>
-        <p style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.6, marginBottom: 24 }}>
-          Your official CRA tax receipt will be mailed by <strong>accounting@chinmayatoronto.org</strong> each February for the prior calendar year.
-        </p>
+        {isPledgeReturn ? (
+          <>
+            <p style={{ fontSize: 14, color: 'var(--body-text)', lineHeight: 1.6, marginBottom: 8 }}>
+              Thank you for setting up a monthly gift to Chinmaya Mission Toronto.{' '}
+              <em className="sa">Hari OM</em> — your seva keeps our programs running.
+            </p>
+            <p style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.6, marginBottom: 24 }}>
+              Your CRA tax receipt covers what is actually received during the year, and is mailed by{' '}
+              <strong>accounting@chinmayatoronto.org</strong> each February.
+            </p>
+          </>
+        ) : (
+          <>
+            <p style={{ fontSize: 14, color: 'var(--body-text)', lineHeight: 1.6, marginBottom: 8 }}>
+              Your donation to Chinmaya Mission Toronto has been received. <em className="sa">Hari OM</em> — your seva keeps our programs running.
+            </p>
+            <p style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.6, marginBottom: 24 }}>
+              Your official CRA tax receipt will be mailed by <strong>accounting@chinmayatoronto.org</strong> each February for the prior calendar year.
+            </p>
+          </>
+        )}
         {/* ── The Adult Study Class ask. FIRST, above the pledge (spec 4.3).
             Quick, free, and part of finishing enrollment - so it leads. ────── */}
         {ask && (

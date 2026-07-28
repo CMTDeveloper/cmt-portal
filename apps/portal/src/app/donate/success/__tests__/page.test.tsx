@@ -321,3 +321,55 @@ describe('/donate/success - the pledge card', () => {
     expect(mockFinalizePledge).not.toHaveBeenCalled();
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The page must not tell a pledging family their money arrived
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('/donate/success - a pledge arrival must not claim money was received', () => {
+  /**
+   * Reported from preview 2026-07-28. This page serves TWO arrivals and the
+   * copy was unconditional, so a family returning from authorising a
+   * pre-authorized debit was shown "Thank you for your donation / Your donation
+   * has been received", plus a promise of a tax receipt for the prior calendar
+   * year - directly above a card reading "Nothing has been taken from your
+   * account yet".
+   *
+   * Nothing HAS been taken: the mandate still has to clear, which is why the
+   * pledge sits in `started` and the reconciler exists. Telling someone they
+   * have paid when a debit may fail days later is the precise harm this whole
+   * feature is designed around, and it is the one thing a receipt page must
+   * never get wrong.
+   */
+  async function renderWith(params: Record<string, string>) {
+    const body = await DonateSuccessBody({ searchParams: Promise.resolve(params) });
+    return render(body);
+  }
+
+  it('does NOT say the donation was received when the family arrives from a pledge', async () => {
+    await renderWith({ pledge: 'PLG-7' });
+    expect(screen.queryByText(/has been received/i)).toBeNull();
+    expect(screen.queryByText(/Thank you for your donation/i)).toBeNull();
+  });
+
+  it('says the monthly gift is being SET UP instead', async () => {
+    await renderWith({ pledge: 'PLG-7' });
+    expect(screen.getByText(/being set up/i)).toBeTruthy();
+  });
+
+  it('does not promise a receipt for the prior calendar year on a pledge arrival', async () => {
+    // A prior-year receipt implies money already given. The pledge wording
+    // still explains receipts, but only for what is actually received.
+    await renderWith({ pledge: 'PLG-7' });
+    expect(screen.queryByText(/for the prior calendar year/i)).toBeNull();
+    expect(screen.getByText(/actually received during the year/i)).toBeTruthy();
+  });
+
+  it('still confirms receipt for a real one-time donation', async () => {
+    // The fix must not blunt the honest case: ?did= means Stripe already
+    // collected the money.
+    await renderWith({ did: 'don_1' });
+    expect(screen.getByText(/has been received/i)).toBeTruthy();
+    expect(screen.getByText(/for the prior calendar year/i)).toBeTruthy();
+  });
+});

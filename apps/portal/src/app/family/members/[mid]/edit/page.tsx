@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { SetuIcon, toast } from '@cmt/ui';
 import { CHILD_GRADE_OPTIONS, NO_ALLERGIES, whatsMissingForMember, type MemberRequiredField } from '@cmt/shared-domain';
@@ -65,7 +65,6 @@ interface FieldErrors {
 }
 
 export default function EditMemberPage() {
-  const router = useRouter();
   const params = useParams<{ mid: string }>();
   const mid = params.mid;
 
@@ -200,7 +199,11 @@ export default function EditMemberPage() {
       });
 
       if (res.ok) {
-        router.push(`/family/members/${mid}`);
+        // Hard nav - see the note on the delete path below. This one cannot
+        // strand the button (the `finally` resets `saving`), but a soft push
+        // into the gated /family layout can still bounce on a stale cached read
+        // and show the member's OLD values right after saving them.
+        window.location.assign(`/family/members/${mid}`);
         return;
       }
 
@@ -233,7 +236,13 @@ export default function EditMemberPage() {
       const res = await fetch(`/api/setu/members/${mid}`, { method: 'DELETE' });
 
       if (res.ok) {
-        router.push('/family/members');
+        // Hard nav. `/family/members` sits under src/app/family/layout.tsx and
+        // its three redirect() gates, which read `use cache` data this DELETE
+        // just invalidated. A soft push can be bounced by a stale read and
+        // leave the manager sitting on the edit screen of a member who no
+        // longer exists. A document load re-runs the gates server-side on fresh
+        // data. See CLAUDE.md discipline #9.
+        window.location.assign('/family/members');
         return;
       }
 

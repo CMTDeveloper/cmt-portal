@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { SetuIcon } from '@cmt/ui';
 import { CHILD_GRADE_OPTIONS, NO_ALLERGIES, whatsMissingForMember, type MemberRequiredField } from '@cmt/shared-domain';
@@ -31,7 +30,6 @@ const MONTHS: readonly { value: number; label: string }[] = [
 ];
 
 export default function AddMemberPage() {
-  const router = useRouter();
   const [mode, setMode] = useState<MemberType>('Child');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -113,7 +111,20 @@ export default function AddMemberPage() {
     });
 
     if (res.ok) {
-      router.push('/family/members');
+      // HARD navigation, never router.push. `/family/members` sits under
+      // src/app/family/layout.tsx, which has three redirect() gates. A soft push
+      // re-runs them on the client router, and those gates read `use cache` data
+      // that this very POST just invalidated - so one of them can bounce on a
+      // stale read. When it does, this component never unmounts: `saving` stays
+      // true (the button is disabled={saving}, so it reads "Adding…" forever and
+      // cannot be pressed again) and every field keeps the previous member's
+      // values. A manager hit exactly that on 2026-07-28 and could not add a
+      // second member at all without reloading the page.
+      //
+      // A full document load cannot be bounced back into a live component: the
+      // gates re-run server-side on fresh data and the form is a new instance,
+      // which is also what clears it. See CLAUDE.md discipline #9.
+      window.location.assign('/family/members');
       return;
     }
 
