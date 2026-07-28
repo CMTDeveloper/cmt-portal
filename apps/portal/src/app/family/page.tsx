@@ -338,6 +338,39 @@ export default async function FamilyDashboardPage() {
   // suppresses it.
   const showDonatePrompt = model.donation.showGive && !donationComplete && !!model.eid;
 
+  // ── The donate CTA must not skip the one-time / monthly choice ─────────────
+  // CompleteDonationButton goes STRAIGHT to Stripe at the full suggested amount
+  // (owner decision 2026-07-04). That predates the monthly plan, and once the
+  // plan exists it means a family landing on the dashboard - which is where a
+  // returning family lands - is taken to a $500 one-time checkout having never
+  // been shown that $51/month is an option. Reported 2026-07-28.
+  //
+  // So when the plan is available, this CTA LINKS to the Bala Vihar page, which
+  // presents both answers. The dashboard itself still never solicits a pledge:
+  // the standalone "Monthly giving" card was removed on 2026-07-27 because it
+  // asked families whose own status read "Not enrolled", and
+  // `pledge-isolation` + pledge.spec both hold that line. Sending someone to
+  // the decision is not the same as making the ask here.
+  //
+  // Flag off (production at launch) → byte-identical to today.
+  const donateCta = (block: boolean) =>
+    flags.setuPledge ? (
+      <Link
+        href="/family/enroll/bala-vihar"
+        className={block ? 'btn btn--p btn--block' : 'btn btn--p'}
+        style={block ? { display: 'block', textAlign: 'center', textDecoration: 'none' } : { textDecoration: 'none' }}
+      >
+        Complete donation
+      </Link>
+    ) : (
+      <CompleteDonationButton
+        eid={model.eid!}
+        amountCAD={model.suggestedAmount ?? 0}
+        label="Complete donation"
+        block={block}
+      />
+    );
+
   // Shared Bala Vihar tail: donation banner OR enroll CTA, then the per-child
   // attendance list (kept — it's real, and a prior regression hid attendance).
   const enrollCta = !isEnrolled && (
@@ -439,7 +472,7 @@ export default async function FamilyDashboardPage() {
                       Complete your donation to confirm your enrollment and support Bala Vihar.
                     </span>
                   </div>
-                  <CompleteDonationButton eid={model.eid} amountCAD={model.suggestedAmount ?? 0} label="Complete donation" block />
+                  {donateCta(true)}
                 </div>
               )}
               {enrollCta && <div style={{ marginTop: 16 }}>{enrollCta}</div>}
@@ -535,7 +568,7 @@ export default async function FamilyDashboardPage() {
                 <span style={{ color: 'var(--warn)', display: 'grid', placeItems: 'center' }}><SetuIcon.info width={16} height={16} /></span>
                 <span style={{ fontSize: 13, color: 'var(--body-text)' }}>Complete your donation to confirm your enrollment and support Bala Vihar.</span>
               </div>
-              <CompleteDonationButton eid={model.eid} amountCAD={model.suggestedAmount ?? 0} label="Complete donation" />
+              {donateCta(false)}
             </div>
           )}
           {enrollCta && <div style={{ marginTop: 20 }}>{enrollCta}</div>}

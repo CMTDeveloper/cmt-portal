@@ -239,6 +239,36 @@ test.describe('monthly pledge', () => {
     ).toHaveCount(0);
   });
 
+  test('the dashboard CTA leads to the CHOICE, not straight to a $500 checkout', async ({ page }) => {
+    // ── THE REACHABILITY RULE ─────────────────────────────────────────────────
+    // The monthly plan was unreachable for weeks despite passing unit tests and
+    // a green pledge E2E, because every test opened /family/donate directly and
+    // no test ever asked whether a FAMILY can get there. They could not: both
+    // "Enroll →" and the dashboard's "Complete donation" went straight to
+    // Stripe at the full amount (owner decision 2026-07-04, predating the
+    // pledge). A manager testing on preview reported never seeing the option.
+    //
+    // This asserts the property that was actually broken - that the CTA a
+    // family presses leads somewhere the two options are visible - rather than
+    // that a component renders when handed the right props.
+    await page.goto('/family');
+    const cta = page.getByRole('link', { name: /complete donation/i }).filter({ visible: true }).first();
+    const button = page.getByRole('button', { name: /complete donation/i }).filter({ visible: true }).first();
+
+    const hasLink = await cta.count();
+    test.skip(!hasLink && !(await button.count()), 'this family has no outstanding Bala Vihar donation');
+
+    await (hasLink ? cta : button).click();
+    await page.waitForLoadState('domcontentloaded');
+
+    // Must NOT have gone straight to a one-time checkout.
+    expect(page.url(), 'the dashboard CTA jumped straight to Stripe, skipping the monthly choice').not.toMatch(
+      /stripe\.com/i,
+    );
+    // And the destination must actually present the monthly alternative.
+    await expect(visibleText(page, /a month instead/i).first()).toBeVisible({ timeout: 20_000 });
+  });
+
   test('the monthly option is offered inside the Bala Vihar donate flow', async ({ page }) => {
     // Where the choice belongs: one decision - how to pay this year's Bala Vihar
     // contribution - with both answers in front of the family at once.
