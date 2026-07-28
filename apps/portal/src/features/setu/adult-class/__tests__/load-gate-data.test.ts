@@ -12,12 +12,16 @@ const {
   getDonations,
   getLegacyPaymentStatus,
   isTeacherAssigned,
+  getFamilyPledge,
 } = vi.hoisted(() => ({
   getOpenOfferingsForFamily: vi.fn(),
   getEnrollments: vi.fn(),
   getDonations: vi.fn(),
   getLegacyPaymentStatus: vi.fn(),
   isTeacherAssigned: vi.fn(),
+  // Defaults to "no pledge" so every existing case keeps its meaning; the
+  // pledge-specific cases opt in.
+  getFamilyPledge: vi.fn().mockResolvedValue(null),
 }));
 // Only the QUERY is mocked - `resolveCurrentOffering` stays real, so the loader
 // is exercised against the actual tie-break rule (which has its own tests in
@@ -30,6 +34,7 @@ vi.mock('@/features/setu/enrollment/get-enrollments', () => ({ getEnrollments })
 vi.mock('@/features/setu/donations/get-donations', () => ({ getDonations }));
 vi.mock('@/features/setu/donations/legacy-payment', () => ({ getLegacyPaymentStatus }));
 vi.mock('@/features/setu/teacher/assignments', () => ({ isTeacherAssigned }));
+vi.mock('@/features/setu/pledges/get-family-pledge', () => ({ getFamilyPledge }));
 
 import { loadAdultClassGateDataOrThrow, loadAdultClassGateDataFailSoft } from '../load-gate-data';
 

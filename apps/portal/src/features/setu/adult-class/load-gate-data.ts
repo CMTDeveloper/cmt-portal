@@ -8,6 +8,8 @@ import {
 import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
 import { getDonations } from '@/features/setu/donations/get-donations';
 import { getLegacyPaymentStatus } from '@/features/setu/donations/legacy-payment';
+import { getFamilyPledge } from '@/features/setu/pledges/get-family-pledge';
+import { isPledgeGiving } from '@cmt/shared-domain/setu';
 import { isTeacherAssigned } from '@/features/setu/teacher/assignments';
 import { isLegacyBvPeriod } from '@/app/family/_helpers/dashboard-model';
 import { selectableAdults } from './selectable-adults';
@@ -115,7 +117,7 @@ export async function loadAdultClassGateDataOrThrow(
       getDonations(family.fid),
     ]);
 
-    const [legacyPaymentStatus, teacherAssignedMids] = await Promise.all([
+    const [legacyPaymentStatus, teacherAssignedMids, pledge] = await Promise.all([
       // Only meaningful for a legacy-sourced Bala Vihar offering, and the read
       // is the ENTIRE prod RTDB roster - skip it otherwise. Same predicate
       // load-dashboard.ts:98 uses, so the two can't disagree about which
@@ -124,6 +126,13 @@ export async function loadAdultClassGateDataOrThrow(
         ? getLegacyPaymentStatus(family.legacyFid)
         : Promise.resolve('unknown'),
       resolveTeacherAssignedMids(members),
+      // The pledge is the SECOND way to pay the Bala Vihar donation, so a
+      // pledging family owes the adult-class selection exactly like a one-time
+      // donor. Omitting this meant they were never asked at all (reported
+      // 2026-07-28). Parallel with the reads above - it adds no latency.
+      // `getFamilyPledge` returns null when the flag is off, so this costs
+      // nothing while the feature is dark.
+      getFamilyPledge(family.fid),
     ]);
 
     return {
@@ -134,6 +143,7 @@ export async function loadAdultClassGateDataOrThrow(
       currentOffering,
       teacherAssignedMids,
       legacyPaymentStatus,
+      hasActivePledge: isPledgeGiving(pledge),
     };
   }
 }
