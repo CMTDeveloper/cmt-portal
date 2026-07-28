@@ -312,6 +312,16 @@ Source of truth: `turbo.json` `tasks.build.env` (must list every var or Vercel b
 
 Preview is otherwise identical to Production (59 of 62 vars; the 3 above are the whole difference).
 
+**Preview domain — assign it to the BRANCH, never to the project.** `cmt-setu-preview.vercel.app` is the intended
+human-friendly preview hostname. Adding it with `vercel domains add` produces a STATIC ALIAS pinned to whatever
+deployment is current — which on 2026-07-28 was a **production** build, i.e. a hostname named "preview" serving
+production. Had the E2E default been pointed at it, a suite that seeds families and rewrites `app_config` would have run
+against production. It was removed the same day. Add it in the dashboard with **Git Branch = `develop`**, which is the
+only form that (a) serves preview and (b) follows each new push instead of going stale. Verify with `vercel alias ls`
+that its source deployment matches the one behind
+`cmt-setu-git-develop-chinmaya-mission-torontos-projects.vercel.app` — a 200 alone proves nothing about which build
+answered.
+
 ### 9.1 The Aug 3 Production delta — the ONLY things that change
 
 The cutover is a **config flip, not a data migration**: prod Setu fills lazily from the legacy RTDB roster on first engagement (§6), and **no UAT→prod copy exists or is needed**, so the `_test:true` E2E fixtures in UAT can never reach production.
@@ -319,7 +329,12 @@ The cutover is a **config flip, not a data migration**: prod Setu fills lazily f
 1. `PORTAL_FIREBASE_PROJECT_ID` / `_CLIENT_EMAIL` / `_PRIVATE_KEY` → the **715b8** service account. Also the three `NEXT_PUBLIC_PORTAL_FIREBASE_*` client values.
 2. **Clear `SETU_EMAIL_ALLOWLIST` and `SETU_PHONE_ALLOWLIST`.** ⚠️ **Empty means NO filter — clearing them is what turns sign-in on for real families.** They currently hold 3 emails / 2 phones, so *today a real family would never receive their OTP*. This is the single switch that opens the portal to the public, and its polarity is the opposite of what "allowlist" suggests.
 3. Stripe → live mode. **BLOCKED**: no live-mode service exists (§8).
-4. `NEXT_PUBLIC_PORTAL_BASE_URL` → the custom domain, and add that domain in Vercel → cmt-setu → Domains.
+4. **`setu.chinmayatoronto.org` → this project.** ⚠️ That hostname ALREADY EXISTS and currently points at a DIFFERENT
+   deployment — `cmt-setu-coming-soon-ptoueydno.vercel.app`, the holding page (confirmed via `vercel alias ls`,
+   2026-07-28). So this is a RE-POINT, not a fresh add: attach it to `cmt-setu` with **Git Branch = `main`**, and expect
+   the coming-soon site to stop serving at that address the moment you do. Then set `NEXT_PUBLIC_PORTAL_BASE_URL` to
+   `https://setu.chinmayatoronto.org` and REDEPLOY (it is `NEXT_PUBLIC_*`, inlined at build time), or invite emails and
+   the Stripe return URLs keep quoting the old host.
 5. Decide `NEXT_PUBLIC_FEATURE_SETU_PLEDGE` (§14 2026-07-27) — on today, but `lib/flags.ts` says it must be off at launch.
 6. **Redeploy.** `NEXT_PUBLIC_*` is inlined at BUILD time; an env change alone does nothing.
 
