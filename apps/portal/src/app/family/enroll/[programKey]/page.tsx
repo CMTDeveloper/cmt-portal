@@ -55,11 +55,17 @@ function renderAlreadyEnrolledBanner(
   paid = false,
   usesDonation = false,
   paymentSource: PaymentSource = 'portal',
+  nothingToPay = false,
 ) {
   // "Proceed to donate below." only makes sense when the program actually takes
-  // a donation; a free program (usesDonation=false) just confirms enrollment.
+  // a donation; a free program (usesDonation=false) just confirms enrollment,
+  // and a WAIVED one (nothingToPay) has a donation in principle but none owed -
+  // sending that family to "donate below" pointed at a $0 ask that could never
+  // be completed.
   const message = paid
     ? `Your family is enrolled in ${termLabel} and your contribution is paid. Thank you.`
+    : nothingToPay
+      ? `Your family is enrolled in ${termLabel}. There is nothing to pay.`
     : usesDonation && paymentSource === 'teacher-managed'
       ? `Your family is already enrolled in ${termLabel}. Payment is managed by the teacher.`
     : usesDonation
@@ -105,6 +111,54 @@ function renderPaidBlockMobile(termLabel: string) {
       <p style={{ fontSize: 13, color: 'var(--body-text)', marginTop: 12, lineHeight: 1.5 }}>
         Your {termLabel} contribution is recorded as paid — thank you. No further action needed.
       </p>
+    </div>
+  );
+}
+
+/**
+ * The enrollment costs nothing - so say that, rather than asking for $0.
+ *
+ * ── Why this is its own state and not `paid` ────────────────────────────────
+ * A family who has paid Bala Vihar attends the Adult Study Class at no further
+ * cost (spec 4.5), which `enrollFamily` records as `suggestedAmountOverride: 0`.
+ * That is NOT the same as having paid this enrollment, so it must not borrow the
+ * "Paid · thank you" copy - the family gave nothing here and telling them
+ * otherwise is simply false.
+ *
+ * ── The dead end this replaces ──────────────────────────────────────────────
+ * Reported 2026-07-28: the adult-class page showed "$0 · per family" under
+ * "Proceed to donate below", with a live "Continue to donation" button. It could
+ * never resolve: `donationComplete` requires `displaySuggestedAmount > 0`, so a
+ * waived enrollment is never `paid` and the ask renders forever. Clicking it
+ * looped - `CompleteDonationButton` bails to `/family/donate` below $1, and the
+ * checkout API rejects anything under $1 too.
+ */
+function renderNothingToPay(waived: boolean, opts: { desktop: boolean }) {
+  const body = waived
+    ? 'Your Bala Vihar donation covers this class — there is nothing to pay here.'
+    : 'There is no donation for this program — you are all set.';
+  const inner = (
+    <>
+      <span
+        className="pill"
+        style={{ background: opts.desktop ? 'var(--accentSoft)' : 'var(--surface)', color: 'var(--accentDeep)', padding: '6px 12px', fontSize: 12 }}
+      >
+        Included
+      </span>
+      <p style={{ fontSize: 13, color: 'var(--body-text)', marginTop: 12, lineHeight: 1.55 }}>{body}</p>
+    </>
+  );
+
+  return opts.desktop ? (
+    <div className="card" style={{ padding: 24, position: 'sticky', top: 0 }}>
+      <h3 style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.16em', fontWeight: 700, fontFamily: 'var(--body)', color: 'var(--muted)', marginBottom: 14 }}>
+        Donation
+      </h3>
+      {inner}
+    </div>
+  ) : (
+    <div style={{ padding: 18, background: 'var(--accentSoft)', border: '1px solid var(--line2)', borderRadius: 'var(--radius)' }}>
+      {inner}
     </div>
   );
 }
@@ -222,6 +276,18 @@ export default async function ProgramEnrollPage({ params }: Props) {
     displaySuggestedAmount != null && displaySuggestedAmount > 0 && givenForPeriod >= displaySuggestedAmount;
   const paid = legacyPaid || donationComplete;
 
+  // ── Enrolled, and there is genuinely nothing to pay ────────────────────────
+  //
+  // A zero suggested amount is not a $0 ask - it means no donation is owed. Most
+  // often that is the Adult Study Class fee waiver for a family who has paid Bala
+  // Vihar (`suggestedAmountOverride: 0`), and `waivedByBv` distinguishes that
+  // from a program that is simply free, so the copy can be specific rather than
+  // vague. Deliberately separate from `paid`: they have not paid this
+  // enrollment, and "Paid · thank you" would be untrue.
+  const nothingToPay =
+    !paid && alreadyEnrolled && usesDonation && displaySuggestedAmount === 0;
+  const waivedByBv = activeEnrollment?.suggestedAmountOverride === 0;
+
   // The OID to use for the EnrollCta — prefer the enrolled offering when already enrolled.
   const ctaOid = enrolledOffering?.oid ?? defaultOffering?.oid ?? '';
 
@@ -326,7 +392,7 @@ export default async function ProgramEnrollPage({ params }: Props) {
             </div>
 
             <div style={{ flex: 1, overflowY: 'auto', padding: '20px 18px 100px' }}>
-              {alreadyEnrolled && renderAlreadyEnrolledBanner(activeTerm, paid, usesDonation, selectedPaymentSource)}
+              {alreadyEnrolled && renderAlreadyEnrolledBanner(activeTerm, paid, usesDonation, selectedPaymentSource, nothingToPay)}
               {!enrolledOffering && !alreadyEnrolled && renderNoPeriodBanner(program.label, family.location)}
 
               {enrolledOffering && (
@@ -365,10 +431,12 @@ export default async function ProgramEnrollPage({ params }: Props) {
                       above it would show "$500" twice with different meanings. */}
                   {usesDonation && !donationChoice && (
                     <>
-                      <SectionLabel>Donation{paid ? '' : ' · suggested donation'}</SectionLabel>
+                      <SectionLabel>Donation{paid || nothingToPay ? '' : ' · suggested donation'}</SectionLabel>
                       {paid
                         ? renderPaidBlockMobile(activeTerm)
-                        : renderDonationBlock(displaySuggestedAmount ?? 0)}
+                        : nothingToPay
+                          ? renderNothingToPay(waivedByBv, { desktop: false })
+                          : renderDonationBlock(displaySuggestedAmount ?? 0)}
                     </>
                   )}
 
@@ -400,7 +468,11 @@ export default async function ProgramEnrollPage({ params }: Props) {
             {!donationChoice && (
             <div style={{ position: 'sticky', bottom: 0, left: 0, right: 0, padding: '14px 18px', background: 'var(--surface)', borderTop: '1px solid var(--line)' }}>
               {alreadyEnrolled ? (
-                paid ? (
+                // `nothingToPay` joins `paid` here: there is no donation to
+                // collect, so the only honest control is the way out. Offering
+                // "Continue to donation" for $0 led nowhere - both the button and
+                // the checkout API reject anything under $1.
+                paid || nothingToPay ? (
                   <Link href="/family" className="btn btn--p btn--block" style={{ display: 'block', textAlign: 'center', textDecoration: 'none' }}>
                     Back to dashboard
                   </Link>
@@ -460,7 +532,7 @@ export default async function ProgramEnrollPage({ params }: Props) {
           </div>
         </header>
 
-        {alreadyEnrolled && renderAlreadyEnrolledBanner(activeTerm, paid, usesDonation, selectedPaymentSource)}
+        {alreadyEnrolled && renderAlreadyEnrolledBanner(activeTerm, paid, usesDonation, selectedPaymentSource, nothingToPay)}
         {!enrolledOffering && !alreadyEnrolled && renderNoPeriodBanner(program.label, family.location)}
 
         {enrolledOffering && (
@@ -512,7 +584,18 @@ export default async function ProgramEnrollPage({ params }: Props) {
 
             {/* Right: offering picker + donation/confirm panel */}
             <aside>
-              {paid ? renderPaidPanel(activeTerm) : donationChoice ? (
+              {paid ? renderPaidPanel(activeTerm) : nothingToPay ? (
+                <div style={{ position: 'sticky', top: 0 }}>
+                  {renderNothingToPay(waivedByBv, { desktop: true })}
+                  <Link
+                    href="/family"
+                    className="btn btn--p btn--block"
+                    style={{ display: 'block', textAlign: 'center', textDecoration: 'none', marginTop: 14 }}
+                  >
+                    Back to dashboard
+                  </Link>
+                </div>
+              ) : donationChoice ? (
                 // Brings its own card, heading, both amounts, the tax-deductible
                 // line and the single CTA - so it stands in for the whole panel
                 // rather than sitting inside it.
