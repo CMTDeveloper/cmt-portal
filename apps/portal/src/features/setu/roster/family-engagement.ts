@@ -20,6 +20,12 @@ export interface RosterFamilySignals {
 
 export interface RosterFamilyContext {
   legacyFid: string | null;
+  /**
+   * This family has a LIVE monthly pledge. Supplied by the CALLER from one bulk
+   * `loadActivePledgeFids()` query - never looked up per family, because the
+   * roster renders ~870 rows and a lookup each would be ~870 round trips.
+   */
+  hasActivePledge: boolean;
   /** The family's members (mid → legacySid) for the door-attendance join. */
   members: ReadonlyArray<{ mid: string; legacySid: string | null }>;
 }
@@ -47,7 +53,13 @@ export async function deriveFamilyRosterSignals(
     const paid = donations
       .filter((d) => d.status === 'completed')
       .reduce((sum, d) => sum + (typeof d.amountCAD === 'number' ? d.amountCAD : 0), 0);
-    const payment = classifyRosterPayment(active.map(chargeFromEnrollment), paid);
+    // A live monthly pledge reads as PAID on the chip too. Letting the chip say
+    // "outstanding" while the engagement column said "confirmed" would put two
+    // contradictory answers about the same family on the same row, and staff
+    // would chase a family who is paying exactly as asked.
+    const payment = ctx.hasActivePledge
+      ? 'paid'
+      : classifyRosterPayment(active.map(chargeFromEnrollment), paid);
 
     // Pin to the active *Bala Vihar* enrollment so a newer non-BV enrollment
     // can't hijack the signal (same rule as selectBalaViharEnrollment).
@@ -66,7 +78,14 @@ export async function deriveFamilyRosterSignals(
 
     // Cheap signals first (donations already loaded + legacy). Only pay for the
     // attendance read when they're inconclusive.
-    if (isEnrollmentConfirmed(bv, { attendedCount: 0, donations, legacyPaid })) {
+    if (
+      isEnrollmentConfirmed(bv, {
+        attendedCount: 0,
+        donations,
+        legacyPaid,
+        hasActivePledge: ctx.hasActivePledge,
+      })
+    ) {
       return { payment, bvEngagement: 'confirmed' };
     }
 
@@ -87,7 +106,12 @@ export async function deriveFamilyRosterSignals(
     const attendedCount = summary.present + summary.late;
     return {
       payment,
-      bvEngagement: isEnrollmentConfirmed(bv, { attendedCount, donations, legacyPaid })
+      bvEngagement: isEnrollmentConfirmed(bv, {
+        attendedCount,
+        donations,
+        legacyPaid,
+        hasActivePledge: ctx.hasActivePledge,
+      })
         ? 'confirmed'
         : 'registered',
     };

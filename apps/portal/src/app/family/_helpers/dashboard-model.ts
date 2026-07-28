@@ -49,6 +49,12 @@ export interface DashboardModelInput {
    * (computed by the loader via getFamilyBalaViharAttendance); 0 when none.
    */
   bvAttendedCount: number;
+  /**
+   * The family has a LIVE monthly pledge (`isPledgeGiving`, i.e. `active`).
+   * Since 2026-07-27 the pledge IS the Bala Vihar enrollment donation paid
+   * monthly, so it satisfies the same rules a one-time donation does.
+   */
+  hasActivePledge: boolean;
 }
 
 export interface FamilyDashboardModel {
@@ -127,7 +133,12 @@ export function buildFamilyDashboardModel(input: DashboardModelInput): FamilyDas
   // real engagement — attendance, a completed donation for its eid, or legacy-paid.
   const bvConfirmed =
     bv !== null &&
-    isEnrollmentConfirmed(bv, { attendedCount: input.bvAttendedCount, donations, legacyPaid });
+    isEnrollmentConfirmed(bv, {
+      attendedCount: input.bvAttendedCount,
+      donations,
+      legacyPaid,
+      hasActivePledge: input.hasActivePledge,
+    });
   const bvState: 'enrolled' | 'registered' | 'none' =
     bv === null ? 'none' : bvConfirmed ? 'enrolled' : 'registered';
   const confirmNudge = bvState === 'registered';
@@ -136,9 +147,22 @@ export function buildFamilyDashboardModel(input: DashboardModelInput): FamilyDas
     (c) => c.programKey !== 'bala-vihar',
   );
 
-  const donationComplete = suggestedAmount !== null && givenForPeriod >= suggestedAmount;
-  const donationPct =
-    suggestedAmount && suggestedAmount > 0
+  // A live monthly pledge satisfies the donation outright. The family chose the
+  // instalment option and is paying it - showing them "donation pending" for ten
+  // months while they pay every month would be both wrong and discouraging.
+  //
+  // ⚠️ KNOWN LIMITATION, accepted by CMT Developer 2026-07-27: the portal has no
+  // Stripe webhook (`mark-donation-status.ts:11` - settlement is client-trusted)
+  // and months 2..N have no browser round-trip, so the portal cannot observe
+  // that any monthly payment after the first was actually COLLECTED. A family
+  // who cancels at the bank still reads as satisfied until the reconciler or a
+  // human notices. Reports therefore over-count monthly givers, deliberately,
+  // until invoice polling exists.
+  const donationComplete =
+    input.hasActivePledge || (suggestedAmount !== null && givenForPeriod >= suggestedAmount);
+  const donationPct = input.hasActivePledge
+    ? 100
+    : suggestedAmount && suggestedAmount > 0
       ? Math.min(100, Math.round((givenForPeriod / suggestedAmount) * 100))
       : 0;
   const donationTone: 'ok' | 'warn' | null = !isEnrolled

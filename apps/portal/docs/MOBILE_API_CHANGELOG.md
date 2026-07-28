@@ -353,3 +353,28 @@ A per-type "required member info" matrix is now enforced at every member write. 
 ## `1c7f2f1` · 2026-06-21 · security: family-lookup PII trim
 - **POST `/api/setu/family-lookup`** — the `match` field is trimmed to **`{ found: true, matchedType: 'email' | 'phone', matchedValue: string } | null`** (no family/member PII). Response is still `{ match }`.
   - **Mobile:** update the family-lookup response schema in `src/api/schemas/auth.ts` to the trimmed `match` shape (it already treats `match: null` as "no family").
+
+## 2026-07-27 — monthly pledge becomes a Bala Vihar payment option
+
+**Why:** Vaibhav, 2026-07-27: *"This should not be separate. It's part of Bala
+Vihar. Instead of straight $500 donation, family can do Monthly Pledge"* …
+*"this is an enrollment option one-time vs monthly"* … *"It would be continuous
+until manually stopped."* The pledge stopped being a standalone "support the
+mission" ask and became the second way to pay the enrollment donation.
+
+**`GET /api/setu/dashboard` — no field added or removed, but VALUES CHANGE.**
+For a family with an `active` pledge:
+
+- `balaVihar.donationComplete` is now `true` even when `givenForPeriod` is `0`.
+- `balaVihar.donationPct` is now `100` in the same case.
+- `balaVihar.bvState` can be `'enrolled'` with no completed donation on file.
+- `actionItems` no longer contains the complete-your-donation nudge.
+
+**What the mobile must do:** stop inferring "paid" from
+`givenForPeriod >= suggestedAmount`. That comparison is now WRONG for monthly
+givers — it will show a paying family as owing the full amount. Read
+`donationComplete` / `donationPct`, which the server derives.
+
+`balaVihar.givenForPeriod` deliberately still counts only **completed one-time
+donations**, so it can legitimately be `0` while `donationComplete` is `true`.
+It is the amount actually received, not the family's standing.

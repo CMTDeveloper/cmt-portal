@@ -42,7 +42,7 @@ function bvEnrollment(over: AnyRec = {}) {
   };
 }
 
-const CTX = { legacyFid: '715', members: [{ mid: 'CMT-1-m-0', legacySid: 's1' }] };
+const CTX = { legacyFid: '715', members: [{ mid: 'CMT-1-m-0', legacySid: 's1' }], hasActivePledge: false };
 
 function attendance(present: number, late = 0) {
   return { present, late, absent: 0, total: present + late, attendedPct: 0 };

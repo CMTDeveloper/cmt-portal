@@ -18,6 +18,9 @@ import {
   type FamilyDashboardModel,
 } from './dashboard-model';
 import { selectBalaViharEnrollment } from './select-bv-enrollment';
+import { flags } from '@/lib/flags';
+import { getFamilyPledge } from '@/features/setu/pledges/get-family-pledge';
+import { isPledgeGiving } from '@cmt/shared-domain/setu';
 
 export interface BvChildView {
   mid: string;
@@ -206,12 +209,19 @@ export async function loadFamilyDashboard(
       })(),
     ]);
 
+  // The monthly pledge is the Bala Vihar donation paid monthly (2026-07-27), so
+  // the model needs to know whether this family is on one. One narrow read of
+  // the family's own pledge - the bulk `loadActivePledgeFids` is for the STAFF
+  // surfaces that render hundreds of families at once.
+  const familyPledge = flags.setuPledge ? await getFamilyPledge(family.fid) : null;
+
   const model = buildFamilyDashboardModel({
     enrollments,
     donations,
     programsById,
     legacyPaymentStatus,
     bvAttendedCount,
+    hasActivePledge: isPledgeGiving(familyPledge),
   });
 
   const byMidMember = new Map(members.map((m): [string, MemberDoc] => [m.mid, m]));

@@ -8,6 +8,18 @@ export interface ConfirmationInputs {
   donations: DonationDoc[];
   /** Legacy-sourced BV offering already paid in the legacy roster. */
   legacyPaid: boolean;
+  /**
+   * The family has a LIVE monthly pledge - `isPledgeGiving(pledge)`, which is
+   * `active` only. Never `started`: that means the family was sent to Stripe and
+   * nothing came back, so no mandate and no money exist.
+   *
+   * REQUIRED, not optional-with-a-default, deliberately. Every caller of this
+   * rule is a surface that tells someone whether a family has paid - the family
+   * dashboard, the teacher roster, the welcome roster, the reports. An optional
+   * field would let a new surface silently inherit "no pledge" and quietly
+   * disagree with the others about the same family.
+   */
+  hasActivePledge: boolean;
 }
 
 /**
@@ -35,5 +47,11 @@ export function isEnrollmentConfirmed(
   if (enrollment.enrolledVia === 'first-attendance') return true;
   if (inputs.attendedCount > 0) return true;
   if (inputs.legacyPaid) return true;
+  // The monthly pledge IS the enrollment donation, paid a month at a time
+  // (Vaibhav, 2026-07-27: "this is an enrollment option one-time vs monthly").
+  // Family-level and unscoped by eid on purpose: the plan is continuous until
+  // manually stopped, so a family who keeps paying keeps satisfying the CURRENT
+  // year's enrollment across a rollover, without re-deciding every August.
+  if (inputs.hasActivePledge) return true;
   return inputs.donations.some((d) => d.status === 'completed' && d.eid === enrollment.eid);
 }

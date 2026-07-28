@@ -153,6 +153,7 @@ function input(overrides: Partial<DashboardModelInput> = {}): DashboardModelInpu
     programsById: PROGRAMS,
     legacyPaymentStatus: null,
     bvAttendedCount: 0, // no attendance unless a test seeds it (issue #23)
+    hasActivePledge: false, // no monthly pledge unless a test seeds it (2026-07-27)
     ...overrides,
   };
 }
@@ -357,7 +358,7 @@ describe('actionItems — donation is NOT an action item in Slice 1 (lives in th
   it('enrolled + portal-managed + unpaid → NO donation action item (BV section owns it)', () => {
     const model = buildFamilyDashboardModel({
       enrollments: [BV_ENROLLMENT], donations: [], programsById: new Map(),
-      legacyPaymentStatus: null, bvAttendedCount: 0,
+      legacyPaymentStatus: null, bvAttendedCount: 0, hasActivePledge: false,
     });
     expect(model.actionItems).toEqual([]);
   });
@@ -365,15 +366,51 @@ describe('actionItems — donation is NOT an action item in Slice 1 (lives in th
     const paid = makeDonation({ eid: BV_ENROLLMENT.eid, status: 'completed', amountCAD: 1000 });
     const model = buildFamilyDashboardModel({
       enrollments: [BV_ENROLLMENT], donations: [paid], programsById: new Map(),
-      legacyPaymentStatus: null, bvAttendedCount: 0,
+      legacyPaymentStatus: null, bvAttendedCount: 0, hasActivePledge: false,
     });
     expect(model.actionItems).toEqual([]);
   });
   it('has no action item when not enrolled', () => {
     const model = buildFamilyDashboardModel({
       enrollments: [], donations: [], programsById: new Map(),
-      legacyPaymentStatus: null, bvAttendedCount: 0,
+      legacyPaymentStatus: null, bvAttendedCount: 0, hasActivePledge: false,
     });
     expect(model.actionItems).toEqual([]);
+  });
+});
+
+// ── Monthly pledge as the enrollment donation (2026-07-27, Vaibhav) ──────────
+// The pledge stopped being a separate "support the mission" ask and became the
+// second way to pay the Bala Vihar donation: $500 once, or $51/month. A family
+// on the monthly plan has done what was asked, so every donation-shaped signal
+// must agree - a family reading "Donation pending" while paying every month is
+// exactly the split-brain this change exists to remove.
+describe('an active monthly pledge satisfies the Bala Vihar donation', () => {
+  // A PROMOTION (carry-forward) enrollment, deliberately. A 'family-initiated'
+  // one confirms on its own (enrollment-confirmation.ts:34), so it would report
+  // 'enrolled' with or without a pledge and prove nothing about this change.
+  const carriedForward = makeEnrollment({ enrolledVia: 'promotion' });
+
+  it('reads as complete, 100%, and Enrolled - with NO one-time donation on file', () => {
+    const m = buildFamilyDashboardModel(input({ enrollments: [carriedForward], hasActivePledge: true }));
+    expect(m.donation.complete).toBe(true);
+    expect(m.donation.pct).toBe(100);
+    expect(m.bvState).toBe('enrolled');
+  });
+
+  it('raises no "complete your donation" action item', () => {
+    // The nudge is the thing a monthly giver would find most irritating: it
+    // asks them to pay again for something they are already paying.
+    const m = buildFamilyDashboardModel(input({ enrollments: [carriedForward], hasActivePledge: true }));
+    expect(m.actionItems).toEqual([]);
+  });
+
+  it('without a pledge the SAME enrollment reads as pending and only Registered', () => {
+    // The control, and it earned its place: run against the default
+    // BV_ENROLLMENT it FAILED, because that fixture is 'family-initiated' and
+    // so already confirmed. Only a carry-forward isolates the pledge's effect.
+    const m = buildFamilyDashboardModel(input({ enrollments: [carriedForward], hasActivePledge: false }));
+    expect(m.donation.complete).toBe(false);
+    expect(m.bvState).toBe('registered');
   });
 });

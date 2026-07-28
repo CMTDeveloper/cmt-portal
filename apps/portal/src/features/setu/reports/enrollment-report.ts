@@ -5,6 +5,7 @@ import type { DonationDoc, EnrollmentReport, PaymentSource, ReportQuery } from '
 import { getLegacyPaymentStatus } from '@/features/setu/donations/legacy-payment';
 import { isEnrollmentConfirmed } from '@/app/family/_helpers/enrollment-confirmation';
 import type { EnrollmentWithOffering } from '@/features/setu/enrollment/get-enrollments';
+import { loadActivePledgeFids } from '@/features/setu/pledges/active-pledge-fids';
 
 const BV_PROGRAM_KEY = 'bala-vihar';
 const OFFERING_CHUNK = 300;
@@ -223,6 +224,16 @@ async function deriveBvConfirmedFids(
     legacyStatusByLegacyFid.set(lf, await getLegacyPaymentStatus(lf));
   }));
 
+  // Monthly pledges count as the enrollment donation (2026-07-27). One query,
+  // like every other signal in this report.
+  //
+  // ⚠️ This report OVER-COUNTS a monthly giver who has stopped paying at their
+  // bank: with no Stripe webhook the portal never learns a debit failed, so an
+  // `active` pledge reads as satisfied until the reconciler or a human notices.
+  // Accepted by CMT Developer 2026-07-27 as the cost of shipping the instalment
+  // option for launch; revisit when invoice polling exists.
+  const pledgedFids = await loadActivePledgeFids();
+
   for (const enr of bvEnrollments) {
     const attendedCount = enr.enrolledMids.some((mid) => attendedPairs.has(`${enr.oid}::${mid}`)) ? 1 : 0;
     const legacyFid = legacyFidByFid.get(enr.fid);
@@ -231,7 +242,12 @@ async function deriveBvConfirmedFids(
         ? legacyStatusByLegacyFid.get(legacyFid) === 'paid'
         : false;
     const donations = donationsByFid.get(enr.fid) ?? [];
-    if (isEnrollmentConfirmed({ eid: enr.eid, enrolledVia: enr.enrolledVia }, { attendedCount, donations, legacyPaid })) {
+    if (
+      isEnrollmentConfirmed(
+        { eid: enr.eid, enrolledVia: enr.enrolledVia },
+        { attendedCount, donations, legacyPaid, hasActivePledge: pledgedFids.has(enr.fid) },
+      )
+    ) {
       confirmedFids.add(enr.fid);
     }
   }

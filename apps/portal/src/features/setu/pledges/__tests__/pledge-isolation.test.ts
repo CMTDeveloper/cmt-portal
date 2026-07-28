@@ -55,7 +55,41 @@ describe('the pledge feature is quarantined', () => {
     expect(readers, 'something outside features/setu/pledges reads the pledges collection').toEqual([]);
   });
 
-  it('is not consulted by anything that decides enrollment, payment, roster, attendance or reports', () => {
+  /**
+   * The surfaces ALLOWED to depend on pledge state, and nothing else.
+   *
+   * ── Why this list exists at all ─────────────────────────────────────────────
+   * Until 2026-07-27 the rule was absolute: "a pledge gates NOTHING". Vaibhav
+   * then established that the monthly pledge is not a separate ask but the
+   * SECOND way to pay the Bala Vihar enrollment donation - $500 once or $51 a
+   * month - so the surfaces that report whether a family has paid now have to
+   * know. The invariant could not survive unchanged; deleting it outright would
+   * have thrown away the part still worth enforcing.
+   *
+   * So it became an allowlist. Each entry below is a place where a human decided
+   * that a pledge counts. Anything NEW that reads pledge state still fails this
+   * test, which is the point: the reversal was deliberate and bounded, and the
+   * next one has to be deliberate too.
+   *
+   * ⚠️ Adding a file here is a claim that a pledge is equivalent to money
+   * received. It is NOT, quite: with no Stripe webhook the portal cannot see
+   * that any monthly payment after the first was collected. Every entry
+   * over-reports a family who stops paying at the bank.
+   */
+  const MAY_READ_PLEDGE_STATE = [
+    // The family's own dashboard: donation complete/percent + Enrolled state.
+    join('app', 'family', '_helpers', 'dashboard-model.ts'),
+    // The #23 rule itself - "attended, or donated, or pledged".
+    join('app', 'family', '_helpers', 'enrollment-confirmation.ts'),
+    // Reads THIS family's pledge to feed the model.
+    join('app', 'family', '_helpers', 'load-dashboard.ts'),
+    // Teacher roster: a pledging family is confirmed, not left unpaid.
+    join('features', 'setu', 'teacher', 'roster-confirmation.ts'),
+    // Enrollment report / CSV headcounts.
+    join('features', 'setu', 'reports', 'enrollment-report.ts'),
+  ];
+
+  it('is consulted ONLY by the surfaces explicitly allowed to treat a pledge as payment', () => {
     const DECIDERS = [
       join('features', 'setu', 'enrollment'),
       join('features', 'setu', 'roster'),
@@ -69,9 +103,29 @@ describe('the pledge feature is quarantined', () => {
     const offenders = FILES.filter(
       (f) =>
         DECIDERS.some((d) => f.rel.includes(d)) &&
+        !MAY_READ_PLEDGE_STATE.some((allowed) => f.rel.endsWith(allowed)) &&
         /(features\/setu\/pledges|isPledgeGiving|PledgeStatus|PledgeDoc)/.test(f.body),
     ).map((f) => f.rel);
-    expect(offenders, 'a decision surface now depends on pledge state').toEqual([]);
+    expect(
+      offenders,
+      'a NEW decision surface depends on pledge state - if that is intended, add it to ' +
+        'MAY_READ_PLEDGE_STATE above and say why a pledge counts as payment there',
+    ).toEqual([]);
+  });
+
+  it('every allowlisted file exists and actually reads pledge state', () => {
+    // Guards the allowlist itself. A stale entry - a file renamed, or one that
+    // stopped reading pledges - would silently widen the exemption, so that the
+    // NEXT file to take that path would be waved through by an entry nobody
+    // remembers granting.
+    for (const allowed of MAY_READ_PLEDGE_STATE) {
+      const file = FILES.find((f) => f.rel.endsWith(allowed));
+      expect(file, `allowlisted file no longer exists: ${allowed}`).toBeDefined();
+      expect(
+        /(features\/setu\/pledges|isPledgeGiving|PledgeStatus|PledgeDoc|hasActivePledge)/.test(file!.body),
+        `${allowed} is allowlisted but no longer reads pledge state - remove it from the allowlist`,
+      ).toBe(true);
+    }
   });
 
   it('never names a bank detail in CODE anywhere in the feature', () => {

@@ -27,42 +27,64 @@ function donation(over: Partial<DonationDoc> = {}): DonationDoc {
 
 describe('isEnrollmentConfirmed', () => {
   it('attendance alone confirms', () => {
-    expect(isEnrollmentConfirmed(bv, { attendedCount: 1, donations: [], legacyPaid: false })).toBe(true);
+    expect(isEnrollmentConfirmed(bv, { attendedCount: 1, donations: [], legacyPaid: false, hasActivePledge: false })).toBe(true);
   });
   it('a completed donation for this eid alone confirms (any amount)', () => {
-    expect(isEnrollmentConfirmed(bv, { attendedCount: 0, donations: [donation({})], legacyPaid: false })).toBe(true);
+    expect(isEnrollmentConfirmed(bv, { attendedCount: 0, donations: [donation({})], legacyPaid: false, hasActivePledge: false })).toBe(true);
   });
   it('legacyPaid alone confirms', () => {
-    expect(isEnrollmentConfirmed(bv, { attendedCount: 0, donations: [], legacyPaid: true })).toBe(true);
+    expect(isEnrollmentConfirmed(bv, { attendedCount: 0, donations: [], legacyPaid: true, hasActivePledge: false })).toBe(true);
   });
   it('neither → not confirmed', () => {
-    expect(isEnrollmentConfirmed(bv, { attendedCount: 0, donations: [], legacyPaid: false })).toBe(false);
+    expect(isEnrollmentConfirmed(bv, { attendedCount: 0, donations: [], legacyPaid: false, hasActivePledge: false })).toBe(false);
   });
   it('a donation to a DIFFERENT enrollment (e.g. Tabla) does NOT confirm', () => {
     const tabla = { ...donation({}), eid: 'FAM1-tabla-brampton-2026-27' } as DonationDoc;
-    expect(isEnrollmentConfirmed(bv, { attendedCount: 0, donations: [tabla], legacyPaid: false })).toBe(false);
+    expect(isEnrollmentConfirmed(bv, { attendedCount: 0, donations: [tabla], legacyPaid: false, hasActivePledge: false })).toBe(false);
   });
   it('a pending/abandoned donation does NOT confirm', () => {
     const pending = { ...donation({}), status: 'abandoned' } as DonationDoc;
-    expect(isEnrollmentConfirmed(bv, { attendedCount: 0, donations: [pending], legacyPaid: false })).toBe(false);
+    expect(isEnrollmentConfirmed(bv, { attendedCount: 0, donations: [pending], legacyPaid: false, hasActivePledge: false })).toBe(false);
   });
   it('a donation with eid null (general giving) does NOT confirm', () => {
     const general = { ...donation({}), eid: null } as DonationDoc;
-    expect(isEnrollmentConfirmed(bv, { attendedCount: 0, donations: [general], legacyPaid: false })).toBe(false);
+    expect(isEnrollmentConfirmed(bv, { attendedCount: 0, donations: [general], legacyPaid: false, hasActivePledge: false })).toBe(false);
   });
   it('a family-initiated enrollment confirms with no engagement (clicked Enroll, $0 paid)', () => {
     const clicked = { eid: bv.eid, enrolledVia: 'family-initiated' as const };
-    expect(isEnrollmentConfirmed(clicked, { attendedCount: 0, donations: [], legacyPaid: false })).toBe(true);
+    expect(isEnrollmentConfirmed(clicked, { attendedCount: 0, donations: [], legacyPaid: false, hasActivePledge: false })).toBe(true);
   });
   it('a first-attendance enrollment confirms with no engagement (teacher auto-enrolled a kid)', () => {
     const auto = { eid: bv.eid, enrolledVia: 'first-attendance' as const };
-    expect(isEnrollmentConfirmed(auto, { attendedCount: 0, donations: [], legacyPaid: false })).toBe(true);
+    expect(isEnrollmentConfirmed(auto, { attendedCount: 0, donations: [], legacyPaid: false, hasActivePledge: false })).toBe(true);
   });
   it('a promotion enrollment with zero engagement stays NOT confirmed (Registered)', () => {
-    expect(isEnrollmentConfirmed(bv, { attendedCount: 0, donations: [], legacyPaid: false })).toBe(false);
+    expect(isEnrollmentConfirmed(bv, { attendedCount: 0, donations: [], legacyPaid: false, hasActivePledge: false })).toBe(false);
   });
+  // ── Monthly pledge (2026-07-27, Vaibhav) ──────────────────────────────────
+  // The pledge stopped being a separate "support the mission" ask and became
+  // the SECOND way to pay the Bala Vihar enrollment donation: $500 once, or
+  // $51/month. A family who chose monthly has done exactly what was asked, so
+  // they must read as Enrolled - not sit in "Registered" all year because no
+  // single lump-sum donation exists for their eid.
+  it('an active monthly pledge confirms a carry-forward enrollment', () => {
+    expect(
+      isEnrollmentConfirmed(bv, { attendedCount: 0, donations: [], legacyPaid: false, hasActivePledge: true }),
+    ).toBe(true);
+  });
+
+  it('is NOT confirmed by a pledge the family has not completed', () => {
+    // `hasActivePledge` is derived from isPledgeGiving(), which counts ONLY
+    // `active`. A `started` pledge means the family was sent to Stripe and
+    // nothing came back - no mandate, no money. Confirming on that would tell a
+    // teacher a family had paid because they once clicked a button.
+    expect(
+      isEnrollmentConfirmed(bv, { attendedCount: 0, donations: [], legacyPaid: false, hasActivePledge: false }),
+    ).toBe(false);
+  });
+
   it('a welcome-team enrollment with zero engagement stays NOT confirmed (Registered)', () => {
     const wt = { eid: bv.eid, enrolledVia: 'welcome-team' as const };
-    expect(isEnrollmentConfirmed(wt, { attendedCount: 0, donations: [], legacyPaid: false })).toBe(false);
+    expect(isEnrollmentConfirmed(wt, { attendedCount: 0, donations: [], legacyPaid: false, hasActivePledge: false })).toBe(false);
   });
 });

@@ -2,6 +2,7 @@ import { paymentSourceOf } from '@cmt/shared-domain';
 import type { DonationDoc } from '@cmt/shared-domain';
 import { getLegacyPaymentStatus } from '@/features/setu/donations/legacy-payment';
 import { isEnrollmentConfirmed } from '@/app/family/_helpers/enrollment-confirmation';
+import { loadActivePledgeFids } from '@/features/setu/pledges/active-pledge-fids';
 
 export interface LevelEnrollment {
   fid: string;
@@ -67,6 +68,13 @@ export async function deriveConfirmedFidsForLevel(
   // single-field index — same tradeoff as report-dataset.ts). Then only the
   // legacy-payment reads (rare — only when the offering is legacy-sourced) run
   // per-family, in parallel.
+  // A live monthly pledge IS the enrollment donation (2026-07-27), so it
+  // confirms exactly as a completed one-time donation does. ONE query for every
+  // pledging family, in the same bulk spirit as the donation read below - this
+  // helper runs on every autosave tap, so a per-family lookup here would be the
+  // fan-out that read was written to remove.
+  const pledgedFids = await loadActivePledgeFids();
+
   const needsReadFids = new Set(needsRead.map((e) => e.fid));
   const donationsByFid = new Map<string, DonationDoc[]>();
   if (needsRead.length > 0) {
@@ -94,7 +102,12 @@ export async function deriveConfirmedFidsForLevel(
         source === 'legacy' && enr.legacyFid
           ? (await getLegacyPaymentStatus(enr.legacyFid)) === 'paid'
           : false;
-      if (isEnrollmentConfirmed({ eid: enr.eid, enrolledVia: enr.enrolledVia }, { attendedCount: 0, donations, legacyPaid })) {
+      if (
+        isEnrollmentConfirmed(
+          { eid: enr.eid, enrolledVia: enr.enrolledVia },
+          { attendedCount: 0, donations, legacyPaid, hasActivePledge: pledgedFids.has(enr.fid) },
+        )
+      ) {
         confirmed.add(enr.fid);
       }
     }),

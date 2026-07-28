@@ -6,8 +6,13 @@ import { CspRoot } from '@/features/family/components/atoms';
 import { DonateForm } from '@/features/family/components/donate-form';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
-import { paymentSourceOf } from '@cmt/shared-domain';
+import { paymentSourceOf, BALA_VIHAR } from '@cmt/shared-domain';
 import { getLegacyPaymentStatus } from '@/features/setu/donations/legacy-payment';
+import { isPledgeGiving } from '@cmt/shared-domain/setu';
+import { flags } from '@/lib/flags';
+import { getFamilyPledge } from '@/features/setu/pledges/get-family-pledge';
+import { configuredMonthlyAmountCAD } from '@/features/setu/pledges/pledge-amount';
+import { MonthlyDonationOption } from '@/features/setu/pledges/components/monthly-donation-option';
 
 export const metadata = { title: 'Donate' };
 
@@ -84,6 +89,29 @@ export default async function DonatePage({
       ? `${programLabel ?? 'Program'}${periodLabel ? ` · ${periodLabel}` : ''} · ${family.location}`
       : 'A charitable gift to Chinmaya Mission Toronto';
 
+  // ── The monthly alternative (2026-07-27, Vaibhav) ─────────────────────────
+  // "This should not be separate. It's part of Bala Vihar. Instead of straight
+  // $500 donation, family can do Monthly Pledge." So the choice lives HERE, at
+  // the moment the family is deciding how to pay, rather than as an unrelated
+  // card on the dashboard.
+  //
+  // Gated to a BALA VIHAR ENROLLMENT donation on purpose: a general gift has no
+  // yearly contribution to spread, and another programme's donation is not what
+  // the monthly plan funds. This is also what stops the ask reaching a family
+  // with no Bala Vihar enrollment at all - the state in the screenshot that
+  // prompted the change.
+  const pledgeEligible =
+    flags.setuPledge && mode === 'enrollment' && programKey === BALA_VIHAR && !teacherManagedPayment;
+  const existingPledge = pledgeEligible ? await getFamilyPledge(family.fid) : null;
+  const monthlyOption = pledgeEligible ? (
+    <MonthlyDonationOption
+      monthlyAmountCAD={configuredMonthlyAmountCAD()}
+      oneTimeAmountCAD={suggestedAmount}
+      canStart={isManager}
+      alreadyPledging={isPledgeGiving(existingPledge)}
+    />
+  ) : null;
+
   const form = teacherManagedPayment ? (
     <div style={{ padding: '16px 18px', background: 'var(--accentSoft)', color: 'var(--accentDeep)', borderRadius: 'var(--radius)', fontSize: 14, lineHeight: 1.55 }}>
       <strong>Payment is managed by the teacher for {periodLabel}.</strong>
@@ -101,6 +129,7 @@ export default async function DonatePage({
       </div>
     </div>
   ) : isManager ? (
+    <>
     <DonateForm
       mode={mode}
       eid={resolvedEid}
@@ -109,15 +138,21 @@ export default async function DonatePage({
       tiers={tiers}
       // DORMANT: the Bala Vihar donation acknowledgements ship with placeholder
       // copy and are gated OFF until CMT provides the final disclaimer text. To
-      // re-enable: re-add the `BALA_VIHAR` import and set this to
-      // {programKey === BALA_VIHAR}.
+      // re-enable, set this to {programKey === BALA_VIHAR} (BALA_VIHAR is now
+      // imported above for the monthly-option gate).
       requiresAcknowledgements={false}
     />
+    {/* The SECOND way to pay the same Bala Vihar contribution (2026-07-27).
+        Bala Vihar only, and only for an enrollment donation - a general gift has
+        no yearly contribution to spread. */}
+    {monthlyOption}
+    </>
   ) : (
     <div style={{ padding: '14px 16px', background: 'var(--accentSoft)', color: 'var(--accentDeep)', borderRadius: 'var(--radiusSm)', fontSize: 14, fontWeight: 600 }}>
       Only the family manager can make a donation through the portal.
     </div>
   );
+
 
   const why = (
     <div style={{ padding: 16, background: 'var(--accentSoft)', borderRadius: 'var(--radius)', marginBottom: 14 }}>

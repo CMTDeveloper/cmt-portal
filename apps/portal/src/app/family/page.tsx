@@ -285,6 +285,9 @@ export default async function FamilyDashboardPage() {
   let isManager = false;
   let model: FamilyDashboardModel = buildFamilyDashboardModel({
     enrollments: [], donations: [], programsById: new Map(), legacyPaymentStatus: null, bvAttendedCount: 0,
+    // Empty-state placeholder before the real load; `false` is the safe default
+    // (claiming a pledge the family may not have would show them "paid").
+    hasActivePledge: false,
   });
   let bvChildren: BvChildView[] = [];
   let familyCounts = { children: 0, adults: 0 };
@@ -443,17 +446,21 @@ export default async function FamilyDashboardPage() {
               {childrenList && <div style={{ marginTop: 16 }}>{childrenList}</div>}
             </div>
 
-            {/* Monthly giving. Below Bala Vihar on purpose: enrollment and the
-                donation that confirms it are why the family is here; the
-                recurring ask is secondary and stays quiet. Rendered in BOTH
-                column variants because this page ships mobile and desktop
-                markup side by side - any E2E locator needs
-                `.filter({ visible: true })`. */}
-            {pledgeSlot && (
+            {/* Monthly giving: STATE ONLY on the dashboard, never an ask.
+                The ask moved into the Bala Vihar donate flow on 2026-07-27
+                (Vaibhav: "This should not be separate. It's part of Bala
+                Vihar."), because a standalone card here read as an unrelated
+                second request for money - and rendered even for families whose
+                own dashboard said "Not enrolled". A family already on a plan
+                still needs to see it, so the card stays for THAT case with
+                `canStart={false}`. Rendered in BOTH column variants because this
+                page ships mobile and desktop markup side by side - any E2E
+                locator needs `.filter({ visible: true })`. */}
+            {pledgeSlot?.pledge && (
               <PledgeCard
                 pledge={pledgeSlot.pledge}
                 askAmountCAD={pledgeSlot.askAmountCAD}
-                canStart={pledgeSlot.canStart}
+                canStart={false}
                 mobile
               />
             )}
@@ -535,11 +542,12 @@ export default async function FamilyDashboardPage() {
           {childrenList && <div style={{ marginTop: 20 }}>{childrenList}</div>}
         </div>
 
-        {pledgeSlot && (
+        {/* State only - see the mobile column above. */}
+        {pledgeSlot?.pledge && (
           <PledgeCard
             pledge={pledgeSlot.pledge}
             askAmountCAD={pledgeSlot.askAmountCAD}
-            canStart={pledgeSlot.canStart}
+            canStart={false}
           />
         )}
 
