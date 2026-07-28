@@ -180,6 +180,14 @@ export async function POST(req: Request) {
     // Scoped to Bala Vihar enrollment donations. A GENERAL gift is a different
     // intent and stays open to everyone - a pledging family may still want to
     // give extra, and blocking that would be wrong.
+    // Deliberately NOT wrapped in a try/catch, unlike `loadPledgeSlot`, which
+    // degrades to null so a Firestore blip costs a card and not a page. Here the
+    // failure directions are not symmetric: swallowing the error would treat an
+    // unreadable pledge as NO pledge and let the charge through, which is the
+    // exact double-debit this prevents. A throw leaves the handler as a 500 -
+    // the family retries and nothing is lost. It also adds no new failure mode:
+    // `getFamilyByFid` and `getEnrollments` above are unwrapped Firestore reads
+    // too, so this route already fails closed on an outage.
     if (programKey === BALA_VIHAR) {
       const pledge = await getFamilyPledge(session.fid);
       if (pledge && (pledge.status === 'started' || pledge.status === 'active')) {

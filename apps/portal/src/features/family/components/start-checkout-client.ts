@@ -2,7 +2,19 @@ export type EnrollmentCheckoutResult =
   | { ok: true; url: string }
   | {
       ok: false;
-      reason: 'unauthorized' | 'below-suggested' | 'not-configured' | 'manager-required' | 'error';
+      reason:
+        | 'unauthorized'
+        | 'below-suggested'
+        | 'not-configured'
+        | 'manager-required'
+        /**
+         * The server refused because a monthly pledge already covers this
+         * contribution. Distinct from `error` on purpose: it is the ONE failure
+         * here that retrying can never clear, so a caller that folds it into the
+         * generic "please try again" is giving advice that is actively wrong.
+         */
+        | 'pledge-covers-enrollment'
+        | 'error';
       suggested?: number;
     };
 
@@ -36,7 +48,9 @@ export async function startEnrollmentCheckout(
           ? 'not-configured'
           : json.error === 'manager-required'
             ? 'manager-required'
-            : 'error';
+            : json.error === 'pledge-covers-enrollment'
+              ? 'pledge-covers-enrollment'
+              : 'error';
     // exactOptionalPropertyTypes: only include `suggested` when present.
     return { ok: false, reason, ...(json.suggested !== undefined ? { suggested: json.suggested } : {}) };
   }
