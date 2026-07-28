@@ -1,5 +1,7 @@
 /**
- * ⚠️ UNRUN — deployed-UAT verification for the public FID/MID renumber (issue #4).
+ * Deployed-UAT verification for the public FID/MID renumber (issue #4).
+ * RUN 2026-07-28 against the develop preview: 4/4 green. (It read "UNRUN" for
+ * weeks after it was passing - a stale label costs the next reader a whole pass.)
  *
  * This spec was authored but NEVER executed (the owner held a DO-NOT-DEPLOY on
  * this slice). Before it can go green it requires, in order:
@@ -90,7 +92,7 @@ type DashboardBody = {
 // ── API: dashboard exposes publicFid + publicMid (Bearer) ───────────────────────
 // This block authenticates the seeded family's manager mobile-style; the same
 // fixture the cookie UI tests below sign into, so the literal '1042' is shared.
-test.describe('public FID/MID over the dashboard API (deployed UAT) — UNRUN', () => {
+test.describe('public FID/MID over the dashboard API (deployed UAT)', () => {
   test.describe.configure({ mode: 'serial' });
   test.skip(!hasFamilyCreds, 'E2E_FAMILY_EMAIL / E2E_FAMILY_PASSWORD required (seed:e2e-family)');
   test.skip(!FIREBASE_API_KEY, 'NEXT_PUBLIC_PORTAL_FIREBASE_API_KEY required for the token exchange');
@@ -133,7 +135,7 @@ test.describe('public FID/MID over the dashboard API (deployed UAT) — UNRUN', 
 // Uses the `setu` project's stored family session (e2e/.auth/family.json). The
 // seeded family is family-manager + admin, so the same login also reaches the
 // admin/welcome roster used by the search test below.
-test.describe('public FID/MID in the family UI (deployed UAT) — UNRUN', () => {
+test.describe('public FID/MID in the family UI (deployed UAT)', () => {
   test.skip(!hasFamilyCreds, 'E2E family creds required (seed:e2e-family)');
 
   test('the family chrome shows the 4-digit FID, not the raw CMT- id', async ({ page }) => {
@@ -188,7 +190,7 @@ test.describe('public FID/MID in the family UI (deployed UAT) — UNRUN', () => 
 // The single seeded login is admin (inherits welcome-team), so the SAME `setu`
 // storageState reaches /welcome/roster. searchFamilies() runs a
 // `where('publicFid','==',q)` lookup, so '1042' must resolve to the fixture.
-test.describe('roster search by public FID (deployed UAT) — UNRUN', () => {
+test.describe('roster search by public FID (deployed UAT)', () => {
   test.skip(!hasFamilyCreds, 'E2E family creds required (seed:e2e-family); login must also be admin/welcome-team');
 
   test("searching the roster for '1042' finds the family", async ({ page }) => {

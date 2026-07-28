@@ -30,7 +30,11 @@ async function DocsGate({ children }: { children: React.ReactNode }) {
           borderBottom: '1px solid var(--line)',
         }}
       >
-        <Link href="/docs" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
+        <Link
+          href="/docs"
+          className="docs-topbar-brand"
+          style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}
+        >
           <SetuLogo size={26} />
           <span style={{ fontWeight: 650, fontSize: 15, color: 'var(--ink)' }}>Guides</span>
         </Link>
