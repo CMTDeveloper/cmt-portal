@@ -304,13 +304,51 @@ Source of truth: `turbo.json` `tasks.build.env` (must list every var or Vercel b
 |---|---|---|
 | `PORTAL_FIREBASE_*` | `chinmaya-setu-uat` | `chinmaya-setu-uat` **→ `chinmaya-setu-715b8` on Aug 3** |
 | `MASTER_FIREBASE_*` | `chinmaya-setu-715b8` (read-only) | `chinmaya-setu-715b8` (read-only) |
-| Feature flags | all on | all on |
+| Feature flags | all on (see the parity warning below) | all on |
 | Stripe | test host, `STRIPE_USE_TEST_CHECKOUT=true` | test host today; **live on Aug 3 — blocked, see §8** |
 | `SETU_*_ALLOWLIST` | **set** (must stay set — a preview deploy must never email a real family) | set today; **cleared on Aug 3** |
 | `NEXT_PUBLIC_PORTAL_BASE_URL` | **deliberately unset** — preview URLs are per-deployment, so a fixed value would put the wrong host in preview emails | the custom domain, from Aug 3 |
 | `SETU_*_REDIRECT_TO` | unset (optional) | unset (optional) |
 
 Preview is otherwise identical to Production (59 of 62 vars; the 3 above are the whole difference).
+
+**Preview domain — assign it to the BRANCH, never to the project.** `cmt-setu-preview.vercel.app` is the intended
+human-friendly preview hostname. Adding it with `vercel domains add` produces a STATIC ALIAS pinned to whatever
+deployment is current — which on 2026-07-28 was a **production** build, i.e. a hostname named "preview" serving
+production. Had the E2E default been pointed at it, a suite that seeds families and rewrites `app_config` would have run
+against production. It was removed the same day. Add it in the dashboard with **Git Branch = `develop`**, which is the
+only form that (a) serves preview and (b) follows each new push instead of going stale. Verify with `vercel alias ls`
+that its source deployment matches the one behind
+`cmt-setu-git-develop-chinmaya-mission-torontos-projects.vercel.app` — a 200 alone proves nothing about which build
+answered.
+
+**Preview must match Production in VALUE, not just in NAME — and you cannot read the values.**
+`vercel env ls` prints `Encrypted` for every one of them, and sensitive vars pull back as empty strings, so a
+name-by-name comparison looks complete while proving nothing. On 2026-07-28 a name check passed and four
+`NEXT_PUBLIC_FEATURE_CHECK_IN_*` flags were still at `false` on Preview, rendering a genuinely different page.
+
+The only way to compare is **behaviourally**, and only where a flag is observable:
+
+```bash
+# a flag-gated page 404s when its flag is off; compare the two hosts
+for r in /check-in/staff-sign-in /check-in/guest; do
+  for h in https://cmt-setu-preview.vercel.app https://cmt-setu.vercel.app; do
+    printf '%s %s -> %s\n' "$h" "$r" "$(curl -s -o /dev/null -w '%{http_code}' "$h$r")"
+  done
+done
+```
+
+⚠️ **This method sees far less than it appears to.** Of the 16 flag-gated pages and 8 flag-gated APIs, exactly
+**one** (`/check-in/staff-sign-in`) is reachable without a session; on every other route the auth redirect (307)
+or the 401 fires *before* the flag gate, so both hosts answer identically no matter what their flags say. A clean
+run of the loop above is NOT evidence of parity for anything but that one route. The rest is only settled by
+running the authenticated E2E suite against Preview — which is the point of running it there.
+
+That one observable route did catch a real defect: on 2026-07-28 `NEXT_PUBLIC_FEATURE_CHECK_IN_KIOSK` was `true`
+on Production (set 2026-07-11, per the §14 entry) but `false` on Preview, so middleware redirected the kiosk to
+`/check-in/staff-sign-in` and Preview answered **404** — a dead end for a sevak at the door. Corrected on Preview
+the same day. Note this is the *Vercel Production env*, which is UAT-backed; the separate 715b8 kiosk flip is
+still a §8 cutover decision.
 
 ### 9.1 The Aug 3 Production delta — the ONLY things that change
 
@@ -319,7 +357,12 @@ The cutover is a **config flip, not a data migration**: prod Setu fills lazily f
 1. `PORTAL_FIREBASE_PROJECT_ID` / `_CLIENT_EMAIL` / `_PRIVATE_KEY` → the **715b8** service account. Also the three `NEXT_PUBLIC_PORTAL_FIREBASE_*` client values.
 2. **Clear `SETU_EMAIL_ALLOWLIST` and `SETU_PHONE_ALLOWLIST`.** ⚠️ **Empty means NO filter — clearing them is what turns sign-in on for real families.** They currently hold 3 emails / 2 phones, so *today a real family would never receive their OTP*. This is the single switch that opens the portal to the public, and its polarity is the opposite of what "allowlist" suggests.
 3. Stripe → live mode. **BLOCKED**: no live-mode service exists (§8).
-4. `NEXT_PUBLIC_PORTAL_BASE_URL` → the custom domain, and add that domain in Vercel → cmt-setu → Domains.
+4. **`setu.chinmayatoronto.org` → this project.** ⚠️ That hostname ALREADY EXISTS and currently points at a DIFFERENT
+   deployment — `cmt-setu-coming-soon-ptoueydno.vercel.app`, the holding page (confirmed via `vercel alias ls`,
+   2026-07-28). So this is a RE-POINT, not a fresh add: attach it to `cmt-setu` with **Git Branch = `main`**, and expect
+   the coming-soon site to stop serving at that address the moment you do. Then set `NEXT_PUBLIC_PORTAL_BASE_URL` to
+   `https://setu.chinmayatoronto.org` and REDEPLOY (it is `NEXT_PUBLIC_*`, inlined at build time), or invite emails and
+   the Stripe return URLs keep quoting the old host.
 5. Decide `NEXT_PUBLIC_FEATURE_SETU_PLEDGE` (§14 2026-07-27) — on today, but `lib/flags.ts` says it must be off at launch.
 6. **Redeploy.** `NEXT_PUBLIC_*` is inlined at BUILD time; an env change alone does nothing.
 
@@ -450,6 +493,12 @@ pnpm --filter @cmt/portal exec tsx --env-file=.env.local scripts/grant-admin.ts 
 
 > **Rule:** any important UAT DB change (new collection/field, new index + deploy, new ops/migration/seed/backfill script or run, schema change, new env var/flag, corrective write) gets a dated entry here **and** an update to the relevant section above, in the same change. Prod replays this log additively (never `--force`, never touch the door-app collections).
 
+- **2026-07-28** - **E2E sweep against the `develop` preview. No product defect found; four operational facts worth carrying to prod.**
+  **DB effect (UAT only, all transient):** cancelled 3 leftover `pledges` documents on the E2E family `CMT-FSWEDU2X` through the real `POST /api/admin/pledges/[pid]/cancel` (test residue that was blocking the pledge spec - the spec now cleans up after itself). Read-only inspections of `pledges` / `donations` / `check_in_events` / `enrollments` for that one family. **NO new collection, field, index, migration, script or schema change.**
+  **(A) ⚠️ TEACHER ASSIGNMENTS DO NOT SURVIVE A SCHOOL-YEAR ROLLOVER.** `POST /api/admin/school-year/copy-teachers` is a deliberate, admin-triggered step. UAT is on 2026-27 with that step never run, so both teacher personas return an EMPTY level list - operationally, **every teacher opens an empty roster and no child appears anywhere**. This is by design, but it is the kind of design that ruins a first Sunday. **Prod-cutover TODO: after any rollover, run copy-teachers before teachers next log in, and spot-check one teacher's roster.**
+  **(B) `NEXT_PUBLIC_FEATURE_CHECK_IN_KIOSK` was `false` on Preview** while Production has had it `true` since 2026-07-11. Middleware still redirected `/check-in` to `/check-in/staff-sign-in`, which 404'd - a dead end at the door. Fixed on Preview; see the parity note in §9.0 for why name-parity checks cannot catch this class of thing.
+  **(C) The pledge start path is VERIFIED WORKING on the test payment host.** `POST /api/pledges/start` returns 201 with a real `cs_test_` Stripe URL, and the pledge spec now runs 6/6 - its first ever green run. This does NOT relax the §8 gate: `/pad/*` is still absent from the PROD host, and the live $51 Price is still unconfirmed.
+  **(D) Open question, deliberately left failing:** `kiosk-auto-enroll` expects a family's `publicFid` to exist BEFORE their first enrollment, but publicFids mint lazily AT first enrollment and that fixture must have no active enrollment. What the door should show a never-enrolled family is a UX decision; the assertion was annotated rather than relaxed so the decision is not buried.
 - **2026-07-27** - ⚠️ **`NEXT_PUBLIC_FEATURE_SETU_PLEDGE` IS NO LONGER A COSMETIC FLAG** (`a7b208a`). Vaibhav established that the monthly plan is not a separate "support the mission" ask but the **second way to pay the Bala Vihar enrollment donation** - $500 once, or $51/month continuing until manually stopped. Approved by CMT Developer 2026-07-27 in the "mark pledge = satisfied" shape.
   **What flipping the flag ON now does:** a family with an `active` pledge reads as **donation complete / 100% / Enrolled** on their dashboard with **zero** completed one-time donations, gets no donation nudge, and counts as **paid** on the teacher roster, the welcome roster chip + engagement column, and the enrollment report. Before this change the flag only revealed a card. **It now changes who the portal says has paid.**
   **P5's "a pledge gates NOTHING" invariant is deliberately reversed**, and `pledge-isolation.test.ts` became an allowlist of the five files permitted to read pledge state - anything new still fails the build. The "no bank detail ever crosses this boundary" half is unchanged.

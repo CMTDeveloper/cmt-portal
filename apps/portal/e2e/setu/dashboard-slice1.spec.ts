@@ -1,7 +1,7 @@
 import { execSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { test, expect, request as apiRequest } from '@playwright/test';
-import { visibleText, hasFamilyCreds } from '../_helpers';
+import { E2E_BASE_URL, visibleText, hasFamilyCreds } from '../_helpers';
 import { signInFamilyAndSaveStorage } from '../auth-helpers';
 
 /**
@@ -85,7 +85,7 @@ function reseedE2eFamily(flags: string[] = []): void {
  *  available in a `beforeAll` hook; `signInFamilyAndSaveStorage` overwrites the
  *  shared storageState the next-created fixtures load. */
 async function reauthE2eFamily(): Promise<void> {
-  const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3001';
+  const baseURL = E2E_BASE_URL;
   const ctx = await apiRequest.newContext({ baseURL });
   try {
     await signInFamilyAndSaveStorage(ctx);

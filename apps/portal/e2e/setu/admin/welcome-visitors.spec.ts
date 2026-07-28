@@ -33,7 +33,6 @@ import { hasFamilyCreds } from '../../_helpers';
  * family + enrollment).
  *
  * Run (deployed UAT only):
- *   PLAYWRIGHT_BASE_URL=https://cmt-setu.vercel.app \
  *     pnpm --filter @cmt/portal exec playwright test --project=setu welcome-visitors
  */
 

@@ -32,7 +32,6 @@ import { ADULT_CLASS_EMAILS, ADULT_CLASS_PASSWORD, hasAdultClassCreds } from '..
  *   3. `.env.local` carries E2E_ADULT_CLASS_PASSWORD (or E2E_FAMILY_PASSWORD).
  *
  * Run (deployed UAT only — never prod):
- *   PLAYWRIGHT_BASE_URL=https://cmt-setu.vercel.app \
  *     pnpm --filter @cmt/portal exec playwright test --project=setu adult-class
  *
  * ── WHY A BROWSER ────────────────────────────────────────────────────────────
@@ -122,13 +121,25 @@ test.describe('adult study class — the gate, the fee, and the §2.3 matrix', (
     }
   }
 
+  /** The persona's cookie jar, or a loud failure.
+   *
+   *  Never let this fall through as `undefined`: Playwright reads that as "no
+   *  saved state", so the context comes up ANONYMOUS and every later assertion
+   *  fails on a sign-in wall while claiming the feature is broken. A missing
+   *  entry means `signIn` was never called for this email - say that. */
+  function stateFor(email: string): Awaited<ReturnType<APIRequestContext['storageState']>> {
+    const state = states.get(email);
+    if (!state) throw new Error(`no saved session for ${email} - signIn() was never called for it`);
+    return state;
+  }
+
   async function pageAs(browser: Browser, email: string) {
-    const ctx = await browser.newContext({ baseURL, storageState: states.get(email) });
+    const ctx = await browser.newContext({ baseURL, storageState: stateFor(email) });
     return { ctx, page: await ctx.newPage() };
   }
 
   async function apiAs(email: string): Promise<APIRequestContext> {
-    return request.newContext({ baseURL, storageState: states.get(email) });
+    return request.newContext({ baseURL, storageState: stateFor(email) });
   }
 
   /** The family's enrollments, straight from the API the mobile app also reads. */

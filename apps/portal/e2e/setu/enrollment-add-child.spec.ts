@@ -1,7 +1,7 @@
 import { execSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { test, expect, request as apiRequest } from '@playwright/test';
-import { visibleText, hasFamilyCreds } from '../_helpers';
+import { E2E_BASE_URL, visibleText, hasFamilyCreds } from '../_helpers';
 import { signInFamilyAndSaveStorage } from '../auth-helpers';
 
 /**
@@ -36,7 +36,7 @@ function reseedE2eFamily(flags: string[] = []): void {
 
 /** Re-establish the E2E family session after the reseed bumps tokensValidAfterTime. */
 async function reauthE2eFamily(): Promise<void> {
-  const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3001';
+  const baseURL = E2E_BASE_URL;
   const ctx = await apiRequest.newContext({ baseURL });
   try {
     await signInFamilyAndSaveStorage(ctx);
@@ -64,7 +64,7 @@ test.describe.serial('Enrollment auto-sync — child added after enrollment', ()
     if (!addedMid) return;
     // Remove the added child via a freshly-authenticated context so the fixture
     // returns to its one-child baseline (the seed does not prune extra members).
-    const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3001';
+    const baseURL = E2E_BASE_URL;
     const ctx = await apiRequest.newContext({ baseURL });
     try {
       await signInFamilyAndSaveStorage(ctx);

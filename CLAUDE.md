@@ -65,7 +65,12 @@ A Turborepo monorepo for the Chinmaya Mission Toronto unified portal. One Next.j
 
 ## Workflow expectations
 
-- **Solo-dev main-only workflow** — All commits go directly to `main`. No feature branches, no PRs for routine work. The pre-push hook validates `typecheck && lint && test && build` locally before every push; a failed hook aborts the push. Larger experimental changes may still warrant a feature branch, but it's not the default.
+- **`develop` → E2E on preview → `main`** (adopted 2026-07-28, replaces the previous main-only rule). Every change lands on `develop` first. `develop` auto-deploys to the Vercel **Preview** environment at **https://cmt-setu-preview.vercel.app**; run the E2E suite against it, and only merge to `main` once it passes. `main` is production.
+  - The pre-push hook (`typecheck && lint && test && build`) still runs on every push to either branch; a failed hook aborts the push. Never `--no-verify`.
+  - **Why the branch exists:** from the 2026-08-03 cutover, `main`/Production serves real families out of `chinmaya-setu-715b8`, while Preview stays on `chinmaya-setu-uat` permanently. The E2E specs are NOT read-only — they seed families, enroll children, start pledges, and rewrite `app_config` (a disclaimers-version bump re-gates every family). Those must never run against production.
+  - `pnpm test:e2e` targets preview by default; the target is defined once, in `apps/portal/e2e/_helpers.ts` (`E2E_BASE_URL`), which `playwright.config.ts` imports. **Never re-read `process.env.PLAYWRIGHT_BASE_URL` in a spec** - nine specs did, and every one silently fell back to `localhost:3001` the moment the default moved into the config.
+  - ⚠️ Until Aug 3 Preview and Production still share one database, so preview is a separate BUILD, not separate DATA.
+  - **Preview env vars must match Production in VALUE, not just in name.** Checking name parity alone missed four `NEXT_PUBLIC_FEATURE_CHECK_IN_*` flags left at `false` on Preview, which silently rendered a different page than production.
 - **Tests are TDD** — write the failing test, run it to confirm it fails, implement, run it again, commit. See existing tests in `packages/firebase-shared/src/__tests__/` for the pattern.
 - **Frequent commits** — Each task in the implementation plan corresponds to one (or a few) commits. Don't bundle unrelated changes.
 - **Commit author** — Always `CMT Developer <developer@chinmayatoronto.org>` (set in local `.git/config`, not global).

@@ -1,35 +1,54 @@
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+// `./e2e/_env` first, for its side effect: it fills process.env from .env.local.
+// It USED to be a loadEnvLocal() function defined here and called below the
+// imports - which broke the moment this file also imported ./e2e/_helpers.
+// ES imports are hoisted, so _helpers evaluated first and captured
+// E2E_FAMILY_EMAIL as undefined; hasFamilyCreds froze false and 14 tests
+// silently self-skipped while the run still reported green.
+import './e2e/_env';
 import { defineConfig, devices } from '@playwright/test';
-
-// Playwright's TEST RUNNER does not auto-load .env.local (only the Next dev
-// webServer does, via Next's own loader). auth.setup reads E2E_FAMILY_EMAIL /
-// E2E_FAMILY_PASSWORD from process.env, so load .env.local here too. Existing
-// env wins. Dependency-free parser — neither dotenv nor @next/env is hoisted as
-// a direct dep under pnpm. Absent file (CI without creds) → specs self-skip.
-function loadEnvLocal(): void {
-  try {
-    const file = readFileSync(resolve(process.cwd(), '.env.local'), 'utf8');
-    for (const raw of file.split('\n')) {
-      const line = raw.trim();
-      if (!line || line.startsWith('#')) continue;
-      const eq = line.indexOf('=');
-      if (eq === -1) continue;
-      const key = line.slice(0, eq).trim();
-      if (!key || key in process.env) continue;
-      let val = line.slice(eq + 1).trim();
-      if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
-        val = val.slice(1, -1);
-      }
-      process.env[key] = val;
-    }
-  } catch {
-    // .env.local absent — fine; specs self-skip when creds are missing.
-  }
-}
-loadEnvLocal();
+import { E2E_BASE_URL, LOCAL_BASE_URL } from './e2e/_helpers';
 
 const STORAGE = 'e2e/.auth/family.json';
+
+/**
+ * ── WHERE THE E2E SUITE POINTS, AND WHY IT IS NOT PRODUCTION ────────────────
+ *
+ * DEFAULT TARGET: the `develop` branch's Vercel Preview alias.
+ *
+ * These specs are not read-only. They seed fixture families, enroll children,
+ * start pledges, and mutate GLOBAL config (`app_config/disclaimers.version`,
+ * `app_config/school_year`) - the disclaimers bump alone re-gates every family
+ * in the database. Running that against production is fine only for as long as
+ * production IS the UAT database. From the 2026-08-03 cutover it will be
+ * `chinmaya-setu-715b8`, holding real families' records, and a suite pointed at
+ * it out of habit would rewrite their data.
+ *
+ * So the default moved to Preview BEFORE the cutover rather than after, while
+ * getting it wrong is still harmless. Preview stays on `chinmaya-setu-uat`
+ * permanently (runbook §9.0), which is what makes it the correct home for this.
+ *
+ * ⚠️ Until the Aug 3 flip, Preview and Production still share one database, so
+ * this changes WHICH BUILD is exercised, not which data. It is not yet a
+ * sandbox.
+ *
+ * Override for a deliberate one-off:
+ *   PLAYWRIGHT_BASE_URL=http://localhost:3001   -> spins up the local dev server
+ *   PLAYWRIGHT_BASE_URL=https://cmt-setu.vercel.app -> production, on purpose
+ */
+// Assigned in Vercel to the `develop` BRANCH (not to the Production
+// environment), so it follows every push to develop and cannot go stale.
+// That distinction is the whole ballgame: added the default way - via
+// `vercel domains add`, or via the dashboard without setting the branch - this
+// hostname serves PRODUCTION, and a suite that seeds families and rewrites
+// app_config would have run against it. Both happened on 2026-07-28 before the
+// branch assignment stuck. If this ever needs re-checking, compare
+// `vercel alias ls` source deployments; an HTTP 200 says the name resolves, not
+// which build answered.
+//
+// Equivalent and always correct by construction:
+//   https://cmt-setu-git-develop-chinmaya-mission-torontos-projects.vercel.app
+// (defined in ./e2e/_helpers so the SPECS and this config cannot disagree)
+const RESOLVED_BASE_URL = E2E_BASE_URL;
 
 export default defineConfig({
   testDir: './e2e',
@@ -51,7 +70,7 @@ export default defineConfig({
   workers: 1,
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
-    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3001',
+    baseURL: RESOLVED_BASE_URL,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },
@@ -70,16 +89,24 @@ export default defineConfig({
     },
     { name: 'legacy', testMatch: /e2e\/legacy\/.*\.spec\.ts$/, use: { ...devices['Desktop Chrome'] } },
   ],
-  // Skip the local dev server when targeting a deployed URL (PLAYWRIGHT_BASE_URL),
-  // e.g. PLAYWRIGHT_BASE_URL=https://cmt-setu.vercel.app pnpm test:e2e.
-  webServer: process.env.PLAYWRIGHT_BASE_URL
-    ? undefined
-    : {
-        // dev:e2e = `next dev --port=3001`. A dedicated script avoids the
-        // `pnpm … dev -- --port` indirection, which pnpm mis-parses as a directory.
-        command: 'pnpm --filter @cmt/portal dev:e2e',
-        url: 'http://localhost:3001',
-        reuseExistingServer: !process.env.CI,
-        timeout: 120 * 1000,
-      },
+  // Start the local dev server ONLY when the resolved target IS localhost.
+  // Keyed on the RESOLVED url, not on "was PLAYWRIGHT_BASE_URL set": now that
+  // the default is a deployed preview, the old check would have booted a local
+  // server and then pointed every test at Preview anyway.
+  //
+  // Spread rather than `webServer: cond ? {...} : undefined` - the repo runs
+  // `exactOptionalPropertyTypes`, under which an explicit `undefined` is not the
+  // same as an absent key, and Playwright's own types reject it.
+  ...(RESOLVED_BASE_URL === LOCAL_BASE_URL
+    ? {
+        webServer: {
+          // dev:e2e = `next dev --port=3001`. A dedicated script avoids the
+          // `pnpm … dev -- --port` indirection, which pnpm mis-parses as a directory.
+          command: 'pnpm --filter @cmt/portal dev:e2e',
+          url: LOCAL_BASE_URL,
+          reuseExistingServer: !process.env.CI,
+          timeout: 120 * 1000,
+        },
+      }
+    : {}),
 });

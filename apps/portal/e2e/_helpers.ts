@@ -1,4 +1,28 @@
+// MUST be first: populates process.env from .env.local before the constants
+// below read it. See e2e/_env.ts for why this is a separate side-effect module.
+import './_env';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type { Locator, Page } from '@playwright/test';
+
+/**
+ * ── THE ONE DEFINITION OF WHERE THE SUITE POINTS ────────────────────────────
+ *
+ * `playwright.config.ts` imports these, and every spec that builds its OWN
+ * request context (for a second persona's cookies) must use `E2E_BASE_URL`
+ * rather than re-reading the env var.
+ *
+ * Why this is centralised: nine call sites across eight specs each had their own
+ * `E2E_BASE_URL`. That was
+ * invisible while everyone passed the env var explicitly on the command line.
+ * The moment the default moved into the config (2026-07-28), all nine silently
+ * fell back to localhost and failed with ECONNREFUSED against a dev server that
+ * is deliberately not running - a failure that reads like a product fault and is
+ * not one. A default only helps if there is exactly one place it lives.
+ */
+export const PREVIEW_BASE_URL = 'https://cmt-setu-preview.vercel.app';
+export const LOCAL_BASE_URL = 'http://localhost:3001';
+export const E2E_BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? PREVIEW_BASE_URL;
 
 /** The family pages render mobile + desktop blocks both in the DOM; pick the
  *  visible one to avoid strict-mode multi-match. */
@@ -14,6 +38,40 @@ export const hasFamilyCreds = Boolean(E2E_FAMILY_EMAIL && E2E_FAMILY_PASSWORD);
 // One shared password via TEST_ACCOUNTS_PASSWORD; emails are fixed.
 export const TEST_ACCOUNTS_PASSWORD = process.env.TEST_ACCOUNTS_PASSWORD;
 export const hasTestAccounts = Boolean(TEST_ACCOUNTS_PASSWORD);
+
+// ── A SILENT SKIP MUST NOT BE ABLE TO HIDE A BROKEN SETUP ───────────────────
+//
+// Every `hasFamilyCreds` / `hasTestAccounts` gate above turns a missing
+// credential into `test.skip`, which is correct for CI (no creds, nothing to
+// run) and catastrophic locally: on 2026-07-28 an import-order slip left both
+// false while .env.local held the values, 14 tests self-skipped, and the run
+// printed "5 passed" in green. Nothing failed, so nothing was noticed.
+//
+// So: if .env.local names a credential that we did NOT end up seeing, that is
+// not a missing credential - it is a loading bug. Say so, loudly, instead of
+// quietly skipping. Only runs on the already-broken path.
+if (!hasFamilyCreds || !hasTestAccounts) {
+  try {
+    const envFile = readFileSync(resolve(process.cwd(), '.env.local'), 'utf8');
+    const named = (k: string) => new RegExp(`^${k}=.+$`, 'm').test(envFile);
+    const missed: string[] = [];
+    if (!hasFamilyCreds && named('E2E_FAMILY_EMAIL') && named('E2E_FAMILY_PASSWORD')) {
+      missed.push('E2E_FAMILY_EMAIL/E2E_FAMILY_PASSWORD');
+    }
+    if (!hasTestAccounts && named('TEST_ACCOUNTS_PASSWORD')) missed.push('TEST_ACCOUNTS_PASSWORD');
+    if (missed.length) {
+      throw new Error(
+        `.env.local defines ${missed.join(' and ')}, but this module did not see ` +
+          `them in process.env. Something imported e2e/_helpers before e2e/_env ran. ` +
+          `Left alone this does not fail - it SKIPS the affected tests and the run still ` +
+          `reports green.`,
+      );
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith('.env.local defines')) throw err;
+    // No .env.local at all (CI): the plain self-skip is the correct behaviour.
+  }
+}
 export const TEST_ACCOUNT_EMAILS = {
   parentBrampton: 'setu-test-parent-brampton@chinmayatoronto.org',
   memberBrampton: 'setu-test-member-brampton@chinmayatoronto.org',

@@ -153,6 +153,23 @@
   .docs-topbar-pill {
     display: none;
   }
+
+  /* Hiding the pill was NOT enough. The brand link measures 289.5px on its own
+   * at 390px wide — the Rosette plus the "Chinmaya Setu" wordmark that SetuLogo
+   * renders — so brand + gap + back link + padding came to 445px and pushed
+   * "Back to portal →" 48px off the right edge of a phone.
+   *
+   * Hide the WORDMARK only: the Rosette and the "Guides" label stay, so the
+   * home link keeps both its mark and its name.
+   *
+   * The selector is structural because SetuLogo is a @cmt/ui component with no
+   * class hooks, and adding one to a shared primitive for a single consumer is
+   * the worse trade. Its Rosette is an <svg>, so `> span` cannot match it. If
+   * that markup ever changes, docs.spec.ts's no-horizontal-overflow assertion
+   * fails — which is exactly how this was found. */
+  .docs-topbar-brand > span:first-child > span {
+    display: none;
+  }
 }
 
 @media (max-width: 480px) {

@@ -1,7 +1,7 @@
 import { execSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { test, expect, request as apiRequest } from '@playwright/test';
-import { visibleText, hasFamilyCreds } from '../_helpers';
+import { E2E_BASE_URL, visibleText, hasFamilyCreds } from '../_helpers';
 import { signInFamilyAndSaveStorage } from '../auth-helpers';
 
 /**
@@ -92,7 +92,7 @@ function reseedE2eFamily(flags: string[] = []): void {
  *  Uses a fresh APIRequestContext because the per-test `request` fixture is not
  *  available in a `beforeAll` hook. */
 async function reauthE2eFamily(): Promise<void> {
-  const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3001';
+  const baseURL = E2E_BASE_URL;
   const ctx = await apiRequest.newContext({ baseURL });
   try {
     await signInFamilyAndSaveStorage(ctx);
@@ -171,7 +171,14 @@ test.describe.serial('enrollment engagement state — Registered vs Enrolled (is
 
       test('flips the pill to Enrolled and drops the confirm nudge', async ({ page }) => {
         await page.goto('/family');
-        await expect(visibleText(page, /^Enrolled$/).first()).toBeVisible();
+        // 20s, not the 5s default. This is the LAST test in the file and the
+        // second one to open a fresh mobile context, and it failed on 2026-07-28
+        // with no page snapshot captured at all - the page had not finished
+        // streaming, not rendered the wrong thing. Its desktop twin passed, and
+        // the earlier mobile test asserts this exact locator and passed, so the
+        // pill is fine; the budget was not. /family streams under PPR and every
+        // other dashboard assertion in the suite allows for it.
+        await expect(visibleText(page, /^Enrolled$/).first()).toBeVisible({ timeout: 20_000 });
         // Confirmed → no nudge anywhere in the DOM (neither layout renders it).
         await expect(page.getByText(NUDGE)).toHaveCount(0);
       });

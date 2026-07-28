@@ -26,7 +26,11 @@ Browser-level regression net for the Setu family/admin flows. On-demand only
 ## Run
 - All: `pnpm test:e2e` (root) — auto-starts `next dev` on :3001 via the `dev:e2e` script.
 - **Against the deployed UAT app (recommended — proven green):**
-  `PLAYWRIGHT_BASE_URL=https://cmt-setu.vercel.app pnpm test:e2e`
+  `pnpm test:e2e` — targets **https://cmt-setu-preview.vercel.app** (the `develop` branch preview) by default
+  (see `playwright.config.ts`). Override deliberately with
+  `PLAYWRIGHT_BASE_URL=http://localhost:3001` for a local run, or
+  `PLAYWRIGHT_BASE_URL=https://cmt-setu.vercel.app` to hit production on purpose —
+  which after the 2026-08-03 cutover means real families' data.
   (the deployed portal is backed by the same UAT Firestore the seed writes to;
   setting `PLAYWRIGHT_BASE_URL` skips the local dev server entirely.)
 - One project: `pnpm --filter @cmt/portal exec playwright test --project=setu dashboard`

@@ -5,8 +5,13 @@ import { TEST_ACCOUNT_EMAILS, TEST_ACCOUNTS_PASSWORD, hasTestAccounts } from '..
 // (see docs/runbooks/test-accounts.md). Each test signs in with a FRESH request
 // context (not the shared family.json storageState) so the asserted access is
 // exactly the persona's — read-only assertions, no UAT mutations.
-const BRAMPTON_LEVEL_1 = 'brampton-level-1-bv-brampton-2025-26';
-const SCARBOROUGH_LEVEL_A = 'scarborough-level-a-bv-scarborough-2025-26';
+// ── NEVER HARDCODE THE SCHOOL YEAR ──────────────────────────────────────────
+// These two were pinned to `…-2025-26` and both teacher tests failed on
+// 2026-07-28 with `Received: []` once UAT's active year became 2026-27 - which
+// reads exactly like "teachers can no longer see their class" and is not that.
+// The year is read from the live config below, so the ids follow the database.
+let BRAMPTON_LEVEL_1 = '';
+let SCARBOROUGH_LEVEL_A = '';
 
 async function signIn(
   baseURL: string,
@@ -21,6 +26,21 @@ async function signIn(
   return { ctx, redirectTo: body.redirectTo ?? '' };
 }
 
+/**
+ * A teacher with NO levels is the failure this file exists to catch, and its
+ * bare `Received: []` diff is uninformative. Teacher→level assignments do NOT
+ * carry across a school-year rollover on their own: `POST
+ * /api/admin/school-year/copy-teachers` is a deliberate, admin-triggered step.
+ * So an empty list almost always means the year advanced and that step was
+ * never run - operationally, every teacher opening an empty roster.
+ */
+const EMPTY_ROSTER_HINT = (expected: string, got: string[]): string =>
+  got.length === 0
+    ? `this teacher has NO levels. Expected ${expected}. Teacher assignments do not ` +
+      `survive a school-year rollover by themselves - run the rollover's ` +
+      `copy-teachers step for the live year (or re-run seed:test-accounts), then retry.`
+    : `expected exactly [${expected}], got [${got.join(', ')}]`;
+
 async function teacherLevelIds(ctx: APIRequestContext): Promise<string[]> {
   const res = await ctx.get('/api/setu/teacher/levels');
   expect(
@@ -34,6 +54,25 @@ async function teacherLevelIds(ctx: APIRequestContext): Promise<string[]> {
 
 test.describe('role-persona test accounts', () => {
   test.skip(!hasTestAccounts, 'TEST_ACCOUNTS_PASSWORD required (run seed:test-accounts first)');
+
+  // One admin sign-in for the whole file, to learn which school year is live.
+  // The level ids the teacher API returns are year-suffixed, so an assertion
+  // written against a fixed year silently becomes an assertion about the
+  // calendar rather than about access control.
+  test.beforeAll(async ({ baseURL }) => {
+    if (!hasTestAccounts) return;
+    const { ctx } = await signIn(baseURL!, TEST_ACCOUNT_EMAILS.admin);
+    try {
+      const res = await ctx.get('/api/admin/school-year');
+      expect(res.status(), 'GET /api/admin/school-year').toBe(200);
+      const year = ((await res.json()) as { config: { currentYear: string } }).config.currentYear;
+      expect(year, 'no currentYear in app_config/school_year').toBeTruthy();
+      BRAMPTON_LEVEL_1 = `brampton-level-1-bv-brampton-${year}`;
+      SCARBOROUGH_LEVEL_A = `scarborough-level-a-bv-scarborough-${year}`;
+    } finally {
+      await ctx.dispose();
+    }
+  });
 
   test('parent (Brampton) signs in as family-manager and sees their family', async ({ baseURL }) => {
     const { ctx, redirectTo } = await signIn(baseURL!, TEST_ACCOUNT_EMAILS.parentBrampton);
@@ -65,14 +104,14 @@ test.describe('role-persona test accounts', () => {
   test('teacher (Brampton) sees Brampton Level 1 and only that', async ({ baseURL }) => {
     const { ctx } = await signIn(baseURL!, TEST_ACCOUNT_EMAILS.teacherBrampton);
     const ids = await teacherLevelIds(ctx);
-    expect(ids).toEqual([BRAMPTON_LEVEL_1]);
+    expect(ids, EMPTY_ROSTER_HINT(BRAMPTON_LEVEL_1, ids)).toEqual([BRAMPTON_LEVEL_1]);
     await ctx.dispose();
   });
 
   test('teacher (Scarborough) sees Scarborough Level A and only that', async ({ baseURL }) => {
     const { ctx } = await signIn(baseURL!, TEST_ACCOUNT_EMAILS.teacherScarborough);
     const ids = await teacherLevelIds(ctx);
-    expect(ids).toEqual([SCARBOROUGH_LEVEL_A]);
+    expect(ids, EMPTY_ROSTER_HINT(SCARBOROUGH_LEVEL_A, ids)).toEqual([SCARBOROUGH_LEVEL_A]);
     await ctx.dispose();
   });
 
