@@ -50,7 +50,7 @@ the portal already uses** - our existing `/api/setu/donations/checkout` call mat
 | 1 | `POST /pad/setup-link` | `{customerEmail, customerName, client_reference_id, branding_settings, successUrl, cancelUrl, metadata}` → `{checkoutUrl, sessionId, customerId}`. **Takes no amount** - the mandate is not amount-bound. |
 | 2 | redirect | Stripe-hosted page collects bank details + mandate acceptance. |
 | 3 | `POST /checkout-session-result` | `{sessionId}` → **`{state: 'success' \| 'failed' \| 'pending', reason, stripe:{…}}`**. |
-| 4 | `POST /pad/monthly-subscription` | `{setupSessionId, priceId, idempotencyKey?}` → `{subscriptionId, status, customerId, paymentMethodId}`. ⚠️ **Field names UNVERIFIED against the live service** - only `subscriptionId` is read, and a wrong name there throws `bad-response` *after* the subscription exists at Stripe (an orphan the reconciler must clear). |
+| 4 | `POST /pad/monthly-subscription` | `{setupSessionId, priceId, idempotencyKey?}` → `{subscriptionId, status, customerId, paymentMethodId}`. ✅ **`subscriptionId` VERIFIED live 2026-07-28** (returned `sub_1TyFTYRNUSAfwnFqmDXx6VCz`). `status` here is never read by the portal - only `subscriptionId` and `customerId` are - so its name is moot. |
 | 5 | `POST /subscription-result` | `{subscriptionId}` → **`{state: …}`**, same shape as step 3. UI status only. |
 
 > 🔴 **The outcome field is `state`, NOT `status` — corrected 2026-07-28 against live traffic.** This table
@@ -63,6 +63,13 @@ the portal already uses** - our existing `/api/setu/donations/checkout` call mat
 > Note `stripe.status` is the Checkout *Session's* lifecycle and is `complete` even for a FAILED mandate — never read it.
 > **Lesson: a contract table must name the field, not just the vocabulary.** Every unit test had mocked
 > `{status: …}`, our own invention, so the suite asserted the guess back at us.
+>
+> ✅ **VERIFIED END TO END 2026-07-28, the first time this flow has ever completed.** After the fix, the
+> daily reconciler was driven manually against the sandbox pledge that had appeared "stuck": it went
+> `started` → **`active`** in one pass, minting `sub_1TyFTYRNUSAfwnFqmDXx6VCz`, with `activatedAt` set and
+> no `needsStripeVerification` flag. That single run also proved steps 4 and 5 live - `subscriptionId`
+> really is that field's name, and step 5's outcome field parses - both of which were guesses until then.
+> Nothing was ever wrong with the sandbox or with Flinks.
 
 > ⚠️ **Step 4 is a SECOND server call, and it is where a pledge can be orphaned.**
 > If the family completes the mandate but the portal never reaches step 4 - browser
