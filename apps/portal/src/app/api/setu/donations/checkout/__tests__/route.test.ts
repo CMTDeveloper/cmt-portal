@@ -20,6 +20,14 @@ vi.mock('@/features/setu/donations/create-donation', () => ({
   createDonation: (...a: unknown[]) => mockCreateDonation(...a),
 }));
 
+// The double-charge guard reads the family's pledge. Unmocked it reaches
+// Firestore Admin and every enrollment test dies on missing env vars, which is
+// exactly how this mock came to be needed.
+const mockGetFamilyPledge = vi.fn();
+vi.mock('@/features/setu/pledges/get-family-pledge', () => ({
+  getFamilyPledge: (...a: unknown[]) => mockGetFamilyPledge(...a),
+}));
+
 import { POST } from '../route';
 
 const DONOR = {
@@ -61,6 +69,8 @@ function lastFetchInit(): { body: string; headers: Record<string, string> } {
 beforeEach(() => {
   vi.clearAllMocks();
   flagState.setuDonations = true;
+  // No pledge by default - the ordinary family.
+  mockGetFamilyPledge.mockResolvedValue(null);
   process.env.STRIPE_API_KEY = 'sk_test_x';
   process.env.STRIPE_CHECKOUT_URL = 'https://stripe-svc.example.com/checkout-link';
   process.env.STRIPE_USE_TEST_CHECKOUT = 'false';
@@ -142,6 +152,82 @@ describe('POST /api/setu/donations/checkout', () => {
     expect(mockCreateDonation).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'enrollment', programKey: 'bala-vihar', programLabel: 'Bala Vihar' }),
     );
+  });
+
+  // ── 🔴 The double-charge guard ─────────────────────────────────────────────
+  //
+  // A monthly pledge IS the Bala Vihar enrollment donation, so a family cannot
+  // also be charged the one-time amount - both would be debited and the portal
+  // can undo neither. Three SCREENS suppress the control, and one of them
+  // (`/family/donate?eid=`, which renders the actual payment form) was missed
+  // entirely for weeks. These tests cover the layer that cannot be routed
+  // around, whatever any screen forgets.
+  describe('a pledge already covers the Bala Vihar enrollment donation', () => {
+    const BV_ENROLLMENT = [
+      { eid: 'fid1-oid1', status: 'active', oid: 'oid1', programKey: 'bala-vihar', programLabel: 'Bala Vihar', termLabel: 'Fall 2026', effectiveSuggestedAmount: 500, offering: { programKey: 'bala-vihar', programLabel: 'Bala Vihar', termLabel: 'Fall 2026' } },
+    ];
+
+    it('refuses the one-time charge while a mandate is still CONFIRMING', async () => {
+      // `started`, not `active` - the days-long confirmation gap IS the exposure
+      // window, and `isPledgeGiving()` (active-only) is what let this through.
+      mockGetEnrollments.mockResolvedValue(BV_ENROLLMENT);
+      mockGetFamilyPledge.mockResolvedValue({ status: 'started' });
+
+      const res = await POST(makeReq({ type: 'enrollment', eid: 'fid1-oid1', amountCAD: 500 }));
+
+      expect(res.status).toBe(409);
+      expect((await res.json()).error).toBe('pledge-covers-enrollment');
+      expect(mockCreateDonation).not.toHaveBeenCalled();
+    });
+
+    it('refuses the one-time charge when the plan is already LIVE', async () => {
+      mockGetEnrollments.mockResolvedValue(BV_ENROLLMENT);
+      mockGetFamilyPledge.mockResolvedValue({ status: 'active' });
+
+      const res = await POST(makeReq({ type: 'enrollment', eid: 'fid1-oid1', amountCAD: 500 }));
+
+      expect(res.status).toBe(409);
+      expect(mockCreateDonation).not.toHaveBeenCalled();
+    });
+
+    it('allows the charge again once a mandate has FAILED', async () => {
+      // Nobody may be stranded: a failed mandate takes no money, so the one-time
+      // route must reopen or the family cannot pay at all.
+      mockGetEnrollments.mockResolvedValue(BV_ENROLLMENT);
+      mockGetFamilyPledge.mockResolvedValue({ status: 'failed' });
+
+      const res = await POST(makeReq({ type: 'enrollment', eid: 'fid1-oid1', amountCAD: 500 }));
+
+      expect(res.status).toBe(200);
+    });
+
+    it('allows the charge again after a CANCELLED pledge', async () => {
+      mockGetEnrollments.mockResolvedValue(BV_ENROLLMENT);
+      mockGetFamilyPledge.mockResolvedValue({ status: 'cancelled' });
+
+      const res = await POST(makeReq({ type: 'enrollment', eid: 'fid1-oid1', amountCAD: 500 }));
+
+      expect(res.status).toBe(200);
+    });
+
+    it('never blocks a GENERAL gift - a pledging family may still give extra', async () => {
+      mockGetFamilyPledge.mockResolvedValue({ status: 'active' });
+
+      const res = await POST(makeReq({ type: 'general', amountCAD: 100 }));
+
+      expect(res.status).toBe(200);
+    });
+
+    it('never blocks a NON-Bala-Vihar enrollment - the pledge does not fund it', async () => {
+      mockGetEnrollments.mockResolvedValue([
+        { eid: 'fid1-tabla', status: 'active', oid: 'tabla-1', programKey: 'tabla', programLabel: 'Tabla classes', termLabel: 'Fall 2026', effectiveSuggestedAmount: 200, offering: { programKey: 'tabla', programLabel: 'Tabla classes', termLabel: 'Fall 2026' } },
+      ]);
+      mockGetFamilyPledge.mockResolvedValue({ status: 'active' });
+
+      const res = await POST(makeReq({ type: 'enrollment', eid: 'fid1-tabla', amountCAD: 200 }));
+
+      expect(res.status).toBe(200);
+    });
   });
 
   it('blocks Stripe checkout for teacher-managed enrollments', async () => {

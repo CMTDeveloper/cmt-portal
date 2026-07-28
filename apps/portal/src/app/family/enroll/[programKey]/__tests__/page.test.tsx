@@ -41,9 +41,15 @@ vi.mock('@cmt/ui', () => ({
     back: () => <span>back</span>,
     check: () => <span>check</span>,
     info: () => <span>info</span>,
+    // `shield` backs the tax-deductible line in DonationChoice. A missing key
+    // here renders as `undefined`, and React's "Element type is invalid" does
+    // not name the icon - so keep this list in step with the real components.
+    shield: () => <span>shield</span>,
+    heart: () => <span>heart</span>,
   },
   SetuAvatar: ({ name }: { name: string }) => <div>{name}</div>,
   Rosette: () => <div />,
+  toast: { error: () => {}, success: () => {} },
 }));
 
 vi.mock('@/features/family/components/atoms', () => ({
@@ -495,5 +501,57 @@ describe('ProgramEnrollPage (bala-vihar) — the monthly alternative', () => {
     render(page);
 
     expect(screen.queryByTestId('monthly-option')).toBeNull();
+  });
+
+  // ── The ALREADY-ENROLLED state, which is what the design actually targets ──
+  //
+  // The two tests above use `getEnrollments -> []`, i.e. a family that has not
+  // enrolled yet and still sees the standalone monthly card. The far more common
+  // state is enrolled-but-unpaid ("Your family is already enrolled. Proceed to
+  // donate below"), and that is where the radio group renders. Without these,
+  // the group could stop rendering entirely and the suite would stay green -
+  // the same reachability blind spot that hid the pledge in the first place.
+  describe('already enrolled, donation outstanding', () => {
+    beforeEach(() => {
+      mockGetEnrollments.mockResolvedValue([ACTIVE_ENROLLMENT_WITH_SNAPSHOT]);
+      mockGetOpenOfferingsForFamily.mockResolvedValue([ACTIVE_PERIOD]);
+      mockGetDonations.mockResolvedValue([]);
+    });
+
+    it('presents both ways to pay as ONE choice', async () => {
+      const page = await ProgramEnrollPage({ params: makeParams() });
+      render(page);
+
+      // getAllByRole: the page renders a mobile and a desktop tree.
+      expect(screen.getAllByRole('radio', { name: /full donation/i }).length).toBeGreaterThan(0);
+      expect(screen.getAllByRole('radio', { name: /monthly pledge/i }).length).toBeGreaterThan(0);
+    });
+
+    it('shows the one-time CTA exactly ONCE per layout, not twice', async () => {
+      const page = await ProgramEnrollPage({ params: makeParams() });
+      render(page);
+
+      // The mobile tree previously carried the choice inline AND a sticky-footer
+      // "Continue to donation" - two primary buttons on one phone screen. Two
+      // trees render here (mobile + desktop), so two is correct and three is the
+      // regression this guards.
+      expect(screen.getAllByRole('button', { name: /continue to donation/i })).toHaveLength(2);
+    });
+
+    it('does not also render the standalone monthly card, which would double the ask', async () => {
+      const page = await ProgramEnrollPage({ params: makeParams() });
+      render(page);
+
+      expect(screen.queryByTestId('monthly-option')).toBeNull();
+    });
+
+    it('falls back to the plain CTA when the pledge flag is off', async () => {
+      flagsMock.setuPledge = false;
+      const page = await ProgramEnrollPage({ params: makeParams() });
+      render(page);
+
+      expect(screen.queryByRole('radio', { name: /monthly pledge/i })).toBeNull();
+      expect(screen.getAllByRole('button', { name: /continue to donation/i }).length).toBeGreaterThan(0);
+    });
   });
 });

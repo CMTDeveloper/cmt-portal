@@ -14,6 +14,7 @@ import { flags } from '@/lib/flags';
 import { getFamilyPledge } from '@/features/setu/pledges/get-family-pledge';
 import { configuredMonthlyAmountCAD } from '@/features/setu/pledges/pledge-amount';
 import { MonthlyDonationOption } from '@/features/setu/pledges/components/monthly-donation-option';
+import { DonationChoice, type PledgeState } from '@/features/setu/pledges/components/donation-choice';
 import { getProgram } from '@/features/setu/programs/get-programs';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
@@ -254,6 +255,38 @@ export default async function ProgramEnrollPage({ params }: Props) {
     />
   ) : null;
 
+  // ── "Choose your donation" - the unified radio group (Vaibhav, 2026-07-28) ──
+  //
+  // It replaces the suggested-amount block, the one-time CTA and the separate
+  // monthly card with ONE decision carrying ONE call to action. Two primary
+  // buttons for a single choice is the ambiguity that made the pledge invisible
+  // in the first place.
+  //
+  // Scoped to the ALREADY-ENROLLED state, which is the only one the design
+  // covers and the only one with an `eid` to pin a checkout to. A family who has
+  // not enrolled yet still clicks Enroll (which goes straight to Stripe at the
+  // full amount), so `monthlyOption` is deliberately KEPT for that state - drop
+  // it and the monthly plan becomes unreachable again for exactly the families
+  // who have not yet paid anything.
+  const pledgeState: PledgeState = isPledgeGiving(existingPledge)
+    ? 'giving'
+    : existingPledge?.status === 'started'
+      ? 'pending'
+      : 'none';
+  // Captured into a local rather than tested as a boolean, so TypeScript narrows
+  // `activeEnrollment` for the two reads below instead of trusting a flag.
+  const choiceEnrollment =
+    pledgeEligible && alreadyEnrolled && onlineDonationsEnabled ? activeEnrollment : null;
+  const donationChoice = choiceEnrollment ? (
+    <DonationChoice
+      eid={choiceEnrollment.eid}
+      oneTimeAmountCAD={choiceEnrollment.effectiveSuggestedAmount}
+      monthlyAmountCAD={configuredMonthlyAmountCAD()}
+      canStartPledge={isManager}
+      pledgeState={pledgeState}
+    />
+  ) : null;
+
   // When MULTIPLE offerings are open and the manager can still enroll, the term
   // picker and submit must share client state — render them together via
   // EnrollPanel. Single-offering (BV) keeps the bare CTA path unchanged.
@@ -308,8 +341,11 @@ export default async function ProgramEnrollPage({ params }: Props) {
                     </>
                   )}
 
-                  {/* Donation — only when program uses donation */}
-                  {usesDonation && (
+                  {/* Donation — only when program uses donation.
+                      `donationChoice` supersedes this block entirely: it states
+                      both amounts itself, so rendering the suggested-amount card
+                      above it would show "$500" twice with different meanings. */}
+                  {usesDonation && !donationChoice && (
                     <>
                       <SectionLabel>Donation{paid ? '' : ' · suggested donation'}</SectionLabel>
                       {paid
@@ -334,14 +370,16 @@ export default async function ProgramEnrollPage({ params }: Props) {
                 </>
               )}
 
-              {/* The monthly alternative. It sits in the SCROLLABLE content, not
-                  in the sticky footer below: the footer is a single-action bar,
-                  and a card with its own button there would compete with the
-                  primary CTA and blow the bar's height on a phone. */}
-              {monthlyOption}
+              {/* The choice, inline in the scrollable content and carrying its
+                  own CTA — as drawn in the mobile design. When it renders, the
+                  sticky footer below stands down: two "Continue to donation"
+                  buttons on one phone screen is worse than none. */}
+              {donationChoice ?? monthlyOption}
             </div>
 
-            {/* Sticky CTA footer */}
+            {/* Sticky CTA footer. Suppressed when the inline choice owns the
+                action, so the primary CTA appears exactly once. */}
+            {!donationChoice && (
             <div style={{ position: 'sticky', bottom: 0, left: 0, right: 0, padding: '14px 18px', background: 'var(--surface)', borderTop: '1px solid var(--line)' }}>
               {alreadyEnrolled ? (
                 paid ? (
@@ -377,6 +415,7 @@ export default async function ProgramEnrollPage({ params }: Props) {
                 </button>
               )}
             </div>
+            )}
           </div>
         </CspRoot>
       </div>
@@ -455,7 +494,12 @@ export default async function ProgramEnrollPage({ params }: Props) {
 
             {/* Right: offering picker + donation/confirm panel */}
             <aside>
-              {paid ? renderPaidPanel(activeTerm) : (
+              {paid ? renderPaidPanel(activeTerm) : donationChoice ? (
+                // Brings its own card, heading, both amounts, the tax-deductible
+                // line and the single CTA - so it stands in for the whole panel
+                // rather than sitting inside it.
+                <div style={{ position: 'sticky', top: 0 }}>{donationChoice}</div>
+              ) : (
                 <div className="card" style={{ padding: 24, position: 'sticky', top: 0 }}>
                   {/* Donation block — only for programs with usesDonation */}
                   {usesDonation ? (

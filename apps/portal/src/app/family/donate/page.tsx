@@ -112,7 +112,37 @@ export default async function DonatePage({
     />
   ) : null;
 
-  const form = teacherManagedPayment ? (
+  // ── 🔴 A pledge already covers this contribution ───────────────────────────
+  //
+  // This page renders the FULL one-time payment form, and until 2026-07-28 it
+  // had no pledge awareness at all: `existingPledge` was read, but only to set
+  // `alreadyPledging`, which is `isPledgeGiving()` - true for `active` ALONE.
+  // A family whose mandate was still confirming (`started`) therefore saw the
+  // complete form and could pay $500 on top of $51/month, with nothing on any
+  // layer to stop it. The page is reachable from four code paths plus any stale
+  // tab, so this was not a theoretical bookmark case.
+  //
+  // `started` counts as well as `active` - the days-long confirmation gap IS the
+  // exposure window. The server enforces the same rule in the checkout route;
+  // this exists so the family reads an explanation instead of meeting a 409.
+  const pledgeCoversThis =
+    existingPledge?.status === 'started' || existingPledge?.status === 'active';
+
+  const form = pledgeCoversThis && mode === 'enrollment' ? (
+    <div style={{ padding: '16px 18px', background: 'var(--accentSoft)', color: 'var(--accentDeep)', borderRadius: 'var(--radius)', fontSize: 14, lineHeight: 1.55 }}>
+      <strong>
+        {existingPledge?.status === 'active'
+          ? `You are giving $${configuredMonthlyAmountCAD()} a month.`
+          : 'Your monthly gift is being set up.'}
+      </strong>
+      <div style={{ marginTop: 6, color: 'var(--body-text)' }}>
+        {existingPledge?.status === 'active'
+          ? `Your monthly plan covers this year's Bala Vihar contribution, so there is nothing more to pay here. It continues until you ask the temple office to stop it.`
+          : `Your bank is confirming it, which can take a few days. Nothing has been taken yet, and there is nothing more for you to do. Changed your mind? Contact the temple office.`}
+        {' '}<Link href="/family" style={{ color: 'var(--accentDeep)', fontWeight: 600 }}>Back to dashboard</Link>
+      </div>
+    </div>
+  ) : teacherManagedPayment ? (
     <div style={{ padding: '16px 18px', background: 'var(--accentSoft)', color: 'var(--accentDeep)', borderRadius: 'var(--radius)', fontSize: 14, lineHeight: 1.55 }}>
       <strong>Payment is managed by the teacher for {periodLabel}.</strong>
       <div style={{ marginTop: 6, color: 'var(--body-text)' }}>

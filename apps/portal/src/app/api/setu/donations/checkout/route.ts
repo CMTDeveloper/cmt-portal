@@ -12,6 +12,8 @@ import { getStripeCheckoutUrl } from '@/lib/stripe-config';
 import { getFamilyByFid } from '@/features/setu/members/get-family-by-fid';
 import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
 import { createDonation } from '@/features/setu/donations/create-donation';
+import { BALA_VIHAR } from '@cmt/shared-domain/setu';
+import { getFamilyPledge } from '@/features/setu/pledges/get-family-pledge';
 
 // In-memory per-IP rate limiter (5/min), same shape as the events-registration
 // checkout route. Resets per warm Lambda; acceptable for a low-volume donate flow.
@@ -153,6 +155,40 @@ export async function POST(req: Request) {
     programKey = enrollment.offering?.programKey ?? enrollment.programKey;
     programLabel = pLabel;
     label = checkoutLineItemName('enrollment', { programLabel: pLabel, termLabel: tLabel });
+
+    // ── 🔴 The double-charge guard, and it belongs HERE ────────────────────────
+    //
+    // A monthly pledge IS the Bala Vihar enrollment donation - $500 once, or $51
+    // a month. So a family with a live or confirming pledge must not also be
+    // able to pay the one-time amount: they would be debited BOTH, and the
+    // portal cannot undo it (there is no cancel endpoint on the payment service,
+    // and `cancelPledgeRecord` is bookkeeping only).
+    //
+    // Three separate SCREENS suppress the payment control for this - the
+    // dashboard, the enroll page's DonationChoice, and now the donate page - and
+    // one of them was missed for weeks: `/family/donate?eid=` rendered the full
+    // form with no pledge awareness at all, reachable from four code paths plus
+    // any stale tab. Client-side suppression repeated per surface is a guarantee
+    // that decays every time someone adds a fourth surface. This check cannot be
+    // routed around, so it is the one that actually holds.
+    //
+    // `started` counts, not just `active`: a mandate settles in DAYS, and the
+    // whole exposure window is exactly that gap. `isPledgeGiving()` is
+    // deliberately NOT used - it means `active` alone, which is the precise
+    // reason the donate page's existing check let this through.
+    //
+    // Scoped to Bala Vihar enrollment donations. A GENERAL gift is a different
+    // intent and stays open to everyone - a pledging family may still want to
+    // give extra, and blocking that would be wrong.
+    if (programKey === BALA_VIHAR) {
+      const pledge = await getFamilyPledge(session.fid);
+      if (pledge && (pledge.status === 'started' || pledge.status === 'active')) {
+        return NextResponse.json(
+          { error: 'pledge-covers-enrollment', pledgeStatus: pledge.status },
+          { status: 409 },
+        );
+      }
+    }
   } else {
     label = checkoutLineItemName('general');
   }
