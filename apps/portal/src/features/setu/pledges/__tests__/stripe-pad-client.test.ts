@@ -181,6 +181,55 @@ describe('result calls (3 and 5)', () => {
     mockFetch(200, {});
     expect(await getSubscriptionResult('sub_1')).toBe('pending');
   });
+
+  // ── The field is `state`, and this was found in production-shaped traffic ──
+  //
+  // The spec (…pad-design.md:52) documented step 3 as returning bare
+  // `success | failed | pending` and never named the field. The client guessed
+  // `status`; the service actually answers `state`. Because an unrecognised
+  // value maps to `pending` - correctly, see above - the mismatch was SILENT:
+  // `getCheckoutSessionResult` returned `pending` for a mandate Stripe had
+  // already marked `succeeded`, so `advancePledge` never reached step 4 and NO
+  // pledge could ever activate. It read as a stuck sandbox for hours.
+  //
+  // Every earlier test here mocked `{status: …}` - our own invention - so the
+  // suite asserted the assumption back at us. These use the payload the live
+  // service actually returned, pasted verbatim.
+  it('reads `state`, which is what the service actually returns', async () => {
+    mockFetch(200, {
+      state: 'success',
+      reason: 'PAD mandate setup completed',
+      stripe: {
+        sessionId: 'cs_test_c1XZ',
+        mode: 'setup',
+        status: 'complete',
+        setup_intent: 'seti_1TyCz2',
+        setup_intent_status: 'succeeded',
+      },
+    });
+    expect(await getCheckoutSessionResult('cs_test_c1XZ')).toBe('success');
+  });
+
+  it('reads `state` on subscription-result too', async () => {
+    mockFetch(200, { state: 'success', reason: 'subscription active' });
+    expect(await getSubscriptionResult('sub_1')).toBe('success');
+  });
+
+  it('still accepts `status`, so either field name works', async () => {
+    // Kept tolerant deliberately: the two endpoints were never proven to agree
+    // with each other, and guessing wrong a second time costs another silent
+    // stall. Whichever field is present wins; absent both, still `pending`.
+    mockFetch(200, { status: 'success' });
+    expect(await getCheckoutSessionResult('cs_1')).toBe('success');
+  });
+
+  it('does NOT read the nested stripe.status, which means something else', async () => {
+    // `stripe.status` is the Checkout Session's own lifecycle (`complete`),
+    // not the mandate outcome. Reading it would map a completed-but-FAILED
+    // session to success - the one direction that must never happen.
+    mockFetch(200, { state: 'failed', stripe: { status: 'complete' } });
+    expect(await getCheckoutSessionResult('cs_1')).toBe('failed');
+  });
 });
 
 describe('createMonthlySubscription (call 4)', () => {

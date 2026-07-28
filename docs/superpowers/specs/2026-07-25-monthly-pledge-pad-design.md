@@ -49,9 +49,20 @@ the portal already uses** - our existing `/api/setu/donations/checkout` call mat
 |---|---|---|
 | 1 | `POST /pad/setup-link` | `{customerEmail, customerName, client_reference_id, branding_settings, successUrl, cancelUrl, metadata}` → `{checkoutUrl, sessionId, customerId}`. **Takes no amount** - the mandate is not amount-bound. |
 | 2 | redirect | Stripe-hosted page collects bank details + mandate acceptance. |
-| 3 | `POST /checkout-session-result` | `{sessionId}` → `success` \| `failed` \| `pending`. |
-| 4 | `POST /pad/monthly-subscription` | `{setupSessionId, priceId, idempotencyKey?}` → `{subscriptionId, status, customerId, paymentMethodId}`. |
-| 5 | `POST /subscription-result` | `{subscriptionId}` → `success` \| `failed` \| `pending`. UI status only. |
+| 3 | `POST /checkout-session-result` | `{sessionId}` → **`{state: 'success' \| 'failed' \| 'pending', reason, stripe:{…}}`**. |
+| 4 | `POST /pad/monthly-subscription` | `{setupSessionId, priceId, idempotencyKey?}` → `{subscriptionId, status, customerId, paymentMethodId}`. ⚠️ **Field names UNVERIFIED against the live service** - only `subscriptionId` is read, and a wrong name there throws `bad-response` *after* the subscription exists at Stripe (an orphan the reconciler must clear). |
+| 5 | `POST /subscription-result` | `{subscriptionId}` → **`{state: …}`**, same shape as step 3. UI status only. |
+
+> 🔴 **The outcome field is `state`, NOT `status` — corrected 2026-07-28 against live traffic.** This table
+> previously wrote steps 3 and 5 as returning a bare `success | failed | pending` without naming the field
+> carrying it. The client guessed `status`, and because an unreadable answer maps to `pending` (the correct
+> safe direction), the mismatch was **silent**: step 3 returned `pending` for a mandate Stripe had already
+> marked `succeeded`, so `advancePledge` never reached step 4 and **no pledge could ever become `active`.**
+> It presented for hours as a sandbox that would not settle. Observed body:
+> `{"state":"success","reason":"PAD mandate setup completed","stripe":{"status":"complete","setup_intent_status":"succeeded"}}`.
+> Note `stripe.status` is the Checkout *Session's* lifecycle and is `complete` even for a FAILED mandate — never read it.
+> **Lesson: a contract table must name the field, not just the vocabulary.** Every unit test had mocked
+> `{status: …}`, our own invention, so the suite asserted the guess back at us.
 
 > ⚠️ **Step 4 is a SECOND server call, and it is where a pledge can be orphaned.**
 > If the family completes the mandate but the portal never reaches step 4 - browser
