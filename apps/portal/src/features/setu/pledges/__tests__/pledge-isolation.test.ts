@@ -91,6 +91,14 @@ describe('the pledge feature is quarantined', () => {
     join('features', 'setu', 'roster', 'report-dataset.ts'),
     // The enrollment report's CSV half.
     join('features', 'setu', 'roster', 'build-csv-rows.ts'),
+    // 🔴 The double-charge guard. This entry is NOT the usual "a pledge counts
+    // as paid" claim the warning above describes - it is the opposite, and the
+    // only entry that REFUSES money rather than reporting it received. A family
+    // with a `started` or `active` pledge cannot also be charged the one-time
+    // Bala Vihar amount, because both would be debited and the portal cannot
+    // undo either. Added 2026-07-28 after `/family/donate?eid=` was found
+    // rendering the full payment form with no pledge awareness at all.
+    join('app', 'api', 'setu', 'donations', 'checkout', 'route.ts'),
   ];
 
   /**
