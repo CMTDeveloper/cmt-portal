@@ -333,7 +333,21 @@ export default async function ProgramEnrollPage({ params }: Props) {
   // `!paid` because a family who has already paid has nothing left to spread.
   const pledgeEligible = flags.setuPledge && isBv && onlineDonationsEnabled && !paid;
   const existingPledge = pledgeEligible ? await getFamilyPledge(family.fid) : null;
-  const monthlyOption = pledgeEligible ? (
+
+  // ── 🔴 The bare card is for ENROLLED families only ──────────────────────────
+  //
+  // `MonthlyDonationOption`'s button starts a mandate and does NOT enrol.
+  // Rendering it to a family who has not joined produced exactly what you would
+  // expect and what Vaibhav photographed on 2026-07-28: a Bala Vihar page
+  // reading "Add a child to enroll" directly above "Give $51 monthly", and a
+  // UAT family with ZERO children holding a live `started` pledge.
+  //
+  // `DonationChoice` owns every not-yet-enrolled case because it enrols FIRST
+  // and pays second. Where the choice cannot render - no children, not the
+  // manager, several open terms - the honest answer is no monthly ask at all.
+  // `/family/donate` has always had this gate (it requires an enrollment eid);
+  // this page simply never applied it. The server refuses too, in the route.
+  const monthlyOption = pledgeEligible && alreadyEnrolled ? (
     <MonthlyDonationOption
       monthlyAmountCAD={configuredMonthlyAmountCAD()}
       oneTimeAmountCAD={displaySuggestedAmount ?? null}

@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { isSetuManager } from '@cmt/shared-domain';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
 import { getFamilyByFid } from '@/features/setu/members/get-family-by-fid';
+import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
+import { selectBalaViharEnrollment } from '@/app/family/_helpers/select-bv-enrollment';
 import { startPledge } from '@/features/setu/pledges/start-pledge';
 import { flags } from '@/lib/flags';
 
@@ -38,6 +40,30 @@ export async function POST(req: Request) {
 
   const fam = await getFamilyByFid(session.fid);
   if (!fam) return NextResponse.json({ error: 'family-not-found' }, { status: 404 });
+
+  // ── The mandate must have something to fund ────────────────────────────────
+  //
+  // 🔴 Reported 2026-07-28: a UAT family with ZERO children held a `started`
+  // pledge. Every check above passes for them - they are a manager, with an
+  // email, and their family exists - and none of those asks the only question
+  // that matters: is there a Bala Vihar contribution to spread? The enroll page
+  // was offering "Give $51 monthly" beside "Add a child to enroll", so a bank
+  // mandate was authorised for a family that could not join the program at all.
+  //
+  // Enforced HERE and not only in the UI for the reason the double-charge
+  // taught: three screens can reach this route, each would re-implement the
+  // rule, and one of them would be missed. Once a mandate exists the portal has
+  // no way to undo it - there is no cancel endpoint on the payment service - so
+  // the refusal has to come before the hosted page, never after.
+  //
+  // Nobody is turned away: enrollment is free, and `DonationChoice` enrols the
+  // family FIRST and then starts the pledge, so the intended flow satisfies
+  // this by the time it arrives.
+  const enrollments = await getEnrollments(session.fid);
+  if (!selectBalaViharEnrollment(enrollments)) {
+    // 409, not 403: the family is permitted to do this, just not yet.
+    return NextResponse.json({ error: 'enrollment-required' }, { status: 409 });
+  }
 
   try {
     const result = await startPledge({

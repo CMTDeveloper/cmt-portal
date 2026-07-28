@@ -20,8 +20,9 @@ vi.mock('@/lib/flags', () => ({ flags: flagsMock }));
 vi.mock('@/features/setu/pledges/components/monthly-donation-option', () => ({
   MonthlyDonationOption: () => <div data-testid="monthly-option" />,
 }));
+const mockGetFamilyPledge = vi.hoisted(() => vi.fn());
 vi.mock('@/features/setu/pledges/get-family-pledge', () => ({
-  getFamilyPledge: vi.fn().mockResolvedValue(null),
+  getFamilyPledge: mockGetFamilyPledge,
 }));
 
 vi.mock('next/server', () => ({ connection: vi.fn().mockResolvedValue(undefined) }));
@@ -219,6 +220,8 @@ beforeEach(() => {
   mockGetOpenOfferingsForFamily.mockResolvedValue([]);
   mockGetLegacyPaymentStatus.mockResolvedValue('unpaid');
   mockGetDonations.mockResolvedValue([]);
+  mockGetFamilyPledge.mockReset();
+  mockGetFamilyPledge.mockResolvedValue(null);
 });
 
 // ─── T2: effectiveSuggestedAmount ─────────────────────────────────────────────
@@ -646,6 +649,89 @@ describe('ProgramEnrollPage (bala-vihar) — the monthly alternative', () => {
     render(page);
 
     expect(screen.queryByTestId('monthly-option')).toBeNull();
+  });
+
+  // ── 🔴 Never solicit a mandate a family cannot possibly owe ─────────────────
+  //
+  // Reported by Vaibhav 2026-07-28 with a screenshot of exactly this page: a
+  // Bala Vihar family with NO children read "Add a child to enroll" and
+  // "Give $51 monthly" on the same screen. It was not hypothetical - a UAT
+  // family with zero children already held a `started` pledge.
+  //
+  // `monthlyOption` is the BARE card: its button starts a mandate and does not
+  // enrol. `DonationChoice` owns the not-yet-enrolled case precisely because it
+  // enrols FIRST, so wherever the choice cannot render, the honest answer is no
+  // monthly ask at all - not one that leaves a family paying into a program
+  // they never joined.
+  describe('a family that cannot enroll is never asked to pledge', () => {
+    it('shows no monthly ask when the Bala Vihar family has no children', async () => {
+      mockGetCurrentFamily.mockResolvedValue({
+        family: FAMILY,
+        members: [MEMBERS[0]], // the manager alone
+        isManager: true,
+      });
+      mockGetEnrollments.mockResolvedValue([]);
+      mockGetOpenOfferingsForFamily.mockResolvedValue([ACTIVE_PERIOD]);
+
+      const page = await ProgramEnrollPage({ params: makeParams() });
+      render(page);
+
+      // The page's own verdict, which the pledge card contradicted.
+      expect(screen.getAllByRole('link', { name: /add a child to enroll/i }).length).toBeGreaterThan(0);
+      expect(screen.queryByTestId('monthly-option')).toBeNull();
+      expect(screen.queryByRole('radio', { name: /monthly pledge/i })).toBeNull();
+    });
+
+    it('shows no bare monthly card when a non-manager has not enrolled', async () => {
+      // No DonationChoice for a non-manager, so before this the standalone card
+      // was all they saw - an ask that could only ever be refused.
+      mockGetCurrentFamily.mockResolvedValue({ family: FAMILY, members: MEMBERS, isManager: false });
+      mockGetEnrollments.mockResolvedValue([]);
+      mockGetOpenOfferingsForFamily.mockResolvedValue([ACTIVE_PERIOD]);
+
+      const page = await ProgramEnrollPage({ params: makeParams() });
+      render(page);
+
+      expect(screen.queryByTestId('monthly-option')).toBeNull();
+    });
+
+    // ── The state family9 was actually left in ────────────────────────────────
+    //
+    // CMT-Z8UXTJIO on UAT: one child, a `started` pledge, ZERO enrollments. The
+    // pledge card rendered, which suppresses this page's sticky footer, and the
+    // pending branch carries no control of its own - so the screen had no way
+    // to enroll ON IT AT ALL. This is a PAGE-level assertion on purpose: the
+    // component's own tests cannot see a footer the page decided not to draw.
+    it('a family with a confirming pledge and no enrollment can still join', async () => {
+      mockGetFamilyPledge.mockResolvedValue({ pid: 'PLG-9', status: 'started', monthlyAmountCAD: 51 });
+      mockGetEnrollments.mockResolvedValue([]);
+      mockGetOpenOfferingsForFamily.mockResolvedValue([ACTIVE_PERIOD]);
+
+      const page = await ProgramEnrollPage({ params: makeParams() });
+      render(page);
+
+      expect(screen.getAllByRole('button', { name: /enroll in bala vihar/i }).length).toBeGreaterThan(0);
+      // ...and still no second way to pay while the mandate confirms.
+      expect(screen.queryByRole('radio')).toBeNull();
+      expect(screen.queryByRole('button', { name: /continue to donation/i })).toBeNull();
+    });
+
+    it('shows no bare monthly card when several terms are open and nothing is picked yet', async () => {
+      // Two open offerings route to EnrollPanel (its own term picker + submit),
+      // so DonationChoice stands down - and the standalone card used to fill the
+      // gap with a button that pledges WITHOUT enrolling.
+      mockGetEnrollments.mockResolvedValue([]);
+      mockGetOpenOfferingsForFamily.mockResolvedValue([
+        ACTIVE_PERIOD,
+        { ...ACTIVE_PERIOD, oid: 'bv-online-fall-2026', location: null, termLabel: 'Fall 2026 online' },
+      ]);
+
+      const page = await ProgramEnrollPage({ params: makeParams() });
+      render(page);
+
+      expect(screen.getAllByTestId('enroll-panel').length).toBeGreaterThan(0);
+      expect(screen.queryByTestId('monthly-option')).toBeNull();
+    });
   });
 
   // ── The ALREADY-ENROLLED state, which is what the design actually targets ──

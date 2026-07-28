@@ -249,6 +249,69 @@ describe('DonationChoice - a pledge that is still confirming', () => {
     expect(screen.getByText(/setting up your monthly/i)).toBeInTheDocument();
     expect(screen.getByText(/temple office/i)).toBeInTheDocument();
   });
+
+  // ── 🔴 Suppressing PAYMENT must not suppress ENROLLMENT ────────────────────
+  //
+  // Reported 2026-07-28 and confirmed in UAT: family9 (CMT-Z8UXTJIO) has one
+  // child, a `started` pledge, and ZERO enrollments. On /family/enroll/bala-vihar
+  // this branch rendered the reassurance card with no control at all, and the
+  // page suppresses its sticky footer whenever this component renders - so the
+  // family was authorising $51 a month toward a program they could not join,
+  // with no way on the screen to fix it.
+  //
+  // The double-charge rule is about MONEY. Enrollment is free and reversible by
+  // the office, so it must survive the pending state. The one thing that must
+  // not come back is a payment control.
+  describe('and the family has not enrolled yet', () => {
+    const stranded = { ...base, eid: null, enrollOid: 'bv-brampton-2026-27', pledgeState: 'pending' as const };
+
+    it('still lets them enroll - the pending pledge suppresses payment, not membership', () => {
+      render(<DonationChoice {...stranded} />);
+      expect(screen.getByRole('button', { name: /enroll/i })).toBeInTheDocument();
+      // ...and still no way to pay twice.
+      expect(screen.queryByRole('radio')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /donation|monthly|pay/i })).not.toBeInTheDocument();
+    });
+
+    it('enrols and reloads, so the page re-renders from the enrollment it just made', async () => {
+      const user = userEvent.setup();
+      checkoutMock.enrollFamily.mockResolvedValueOnce({ ok: true, eid: 'NEW-EID', suggestedAmount: 500, donateUrl: null });
+      render(<DonationChoice {...stranded} />);
+
+      await user.click(screen.getByRole('button', { name: /enroll/i }));
+
+      await waitFor(() => expect(checkoutMock.enrollFamily).toHaveBeenCalledWith('bv-brampton-2026-27'));
+      // Never a checkout - that is the whole point of this state.
+      expect(checkoutMock.startEnrollmentCheckout).not.toHaveBeenCalled();
+      expect(checkoutMock.startPledgeCheckout).not.toHaveBeenCalled();
+      await waitFor(() => expect(window.location.reload).toHaveBeenCalled());
+    });
+
+    it('reports a failed enrollment instead of silently doing nothing', async () => {
+      const user = userEvent.setup();
+      checkoutMock.enrollFamily.mockResolvedValueOnce({
+        ok: false,
+        reason: 'failed',
+        message: 'Add a child to your family before enrolling in Bala Vihar.',
+      });
+      render(<DonationChoice {...stranded} />);
+
+      await user.click(screen.getByRole('button', { name: /enroll/i }));
+
+      await waitFor(() =>
+        expect(toastMock.error).toHaveBeenCalledWith('Add a child to your family before enrolling in Bala Vihar.'),
+      );
+      expect(window.location.reload).not.toHaveBeenCalled();
+      // Still clickable - a transient failure must not strand them a second time.
+      expect(screen.getByRole('button', { name: /enroll/i })).toBeEnabled();
+    });
+
+    it('offers no enroll control when the page did not supply an offering', () => {
+      // Nothing to enrol INTO - a button here could only ever fail.
+      render(<DonationChoice {...stranded} enrollOid={null} />);
+      expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    });
+  });
 });
 
 describe('DonationChoice - a family already giving monthly', () => {
@@ -256,6 +319,14 @@ describe('DonationChoice - a family already giving monthly', () => {
     render(<DonationChoice {...base} pledgeState="giving" />);
     expect(screen.getByText(/\$51 a month/i)).toBeInTheDocument();
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    expect(screen.queryByRole('radio')).not.toBeInTheDocument();
+  });
+
+  it('still lets an unenrolled family join - they are already paying for it', () => {
+    // The stranded state one step further on: the mandate settled, the money is
+    // moving, and the family is funding a program they are not in.
+    render(<DonationChoice {...base} eid={null} enrollOid="bv-brampton-2026-27" pledgeState="giving" />);
+    expect(screen.getByRole('button', { name: /enroll/i })).toBeInTheDocument();
     expect(screen.queryByRole('radio')).not.toBeInTheDocument();
   });
 });

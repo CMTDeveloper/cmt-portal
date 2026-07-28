@@ -50,7 +50,12 @@ export function StartPledgeButton({ label, block = false }: StartPledgeButtonPro
       window.location.reload();
       return;
     }
-    if (result.reason === 'manager-required') {
+    if (result.reason === 'enrollment-required') {
+      // Actionable, and the action is free - so name it rather than reporting a
+      // failure. The server refuses because a monthly plan funds Bala Vihar, and
+      // this family has no Bala Vihar to fund.
+      toast.error('Enroll in Bala Vihar first - then you can set up a monthly gift.');
+    } else if (result.reason === 'manager-required') {
       toast.error('Only the family manager can set up monthly giving.');
     } else if (result.reason === 'no-email') {
       toast.error('Add an email address to your profile first - the bank needs somewhere to confirm.');

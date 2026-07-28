@@ -1,14 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockFlags, mockStart, mockFamily } = vi.hoisted(() => ({
+const { mockFlags, mockStart, mockFamily, mockEnrollments } = vi.hoisted(() => ({
   mockFlags: { setuPledge: true },
   mockStart: vi.fn(),
   mockFamily: vi.fn(),
+  mockEnrollments: vi.fn(),
 }));
 
 vi.mock('@/lib/flags', () => ({ flags: mockFlags }));
 vi.mock('@/features/setu/pledges/start-pledge', () => ({ startPledge: mockStart }));
 vi.mock('@/features/setu/members/get-family-by-fid', () => ({ getFamilyByFid: mockFamily }));
+vi.mock('@/features/setu/enrollment/get-enrollments', () => ({ getEnrollments: mockEnrollments }));
+
+const BV_ENROLLMENT = { eid: 'CMT-A-bv-2026', programKey: 'bala-vihar', status: 'active' };
 
 import { POST } from '../route';
 
@@ -32,6 +36,8 @@ beforeEach(() => {
   mockStart.mockResolvedValue({ created: true, pid: 'PLG-1', checkoutUrl: 'https://stripe.test/cs_1' });
   mockFamily.mockReset();
   mockFamily.mockResolvedValue({ family: { fid: 'CMT-A', name: 'Apple Family' } });
+  mockEnrollments.mockReset();
+  mockEnrollments.mockResolvedValue([BV_ENROLLMENT]);
 });
 
 describe('POST /api/pledges/start', () => {
@@ -70,6 +76,55 @@ describe('POST /api/pledges/start', () => {
     const res = await POST(req(MANAGER));
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({ error: 'already-active', pid: 'PLG-OLD' });
+  });
+
+  // ── The mandate must have something to fund ────────────────────────────────
+  //
+  // Reported 2026-07-28: a UAT family with ZERO children held a `started`
+  // pledge. The enroll page offered "Give $51 monthly" beside "Add a child to
+  // enroll", and this route asked only "are you a manager with an email?" - so
+  // a bank mandate was authorised for a family that could not be in Bala Vihar
+  // at all. The portal has no cancel endpoint, so the refusal has to happen
+  // BEFORE the hosted page, not after.
+  //
+  // The rule lives here rather than only in the UI because three screens can
+  // reach this route and each would otherwise re-implement it - the same shape
+  // as the double-charge that went unnoticed for weeks.
+  describe('requires an active Bala Vihar enrollment', () => {
+    it('409s a family with no enrollments at all', async () => {
+      mockEnrollments.mockResolvedValue([]);
+      const res = await POST(req(MANAGER));
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({ error: 'enrollment-required' });
+      expect(mockStart).not.toHaveBeenCalled();
+    });
+
+    it('409s when the only Bala Vihar enrollment is cancelled', async () => {
+      mockEnrollments.mockResolvedValue([{ ...BV_ENROLLMENT, status: 'cancelled' }]);
+      const res = await POST(req(MANAGER));
+      expect(res.status).toBe(409);
+      expect(mockStart).not.toHaveBeenCalled();
+    });
+
+    it('409s when the family is enrolled in a DIFFERENT program only', async () => {
+      // The monthly plan funds Bala Vihar specifically. A Tabla enrollment is
+      // not a Bala Vihar contribution to spread.
+      mockEnrollments.mockResolvedValue([{ eid: 'CMT-A-tabla', programKey: 'tabla', status: 'active' }]);
+      const res = await POST(req(MANAGER));
+      expect(res.status).toBe(409);
+      expect(mockStart).not.toHaveBeenCalled();
+    });
+
+    it('proceeds when a Bala Vihar enrollment sits behind a newer one', async () => {
+      // N=2: `getEnrollments` sorts enrolledAt DESC, so the newest active
+      // enrollment may not be the Bala Vihar one. Finding it must not depend on
+      // position.
+      mockEnrollments.mockResolvedValue([
+        { eid: 'CMT-A-tabla', programKey: 'tabla', status: 'active' },
+        BV_ENROLLMENT,
+      ]);
+      expect((await POST(req(MANAGER))).status).toBe(201);
+    });
   });
 
   it('503s on a provider failure WITHOUT echoing the provider error', async () => {
