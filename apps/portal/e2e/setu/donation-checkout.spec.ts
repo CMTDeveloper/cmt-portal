@@ -28,7 +28,6 @@ import { hasFamilyCreds } from '../_helpers';
  * loudly if the deployment is still pointed at the test service.
  *
  * Run (deployed target only):
- *   PLAYWRIGHT_BASE_URL=https://cmt-setu.vercel.app \
  *     pnpm --filter @cmt/portal exec playwright test --project=setu donation-checkout
  */
 

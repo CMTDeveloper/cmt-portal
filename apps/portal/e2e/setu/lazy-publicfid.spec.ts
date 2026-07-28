@@ -19,7 +19,6 @@
  * E2E_PENDING_EMAIL / E2E_PENDING_PASSWORD to its creds (printed by the seed).
  *
  * Run (against the deployed UAT app):
- *   PLAYWRIGHT_BASE_URL=https://cmt-setu.vercel.app \
  *     pnpm --filter @cmt/portal exec playwright test --project=setu lazy-publicfid
  */
 import { test, expect, request, type APIRequestContext, type BrowserContext } from '@playwright/test';

@@ -28,7 +28,6 @@ import { visibleText, hasFamilyCreds } from '../_helpers';
  *      CRON_SECRET for the reconciler phase.
  *
  * Run (deployed UAT only - never prod):
- *   PLAYWRIGHT_BASE_URL=https://cmt-setu.vercel.app \
  *     pnpm --filter @cmt/portal exec playwright test --project=setu pledge
  *
  * ── WHAT IS AUTOMATED, AND WHAT IS NOT ──────────────────────────────────────

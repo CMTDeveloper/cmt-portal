@@ -55,7 +55,6 @@ import { TEST_ACCOUNT_EMAILS, TEST_ACCOUNTS_PASSWORD, hasTestAccounts, hasFamily
  * `guest_check_ins` docs it wrote.
  *
  * Run (deployed UAT only):
- *   PLAYWRIGHT_BASE_URL=https://cmt-setu.vercel.app \
  *     pnpm --filter @cmt/portal exec playwright test --project=setu guest-to-teacher
  */
 

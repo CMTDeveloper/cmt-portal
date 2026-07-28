@@ -35,7 +35,6 @@
  *      .env.local into process.env; absent creds → the sevak-login test self-skips.
  *
  * Run (against deployed UAT only - never prod), AFTER the owner approves + deploys:
- *   PLAYWRIGHT_BASE_URL=https://cmt-setu.vercel.app \
  *     pnpm --filter @cmt/portal exec playwright test --project=setu staff-login
  *
  * Note the shared 5/15min sign-in limiter (password-sign-in / kiosk-sign-in share

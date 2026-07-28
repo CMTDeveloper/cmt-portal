@@ -55,7 +55,6 @@
  *      into process.env, so the afterAll admin SDK read/cleanup works.
  *
  * Run (against deployed UAT only — never prod), AFTER the owner approves:
- *   PLAYWRIGHT_BASE_URL=https://cmt-setu.vercel.app \
  *     pnpm --filter @cmt/portal exec playwright test --project=setu kiosk-auto-enroll
  *
  * Mutating spec: creates ONE Bala Vihar enrollment (+ per-child check_in_events)

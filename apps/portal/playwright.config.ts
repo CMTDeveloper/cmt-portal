@@ -31,6 +31,36 @@ loadEnvLocal();
 
 const STORAGE = 'e2e/.auth/family.json';
 
+/**
+ * ── WHERE THE E2E SUITE POINTS, AND WHY IT IS NOT PRODUCTION ────────────────
+ *
+ * DEFAULT TARGET: the `develop` branch's Vercel Preview alias.
+ *
+ * These specs are not read-only. They seed fixture families, enroll children,
+ * start pledges, and mutate GLOBAL config (`app_config/disclaimers.version`,
+ * `app_config/school_year`) - the disclaimers bump alone re-gates every family
+ * in the database. Running that against production is fine only for as long as
+ * production IS the UAT database. From the 2026-08-03 cutover it will be
+ * `chinmaya-setu-715b8`, holding real families' records, and a suite pointed at
+ * it out of habit would rewrite their data.
+ *
+ * So the default moved to Preview BEFORE the cutover rather than after, while
+ * getting it wrong is still harmless. Preview stays on `chinmaya-setu-uat`
+ * permanently (runbook §9.0), which is what makes it the correct home for this.
+ *
+ * ⚠️ Until the Aug 3 flip, Preview and Production still share one database, so
+ * this changes WHICH BUILD is exercised, not which data. It is not yet a
+ * sandbox.
+ *
+ * Override for a deliberate one-off:
+ *   PLAYWRIGHT_BASE_URL=http://localhost:3001   -> spins up the local dev server
+ *   PLAYWRIGHT_BASE_URL=https://cmt-setu.vercel.app -> production, on purpose
+ */
+const PREVIEW_BASE_URL =
+  'https://cmt-setu-git-develop-chinmaya-mission-torontos-projects.vercel.app';
+const LOCAL_BASE_URL = 'http://localhost:3001';
+const RESOLVED_BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? PREVIEW_BASE_URL;
+
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: true,
@@ -51,7 +81,7 @@ export default defineConfig({
   workers: 1,
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
-    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3001',
+    baseURL: RESOLVED_BASE_URL,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },
@@ -70,15 +100,18 @@ export default defineConfig({
     },
     { name: 'legacy', testMatch: /e2e\/legacy\/.*\.spec\.ts$/, use: { ...devices['Desktop Chrome'] } },
   ],
-  // Skip the local dev server when targeting a deployed URL (PLAYWRIGHT_BASE_URL),
-  // e.g. PLAYWRIGHT_BASE_URL=https://cmt-setu.vercel.app pnpm test:e2e.
-  webServer: process.env.PLAYWRIGHT_BASE_URL
+  // Start the local dev server ONLY when the resolved target IS localhost.
+  // Keyed on the RESOLVED url, not on "was PLAYWRIGHT_BASE_URL set": now that
+  // the default is a deployed preview, the old check would have booted a local
+  // server and then pointed every test at Preview anyway.
+  webServer:
+    RESOLVED_BASE_URL !== LOCAL_BASE_URL
     ? undefined
     : {
         // dev:e2e = `next dev --port=3001`. A dedicated script avoids the
         // `pnpm … dev -- --port` indirection, which pnpm mis-parses as a directory.
         command: 'pnpm --filter @cmt/portal dev:e2e',
-        url: 'http://localhost:3001',
+        url: LOCAL_BASE_URL,
         reuseExistingServer: !process.env.CI,
         timeout: 120 * 1000,
       },

@@ -32,7 +32,6 @@ import { ADULT_CLASS_EMAILS, ADULT_CLASS_PASSWORD, hasAdultClassCreds } from '..
  *   3. `.env.local` carries E2E_ADULT_CLASS_PASSWORD (or E2E_FAMILY_PASSWORD).
  *
  * Run (deployed UAT only — never prod):
- *   PLAYWRIGHT_BASE_URL=https://cmt-setu.vercel.app \
  *     pnpm --filter @cmt/portal exec playwright test --project=setu adult-class
  *
  * ── WHY A BROWSER ────────────────────────────────────────────────────────────

@@ -17,7 +17,6 @@
  *      spec deliberately leans on the SEED, not the live migration.
  *
  * Run (against the deployed UAT app, the repo's standing E2E target):
- *   PLAYWRIGHT_BASE_URL=https://cmt-setu.vercel.app \
  *     pnpm --filter @cmt/portal exec playwright test --project=setu public-ids
  *
  * Coverage:
