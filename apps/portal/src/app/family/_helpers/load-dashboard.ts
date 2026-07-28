@@ -94,7 +94,7 @@ export async function loadFamilyDashboard(
   // but they're independent of EACH OTHER — run them concurrently in one narrow
   // second step rather than serializing.
   const bv = selectBalaViharEnrollment(enrollments);
-  const [legacyPaymentStatus, bvAttendedCount, perChildAttendance, teacherNamesByLevel, bvLevels] =
+  const [legacyPaymentStatus, bvAttendedCount, perChildAttendance, teacherNamesByLevel, bvLevels, familyPledge] =
     await Promise.all([
       // Legacy roster status only matters for the 2025-26 cutover BV offering;
       // skip the extra RTDB read otherwise (same predicate the model uses).
@@ -207,13 +207,19 @@ export async function loadFamilyDashboard(
           return [];
         }
       })(),
+      // The monthly pledge is the Bala Vihar donation paid monthly (2026-07-27),
+      // so the model needs to know whether this family is on one.
+      //
+      // INSIDE this Promise.all, not after it. Awaited separately it added a
+      // serial round-trip to the dashboard's critical path for every family on
+      // every render - which is exactly the kind of quiet latency regression
+      // that turns a passing E2E assertion into a flaky one. It depends on
+      // nothing above, so it costs nothing here.
+      //
+      // The per-family read; the bulk `loadActivePledgeFids` is for the STAFF
+      // surfaces that render hundreds of families at once.
+      flags.setuPledge ? getFamilyPledge(family.fid) : Promise.resolve(null),
     ]);
-
-  // The monthly pledge is the Bala Vihar donation paid monthly (2026-07-27), so
-  // the model needs to know whether this family is on one. One narrow read of
-  // the family's own pledge - the bulk `loadActivePledgeFids` is for the STAFF
-  // surfaces that render hundreds of families at once.
-  const familyPledge = flags.setuPledge ? await getFamilyPledge(family.fid) : null;
 
   const model = buildFamilyDashboardModel({
     enrollments,

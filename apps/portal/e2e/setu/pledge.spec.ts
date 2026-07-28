@@ -56,18 +56,27 @@ test.describe('monthly pledge', () => {
     return page.locator('.card').filter({ hasText: 'Monthly giving' }).filter({ visible: true });
   }
 
-  test('the dashboard shows the ask, and only the manager gets a button', async ({ page }) => {
-    await page.goto('/family');
-    await expect(card(page).first()).toBeVisible();
-    await expect(visibleText(page, /a month/).first()).toBeVisible();
-    await expect(
-      card(page).first().getByRole('button', { name: /give \$\d+ monthly/i }),
-    ).toBeVisible();
-  });
+
+  /** The family's ACTIVE Bala Vihar enrollment id - the donate flow's target. */
+  async function activeBvEid(page: Page): Promise<string | undefined> {
+    const res = await page.request.get('/api/setu/enrollments', { timeout: 30_000 });
+    expect(res.ok(), `could not read enrollments: ${res.status()}`).toBeTruthy();
+    const body = (await res.json()) as
+      | { enrollments?: { eid: string; programKey: string; status: string }[] }
+      | { eid: string; programKey: string; status: string }[];
+    const rows = Array.isArray(body) ? body : (body.enrollments ?? []);
+    return rows.find((e) => e.programKey === 'bala-vihar' && e.status === 'active')?.eid;
+  }
 
   test('starting a pledge redirects to a Stripe-hosted page, and never asks for a bank detail here', async ({ page }) => {
-    await page.goto('/family');
-    const start = card(page).first().getByRole('button', { name: /give \$\d+ monthly/i });
+    // The button moved from the dashboard into the Bala Vihar donate flow on
+    // 2026-07-27 - the monthly plan is one of two ways to pay THIS donation, so
+    // the click starts where the family is making that choice.
+    const bvEid = await activeBvEid(page);
+    test.skip(!bvEid, 'the seeded family has no active Bala Vihar enrollment');
+    await page.goto(`/family/donate?eid=${bvEid}`);
+    const start = page.getByRole('button', { name: /give \$\d+ monthly/i }).filter({ visible: true }).first();
+    await expect(start, 'the monthly option is missing from the donate flow').toBeVisible({ timeout: 20_000 });
 
     // The portal must never render a bank field. Assert BEFORE the click, on the
     // page we control - after it we are on Stripe's origin, where such fields are
@@ -101,8 +110,8 @@ test.describe('monthly pledge', () => {
       }
       if (status === 409) {
         throw new Error(
-          'This family already has a live pledge from an earlier run, so the card shows state ' +
-            'rather than an ask and the button was never there to click. Cancel it via ' +
+          'This family already has a live pledge from an earlier run, so the donate page shows ' +
+            'the plan rather than an ask and the button was never there to click. Cancel it via ' +
             'POST /api/admin/pledges/[pid]/cancel, or let the reconciler settle it, then re-run.',
         );
       }
@@ -161,16 +170,45 @@ test.describe('monthly pledge', () => {
     expect(json).toHaveProperty('scanned');
   });
 
-  test('a pledge gates NOTHING - the dashboard payment and enrollment status are untouched', async ({ page }) => {
-    // P5's global constraint. The static guard in
-    // features/setu/pledges/__tests__/pledge-isolation.test.ts proves no code
-    // reads a pledge outside the feature; this proves the rendered dashboard
-    // agrees, against real data.
+  // ── REVERSED 2026-07-27 ────────────────────────────────────────────────────
+  // This test used to assert "a pledge gates NOTHING - the dashboard payment and
+  // enrollment status are untouched", which was P5's global constraint. Vaibhav
+  // then established that the monthly plan is not a separate ask but the SECOND
+  // way to pay the Bala Vihar donation, so a pledge is now SUPPOSED to move
+  // exactly the signals this test guarded. Left in place, it would have failed
+  // the moment the feature worked - and the temptation would have been to delete
+  // it. The replacement asserts the NEW rule, and the isolation invariant lives
+  // on as an allowlist in pledge-isolation.test.ts.
+  test('the dashboard never shows a monthly ASK next to a Not-enrolled status', async ({ page }) => {
+    // The regression that prompted the whole change: the standalone card offered
+    // "$51 monthly" to families whose own dashboard read "Not enrolled" - an
+    // invitation to fund a programme they had not joined. The ask now lives in
+    // the Bala Vihar donate flow; the dashboard may report an EXISTING plan, but
+    // must never solicit a new one.
     await page.goto('/family');
-    await expect(visibleText(page, /Donation status/).first()).toBeVisible();
-    const dashboard = (await page.locator('body').textContent()) ?? '';
-    // The pledge card is the only place the word may appear.
-    const outsideCard = dashboard.replace(/Monthly giving[\s\S]*?(?=Keep your Family ID|$)/g, '');
-    expect(outsideCard, 'pledge state leaked into the Bala Vihar summary').not.toMatch(/monthly gift|giving \$/i);
+    // 20s, not the 5s default: /family streams under PPR and every other dashboard
+    // assertion in this suite allows for that. A tight default here failed once
+    // on load time and read as a product fault.
+    await expect(visibleText(page, /Donation status/).first()).toBeVisible({ timeout: 20_000 });
+    await expect(
+      page.getByRole('button', { name: /give \$\d+ monthly/i }),
+      'the dashboard is soliciting a monthly plan - that ask belongs on /family/donate',
+    ).toHaveCount(0);
+  });
+
+  test('the monthly option is offered inside the Bala Vihar donate flow', async ({ page }) => {
+    // Where the choice belongs: one decision - how to pay this year's Bala Vihar
+    // contribution - with both answers in front of the family at once.
+    const bvEid = await activeBvEid(page);
+    test.skip(!bvEid, 'the seeded family has no active Bala Vihar enrollment');
+
+    await page.goto(`/family/donate?eid=${bvEid}`);
+    // The one-time path is still the primary action...
+    await expect(visibleText(page, /Your donation/i).first()).toBeVisible();
+    // ...and the instalment alternative sits beside it, saying plainly that it
+    // does not stop on its own. That sentence is the honesty requirement: a
+    // family who believes a bank debit ends by itself has been misled.
+    await expect(visibleText(page, /a month instead/i).first()).toBeVisible({ timeout: 20_000 });
+    await expect(visibleText(page, /continues until you stop it/i).first()).toBeVisible();
   });
 });
