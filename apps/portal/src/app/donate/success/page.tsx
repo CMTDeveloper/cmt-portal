@@ -124,7 +124,32 @@ async function resolvePledgeSlot(
     console.error('[donate/success] finalizePledge failed - the cron will finish it', err);
   }
 
-  return loadPledgeSlot({ fid: familyData.family.fid, isManager: familyData.isManager });
+  const slot = await loadPledgeSlot({ fid: familyData.family.fid, isManager: familyData.isManager });
+
+  // ── 🔴 `?pledge=` is a CLAIM, not proof ────────────────────────────────────
+  //
+  // Found in review 2026-07-28. The check above passes for any non-empty query
+  // value, and `finalizePledge` deliberately no-ops on a pid it cannot match -
+  // so the slot came back for families with no pledge at all, and `PledgeCard`
+  // fell through to `AskBody`: a live "Give $63 monthly" button under a headline
+  // thanking them for a monthly gift they had never set up.
+  //
+  // Not an exotic URL to reach. A genuine return lands the family on exactly
+  // this address, so it sits in their history; revisit it after the mandate
+  // fails and the page thanks you while the card underneath says it is inactive.
+  //
+  // So: report a pledge that EXISTS, and only one still in play. A terminal
+  // pledge renders `AskBody`, whose entire content is a solicitation - and the
+  // rule this page is built on (stated above, and by `DonationChoice` owning the
+  // choice) is that a receipt is never a decision point.
+  //
+  // NOTE the same `started || active` pair is spelled out in the checkout route
+  // and on /family/donate. Three inline copies of one money rule is the shape
+  // that hid the double-charge; extracting `isPledgeInPlay` is filed as a task
+  // rather than done here, in the launch week.
+  if (!slot?.pledge) return null;
+  if (slot.pledge.status !== 'started' && slot.pledge.status !== 'active') return null;
+  return slot;
 }
 
 // Exported for tests: an async server component does not resolve under jsdom, so
@@ -181,7 +206,12 @@ export async function DonateSuccessBody({
   // yet". Reported from preview. That contradiction is the exact harm this
   // feature is built to avoid: a PAD can fail days later, and someone told they
   // have paid will not look again.
-  const isPledgeReturn = !!pledgePid && !did;
+  //
+  // `pledgeSlot` and not `pledgePid` alone: the param is whatever is in the URL,
+  // and this headline makes a claim about a bank mandate. Saying "your monthly
+  // gift is being set up" to someone with no pledge is the same class of untruth
+  // the paragraph above exists to prevent, just pointed the other way.
+  const isPledgeReturn = !!pledgePid && !did && pledgeSlot !== null;
 
   return (
     <CspRoot style={{ minHeight: '100dvh', display: 'grid', placeItems: 'center', padding: 24 }}>
@@ -245,10 +275,16 @@ export async function DonateSuccessBody({
             for nobody. Both facts are test-locked in this page's spec. */}
         {pledgeSlot && (
           <div style={{ textAlign: 'left', marginBottom: 24 }}>
+            {/* `canStart={false}`, exactly as the family dashboard passes it.
+                This page REPORTS a pledge; it never offers one. With the slot
+                now gated to a live pledge the ask cannot render anyway, so this
+                is the second lock on the same door - and it stops a future
+                `AskBody` branch quietly turning a receipt back into a sales
+                page. */}
             <PledgeCard
               pledge={pledgeSlot.pledge}
               askAmountCAD={pledgeSlot.askAmountCAD}
-              canStart={pledgeSlot.canStart}
+              canStart={false}
             />
           </div>
         )}
