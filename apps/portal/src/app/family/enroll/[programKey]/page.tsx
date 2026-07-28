@@ -9,6 +9,11 @@ import { EligibleMembersList } from '@/features/family/components/eligible-membe
 import { CompleteDonationButton } from '@/features/family/components/complete-donation-button';
 import { resolveSuggestedAmount, paymentSourceOf, memberEligibleForProgram, gradeLabel, BALA_VIHAR } from '@cmt/shared-domain';
 import type { OfferingDoc, PaymentSource } from '@cmt/shared-domain';
+import { isPledgeGiving } from '@cmt/shared-domain/setu';
+import { flags } from '@/lib/flags';
+import { getFamilyPledge } from '@/features/setu/pledges/get-family-pledge';
+import { configuredMonthlyAmountCAD } from '@/features/setu/pledges/pledge-amount';
+import { MonthlyDonationOption } from '@/features/setu/pledges/components/monthly-donation-option';
 import { getProgram } from '@/features/setu/programs/get-programs';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
@@ -224,6 +229,31 @@ export default async function ProgramEnrollPage({ params }: Props) {
   // non-managers still see the manager message (handled below by precedence).
   const bvNoChildren = isBv && displayMembers.length === 0;
 
+  // ── The monthly alternative, BESIDE the one-time ask ────────────────────────
+  // Vaibhav 2026-07-27: the monthly plan is not a separate appeal - it is the
+  // SECOND way to pay the Bala Vihar contribution. "$500 once, or $51 a month."
+  //
+  // It first shipped only on /family/donate, which turned out to be a page this
+  // flow never visits: EnrollCta sends the family STRAIGHT to Stripe at the full
+  // amount (owner decision 2026-07-04, predating the pledge work), and the
+  // dashboard's "Complete donation" does the same. So the choice existed but was
+  // unreachable - a family enrolling only ever saw $500. It has to be offered
+  // where the decision is actually made, which is this page.
+  //
+  // `onlineDonationsEnabled` already means usesDonation && donationsEnabled &&
+  // paymentSource !== 'teacher-managed', which is exactly the donate page's gate.
+  // `!paid` because a family who has already paid has nothing left to spread.
+  const pledgeEligible = flags.setuPledge && isBv && onlineDonationsEnabled && !paid;
+  const existingPledge = pledgeEligible ? await getFamilyPledge(family.fid) : null;
+  const monthlyOption = pledgeEligible ? (
+    <MonthlyDonationOption
+      monthlyAmountCAD={configuredMonthlyAmountCAD()}
+      oneTimeAmountCAD={displaySuggestedAmount ?? null}
+      canStart={isManager}
+      alreadyPledging={isPledgeGiving(existingPledge)}
+    />
+  ) : null;
+
   // When MULTIPLE offerings are open and the manager can still enroll, the term
   // picker and submit must share client state — render them together via
   // EnrollPanel. Single-offering (BV) keeps the bare CTA path unchanged.
@@ -303,6 +333,12 @@ export default async function ProgramEnrollPage({ params }: Props) {
                   )}
                 </>
               )}
+
+              {/* The monthly alternative. It sits in the SCROLLABLE content, not
+                  in the sticky footer below: the footer is a single-action bar,
+                  and a card with its own button there would compete with the
+                  primary CTA and blow the bar's height on a phone. */}
+              {monthlyOption}
             </div>
 
             {/* Sticky CTA footer */}
@@ -484,6 +520,10 @@ export default async function ProgramEnrollPage({ params }: Props) {
                       Donations are tax-deductible · Chinmaya Mission Toronto
                     </p>
                   )}
+
+                  {/* The second way to pay, directly under the one-time CTA so
+                      both answers are visible before the family commits. */}
+                  {monthlyOption}
                 </div>
               )}
             </aside>
