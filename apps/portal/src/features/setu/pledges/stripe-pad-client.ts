@@ -92,7 +92,29 @@ async function post(path: string, body: Record<string, unknown>): Promise<Record
 }
 
 /**
- * Normalise a provider status.
+ * Normalise a provider outcome from a step 3 / step 5 response body.
+ *
+ * ── The field is `state`, not `status` ──────────────────────────────────────
+ * The spec documented these calls as returning bare `success | failed |
+ * pending` and never named the field carrying it; this client guessed
+ * `status`, and the service answers `state`:
+ *
+ *   {"state":"success","reason":"PAD mandate setup completed",
+ *    "stripe":{"status":"complete","setup_intent_status":"succeeded", …}}
+ *
+ * The mismatch was SILENT rather than loud, because an unreadable answer maps
+ * to `pending` (below) - so step 3 reported `pending` for a mandate Stripe had
+ * already marked `succeeded`, `advancePledge` never proceeded to step 4, and no
+ * pledge could reach `active`. It presented as a sandbox that never settled.
+ *
+ * Both names are accepted. The two endpoints were never proven to agree with
+ * each other, and a second wrong guess costs another silent stall - whereas
+ * accepting a name the service does not send costs nothing.
+ *
+ * ⚠️ Read ONLY the top level. `stripe.status` is the Checkout Session's own
+ * lifecycle - `complete` merely means the family finished the page, which is
+ * equally true of a mandate that FAILED. Reading it would turn a failure into
+ * a success, the one direction that must never happen.
  *
  * Anything unrecognised - a new value, a typo, a missing field - becomes
  * `pending`, NEVER `success`. The two failure directions are not symmetric:
@@ -100,7 +122,8 @@ async function post(path: string, body: Record<string, unknown>): Promise<Record
  * subscription is confirmed, while reading it as pending simply leaves the
  * pledge for the reconciler to resolve.
  */
-function toResult(raw: unknown): PadResult {
+function toResult(body: Record<string, unknown>): PadResult {
+  const raw = body['state'] ?? body['status'];
   return raw === 'success' || raw === 'failed' ? raw : 'pending';
 }
 
@@ -171,7 +194,7 @@ export async function createPadSetupLink(args: PadSetupLinkArgs): Promise<PadSet
 /** Call 3 - did the family actually complete the hosted mandate page? */
 export async function getCheckoutSessionResult(sessionId: string): Promise<PadResult> {
   const data = await post('/checkout-session-result', { sessionId });
-  return toResult(data['status']);
+  return toResult(data);
 }
 
 export interface MonthlySubscription {
@@ -210,5 +233,5 @@ export async function createMonthlySubscription(args: {
 /** Call 5 - is that subscription actually live? */
 export async function getSubscriptionResult(subscriptionId: string): Promise<PadResult> {
   const data = await post('/subscription-result', { subscriptionId });
-  return toResult(data['status']);
+  return toResult(data);
 }
