@@ -215,24 +215,32 @@ test.describe('monthly pledge', () => {
       // And no second start button, which would risk a SECOND authorised mandate.
       await expect(body.getByRole('button', { name: /give \$\d+ monthly/i })).toHaveCount(0);
 
-      // ── AND THE DONATION BANNER MUST NOT SEND THEM TO PAY AGAIN ────────────
+      // ── AND THE DONATION BANNER MUST OFFER NO WAY TO PAY AGAIN ─────────────
       // Nothing is paid while the mandate is confirming, so the banner still
-      // shows - but its normal copy is an INSTRUCTION, and a family who obeys
-      // it pays $500 on top of the $51/month they just authorised. There is no
-      // webhook to catch that and the refund is manual.
+      // shows - but it must not carry a payment control of any kind.
       //
-      // The one-time route must stay REACHABLE (the mandate can still fail),
-      // just not phrased as the thing to do. Reported 2026-07-28.
+      // The portal cannot undo a double payment: cancelPledgeRecord is
+      // BOOKKEEPING ONLY, and stopping a pre-authorized debit is a manual
+      // action in Stripe by the temple. A family who pays here and whose
+      // mandate then clears is charged $500 AND $51/month, and only a phone
+      // call fixes it.
+      //
+      // Nobody is stranded: a mandate that FAILS is written `failed`
+      // (advance-pledge step 3), so this state ends and the normal control
+      // returns on its own. Reported 2026-07-28.
       await expect(
         visibleText(page, /Complete your donation to confirm your enrollment/i),
         'the dashboard is still instructing a family with a pending pledge to pay the full amount',
       ).toHaveCount(0);
       await expect(visibleText(page, /monthly gift is being confirmed/i).first()).toBeVisible();
-      // The fallback is still there, just quiet.
       await expect(
-        page.getByRole('button', { name: /one-time donation instead/i }).filter({ visible: true }).first(),
-        'the one-time fallback disappeared - a family whose mandate fails could not pay',
-      ).toBeVisible();
+        page.getByRole('button', { name: /complete donation|one-time donation/i }),
+        'a pending pledge still offers a self-serve payment - that is the double-charge path',
+      ).toHaveCount(0);
+      await expect(
+        page.getByRole('link', { name: /complete donation/i }),
+        'a pending pledge still links to the donate flow - that is the double-charge path',
+      ).toHaveCount(0);
     }
   });
 

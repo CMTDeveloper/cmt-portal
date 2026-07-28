@@ -365,12 +365,11 @@ export default async function FamilyDashboardPage() {
   // `pledge-isolation` + pledge.spec both hold that line. Sending someone to
   // the decision is not the same as making the ask here.
   //
-  // NOT used while a pledge is pending: that family has already chosen, and
-  // re-offering the plan would only invite a second one (startPledge 409s).
+  // Not rendered at all while a pledge is pending - see donatePrompt.
   //
   // Flag off (production at launch) → byte-identical to today.
   const donateCta = (block: boolean) =>
-    flags.setuPledge && !pledgePending ? (
+    flags.setuPledge ? (
       <Link
         href="/family/enroll/bala-vihar"
         className={block ? 'btn btn--p btn--block' : 'btn btn--p'}
@@ -382,9 +381,8 @@ export default async function FamilyDashboardPage() {
       <CompleteDonationButton
         eid={model.eid!}
         amountCAD={model.suggestedAmount ?? 0}
-        label={pledgePending ? 'Complete a one-time donation instead' : 'Complete donation'}
+        label="Complete donation"
         block={block}
-        variant={pledgePending ? 'quiet' : 'primary'}
       />
     );
 
@@ -409,12 +407,29 @@ export default async function FamilyDashboardPage() {
           <SetuIcon.info width={16} height={16} />
         </span>
         <span style={{ fontSize: 13, color: 'var(--body-text)', lineHeight: 1.45 }}>
-          {pledgePending
-            ? "Your monthly gift is being confirmed — there's nothing to do right now. We'll email you once it's set up."
-            : 'Complete your donation to confirm your enrollment and support Bala Vihar.'}
+          {pledgePending ? (
+            <>
+              Your monthly gift is being confirmed — there&apos;s nothing to do right now. We&apos;ll
+              email you once it&apos;s set up.{' '}
+              <span style={{ color: 'var(--muted)' }}>
+                Changed your mind? Contact the temple office.
+              </span>
+            </>
+          ) : (
+            'Complete your donation to confirm your enrollment and support Bala Vihar.'
+          )}
         </span>
       </div>
-      {donateCta(block)}
+      {/* NO self-serve payment while the mandate is confirming.
+          The portal cannot undo a double payment: cancelPledgeRecord is
+          BOOKKEEPING ONLY - stopping a pre-authorized debit is a manual action
+          in Stripe by the temple. So a family who pays here and whose mandate
+          then clears is charged $500 AND $51/month, and only a phone call fixes
+          it.
+          Nobody is stranded by this: a mandate that FAILS is written `failed`
+          (advance-pledge step 3), `pledgePending` goes false, and the normal
+          Complete donation control below returns on its own. */}
+      {!pledgePending && donateCta(block)}
     </div>
   );
 
