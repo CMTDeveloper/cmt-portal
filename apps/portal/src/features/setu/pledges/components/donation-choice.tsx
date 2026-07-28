@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { SetuIcon, toast } from '@cmt/ui';
 import { startEnrollmentCheckout } from '@/features/family/components/start-checkout-client';
 import { startPledgeCheckout } from '@/features/family/components/start-pledge-client';
@@ -60,6 +60,20 @@ export function DonationChoice({
 }: DonationChoiceProps) {
   const [choice, setChoice] = useState<'full' | 'monthly'>('full');
   const [pending, setPending] = useState(false);
+  // ── Why the group name is per-INSTANCE and not a constant ──────────────────
+  //
+  // The enroll page renders a mobile tree AND a desktop tree, both in the DOM at
+  // once (`block md:hidden` / `hidden md:block`). With a shared `name`, the
+  // browser treats every radio across BOTH trees as ONE group, so the
+  // second-rendered instance silently steals `checked` from the first: on
+  // deployed preview the desktop radio showed filled and the phone's showed
+  // EMPTY, while the card beside it was still tinted as selected. The duplicated
+  // `id` compounded it - `<label htmlFor>` binds to the first match in document
+  // order, so tapping the desktop label drove the mobile input.
+  //
+  // Unit tests render this component once and could never see it; it took a
+  // screenshot of the real page. `useId` is SSR-safe and stable across hydration.
+  const uid = useId();
 
   if (pledgeState === 'giving') {
     return (
@@ -182,8 +196,8 @@ export function DonationChoice({
     <ChoiceShell>
       <div style={{ display: 'grid', gap: 12 }}>
         <Option
-          id="donation-full"
-          name="donation-choice"
+          id={`${uid}-full`}
+          name={`${uid}-donation-choice`}
           selected={choice === 'full'}
           onSelect={() => setChoice('full')}
           title="Full donation"
@@ -194,8 +208,8 @@ export function DonationChoice({
           body={`A one-time donation of $${oneTimeAmountCAD} supports the entire academic year.`}
         />
         <Option
-          id="donation-monthly"
-          name="donation-choice"
+          id={`${uid}-monthly`}
+          name={`${uid}-donation-choice`}
           selected={choice === 'monthly'}
           onSelect={() => setChoice('monthly')}
           disabled={!canStartPledge}

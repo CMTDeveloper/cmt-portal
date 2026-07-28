@@ -76,6 +76,54 @@ describe('DonationChoice - the choice itself', () => {
   });
 });
 
+describe('DonationChoice - TWO instances on one page (mobile tree + desktop tree)', () => {
+  // 🔴 Found on deployed preview, not here: the enroll page keeps BOTH layout
+  // trees in the DOM (`block md:hidden` / `hidden md:block`). With a shared
+  // radio-group `name`, the browser treats them as ONE group and the
+  // second-rendered instance steals `checked` from the first - the desktop radio
+  // rendered filled while the PHONE's rendered empty, beside a card still tinted
+  // as selected. A duplicated `id` made it worse: `<label htmlFor>` binds to the
+  // first match in document order, so the desktop label drove the mobile input.
+  //
+  // Every test above renders ONE instance and passes either way. This is the
+  // N=2 case, and it is the only shape that can catch it.
+  function renderBothTrees() {
+    return render(
+      <>
+        <DonationChoice {...base} />
+        <DonationChoice {...base} />
+      </>,
+    );
+  }
+
+  it('checks the default option in BOTH trees, not just the last one rendered', () => {
+    renderBothTrees();
+    const full = screen.getAllByRole('radio', { name: /full donation/i });
+    expect(full).toHaveLength(2);
+    for (const radio of full) expect(radio).toBeChecked();
+  });
+
+  it('gives each tree its own radio group, so one cannot deselect the other', async () => {
+    const user = userEvent.setup();
+    renderBothTrees();
+    const monthly = screen.getAllByRole('radio', { name: /monthly pledge/i });
+
+    await user.click(monthly[0]!);
+
+    // The first tree switched; the second is untouched. Under a shared name the
+    // click would have driven both.
+    expect(monthly[0]!).toBeChecked();
+    expect(monthly[1]!).not.toBeChecked();
+    expect(screen.getAllByRole('radio', { name: /full donation/i })[1]!).toBeChecked();
+  });
+
+  it('gives every input a unique id, so a label cannot target the wrong tree', () => {
+    renderBothTrees();
+    const ids = screen.getAllByRole('radio').map((r) => r.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
 describe('DonationChoice - who may commit the family to a debit', () => {
   it('does not let a non-manager select the monthly plan', async () => {
     render(<DonationChoice {...base} canStartPledge={false} />);
