@@ -467,6 +467,75 @@ describe('ProgramEnrollPage — legacy-payment bridge is Bala Vihar-only (#3)', 
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ─────────────────────────────────────────────────────────────────────────────
+// Once enrolled, the member list is a RECORD, not a preview
+// ─────────────────────────────────────────────────────────────────────────────
+describe('ProgramEnrollPage - who the list shows once enrolled', () => {
+  // Reported 2026-07-28: a family who enrolled ONE adult in the Adult Study
+  // Class saw all three ticked. Verified against UAT that the DATA was correct -
+  // enrolledMids held exactly one - so the page was reporting ELIGIBILITY while
+  // wearing a hardcoded checkmark. Nobody was over-enrolled; the screen said so.
+  //
+  // TWO children, so "shows only the enrolled one" is actually demonstrable -
+  // with a single eligible member every filter looks identical (CLAUDE.md #6).
+  const SECOND_CHILD = {
+    mid: 'CMT-AAAA1111-03', type: 'Child' as const, firstName: 'Meera', lastName: 'Kumar',
+    schoolGrade: 'Grade 2', birthMonthYear: '2019-05', gender: 'Female' as const,
+    manager: false, joinedAt: new Date(), emergencyContacts: [], enrolledMids: [],
+  };
+
+  beforeEach(() => {
+    mockGetCurrentFamily.mockResolvedValue({
+      family: FAMILY,
+      members: [...MEMBERS, SECOND_CHILD],
+      isManager: true,
+    });
+    mockGetOpenOfferingsForFamily.mockResolvedValue([ACTIVE_PERIOD]);
+  });
+
+  it('lists only the members actually enrolled, not everyone eligible', async () => {
+    mockGetEnrollments.mockResolvedValue([
+      { ...ACTIVE_ENROLLMENT_WITH_SNAPSHOT, enrolledMids: ['CMT-AAAA1111-02'] },
+    ]);
+
+    const page = await ProgramEnrollPage({ params: makeParams() });
+    const { container } = render(page);
+
+    expect(container.textContent).toMatch(/Arjun/);
+    expect(container.textContent, 'a child who is NOT enrolled is being shown as enrolled')
+      .not.toMatch(/Meera/);
+  });
+
+  it('calls the list "enrolled", not "enrolling", once the family has joined', async () => {
+    mockGetEnrollments.mockResolvedValue([
+      { ...ACTIVE_ENROLLMENT_WITH_SNAPSHOT, enrolledMids: ['CMT-AAAA1111-02'] },
+    ]);
+    const page = await ProgramEnrollPage({ params: makeParams() });
+    const { container } = render(page);
+    expect(container.textContent).toMatch(/enrolled/i);
+  });
+
+  it('falls back to the eligible list when enrolledMids is empty', async () => {
+    // A legacy or mid-less enrollment must still show something rather than an
+    // empty card.
+    mockGetEnrollments.mockResolvedValue([
+      { ...ACTIVE_ENROLLMENT_WITH_SNAPSHOT, enrolledMids: [] },
+    ]);
+    const page = await ProgramEnrollPage({ params: makeParams() });
+    const { container } = render(page);
+    expect(container.textContent).toMatch(/Arjun/);
+    expect(container.textContent).toMatch(/Meera/);
+  });
+
+  it('still previews everyone eligible BEFORE enrolling', async () => {
+    mockGetEnrollments.mockResolvedValue([]);
+    const page = await ProgramEnrollPage({ params: makeParams() });
+    const { container } = render(page);
+    expect(container.textContent).toMatch(/enrolling/i);
+    expect(container.textContent).toMatch(/Meera/);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // A waived enrollment owes nothing - it must not render a $0 ask
 // ─────────────────────────────────────────────────────────────────────────────
 describe('ProgramEnrollPage - nothing to pay (the Adult Study Class waiver)', () => {

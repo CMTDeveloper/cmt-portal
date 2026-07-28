@@ -208,7 +208,7 @@ export default async function ProgramEnrollPage({ params }: Props) {
   );
 
   // For BV (child-only): show the children list. For generic: show eligible members.
-  const displayMembers = isBv
+  const eligibleForDisplay = isBv
     ? members.filter((m) => m.type === 'Child')
     : eligibleMembers;
 
@@ -242,6 +242,27 @@ export default async function ProgramEnrollPage({ params }: Props) {
     : defaultOffering;
 
   const alreadyEnrolled = activeEnrollment !== null;
+
+  // ── Who this list is ABOUT changes once the family has enrolled ────────────
+  //
+  // Before enrolling it is a preview: "these are the people who will be
+  // enrolled", every row ticked, which is honest because enrollFamily does
+  // exactly that when no explicit selection is supplied.
+  //
+  // AFTER enrolling it must be a record, and it was not. Reported 2026-07-28:
+  // a family who enrolled ONE adult in the Adult Study Class saw all three
+  // ticked. Verified against UAT that the DATA was right - `enrolledMids` held
+  // exactly one - so the page was simply reporting eligibility while wearing a
+  // hardcoded checkmark. Nobody was over-enrolled; the screen just said so.
+  //
+  // `enrolledMids` was already on EnrollmentDoc and simply never read here.
+  // Falls back to the eligible list when it is empty, so a legacy or
+  // mid-less enrollment still shows something rather than an empty card.
+  const enrolledMidSet = new Set(activeEnrollment?.enrolledMids ?? []);
+  const displayMembers =
+    alreadyEnrolled && enrolledMidSet.size > 0
+      ? members.filter((m) => enrolledMidSet.has(m.mid))
+      : eligibleForDisplay;
   const donationsEnabled = process.env.NEXT_PUBLIC_FEATURE_SETU_DONATIONS === 'true';
   const usesDonation = program.capabilities.usesDonation;
   const selectedPaymentSource = offeringPaymentSource(enrolledOffering);
@@ -416,7 +437,7 @@ export default async function ProgramEnrollPage({ params }: Props) {
                   {/* Eligible members */}
                   {displayMembers.length > 0 && (
                     <>
-                      <SectionLabel>Who&apos;s enrolling</SectionLabel>
+                      <SectionLabel>{alreadyEnrolled ? 'Who’s enrolled' : 'Who’s enrolling'}</SectionLabel>
                       <EligibleMembersList
                         members={displayMembers}
                         eligibility={program.eligibility}
@@ -542,7 +563,12 @@ export default async function ProgramEnrollPage({ params }: Props) {
               {displayMembers.length > 0 && (
                 <div className="card" style={{ padding: 24, marginBottom: 14 }}>
                   <h3 style={{ fontSize: 13, textTransform: 'uppercase', letterSpacing: '.12em', fontWeight: 700, fontFamily: 'var(--body)', color: 'var(--body-text)', marginBottom: 16 }}>
-                    {isBv ? 'Children enrolling' : 'Members enrolling'}
+                    {/* A record once enrolled, a preview before - the tick means
+                        "will be enrolled" in one case and "is enrolled" in the
+                        other, so the heading has to say which. */}
+                    {isBv
+                      ? alreadyEnrolled ? 'Children enrolled' : 'Children enrolling'
+                      : alreadyEnrolled ? 'Members enrolled' : 'Members enrolling'}
                   </h3>
                   <div className="col" style={{ gap: 10 }}>
                     {displayMembers.map((m) => (
