@@ -97,6 +97,48 @@ test.describe('monthly pledge', () => {
     return rows.find((e) => e.programKey === 'bala-vihar' && e.status === 'active')?.eid;
   }
 
+  test('the dashboard CTA leads to the CHOICE, not straight to a $500 checkout', async ({ page }) => {
+    // ── THE REACHABILITY RULE ─────────────────────────────────────────────────
+    // The monthly plan was unreachable for weeks despite passing unit tests and
+    // a green pledge E2E, because every test opened /family/donate directly and
+    // no test ever asked whether a FAMILY can get there. They could not: both
+    // "Enroll →" and the dashboard's "Complete donation" went straight to
+    // Stripe at the full amount (owner decision 2026-07-04, predating the
+    // pledge). A manager testing on preview reported never seeing the option.
+    //
+    // This asserts the property that was actually broken - that the CTA a
+    // family presses leads somewhere the two options are visible - rather than
+    // that a component renders when handed the right props.
+    await page.goto('/family');
+    // WAIT for the Bala Vihar card before counting anything. /family streams
+    // under PPR, so locators counted straight after goto() find nothing and the
+    // `test.skip` below fires on an empty page - the run then reports "passed"
+    // with this test quietly skipped, which is exactly the failure mode this
+    // suite has been bitten by before. A skip is not a pass.
+    await expect(
+      page.getByRole('heading', { name: /bala vihar/i }).filter({ visible: true }).first(),
+    ).toBeVisible({ timeout: 25_000 });
+
+    const cta = page.getByRole('link', { name: /complete donation/i }).filter({ visible: true }).first();
+    const button = page.getByRole('button', { name: /complete donation/i }).filter({ visible: true }).first();
+
+    const hasLink = (await cta.count()) > 0;
+    test.skip(
+      !hasLink && (await button.count()) === 0,
+      'no outstanding Bala Vihar donation for this family (already paid, or a live pledge already covers it)',
+    );
+
+    await (hasLink ? cta : button).click();
+    await page.waitForLoadState('domcontentloaded');
+
+    // Must NOT have gone straight to a one-time checkout.
+    expect(page.url(), 'the dashboard CTA jumped straight to Stripe, skipping the monthly choice').not.toMatch(
+      /stripe\.com/i,
+    );
+    // And the destination must actually present the monthly alternative.
+    await expect(visibleText(page, /a month instead/i).first()).toBeVisible({ timeout: 20_000 });
+  });
+
   test('starting a pledge redirects to a Stripe-hosted page, and never asks for a bank detail here', async ({ page }) => {
     // The button moved from the dashboard into the Bala Vihar donate flow on
     // 2026-07-27 - the monthly plan is one of two ways to pay THIS donation, so
@@ -237,36 +279,6 @@ test.describe('monthly pledge', () => {
       page.getByRole('button', { name: /give \$\d+ monthly/i }),
       'the dashboard is soliciting a monthly plan - that ask belongs on /family/donate',
     ).toHaveCount(0);
-  });
-
-  test('the dashboard CTA leads to the CHOICE, not straight to a $500 checkout', async ({ page }) => {
-    // ── THE REACHABILITY RULE ─────────────────────────────────────────────────
-    // The monthly plan was unreachable for weeks despite passing unit tests and
-    // a green pledge E2E, because every test opened /family/donate directly and
-    // no test ever asked whether a FAMILY can get there. They could not: both
-    // "Enroll →" and the dashboard's "Complete donation" went straight to
-    // Stripe at the full amount (owner decision 2026-07-04, predating the
-    // pledge). A manager testing on preview reported never seeing the option.
-    //
-    // This asserts the property that was actually broken - that the CTA a
-    // family presses leads somewhere the two options are visible - rather than
-    // that a component renders when handed the right props.
-    await page.goto('/family');
-    const cta = page.getByRole('link', { name: /complete donation/i }).filter({ visible: true }).first();
-    const button = page.getByRole('button', { name: /complete donation/i }).filter({ visible: true }).first();
-
-    const hasLink = await cta.count();
-    test.skip(!hasLink && !(await button.count()), 'this family has no outstanding Bala Vihar donation');
-
-    await (hasLink ? cta : button).click();
-    await page.waitForLoadState('domcontentloaded');
-
-    // Must NOT have gone straight to a one-time checkout.
-    expect(page.url(), 'the dashboard CTA jumped straight to Stripe, skipping the monthly choice').not.toMatch(
-      /stripe\.com/i,
-    );
-    // And the destination must actually present the monthly alternative.
-    await expect(visibleText(page, /a month instead/i).first()).toBeVisible({ timeout: 20_000 });
   });
 
   test('the monthly option is offered inside the Bala Vihar donate flow', async ({ page }) => {
