@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { toast } from '@cmt/ui';
 import type { PaymentSource } from '@cmt/shared-domain';
 import { startEnrollmentCheckout, type EnrollmentCheckoutResult } from './start-checkout-client';
+import { enrollFamily } from './enroll-client';
 
 interface EnrollCtaProps {
   /** The offering id (oid) to enroll the family in. */
@@ -42,45 +43,22 @@ export function EnrollCta({ oid, donationsEnabled, usesDonation = false, payment
   async function handleEnroll() {
     setPending(true);
     try {
-      const res = await fetch('/api/setu/enrollments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ oid }),
-      });
+      // The POST and its error wording live in `enroll-client` so the enroll
+      // page's donation choice can enrol a family too, without a second copy of
+      // the ladder that would drift from this one.
+      const result = await enrollFamily(oid);
 
-      if (res.status === 401) {
-        router.push(`/sign-in?from=${encodeURIComponent(safeFrom('/family/enroll'))}`);
-        return;
-      }
-
-      const json = await res.json() as { eid?: string; suggestedAmount?: number; donateUrl?: string; error?: string };
-
-      if (!res.ok) {
-        const err = json.error;
-        if (err === 'offering-disabled') {
-          toast.error('This term is no longer enrolling — please contact the welcome team.');
-        } else if (err === 'offering-expired') {
-          toast.error('This term has ended — please contact the welcome team.');
-        } else if (err === 'offering-not-found') {
-          toast.error('This term is no longer available — please refresh and try again.');
-        } else if (err === 'program-not-available') {
-          toast.error('This program is not available right now — please check back soon.');
-        } else if (err === 'no-selectable-adults') {
-          // Deterministic and actionable - retrying changes nothing. Every adult
-          // in the household is assigned to teach (or there are none), so there
-          // is no one left who could attend the class.
-          toast.error('Everyone in your family is already teaching during this class.');
-        } else if (err === 'no-eligible-members') {
-          toast.error('Add a child to your family before enrolling in Bala Vihar.');
-        } else if (err === 'family-not-found' || err === 'missing-fid') {
-          console.error('[EnrollCta] unexpected error:', err);
-          toast.error('Something went wrong — please sign out and sign in again.');
-        } else {
-          toast.error('Enrollment failed — please try again.');
+      if (!result.ok) {
+        if (result.reason === 'unauthorized') {
+          router.push(`/sign-in?from=${encodeURIComponent(safeFrom('/family/enroll'))}`);
+          return;
         }
+        toast.error(result.message);
         setPending(false);
         return;
       }
+
+      const json = { eid: result.eid ?? undefined, suggestedAmount: result.suggestedAmount, donateUrl: result.donateUrl ?? undefined };
 
       if (donationsEnabled) {
         // Go STRAIGHT to Stripe at the enrollment-resolved amount — skip the

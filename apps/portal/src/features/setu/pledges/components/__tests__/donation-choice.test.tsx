@@ -8,7 +8,14 @@ vi.mock('@cmt/ui', async () => {
   return { ...actual, toast: toastMock };
 });
 
-const checkoutMock = vi.hoisted(() => ({ startEnrollmentCheckout: vi.fn(), startPledgeCheckout: vi.fn() }));
+const checkoutMock = vi.hoisted(() => ({
+  startEnrollmentCheckout: vi.fn(),
+  startPledgeCheckout: vi.fn(),
+  enrollFamily: vi.fn(),
+}));
+vi.mock('@/features/family/components/enroll-client', () => ({
+  enrollFamily: checkoutMock.enrollFamily,
+}));
 vi.mock('@/features/family/components/start-checkout-client', () => ({
   startEnrollmentCheckout: checkoutMock.startEnrollmentCheckout,
 }));
@@ -32,6 +39,7 @@ beforeEach(() => {
   toastMock.error.mockReset();
   checkoutMock.startEnrollmentCheckout.mockReset();
   checkoutMock.startPledgeCheckout.mockReset();
+  checkoutMock.enrollFamily.mockReset();
   Object.defineProperty(window, 'location', {
     configurable: true,
     writable: true,
@@ -121,6 +129,93 @@ describe('DonationChoice - TWO instances on one page (mobile tree + desktop tree
     renderBothTrees();
     const ids = screen.getAllByRole('radio').map((r) => r.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+describe('DonationChoice - a family that has NOT enrolled yet', () => {
+  // The choice originally rendered only for already-enrolled families, so a
+  // family joining for the FIRST time - exactly who is deciding how to pay - was
+  // still met by the old pair of buttons ("Enroll →" plus a separate "Give $51
+  // monthly"). Both answers need an enrollment: the one-time checkout pins to an
+  // eid, and a monthly plan funding Bala Vihar for a family not IN Bala Vihar is
+  // nonsense. So this click enrols, then pays.
+  const notEnrolled = { ...base, eid: null, enrollOid: 'bv-brampton-2026-27' };
+
+  it('says it will enrol, rather than doing it silently under "Continue"', () => {
+    render(<DonationChoice {...notEnrolled} />);
+    expect(screen.getByRole('button', { name: /enroll and continue/i })).toBeInTheDocument();
+  });
+
+  it('enrols first, then sends the family to the one-time checkout', async () => {
+    const user = userEvent.setup();
+    checkoutMock.enrollFamily.mockResolvedValueOnce({ ok: true, eid: 'NEW-EID', suggestedAmount: 500, donateUrl: null });
+    checkoutMock.startEnrollmentCheckout.mockResolvedValueOnce({ ok: true, url: 'https://checkout.stripe.com/c/pay/cs_1' });
+
+    render(<DonationChoice {...notEnrolled} />);
+    await user.click(screen.getByRole('button', { name: /enroll and continue/i }));
+
+    await waitFor(() => expect(window.location.href).toBe('https://checkout.stripe.com/c/pay/cs_1'));
+    expect(checkoutMock.enrollFamily).toHaveBeenCalledWith('bv-brampton-2026-27');
+    // The eid the SERVER just minted, not the null prop.
+    expect(checkoutMock.startEnrollmentCheckout).toHaveBeenCalledWith('NEW-EID', 500);
+  });
+
+  it('enrols first, then sends the family to the hosted mandate page', async () => {
+    const user = userEvent.setup();
+    checkoutMock.enrollFamily.mockResolvedValueOnce({ ok: true, eid: 'NEW-EID', suggestedAmount: 500, donateUrl: null });
+    checkoutMock.startPledgeCheckout.mockResolvedValueOnce({ ok: true, checkoutUrl: 'https://checkout.stripe.com/c/pay/cs_pad' });
+
+    render(<DonationChoice {...notEnrolled} />);
+    await user.click(screen.getByRole('radio', { name: /monthly pledge/i }));
+    await user.click(screen.getByRole('button', { name: /enroll and continue/i }));
+
+    await waitFor(() => expect(window.location.href).toBe('https://checkout.stripe.com/c/pay/cs_pad'));
+    // Enrolment still happens on the monthly path - a pledge funding a programme
+    // the family has not joined would be nonsense.
+    expect(checkoutMock.enrollFamily).toHaveBeenCalledTimes(1);
+    expect(checkoutMock.startEnrollmentCheckout).not.toHaveBeenCalled();
+  });
+
+  it('prefers the SERVER-resolved amount over the rendered one', async () => {
+    // The page's figure can be stale by the time this runs; the server re-derives
+    // the floor, so its answer wins.
+    const user = userEvent.setup();
+    checkoutMock.enrollFamily.mockResolvedValueOnce({ ok: true, eid: 'NEW-EID', suggestedAmount: 250, donateUrl: null });
+    checkoutMock.startEnrollmentCheckout.mockResolvedValueOnce({ ok: true, url: 'https://x' });
+
+    render(<DonationChoice {...notEnrolled} oneTimeAmountCAD={500} />);
+    await user.click(screen.getByRole('button', { name: /enroll and continue/i }));
+
+    await waitFor(() => expect(checkoutMock.startEnrollmentCheckout).toHaveBeenCalledWith('NEW-EID', 250));
+  });
+
+  it('touches NEITHER payment path when enrolment fails', async () => {
+    // Enrolment is free and reversible; the payment after it is neither. A
+    // failure must stop before any money moves.
+    const user = userEvent.setup();
+    checkoutMock.enrollFamily.mockResolvedValueOnce({ ok: false, reason: 'failed', message: 'Add a child to your family before enrolling in Bala Vihar.' });
+
+    render(<DonationChoice {...notEnrolled} />);
+    const cta = screen.getByRole('button', { name: /enroll and continue/i });
+    await user.click(cta);
+
+    await waitFor(() =>
+      expect(toastMock.error).toHaveBeenCalledWith(expect.stringMatching(/Add a child/)),
+    );
+    expect(checkoutMock.startEnrollmentCheckout).not.toHaveBeenCalled();
+    expect(checkoutMock.startPledgeCheckout).not.toHaveBeenCalled();
+    expect(cta).not.toBeDisabled();
+  });
+
+  it('does not re-enrol a family that already has an eid', async () => {
+    const user = userEvent.setup();
+    checkoutMock.startEnrollmentCheckout.mockResolvedValueOnce({ ok: true, url: 'https://x' });
+
+    render(<DonationChoice {...base} enrollOid="bv-brampton-2026-27" />);
+    await user.click(screen.getByRole('button', { name: /continue to donation/i }));
+
+    await waitFor(() => expect(checkoutMock.startEnrollmentCheckout).toHaveBeenCalled());
+    expect(checkoutMock.enrollFamily).not.toHaveBeenCalled();
   });
 });
 

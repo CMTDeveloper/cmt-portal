@@ -277,15 +277,33 @@ export default async function ProgramEnrollPage({ params }: Props) {
   // `activeEnrollment` for the two reads below instead of trusting a flag.
   const choiceEnrollment =
     pledgeEligible && alreadyEnrolled && onlineDonationsEnabled ? activeEnrollment : null;
-  const donationChoice = choiceEnrollment ? (
-    <DonationChoice
-      eid={choiceEnrollment.eid}
-      oneTimeAmountCAD={choiceEnrollment.effectiveSuggestedAmount}
-      monthlyAmountCAD={configuredMonthlyAmountCAD()}
-      canStartPledge={isManager}
-      pledgeState={pledgeState}
-    />
-  ) : null;
+
+  // ── The NOT-yet-enrolled case ──────────────────────────────────────────────
+  //
+  // Originally the choice was scoped to already-enrolled families, on the
+  // grounds that it is the only state the design draws and the only one with an
+  // `eid`. That was wrong in practice: a family joining for the FIRST time is
+  // exactly who is deciding how to pay, and they were still met by the old pair
+  // of buttons ("Enroll →" plus a separate "Give $51 monthly"). DonationChoice
+  // now enrols them itself when handed an `enrollOid`, so both states get one
+  // decision. Requires a manager and a single open offering - the multi-offering
+  // path (`showInlinePanel`) owns its own term picker and submit.
+  const choiceEnrollOid =
+    pledgeEligible && !alreadyEnrolled && isManager && !bvNoChildren && openOfferings.length <= 1
+      ? ctaOid
+      : null;
+
+  const donationChoice =
+    choiceEnrollment || choiceEnrollOid ? (
+      <DonationChoice
+        eid={choiceEnrollment?.eid ?? null}
+        enrollOid={choiceEnrollOid}
+        oneTimeAmountCAD={choiceEnrollment?.effectiveSuggestedAmount ?? displaySuggestedAmount ?? 0}
+        monthlyAmountCAD={configuredMonthlyAmountCAD()}
+        canStartPledge={isManager}
+        pledgeState={pledgeState}
+      />
+    ) : null;
 
   // When MULTIPLE offerings are open and the manager can still enroll, the term
   // picker and submit must share client state — render them together via

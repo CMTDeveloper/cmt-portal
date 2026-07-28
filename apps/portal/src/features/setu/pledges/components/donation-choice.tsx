@@ -4,6 +4,7 @@ import { useId, useState } from 'react';
 import { SetuIcon, toast } from '@cmt/ui';
 import { startEnrollmentCheckout } from '@/features/family/components/start-checkout-client';
 import { startPledgeCheckout } from '@/features/family/components/start-pledge-client';
+import { enrollFamily } from '@/features/family/components/enroll-client';
 
 /** Where a family's monthly plan currently stands, as far as this screen cares. */
 export type PledgeState =
@@ -15,8 +16,17 @@ export type PledgeState =
   | 'giving';
 
 export interface DonationChoiceProps {
-  /** Enrollment id - the one-time checkout is pinned to this enrollment. */
-  eid: string;
+  /**
+   * Enrollment id, or `null` when the family has NOT enrolled yet. The one-time
+   * checkout is pinned to this enrollment; with no eid there is nothing to pin
+   * to, so `enrollOid` must carry the offering to join first.
+   */
+  eid: string | null;
+  /**
+   * The offering to enrol into when `eid` is null. Supplying both is harmless -
+   * `eid` wins, because an existing enrollment is never re-created.
+   */
+  enrollOid?: string | null;
   /** The enrollment-resolved one-time ask. Re-derived and enforced server-side. */
   oneTimeAmountCAD: number;
   /** The configured monthly ask. What is DEBITED lives on the Stripe Price. */
@@ -53,6 +63,7 @@ export interface DonationChoiceProps {
  */
 export function DonationChoice({
   eid,
+  enrollOid = null,
   oneTimeAmountCAD,
   monthlyAmountCAD,
   canStartPledge,
@@ -117,6 +128,42 @@ export function DonationChoice({
     if (pending) return;
     setPending(true);
 
+    // ── Enrol first when the family has not joined yet ────────────────────────
+    //
+    // Both answers require an enrollment: the one-time checkout is pinned to an
+    // `eid`, and a monthly plan that funds Bala Vihar for a family not IN Bala
+    // Vihar is nonsense. Enrolling here rather than behind a separate "Enroll"
+    // button is the whole point - the family previously met TWO buttons and had
+    // to guess which one also enrolled them.
+    //
+    // Enrollment is free and reversible by the office; the payment step after it
+    // is neither. So a failure here stops before either payment path is touched.
+    let checkoutEid = eid;
+    let checkoutAmount = oneTimeAmountCAD;
+    if (!checkoutEid && enrollOid) {
+      let enrolled: Awaited<ReturnType<typeof enrollFamily>>;
+      try {
+        enrolled = await enrollFamily(enrollOid);
+      } catch {
+        toast.error('Network error - please try again.');
+        setPending(false);
+        return;
+      }
+      if (!enrolled.ok) {
+        if (enrolled.reason === 'unauthorized') {
+          window.location.href = '/sign-in?from=%2Ffamily';
+          return;
+        }
+        toast.error(enrolled.message);
+        setPending(false);
+        return;
+      }
+      checkoutEid = enrolled.eid;
+      // The server's resolved amount wins over the rendered one - it re-derives
+      // the floor, and the page's figure can be stale by the time this runs.
+      if (enrolled.suggestedAmount >= 1) checkoutAmount = enrolled.suggestedAmount;
+    }
+
     if (choice === 'monthly') {
       let result: Awaited<ReturnType<typeof startPledgeCheckout>>;
       try {
@@ -157,16 +204,19 @@ export function DonationChoice({
       return;
     }
 
-    // Degenerate case (free program / $0 suggested): the checkout API requires
-    // amountCAD >= 1, so fall back to the full donate page, which handles it.
-    if (oneTimeAmountCAD < 1) {
-      window.location.href = `/family/donate?eid=${encodeURIComponent(eid)}`;
+    // No eid even after the enrol step - a free/$0 offering returns none, and
+    // the checkout API requires amountCAD >= 1 anyway. The donate page owns that
+    // flow. `/family/donate` with no eid resolves the family's own enrollment.
+    if (!checkoutEid || checkoutAmount < 1) {
+      window.location.href = checkoutEid
+        ? `/family/donate?eid=${encodeURIComponent(checkoutEid)}`
+        : '/family/donate';
       return;
     }
 
     let result: Awaited<ReturnType<typeof startEnrollmentCheckout>>;
     try {
-      result = await startEnrollmentCheckout(eid, oneTimeAmountCAD);
+      result = await startEnrollmentCheckout(checkoutEid, checkoutAmount);
     } catch {
       toast.error('Network error - please try again.');
       setPending(false);
@@ -249,7 +299,10 @@ export function DonationChoice({
         onClick={handleContinue}
         style={{ display: 'block', width: '100%', opacity: pending ? 0.7 : 1 }}
       >
-        {pending ? 'Starting…' : 'Continue to donation →'}
+        {/* A family who has not joined yet is enrolled by this same click, and
+            the label has to say so - "Continue to donation" would enrol them
+            silently, which the old two-button layout at least made explicit. */}
+        {pending ? 'Starting…' : eid ? 'Continue to donation →' : 'Enroll and continue →'}
       </button>
     </ChoiceShell>
   );
