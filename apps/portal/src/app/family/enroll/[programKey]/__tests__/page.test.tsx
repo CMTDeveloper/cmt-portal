@@ -482,14 +482,24 @@ describe('ProgramEnrollPage (bala-vihar) — the monthly alternative', () => {
     flagsMock.setuPledge = false;
   });
 
-  it('offers the monthly option beside the one-time ask', async () => {
+  it('offers both ways to pay to a family that has NOT enrolled yet', async () => {
+    // This assertion changed shape on 2026-07-28 and the INTENT is what matters:
+    // the monthly plan must be reachable by a family joining for the first time.
+    // It used to be reachable as a standalone card beside an "Enroll →" button -
+    // two primary buttons for one decision. It is now the same radio group the
+    // enrolled state gets, whose CTA enrols and then pays.
     mockGetEnrollments.mockResolvedValue([]);
     mockGetOpenOfferingsForFamily.mockResolvedValue([ACTIVE_PERIOD]);
 
     const page = await ProgramEnrollPage({ params: makeParams() });
     render(page);
 
-    expect(screen.getAllByTestId('monthly-option').length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('radio', { name: /monthly pledge/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('radio', { name: /full donation/i }).length).toBeGreaterThan(0);
+    // And the label admits that this click also enrols them.
+    expect(screen.getAllByRole('button', { name: /enroll and continue/i }).length).toBeGreaterThan(0);
+    // The standalone card is gone from this state - it was the second CTA.
+    expect(screen.queryByTestId('monthly-option')).toBeNull();
   });
 
   it('offers nothing when the pledge flag is off - production at launch', async () => {
