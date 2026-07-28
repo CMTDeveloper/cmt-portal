@@ -115,15 +115,20 @@ export default defineConfig({
   // Keyed on the RESOLVED url, not on "was PLAYWRIGHT_BASE_URL set": now that
   // the default is a deployed preview, the old check would have booted a local
   // server and then pointed every test at Preview anyway.
-  webServer:
-    RESOLVED_BASE_URL !== LOCAL_BASE_URL
-    ? undefined
-    : {
-        // dev:e2e = `next dev --port=3001`. A dedicated script avoids the
-        // `pnpm … dev -- --port` indirection, which pnpm mis-parses as a directory.
-        command: 'pnpm --filter @cmt/portal dev:e2e',
-        url: LOCAL_BASE_URL,
-        reuseExistingServer: !process.env.CI,
-        timeout: 120 * 1000,
-      },
+  //
+  // Spread rather than `webServer: cond ? {...} : undefined` - the repo runs
+  // `exactOptionalPropertyTypes`, under which an explicit `undefined` is not the
+  // same as an absent key, and Playwright's own types reject it.
+  ...(RESOLVED_BASE_URL === LOCAL_BASE_URL
+    ? {
+        webServer: {
+          // dev:e2e = `next dev --port=3001`. A dedicated script avoids the
+          // `pnpm … dev -- --port` indirection, which pnpm mis-parses as a directory.
+          command: 'pnpm --filter @cmt/portal dev:e2e',
+          url: LOCAL_BASE_URL,
+          reuseExistingServer: !process.env.CI,
+          timeout: 120 * 1000,
+        },
+      }
+    : {}),
 });

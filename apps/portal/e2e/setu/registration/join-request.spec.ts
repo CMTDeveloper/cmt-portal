@@ -73,7 +73,7 @@ test.describe('registration — gated co-manager join-request', () => {
   // the UI lookup steps MUST run in a CLEAN, unauthenticated browser context
   // (the `setu` project's storageState is a different, admin family).
   test('manager email lookup classifies as sign-in (UI + API)', async ({ browser }) => {
-    const ctx = await browser.newContext({ baseURL, storageState: undefined });
+    const ctx = await browser.newContext({ baseURL, storageState: EMPTY_STATE });
     const page = await ctx.newPage();
     try {
       // API contract.
@@ -102,7 +102,7 @@ test.describe('registration — gated co-manager join-request', () => {
 
   // ── 2. Gated member lookup → request panel; send → confirmation ────────────
   test('gated member email lookup classifies as request-to-join and sends a request', async ({ browser }) => {
-    const ctx = await browser.newContext({ baseURL, storageState: undefined });
+    const ctx = await browser.newContext({ baseURL, storageState: EMPTY_STATE });
     const page = await ctx.newPage();
     try {
       const res = await ctx.request.post('/api/setu/family-lookup', {
@@ -245,7 +245,7 @@ test.describe('registration — gated co-manager join-request', () => {
 
   // ── 6. Emergency / no-match email → register (matchAction null) ────────────
   test('an email not in contactKeys returns no match (continue to register)', async ({ browser }) => {
-    const ctx = await browser.newContext({ baseURL, storageState: undefined });
+    const ctx = await browser.newContext({ baseURL, storageState: EMPTY_STATE });
     const page = await ctx.newPage();
     try {
       // API: an email that was never indexed (e.g. an emergency-only contact)

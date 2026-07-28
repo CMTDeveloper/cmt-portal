@@ -1,0 +1,27 @@
+// ── WHY THIS FILE EXISTS ─────────────────────────────────────────────────────
+//
+// The pre-push gate is `typecheck && lint && test && build`. Until 2026-07-28
+// not one of those four ever loaded `e2e/`: `tsconfig.json` includes only
+// `src/**`, and the lint script is literally `eslint src`. 155 Playwright tests
+// across 42 files sat entirely outside the gate.
+//
+// That is not a hypothetical gap. `disclaimers.spec.ts` was pushed referencing
+// `E2E_BASE_URL` with no import for it - a ReferenceError the moment the file
+// loads - and every check reported green. The spec would have failed at run
+// time, in the middle of a suite whose other failures were being triaged as
+// product bugs.
+//
+// Playwright transpiles with esbuild and does NOT type-check, so running the
+// suite is not a substitute for this. Separate from `tsconfig.json` rather than
+// merged into it because the specs are Node/Playwright code, not app code, and
+// must never end up in the Next build graph.
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // The specs are not compiled by Next, so they need their own emit-free
+    // module resolution. `noEmit` is inherited.
+    "types": ["node"]
+  },
+  "include": ["e2e/**/*.ts", "playwright.config.ts"],
+  "exclude": ["node_modules", ".next", "dist", "coverage"]
+}

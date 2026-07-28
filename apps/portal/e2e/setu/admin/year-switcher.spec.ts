@@ -80,6 +80,7 @@ test.describe('Phase 2 — School-year switcher (/admin/levels)', () => {
     const years = await openPicker(page);
     const past = years.filter((y) => y < live).sort().reverse()[0];
     test.skip(!past, 'no past school year has BV data');
+    if (!past) return; // `test.skip` above already aborted; this only narrows for TS.
 
     await page.goto(`/admin/levels?year=${past}`);
     await expect(scopeBar(page)).toHaveAttribute('data-status', 'past', { timeout: 20_000 });
