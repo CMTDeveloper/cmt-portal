@@ -1,4 +1,5 @@
 import { test, expect, request as apiRequest, type Page, type APIRequestContext } from '@playwright/test';
+import { E2E_BASE_URL } from '../../_helpers';
 
 /**
  * The coordinator role, walked against DEPLOYED UAT. Everything Track A added
@@ -41,7 +42,7 @@ async function cookiesFor(email: string): Promise<Cookies> {
   const cached = cookieCache.get(email);
   if (cached) return cached;
   const ctx: APIRequestContext = await apiRequest.newContext({
-    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3001',
+    baseURL: E2E_BASE_URL,
   });
   try {
     const res = await ctx.post('/api/setu/auth/password-sign-in', { data: { email, password: PASSWORD } });

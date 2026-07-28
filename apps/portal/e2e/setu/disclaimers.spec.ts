@@ -1,5 +1,5 @@
 import { test, expect, request as pwRequest } from '@playwright/test';
-import { hasFamilyCreds } from '../_helpers';
+import { E2E_BASE_URL, hasFamilyCreds } from '../_helpers';
 import { signInFamilyAndSaveStorage } from '../auth-helpers';
 
 /**
@@ -37,11 +37,12 @@ import { signInFamilyAndSaveStorage } from '../auth-helpers';
  */
 test.describe.configure({ mode: 'serial' });
 
-// Same base-URL mechanism the Slice 1 setu specs use (there is no E2E_BASE_URL
-// export): PLAYWRIGHT_BASE_URL when targeting deployed UAT, else the local
-// dev:e2e server. Used only for the beforeAll/afterAll `request.newContext`
-// re-auth; the per-test `page`/`request` fixtures get baseURL from the config.
-const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3001';
+// The suite's ONE base-URL definition, shared with playwright.config.ts. Used
+// only for the beforeAll/afterAll `request.newContext` re-auth; the per-test
+// `page`/`request` fixtures get baseURL from the config. Never re-derive it from
+// process.env here - that is precisely the duplication that sent nine specs to a
+// dev server that was not running.
+const BASE_URL = E2E_BASE_URL;
 
 // A deep copy of the PRE-mutation content (intro + sections + acknowledgement)
 // captured in the test, so the afterAll can PUT the original content back and stop

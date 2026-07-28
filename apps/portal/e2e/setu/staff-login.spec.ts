@@ -42,6 +42,7 @@
  * clear it with the seed's `clear:otp-rate-limit` on the kiosk email and re-run.
  */
 import { test, expect, request } from '@playwright/test';
+import { E2E_BASE_URL } from '../_helpers';
 
 // Owner-supplied credential, read in-spec (mirroring kiosk-auto-enroll.spec.ts).
 // Only the password is needed here - the route maps the `sevak` username to the
@@ -51,7 +52,7 @@ const hasKioskCreds = Boolean(KIOSK_PASSWORD);
 
 // Fresh contexts need an explicit baseURL (request.newContext does not inherit the
 // project's `use.baseURL`). Same derivation as playwright.config.ts's default.
-const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3001';
+const baseURL = E2E_BASE_URL;
 
 test.describe('Kiosk staff login (deployed UAT)', () => {
   // (a) The kiosk PAGE is gated: an unauthenticated visit to /check-in is

@@ -1,5 +1,24 @@
 import type { Locator, Page } from '@playwright/test';
 
+/**
+ * ── THE ONE DEFINITION OF WHERE THE SUITE POINTS ────────────────────────────
+ *
+ * `playwright.config.ts` imports these, and every spec that builds its OWN
+ * request context (for a second persona's cookies) must use `E2E_BASE_URL`
+ * rather than re-reading the env var.
+ *
+ * Why this is centralised: nine call sites across eight specs each had their own
+ * `E2E_BASE_URL`. That was
+ * invisible while everyone passed the env var explicitly on the command line.
+ * The moment the default moved into the config (2026-07-28), all nine silently
+ * fell back to localhost and failed with ECONNREFUSED against a dev server that
+ * is deliberately not running - a failure that reads like a product fault and is
+ * not one. A default only helps if there is exactly one place it lives.
+ */
+export const PREVIEW_BASE_URL = 'https://cmt-setu-preview.vercel.app';
+export const LOCAL_BASE_URL = 'http://localhost:3001';
+export const E2E_BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? PREVIEW_BASE_URL;
+
 /** The family pages render mobile + desktop blocks both in the DOM; pick the
  *  visible one to avoid strict-mode multi-match. */
 export function visibleText(page: Page, text: string | RegExp): Locator {

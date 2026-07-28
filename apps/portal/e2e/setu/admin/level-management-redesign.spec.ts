@@ -5,7 +5,7 @@ import {
   type APIRequestContext,
   type Page,
 } from '@playwright/test';
-import { hasFamilyCreds } from '../../_helpers';
+import { E2E_BASE_URL, hasFamilyCreds } from '../../_helpers';
 
 // Slice "admin-managed locations + levels redesign" — the master-detail Level
 // management screen (/admin/levels), deployed UAT. The single seeded UAT user is
@@ -23,7 +23,7 @@ import { hasFamilyCreds } from '../../_helpers';
 // (data-testid="level-detail-desktop"); the md:hidden mobile drawer is scoped
 // out by keying every panel query off that testid.
 
-const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3001';
+const BASE_URL = E2E_BASE_URL;
 const STORAGE = 'e2e/.auth/family.json';
 
 const RUN = Date.now();

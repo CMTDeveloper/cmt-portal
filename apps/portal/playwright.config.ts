@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { defineConfig, devices } from '@playwright/test';
+import { E2E_BASE_URL, LOCAL_BASE_URL } from './e2e/_helpers';
 
 // Playwright's TEST RUNNER does not auto-load .env.local (only the Next dev
 // webServer does, via Next's own loader). auth.setup reads E2E_FAMILY_EMAIL /
@@ -68,9 +69,8 @@ const STORAGE = 'e2e/.auth/family.json';
 //
 // Equivalent and always correct by construction:
 //   https://cmt-setu-git-develop-chinmaya-mission-torontos-projects.vercel.app
-const PREVIEW_BASE_URL = 'https://cmt-setu-preview.vercel.app';
-const LOCAL_BASE_URL = 'http://localhost:3001';
-const RESOLVED_BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? PREVIEW_BASE_URL;
+// (defined in ./e2e/_helpers so the SPECS and this config cannot disagree)
+const RESOLVED_BASE_URL = E2E_BASE_URL;
 
 export default defineConfig({
   testDir: './e2e',

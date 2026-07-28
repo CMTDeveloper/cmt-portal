@@ -1,4 +1,5 @@
 import { test, expect, request as apiRequest, type APIRequestContext } from '@playwright/test';
+import { E2E_BASE_URL } from '../../_helpers';
 
 /**
  * Staff cross-family edit, walked against DEPLOYED UAT.
@@ -39,7 +40,7 @@ async function ctxFor(email: string): Promise<APIRequestContext> {
   const cached = contexts.get(email);
   if (cached) return cached;
   const ctx = await apiRequest.newContext({
-    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3001',
+    baseURL: E2E_BASE_URL,
   });
   const res = await ctx.post('/api/setu/auth/password-sign-in', {
     data: { email, password: PASSWORD },
