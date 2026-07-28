@@ -3,6 +3,7 @@ import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import type { PledgeStatus } from '@cmt/shared-domain/setu';
 import { createPadSetupLink } from './stripe-pad-client';
 import { configuredMonthlyAmountCAD } from './pledge-amount';
+import { portalBaseUrl as trustedPortalBaseUrl } from '@/lib/portal-base-url';
 
 /** Statuses that mean "this family already has a pledge in play". */
 const LIVE_STATUSES: readonly PledgeStatus[] = ['started', 'active'];
@@ -16,6 +17,13 @@ export interface StartPledgeActor {
   mid: string;
   email: string;
   name: string;
+  /**
+   * The incoming request, used ONLY to resolve the return origin for Stripe.
+   * Optional: without it the origin falls back to the configured env and then to
+   * production - never to a relative url, and never to a caller-supplied host
+   * (`portalBaseUrl` allowlists the host, so this cannot be redirected offsite).
+   */
+  req?: Request;
 }
 
 /**
@@ -98,8 +106,8 @@ export async function startPledge(actor: StartPledgeActor): Promise<StartPledgeR
       customerEmail: actor.email,
       customerName: actor.name,
       clientReferenceId: pid,
-      successUrl: `${portalBaseUrl()}/donate/success?pledge=${encodeURIComponent(pid)}`,
-      cancelUrl: `${portalBaseUrl()}/family`,
+      successUrl: `${pledgeReturnOrigin(actor.req)}/donate/success?pledge=${encodeURIComponent(pid)}`,
+      cancelUrl: `${pledgeReturnOrigin(actor.req)}/family`,
       metadata: { fid: actor.fid, pid },
     });
     // Only the handles - explicitly named, never a spread of the provider
@@ -117,6 +125,17 @@ export async function startPledge(actor: StartPledgeActor): Promise<StartPledgeR
   }
 }
 
-function portalBaseUrl(): string {
-  return (process.env.NEXT_PUBLIC_PORTAL_BASE_URL ?? '').replace(/\/+$/, '');
+/**
+ * The absolute origin for Stripe's successUrl / cancelUrl.
+ *
+ * Delegates to `lib/portal-base-url`, which chains configured env -> allowlisted
+ * request host -> prod fallback and can NEVER return empty. The previous
+ * `(env ?? '')` produced a RELATIVE url ("/donate/success?pledge=...") whenever
+ * `NEXT_PUBLIC_PORTAL_BASE_URL` was unset - which is the deliberate state of the
+ * Vercel PREVIEW environment, so the whole pledge flow was unusable there
+ * (Stripe requires an absolute return url). Threading the request through means
+ * a preview deployment returns the family to THAT deployment, not to production.
+ */
+function pledgeReturnOrigin(req?: Request): string {
+  return trustedPortalBaseUrl(req).replace(/\/+$/, '');
 }

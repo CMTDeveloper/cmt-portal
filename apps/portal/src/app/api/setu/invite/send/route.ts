@@ -10,6 +10,7 @@ import { sendManagedEmail } from '@/lib/aws/send-managed-email';
 import { setuInviteEmail } from '@/lib/aws/templates/setu-invite-email';
 import { allocateMemberPublicIds } from '@/features/setu/ids/public-id-allocator';
 import { nextMemberMid } from '@/features/setu/ids/member-mid';
+import { portalBaseUrl } from '@/lib/portal-base-url';
 
 
 const bodySchema = z.object({
@@ -170,8 +171,13 @@ export async function POST(req: Request) {
   }
 
   revalidateTag(`family-${fid}`, 'max');
-  const baseUrl = env.NEXT_PUBLIC_PORTAL_BASE_URL ?? '';
-  const acceptUrl = `${baseUrl}/invite/${token}`;
+  // portalBaseUrl(req), not `env.NEXT_PUBLIC_PORTAL_BASE_URL ?? ''`. The helper
+  // chains configured -> allowlisted request host -> prod fallback and can never
+  // return empty; the old `?? ''` produced a HOST-LESS link ("/invite/<token>")
+  // in a real email whenever the var was unset - which is exactly the state of
+  // the Vercel PREVIEW environment (2026-07-27), where the var is deliberately
+  // absent because preview URLs are per-deployment.
+  const acceptUrl = `${portalBaseUrl(req)}/invite/${token}`;
 
   // Guard for EMPTINESS, not nullness. Both are `let`s assigned unconditionally
   // inside the transaction, so the `!` is a definite-assignment escape and a

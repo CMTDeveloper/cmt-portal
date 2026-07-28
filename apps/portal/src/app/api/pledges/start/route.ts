@@ -45,6 +45,9 @@ export async function POST(req: Request) {
       mid: session.mid,
       email: session.email,
       name: fam.family.name,
+      // So a preview deployment returns the family to ITSELF after the mandate,
+      // instead of to production (or, before this, to a relative url).
+      req,
     });
     if (!result.created) {
       // 409, not 200: the caller asked to create something and nothing was

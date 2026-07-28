@@ -7,6 +7,7 @@ import { resolveSender } from '@/lib/aws/resolve-sender';
 import { sendManagedEmail } from '@/lib/aws/send-managed-email';
 import { setuJoinRequestEmail } from '@/lib/aws/templates/setu-join-request-email';
 import { createJoinRequest } from '@/features/setu/join-request/create-request';
+import { portalBaseUrl } from '@/lib/portal-base-url';
 
 // Open (no session required — a requester may not have one yet). Anti-enumeration:
 // ALWAYS answers {ok:true} for a well-formed body. The server only creates +
@@ -57,8 +58,13 @@ export async function POST(req: Request) {
     // Notify ALL family managers by email (+ SMS best-effort). Failures are
     // swallowed so a flaky notification never reveals match state to the caller
     // (we always answer {ok:true}).
-    const baseUrl = env.NEXT_PUBLIC_PORTAL_BASE_URL ?? '';
-    const reviewUrl = `${baseUrl}/join-request/${result.token}`;
+    // portalBaseUrl(req), not `env.NEXT_PUBLIC_PORTAL_BASE_URL ?? ''`. The helper
+    // chains configured -> allowlisted request host -> prod fallback and can never
+    // return empty; the old `?? ''` produced a HOST-LESS link ("/join-request/<token>")
+    // in a real email whenever the var was unset - which is exactly the state of
+    // the Vercel PREVIEW environment (2026-07-27), where the var is deliberately
+    // absent because preview URLs are per-deployment.
+    const reviewUrl = `${portalBaseUrl(req)}/join-request/${result.token}`;
     const sender = resolveSender();
     await Promise.allSettled(
       result.managers.flatMap((m) => {
