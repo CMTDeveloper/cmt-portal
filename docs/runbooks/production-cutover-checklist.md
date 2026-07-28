@@ -304,7 +304,7 @@ Source of truth: `turbo.json` `tasks.build.env` (must list every var or Vercel b
 |---|---|---|
 | `PORTAL_FIREBASE_*` | `chinmaya-setu-uat` | `chinmaya-setu-uat` **→ `chinmaya-setu-715b8` on Aug 3** |
 | `MASTER_FIREBASE_*` | `chinmaya-setu-715b8` (read-only) | `chinmaya-setu-715b8` (read-only) |
-| Feature flags | all on | all on |
+| Feature flags | all on (see the parity warning below) | all on |
 | Stripe | test host, `STRIPE_USE_TEST_CHECKOUT=true` | test host today; **live on Aug 3 — blocked, see §8** |
 | `SETU_*_ALLOWLIST` | **set** (must stay set — a preview deploy must never email a real family) | set today; **cleared on Aug 3** |
 | `NEXT_PUBLIC_PORTAL_BASE_URL` | **deliberately unset** — preview URLs are per-deployment, so a fixed value would put the wrong host in preview emails | the custom domain, from Aug 3 |
@@ -321,6 +321,34 @@ only form that (a) serves preview and (b) follows each new push instead of going
 that its source deployment matches the one behind
 `cmt-setu-git-develop-chinmaya-mission-torontos-projects.vercel.app` — a 200 alone proves nothing about which build
 answered.
+
+**Preview must match Production in VALUE, not just in NAME — and you cannot read the values.**
+`vercel env ls` prints `Encrypted` for every one of them, and sensitive vars pull back as empty strings, so a
+name-by-name comparison looks complete while proving nothing. On 2026-07-28 a name check passed and four
+`NEXT_PUBLIC_FEATURE_CHECK_IN_*` flags were still at `false` on Preview, rendering a genuinely different page.
+
+The only way to compare is **behaviourally**, and only where a flag is observable:
+
+```bash
+# a flag-gated page 404s when its flag is off; compare the two hosts
+for r in /check-in/staff-sign-in /check-in/guest; do
+  for h in https://cmt-setu-preview.vercel.app https://cmt-setu.vercel.app; do
+    printf '%s %s -> %s\n' "$h" "$r" "$(curl -s -o /dev/null -w '%{http_code}' "$h$r")"
+  done
+done
+```
+
+⚠️ **This method sees far less than it appears to.** Of the 16 flag-gated pages and 8 flag-gated APIs, exactly
+**one** (`/check-in/staff-sign-in`) is reachable without a session; on every other route the auth redirect (307)
+or the 401 fires *before* the flag gate, so both hosts answer identically no matter what their flags say. A clean
+run of the loop above is NOT evidence of parity for anything but that one route. The rest is only settled by
+running the authenticated E2E suite against Preview — which is the point of running it there.
+
+That one observable route did catch a real defect: on 2026-07-28 `NEXT_PUBLIC_FEATURE_CHECK_IN_KIOSK` was `true`
+on Production (set 2026-07-11, per the §14 entry) but `false` on Preview, so middleware redirected the kiosk to
+`/check-in/staff-sign-in` and Preview answered **404** — a dead end for a sevak at the door. Corrected on Preview
+the same day. Note this is the *Vercel Production env*, which is UAT-backed; the separate 715b8 kiosk flip is
+still a §8 cutover decision.
 
 ### 9.1 The Aug 3 Production delta — the ONLY things that change
 
