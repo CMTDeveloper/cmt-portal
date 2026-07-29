@@ -217,14 +217,24 @@ test.describe('monthly pledge', () => {
     // debit can fail days later, and a family told "thank you, you're giving"
     // would never look again.
     await page.goto('/family');
-    const body = card(page).first();
-    await expect(body).toBeVisible();
 
-    const text = (await body.textContent()) ?? '';
-    if (/setting up your monthly gift/i.test(text)) {
-      expect(text, 'the started state claims the gift is working').not.toMatch(/you.re giving|thank you/i);
-      // And no second start button, which would risk a SECOND authorised mandate.
-      await expect(body.getByRole('button', { name: /give \$\d+ monthly/i })).toHaveCount(0);
+    // ── The dashboard says this ONCE, in the Bala Vihar card ─────────────────
+    // It used to say it twice: the Bala Vihar card carried "your monthly gift is
+    // being confirmed", and a standalone "Monthly giving" card below repeated
+    // the same fact in different words. CMT Developer, 2026-07-28: "I thought we
+    // removed monthly giving option." The card is gone; the line stays where the
+    // plan belongs, because the pledge IS the Bala Vihar contribution.
+    await expect(
+      card(page),
+      'the standalone Monthly giving card is back - the dashboard now states this once, in the Bala Vihar card',
+    ).toHaveCount(0);
+
+    const pendingLine = visibleText(page, /monthly gift is being confirmed/i);
+    if ((await pendingLine.count()) > 0) {
+      const text = (await page.locator('body').textContent()) ?? '';
+      expect(text, 'the started state claims the gift is working').not.toMatch(/you.re giving|thank you for setting up/i);
+      // And no start button anywhere, which would risk a SECOND authorised mandate.
+      await expect(page.getByRole('button', { name: /give \$\d+ monthly/i })).toHaveCount(0);
 
       // ── AND THE DONATION BANNER MUST OFFER NO WAY TO PAY AGAIN ─────────────
       // Nothing is paid while the mandate is confirming, so the banner still

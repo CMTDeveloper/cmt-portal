@@ -7,7 +7,6 @@ import { flags } from '@/lib/flags';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 import { PendingJoinRequestsPanel } from '@/features/family/components/pending-join-requests-panel';
 import { CompleteDonationButton } from '@/features/family/components/complete-donation-button';
-import { PledgeCard } from '@/features/family/components/pledge-card';
 import { loadPledgeSlot, type PledgeSlot } from '@/features/setu/pledges/load-pledge-slot';
 import { loadFamilyDashboard, type BvChildView } from './_helpers/load-dashboard';
 import { buildFamilyDashboardModel, type FamilyDashboardModel } from './_helpers/dashboard-model';
@@ -531,25 +530,22 @@ export default async function FamilyDashboardPage() {
               {childrenList && <div style={{ marginTop: 16 }}>{childrenList}</div>}
             </div>
 
-            {/* Monthly giving: STATE ONLY on the dashboard, never an ask.
-                The ask moved into the Bala Vihar donate flow on 2026-07-27
-                (Vaibhav: "This should not be separate. It's part of Bala
-                Vihar."), because a standalone card here read as an unrelated
-                second request for money - and rendered even for families whose
-                own dashboard said "Not enrolled". A family already on a plan
-                still needs to see it, so the card stays for THAT case with
-                `canStart={false}`. Rendered in BOTH column variants because this
-                page ships mobile and desktop markup side by side - any E2E
-                locator needs `.filter({ visible: true })`. */}
-            {pledgeSlot?.pledge && (
-              <PledgeCard
-                pledge={pledgeSlot.pledge}
-                askAmountCAD={pledgeSlot.askAmountCAD}
-                canStart={false}
-                mobile
-              />
-            )}
-
+            {/* ── No standalone "Monthly giving" card here, by decision ────────
+                CMT Developer, 2026-07-28: "I thought we removed monthly giving
+                option." The dashboard was saying the same thing twice - the Bala
+                Vihar card already carries "Your monthly gift is being confirmed
+                - there's nothing to do right now", and a second card below it
+                repeated the point in different words.
+                One statement, in the card the plan actually belongs to: the
+                pledge IS the Bala Vihar contribution (Vaibhav, 2026-07-27 -
+                "This should not be separate. It's part of Bala Vihar"), so the
+                Bala Vihar card is where it reads as context rather than as a
+                second, unrelated notice.
+                The acknowledgement itself is NOT lost - that mattered, because a
+                family who has just authorised a recurring bank debit must see
+                the portal confirm it somewhere. `pledgeSlot` is still read; it
+                drives `pledgePending`, which is what puts that line on the Bala
+                Vihar card and suppresses the donate prompt. */}
             <KeepIdBanner />
           </div>
         </CspRoot>
@@ -619,15 +615,7 @@ export default async function FamilyDashboardPage() {
           {childrenList && <div style={{ marginTop: 20 }}>{childrenList}</div>}
         </div>
 
-        {/* State only - see the mobile column above. */}
-        {pledgeSlot?.pledge && (
-          <PledgeCard
-            pledge={pledgeSlot.pledge}
-            askAmountCAD={pledgeSlot.askAmountCAD}
-            canStart={false}
-          />
-        )}
-
+        {/* No standalone "Monthly giving" card - see the mobile column above. */}
         <KeepIdBanner />
       </div>
     </>

@@ -223,13 +223,36 @@ export default function FamilyLayout({ children }: { children: React.ReactNode }
               and `display:flex` lets that aside stretch to full height exactly
               as it did when it was the flex item. Renders identically.
 
-              Honest limit: the misplacement is intermittent and I could not
-              reproduce it on demand, so this is reasoned from the mechanism
-              rather than proven by a red-to-green test. Vercel's Skew
-              Protection - which would remove the deploy-boundary trigger at the
-              platform level - is Pro-only and we are on Hobby. If the reports
-              continue, `aside.textContent.length` is the discriminator: ~90-115
-              healthy, thousands when broken. */}
+              ⚠️ THIS DID NOT FIX THE REPORTED BUG. Verified against the
+              deployed build immediately after shipping it: the dashboard still
+              lands inside the <aside>, now inside this very wrapper. Containing
+              the boundary is still correct hygiene - a loose boundary among
+              siblings is a real hazard and this shell was the only one with it -
+              so the wrapper stays. But do not read it as the cure.
+
+              WHAT IT ACTUALLY IS (evidence, 2026-07-28, live in the owner's
+              browser). When broken, the sidebar has FOUR children instead of
+              three; the extra one holds a second copy of sidebar markup wrapping
+              the whole page, fenced by React's own `<!--&-->`/`<!--$-->`
+              Activity+Suspense markers. Crucially that node has **no
+              `__reactFiber$` key**, so React never claimed it: it is ORPHANED
+              SERVER HTML left behind after hydration bailed, while React's real
+              tree is one of the zero-width copies. That is a hydration failure,
+              not a streaming-marker misplacement - which is why wrapping the
+              boundary changed nothing.
+
+              DISCRIMINATOR for any future check - and note the trap: use the
+              VISIBLE aside, because `document.querySelector('aside')` returns a
+              hidden mobile one and reports false health.
+                [...document.querySelectorAll('aside')]
+                  .find(a => a.getBoundingClientRect().width > 0)
+              Broken: 4 children, textContent includes the greeting.
+              Healthy: 3 children.
+
+              NEXT STEP is to catch the hydration error itself - Sentry has been
+              wired since 2026-06-26 and would have been recording React #418 /
+              #423 / #425 all along. Vercel Skew Protection (which would remove
+              the deploy-boundary trigger) is Pro-only; this team is on Hobby. */}
           <div style={{ display: 'flex' }}>
             <Suspense fallback={<DesktopSidebar showSignOut/>}>
               <SidebarWithIdentity />
