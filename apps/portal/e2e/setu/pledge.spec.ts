@@ -136,7 +136,18 @@ test.describe('monthly pledge', () => {
       /stripe\.com/i,
     );
     // And the destination must actually present the monthly alternative.
-    await expect(visibleText(page, /a month instead/i).first()).toBeVisible({ timeout: 20_000 });
+    //
+    // ── Why this matches TWO wordings ─────────────────────────────────────────
+    // It used to pin `/a month instead/i` alone - the standalone
+    // `MonthlyDonationOption` card. `DonationChoice` superseded that on
+    // 2026-07-28 with a radio group reading "Monthly pledge · $51", so this
+    // failed against a destination that was doing exactly the right thing, and
+    // it stayed red because the spec had never been run. The PROPERTY this test
+    // exists for is reachability - that the CTA a family presses leads somewhere
+    // both ways to pay are visible - not which of the two components draws it.
+    await expect(visibleText(page, /monthly pledge|a month instead/i).first()).toBeVisible({
+      timeout: 20_000,
+    });
   });
 
   test('starting a pledge redirects to a Stripe-hosted page, and never asks for a bank detail here', async ({ page }) => {
@@ -317,9 +328,29 @@ test.describe('monthly pledge', () => {
     await page.goto(`/family/donate?eid=${bvEid}`);
     // The one-time path is still the primary action...
     await expect(visibleText(page, /Your donation/i).first()).toBeVisible();
-    // ...and the instalment alternative sits beside it, saying plainly that it
-    // does not stop on its own. That sentence is the honesty requirement: a
-    // family who believes a bank debit ends by itself has been misled.
+
+    // ── ⚠️ ORDER-COUPLED, and deliberately branch rather than skip ────────────
+    // The pledge-start test ABOVE leaves a `started` pledge on this shared
+    // family until the describe's afterAll cancels it. A pledge in play
+    // correctly REPLACES this ask with "your monthly gift is being set up" -
+    // that is the double-charge guard, not a fault - so pinning the ask alone
+    // made a passing feature look broken whenever the whole file ran.
+    //
+    // Branch instead of `test.skip`: a skip is not a pass, and this file has
+    // been bitten by that before. Whichever state the family is in, ONE of the
+    // two must hold - the regression this guards is neither being present.
+    const covered = await visibleText(page, /monthly gift is being set up/i).count();
+    if (covered > 0) {
+      await expect(visibleText(page, /nothing more for you to do/i).first()).toBeVisible();
+      // And it must NOT still be soliciting while a mandate is confirming.
+      await expect(page.getByRole('button', { name: /give \$\d+ monthly/i })).toHaveCount(0);
+      return;
+    }
+
+    // ...the instalment alternative sits beside the one-time ask, saying plainly
+    // that it does not stop on its own. That sentence is the honesty
+    // requirement: a family who believes a bank debit ends by itself has been
+    // misled.
     await expect(visibleText(page, /a month instead/i).first()).toBeVisible({ timeout: 20_000 });
     await expect(visibleText(page, /continues until you stop it/i).first()).toBeVisible();
   });
