@@ -22,6 +22,29 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
+## 2026-07-29 - NEW route: `POST /api/pledges/abandon` (**additive - nothing existing changed**)
+
+Lets a family clear a monthly plan they started but never finished authorising, so they can choose again. Manager-only, same `/api/pledges/*` rule as `start`. **No body** - which pledge is decided server-side from the session's `fid`; a client-supplied pid would let a manager clear a record by guessing its id.
+
+```ts
+// 200 - cleared; re-read the family's pledge, the choice is available again
+{ ok: true; pid: string }
+// 409 - Stripe says the hosted page WAS submitted; a mandate may exist
+{ error: 'mandate-may-exist' }
+// 409 - nothing in flight; the screen is stale, re-read and re-render
+{ error: 'nothing-to-abandon' }
+// 409 - lost a race with the reconciler/an admin
+{ error: 'already-cancelled' | 'not-cancellable' }
+// 404 flag off | 401 no-session / no-family | 403 manager-required
+// 503 provider-unavailable  (could not ask Stripe ⇒ refused, NOT an error to retry blindly)
+```
+
+**Why it exists:** an abandoned hosted session answers `state: "pending"` forever, so the pledge stays `started` and every payment surface refuses the family - `POST /api/pledges/start` included, with 409 `already-started`. There is no admin action for it either.
+
+**The mobile MUST NOT treat 409 `mandate-may-exist` as retryable.** It means the bank may already hold a mandate; the honest message is *wait for it to confirm, or contact the temple office*. Retrying can only ever fail, and clearing the record locally would let the family authorise a SECOND debit that nobody can stop.
+
+`503 provider-unavailable` means we could not reach Stripe to check - do not clear anything client-side; show "try again later".
+
 ## 2026-07-28 - `f85a1d2` - `POST /api/pledges/start` gains a NEW 409: `enrollment-required`
 
 **Action required: the mobile must handle a second, differently-shaped 409 on this route.**

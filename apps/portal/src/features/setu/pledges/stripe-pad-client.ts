@@ -197,6 +197,45 @@ export async function getCheckoutSessionResult(sessionId: string): Promise<PadRe
   return toResult(data);
 }
 
+/**
+ * Was the hosted page ever SUBMITTED? A narrower question than `PadResult`.
+ *
+ * ── Why this exists ─────────────────────────────────────────────────────────
+ * `state` collapses two very different situations into `pending`: "the family
+ * authorised a mandate and the bank is confirming it" and "the family opened the
+ * page and walked away". Vaibhav, 2026-07-28: *"didn't even complete PAD
+ * process. I clicked and backed out from stripe page."* Probing the service for
+ * that exact session returned
+ *   {"state":"pending","reason":"PAD setup not completed yet",
+ *    "stripe":{"mode":"setup","status":"open"}}
+ * so the pledge sat `started` forever, every payment surface refused the family,
+ * and `/api/pledges/start` answered 409 `already-started`. A dead end.
+ *
+ * ── Why reading nested `stripe.status` is safe HERE and nowhere else ────────
+ * 🔴 It is NOT safe for judging SUCCESS - `complete` is set even for a mandate
+ * that later FAILS, which is precisely why `toResult` reads the top-level
+ * `state`. This function asks a different question: *was anything submitted at
+ * all?* Stripe's Checkout Session status answers exactly that, and only that:
+ *   open     - never submitted; no mandate can exist
+ *   expired  - never submitted, and now unusable
+ *   complete - submitted; a mandate may well exist
+ * Do not widen this to infer success. It has one job.
+ *
+ * FAILS CLOSED: anything unrecognised is `submitted`, because the cost of a
+ * wrong `not-submitted` is a family authorising a SECOND bank mandate.
+ */
+export type SessionSubmission = 'not-submitted' | 'submitted';
+
+export async function getCheckoutSessionSubmission(sessionId: string): Promise<SessionSubmission> {
+  const data = await post('/checkout-session-result', { sessionId });
+  const stripe = data['stripe'];
+  const status =
+    stripe !== null && typeof stripe === 'object'
+      ? (stripe as Record<string, unknown>)['status']
+      : undefined;
+  return status === 'open' || status === 'expired' ? 'not-submitted' : 'submitted';
+}
+
 export interface MonthlySubscription {
   subscriptionId: string;
   status: string | null;

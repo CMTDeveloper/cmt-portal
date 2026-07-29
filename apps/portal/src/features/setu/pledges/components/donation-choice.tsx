@@ -5,6 +5,7 @@ import { SetuIcon, toast } from '@cmt/ui';
 import { startEnrollmentCheckout } from '@/features/family/components/start-checkout-client';
 import { startPledgeCheckout } from '@/features/family/components/start-pledge-client';
 import { enrollFamily } from '@/features/family/components/enroll-client';
+import { abandonPledge } from '@/features/family/components/abandon-pledge-client';
 
 /** Where a family's monthly plan currently stands, as far as this screen cares. */
 export type PledgeState =
@@ -133,6 +134,7 @@ export function DonationChoice({
             enrollment while they are not yet in the program - so the one thing
             still to do gets its own button rather than being written away. */}
         {!eid && enrollOid && <EnrollOnlyButton oid={enrollOid} />}
+        <AbandonPledgeButton />
       </ChoiceShell>
     );
   }
@@ -322,6 +324,88 @@ export function DonationChoice({
         {pending ? 'Starting…' : eid ? 'Continue to donation →' : 'Enroll and continue →'}
       </button>
     </ChoiceShell>
+  );
+}
+
+/**
+ * "I didn't finish it" - the way out of an attempt that never completed.
+ *
+ * ── Why a family needs this ─────────────────────────────────────────────────
+ * Vaibhav, 2026-07-28: he opened the hosted page and BACKED OUT without
+ * authorising anything. An abandoned session answers `state: "pending"`
+ * forever, so the pledge stays `started` and every payment surface refuses the
+ * family - including `/api/pledges/start`, which 409s `already-started`. There
+ * was no admin action either. This is the self-serve exit he asked for.
+ *
+ * The button PROMISES nothing: the server asks Stripe whether the session was
+ * ever submitted and refuses if it was, because clearing a record while a real
+ * mandate exists would let the family authorise a second one. So the copy says
+ * what it does ("didn't finish"), not what it guarantees.
+ *
+ * Rendered quietly and last: the common case is a mandate genuinely confirming,
+ * where the right answer is to wait, and a prominent escape hatch would invite
+ * people to restart something already in progress.
+ */
+function AbandonPledgeButton() {
+  const [pending, setPending] = useState(false);
+
+  async function handleClick() {
+    if (pending) return;
+    setPending(true);
+
+    let result: Awaited<ReturnType<typeof abandonPledge>>;
+    try {
+      result = await abandonPledge();
+    } catch {
+      toast.error('Network error - please try again.');
+      setPending(false);
+      return;
+    }
+
+    if (result.ok) {
+      // A full load re-reads the pledge and brings the choice back.
+      window.location.reload();
+      return;
+    }
+    if (result.reason === 'unauthorized') {
+      window.location.href = '/sign-in?from=%2Ffamily';
+      return;
+    }
+    if (result.reason === 'mandate-may-exist') {
+      toast.error('Your bank has this already - please wait for it to confirm, or contact the temple office.');
+    } else if (result.reason === 'nothing-to-abandon') {
+      // Nothing in flight: the screen is simply stale.
+      window.location.reload();
+      return;
+    } else if (result.reason === 'unavailable') {
+      toast.error('We could not check with the bank just now - please try again later.');
+    } else {
+      toast.error('Could not cancel that attempt - please try again.');
+    }
+    setPending(false);
+  }
+
+  return (
+    <button
+      type="button"
+      className="focus-ring"
+      disabled={pending}
+      onClick={handleClick}
+      style={{
+        display: 'block',
+        width: '100%',
+        marginTop: 12,
+        padding: 0,
+        background: 'transparent',
+        border: 0,
+        color: 'var(--muted)',
+        fontSize: 12,
+        textDecoration: 'underline',
+        cursor: pending ? 'default' : 'pointer',
+      }}
+    >
+      {pending ? 'Checking…' : "Didn't finish setting it up? Start over"}
+    </button>
   );
 }
 

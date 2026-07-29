@@ -12,6 +12,10 @@ const checkoutMock = vi.hoisted(() => ({
   startEnrollmentCheckout: vi.fn(),
   startPledgeCheckout: vi.fn(),
   enrollFamily: vi.fn(),
+  abandonPledge: vi.fn(),
+}));
+vi.mock('@/features/family/components/abandon-pledge-client', () => ({
+  abandonPledge: checkoutMock.abandonPledge,
 }));
 vi.mock('@/features/family/components/enroll-client', () => ({
   enrollFamily: checkoutMock.enrollFamily,
@@ -40,6 +44,7 @@ beforeEach(() => {
   checkoutMock.startEnrollmentCheckout.mockReset();
   checkoutMock.startPledgeCheckout.mockReset();
   checkoutMock.enrollFamily.mockReset();
+  checkoutMock.abandonPledge.mockReset();
   Object.defineProperty(window, 'location', {
     configurable: true,
     writable: true,
@@ -240,14 +245,76 @@ describe('DonationChoice - a pledge that is still confirming', () => {
   // bookkeeping only. So a pending pledge gets NO payment control whatsoever.
   it('offers no payment control at all while a pledge is confirming', () => {
     render(<DonationChoice {...base} pledgeState="pending" />);
-    expect(screen.queryByRole('button')).not.toBeInTheDocument();
     expect(screen.queryByRole('radio')).not.toBeInTheDocument();
+    // PAYMENT controls specifically. The "start over" escape hatch below is not
+    // one - it cancels an unfinished attempt and can never move money.
+    expect(screen.queryByRole('button', { name: /donation|monthly|pay|continue/i })).not.toBeInTheDocument();
   });
 
   it('reassures rather than instructs, and says how to change course', () => {
     render(<DonationChoice {...base} pledgeState="pending" />);
     expect(screen.getByText(/setting up your monthly/i)).toBeInTheDocument();
     expect(screen.getByText(/temple office/i)).toBeInTheDocument();
+  });
+
+  // ── 🔴 The dead end Vaibhav walked into ────────────────────────────────────
+  //
+  // 2026-07-28: he opened the hosted page and BACKED OUT without authorising
+  // anything. An abandoned session answers `state: "pending"` forever (proven by
+  // probing the service), so the pledge stayed `started` and every payment
+  // surface refused him - `/api/pledges/start` included, with 409
+  // `already-started`. Nothing an admin could do either. This is the self-serve
+  // exit; the SERVER decides whether it is safe, by asking Stripe.
+  describe('and they never actually finished it', () => {
+    it('offers a way to start over', () => {
+      render(<DonationChoice {...base} pledgeState="pending" />);
+      expect(screen.getByRole('button', { name: /start over/i })).toBeInTheDocument();
+    });
+
+    it('clears the attempt and reloads, bringing the choice back', async () => {
+      const user = userEvent.setup();
+      checkoutMock.abandonPledge.mockResolvedValueOnce({ ok: true });
+      render(<DonationChoice {...base} pledgeState="pending" />);
+
+      await user.click(screen.getByRole('button', { name: /start over/i }));
+
+      await waitFor(() => expect(checkoutMock.abandonPledge).toHaveBeenCalled());
+      await waitFor(() => expect(window.location.reload).toHaveBeenCalled());
+      // It must never quietly start a NEW mandate on the family's behalf.
+      expect(checkoutMock.startPledgeCheckout).not.toHaveBeenCalled();
+    });
+
+    it('says WAIT, not "try again", when the bank may already have it', async () => {
+      // The server refused because Stripe says the page WAS submitted. Retrying
+      // cannot help, and a second mandate is the one outcome nobody can undo.
+      const user = userEvent.setup();
+      checkoutMock.abandonPledge.mockResolvedValueOnce({ ok: false, reason: 'mandate-may-exist' });
+      render(<DonationChoice {...base} pledgeState="pending" />);
+
+      await user.click(screen.getByRole('button', { name: /start over/i }));
+
+      await waitFor(() =>
+        expect(toastMock.error).toHaveBeenCalledWith(expect.stringMatching(/wait for it to confirm/i)),
+      );
+      expect(window.location.reload).not.toHaveBeenCalled();
+      expect(screen.getByRole('button', { name: /start over/i })).toBeEnabled();
+    });
+
+    it('does not claim success when the provider could not be reached', async () => {
+      const user = userEvent.setup();
+      checkoutMock.abandonPledge.mockResolvedValueOnce({ ok: false, reason: 'unavailable' });
+      render(<DonationChoice {...base} pledgeState="pending" />);
+
+      await user.click(screen.getByRole('button', { name: /start over/i }));
+
+      await waitFor(() => expect(toastMock.error).toHaveBeenCalled());
+      expect(window.location.reload).not.toHaveBeenCalled();
+    });
+
+    it('is NOT offered once the plan is live - there is nothing to abandon', () => {
+      render(<DonationChoice {...base} pledgeState="giving" />);
+      expect(screen.queryByRole('button', { name: /start over/i })).toBeNull();
+    });
   });
 
   // ── 🔴 Suppressing PAYMENT must not suppress ENROLLMENT ────────────────────
@@ -309,7 +376,7 @@ describe('DonationChoice - a pledge that is still confirming', () => {
     it('offers no enroll control when the page did not supply an offering', () => {
       // Nothing to enrol INTO - a button here could only ever fail.
       render(<DonationChoice {...stranded} enrollOid={null} />);
-      expect(screen.queryByRole('button')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /enroll/i })).not.toBeInTheDocument();
     });
   });
 });
