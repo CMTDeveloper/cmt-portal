@@ -22,7 +22,18 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
-## 2026-07-29 - NEW route: `POST /api/pledges/abandon` (**additive - nothing existing changed**)
+## 2026-07-29 - abandoned PAD sessions now clear THEMSELVES (**no new route; nothing to call**)
+
+**Supersedes the `POST /api/pledges/abandon` route described below, which was added and removed the same day.** Vaibhav's direction was that the family should simply be *"taken back to options again"* rather than shown a link to press - so the portal resolves the state instead of exposing an action.
+
+**What the mobile needs to know:**
+- `POST /api/pledges/start` no longer returns 409 `already-started` for a session the family never submitted. It clears that record first and mints a fresh one, so **a retry after backing out of the hosted page now simply works.** A REAL in-flight mandate still returns 409 - that guard is unchanged.
+- The Stripe **cancel URL** moved from `/family` to `/family/enroll/bala-vihar`, i.e. back to the one-time/monthly choice. If the app opens the hosted page in a web view, send the family to its own equivalent choice screen on cancel, not to a dashboard.
+- Any screen that reads pledge state should re-read it after a cancelled/abandoned attempt; it will report no pledge rather than a stuck `started`.
+
+The safety rule is unchanged and is enforced server-side: a record is cleared ONLY when Stripe itself says the hosted session was never submitted (`open`/`expired`). Anything else, including an unreachable provider, leaves it in play - clearing a record while a mandate exists would let a family authorise a second bank debit that nobody can stop.
+
+### Removed same-day: `POST /api/pledges/abandon`
 
 Lets a family clear a monthly plan they started but never finished authorising, so they can choose again. Manager-only, same `/api/pledges/*` rule as `start`. **No body** - which pledge is decided server-side from the session's `fid`; a client-supplied pid would let a manager clear a record by guessing its id.
 

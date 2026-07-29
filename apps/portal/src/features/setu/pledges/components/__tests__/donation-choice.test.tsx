@@ -12,10 +12,6 @@ const checkoutMock = vi.hoisted(() => ({
   startEnrollmentCheckout: vi.fn(),
   startPledgeCheckout: vi.fn(),
   enrollFamily: vi.fn(),
-  abandonPledge: vi.fn(),
-}));
-vi.mock('@/features/family/components/abandon-pledge-client', () => ({
-  abandonPledge: checkoutMock.abandonPledge,
 }));
 vi.mock('@/features/family/components/enroll-client', () => ({
   enrollFamily: checkoutMock.enrollFamily,
@@ -44,7 +40,6 @@ beforeEach(() => {
   checkoutMock.startEnrollmentCheckout.mockReset();
   checkoutMock.startPledgeCheckout.mockReset();
   checkoutMock.enrollFamily.mockReset();
-  checkoutMock.abandonPledge.mockReset();
   Object.defineProperty(window, 'location', {
     configurable: true,
     writable: true,
@@ -257,128 +252,6 @@ describe('DonationChoice - a pledge that is still confirming', () => {
     expect(screen.getByText(/temple office/i)).toBeInTheDocument();
   });
 
-  // ── 🔴 The dead end Vaibhav walked into ────────────────────────────────────
-  //
-  // 2026-07-28: he opened the hosted page and BACKED OUT without authorising
-  // anything. An abandoned session answers `state: "pending"` forever (proven by
-  // probing the service), so the pledge stayed `started` and every payment
-  // surface refused him - `/api/pledges/start` included, with 409
-  // `already-started`. Nothing an admin could do either. This is the self-serve
-  // exit; the SERVER decides whether it is safe, by asking Stripe.
-  describe('and they never actually finished it', () => {
-    it('offers a way to start over', () => {
-      render(<DonationChoice {...base} pledgeState="pending" />);
-      expect(screen.getByRole('button', { name: /start over/i })).toBeInTheDocument();
-    });
-
-    it('clears the attempt and reloads, bringing the choice back', async () => {
-      const user = userEvent.setup();
-      checkoutMock.abandonPledge.mockResolvedValueOnce({ ok: true });
-      render(<DonationChoice {...base} pledgeState="pending" />);
-
-      await user.click(screen.getByRole('button', { name: /start over/i }));
-
-      await waitFor(() => expect(checkoutMock.abandonPledge).toHaveBeenCalled());
-      await waitFor(() => expect(window.location.reload).toHaveBeenCalled());
-      // It must never quietly start a NEW mandate on the family's behalf.
-      expect(checkoutMock.startPledgeCheckout).not.toHaveBeenCalled();
-    });
-
-    it('says WAIT, not "try again", when the bank may already have it', async () => {
-      // The server refused because Stripe says the page WAS submitted. Retrying
-      // cannot help, and a second mandate is the one outcome nobody can undo.
-      const user = userEvent.setup();
-      checkoutMock.abandonPledge.mockResolvedValueOnce({ ok: false, reason: 'mandate-may-exist' });
-      render(<DonationChoice {...base} pledgeState="pending" />);
-
-      await user.click(screen.getByRole('button', { name: /start over/i }));
-
-      await waitFor(() =>
-        expect(toastMock.error).toHaveBeenCalledWith(expect.stringMatching(/wait for it to confirm/i)),
-      );
-      expect(window.location.reload).not.toHaveBeenCalled();
-      expect(screen.getByRole('button', { name: /start over/i })).toBeEnabled();
-    });
-
-    it('does not claim success when the provider could not be reached', async () => {
-      const user = userEvent.setup();
-      checkoutMock.abandonPledge.mockResolvedValueOnce({ ok: false, reason: 'unavailable' });
-      render(<DonationChoice {...base} pledgeState="pending" />);
-
-      await user.click(screen.getByRole('button', { name: /start over/i }));
-
-      await waitFor(() => expect(toastMock.error).toHaveBeenCalled());
-      expect(window.location.reload).not.toHaveBeenCalled();
-    });
-
-    it('is NOT offered once the plan is live - there is nothing to abandon', () => {
-      render(<DonationChoice {...base} pledgeState="giving" />);
-      expect(screen.queryByRole('button', { name: /start over/i })).toBeNull();
-    });
-  });
-
-  // ── 🔴 Suppressing PAYMENT must not suppress ENROLLMENT ────────────────────
-  //
-  // Reported 2026-07-28 and confirmed in UAT: family9 (CMT-Z8UXTJIO) has one
-  // child, a `started` pledge, and ZERO enrollments. On /family/enroll/bala-vihar
-  // this branch rendered the reassurance card with no control at all, and the
-  // page suppresses its sticky footer whenever this component renders - so the
-  // family was authorising $51 a month toward a program they could not join,
-  // with no way on the screen to fix it.
-  //
-  // The double-charge rule is about MONEY. Enrollment is free and reversible by
-  // the office, so it must survive the pending state. The one thing that must
-  // not come back is a payment control.
-  describe('and the family has not enrolled yet', () => {
-    const stranded = { ...base, eid: null, enrollOid: 'bv-brampton-2026-27', pledgeState: 'pending' as const };
-
-    it('still lets them enroll - the pending pledge suppresses payment, not membership', () => {
-      render(<DonationChoice {...stranded} />);
-      expect(screen.getByRole('button', { name: /enroll/i })).toBeInTheDocument();
-      // ...and still no way to pay twice.
-      expect(screen.queryByRole('radio')).not.toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: /donation|monthly|pay/i })).not.toBeInTheDocument();
-    });
-
-    it('enrols and reloads, so the page re-renders from the enrollment it just made', async () => {
-      const user = userEvent.setup();
-      checkoutMock.enrollFamily.mockResolvedValueOnce({ ok: true, eid: 'NEW-EID', suggestedAmount: 500, donateUrl: null });
-      render(<DonationChoice {...stranded} />);
-
-      await user.click(screen.getByRole('button', { name: /enroll/i }));
-
-      await waitFor(() => expect(checkoutMock.enrollFamily).toHaveBeenCalledWith('bv-brampton-2026-27'));
-      // Never a checkout - that is the whole point of this state.
-      expect(checkoutMock.startEnrollmentCheckout).not.toHaveBeenCalled();
-      expect(checkoutMock.startPledgeCheckout).not.toHaveBeenCalled();
-      await waitFor(() => expect(window.location.reload).toHaveBeenCalled());
-    });
-
-    it('reports a failed enrollment instead of silently doing nothing', async () => {
-      const user = userEvent.setup();
-      checkoutMock.enrollFamily.mockResolvedValueOnce({
-        ok: false,
-        reason: 'failed',
-        message: 'Add a child to your family before enrolling in Bala Vihar.',
-      });
-      render(<DonationChoice {...stranded} />);
-
-      await user.click(screen.getByRole('button', { name: /enroll/i }));
-
-      await waitFor(() =>
-        expect(toastMock.error).toHaveBeenCalledWith('Add a child to your family before enrolling in Bala Vihar.'),
-      );
-      expect(window.location.reload).not.toHaveBeenCalled();
-      // Still clickable - a transient failure must not strand them a second time.
-      expect(screen.getByRole('button', { name: /enroll/i })).toBeEnabled();
-    });
-
-    it('offers no enroll control when the page did not supply an offering', () => {
-      // Nothing to enrol INTO - a button here could only ever fail.
-      render(<DonationChoice {...stranded} enrollOid={null} />);
-      expect(screen.queryByRole('button', { name: /enroll/i })).not.toBeInTheDocument();
-    });
-  });
 });
 
 describe('DonationChoice - a family already giving monthly', () => {

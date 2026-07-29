@@ -12,6 +12,7 @@ import type { OfferingDoc, PaymentSource } from '@cmt/shared-domain';
 import { isPledgeGiving } from '@cmt/shared-domain/setu';
 import { flags } from '@/lib/flags';
 import { getFamilyPledge } from '@/features/setu/pledges/get-family-pledge';
+import { clearAbandonedPledge } from '@/features/setu/pledges/clear-abandoned-pledge';
 import { configuredMonthlyAmountCAD } from '@/features/setu/pledges/pledge-amount';
 import { MonthlyDonationOption } from '@/features/setu/pledges/components/monthly-donation-option';
 import { DonationChoice, type PledgeState } from '@/features/setu/pledges/components/donation-choice';
@@ -332,6 +333,27 @@ export default async function ProgramEnrollPage({ params }: Props) {
   // paymentSource !== 'teacher-managed', which is exactly the donate page's gate.
   // `!paid` because a family who has already paid has nothing left to spread.
   const pledgeEligible = flags.setuPledge && isBv && onlineDonationsEnabled && !paid;
+
+  // ── An unfinished pledge must not lock this page ───────────────────────────
+  //
+  // Vaibhav, 2026-07-29: *"If someone selects the Pledge option, and not
+  // complete, then the process is not complete and they need to be taken back to
+  // options again where they can select donation or pledge... It's for family to
+  // start the donation process again and complete on their own since this is
+  // complete self serve."*
+  //
+  // He is describing this page. A hosted session the family backed out of
+  // answers `pending` forever, so the pledge stayed `started` and this page
+  // rendered "we're setting up your monthly gift - nothing more for you to do",
+  // which was simply untrue: nothing was being set up and nobody was going to
+  // fix it.
+  //
+  // Resolved BEFORE the pledge is read, so the read below sees the true state
+  // and the family gets the ordinary choice back with no special-case branch
+  // anywhere downstream. `clearAbandonedPledge` asks Stripe first and fails
+  // CLOSED - it only clears what Stripe says was never submitted.
+  if (pledgeEligible) await clearAbandonedPledge(family.fid);
+
   const existingPledge = pledgeEligible ? await getFamilyPledge(family.fid) : null;
 
   // ── 🔴 The bare card is for ENROLLED families only ──────────────────────────

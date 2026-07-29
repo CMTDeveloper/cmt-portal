@@ -21,6 +21,10 @@ vi.mock('@/features/setu/pledges/components/monthly-donation-option', () => ({
   MonthlyDonationOption: () => <div data-testid="monthly-option" />,
 }));
 const mockGetFamilyPledge = vi.hoisted(() => vi.fn());
+const mockClearAbandoned = vi.hoisted(() => vi.fn());
+vi.mock('@/features/setu/pledges/clear-abandoned-pledge', () => ({
+  clearAbandonedPledge: mockClearAbandoned,
+}));
 vi.mock('@/features/setu/pledges/get-family-pledge', () => ({
   getFamilyPledge: mockGetFamilyPledge,
 }));
@@ -222,6 +226,8 @@ beforeEach(() => {
   mockGetDonations.mockResolvedValue([]);
   mockGetFamilyPledge.mockReset();
   mockGetFamilyPledge.mockResolvedValue(null);
+  mockClearAbandoned.mockReset();
+  mockClearAbandoned.mockResolvedValue('none');
 });
 
 // ─── T2: effectiveSuggestedAmount ─────────────────────────────────────────────
@@ -702,6 +708,34 @@ describe('ProgramEnrollPage (bala-vihar) — the monthly alternative', () => {
     // pending branch carries no control of its own - so the screen had no way
     // to enroll ON IT AT ALL. This is a PAGE-level assertion on purpose: the
     // component's own tests cannot see a footer the page decided not to draw.
+    // ── Vaibhav, 2026-07-29: an unfinished attempt must not lock this page ────
+    // "If someone selects the Pledge option, and not complete... they need to be
+    // taken back to options again where they can select donation or pledge."
+    // The page resolves that BEFORE reading the pledge, so the ordinary choice
+    // returns with no special-case branch. Asserted here because the call is the
+    // whole mechanism - drop it and the family is locked out again.
+    it('resolves an abandoned attempt BEFORE reading the pledge state', async () => {
+      mockGetEnrollments.mockResolvedValue([ACTIVE_ENROLLMENT_WITH_SNAPSHOT]);
+      mockGetOpenOfferingsForFamily.mockResolvedValue([ACTIVE_PERIOD]);
+
+      await ProgramEnrollPage({ params: makeParams() });
+
+      expect(mockClearAbandoned).toHaveBeenCalledWith(FAMILY.fid);
+      const clearedAt = mockClearAbandoned.mock.invocationCallOrder[0]!;
+      const readAt = mockGetFamilyPledge.mock.invocationCallOrder[0]!;
+      expect(clearedAt, 'the pledge was read before the abandoned attempt was cleared').toBeLessThan(readAt);
+    });
+
+    it('does not touch the pledge at all when the feature is dark', async () => {
+      flagsMock.setuPledge = false;
+      mockGetEnrollments.mockResolvedValue([ACTIVE_ENROLLMENT_WITH_SNAPSHOT]);
+      mockGetOpenOfferingsForFamily.mockResolvedValue([ACTIVE_PERIOD]);
+
+      await ProgramEnrollPage({ params: makeParams() });
+
+      expect(mockClearAbandoned).not.toHaveBeenCalled();
+    });
+
     it('a family with a confirming pledge and no enrollment can still join', async () => {
       mockGetFamilyPledge.mockResolvedValue({ pid: 'PLG-9', status: 'started', monthlyAmountCAD: 51 });
       mockGetEnrollments.mockResolvedValue([]);

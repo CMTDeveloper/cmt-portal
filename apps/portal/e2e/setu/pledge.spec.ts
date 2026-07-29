@@ -216,53 +216,56 @@ test.describe('monthly pledge', () => {
     // page. This is the assertion the whole feature turns on: a pre-authorized
     // debit can fail days later, and a family told "thank you, you're giving"
     // would never look again.
+    // ── Detect the state from the API, not from the copy ─────────────────────
+    // This used to gate on the banner text "your monthly gift is being
+    // confirmed". That text is GONE - CMT Developer, 2026-07-29, removed the
+    // whole banner for a confirming mandate, as with the Monthly giving card
+    // before it. A UI-text gate would now silently skip and report green, and a
+    // skip is not a pass. `start` answers 409 `already-started` while a pledge
+    // is in flight, which is the state itself rather than a rendering of it.
+    const probe = await page.request.post('/api/pledges/start', { data: {} });
+    const inFlight = probe.status() === 409 && /already-started/.test(await probe.text());
+    test.skip(!inFlight, 'no pledge in flight for this family - nothing to assert about');
+
     await page.goto('/family');
 
-    // ── The dashboard says this ONCE, in the Bala Vihar card ─────────────────
-    // It used to say it twice: the Bala Vihar card carried "your monthly gift is
-    // being confirmed", and a standalone "Monthly giving" card below repeated
-    // the same fact in different words. CMT Developer, 2026-07-28: "I thought we
-    // removed monthly giving option." The card is gone; the line stays where the
-    // plan belongs, because the pledge IS the Bala Vihar contribution.
+    // The dashboard narrates NOTHING about the monthly plan now: no standalone
+    // card, and no banner while it confirms.
+    await expect(card(page), 'the standalone Monthly giving card is back').toHaveCount(0);
     await expect(
-      card(page),
-      'the standalone Monthly giving card is back - the dashboard now states this once, in the Bala Vihar card',
+      visibleText(page, /monthly gift is being confirmed/i),
+      'the confirming banner is back on the dashboard',
     ).toHaveCount(0);
 
-    const pendingLine = visibleText(page, /monthly gift is being confirmed/i);
-    if ((await pendingLine.count()) > 0) {
-      const text = (await page.locator('body').textContent()) ?? '';
-      expect(text, 'the started state claims the gift is working').not.toMatch(/you.re giving|thank you for setting up/i);
-      // And no start button anywhere, which would risk a SECOND authorised mandate.
-      await expect(page.getByRole('button', { name: /give \$\d+ monthly/i })).toHaveCount(0);
-
-      // ── AND THE DONATION BANNER MUST OFFER NO WAY TO PAY AGAIN ─────────────
-      // Nothing is paid while the mandate is confirming, so the banner still
-      // shows - but it must not carry a payment control of any kind.
-      //
-      // The portal cannot undo a double payment: cancelPledgeRecord is
-      // BOOKKEEPING ONLY, and stopping a pre-authorized debit is a manual
-      // action in Stripe by the temple. A family who pays here and whose
-      // mandate then clears is charged $500 AND $51/month, and only a phone
-      // call fixes it.
-      //
-      // Nobody is stranded: a mandate that FAILS is written `failed`
-      // (advance-pledge step 3), so this state ends and the normal control
-      // returns on its own. Reported 2026-07-28.
-      await expect(
-        visibleText(page, /Complete your donation to confirm your enrollment/i),
-        'the dashboard is still instructing a family with a pending pledge to pay the full amount',
-      ).toHaveCount(0);
-      await expect(visibleText(page, /monthly gift is being confirmed/i).first()).toBeVisible();
-      await expect(
-        page.getByRole('button', { name: /complete donation|one-time donation/i }),
-        'a pending pledge still offers a self-serve payment - that is the double-charge path',
-      ).toHaveCount(0);
-      await expect(
-        page.getByRole('link', { name: /complete donation/i }),
-        'a pending pledge still links to the donate flow - that is the double-charge path',
-      ).toHaveCount(0);
-    }
+    // ── 🔴 What actually matters: NO WAY TO PAY while the mandate confirms ────
+    // The portal cannot undo a double payment - `cancelPledgeRecord` is
+    // BOOKKEEPING ONLY, and stopping a pre-authorized debit is a manual action
+    // in Stripe by the temple. A family who pays here and whose mandate then
+    // clears is charged $500 AND $51/month, and only a phone call fixes it.
+    //
+    // Suppressing the banner is what removes the control (it is the only place
+    // the donate CTA renders), so these assertions are what stop someone
+    // re-adding a CTA elsewhere on the card.
+    //
+    // Nobody is stranded: a mandate that FAILS is written `failed`
+    // (advance-pledge step 3), the banner returns, and the normal control with
+    // it.
+    const text = (await page.locator('body').textContent()) ?? '';
+    expect(text, 'the started state claims the gift is working').not.toMatch(
+      /you.re giving|thank you for setting up/i,
+    );
+    await expect(
+      visibleText(page, /Complete your donation to confirm your enrollment/i),
+      'the dashboard is still instructing a family with a pending pledge to pay the full amount',
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole('button', { name: /complete donation|one-time donation|give \$\d+ monthly/i }),
+      'a pending pledge still offers a self-serve payment - that is the double-charge path',
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole('link', { name: /complete donation/i }),
+      'a pending pledge still links to the donate flow - that is the double-charge path',
+    ).toHaveCount(0);
   });
 
   /**

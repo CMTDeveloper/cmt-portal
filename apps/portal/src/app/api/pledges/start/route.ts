@@ -5,6 +5,7 @@ import { getFamilyByFid } from '@/features/setu/members/get-family-by-fid';
 import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
 import { selectBalaViharEnrollment } from '@/app/family/_helpers/select-bv-enrollment';
 import { startPledge } from '@/features/setu/pledges/start-pledge';
+import { clearAbandonedPledge } from '@/features/setu/pledges/clear-abandoned-pledge';
 import { flags } from '@/lib/flags';
 
 /**
@@ -64,6 +65,14 @@ export async function POST(req: Request) {
     // 409, not 403: the family is permitted to do this, just not yet.
     return NextResponse.json({ error: 'enrollment-required' }, { status: 409 });
   }
+
+  // ── An attempt they never finished must not block the next one ────────────
+  // Vaibhav, 2026-07-29: the family "start[s] the donation process again and
+  // complete[s] on their own since this is complete self serve". Without this a
+  // retry hits `already-started` from a session Stripe says was never submitted.
+  // Fails CLOSED - only clears what the provider confirms was never submitted,
+  // so a real mandate still blocks a second one.
+  await clearAbandonedPledge(session.fid);
 
   try {
     const result = await startPledge({
