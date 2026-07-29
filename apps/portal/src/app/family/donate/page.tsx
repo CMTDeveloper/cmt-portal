@@ -11,6 +11,7 @@ import { getLegacyPaymentStatus } from '@/features/setu/donations/legacy-payment
 import { isPledgeGiving } from '@cmt/shared-domain/setu';
 import { flags } from '@/lib/flags';
 import { getFamilyPledge } from '@/features/setu/pledges/get-family-pledge';
+import { clearAbandonedPledge } from '@/features/setu/pledges/clear-abandoned-pledge';
 import { configuredMonthlyAmountCAD } from '@/features/setu/pledges/pledge-amount';
 import { MonthlyDonationOption } from '@/features/setu/pledges/components/monthly-donation-option';
 
@@ -87,7 +88,7 @@ export default async function DonatePage({
   const sub =
     mode === 'enrollment'
       ? `${programLabel ?? 'Program'}${periodLabel ? ` · ${periodLabel}` : ''} · ${family.location}`
-      : 'A charitable gift to Chinmaya Mission Toronto';
+      : 'A charitable donation to Chinmaya Mission Toronto';
 
   // ── The monthly alternative (2026-07-27, Vaibhav) ─────────────────────────
   // "This should not be separate. It's part of Bala Vihar. Instead of straight
@@ -102,7 +103,18 @@ export default async function DonatePage({
   // prompted the change.
   const pledgeEligible =
     flags.setuPledge && mode === 'enrollment' && programKey === BALA_VIHAR && !teacherManagedPayment;
-  const existingPledge = pledgeEligible ? await getFamilyPledge(family.fid) : null;
+  // Same repair as the enroll page and the dashboard: an attempt the family
+  // never submitted must not block the ONE-TIME payment either. Reachable
+  // without touching the enroll page - during a multi-offering window
+  // `EnrollPanel` -> `EnrollCta` redirects straight here after enrolling, so a
+  // family with an earlier abandoned attempt would land on "your bank is
+  // confirming it" with no way to pay. Found by a Codex review, 2026-07-29.
+  let existingPledge = pledgeEligible ? await getFamilyPledge(family.fid) : null;
+  if (existingPledge?.status === 'started') {
+    if ((await clearAbandonedPledge(family.fid)) === 'cleared') {
+      existingPledge = await getFamilyPledge(family.fid);
+    }
+  }
   const monthlyOption = pledgeEligible ? (
     <MonthlyDonationOption
       monthlyAmountCAD={configuredMonthlyAmountCAD()}
@@ -133,7 +145,7 @@ export default async function DonatePage({
       <strong>
         {existingPledge?.status === 'active'
           ? `You are giving $${configuredMonthlyAmountCAD()} a month.`
-          : 'Your monthly gift is being set up.'}
+          : 'Your monthly donation is being set up.'}
       </strong>
       <div style={{ marginTop: 6, color: 'var(--body-text)' }}>
         {existingPledge?.status === 'active'

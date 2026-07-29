@@ -240,8 +240,10 @@ describe('DonationChoice - a pledge that is still confirming', () => {
   // bookkeeping only. So a pending pledge gets NO payment control whatsoever.
   it('offers no payment control at all while a pledge is confirming', () => {
     render(<DonationChoice {...base} pledgeState="pending" />);
-    expect(screen.queryByRole('button')).not.toBeInTheDocument();
     expect(screen.queryByRole('radio')).not.toBeInTheDocument();
+    // PAYMENT controls specifically. The "start over" escape hatch below is not
+    // one - it cancels an unfinished attempt and can never move money.
+    expect(screen.queryByRole('button', { name: /donation|monthly|pay|continue/i })).not.toBeInTheDocument();
   });
 
   it('reassures rather than instructs, and says how to change course', () => {
@@ -249,6 +251,7 @@ describe('DonationChoice - a pledge that is still confirming', () => {
     expect(screen.getByText(/setting up your monthly/i)).toBeInTheDocument();
     expect(screen.getByText(/temple office/i)).toBeInTheDocument();
   });
+
 });
 
 describe('DonationChoice - a family already giving monthly', () => {
@@ -256,6 +259,14 @@ describe('DonationChoice - a family already giving monthly', () => {
     render(<DonationChoice {...base} pledgeState="giving" />);
     expect(screen.getByText(/\$51 a month/i)).toBeInTheDocument();
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    expect(screen.queryByRole('radio')).not.toBeInTheDocument();
+  });
+
+  it('still lets an unenrolled family join - they are already paying for it', () => {
+    // The stranded state one step further on: the mandate settled, the money is
+    // moving, and the family is funding a program they are not in.
+    render(<DonationChoice {...base} eid={null} enrollOid="bv-brampton-2026-27" pledgeState="giving" />);
+    expect(screen.getByRole('button', { name: /enroll/i })).toBeInTheDocument();
     expect(screen.queryByRole('radio')).not.toBeInTheDocument();
   });
 });

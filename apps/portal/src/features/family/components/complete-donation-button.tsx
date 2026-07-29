@@ -68,7 +68,7 @@ export function CompleteDonationButton({ eid, amountCAD, label, block = false }:
       // tab, a co-manager's phone) after this page rendered. Retrying can never
       // clear it, so the generic "please try again" would be wrong advice. A
       // hard reload re-runs the server render, which shows the pledge state.
-      toast.error('Your monthly gift already covers this - refreshing.');
+      toast.error('Your monthly donation already covers this - refreshing.');
       window.location.reload();
       return;
     }

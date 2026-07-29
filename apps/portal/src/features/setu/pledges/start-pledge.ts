@@ -107,7 +107,20 @@ export async function startPledge(actor: StartPledgeActor): Promise<StartPledgeR
       customerName: actor.name,
       clientReferenceId: pid,
       successUrl: `${pledgeReturnOrigin(actor.req)}/donate/success?pledge=${encodeURIComponent(pid)}`,
-      cancelUrl: `${pledgeReturnOrigin(actor.req)}/family`,
+      // ── Cancel returns to the CHOICE, not to the dashboard ─────────────────
+      // Vaibhav, 2026-07-29: *"they need to be taken back to options again where
+      // they can select donation or pledge"* - and, of this very URL, *"perhaps
+      // this needs to be updated where if one clicks cancelled then it resets"*.
+      // It pointed at `/family`, which shows Bala Vihar status and no way to
+      // choose, so backing out of Stripe left the family looking at a screen
+      // with nothing on it to act on.
+      //
+      // The enroll page IS the reset: it calls `clearAbandonedPledge` on render,
+      // which asks Stripe whether the session was ever submitted and clears the
+      // record if it was not - so this lands them on the one-time/monthly choice
+      // with the abandoned attempt already gone. Cancelling and closing the tab
+      // therefore heal by the same path; the difference is only when.
+      cancelUrl: `${pledgeReturnOrigin(actor.req)}/family/enroll/bala-vihar`,
       metadata: { fid: actor.fid, pid },
     });
     // Only the handles - explicitly named, never a spread of the provider

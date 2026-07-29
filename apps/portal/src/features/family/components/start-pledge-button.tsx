@@ -46,18 +46,23 @@ export function StartPledgeButton({ label, block = false }: StartPledgeButtonPro
     if (result.reason === 'already-live') {
       // The card is stale, not broken. A hard reload re-reads the pledge and
       // shows the state that already exists rather than reporting a failure.
-      toast.error('You already have a monthly gift in progress.');
+      toast.error('You already have a monthly donation in progress.');
       window.location.reload();
       return;
     }
-    if (result.reason === 'manager-required') {
-      toast.error('Only the family manager can set up monthly giving.');
+    if (result.reason === 'enrollment-required') {
+      // Actionable, and the action is free - so name it rather than reporting a
+      // failure. The server refuses because a monthly plan funds Bala Vihar, and
+      // this family has no Bala Vihar to fund.
+      toast.error('Enroll in Bala Vihar first - then you can set up a monthly donation.');
+    } else if (result.reason === 'manager-required') {
+      toast.error('Only the family manager can set up a monthly donation.');
     } else if (result.reason === 'no-email') {
       toast.error('Add an email address to your profile first - the bank needs somewhere to confirm.');
     } else if (result.reason === 'unavailable') {
-      toast.error('Monthly giving is temporarily unavailable - please try again later.');
+      toast.error('Monthly donations are temporarily unavailable - please try again later.');
     } else {
-      toast.error('Could not start monthly giving - please try again.');
+      toast.error('Could not start the monthly donation - please try again.');
     }
     setPending(false);
   }

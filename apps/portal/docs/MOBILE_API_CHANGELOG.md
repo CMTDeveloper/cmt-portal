@@ -22,6 +22,66 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
+## 2026-07-29 - abandoned PAD sessions now clear THEMSELVES (**no new route; nothing to call**)
+
+**Supersedes the `POST /api/pledges/abandon` route described below, which was added and removed the same day.** Vaibhav's direction was that the family should simply be *"taken back to options again"* rather than shown a link to press - so the portal resolves the state instead of exposing an action.
+
+**What the mobile needs to know:**
+- `POST /api/pledges/start` no longer returns 409 `already-started` for a session the family never submitted. It clears that record first and mints a fresh one, so **a retry after backing out of the hosted page now simply works.** A REAL in-flight mandate still returns 409 - that guard is unchanged.
+- The Stripe **cancel URL** moved from `/family` to `/family/enroll/bala-vihar`, i.e. back to the one-time/monthly choice. If the app opens the hosted page in a web view, send the family to its own equivalent choice screen on cancel, not to a dashboard.
+- Any screen that reads pledge state should re-read it after a cancelled/abandoned attempt; it will report no pledge rather than a stuck `started`.
+
+The safety rule is unchanged and is enforced server-side: a record is cleared ONLY when Stripe itself says the hosted session was never submitted (`open`/`expired`). Anything else, including an unreachable provider, leaves it in play - clearing a record while a mandate exists would let a family authorise a second bank debit that nobody can stop.
+
+### Removed same-day: `POST /api/pledges/abandon`
+
+Lets a family clear a monthly plan they started but never finished authorising, so they can choose again. Manager-only, same `/api/pledges/*` rule as `start`. **No body** - which pledge is decided server-side from the session's `fid`; a client-supplied pid would let a manager clear a record by guessing its id.
+
+```ts
+// 200 - cleared; re-read the family's pledge, the choice is available again
+{ ok: true; pid: string }
+// 409 - Stripe says the hosted page WAS submitted; a mandate may exist
+{ error: 'mandate-may-exist' }
+// 409 - nothing in flight; the screen is stale, re-read and re-render
+{ error: 'nothing-to-abandon' }
+// 409 - lost a race with the reconciler/an admin
+{ error: 'already-cancelled' | 'not-cancellable' }
+// 404 flag off | 401 no-session / no-family | 403 manager-required
+// 503 provider-unavailable  (could not ask Stripe ⇒ refused, NOT an error to retry blindly)
+```
+
+**Why it exists:** an abandoned hosted session answers `state: "pending"` forever, so the pledge stays `started` and every payment surface refuses the family - `POST /api/pledges/start` included, with 409 `already-started`. There is no admin action for it either.
+
+**The mobile MUST NOT treat 409 `mandate-may-exist` as retryable.** It means the bank may already hold a mandate; the honest message is *wait for it to confirm, or contact the temple office*. Retrying can only ever fail, and clearing the record locally would let the family authorise a SECOND debit that nobody can stop.
+
+`503 provider-unavailable` means we could not reach Stripe to check - do not clear anything client-side; show "try again later".
+
+## 2026-07-28 - `f85a1d2` - `POST /api/pledges/start` gains a NEW 409: `enrollment-required`
+
+**Action required: the mobile must handle a second, differently-shaped 409 on this route.**
+
+A monthly plan funds Bala Vihar, so the route now refuses when the family has no **active Bala Vihar enrollment**. Reported by the product owner and confirmed in UAT: a family with zero children held a live `started` pledge, and another was paying monthly toward a program it had never joined.
+
+```ts
+// 409 - a pledge is already `started` or `active`; nothing was created  (UNCHANGED)
+{ error: 'already-started' | 'already-active'; pid: string }
+// 409 - NEW: no active Bala Vihar enrollment; nothing was created
+{ error: 'enrollment-required' }   // note: NO `pid` field
+```
+
+**Do not collapse the two.** They need opposite treatment:
+
+- `already-started` / `already-active` - nothing the family can act on. Reload and show the state that already exists.
+- `enrollment-required` - **actionable**: enrol in Bala Vihar first, then start the plan. Treating it as "you already have a monthly gift in progress" (which a bare `status === 409` check does) tells the family something false and then reloads them into the same ask, which reads as a dead button.
+
+Discriminate on `error`, not on the status code. The portal's own client does this in `start-pledge-client.ts`.
+
+**Ordering, if the app has its own enroll-then-pledge flow:** enrol FIRST and start the pledge second. Enrollment is free and reversible by the office; a bank mandate is neither, and the portal has no cancel endpoint.
+
+No request-shape change. `POST /api/pledges/finalize` is untouched.
+
+---
+
 ## 2026-07-27 - `d4fda47`..`34cb977` - NEW family-facing money routes: `/api/pledges/*` (**additive - nothing existing changed**)
 
 The monthly-pledge feature. **No existing route, schema, error code or field changed** - an unmodified mobile client is unaffected. This entry exists because the routes are family-facing, so the mobile will want to mirror them eventually.
@@ -40,10 +100,12 @@ Request body: **none** (send `{}`). There is deliberately no amount in the reque
 { pid: string; checkoutUrl: string }   // checkoutUrl is a Stripe-HOSTED page on a third-party origin
 // 409 - a pledge is already `started` or `active`; nothing was created
 { error: 'already-started' | 'already-active'; pid: string }
+// 409 - no active Bala Vihar enrollment (ADDED 2026-07-28 `f85a1d2` - see the entry above)
+{ error: 'enrollment-required' }
 // 404 flag off | 401 no-session / no-family / no-member | 403 manager-required
 // 400 no-email | 404 family-not-found | 503 provider-unavailable
 ```
-**The mobile must open `checkoutUrl` in a real browser / web view, not an embedded form.** The bank mandate is authorised entirely on Stripe's page; the portal never sees a bank detail and neither should the app. Treat 409 as "reload and show the state that already exists", not as an error.
+**The mobile must open `checkoutUrl` in a real browser / web view, not an embedded form.** The bank mandate is authorised entirely on Stripe's page; the portal never sees a bank detail and neither should the app. Treat 409 as "reload and show the state that already exists", not as an error - **except `error: 'enrollment-required'`, added 2026-07-28, which IS actionable. See the newest entry.**
 
 ### `POST /api/pledges/finalize`
 Called after the family returns from the hosted page. Body is **`.strict()`** - an extra key is a **400**, not silently ignored.

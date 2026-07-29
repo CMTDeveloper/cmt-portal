@@ -270,47 +270,56 @@ describe('/donate/success - the pledge card', () => {
   // The card belongs to a pledge RETURN (`?pledge=`), where it reports the
   // status of a mandate the family just authorised. It is NOT an ask, and the
   // `?did=` receipt arrival gets none of it - see the regression block below.
+  //
+  // ── Why these now seed a pledge ───────────────────────────────────────────
+  // They used to render `?pledge=PLG-7` on top of `getFamilyPledge -> null`, a
+  // combination that CANNOT occur: `startPledge` writes the doc before it mints
+  // the hosted page, so a family arriving from Stripe always has one. That
+  // impossible fixture is what let the ask-shaped `AskBody` render here for
+  // weeks while the suite stayed green - it was asserting the bug (rule 7: the
+  // fixture has to look like a real account).
+  beforeEach(() => {
+    mockGetFamilyPledge.mockResolvedValue({
+      pid: 'PLG-7', status: 'started', monthlyAmountCAD: 63,
+      startedAt: new Date('2026-07-28T12:00:00Z'), activatedAt: null,
+    });
+  });
+
   async function renderWith(params: Record<string, string> = { pledge: 'PLG-7' }) {
     const body = await DonateSuccessBody({ searchParams: Promise.resolve(params) });
     return render(body);
   }
 
-  it('shows the amount from config, not a literal in the page', async () => {
+  it('shows NO "Monthly giving" card - the headline already says it', async () => {
+    // CMT Developer, 2026-07-28: "just hide monthly giving it should not display
+    // anywhere." Nothing is lost here: this page's own headline is "Your monthly
+    // gift is being set up", so the card only restated the page it sat on.
     const { container } = await renderWith();
-    // 63, from PLEDGE_MONTHLY_AMOUNT_CAD.
-    expect(container.textContent).toMatch(/\$63 a month/);
+    expect(container.textContent).not.toMatch(/Monthly giving/);
+    // ...and the acknowledgement itself is still on the page. A family who has
+    // just authorised a recurring bank debit must see the portal confirm it.
+    expect(screen.getByText(/monthly donation is being set up/i)).toBeTruthy();
   });
 
-  it('renders the pledge card BELOW the adult-class ask', async () => {
-    // Spec 4.3 and P4 Task 9: adult-class first because it is quick and free,
-    // pledge second and quieter.
-    const { container } = await renderWith();
-    const text = container.textContent ?? '';
-    const ask = text.indexOf('One last thing');
-    const pledge = text.indexOf('Monthly giving');
-    const out = text.indexOf('Back to family');
-    expect(ask).toBeGreaterThan(-1);
-    expect(pledge, 'the pledge card is missing entirely').toBeGreaterThan(-1);
-    expect(pledge, 'the pledge card renders ABOVE the adult-class ask').toBeGreaterThan(ask);
-    expect(out, 'the pledge card renders below the way out').toBeGreaterThan(pledge);
-  });
-
-  it('renders the card even when there is no adult-class ask', async () => {
-    // Proves the card is a sibling of the ask, not nested inside `ask && (...)`.
+  it('shows no card even when there is no adult-class ask', async () => {
     mockNeedsSelection.mockReturnValue(false);
     const { container } = await renderWith();
-    expect(container.textContent).toMatch(/Monthly giving/);
+    expect(container.textContent).not.toMatch(/Monthly giving/);
   });
 
-  it('speaks the pledge\'s own snapshotted amount once one is active', async () => {
+  it('quotes NO monthly amount, for an active plan or any other', async () => {
+    // The card was the only surface that printed a figure here. With it gone the
+    // page must not reintroduce one: a receipt that names a price is an ask.
     mockGetFamilyPledge.mockResolvedValue({
       pid: 'PLG-7', status: 'active', monthlyAmountCAD: 51,
       startedAt: new Date('2026-02-01T12:00:00Z'), activatedAt: new Date('2026-02-03T12:00:00Z'),
     });
     const { container } = await renderWith();
-    expect(container.textContent).toMatch(/\$51 monthly/);
-    // 63 is today's price; this family signed for 51 and must keep being told 51.
-    expect(container.textContent).not.toMatch(/63/);
+    expect(container.textContent).not.toMatch(/\$51/);
+    expect(container.textContent).not.toMatch(/\$63/);
+    // Deliberately not /a month/: the headline legitimately thanks them for
+    // "a monthly gift". What must never appear is a PRICE.
+    expect(container.textContent).not.toMatch(/\$\d+\s*(a month|monthly|per month)/i);
   });
 
   it('renders NOTHING pledge-shaped when the flag is off, and reads nothing', async () => {
@@ -353,10 +362,64 @@ describe('/donate/success - the pledge card', () => {
       expect(mockGetFamilyPledge).not.toHaveBeenCalled();
     });
 
-    it('still shows the card on a pledge RETURN, which is what it is for', async () => {
+    it('still FINALIZES on a pledge return, and says so without a card', async () => {
       const { container } = await renderWith({ pledge: 'PLG-7' });
-      expect(container.textContent).toMatch(/Monthly giving/);
       expect(mockFinalizePledge).toHaveBeenCalled();
+      expect(container.textContent).not.toMatch(/Monthly giving/);
+      expect(container.textContent).toMatch(/monthly donation is being set up/i);
+    });
+  });
+
+  // ── 🔴 `?pledge=` is a claim, not proof ────────────────────────────────────
+  //
+  // Found in review 2026-07-28. `resolvePledgeSlot` gated on `!!pledgePid` -
+  // ANY non-empty query value - and `finalizePledge` deliberately no-ops on a
+  // pid it cannot match. So a signed-in manager reaching this URL without a
+  // real pledge got a live "Give $63 monthly" button inside `AskBody`, under a
+  // headline thanking them for setting up a monthly gift they had never set up.
+  //
+  // This is not an exotic URL to reach: a genuine pledge return lands the
+  // family on exactly this address, so it sits in their history and back
+  // button. Revisit it after the mandate fails and the page thanks you for a
+  // gift while the card beneath says it is not active.
+  //
+  // The page's own docstring already said "STATUS of a pledge just authorised -
+  // never a new ASK". The code just never enforced it.
+  describe('a pledge param without a pledge behind it', () => {
+    it('shows no card at all when the family has no pledge', async () => {
+      mockGetFamilyPledge.mockResolvedValue(null);
+      const { container } = await renderWith({ pledge: 'anything' });
+      expect(container.textContent).not.toMatch(/Monthly giving/);
+      expect(container.textContent).not.toMatch(/Give \$\d+ monthly/);
+      expect(container.textContent).not.toMatch(/Support the mission/);
+    });
+
+    it('does not thank them for a monthly gift they never set up', async () => {
+      mockGetFamilyPledge.mockResolvedValue(null);
+      await renderWith({ pledge: 'anything' });
+      expect(screen.queryByText(/monthly donation is being set up/i)).toBeNull();
+      expect(screen.queryByText(/thank you for setting up a monthly donation/i)).toBeNull();
+    });
+
+    it('shows no card for a pledge that already FAILED - that state is an ask', async () => {
+      // `AskBody` renders for any terminal pledge, and its whole content is a
+      // solicitation. A receipt is not the place to re-ask.
+      mockGetFamilyPledge.mockResolvedValue({
+        pid: 'PLG-7', status: 'failed', monthlyAmountCAD: 63,
+        startedAt: new Date('2026-07-01T12:00:00Z'), activatedAt: null,
+      });
+      const { container } = await renderWith({ pledge: 'PLG-7' });
+      expect(container.textContent).not.toMatch(/Monthly giving/);
+      expect(container.textContent).not.toMatch(/set one up again/);
+    });
+
+    it('never renders a pledge START control here, even for a real pledge', async () => {
+      // This page does not solicit. The ask lives on the enroll page, where the
+      // family is choosing. Scoped to a pledge-shaped button on purpose - the
+      // adult-class ask has its own legitimate "Continue" on this same screen.
+      const { container } = await renderWith({ pledge: 'PLG-7' });
+      expect(container.textContent).not.toMatch(/Monthly giving/);
+      expect(screen.queryByRole('button', { name: /monthly/i })).toBeNull();
     });
   });
 });
@@ -380,6 +443,16 @@ describe('/donate/success - a pledge arrival must not claim money was received',
    * feature is designed around, and it is the one thing a receipt page must
    * never get wrong.
    */
+  // A real return always has the pledge doc behind it - `startPledge` writes it
+  // before minting the hosted page. Seeded so these assert the genuine arrival
+  // rather than a shape that cannot occur.
+  beforeEach(() => {
+    mockGetFamilyPledge.mockResolvedValue({
+      pid: 'PLG-7', status: 'started', monthlyAmountCAD: 63,
+      startedAt: new Date('2026-07-28T12:00:00Z'), activatedAt: null,
+    });
+  });
+
   async function renderWith(params: Record<string, string>) {
     const body = await DonateSuccessBody({ searchParams: Promise.resolve(params) });
     return render(body);

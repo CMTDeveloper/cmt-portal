@@ -201,9 +201,63 @@ export default function FamilyLayout({ children }: { children: React.ReactNode }
       {/* Desktop: shared sidebar around the children main area. */}
       <div className="hidden md:flex" style={{ minHeight: '100dvh' }}>
         <CspRoot style={{ display: 'flex', width: '100%', minHeight: '100dvh' }}>
-          <Suspense fallback={<DesktopSidebar showSignOut/>}>
-            <SidebarWithIdentity />
-          </Suspense>
+          {/* ── 🔴 The wrapper is load-bearing, not cosmetic ────────────────────
+              Reported repeatedly as "blank page / broken CSS after a mutation,
+              fixed by a hard refresh". Caught live on 2026-07-28 in the owner's
+              browser and dissected: the page content was rendering INSIDE this
+              sidebar's <aside> (the visible h1 at x=18 w=211 instead of x=296
+              w=1384). The stylesheet was fine - 588 rules, `md:` utilities
+              resolving - so nothing was ever "unstyled"; the content was in the
+              wrong box.
+
+              React streams a Suspense boundary in by locating its comment
+              markers AMONG ITS PARENT'S CHILDREN. Left unwrapped, this boundary
+              and <main> are siblings of one flex parent, so a marker mismatch
+              lets the boundary swallow what follows it - which is exactly
+              <main> and the whole page. <main>'s own boundary was never at risk
+              because it is already contained by <main> itself; this was the one
+              loose boundary in the shell.
+
+              So give it a container of its own. Purely structural: the wrapper
+              is a flex item whose width comes from the 248px <aside> inside it,
+              and `display:flex` lets that aside stretch to full height exactly
+              as it did when it was the flex item. Renders identically.
+
+              ⚠️ THIS DID NOT FIX THE REPORTED BUG. Verified against the
+              deployed build immediately after shipping it: the dashboard still
+              lands inside the <aside>, now inside this very wrapper. Containing
+              the boundary is still correct hygiene - a loose boundary among
+              siblings is a real hazard and this shell was the only one with it -
+              so the wrapper stays. But do not read it as the cure.
+
+              WHAT IT ACTUALLY IS (evidence, 2026-07-28, live in the owner's
+              browser). When broken, the sidebar has FOUR children instead of
+              three; the extra one holds a second copy of sidebar markup wrapping
+              the whole page, fenced by React's own `<!--&-->`/`<!--$-->`
+              Activity+Suspense markers. Crucially that node has **no
+              `__reactFiber$` key**, so React never claimed it: it is ORPHANED
+              SERVER HTML left behind after hydration bailed, while React's real
+              tree is one of the zero-width copies. That is a hydration failure,
+              not a streaming-marker misplacement - which is why wrapping the
+              boundary changed nothing.
+
+              DISCRIMINATOR for any future check - and note the trap: use the
+              VISIBLE aside, because `document.querySelector('aside')` returns a
+              hidden mobile one and reports false health.
+                [...document.querySelectorAll('aside')]
+                  .find(a => a.getBoundingClientRect().width > 0)
+              Broken: 4 children, textContent includes the greeting.
+              Healthy: 3 children.
+
+              NEXT STEP is to catch the hydration error itself - Sentry has been
+              wired since 2026-06-26 and would have been recording React #418 /
+              #423 / #425 all along. Vercel Skew Protection (which would remove
+              the deploy-boundary trigger) is Pro-only; this team is on Hobby. */}
+          <div style={{ display: 'flex' }}>
+            <Suspense fallback={<DesktopSidebar showSignOut/>}>
+              <SidebarWithIdentity />
+            </Suspense>
+          </div>
           <main style={{ flex: 1, padding: '32px 48px', overflow: 'auto' }}>
             <Suspense fallback={<LoadingOm />}>
               {children}

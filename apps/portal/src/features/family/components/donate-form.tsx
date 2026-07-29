@@ -96,7 +96,7 @@ export function DonateForm({
           // pledge flag off while the family already holds one (the server guard
           // is deliberately not flag-gated, so the charge is still refused). A
           // reload re-runs the server render, which explains it properly.
-          toast.error('Your monthly gift already covers this - refreshing.');
+          toast.error('Your monthly donation already covers this - refreshing.');
           window.location.reload();
           return;
         } else if (json.error === 'amount-below-suggested') {
@@ -182,7 +182,7 @@ export function DonateForm({
       <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radiusSm)', marginBottom: 14, cursor: 'pointer', fontSize: 13 }}>
         <input type="checkbox" checked={coverFee} onChange={(e) => setCoverFee(e.target.checked)} />
         <span style={{ flex: 1 }}>
-          Add {amount >= 1 ? `$${processingFeeCAD(amount).toFixed(2)}` : 'the'} processing fee so 100% of my gift reaches the Mission
+          Add {amount >= 1 ? `$${processingFeeCAD(amount).toFixed(2)}` : 'the'} processing fee so 100% of my donation reaches the Mission
         </span>
       </label>
 

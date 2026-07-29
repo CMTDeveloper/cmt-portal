@@ -12,6 +12,7 @@ import type { OfferingDoc, PaymentSource } from '@cmt/shared-domain';
 import { isPledgeGiving } from '@cmt/shared-domain/setu';
 import { flags } from '@/lib/flags';
 import { getFamilyPledge } from '@/features/setu/pledges/get-family-pledge';
+import { clearAbandonedPledge } from '@/features/setu/pledges/clear-abandoned-pledge';
 import { configuredMonthlyAmountCAD } from '@/features/setu/pledges/pledge-amount';
 import { MonthlyDonationOption } from '@/features/setu/pledges/components/monthly-donation-option';
 import { DonationChoice, type PledgeState } from '@/features/setu/pledges/components/donation-choice';
@@ -332,8 +333,49 @@ export default async function ProgramEnrollPage({ params }: Props) {
   // paymentSource !== 'teacher-managed', which is exactly the donate page's gate.
   // `!paid` because a family who has already paid has nothing left to spread.
   const pledgeEligible = flags.setuPledge && isBv && onlineDonationsEnabled && !paid;
-  const existingPledge = pledgeEligible ? await getFamilyPledge(family.fid) : null;
-  const monthlyOption = pledgeEligible ? (
+
+  // ── An unfinished pledge must not lock this page ───────────────────────────
+  //
+  // Vaibhav, 2026-07-29: *"If someone selects the Pledge option, and not
+  // complete, then the process is not complete and they need to be taken back to
+  // options again where they can select donation or pledge... It's for family to
+  // start the donation process again and complete on their own since this is
+  // complete self serve."*
+  //
+  // He is describing this page. A hosted session the family backed out of
+  // answers `pending` forever, so the pledge stayed `started` and this page
+  // rendered "we're setting up your monthly gift - nothing more for you to do",
+  // which was simply untrue: nothing was being set up and nobody was going to
+  // fix it.
+  //
+  // Resolved BEFORE the pledge is read, so the read below sees the true state
+  // and the family gets the ordinary choice back with no special-case branch
+  // anywhere downstream. `clearAbandonedPledge` asks Stripe first and fails
+  // CLOSED - it only clears what Stripe says was never submitted.
+  let existingPledge = pledgeEligible ? await getFamilyPledge(family.fid) : null;
+  // Only a `started` pledge can be an unfinished attempt, and only then is the
+  // provider round trip worth paying for - see the dashboard for why gating on
+  // the read matters rather than clearing unconditionally.
+  if (existingPledge?.status === 'started') {
+    if ((await clearAbandonedPledge(family.fid)) === 'cleared') {
+      existingPledge = await getFamilyPledge(family.fid);
+    }
+  }
+
+  // ── 🔴 The bare card is for ENROLLED families only ──────────────────────────
+  //
+  // `MonthlyDonationOption`'s button starts a mandate and does NOT enrol.
+  // Rendering it to a family who has not joined produced exactly what you would
+  // expect and what Vaibhav photographed on 2026-07-28: a Bala Vihar page
+  // reading "Add a child to enroll" directly above "Give $51 monthly", and a
+  // UAT family with ZERO children holding a live `started` pledge.
+  //
+  // `DonationChoice` owns every not-yet-enrolled case because it enrols FIRST
+  // and pays second. Where the choice cannot render - no children, not the
+  // manager, several open terms - the honest answer is no monthly ask at all.
+  // `/family/donate` has always had this gate (it requires an enrollment eid);
+  // this page simply never applied it. The server refuses too, in the route.
+  const monthlyOption = pledgeEligible && alreadyEnrolled ? (
     <MonthlyDonationOption
       monthlyAmountCAD={configuredMonthlyAmountCAD()}
       oneTimeAmountCAD={displaySuggestedAmount ?? null}

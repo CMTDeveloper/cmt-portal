@@ -16,7 +16,6 @@ import {
 } from '@/features/setu/adult-class/selectable-adults';
 import { selectBalaViharEnrollment } from '@/app/family/_helpers/select-bv-enrollment';
 import { AdultClassForm } from '@/features/setu/adult-class/components/adult-class-form';
-import { PledgeCard } from '@/features/family/components/pledge-card';
 import { loadPledgeSlot, type PledgeSlot } from '@/features/setu/pledges/load-pledge-slot';
 import { finalizePledge } from '@/features/setu/pledges/finalize-pledge';
 
@@ -124,7 +123,32 @@ async function resolvePledgeSlot(
     console.error('[donate/success] finalizePledge failed - the cron will finish it', err);
   }
 
-  return loadPledgeSlot({ fid: familyData.family.fid, isManager: familyData.isManager });
+  const slot = await loadPledgeSlot({ fid: familyData.family.fid, isManager: familyData.isManager });
+
+  // ── 🔴 `?pledge=` is a CLAIM, not proof ────────────────────────────────────
+  //
+  // Found in review 2026-07-28. The check above passes for any non-empty query
+  // value, and `finalizePledge` deliberately no-ops on a pid it cannot match -
+  // so the slot came back for families with no pledge at all, and `PledgeCard`
+  // fell through to `AskBody`: a live "Give $63 monthly" button under a headline
+  // thanking them for a monthly gift they had never set up.
+  //
+  // Not an exotic URL to reach. A genuine return lands the family on exactly
+  // this address, so it sits in their history; revisit it after the mandate
+  // fails and the page thanks you while the card underneath says it is inactive.
+  //
+  // So: report a pledge that EXISTS, and only one still in play. A terminal
+  // pledge renders `AskBody`, whose entire content is a solicitation - and the
+  // rule this page is built on (stated above, and by `DonationChoice` owning the
+  // choice) is that a receipt is never a decision point.
+  //
+  // NOTE the same `started || active` pair is spelled out in the checkout route
+  // and on /family/donate. Three inline copies of one money rule is the shape
+  // that hid the double-charge; extracting `isPledgeInPlay` is filed as a task
+  // rather than done here, in the launch week.
+  if (!slot?.pledge) return null;
+  if (slot.pledge.status !== 'started' && slot.pledge.status !== 'active') return null;
+  return slot;
 }
 
 // Exported for tests: an async server component does not resolve under jsdom, so
@@ -181,7 +205,12 @@ export async function DonateSuccessBody({
   // yet". Reported from preview. That contradiction is the exact harm this
   // feature is built to avoid: a PAD can fail days later, and someone told they
   // have paid will not look again.
-  const isPledgeReturn = !!pledgePid && !did;
+  //
+  // `pledgeSlot` and not `pledgePid` alone: the param is whatever is in the URL,
+  // and this headline makes a claim about a bank mandate. Saying "your monthly
+  // gift is being set up" to someone with no pledge is the same class of untruth
+  // the paragraph above exists to prevent, just pointed the other way.
+  const isPledgeReturn = !!pledgePid && !did && pledgeSlot !== null;
 
   return (
     <CspRoot style={{ minHeight: '100dvh', display: 'grid', placeItems: 'center', padding: 24 }}>
@@ -190,12 +219,12 @@ export async function DonateSuccessBody({
           <SetuIcon.check />
         </div>
         <h1 style={{ fontSize: 30, fontWeight: 400, marginBottom: 10 }}>
-          {isPledgeReturn ? 'Your monthly gift is being set up' : 'Thank you for your donation'}
+          {isPledgeReturn ? 'Your monthly donation is being set up' : 'Thank you for your donation'}
         </h1>
         {isPledgeReturn ? (
           <>
             <p style={{ fontSize: 14, color: 'var(--body-text)', lineHeight: 1.6, marginBottom: 8 }}>
-              Thank you for setting up a monthly gift to Chinmaya Mission Toronto.{' '}
+              Thank you for setting up a monthly donation to Chinmaya Mission Toronto.{' '}
               <em className="sa">Hari OM</em> — your seva keeps our programs running.
             </p>
             <p style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.6, marginBottom: 24 }}>
@@ -243,15 +272,14 @@ export async function DonateSuccessBody({
             ~$500 payment reads badly. A SIBLING of the ask, never nested inside
             it - nested, it would inherit the adult-class predicate and render
             for nobody. Both facts are test-locked in this page's spec. */}
-        {pledgeSlot && (
-          <div style={{ textAlign: 'left', marginBottom: 24 }}>
-            <PledgeCard
-              pledge={pledgeSlot.pledge}
-              askAmountCAD={pledgeSlot.askAmountCAD}
-              canStart={pledgeSlot.canStart}
-            />
-          </div>
-        )}
+        {/* ── No "Monthly giving" card here either ─────────────────────────────
+            CMT Developer, 2026-07-28: "just hide monthly giving it should not
+            display anywhere." Nothing is lost on this page: the headline above
+            ALREADY says "Your monthly gift is being set up" and thanks them for
+            it, so the card only restated the page it sits on.
+            `pledgeSlot` is still resolved - it is what makes `isPledgeReturn`
+            true, and therefore what makes that headline say "monthly gift" and
+            not "your donation has been received". */}
 
         <div style={{ display: 'flex', justifyContent: 'center' }}>
           {/* This link IS the "not now" path (Task 9 Step 4). Deliberately NOT

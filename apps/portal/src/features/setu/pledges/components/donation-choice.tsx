@@ -60,6 +60,14 @@ export interface DonationChoiceProps {
  *    payment control at all. Nobody is stranded: a FAILED mandate is written
  *    `failed`, which returns this to `none` and the choice comes back on its own.
  * 3. **Already giving.** Show the live plan; never ask a second time.
+ *
+ * ── The one thing states 2 and 3 must NOT suppress ──────────────────────────
+ * 🔴 Enrollment. Reported 2026-07-28: family9 held a `started` pledge with ZERO
+ * enrollments, so this component rendered the reassurance card - and the enroll
+ * page stands its own sticky footer down whenever this renders. The family was
+ * committing $51 a month to a program they had no way, on that screen, to join.
+ * The double-charge rule is about MONEY; enrollment is free and reversible by
+ * the office, so it survives both states whenever `eid` is null.
  */
 export function DonationChoice({
   eid,
@@ -101,6 +109,7 @@ export function DonationChoice({
             more to pay here. It continues until you ask the temple office to stop it.
           </p>
         </div>
+        {!eid && enrollOid && <EnrollOnlyButton oid={enrollOid} />}
       </ChoiceShell>
     );
   }
@@ -112,7 +121,7 @@ export function DonationChoice({
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 6 }}>
             <SetuIcon.check width={17} height={17} color="var(--muted)" />
             <strong style={{ fontSize: 14, color: 'var(--body-text)' }}>
-              We&apos;re setting up your monthly gift
+              We&apos;re setting up your monthly donation
             </strong>
           </div>
           <p style={{ fontSize: 13, color: 'var(--body-text)', lineHeight: 1.55, margin: 0 }}>
@@ -120,6 +129,10 @@ export function DonationChoice({
             there is nothing more for you to do. Changed your mind? Contact the temple office.
           </p>
         </div>
+        {/* "nothing more for you to do" is true of the PAYMENT and false of the
+            enrollment while they are not yet in the program - so the one thing
+            still to do gets its own button rather than being written away. */}
+        {!eid && enrollOid && <EnrollOnlyButton oid={enrollOid} />}
       </ChoiceShell>
     );
   }
@@ -187,18 +200,23 @@ export function DonationChoice({
       if (result.reason === 'already-live') {
         // The screen is stale, not broken. A hard reload re-reads the pledge and
         // renders the state that already exists rather than reporting a failure.
-        toast.error('You already have a monthly gift in progress.');
+        toast.error('You already have a monthly donation in progress.');
         window.location.reload();
         return;
       }
-      if (result.reason === 'manager-required') {
-        toast.error('Only the family manager can set up monthly giving.');
+      if (result.reason === 'enrollment-required') {
+        // Should be unreachable from here - this component enrols first - but if
+        // that enrollment silently did not take, "please try again" would be a
+        // lie. Name the real precondition.
+        toast.error('Enroll in Bala Vihar first - then you can set up a monthly donation.');
+      } else if (result.reason === 'manager-required') {
+        toast.error('Only the family manager can set up a monthly donation.');
       } else if (result.reason === 'no-email') {
         toast.error('Add an email address to your profile first - the bank needs somewhere to confirm.');
       } else if (result.reason === 'unavailable') {
-        toast.error('Monthly giving is temporarily unavailable - please try again later.');
+        toast.error('Monthly donations are temporarily unavailable - please try again later.');
       } else {
-        toast.error('Could not start monthly giving - please try again.');
+        toast.error('Could not start the monthly donation - please try again.');
       }
       setPending(false);
       return;
@@ -235,7 +253,7 @@ export function DonationChoice({
       // or a co-manager's device. Retrying can never clear it, so the generic
       // "please try again" would be actively wrong. Reload; the server render
       // then shows the pending/giving state instead of the choice.
-      toast.error('Your monthly gift already covers this - refreshing.');
+      toast.error('Your monthly donation already covers this - refreshing.');
       window.location.reload();
       return;
     }
@@ -304,6 +322,61 @@ export function DonationChoice({
         {pending ? 'Starting…' : eid ? 'Continue to donation →' : 'Enroll and continue →'}
       </button>
     </ChoiceShell>
+  );
+}
+
+/**
+ * Enrollment WITHOUT payment - the only control a pledging family still needs.
+ *
+ * A top-level component and not a closure inside `DonationChoice`: a component
+ * declared inside another is a new type on every render, so React unmounts and
+ * remounts it and this button would drop its `pending` state mid-click.
+ *
+ * On success it RELOADS rather than routing. The enroll page is a server
+ * component reading `use cache`d family data; a soft navigation can re-render
+ * from the value that was true before the write, put the family straight back on
+ * this same screen, and preserve the "Enrolling…" label forever. A full load
+ * re-runs the page server-side against the enrollment that now exists.
+ */
+function EnrollOnlyButton({ oid }: { oid: string }) {
+  const [pending, setPending] = useState(false);
+
+  async function handleClick() {
+    if (pending) return;
+    setPending(true);
+
+    let enrolled: Awaited<ReturnType<typeof enrollFamily>>;
+    try {
+      enrolled = await enrollFamily(oid);
+    } catch {
+      toast.error('Network error - please try again.');
+      setPending(false);
+      return;
+    }
+
+    if (enrolled.ok) {
+      // Deliberately NOT clearing `pending` - the page is on its way out.
+      window.location.reload();
+      return;
+    }
+    if (enrolled.reason === 'unauthorized') {
+      window.location.href = '/sign-in?from=%2Ffamily';
+      return;
+    }
+    toast.error(enrolled.message);
+    setPending(false);
+  }
+
+  return (
+    <button
+      type="button"
+      className="btn btn--p btn--block"
+      disabled={pending}
+      onClick={handleClick}
+      style={{ display: 'block', width: '100%', marginTop: 14, opacity: pending ? 0.7 : 1 }}
+    >
+      {pending ? 'Enrolling…' : 'Enroll in Bala Vihar →'}
+    </button>
   );
 }
 

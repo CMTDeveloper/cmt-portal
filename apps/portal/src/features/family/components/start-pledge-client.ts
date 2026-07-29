@@ -2,7 +2,15 @@ export type StartPledgeClientResult =
   | { ok: true; checkoutUrl: string }
   | {
       ok: false;
-      reason: 'unauthorized' | 'manager-required' | 'no-email' | 'already-live' | 'unavailable' | 'error';
+      reason:
+        | 'unauthorized'
+        | 'manager-required'
+        | 'no-email'
+        | 'already-live'
+        /** No active Bala Vihar enrollment - there is nothing for a monthly plan to fund. */
+        | 'enrollment-required'
+        | 'unavailable'
+        | 'error';
     };
 
 /**
@@ -28,9 +36,16 @@ export async function startPledgeCheckout(): Promise<StartPledgeClientResult> {
   const json = (await res.json().catch(() => ({}))) as { checkoutUrl?: string; error?: string };
 
   if (!res.ok) {
-    // 409 means a pledge is already `started` or `active`. Not an error the
-    // family can act on - the card is simply stale, so the honest move is to
-    // reload it rather than report a failure.
+    // Two different 409s, and they need opposite responses: `enrollment-required`
+    // is something the family CAN act on (join Bala Vihar), so it must not be
+    // swallowed by the "your card is just stale, reload it" branch - reloading
+    // would show the same ask again and look like the button does nothing.
+    if (res.status === 409 && json.error === 'enrollment-required') {
+      return { ok: false, reason: 'enrollment-required' };
+    }
+    // Otherwise 409 means a pledge is already `started` or `active`. Not an
+    // error the family can act on - the card is simply stale, so the honest
+    // move is to reload it rather than report a failure.
     if (res.status === 409) return { ok: false, reason: 'already-live' };
     if (json.error === 'manager-required') return { ok: false, reason: 'manager-required' };
     if (json.error === 'no-email') return { ok: false, reason: 'no-email' };

@@ -7,8 +7,8 @@ import { flags } from '@/lib/flags';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 import { PendingJoinRequestsPanel } from '@/features/family/components/pending-join-requests-panel';
 import { CompleteDonationButton } from '@/features/family/components/complete-donation-button';
-import { PledgeCard } from '@/features/family/components/pledge-card';
 import { loadPledgeSlot, type PledgeSlot } from '@/features/setu/pledges/load-pledge-slot';
+import { clearAbandonedPledge } from '@/features/setu/pledges/clear-abandoned-pledge';
 import { loadFamilyDashboard, type BvChildView } from './_helpers/load-dashboard';
 import { buildFamilyDashboardModel, type FamilyDashboardModel } from './_helpers/dashboard-model';
 
@@ -313,6 +313,31 @@ export default async function FamilyDashboardPage() {
       // Null with the flag off, and null on a read error - loadPledgeSlot owns
       // both, so the dashboard never 500s over an optional ask.
       pledgeSlot = await loadPledgeSlot({ fid: data.family.fid, isManager: data.isManager });
+
+      // ── Repair an unfinished attempt, but ONLY when there is one ───────────
+      //
+      // 🔴 This page is the one most families land on, and the worst place to
+      // leave an unfinished attempt unresolved: `pledgePending` suppresses the
+      // donate banner entirely and the reassurance copy was removed on
+      // 2026-07-29, so a family who closed the Stripe tab (never hitting the
+      // cancel URL) and later opened the portal fresh would see no banner, no
+      // CTA and no explanation, indefinitely. Found by a Codex review of the
+      // enroll-page fix, which had left this surface behind.
+      //
+      // Gated on `started` deliberately. The first cut called this before the
+      // read, which meant an extra Firestore query on EVERY dashboard load - a
+      // latency cost paid by every family to repair a state almost none of them
+      // are in, and it lengthened the window before the donate CTA is
+      // interactive (an E2E click on that CTA started missing). Reading first
+      // costs nothing extra: `loadPledgeSlot` was already loaded here.
+      if (pledgeSlot?.pledge?.status === 'started') {
+        const outcome = await clearAbandonedPledge(data.family.fid);
+        // Re-read only when something actually changed, so the banner and CTA
+        // reflect the repair rather than the state we just fixed.
+        if (outcome === 'cleared') {
+          pledgeSlot = await loadPledgeSlot({ fid: data.family.fid, isManager: data.isManager });
+        }
+      }
     }
   }
 
@@ -336,20 +361,38 @@ export default async function FamilyDashboardPage() {
   // The in-portal "Complete donation" prompt: an enrolled family with an unpaid,
   // portal-managed donation. Everything else (paid / teacher-managed / legacy)
   // suppresses it.
-  const showDonatePrompt = model.donation.showGive && !donationComplete && !!model.eid;
-
   // ── A PENDING pledge must not be told to go and pay again ─────────────────
   // `started` = the family authorised the pre-authorized debit and the bank has
   // not confirmed it yet (see advance-pledge: mandate `pending` keeps it here).
-  // Nothing is paid, so the donation prompt legitimately still shows - but its
-  // normal copy is an INSTRUCTION ("Complete your donation to confirm your
+  // Nothing is paid, so the donation prompt would normally still show - but its
+  // copy is an INSTRUCTION ("Complete your donation to confirm your
   // enrollment"), and a family who follows it ends up paying $500 on top of a
   // $51/month debit, with no webhook to notice and a manual refund to unwind.
-  //
-  // So while a pledge is pending we reassure instead of instruct, and keep the
-  // one-time path as a quiet fallback rather than removing it - the mandate can
-  // still fail days later, and that family must be able to pay.
   const pledgePending = pledgeSlot?.pledge?.status === 'started';
+
+  // ── The banner is SUPPRESSED entirely while a mandate is confirming ────────
+  //
+  // It used to swap the instruction for reassurance ("Your monthly gift is being
+  // confirmed - there's nothing to do right now"). CMT Developer, 2026-07-29,
+  // pointing at that paragraph: remove it. Consistent with dropping the Monthly
+  // giving card from this page and from /donate/success - the dashboard reports
+  // Bala Vihar, and the monthly plan is not something it needs to narrate.
+  //
+  // 🔴 Suppressing the whole banner - not just its text - is what keeps this
+  // safe. The banner is the ONLY place `donateCta` renders, so with it gone
+  // there is no self-serve payment control anywhere on the dashboard while the
+  // mandate is confirming. Deleting the paragraph alone would have left an empty
+  // box; re-adding a CTA here without re-reading this comment would reopen the
+  // double-charge path, because the portal cannot undo a double payment -
+  // `cancelPledgeRecord` is bookkeeping only and stopping a pre-authorized debit
+  // is a manual action in Stripe by the temple.
+  //
+  // Nobody is stranded: a mandate that FAILS is written `failed`
+  // (advance-pledge step 3), `pledgePending` goes false, and the normal
+  // Complete donation banner returns on its own. `Donation status` on this same
+  // card still reads Pending throughout, which stays true either way.
+  const showDonatePrompt =
+    model.donation.showGive && !donationComplete && !!model.eid && !pledgePending;
 
   // ── The donate CTA must not skip the one-time / monthly choice ─────────────
   // CompleteDonationButton goes STRAIGHT to Stripe at the full suggested amount
@@ -386,15 +429,23 @@ export default async function FamilyDashboardPage() {
       />
     );
 
-  /** The whole donation banner: an instruction normally, reassurance while a
-   *  pledge is still confirming. */
+  /**
+   * The donation banner - an instruction to pay, and the only place `donateCta`
+   * renders.
+   *
+   * It carried a second, reassurance variant for a confirming mandate; that is
+   * gone, because `showDonatePrompt` now suppresses the banner outright in that
+   * state (see the comment there for why the whole banner, not just its copy).
+   * Nothing here may become conditional on `pledgePending` again - if this
+   * renders at all, the family is expected to pay.
+   */
   const donatePrompt = (block: boolean) => (
     <div
       style={{
         marginTop: block ? 16 : 20,
         padding: block ? 14 : '14px 18px',
-        background: pledgePending ? 'var(--surface2, #f3f1ec)' : '#fdefe7',
-        border: `1px solid ${pledgePending ? 'var(--line, #e5e0d8)' : 'var(--accentSoft)'}`,
+        background: '#fdefe7',
+        border: '1px solid var(--accentSoft)',
         borderRadius: 'var(--radiusSm)',
         display: 'flex',
         ...(block
@@ -403,33 +454,14 @@ export default async function FamilyDashboardPage() {
       }}
     >
       <div style={{ display: 'flex', gap: 10, alignItems: block ? 'flex-start' : 'center', ...(block ? {} : { flex: 1, minWidth: 0 }) }}>
-        <span style={{ color: pledgePending ? 'var(--muted)' : 'var(--warn)', ...(block ? { marginTop: 1 } : { display: 'grid', placeItems: 'center' }) }}>
+        <span style={{ color: 'var(--warn)', ...(block ? { marginTop: 1 } : { display: 'grid', placeItems: 'center' }) }}>
           <SetuIcon.info width={16} height={16} />
         </span>
         <span style={{ fontSize: 13, color: 'var(--body-text)', lineHeight: 1.45 }}>
-          {pledgePending ? (
-            <>
-              Your monthly gift is being confirmed — there&apos;s nothing to do right now. We&apos;ll
-              email you once it&apos;s set up.{' '}
-              <span style={{ color: 'var(--muted)' }}>
-                Changed your mind? Contact the temple office.
-              </span>
-            </>
-          ) : (
-            'Complete your donation to confirm your enrollment and support Bala Vihar.'
-          )}
+          Complete your donation to confirm your enrollment and support Bala Vihar.
         </span>
       </div>
-      {/* NO self-serve payment while the mandate is confirming.
-          The portal cannot undo a double payment: cancelPledgeRecord is
-          BOOKKEEPING ONLY - stopping a pre-authorized debit is a manual action
-          in Stripe by the temple. So a family who pays here and whose mandate
-          then clears is charged $500 AND $51/month, and only a phone call fixes
-          it.
-          Nobody is stranded by this: a mandate that FAILS is written `failed`
-          (advance-pledge step 3), `pledgePending` goes false, and the normal
-          Complete donation control below returns on its own. */}
-      {!pledgePending && donateCta(block)}
+      {donateCta(block)}
     </div>
   );
 
@@ -531,25 +563,23 @@ export default async function FamilyDashboardPage() {
               {childrenList && <div style={{ marginTop: 16 }}>{childrenList}</div>}
             </div>
 
-            {/* Monthly giving: STATE ONLY on the dashboard, never an ask.
-                The ask moved into the Bala Vihar donate flow on 2026-07-27
-                (Vaibhav: "This should not be separate. It's part of Bala
-                Vihar."), because a standalone card here read as an unrelated
-                second request for money - and rendered even for families whose
-                own dashboard said "Not enrolled". A family already on a plan
-                still needs to see it, so the card stays for THAT case with
-                `canStart={false}`. Rendered in BOTH column variants because this
-                page ships mobile and desktop markup side by side - any E2E
-                locator needs `.filter({ visible: true })`. */}
-            {pledgeSlot?.pledge && (
-              <PledgeCard
-                pledge={pledgeSlot.pledge}
-                askAmountCAD={pledgeSlot.askAmountCAD}
-                canStart={false}
-                mobile
-              />
-            )}
-
+            {/* ── No standalone "Monthly giving" card here, by decision ────────
+                CMT Developer, 2026-07-28: "I thought we removed monthly giving
+                option." The dashboard was saying the same thing twice - the Bala
+                Vihar card carried "Your monthly gift is being confirmed", and a
+                second card below repeated it in different words. On 2026-07-29
+                the Bala Vihar line went too, so this page now narrates nothing
+                about the monthly plan at all.
+                One statement, in the card the plan actually belongs to: the
+                pledge IS the Bala Vihar contribution (Vaibhav, 2026-07-27 -
+                "This should not be separate. It's part of Bala Vihar"), so the
+                Bala Vihar card is where it reads as context rather than as a
+                second, unrelated notice.
+                The acknowledgement still exists where it counts: /donate/success
+                headlines "Your monthly gift is being set up" at the moment they
+                authorise it. `pledgeSlot` is still read here because it drives
+                `pledgePending`, which SUPPRESSES the donate banner - and that
+                suppression is what removes the double-charge path. */}
             <KeepIdBanner />
           </div>
         </CspRoot>
@@ -619,15 +649,7 @@ export default async function FamilyDashboardPage() {
           {childrenList && <div style={{ marginTop: 20 }}>{childrenList}</div>}
         </div>
 
-        {/* State only - see the mobile column above. */}
-        {pledgeSlot?.pledge && (
-          <PledgeCard
-            pledge={pledgeSlot.pledge}
-            askAmountCAD={pledgeSlot.askAmountCAD}
-            canStart={false}
-          />
-        )}
-
+        {/* No standalone "Monthly giving" card - see the mobile column above. */}
         <KeepIdBanner />
       </div>
     </>

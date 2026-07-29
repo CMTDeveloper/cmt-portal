@@ -125,24 +125,68 @@ test.describe.serial('enrollment engagement state — Registered vs Enrolled (is
   test.describe('UI (mobile viewport)', () => {
     test.use({ viewport: MOBILE_VIEWPORT });
 
-    test('shows the Enrolled pill and a Complete donation button (straight to Stripe)', async ({ page }) => {
+    test('shows the Enrolled pill and a Complete donation control', async ({ page }) => {
       await page.goto('/family');
       // Mobile BV card pill now reads "Enrolled" (registered→Enrolled on the web).
       await expect(visibleText(page, /^Enrolled$/).first()).toBeVisible();
-      // The donate CTA is now a BUTTON that POSTs to checkout and redirects to
-      // Stripe (2026-07-04) — no longer a link to /family/donate.
-      const give = page.getByRole('button', { name: /Complete donation/i }).filter({ visible: true }).first();
+
+      // ── Button OR link, deliberately ─────────────────────────────────────
+      // This asserted a BUTTON going "straight to Stripe" (the 2026-07-04
+      // decision). Once the monthly plan existed that became wrong, and
+      // `pledge.spec.ts` now asserts the OPPOSITE - that the dashboard CTA must
+      // lead to the choice rather than jump to a $500 checkout, because a family
+      // taken straight to Stripe never learns $51/month is an option. With the
+      // pledge flag on, `donateCta` renders a <Link> to /family/enroll/bala-vihar;
+      // with it off, the original button. Two specs asserting opposite things is
+      // how a stale one survives, so this now pins the PROPERTY they agree on -
+      // the family has a way to complete their donation - and pledge.spec owns
+      // where it leads.
+      const give = page
+        .getByRole('button', { name: /Complete donation/i })
+        .or(page.getByRole('link', { name: /Complete donation/i }))
+        .filter({ visible: true })
+        .first();
       await expect(give).toBeVisible();
     });
   });
 
   // ── Phase 2: Enrolled after a completed donation (self-mutates the fixture) ──
   test.describe('after a completed donation (--confirm-bv)', () => {
-    test.beforeAll(async () => {
+    test.beforeAll(async ({ playwright, baseURL }) => {
       reseedE2eFamily(['--confirm-bv']);
       // The reseed bumped tokensValidAfterTime → the storageState session is now
       // dead. Re-sign-in so the Phase-2 request/page fixtures carry a live one.
       await reauthE2eFamily();
+
+      // ── Satisfy the Adult Study Class gate ────────────────────────────────
+      // `--confirm-bv` marks the Bala Vihar donation PAID, which is condition 3
+      // of `needsAdultClassSelection` - so from that moment `/family` correctly
+      // REDIRECTS to /adult-class until the family names an attendee. Both
+      // tests below open /family, so without this they assert against the gate
+      // page and fail on a locator that was never going to be there. (Caught
+      // 2026-07-29: the mobile one timed out for 20s and its screenshot showed
+      // "Who will attend the Adult Study Class?".)
+      //
+      // Named here rather than worked around, because the gate firing IS the
+      // correct behaviour - the fixture simply has to get past it, exactly as a
+      // real family would. Best-effort: the gate is flag-gated, so a 404 just
+      // means it is off and there was nothing to satisfy.
+      const ctx = await playwright.request.newContext({
+        baseURL: baseURL!,
+        storageState: 'e2e/.auth/family.json',
+      });
+      try {
+        const me = await ctx.get('/api/setu/family');
+        if (me.ok()) {
+          const body = (await me.json()) as { members?: { mid: string; type?: string }[] };
+          const adult = (body.members ?? []).find((m) => m.type === 'Adult');
+          if (adult) await ctx.post('/api/setu/adult-class', { data: { mids: [adult.mid] } });
+        }
+      } catch {
+        // Never fail setup on the gate; the assertions below will say what broke.
+      } finally {
+        await ctx.dispose();
+      }
     });
 
     test('API: dashboard reports bvState=enrolled', async ({ request }) => {
