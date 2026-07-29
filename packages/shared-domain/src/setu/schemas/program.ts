@@ -107,7 +107,16 @@ export function isAdultStudyClassProgram(program: {
   // exactly what every real caller passes.
   capabilities?: Partial<ProgramCapabilities> | undefined;
 }): boolean {
-  if (program.capabilities?.isAdultStudyClass === true) return true;
+  // An EXPLICIT boolean always wins - including `false`. Testing only for `true`
+  // and falling through left the checkbox unable to turn itself off for the one
+  // program named `adult-study-class`: an admin could untick it, save
+  // successfully, and the program stayed classified as an adult class forever.
+  // A control that cannot express one of its two states is worse than no
+  // control, because the admin is told the save worked.
+  const flag = program.capabilities?.isAdultStudyClass;
+  if (typeof flag === 'boolean') return flag;
+  // ABSENT only: the legacy key. Its doc carries no capability yet, and reading
+  // only the flag would break Brampton the moment this deployed.
   return program.programKey === ADULT_STUDY_CLASS;
 }
 

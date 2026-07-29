@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { GRADE_BAND_OPTIONS, CHILD_GRADE_OPTIONS, gradeLabel } from '../grades';
+import { GRADE_BAND_OPTIONS, CHILD_GRADE_OPTIONS, CHILD_GRADE_VALUES, isChildGradeValue, gradeLabel } from '../grades';
 
 describe('grade options', () => {
   it('GRADE_BAND_OPTIONS is JK, SK, then Grade 1..12 in order (no Shishu, no 3K)', () => {
@@ -31,5 +31,43 @@ describe('gradeLabel', () => {
     expect(gradeLabel('')).toBe('');
     expect(gradeLabel(null)).toBe('');
     expect(gradeLabel(undefined)).toBe('');
+  });
+});
+
+// ── The WRITE-path guard ─────────────────────────────────────────────────────
+// /register/family used a free-text grade input until 2026-07-29, so "E" was
+// accepted (reported by Vaibhav). Replacing it with a <select> constrains only
+// the portal's newest client - the register route still declared
+// `schoolGrade: z.string().optional()`, so a stale tab, the mobile app, or any
+// direct caller could keep writing junk. Found by a Codex review the same day.
+describe('isChildGradeValue - write-path guard', () => {
+  it('accepts every value the pickers actually offer', () => {
+    for (const g of CHILD_GRADE_OPTIONS) expect(isChildGradeValue(g.value)).toBe(true);
+  });
+
+  it('accepts the age-based Shishu bucket, which is a real stored value', () => {
+    expect(isChildGradeValue('Shishu')).toBe(true);
+  });
+
+  it('rejects the reported junk', () => {
+    expect(isChildGradeValue('E')).toBe(false);
+    expect(isChildGradeValue('3rd')).toBe(false);
+    expect(isChildGradeValue('grade three')).toBe(false);
+    expect(isChildGradeValue('')).toBe(false);
+  });
+
+  it('rejects a LABEL - the stored form is the token, and "Grade 3" is display only', () => {
+    expect(isChildGradeValue('Grade 3')).toBe(false);
+    expect(isChildGradeValue('3')).toBe(true);
+  });
+
+  it('is case- and space-exact, so a near-miss fails loudly rather than storing a second format', () => {
+    expect(isChildGradeValue('jk')).toBe(false);
+    expect(isChildGradeValue(' 3')).toBe(false);
+    expect(isChildGradeValue('shishu')).toBe(false);
+  });
+
+  it('CHILD_GRADE_VALUES stays in step with the options list', () => {
+    expect(CHILD_GRADE_VALUES).toEqual(CHILD_GRADE_OPTIONS.map((g) => g.value));
   });
 });

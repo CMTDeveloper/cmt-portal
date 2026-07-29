@@ -104,6 +104,22 @@ describe('isAdultStudyClassProgram', () => {
     expect(isAdultStudyClassProgram({ programKey: 'adult-study-class', capabilities: caps })).toBe(true);
   });
 
+  // Found by a Codex review, 2026-07-29: testing only for `true` and falling
+  // through to the key meant the checkbox could not turn itself OFF for the one
+  // program called `adult-study-class` - an admin could untick it, be told the
+  // save succeeded, and have nothing change.
+  it('an EXPLICIT false disables the legacy program too - the checkbox is not a lie', () => {
+    expect(
+      isAdultStudyClassProgram({ programKey: 'adult-study-class', capabilities: { ...caps, isAdultStudyClass: false } }),
+    ).toBe(false);
+  });
+
+  it('an explicit true still wins for the legacy key', () => {
+    expect(
+      isAdultStudyClassProgram({ programKey: 'adult-study-class', capabilities: { ...caps, isAdultStudyClass: true } }),
+    ).toBe(true);
+  });
+
   it('survives a doc with no capabilities at all rather than throwing', () => {
     expect(isAdultStudyClassProgram({ programKey: 'adult-study-east' })).toBe(false);
     expect(isAdultStudyClassProgram({ programKey: 'adult-study-class' })).toBe(true);
