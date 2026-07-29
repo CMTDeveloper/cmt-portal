@@ -38,7 +38,7 @@ describe('PledgeCard', () => {
     const ASK = 63;
 
     it('asks for the CURRENT monthly amount and offers a start button to a manager', () => {
-      render(<PledgeCard pledge={null} askAmountCAD={ASK} canStart />);
+      render(<PledgeCard pledge={null} askAmountCAD={ASK} canStart canAsk />);
       expect(screen.getByText(/\$63 a month/i)).toBeTruthy();
       expect(screen.getByRole('button', { name: /give \$63 monthly/i })).toBeTruthy();
     });
@@ -46,8 +46,65 @@ describe('PledgeCard', () => {
     it('shows the ask but NO button to a non-manager', () => {
       // A second parent on the account can see that the temple offers this; only
       // the manager can commit the family's bank account to it.
-      render(<PledgeCard pledge={null} askAmountCAD={ASK} canStart={false} />);
+      render(<PledgeCard pledge={null} askAmountCAD={ASK} canStart={false} canAsk />);
       expect(screen.getByText(/\$63 a month/i)).toBeTruthy();
+      expect(screen.queryByRole('button')).toBeNull();
+    });
+
+    it('renders NOTHING on a surface that does not solicit', () => {
+      // No pledge to report and no ask permitted leaves an empty "Monthly
+      // giving" heading, which is worse than no card.
+      const { container } = render(<PledgeCard pledge={null} askAmountCAD={ASK} canStart />);
+      expect(container).toBeEmptyDOMElement();
+    });
+  });
+
+  // ── 🔴 A surface must OPT IN to soliciting ─────────────────────────────────
+  //
+  // Reported by CMT Developer 2026-07-28 with a screenshot of `/family`: a
+  // family reading "Bala Vihar · Not enrolled · Enroll now" had, directly
+  // beneath it, "Your previous monthly gift isn't active. You can set one up
+  // again below." and "Support the mission with $51 a month" - with NOTHING
+  // below, because the dashboard hardcodes `canStart={false}`.
+  //
+  // Three faults in one card: a dangling "below", a general "support the
+  // mission" ask that Vaibhav ruled out ("This should not be separate. It's
+  // part of Bala Vihar"), and a solicitation beside a Not-enrolled status,
+  // which `pledge.spec.ts` already names as a rule.
+  //
+  // `canStart` could not express this: it means "may commit the family to a
+  // debit", and a non-manager legitimately still SEES the ask (above). So
+  // whether a surface solicits at all is its own prop - and it defaults to
+  // false, because a money ask should have to be asked for.
+  describe('a surface that reports but does not solicit', () => {
+    it.each([['failed'], ['cancelled']] as const)(
+      '%s says the gift is not active WITHOUT asking for money',
+      (status) => {
+        render(<PledgeCard pledge={pledge({ status })} askAmountCAD={63} canStart={false} />);
+        expect(screen.getByText(/isn't active/i)).toBeTruthy();
+        // No amount: quoting the price IS the ask.
+        expect((document.body.textContent ?? '').includes('63')).toBe(false);
+        expect(screen.queryByText(/support the mission/i)).toBeNull();
+        // And no dangling pointer at a control that is not rendered.
+        expect(screen.queryByText(/below/i)).toBeNull();
+        expect(screen.queryByRole('button')).toBeNull();
+      },
+    );
+
+    it('still reports a LIVE plan - reporting is the whole point of the card', () => {
+      render(<PledgeCard pledge={pledge({ monthlyAmountCAD: 51 })} askAmountCAD={63} canStart={false} />);
+      expect(screen.getByText(/\$51 monthly/i)).toBeTruthy();
+    });
+
+    it('still reports one that is CONFIRMING', () => {
+      render(
+        <PledgeCard
+          pledge={pledge({ status: 'started', activatedAt: null })}
+          askAmountCAD={63}
+          canStart={false}
+        />,
+      );
+      expect(screen.getByText(/setting up your monthly gift/i)).toBeTruthy();
       expect(screen.queryByRole('button')).toBeNull();
     });
   });
@@ -104,7 +161,7 @@ describe('PledgeCard', () => {
 
   describe('failed and cancelled - back to the ask', () => {
     it.each([['failed'], ['cancelled']] as const)('%s returns to the ask with a neutral line', (status) => {
-      render(<PledgeCard pledge={pledge({ status })} askAmountCAD={63} canStart />);
+      render(<PledgeCard pledge={pledge({ status })} askAmountCAD={63} canStart canAsk />);
       expect(screen.getByText(/\$63 a month/i)).toBeTruthy();
       expect(screen.getByRole('button', { name: /give \$63 monthly/i })).toBeTruthy();
       // Neutral: it must not blame the family or imply a bank problem.
@@ -114,7 +171,7 @@ describe('PledgeCard', () => {
     it('asks at TODAY\'s amount after a failure, not the amount of the failed attempt', () => {
       // They are signing a NEW mandate; quoting the stale amount would commit
       // them to a number the Price no longer charges.
-      render(<PledgeCard pledge={pledge({ status: 'failed', monthlyAmountCAD: 41 })} askAmountCAD={63} canStart />);
+      render(<PledgeCard pledge={pledge({ status: 'failed', monthlyAmountCAD: 41 })} askAmountCAD={63} canStart canAsk />);
       expect(screen.getByText(/\$63 a month/i)).toBeTruthy();
       expect((document.body.textContent ?? '').includes('41')).toBe(false);
     });

@@ -317,6 +317,30 @@ test.describe('monthly pledge', () => {
       page.getByRole('button', { name: /give \$\d+ monthly/i }),
       'the dashboard is soliciting a monthly plan - that ask belongs on /family/donate',
     ).toHaveCount(0);
+
+    // ── 🔴 An ask is COPY, not just a button ──────────────────────────────────
+    // This test named the right rule and then checked the wrong thing. Counting
+    // buttons alone passed on 2026-07-28 while the dashboard read, beneath a
+    // "Not enrolled" status: "Your previous monthly gift isn't active. You can
+    // set one up again below." and "Support the mission with $51 a month" -
+    // with nothing below, because `canStart={false}` had removed the button and
+    // left every word of the sales copy behind. Reported with a screenshot.
+    //
+    // So assert the SOLICITATION, which is what the rule is actually about:
+    // a price quoted as an ask, the general "support the mission" framing the
+    // pledge is explicitly not, and a pointer at a control that is not there.
+    await expect(
+      visibleText(page, /support the mission/i),
+      'the dashboard is making a general "support the mission" ask - the pledge is part of Bala Vihar',
+    ).toHaveCount(0);
+    await expect(
+      visibleText(page, /\$\d+ a month/i),
+      'the dashboard is quoting a monthly price, which is an ask however it is worded',
+    ).toHaveCount(0);
+    await expect(
+      visibleText(page, /set one up again below/i),
+      'the dashboard points at a control below it that this surface never renders',
+    ).toHaveCount(0);
   });
 
   test('the monthly option is offered inside the Bala Vihar donate flow', async ({ page }) => {
