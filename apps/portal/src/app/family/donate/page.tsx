@@ -11,6 +11,7 @@ import { getLegacyPaymentStatus } from '@/features/setu/donations/legacy-payment
 import { isPledgeGiving } from '@cmt/shared-domain/setu';
 import { flags } from '@/lib/flags';
 import { getFamilyPledge } from '@/features/setu/pledges/get-family-pledge';
+import { clearAbandonedPledge } from '@/features/setu/pledges/clear-abandoned-pledge';
 import { configuredMonthlyAmountCAD } from '@/features/setu/pledges/pledge-amount';
 import { MonthlyDonationOption } from '@/features/setu/pledges/components/monthly-donation-option';
 
@@ -102,6 +103,14 @@ export default async function DonatePage({
   // prompted the change.
   const pledgeEligible =
     flags.setuPledge && mode === 'enrollment' && programKey === BALA_VIHAR && !teacherManagedPayment;
+  // Same repair as the enroll page and the dashboard: an attempt the family
+  // never submitted must not block the ONE-TIME payment either. Reachable
+  // without touching the enroll page - during a multi-offering window
+  // `EnrollPanel` -> `EnrollCta` redirects straight here after enrolling, so a
+  // family with an earlier abandoned attempt would land on "your bank is
+  // confirming it" with no way to pay. Found by a Codex review, 2026-07-29.
+  if (pledgeEligible) await clearAbandonedPledge(family.fid);
+
   const existingPledge = pledgeEligible ? await getFamilyPledge(family.fid) : null;
   const monthlyOption = pledgeEligible ? (
     <MonthlyDonationOption

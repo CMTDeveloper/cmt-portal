@@ -8,6 +8,7 @@ import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 import { PendingJoinRequestsPanel } from '@/features/family/components/pending-join-requests-panel';
 import { CompleteDonationButton } from '@/features/family/components/complete-donation-button';
 import { loadPledgeSlot, type PledgeSlot } from '@/features/setu/pledges/load-pledge-slot';
+import { clearAbandonedPledge } from '@/features/setu/pledges/clear-abandoned-pledge';
 import { loadFamilyDashboard, type BvChildView } from './_helpers/load-dashboard';
 import { buildFamilyDashboardModel, type FamilyDashboardModel } from './_helpers/dashboard-model';
 
@@ -309,6 +310,19 @@ export default async function FamilyDashboardPage() {
       model = dash.model;
       bvChildren = dash.bvChildren;
       familyCounts = dash.familyCounts;
+      // ── Resolve an abandoned attempt BEFORE reading the pledge ────────────
+      //
+      // 🔴 This page is the one most families land on, and it is the WORST
+      // place to leave an unfinished attempt unresolved. `pledgePending`
+      // suppresses the donate banner entirely, and the reassurance copy was
+      // removed on 2026-07-29 - so a family who closed the Stripe tab (never
+      // hitting the cancel URL) and later opened the portal fresh would see no
+      // banner, no CTA and no explanation, indefinitely. Found by a Codex review
+      // of the enroll-page fix, which had left this surface behind.
+      //
+      // Never throws and only clears what Stripe says was never submitted.
+      if (flags.setuPledge) await clearAbandonedPledge(data.family.fid);
+
       // Null with the flag off, and null on a read error - loadPledgeSlot owns
       // both, so the dashboard never 500s over an optional ask.
       pledgeSlot = await loadPledgeSlot({ fid: data.family.fid, isManager: data.isManager });

@@ -1,16 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockFlags, mockStart, mockFamily, mockEnrollments } = vi.hoisted(() => ({
+const { mockFlags, mockStart, mockFamily, mockEnrollments, mockClear } = vi.hoisted(() => ({
   mockFlags: { setuPledge: true },
   mockStart: vi.fn(),
   mockFamily: vi.fn(),
   mockEnrollments: vi.fn(),
+  mockClear: vi.fn(),
 }));
 
 vi.mock('@/lib/flags', () => ({ flags: mockFlags }));
 vi.mock('@/features/setu/pledges/start-pledge', () => ({ startPledge: mockStart }));
 vi.mock('@/features/setu/members/get-family-by-fid', () => ({ getFamilyByFid: mockFamily }));
 vi.mock('@/features/setu/enrollment/get-enrollments', () => ({ getEnrollments: mockEnrollments }));
+vi.mock('@/features/setu/pledges/clear-abandoned-pledge', () => ({ clearAbandonedPledge: mockClear }));
 
 const BV_ENROLLMENT = { eid: 'CMT-A-bv-2026', programKey: 'bala-vihar', status: 'active' };
 
@@ -38,6 +40,8 @@ beforeEach(() => {
   mockFamily.mockResolvedValue({ family: { fid: 'CMT-A', name: 'Apple Family' } });
   mockEnrollments.mockReset();
   mockEnrollments.mockResolvedValue([BV_ENROLLMENT]);
+  mockClear.mockReset();
+  mockClear.mockResolvedValue('none');
 });
 
 describe('POST /api/pledges/start', () => {
@@ -125,6 +129,32 @@ describe('POST /api/pledges/start', () => {
       ]);
       expect((await POST(req(MANAGER))).status).toBe(201);
     });
+  });
+
+  // ── A stale attempt must not block the retry ───────────────────────────────
+  //
+  // Vaibhav backed out of the hosted page; that session answers `pending`
+  // forever, so without this the retry hits `already-started` from a mandate
+  // that does not exist. Asserted with ORDERING because the call only helps if
+  // it lands BEFORE startPledge's duplicate guard reads the collection.
+  //
+  // This test exists because a Codex review pointed out the route had NO
+  // coverage of the wiring at all: the real `clearAbandonedPledge` swallows its
+  // own Firestore-init failure under test, and the route discards the return
+  // value, so deleting the call outright left this suite green.
+  it('clears an abandoned attempt BEFORE starting a new one', async () => {
+    await POST(req(MANAGER));
+    expect(mockClear).toHaveBeenCalledWith('CMT-A');
+    const clearedAt = mockClear.mock.invocationCallOrder[0]!;
+    const startedAt = mockStart.mock.invocationCallOrder[0]!;
+    expect(clearedAt, 'startPledge ran before the stale attempt was cleared').toBeLessThan(startedAt);
+  });
+
+  it('does not bother clearing when the family cannot pledge anyway', async () => {
+    // No Bala Vihar enrollment: the request is refused before any repair.
+    mockEnrollments.mockResolvedValue([]);
+    await POST(req(MANAGER));
+    expect(mockClear).not.toHaveBeenCalled();
   });
 
   it('503s on a provider failure WITHOUT echoing the provider error', async () => {

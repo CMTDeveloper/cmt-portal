@@ -79,6 +79,19 @@ describe('clearAbandonedPledge', () => {
     await expect(clearAbandonedPledge('CMT-A')).resolves.toBe('cleared');
   });
 
+  // 🔴 Callers include server components rendering a WHOLE PAGE. A transient
+  // Firestore blip must cost this repair and nothing else - `loadPledgeSlot`
+  // takes the same care so the dashboard never 500s over an optional ask. Codex
+  // caught that the write path was the one step left unwrapped, so a DB hiccup
+  // would have taken down the enroll page for every family with a live pledge.
+  it('NEVER THROWS when the cancel write fails - it degrades to in-play', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mockCancel.mockRejectedValue(new Error('UNAVAILABLE'));
+    await expect(clearAbandonedPledge('CMT-A')).resolves.toBe('in-play');
+    expect(spy).toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
   it('records the SYSTEM as the actor, not a human who decided nothing', async () => {
     await clearAbandonedPledge('CMT-A');
     expect(mockCancel).toHaveBeenCalledWith(

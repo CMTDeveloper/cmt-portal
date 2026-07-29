@@ -32,13 +32,30 @@ export type ClearAbandonedResult =
  * cancel endpoint, and the temple stops debits by hand in Stripe. So the
  * decision is never taken on our own bookkeeping: we ask the provider and act
  * only on Stripe's own statement that the hosted page was never submitted.
- * `getCheckoutSessionSubmission` fails CLOSED, and so does this - any provider
- * error returns `in-play`, leaving the family locked rather than exposed.
+ * `getCheckoutSessionSubmission` fails CLOSED, and so does every step here:
+ * ANY error - read, provider, or write - returns `in-play`, leaving the family
+ * locked rather than exposed.
+ *
+ * NEVER THROWS. Callers include server components rendering a whole page, so a
+ * transient Firestore blip must cost this repair and nothing else -
+ * `loadPledgeSlot` takes the same care, for the same reason.
  *
  * Proven necessary, not theoretical: probing the service for a session Vaibhav
  * backed out of returned `{"state":"pending","reason":"PAD setup not completed
  * yet","stripe":{"status":"open"}}` - `pending` forever, so `advancePledge`
  * would have left that pledge `started` until the end of time.
+ *
+ * ── Known, bounded race (Codex review, 2026-07-29) ──────────────────────────
+ * Between asking the provider and writing the cancel, a family with the hosted
+ * page still open on ANOTHER device could submit the mandate;
+ * `cancelPledgeRecord` re-checks only the status, not submission, so it would
+ * cancel anyway. It cannot produce a double DEBIT - `advancePledge` short-
+ * circuits a `cancelled` pledge before step 4, so no subscription is ever
+ * created from it. What it can leave is a mandate at Stripe with no
+ * subscription behind it and nothing in the portal pointing at it. Accepted:
+ * it needs two live sessions on one abandoned page, and the alternative (a
+ * second provider round trip inside the transaction) trades a rare orphan for
+ * network I/O inside a Firestore transaction, which the SDK may retry.
  */
 export async function clearAbandonedPledge(fid: string): Promise<ClearAbandonedResult> {
   let started: Awaited<ReturnType<typeof findStartedPledge>>;
@@ -66,11 +83,20 @@ export async function clearAbandonedPledge(fid: string): Promise<ClearAbandonedR
   // Through `cancelPledgeRecord` so the write and its audit row land in ONE
   // transaction. The actor is the system, honestly labelled: no human decided
   // this, and a row claiming otherwise would mislead whoever reads it later.
-  const result = await cancelPledgeRecord({
-    pid: started.pid,
-    actor: { uid: 'system:abandoned-pad-session', mid: null, role: 'family-manager', extraRoles: [] },
-  });
-  // A lost race (the reconciler or an admin got there first) is still "not in
-  // play" - whatever they did, this pledge is no longer blocking the family.
-  return result.ok ? 'cleared' : 'cleared';
+  try {
+    await cancelPledgeRecord({
+      pid: started.pid,
+      actor: { uid: 'system:abandoned-pad-session', mid: null, role: 'family-manager', extraRoles: [] },
+    });
+  } catch (err) {
+    // The repair failed; the pledge is untouched and still blocking. Report that
+    // truthfully rather than crashing the page that called us - the family sees
+    // the confirming state for another few minutes, and the next visit retries.
+    console.error('[pledge] could not clear an abandoned attempt - leaving it in play', err);
+    return 'in-play';
+  }
+  // A lost race - the reconciler or an admin got there first - still means "not
+  // in play": whatever they did, this pledge no longer blocks the family.
+  // `cancelPledgeRecord` reports that as ok:false, which is not a failure here.
+  return 'cleared';
 }
