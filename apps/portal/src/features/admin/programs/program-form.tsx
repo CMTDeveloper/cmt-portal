@@ -44,6 +44,9 @@ export function ProgramForm({ program, locationOptions }: ProgramFormProps) {
   const [usesLevels, setUsesLevels] = useState(program.capabilities.usesLevels);
   const [usesCalendar, setUsesCalendar] = useState(program.capabilities.usesCalendar);
   const [attendanceMode, setAttendanceMode] = useState<AttendanceMode>(program.capabilities.attendanceMode);
+  // `=== true`, because the field is optional on purpose - see the note on
+  // ProgramCapabilitiesSchema. An absent flag is "not an adult class".
+  const [isAdultStudyClass, setIsAdultStudyClass] = useState(program.capabilities.isAdultStudyClass === true);
   const [displayOrder, setDisplayOrder] = useState(String(program.displayOrder));
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -79,8 +82,27 @@ export function ProgramForm({ program, locationOptions }: ProgramFormProps) {
         if (maxAge !== '') (newEligibility as Record<string, unknown>).maxAgeYears = Number(maxAge);
         if (JSON.stringify(newEligibility) !== JSON.stringify(program.eligibility)) body.eligibility = newEligibility;
 
-        const newCaps = { usesOfferings, usesDonation, usesLevels, usesCalendar, attendanceMode };
-        if (JSON.stringify(newCaps) !== JSON.stringify(program.capabilities)) body.capabilities = newCaps;
+        // ⚠️ This REPLACES the stored capabilities wholesale, so every field the
+        // schema knows about must be listed here. Omitting `isAdultStudyClass`
+        // would silently un-flag an Adult Study Class program the first time an
+        // admin saved an unrelated edit to it, and the only symptom would be
+        // families quietly stopping being asked who attends.
+        const newCaps = { usesOfferings, usesDonation, usesLevels, usesCalendar, attendanceMode, isAdultStudyClass };
+        // Field-by-field, NOT JSON.stringify: Firestore preserves whatever key
+        // order each doc was written with, and these docs genuinely differ -
+        // `adult-study-class` stores attendanceMode first, `adult-study-east`
+        // stores it last. Stringify-comparing them reported a change on every
+        // load and rewrote identical values. Compared this way an absent
+        // `isAdultStudyClass` equals an unticked box, so a program predating the
+        // flag is correctly "unchanged".
+        const capsChanged =
+          newCaps.usesOfferings !== program.capabilities.usesOfferings ||
+          newCaps.usesDonation !== program.capabilities.usesDonation ||
+          newCaps.usesLevels !== program.capabilities.usesLevels ||
+          newCaps.usesCalendar !== program.capabilities.usesCalendar ||
+          newCaps.attendanceMode !== program.capabilities.attendanceMode ||
+          newCaps.isAdultStudyClass !== (program.capabilities.isAdultStudyClass === true);
+        if (capsChanged) body.capabilities = newCaps;
 
         if (Number(displayOrder) !== program.displayOrder) body.displayOrder = Number(displayOrder) || 0;
 
@@ -184,6 +206,11 @@ export function ProgramForm({ program, locationOptions }: ProgramFormProps) {
               { key: 'usesDonation', capLabel: 'Uses donation', value: usesDonation, set: setUsesDonation },
               { key: 'usesLevels', capLabel: 'Uses levels (class placement)', value: usesLevels, set: setUsesLevels },
               { key: 'usesCalendar', capLabel: 'Uses calendar (published schedule)', value: usesCalendar, set: setUsesCalendar },
+              // Tick this and the program joins the "one parent stays on site"
+              // ask: families are gated to /adult-class to name who attends.
+              // Each centre may run its own adult-class program, so this is the
+              // ONLY thing that marks one - see isAdultStudyClassProgram.
+              { key: 'isAdultStudyClass', capLabel: 'Is an Adult Study Class (asks families who attends)', value: isAdultStudyClass, set: setIsAdultStudyClass },
             ].map(({ key, capLabel, value, set }) => (
               <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, cursor: 'pointer' }}>
                 <input type="checkbox" checked={value} onChange={(e) => set(e.target.checked)} style={{ width: 15, height: 15, accentColor: 'var(--accent)' }} />

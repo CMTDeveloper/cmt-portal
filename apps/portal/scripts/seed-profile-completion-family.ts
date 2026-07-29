@@ -31,6 +31,9 @@ import { normalizeContactForKey } from '@cmt/shared-domain/setu';
 import { registerFamily } from '@/features/setu/registration/register-family';
 import { hashContactKey } from '@/features/setu/registration/hash-contact-key';
 import { findSetuFamilyByContact } from '@/features/setu/auth/find-family-by-contact';
+import { getDisclaimersConfig } from '@/features/setu/disclaimers/config';
+import { recordDisclaimerAcceptance } from '@/features/setu/disclaimers/acceptance';
+import { getSchoolYearConfig } from '@/features/setu/rollover/school-year-config';
 
 const MANAGER_EMAIL = process.env['E2E_PC_MANAGER_EMAIL'] ?? 'e2e-pc-manager@chinmayatoronto.org';
 const PASSWORD = process.env['E2E_PC_PASSWORD'] ?? process.env['E2E_FAMILY_PASSWORD'];
@@ -115,6 +118,36 @@ async function main(): Promise<void> {
       _test: true,
     },
     { merge: true },
+  );
+
+  // 2b) ACCEPT the CURRENT disclaimers, so the only gate this fixture trips is
+  //     the profile-completion one it exists to test.
+  //
+  // The specs are not read-only: publishing disclaimers bumps
+  // `app_config/disclaimers.version`, and that re-gates EVERY family. On
+  // 2026-07-29 the version stood at 18, written by `CMT-FSWEDU2X-01` - another
+  // spec's own test family - and 8 families held a stale acceptance. This
+  // fixture was one, so its last spec ("a complete family is no longer gated")
+  // landed on `/acknowledgements` and failed a `toHaveURL(/\/family/)` after
+  // 20s. The failure named neither disclaimers nor a version, which is what made
+  // it read as a broken profile gate.
+  //
+  // Reading the version rather than pinning one is the whole point: a hardcoded
+  // 18 would rot at the next publish. Written through the SAME
+  // `recordDisclaimerAcceptance` the app uses, so the fixture's shape can never
+  // drift from what `isDisclaimerAccepted` checks - the failure mode a
+  // hand-built `disclaimersAccepted` literal invites.
+  const [disclaimers, schoolYear] = await Promise.all([
+    getDisclaimersConfig(db),
+    getSchoolYearConfig(db),
+  ]);
+  await recordDisclaimerAcceptance(db, fid, {
+    version: disclaimers.version,
+    schoolYear: schoolYear.currentYear,
+    byMid: managerMid,
+  });
+  console.log(
+    `accepted disclaimers v${disclaimers.version} for ${schoolYear.currentYear} (so only the profile gate fires)`,
   );
 
   // 3) RESET the manager to the gate-INCOMPLETE state (the whole point of this

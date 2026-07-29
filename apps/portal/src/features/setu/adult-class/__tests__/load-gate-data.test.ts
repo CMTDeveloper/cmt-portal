@@ -13,6 +13,7 @@ const {
   getLegacyPaymentStatus,
   isTeacherAssigned,
   getFamilyPledge,
+  adultStudyClassProgramKeys,
 } = vi.hoisted(() => ({
   getOpenOfferingsForFamily: vi.fn(),
   getEnrollments: vi.fn(),
@@ -22,6 +23,11 @@ const {
   // Defaults to "no pledge" so every existing case keeps its meaning; the
   // pledge-specific cases opt in.
   getFamilyPledge: vi.fn().mockResolvedValue(null),
+  // The one legacy key by default, so every pre-existing case keeps its
+  // meaning. Mocked because the real one reads `listPrograms()`, which is
+  // `use cache` and throws "cacheTag() is only available with the
+  // cacheComponents config" under vitest.
+  adultStudyClassProgramKeys: vi.fn().mockResolvedValue(['adult-study-class']),
 }));
 // Only the QUERY is mocked - `resolveCurrentOffering` stays real, so the loader
 // is exercised against the actual tie-break rule (which has its own tests in
@@ -35,6 +41,7 @@ vi.mock('@/features/setu/donations/get-donations', () => ({ getDonations }));
 vi.mock('@/features/setu/donations/legacy-payment', () => ({ getLegacyPaymentStatus }));
 vi.mock('@/features/setu/teacher/assignments', () => ({ isTeacherAssigned }));
 vi.mock('@/features/setu/pledges/get-family-pledge', () => ({ getFamilyPledge }));
+vi.mock('../program-keys', () => ({ adultStudyClassProgramKeys }));
 
 import { loadAdultClassGateDataOrThrow, loadAdultClassGateDataFailSoft } from '../load-gate-data';
 
@@ -82,6 +89,8 @@ beforeEach(() => {
   getDonations.mockReset().mockResolvedValue([]);
   getLegacyPaymentStatus.mockReset().mockResolvedValue('paid');
   isTeacherAssigned.mockReset().mockResolvedValue(false);
+  // Reset too, or a per-centre override leaks into the next case.
+  adultStudyClassProgramKeys.mockReset().mockResolvedValue(['adult-study-class']);
 });
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -95,6 +104,8 @@ describe('loadAdultClassGateDataOrThrow', () => {
     const data = await loadAdultClassGateDataOrThrow({ family: family(), members, isManager: true });
 
     expect(getOpenOfferingsForFamily).toHaveBeenCalledWith('adult-study-class', 'Brampton');
+    // One program configured => exactly one query. The loop must not fan out.
+    expect(getOpenOfferingsForFamily).toHaveBeenCalledTimes(1);
     expect(data).not.toBeNull();
     expect(data!.isManager).toBe(true);
     expect(data!.members).toEqual(members);
@@ -251,5 +262,97 @@ describe('loadAdultClassGateDataFailSoft', () => {
       isManager: true,
     });
     expect(data?.currentOffering?.oid).toBe('asc-2026');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Per-centre adult-class programs (Scarborough, reported 2026-07-29)
+//
+// Scarborough's class is its own program, `adult-study-east`. While every path
+// compared against the literal `adult-study-class`, this gate queried a key that
+// had no Scarborough offering, found nothing, and returned null - so the family
+// enrolled, paid, and was never asked who attends. CMT's decision is that each
+// centre may run its own adult-class program, so the gate must span them all.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('loadAdultClassGateDataOrThrow - per-centre adult-class programs', () => {
+  it("gates a Scarborough family on a program that is NOT the hardcoded key", async () => {
+    adultStudyClassProgramKeys.mockResolvedValue(['adult-study-east']);
+    getOpenOfferingsForFamily.mockImplementation(async (key: string) =>
+      key === 'adult-study-east'
+        ? [offering({ oid: 'adult-study-east-scarborough-2026-27', programKey: 'adult-study-east', location: 'Scarborough' })]
+        : [],
+    );
+
+    const data = await loadAdultClassGateDataOrThrow({
+      family: family({ location: 'Scarborough' }),
+      members: [adult('CMT-F-01'), child('CMT-F-03')],
+      isManager: true,
+    });
+
+    expect(getOpenOfferingsForFamily).toHaveBeenCalledWith('adult-study-east', 'Scarborough');
+    expect(data).not.toBeNull();
+    expect(data!.currentOffering?.oid).toBe('adult-study-east-scarborough-2026-27');
+  });
+
+  it('queries EVERY configured program and picks the one at the family\'s own centre', async () => {
+    adultStudyClassProgramKeys.mockResolvedValue(['adult-study-class', 'adult-study-east']);
+    getOpenOfferingsForFamily.mockImplementation(async (key: string, loc: string | null) => {
+      // Each program only has an offering at its own centre, which is what the
+      // real query would return for a Scarborough family.
+      if (key === 'adult-study-class') return [];
+      return loc === 'Scarborough'
+        ? [offering({ oid: 'east-scar', programKey: 'adult-study-east', location: 'Scarborough' })]
+        : [];
+    });
+
+    const data = await loadAdultClassGateDataOrThrow({
+      family: family({ location: 'Scarborough' }),
+      members: [adult('CMT-F-01')],
+      isManager: true,
+    });
+
+    expect(getOpenOfferingsForFamily).toHaveBeenCalledTimes(2);
+    expect(data!.currentOffering?.oid).toBe('east-scar');
+  });
+
+  it('still returns null when no configured program has an offering for this centre', async () => {
+    adultStudyClassProgramKeys.mockResolvedValue(['adult-study-class', 'adult-study-east']);
+    getOpenOfferingsForFamily.mockResolvedValue([]);
+
+    const data = await loadAdultClassGateDataOrThrow({
+      family: family({ location: 'Mississauga' }),
+      members: [adult('CMT-F-01')],
+      isManager: true,
+    });
+
+    expect(data).toBeNull();
+    // No offering => none of the expensive downstream reads were paid for.
+    expect(getEnrollments).not.toHaveBeenCalled();
+  });
+
+  it('no adult-class program configured at all means no gate, and no offering queries', async () => {
+    adultStudyClassProgramKeys.mockResolvedValue([]);
+
+    const data = await loadAdultClassGateDataOrThrow({
+      family: family(),
+      members: [adult('CMT-F-01')],
+      isManager: true,
+    });
+
+    expect(data).toBeNull();
+    expect(getOpenOfferingsForFamily).not.toHaveBeenCalled();
+  });
+
+  it('dedupes by oid so one offering reachable from two programs is not counted twice', async () => {
+    adultStudyClassProgramKeys.mockResolvedValue(['adult-study-class', 'adult-study-east']);
+    getOpenOfferingsForFamily.mockResolvedValue([offering({ oid: 'shared-oid' })]);
+
+    const data = await loadAdultClassGateDataOrThrow({
+      family: family(),
+      members: [adult('CMT-F-01')],
+      isManager: true,
+    });
+
+    expect(data!.currentOffering?.oid).toBe('shared-oid');
   });
 });

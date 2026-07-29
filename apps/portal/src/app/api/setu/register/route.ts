@@ -14,7 +14,7 @@ import {
   checkAndRecordOtpRateLimit,
   REGISTER_RATE_LIMIT_MAX,
 } from '@/features/check-in/shared';
-import { whatsMissingForMember, type MemberRequiredField, FamilyAddressSchema } from '@cmt/shared-domain';
+import { whatsMissingForMember, isChildGradeValue, type MemberRequiredField, FamilyAddressSchema } from '@cmt/shared-domain';
 import { getLocationOptions } from '@/lib/locations';
 
 
@@ -26,7 +26,20 @@ const additionalMemberSchema = z.object({
   lastName: z.string().min(1),
   type: z.enum(['Adult', 'Child']),
   gender: z.enum(['Male', 'Female']),
-  schoolGrade: z.string().optional(),
+  // Canonical values only. `z.string()` here is what let the old free-text input
+  // store "E" (reported 2026-07-29) - and the dropdown that replaced it only
+  // constrains the portal's newest client, not a stale tab, the mobile app, or a
+  // direct caller. Level assignment and the annual promotion read these as
+  // GRADE_LADDER tokens, so an off-ladder value makes a child look enrolled and
+  // sort into no level. The refusal belongs here, at the one point every caller
+  // passes through.
+  //
+  // WRITE path only: existing docs may hold legacy labels and must still READ -
+  // see the note on CHILD_GRADE_VALUES.
+  schoolGrade: z
+    .string()
+    .refine(isChildGradeValue, { message: 'schoolGrade must be one of CHILD_GRADE_VALUES' })
+    .optional(),
   birthMonthYear: z.string().optional(),
   foodAllergies: z.string().optional(),
   volunteeringSkills: z.array(z.string()).optional(),

@@ -104,6 +104,29 @@ export function memberFieldComplete(member: MemberCompletenessInput, field: Memb
   }
 }
 
+/**
+ * Human labels for the required fields, for telling someone what is missing.
+ *
+ * Lives here, next to the field list itself, so a new `MemberRequiredField` is a
+ * TYPE ERROR until it gets a label - a `Partial<Record<...>>` copy per screen
+ * silently renders the raw key instead. The register form and the
+ * complete-profile form share this; the two `*_ERROR` maps in the register route
+ * and `write-member.ts` are deliberately NOT folded in, because those are
+ * server-side refusal messages ("Email is required to..."), not field names.
+ */
+export const MEMBER_FIELD_LABEL: Record<MemberRequiredField, string> = {
+  firstName: 'First name',
+  lastName: 'Last name',
+  gender: 'Gender',
+  type: 'Member type',
+  foodAllergies: 'Food allergies',
+  email: 'Email',
+  phone: 'Phone',
+  volunteeringSkills: 'Volunteering skills',
+  schoolGrade: 'School grade',
+  birthMonthYear: 'Birth month & year',
+};
+
 /** The required fields a member is still missing (empty ⇒ complete). */
 export function whatsMissingForMember(member: MemberCompletenessInput): MemberRequiredField[] {
   return requiredFieldsForType(member.type).filter((f) => !memberFieldComplete(member, f));

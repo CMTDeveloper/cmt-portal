@@ -78,7 +78,7 @@ const completeChild = {
   type: 'Child',
   gender: 'Female',
   foodAllergies: 'Peanuts',
-  schoolGrade: 'Grade 5',
+  schoolGrade: '5',
   birthMonthYear: '2016-03',
 };
 
@@ -346,7 +346,7 @@ describe('POST /api/setu/register', () => {
     expect(registerFamily).toHaveBeenCalledWith(expect.objectContaining({
       additionalMembers: expect.arrayContaining([
         expect.objectContaining({
-          schoolGrade: 'Grade 5',
+          schoolGrade: '5',
           birthMonthYear: '2016-03',
           foodAllergies: 'Peanuts',
         }),
@@ -402,6 +402,32 @@ describe('POST /api/setu/register — per-type required matrix (400 guards)', ()
     expect(res.status).toBe(400);
     expect((await res.json()).error).toBe('grade-required');
     expect(registerFamily).not.toHaveBeenCalled();
+  });
+
+  // ── The grade the SERVER will accept ────────────────────────────────────────
+  // The form's grade field was free text until 2026-07-29, so "E" registered a
+  // child (reported by Vaibhav). Making it a <select> only constrains the
+  // portal's own newest client; this route is where a stale tab, the mobile app
+  // or a direct caller is stopped. Found by a Codex review the same day.
+  it.each(['E', '3rd', 'grade three', 'Grade 5'])(
+    'refuses the off-ladder schoolGrade %p instead of storing it verbatim',
+    async (bad) => {
+      const res = await POST(
+        makeRequest({ ...validBody, additionalMembers: [{ ...completeChild, schoolGrade: bad }] }),
+      );
+      expect(res.status).toBe(400);
+      expect(registerFamily).not.toHaveBeenCalled();
+    },
+  );
+
+  it('accepts the canonical tokens, including the age-based Shishu bucket', async () => {
+    for (const good of ['JK', 'SK', '1', '12', 'Shishu']) {
+      (registerFamily as unknown as { mockClear: () => void }).mockClear();
+      const res = await POST(
+        makeRequest({ ...validBody, additionalMembers: [{ ...completeChild, schoolGrade: good }] }),
+      );
+      expect(res.status, `schoolGrade ${good} must be accepted`).toBe(200);
+    }
   });
 
   it('400 birthmonth-required when a child member omits birthMonthYear', async () => {

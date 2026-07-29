@@ -39,8 +39,10 @@ vi.mock('@/features/family/components/atoms', () => ({
   StepHeader: ({ step, of, label }: { step: number; of: number; label: string }) => (
     <div data-testid="step-header">Step {step} of {of} · {label}</div>
   ),
-  AddedMemberRow: ({ name, type }: { name: string; type: string }) => (
-    <div data-testid="added-member-row">{name} — {type}</div>
+  // Renders `action` (the row's trailing control) - see the note on the same
+  // mock in register/family/__tests__/page.test.tsx.
+  AddedMemberRow: ({ name, type, action }: { name: string; type: string; action?: React.ReactNode }) => (
+    <div data-testid="added-member-row">{name} — {type}{action}</div>
   ),
 }));
 

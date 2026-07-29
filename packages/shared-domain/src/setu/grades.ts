@@ -15,6 +15,31 @@ export const CHILD_GRADE_OPTIONS: readonly { value: string; label: string }[] = 
   ...GRADE_BAND_OPTIONS,
 ];
 
+/**
+ * The canonical child-grade values, for validating a WRITE.
+ *
+ * A dropdown is a convenience, never a rule: `/register/family` used a free-text
+ * input until 2026-07-29 and the register route still declared
+ * `schoolGrade: z.string().optional()`, so "E", "3rd" and "grade three" all
+ * stored verbatim. Making the input a `<select>` fixed only the portal's own
+ * newest client - a stale tab, the mobile app, or any direct caller could still
+ * write junk that level assignment and the annual promotion cannot read.
+ *
+ * So the check belongs at the write route, which is the one place every caller
+ * must pass through.
+ *
+ * ⚠️ For WRITES ONLY. Never use this to validate a READ: members registered
+ * before the dropdown may legitimately hold a label like 'Grade 3', and refusing
+ * to read those docs would lock those families out of their own profile. Display
+ * goes through `gradeLabel()`, which tolerates both.
+ */
+export const CHILD_GRADE_VALUES: readonly string[] = CHILD_GRADE_OPTIONS.map((g) => g.value);
+
+/** Is this exactly one of the canonical child-grade values? Write-path only. */
+export function isChildGradeValue(value: string): boolean {
+  return CHILD_GRADE_VALUES.includes(value);
+}
+
 /** Friendly label for a stored child grade value, for display next to a child's
  *  name. Numeric grades get a "Grade" prefix ('2' -> 'Grade 2'); JK/SK/Shishu
  *  and anything else stay as-is (a value already like 'Grade 2' is returned

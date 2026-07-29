@@ -176,20 +176,34 @@ export function PayMethod({ active, label, sub, icon, onClick }: PayMethodProps)
 interface AddedMemberRowProps {
   name: string;
   type: string;
+  /**
+   * The row's trailing control. Supply one and it REPLACES the decorative
+   * pencil - it does not sit beside it.
+   *
+   * The register form used to absolutely-position its "Remove" button over this
+   * row (`top:12 right:12`), which landed it directly on top of the pencil:
+   * reported 2026-07-29 as "the edit and remove overlapping". The pencil is the
+   * one at fault - it has never had an `onClick` and exists only in the
+   * flag-off prototype, so a real caller's control must take its place rather
+   * than be layered over a button that does nothing.
+   */
+  action?: React.ReactNode;
 }
 
-export function AddedMemberRow({ name, type }: AddedMemberRowProps) {
+export function AddedMemberRow({ name, type, action }: AddedMemberRowProps) {
   return (
     <div style={{ padding: '12px 14px', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radius)' }}>
       <div className="row" style={{ gap: 10 }}>
         <SetuAvatar name={name} size={32}/>
-        <div style={{ flex: 1 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontWeight: 600, fontSize: 14 }}>{name}</div>
           <div style={{ fontSize: 11, color: 'var(--muted)' }}>{type}</div>
         </div>
-        <button className="focus-ring" style={{ background: 'transparent', border: 0, color: 'var(--muted)', padding: 4 }}>
-          <SetuIcon.edit/>
-        </button>
+        {action ?? (
+          <button className="focus-ring" style={{ background: 'transparent', border: 0, color: 'var(--muted)', padding: 4 }}>
+            <SetuIcon.edit/>
+          </button>
+        )}
       </div>
     </div>
   );

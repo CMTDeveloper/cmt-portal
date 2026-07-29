@@ -22,6 +22,33 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
+## 2026-07-29 - 🔴 `POST /api/setu/register` now REFUSES an off-ladder `schoolGrade` (**breaking for any client that sends a label**)
+
+**What changed.** `additionalMembers[].schoolGrade` was `z.string().optional()` - any string, stored verbatim. It is now validated against `CHILD_GRADE_VALUES` (`Shishu`, `JK`, `SK`, `1`…`12`). An off-ladder value is a **400**, and the family is not created.
+
+**Why.** The portal's own form was free text until today, so a child was registered with `"E"`. Turning that input into a `<select>` only constrains the portal's newest client - a stale tab, this app, or any direct caller could keep writing values that level assignment and the annual promotion cannot read, leaving a child enrolled but in no level. The rule therefore belongs at the route, which is the one place every caller passes through.
+
+**What the mobile must do:**
+- **Send the TOKEN, never the label.** `'3'`, not `'Grade 3'`. `'Grade 3'` is now rejected. Display-only formatting is `gradeLabel()`'s job.
+- Mirror the accepted set as `['Shishu','JK','SK','1','2','3','4','5','6','7','8','9','10','11','12']` and make the app's own grade input a picker over it, so a family cannot be sent into a 400 after completing email verification.
+- `'Shishu'` is a valid stored value (the age-based bucket for children younger than JK) even though it is not in `GRADE_LADDER`.
+- ⚠️ **READS are unchanged and must stay tolerant.** Members registered before today may hold labels like `'Grade 3'`; the guard is write-path only. Do not validate a grade you have *read*, or you will lock those families out of their own profile.
+
+---
+
+## 2026-07-29 - "is this the Adult Study Class?" is now a program CAPABILITY, not a hardcoded key
+
+**No request or response SHAPE changes.** What changes is *which* offerings behave as the adult class, and the mobile must not hardcode the answer either.
+
+**Background.** Both adult-class doors (`POST /api/setu/enrollments` and `POST /api/setu/adult-class`) and the gate compared the offering's programKey against the literal `'adult-study-class'`. Scarborough's class was created as its own program, `adult-study-east`, so none of them fired for it: the family enrolled, paid, and was never asked who attends. CMT's decision (2026-07-29) is that each centre may run its own adult-class program, so the marker is now `programs/{key}.capabilities.isAdultStudyClass === true` (the original `adult-study-class` key still counts even with no flag, so Brampton keeps working un-migrated).
+
+**What the mobile must do:**
+- **Do not test `programKey === 'adult-study-class'` anywhere.** If the app decides "show the who-attends screen" or "this enrollment is the adult class" from the programKey, it has the same Scarborough bug. Treat it as data.
+- `POST /api/setu/enrollments` for an adult-class offering can now return **422 `no-selectable-adults`** for offerings it previously enrolled silently (every adult in the household teaches, or there are none). Reachable for any per-centre adult program, not just `adult-study-class`. Same code and meaning as before - only the set of offerings that can produce it grew.
+- If the app surfaces program metadata, `capabilities.isAdultStudyClass` is a new **optional boolean** on the program shape. It is optional on purpose: absent means false, and the portal never writes `false` in place of absent. Mirror it as optional, and read it as `=== true`.
+
+---
+
 ## 2026-07-29 - abandoned PAD sessions now clear THEMSELVES (**no new route; nothing to call**)
 
 **Supersedes the `POST /api/pledges/abandon` route described below, which was added and removed the same day.** Vaibhav's direction was that the family should simply be *"taken back to options again"* rather than shown a link to press - so the portal resolves the state instead of exposing an action.

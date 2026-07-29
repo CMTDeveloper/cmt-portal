@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ProgramDocSchema, CreateProgramSchema, ProgramEligibilitySchema, memberEligibleForProgram } from '../program';
+import { ProgramDocSchema, CreateProgramSchema, ProgramEligibilitySchema, memberEligibleForProgram, isAdultStudyClassProgram } from '../program';
 
 const prog = {
   programKey: 'bala-vihar', label: 'Bala Vihar', shortDescription: 'Sunday classes',
@@ -74,3 +74,79 @@ describe('memberEligibleForProgram', () => {
     expect(memberEligibleForProgram({ type: 'Child', birthMonthYear: null }, { memberType: 'child', minAgeYears: 5 }, now)).toBe(true);
   });
 });
+
+const caps2 = { usesOfferings: true, usesDonation: true, usesLevels: false, usesCalendar: false, attendanceMode: 'none' as const };
+
+// ── isAdultStudyClassProgram ─────────────────────────────────────────────────
+// Scarborough's adult class was created as its own program, `adult-study-east`
+// (2026-07-28). Every adult-class code path compared against the literal
+// `adult-study-class`, so the gate could never fire for it: the family enrolled,
+// paid, and was never asked who attends, with nothing logging a mismatch.
+describe('isAdultStudyClassProgram', () => {
+  const caps = { usesOfferings: true, usesDonation: true, usesLevels: false, usesCalendar: false, attendanceMode: 'none' as const };
+
+  it('the capability marks a per-centre program, whatever its key', () => {
+    expect(
+      isAdultStudyClassProgram({ programKey: 'adult-study-east', capabilities: { ...caps, isAdultStudyClass: true } }),
+    ).toBe(true);
+  });
+
+  it('an ordinary program is not one', () => {
+    expect(isAdultStudyClassProgram({ programKey: 'bala-vihar', capabilities: caps })).toBe(false);
+    expect(isAdultStudyClassProgram({ programKey: 'tabla', capabilities: { ...caps, isAdultStudyClass: false } })).toBe(false);
+  });
+
+  it('a MERELY SIMILAR key is not one - the flag is the rule, not a prefix', () => {
+    expect(isAdultStudyClassProgram({ programKey: 'adult-study-class-lookalike', capabilities: caps })).toBe(false);
+  });
+
+  it('the original key still counts with no capability set, so Brampton keeps working un-migrated', () => {
+    expect(isAdultStudyClassProgram({ programKey: 'adult-study-class', capabilities: caps })).toBe(true);
+  });
+
+  // Found by a Codex review, 2026-07-29: testing only for `true` and falling
+  // through to the key meant the checkbox could not turn itself OFF for the one
+  // program called `adult-study-class` - an admin could untick it, be told the
+  // save succeeded, and have nothing change.
+  it('an EXPLICIT false disables the legacy program too - the checkbox is not a lie', () => {
+    expect(
+      isAdultStudyClassProgram({ programKey: 'adult-study-class', capabilities: { ...caps, isAdultStudyClass: false } }),
+    ).toBe(false);
+  });
+
+  it('an explicit true still wins for the legacy key', () => {
+    expect(
+      isAdultStudyClassProgram({ programKey: 'adult-study-class', capabilities: { ...caps, isAdultStudyClass: true } }),
+    ).toBe(true);
+  });
+
+  it('survives a doc with no capabilities at all rather than throwing', () => {
+    expect(isAdultStudyClassProgram({ programKey: 'adult-study-east' })).toBe(false);
+    expect(isAdultStudyClassProgram({ programKey: 'adult-study-class' })).toBe(true);
+  });
+});
+
+// The flag is optional ON PURPOSE: this schema validates on READ, so a required
+// field would reject every program doc written before it existed.
+describe('ProgramCapabilitiesSchema.isAdultStudyClass', () => {
+  it('parses a doc that predates the flag', () => {
+    expect(ProgramDocSchema.safeParse({ ...prog, createdAt: new Date(), createdBy: 'x', updatedAt: new Date(), updatedBy: 'x' }).success).toBe(true);
+  });
+
+  it('does NOT invent a false default - an absent flag stays absent, so a partial write cannot erase it', () => {
+    const parsed = CreateProgramSchema.parse({
+      label: 'Adult Study Classes East', termType: 'term',
+      eligibility: { memberType: 'adult' }, capabilities: caps2,
+    });
+    expect('isAdultStudyClass' in parsed.capabilities).toBe(false);
+  });
+
+  it('round-trips true', () => {
+    const parsed = CreateProgramSchema.parse({
+      label: 'Adult Study Classes East', termType: 'term',
+      eligibility: { memberType: 'adult' }, capabilities: { ...caps2, isAdultStudyClass: true },
+    });
+    expect(parsed.capabilities.isAdultStudyClass).toBe(true);
+  });
+});
+
