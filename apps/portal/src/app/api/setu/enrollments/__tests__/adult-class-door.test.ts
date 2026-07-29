@@ -3,18 +3,26 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('@/lib/flags', () => ({ flags: { setuAuth: true } }));
 vi.mock('next/cache', () => ({ revalidateTag: vi.fn() }));
 
-const { getOfferingProgramKey, getFamilyByFid, getEnrollments, resolveTeacherAssignedMids, enrollFamily } =
+const { getOfferingProgramKey, getFamilyByFid, getEnrollments, resolveTeacherAssignedMids, enrollFamily, isAdultStudyClassKey } =
   vi.hoisted(() => ({
     getOfferingProgramKey: vi.fn(),
     getFamilyByFid: vi.fn(),
     getEnrollments: vi.fn(),
     resolveTeacherAssignedMids: vi.fn(),
     enrollFamily: vi.fn(),
+    // The route now asks the program's CAPABILITY rather than comparing to a
+    // literal key, so this stands in for that lookup. Mocked because the real
+    // one reads `listPrograms()`, which is `use cache` and cannot run here.
+    // Default mirrors the old hardcoded rule, so every pre-existing case keeps
+    // its meaning - including the 'adult-study-class-lookalike' case, which
+    // exists to prove a merely SIMILAR key is not the adult class.
+    isAdultStudyClassKey: vi.fn(async (k: string | null) => k === 'adult-study-class'),
   }));
 vi.mock('@/features/setu/enrollment/get-offering', () => ({ getOfferingProgramKey }));
 vi.mock('@/features/setu/members/get-family-by-fid', () => ({ getFamilyByFid }));
 vi.mock('@/features/setu/enrollment/get-enrollments', () => ({ getEnrollments }));
 vi.mock('@/features/setu/adult-class/load-gate-data', () => ({ resolveTeacherAssignedMids }));
+vi.mock('@/features/setu/adult-class/program-keys', () => ({ isAdultStudyClassKey }));
 vi.mock('@/features/setu/enrollment/enroll-family', () => ({ enrollFamily }));
 
 import { POST } from '../route';

@@ -1,6 +1,6 @@
 import 'server-only';
-import { ADULT_STUDY_CLASS } from '@cmt/shared-domain';
 import type { FamilyDoc, MemberDoc } from '@cmt/shared-domain/setu';
+import { adultStudyClassProgramKeys } from './program-keys';
 import {
   getOpenOfferingsForFamily,
   resolveCurrentOffering,
@@ -107,8 +107,29 @@ export async function loadAdultClassGateDataOrThrow(
     // from `null` (location-less only), and passing the wrong one there would
     // widen the query.
     const familyLocation = family.location ?? null;
-    const offerings = await getOpenOfferingsForFamily(ADULT_STUDY_CLASS, familyLocation);
-    const currentOffering = resolveCurrentOffering(offerings, familyLocation);
+    // ── Every adult-class program, not the one hardcoded key ────────────────
+    // Each centre may run its own adult-class PROGRAM (CMT, 2026-07-29), so the
+    // set comes from the `isAdultStudyClass` capability. Pinned to
+    // ADULT_STUDY_CLASS, this gate could never fire for Scarborough's
+    // `adult-study-east`: the family enrolled, paid, and was never asked.
+    //
+    // Concurrent, and `adultStudyClassProgramKeys()` reads a `use cache`d list,
+    // so N programs cost one round trip rather than N sequential ones - this
+    // runs on every /family/* render.
+    const programKeys = await adultStudyClassProgramKeys();
+    const offeringSets = await Promise.all(
+      programKeys.map((key) => getOpenOfferingsForFamily(key, familyLocation)),
+    );
+    // Dedupe by oid: two programs cannot share an oid, but merging through a Map
+    // keeps this total even if a future offering is listed under both.
+    const byOid = new Map<string, (typeof offeringSets)[number][number]>();
+    for (const set of offeringSets) for (const o of set) byOid.set(o.oid, o);
+    // ⚠️ With per-centre programs, a family whose centre runs TWO adult classes
+    // gets whichever resolveCurrentOffering picks - the family's own location
+    // first, then earliest startDate, then oid. Deterministic, but it is a real
+    // ambiguity the one-program-many-locations shape did not have. If that ever
+    // becomes a genuine configuration, the family has to be asked which.
+    const currentOffering = resolveCurrentOffering([...byOid.values()], familyLocation);
     // Condition 0 - no offering means no gate, and no reason to pay for the rest.
     if (!currentOffering) return null;
 

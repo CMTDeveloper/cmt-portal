@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { revalidateTag } from 'next/cache';
 import { flags } from '@/lib/flags';
-import { ADULT_STUDY_CLASS, isSetuFamily, isSetuManager, PostEnrollmentBodySchema } from '@cmt/shared-domain';
+import { isSetuFamily, isSetuManager, PostEnrollmentBodySchema } from '@cmt/shared-domain';
+import { isAdultStudyClassKey } from '@/features/setu/adult-class/program-keys';
 import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
 import { enrollFamily } from '@/features/setu/enrollment/enroll-family';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
@@ -69,7 +70,12 @@ export async function POST(req: Request) {
   // is; every other programKey below behaves EXACTLY as it always has.
   const programKey = await getOfferingProgramKey(parsed.data.oid);
   let adultClass: AdultClassEnrollParams | null = null;
-  if (programKey === ADULT_STUDY_CLASS) {
+  // Asks the CAPABILITY, not a hardcoded key. A per-centre adult-class program
+  // (Scarborough's `adult-study-east`) would otherwise fall through to the bare
+  // enrollFamily path below and hit every consequence this branch exists to
+  // prevent - the $101 bill, every adult auto-enrolled, and a silently satisfied
+  // gate condition 4. The lookup reads a `use cache`d program list.
+  if (await isAdultStudyClassKey(programKey)) {
     const [cached, enrollments] = await Promise.all([
       getFamilyByFid(session.fid),
       getEnrollments(session.fid),

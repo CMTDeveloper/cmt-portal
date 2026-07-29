@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { programKeySchema, PROGRAM_TERM_TYPES } from './offering';
+import { programKeySchema, PROGRAM_TERM_TYPES, ADULT_STUDY_CLASS } from './offering';
 
 export const MEMBER_TYPES = ['child', 'adult', 'any'] as const;
 export type MemberType = (typeof MEMBER_TYPES)[number];
@@ -25,6 +25,28 @@ export const ProgramCapabilitiesSchema = z.object({
   usesLevels: z.boolean(),
   usesCalendar: z.boolean(),
   attendanceMode: z.enum(ATTENDANCE_MODES),
+  /**
+   * This program IS an Adult Study Class: the "one parent stays on site" ask.
+   * Ticking it puts the program behind the adult-class gate and the bespoke
+   * `/adult-class` selection screen.
+   *
+   * ── Why a capability and not the programKey ──────────────────────────────
+   * The flow was pinned to the literal key `adult-study-class`. Scarborough's
+   * class was then created as its own program, `adult-study-east`, and the gate
+   * could never fire for it - so a Scarborough family enrolled, paid, and was
+   * never asked who attends, with nothing anywhere saying why (reported
+   * 2026-07-29). An admin can invent any programKey; a hardcoded one silently
+   * supports exactly the one centre that happened to be seeded first.
+   *
+   * ── `.optional()`, with NO `.default(false)` ─────────────────────────────
+   * This schema validates on READ, so a required field would reject every
+   * program doc written before today. And a default would be worse than absent:
+   * `ProgramForm` rebuilds this whole object on save, so a writer that omitted
+   * the key would silently persist `false` and un-flag the program - the
+   * erase-on-partial-write trap. Readers must therefore test `=== true`, which
+   * `isAdultStudyClassProgram` does for them.
+   */
+  isAdultStudyClass: z.boolean().optional(),
 });
 export type ProgramCapabilities = z.infer<typeof ProgramCapabilitiesSchema>;
 
@@ -60,6 +82,34 @@ export type CreateProgramInput = z.infer<typeof CreateProgramSchema>;
 
 export const UpdateProgramSchema = CreateProgramSchema.partial().omit({ programKey: true });
 export type UpdateProgramInput = z.infer<typeof UpdateProgramSchema>;
+
+/**
+ * Is this program an Adult Study Class?
+ *
+ * The capability is the answer, EXCEPT that the original `adult-study-class`
+ * program counts whatever its doc says. That fallback is deliberate and is not
+ * dead weight: the Brampton class works today purely because the code matched
+ * that literal key, and its doc carries no capability yet. Reading only the flag
+ * would break the one centre that currently works the moment this deploys, and
+ * leave it broken until somebody happened to open the admin form and tick a box.
+ *
+ * Remove the fallback only after every environment's `adult-study-class` doc has
+ * `capabilities.isAdultStudyClass: true` - and check prod, not just UAT.
+ *
+ * Takes the narrowest shape that answers the question, so callers can pass a
+ * ProgramDoc, an admin form row, or a test fixture without casting.
+ */
+export function isAdultStudyClassProgram(program: {
+  programKey: string;
+  // `Partial<ProgramCapabilities>`, not a lone `{ isAdultStudyClass?: boolean }`.
+  // The latter is a WEAK type - every property optional - so TypeScript rejects a
+  // full capabilities object with "no properties in common" (TS2559), which is
+  // exactly what every real caller passes.
+  capabilities?: Partial<ProgramCapabilities> | undefined;
+}): boolean {
+  if (program.capabilities?.isAdultStudyClass === true) return true;
+  return program.programKey === ADULT_STUDY_CLASS;
+}
 
 /** Whole years between a 'YYYY-MM' birth month and now (null when unknown/malformed). */
 function ageYears(birthMonthYear: string | null, now: Date): number | null {
