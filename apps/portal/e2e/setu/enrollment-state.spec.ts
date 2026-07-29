@@ -152,11 +152,41 @@ test.describe.serial('enrollment engagement state — Registered vs Enrolled (is
 
   // ── Phase 2: Enrolled after a completed donation (self-mutates the fixture) ──
   test.describe('after a completed donation (--confirm-bv)', () => {
-    test.beforeAll(async () => {
+    test.beforeAll(async ({ playwright, baseURL }) => {
       reseedE2eFamily(['--confirm-bv']);
       // The reseed bumped tokensValidAfterTime → the storageState session is now
       // dead. Re-sign-in so the Phase-2 request/page fixtures carry a live one.
       await reauthE2eFamily();
+
+      // ── Satisfy the Adult Study Class gate ────────────────────────────────
+      // `--confirm-bv` marks the Bala Vihar donation PAID, which is condition 3
+      // of `needsAdultClassSelection` - so from that moment `/family` correctly
+      // REDIRECTS to /adult-class until the family names an attendee. Both
+      // tests below open /family, so without this they assert against the gate
+      // page and fail on a locator that was never going to be there. (Caught
+      // 2026-07-29: the mobile one timed out for 20s and its screenshot showed
+      // "Who will attend the Adult Study Class?".)
+      //
+      // Named here rather than worked around, because the gate firing IS the
+      // correct behaviour - the fixture simply has to get past it, exactly as a
+      // real family would. Best-effort: the gate is flag-gated, so a 404 just
+      // means it is off and there was nothing to satisfy.
+      const ctx = await playwright.request.newContext({
+        baseURL: baseURL!,
+        storageState: 'e2e/.auth/family.json',
+      });
+      try {
+        const me = await ctx.get('/api/setu/family');
+        if (me.ok()) {
+          const body = (await me.json()) as { members?: { mid: string; type?: string }[] };
+          const adult = (body.members ?? []).find((m) => m.type === 'Adult');
+          if (adult) await ctx.post('/api/setu/adult-class', { data: { mids: [adult.mid] } });
+        }
+      } catch {
+        // Never fail setup on the gate; the assertions below will say what broke.
+      } finally {
+        await ctx.dispose();
+      }
     });
 
     test('API: dashboard reports bvState=enrolled', async ({ request }) => {
