@@ -233,7 +233,7 @@ test.describe('monthly pledge', () => {
     // card, and no banner while it confirms.
     await expect(card(page), 'the standalone Monthly giving card is back').toHaveCount(0);
     await expect(
-      visibleText(page, /monthly gift is being confirmed/i),
+      visibleText(page, /monthly (gift|donation) is being confirmed/i),
       'the confirming banner is back on the dashboard',
     ).toHaveCount(0);
 
@@ -376,7 +376,9 @@ test.describe('monthly pledge', () => {
     // Branch instead of `test.skip`: a skip is not a pass, and this file has
     // been bitten by that before. Whichever state the family is in, ONE of the
     // two must hold - the regression this guards is neither being present.
-    const covered = await visibleText(page, /monthly gift is being set up/i).count();
+    // Matches either wording: the copy became "donation" on 2026-07-29, and a
+    // stale string here would silently take the WRONG branch rather than fail.
+    const covered = await visibleText(page, /monthly (gift|donation) is being set up/i).count();
     if (covered > 0) {
       await expect(visibleText(page, /nothing more for you to do/i).first()).toBeVisible();
       // And it must NOT still be soliciting while a mandate is confirming.
