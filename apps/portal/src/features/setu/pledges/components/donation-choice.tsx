@@ -121,7 +121,7 @@ export function DonationChoice({
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 6 }}>
             <SetuIcon.check width={17} height={17} color="var(--muted)" />
             <strong style={{ fontSize: 14, color: 'var(--body-text)' }}>
-              We&apos;re setting up your monthly gift
+              We&apos;re setting up your monthly donation
             </strong>
           </div>
           <p style={{ fontSize: 13, color: 'var(--body-text)', lineHeight: 1.55, margin: 0 }}>
@@ -200,7 +200,7 @@ export function DonationChoice({
       if (result.reason === 'already-live') {
         // The screen is stale, not broken. A hard reload re-reads the pledge and
         // renders the state that already exists rather than reporting a failure.
-        toast.error('You already have a monthly gift in progress.');
+        toast.error('You already have a monthly donation in progress.');
         window.location.reload();
         return;
       }
@@ -208,15 +208,15 @@ export function DonationChoice({
         // Should be unreachable from here - this component enrols first - but if
         // that enrollment silently did not take, "please try again" would be a
         // lie. Name the real precondition.
-        toast.error('Enroll in Bala Vihar first - then you can set up a monthly gift.');
+        toast.error('Enroll in Bala Vihar first - then you can set up a monthly donation.');
       } else if (result.reason === 'manager-required') {
-        toast.error('Only the family manager can set up monthly giving.');
+        toast.error('Only the family manager can set up a monthly donation.');
       } else if (result.reason === 'no-email') {
         toast.error('Add an email address to your profile first - the bank needs somewhere to confirm.');
       } else if (result.reason === 'unavailable') {
-        toast.error('Monthly giving is temporarily unavailable - please try again later.');
+        toast.error('Monthly donations are temporarily unavailable - please try again later.');
       } else {
-        toast.error('Could not start monthly giving - please try again.');
+        toast.error('Could not start the monthly donation - please try again.');
       }
       setPending(false);
       return;
@@ -253,7 +253,7 @@ export function DonationChoice({
       // or a co-manager's device. Retrying can never clear it, so the generic
       // "please try again" would be actively wrong. Reload; the server render
       // then shows the pending/giving state instead of the choice.
-      toast.error('Your monthly gift already covers this - refreshing.');
+      toast.error('Your monthly donation already covers this - refreshing.');
       window.location.reload();
       return;
     }

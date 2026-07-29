@@ -88,7 +88,7 @@ export default async function DonatePage({
   const sub =
     mode === 'enrollment'
       ? `${programLabel ?? 'Program'}${periodLabel ? ` · ${periodLabel}` : ''} · ${family.location}`
-      : 'A charitable gift to Chinmaya Mission Toronto';
+      : 'A charitable donation to Chinmaya Mission Toronto';
 
   // ── The monthly alternative (2026-07-27, Vaibhav) ─────────────────────────
   // "This should not be separate. It's part of Bala Vihar. Instead of straight
@@ -145,7 +145,7 @@ export default async function DonatePage({
       <strong>
         {existingPledge?.status === 'active'
           ? `You are giving $${configuredMonthlyAmountCAD()} a month.`
-          : 'Your monthly gift is being set up.'}
+          : 'Your monthly donation is being set up.'}
       </strong>
       <div style={{ marginTop: 6, color: 'var(--body-text)' }}>
         {existingPledge?.status === 'active'

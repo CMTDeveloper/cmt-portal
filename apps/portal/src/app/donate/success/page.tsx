@@ -219,12 +219,12 @@ export async function DonateSuccessBody({
           <SetuIcon.check />
         </div>
         <h1 style={{ fontSize: 30, fontWeight: 400, marginBottom: 10 }}>
-          {isPledgeReturn ? 'Your monthly gift is being set up' : 'Thank you for your donation'}
+          {isPledgeReturn ? 'Your monthly donation is being set up' : 'Thank you for your donation'}
         </h1>
         {isPledgeReturn ? (
           <>
             <p style={{ fontSize: 14, color: 'var(--body-text)', lineHeight: 1.6, marginBottom: 8 }}>
-              Thank you for setting up a monthly gift to Chinmaya Mission Toronto.{' '}
+              Thank you for setting up a monthly donation to Chinmaya Mission Toronto.{' '}
               <em className="sa">Hari OM</em> — your seva keeps our programs running.
             </p>
             <p style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.6, marginBottom: 24 }}>

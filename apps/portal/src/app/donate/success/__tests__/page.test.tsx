@@ -298,7 +298,7 @@ describe('/donate/success - the pledge card', () => {
     expect(container.textContent).not.toMatch(/Monthly giving/);
     // ...and the acknowledgement itself is still on the page. A family who has
     // just authorised a recurring bank debit must see the portal confirm it.
-    expect(screen.getByText(/monthly gift is being set up/i)).toBeTruthy();
+    expect(screen.getByText(/monthly donation is being set up/i)).toBeTruthy();
   });
 
   it('shows no card even when there is no adult-class ask', async () => {
@@ -366,7 +366,7 @@ describe('/donate/success - the pledge card', () => {
       const { container } = await renderWith({ pledge: 'PLG-7' });
       expect(mockFinalizePledge).toHaveBeenCalled();
       expect(container.textContent).not.toMatch(/Monthly giving/);
-      expect(container.textContent).toMatch(/monthly gift is being set up/i);
+      expect(container.textContent).toMatch(/monthly donation is being set up/i);
     });
   });
 
@@ -397,8 +397,8 @@ describe('/donate/success - the pledge card', () => {
     it('does not thank them for a monthly gift they never set up', async () => {
       mockGetFamilyPledge.mockResolvedValue(null);
       await renderWith({ pledge: 'anything' });
-      expect(screen.queryByText(/monthly gift is being set up/i)).toBeNull();
-      expect(screen.queryByText(/thank you for setting up a monthly gift/i)).toBeNull();
+      expect(screen.queryByText(/monthly donation is being set up/i)).toBeNull();
+      expect(screen.queryByText(/thank you for setting up a monthly donation/i)).toBeNull();
     });
 
     it('shows no card for a pledge that already FAILED - that state is an ask', async () => {
