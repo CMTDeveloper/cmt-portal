@@ -201,9 +201,40 @@ export default function FamilyLayout({ children }: { children: React.ReactNode }
       {/* Desktop: shared sidebar around the children main area. */}
       <div className="hidden md:flex" style={{ minHeight: '100dvh' }}>
         <CspRoot style={{ display: 'flex', width: '100%', minHeight: '100dvh' }}>
-          <Suspense fallback={<DesktopSidebar showSignOut/>}>
-            <SidebarWithIdentity />
-          </Suspense>
+          {/* ── 🔴 The wrapper is load-bearing, not cosmetic ────────────────────
+              Reported repeatedly as "blank page / broken CSS after a mutation,
+              fixed by a hard refresh". Caught live on 2026-07-28 in the owner's
+              browser and dissected: the page content was rendering INSIDE this
+              sidebar's <aside> (the visible h1 at x=18 w=211 instead of x=296
+              w=1384). The stylesheet was fine - 588 rules, `md:` utilities
+              resolving - so nothing was ever "unstyled"; the content was in the
+              wrong box.
+
+              React streams a Suspense boundary in by locating its comment
+              markers AMONG ITS PARENT'S CHILDREN. Left unwrapped, this boundary
+              and <main> are siblings of one flex parent, so a marker mismatch
+              lets the boundary swallow what follows it - which is exactly
+              <main> and the whole page. <main>'s own boundary was never at risk
+              because it is already contained by <main> itself; this was the one
+              loose boundary in the shell.
+
+              So give it a container of its own. Purely structural: the wrapper
+              is a flex item whose width comes from the 248px <aside> inside it,
+              and `display:flex` lets that aside stretch to full height exactly
+              as it did when it was the flex item. Renders identically.
+
+              Honest limit: the misplacement is intermittent and I could not
+              reproduce it on demand, so this is reasoned from the mechanism
+              rather than proven by a red-to-green test. Vercel's Skew
+              Protection - which would remove the deploy-boundary trigger at the
+              platform level - is Pro-only and we are on Hobby. If the reports
+              continue, `aside.textContent.length` is the discriminator: ~90-115
+              healthy, thousands when broken. */}
+          <div style={{ display: 'flex' }}>
+            <Suspense fallback={<DesktopSidebar showSignOut/>}>
+              <SidebarWithIdentity />
+            </Suspense>
+          </div>
           <main style={{ flex: 1, padding: '32px 48px', overflow: 'auto' }}>
             <Suspense fallback={<LoadingOm />}>
               {children}
