@@ -290,36 +290,36 @@ describe('/donate/success - the pledge card', () => {
     return render(body);
   }
 
-  it('renders the pledge card BELOW the adult-class ask', async () => {
-    // Spec 4.3 and P4 Task 9: adult-class first because it is quick and free,
-    // pledge second and quieter.
+  it('shows NO "Monthly giving" card - the headline already says it', async () => {
+    // CMT Developer, 2026-07-28: "just hide monthly giving it should not display
+    // anywhere." Nothing is lost here: this page's own headline is "Your monthly
+    // gift is being set up", so the card only restated the page it sat on.
     const { container } = await renderWith();
-    const text = container.textContent ?? '';
-    const ask = text.indexOf('One last thing');
-    const pledge = text.indexOf('Monthly giving');
-    const out = text.indexOf('Back to family');
-    expect(ask).toBeGreaterThan(-1);
-    expect(pledge, 'the pledge card is missing entirely').toBeGreaterThan(-1);
-    expect(pledge, 'the pledge card renders ABOVE the adult-class ask').toBeGreaterThan(ask);
-    expect(out, 'the pledge card renders below the way out').toBeGreaterThan(pledge);
+    expect(container.textContent).not.toMatch(/Monthly giving/);
+    // ...and the acknowledgement itself is still on the page. A family who has
+    // just authorised a recurring bank debit must see the portal confirm it.
+    expect(screen.getByText(/monthly gift is being set up/i)).toBeTruthy();
   });
 
-  it('renders the card even when there is no adult-class ask', async () => {
-    // Proves the card is a sibling of the ask, not nested inside `ask && (...)`.
+  it('shows no card even when there is no adult-class ask', async () => {
     mockNeedsSelection.mockReturnValue(false);
     const { container } = await renderWith();
-    expect(container.textContent).toMatch(/Monthly giving/);
+    expect(container.textContent).not.toMatch(/Monthly giving/);
   });
 
-  it('speaks the pledge\'s own snapshotted amount once one is active', async () => {
+  it('quotes NO monthly amount, for an active plan or any other', async () => {
+    // The card was the only surface that printed a figure here. With it gone the
+    // page must not reintroduce one: a receipt that names a price is an ask.
     mockGetFamilyPledge.mockResolvedValue({
       pid: 'PLG-7', status: 'active', monthlyAmountCAD: 51,
       startedAt: new Date('2026-02-01T12:00:00Z'), activatedAt: new Date('2026-02-03T12:00:00Z'),
     });
     const { container } = await renderWith();
-    expect(container.textContent).toMatch(/\$51 monthly/);
-    // 63 is today's price; this family signed for 51 and must keep being told 51.
-    expect(container.textContent).not.toMatch(/63/);
+    expect(container.textContent).not.toMatch(/\$51/);
+    expect(container.textContent).not.toMatch(/\$63/);
+    // Deliberately not /a month/: the headline legitimately thanks them for
+    // "a monthly gift". What must never appear is a PRICE.
+    expect(container.textContent).not.toMatch(/\$\d+\s*(a month|monthly|per month)/i);
   });
 
   it('renders NOTHING pledge-shaped when the flag is off, and reads nothing', async () => {
@@ -362,10 +362,11 @@ describe('/donate/success - the pledge card', () => {
       expect(mockGetFamilyPledge).not.toHaveBeenCalled();
     });
 
-    it('still shows the card on a pledge RETURN, which is what it is for', async () => {
+    it('still FINALIZES on a pledge return, and says so without a card', async () => {
       const { container } = await renderWith({ pledge: 'PLG-7' });
-      expect(container.textContent).toMatch(/Monthly giving/);
       expect(mockFinalizePledge).toHaveBeenCalled();
+      expect(container.textContent).not.toMatch(/Monthly giving/);
+      expect(container.textContent).toMatch(/monthly gift is being set up/i);
     });
   });
 
@@ -412,13 +413,12 @@ describe('/donate/success - the pledge card', () => {
       expect(container.textContent).not.toMatch(/set one up again/);
     });
 
-    it('never renders a pledge START button here, even for a real pledge', async () => {
-      // Belt and braces: whatever state the card lands in, this page does not
-      // solicit. The ask lives on the enroll page, where the family is choosing.
-      // Scoped to a pledge-shaped button on purpose - the adult-class ask has
-      // its own legitimate "Continue" on this same screen.
+    it('never renders a pledge START control here, even for a real pledge', async () => {
+      // This page does not solicit. The ask lives on the enroll page, where the
+      // family is choosing. Scoped to a pledge-shaped button on purpose - the
+      // adult-class ask has its own legitimate "Continue" on this same screen.
       const { container } = await renderWith({ pledge: 'PLG-7' });
-      expect(container.textContent).toMatch(/Monthly giving/);
+      expect(container.textContent).not.toMatch(/Monthly giving/);
       expect(screen.queryByRole('button', { name: /monthly/i })).toBeNull();
     });
   });

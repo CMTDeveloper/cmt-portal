@@ -16,7 +16,6 @@ import {
 } from '@/features/setu/adult-class/selectable-adults';
 import { selectBalaViharEnrollment } from '@/app/family/_helpers/select-bv-enrollment';
 import { AdultClassForm } from '@/features/setu/adult-class/components/adult-class-form';
-import { PledgeCard } from '@/features/family/components/pledge-card';
 import { loadPledgeSlot, type PledgeSlot } from '@/features/setu/pledges/load-pledge-slot';
 import { finalizePledge } from '@/features/setu/pledges/finalize-pledge';
 
@@ -273,21 +272,14 @@ export async function DonateSuccessBody({
             ~$500 payment reads badly. A SIBLING of the ask, never nested inside
             it - nested, it would inherit the adult-class predicate and render
             for nobody. Both facts are test-locked in this page's spec. */}
-        {pledgeSlot && (
-          <div style={{ textAlign: 'left', marginBottom: 24 }}>
-            {/* `canStart={false}`, exactly as the family dashboard passes it.
-                This page REPORTS a pledge; it never offers one. With the slot
-                now gated to a live pledge the ask cannot render anyway, so this
-                is the second lock on the same door - and it stops a future
-                `AskBody` branch quietly turning a receipt back into a sales
-                page. */}
-            <PledgeCard
-              pledge={pledgeSlot.pledge}
-              askAmountCAD={pledgeSlot.askAmountCAD}
-              canStart={false}
-            />
-          </div>
-        )}
+        {/* ── No "Monthly giving" card here either ─────────────────────────────
+            CMT Developer, 2026-07-28: "just hide monthly giving it should not
+            display anywhere." Nothing is lost on this page: the headline above
+            ALREADY says "Your monthly gift is being set up" and thanks them for
+            it, so the card only restated the page it sits on.
+            `pledgeSlot` is still resolved - it is what makes `isPledgeReturn`
+            true, and therefore what makes that headline say "monthly gift" and
+            not "your donation has been received". */}
 
         <div style={{ display: 'flex', justifyContent: 'center' }}>
           {/* This link IS the "not now" path (Task 9 Step 4). Deliberately NOT
