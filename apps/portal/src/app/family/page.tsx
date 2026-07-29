@@ -310,22 +310,34 @@ export default async function FamilyDashboardPage() {
       model = dash.model;
       bvChildren = dash.bvChildren;
       familyCounts = dash.familyCounts;
-      // ── Resolve an abandoned attempt BEFORE reading the pledge ────────────
-      //
-      // 🔴 This page is the one most families land on, and it is the WORST
-      // place to leave an unfinished attempt unresolved. `pledgePending`
-      // suppresses the donate banner entirely, and the reassurance copy was
-      // removed on 2026-07-29 - so a family who closed the Stripe tab (never
-      // hitting the cancel URL) and later opened the portal fresh would see no
-      // banner, no CTA and no explanation, indefinitely. Found by a Codex review
-      // of the enroll-page fix, which had left this surface behind.
-      //
-      // Never throws and only clears what Stripe says was never submitted.
-      if (flags.setuPledge) await clearAbandonedPledge(data.family.fid);
-
       // Null with the flag off, and null on a read error - loadPledgeSlot owns
       // both, so the dashboard never 500s over an optional ask.
       pledgeSlot = await loadPledgeSlot({ fid: data.family.fid, isManager: data.isManager });
+
+      // ── Repair an unfinished attempt, but ONLY when there is one ───────────
+      //
+      // 🔴 This page is the one most families land on, and the worst place to
+      // leave an unfinished attempt unresolved: `pledgePending` suppresses the
+      // donate banner entirely and the reassurance copy was removed on
+      // 2026-07-29, so a family who closed the Stripe tab (never hitting the
+      // cancel URL) and later opened the portal fresh would see no banner, no
+      // CTA and no explanation, indefinitely. Found by a Codex review of the
+      // enroll-page fix, which had left this surface behind.
+      //
+      // Gated on `started` deliberately. The first cut called this before the
+      // read, which meant an extra Firestore query on EVERY dashboard load - a
+      // latency cost paid by every family to repair a state almost none of them
+      // are in, and it lengthened the window before the donate CTA is
+      // interactive (an E2E click on that CTA started missing). Reading first
+      // costs nothing extra: `loadPledgeSlot` was already loaded here.
+      if (pledgeSlot?.pledge?.status === 'started') {
+        const outcome = await clearAbandonedPledge(data.family.fid);
+        // Re-read only when something actually changed, so the banner and CTA
+        // reflect the repair rather than the state we just fixed.
+        if (outcome === 'cleared') {
+          pledgeSlot = await loadPledgeSlot({ fid: data.family.fid, isManager: data.isManager });
+        }
+      }
     }
   }
 

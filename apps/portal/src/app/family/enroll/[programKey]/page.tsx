@@ -352,9 +352,15 @@ export default async function ProgramEnrollPage({ params }: Props) {
   // and the family gets the ordinary choice back with no special-case branch
   // anywhere downstream. `clearAbandonedPledge` asks Stripe first and fails
   // CLOSED - it only clears what Stripe says was never submitted.
-  if (pledgeEligible) await clearAbandonedPledge(family.fid);
-
-  const existingPledge = pledgeEligible ? await getFamilyPledge(family.fid) : null;
+  let existingPledge = pledgeEligible ? await getFamilyPledge(family.fid) : null;
+  // Only a `started` pledge can be an unfinished attempt, and only then is the
+  // provider round trip worth paying for - see the dashboard for why gating on
+  // the read matters rather than clearing unconditionally.
+  if (existingPledge?.status === 'started') {
+    if ((await clearAbandonedPledge(family.fid)) === 'cleared') {
+      existingPledge = await getFamilyPledge(family.fid);
+    }
+  }
 
   // ── 🔴 The bare card is for ENROLLED families only ──────────────────────────
   //

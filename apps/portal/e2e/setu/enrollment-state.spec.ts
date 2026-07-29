@@ -125,13 +125,27 @@ test.describe.serial('enrollment engagement state — Registered vs Enrolled (is
   test.describe('UI (mobile viewport)', () => {
     test.use({ viewport: MOBILE_VIEWPORT });
 
-    test('shows the Enrolled pill and a Complete donation button (straight to Stripe)', async ({ page }) => {
+    test('shows the Enrolled pill and a Complete donation control', async ({ page }) => {
       await page.goto('/family');
       // Mobile BV card pill now reads "Enrolled" (registered→Enrolled on the web).
       await expect(visibleText(page, /^Enrolled$/).first()).toBeVisible();
-      // The donate CTA is now a BUTTON that POSTs to checkout and redirects to
-      // Stripe (2026-07-04) — no longer a link to /family/donate.
-      const give = page.getByRole('button', { name: /Complete donation/i }).filter({ visible: true }).first();
+
+      // ── Button OR link, deliberately ─────────────────────────────────────
+      // This asserted a BUTTON going "straight to Stripe" (the 2026-07-04
+      // decision). Once the monthly plan existed that became wrong, and
+      // `pledge.spec.ts` now asserts the OPPOSITE - that the dashboard CTA must
+      // lead to the choice rather than jump to a $500 checkout, because a family
+      // taken straight to Stripe never learns $51/month is an option. With the
+      // pledge flag on, `donateCta` renders a <Link> to /family/enroll/bala-vihar;
+      // with it off, the original button. Two specs asserting opposite things is
+      // how a stale one survives, so this now pins the PROPERTY they agree on -
+      // the family has a way to complete their donation - and pledge.spec owns
+      // where it leads.
+      const give = page
+        .getByRole('button', { name: /Complete donation/i })
+        .or(page.getByRole('link', { name: /Complete donation/i }))
+        .filter({ visible: true })
+        .first();
       await expect(give).toBeVisible();
     });
   });

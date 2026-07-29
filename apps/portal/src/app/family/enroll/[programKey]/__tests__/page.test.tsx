@@ -714,16 +714,32 @@ describe('ProgramEnrollPage (bala-vihar) — the monthly alternative', () => {
     // The page resolves that BEFORE reading the pledge, so the ordinary choice
     // returns with no special-case branch. Asserted here because the call is the
     // whole mechanism - drop it and the family is locked out again.
-    it('resolves an abandoned attempt BEFORE reading the pledge state', async () => {
+    it('repairs an unfinished attempt and re-reads the resulting state', async () => {
       mockGetEnrollments.mockResolvedValue([ACTIVE_ENROLLMENT_WITH_SNAPSHOT]);
       mockGetOpenOfferingsForFamily.mockResolvedValue([ACTIVE_PERIOD]);
+      mockGetFamilyPledge.mockResolvedValueOnce({ pid: 'PLG-9', status: 'started', monthlyAmountCAD: 51 });
+      mockClearAbandoned.mockResolvedValue('cleared');
 
       await ProgramEnrollPage({ params: makeParams() });
 
       expect(mockClearAbandoned).toHaveBeenCalledWith(FAMILY.fid);
-      const clearedAt = mockClearAbandoned.mock.invocationCallOrder[0]!;
-      const readAt = mockGetFamilyPledge.mock.invocationCallOrder[0]!;
-      expect(clearedAt, 'the pledge was read before the abandoned attempt was cleared').toBeLessThan(readAt);
+      // Re-read AFTER the repair, or the page would render the state it just fixed.
+      expect(mockGetFamilyPledge).toHaveBeenCalledTimes(2);
+    });
+
+    // The repair costs a Firestore read and a provider round trip. Paying that on
+    // every visit was a real latency regression - it lengthened the window before
+    // the donate CTA became interactive and an E2E click on it started missing -
+    // so it is gated on a pledge that is actually `started`.
+    it('does NO repair work when nothing is in flight', async () => {
+      mockGetEnrollments.mockResolvedValue([ACTIVE_ENROLLMENT_WITH_SNAPSHOT]);
+      mockGetOpenOfferingsForFamily.mockResolvedValue([ACTIVE_PERIOD]);
+      mockGetFamilyPledge.mockResolvedValue(null);
+
+      await ProgramEnrollPage({ params: makeParams() });
+
+      expect(mockClearAbandoned).not.toHaveBeenCalled();
+      expect(mockGetFamilyPledge).toHaveBeenCalledTimes(1);
     });
 
     it('does not touch the pledge at all when the feature is dark', async () => {

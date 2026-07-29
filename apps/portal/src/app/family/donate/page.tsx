@@ -109,9 +109,12 @@ export default async function DonatePage({
   // `EnrollPanel` -> `EnrollCta` redirects straight here after enrolling, so a
   // family with an earlier abandoned attempt would land on "your bank is
   // confirming it" with no way to pay. Found by a Codex review, 2026-07-29.
-  if (pledgeEligible) await clearAbandonedPledge(family.fid);
-
-  const existingPledge = pledgeEligible ? await getFamilyPledge(family.fid) : null;
+  let existingPledge = pledgeEligible ? await getFamilyPledge(family.fid) : null;
+  if (existingPledge?.status === 'started') {
+    if ((await clearAbandonedPledge(family.fid)) === 'cleared') {
+      existingPledge = await getFamilyPledge(family.fid);
+    }
+  }
   const monthlyOption = pledgeEligible ? (
     <MonthlyDonationOption
       monthlyAmountCAD={configuredMonthlyAmountCAD()}
