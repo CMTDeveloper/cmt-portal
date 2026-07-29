@@ -67,8 +67,11 @@ vi.mock('@/features/family/components/atoms', () => ({
   StepHeader: ({ step, of, label }: { step: number; of: number; label: string }) => (
     <div data-testid="step-header">Step {step} of {of} · {label}</div>
   ),
-  AddedMemberRow: ({ name, type }: { name: string; type: string }) => (
-    <div data-testid="added-member-row">{name} — {type}</div>
+  // `action` is rendered, not dropped. It carries the row's Remove button, so a
+  // mock that ignored it deleted a real control from every test's DOM while the
+  // page itself was fine - the failure looked like "Remove disappeared".
+  AddedMemberRow: ({ name, type, action }: { name: string; type: string; action?: React.ReactNode }) => (
+    <div data-testid="added-member-row">{name} — {type}{action}</div>
   ),
 }));
 
@@ -196,7 +199,10 @@ async function addChildMember(
   // Draft gender pill is the second 'Male' (index [1]) — manager's is first.
   await user.click(screen.getAllByRole('button', { name: 'Male' })[1]!);
   await user.type(screen.getAllByLabelText(/member food allergies/i)[0]!, 'None known');
-  await user.type(screen.getAllByLabelText(/member school grade/i)[0]!, 'Grade 3');
+  // A SELECT since 2026-07-29 — the stored value is the canonical ladder token
+  // ('3'), which is what levels + the annual promotion read; 'Grade 3' is only
+  // the label. Typing free text here used to store the label itself.
+  await user.selectOptions(screen.getAllByLabelText(/member school grade/i)[0]!, '3');
   await user.selectOptions(screen.getAllByLabelText(/birth month/i)[0]!, '3');
   await user.selectOptions(
     screen.getAllByLabelText(/birth year/i)[0]!,
@@ -558,7 +564,10 @@ describe('RegisterFamilyPage — additional members', () => {
     await user.click(screen.getAllByRole('button', { name: 'Child' })[0]!);
     await user.click(screen.getAllByRole('button', { name: 'Male' })[1]!);
     await user.type(screen.getAllByLabelText(/member food allergies/i)[0]!, 'None known');
-    await user.type(screen.getAllByLabelText(/member school grade/i)[0]!, 'Grade 3');
+    // A SELECT since 2026-07-29 — the stored value is the canonical ladder token
+  // ('3'), which is what levels + the annual promotion read; 'Grade 3' is only
+  // the label. Typing free text here used to store the label itself.
+  await user.selectOptions(screen.getAllByLabelText(/member school grade/i)[0]!, '3');
     await user.selectOptions(screen.getAllByLabelText(/birth month/i)[0]!, '3');
     await user.selectOptions(screen.getAllByLabelText(/birth year/i)[0]!, String(new Date().getFullYear() - 8));
 
@@ -643,5 +652,48 @@ describe('RegisterFamilyPage — additional members', () => {
       expect(screen.getAllByText(/valid email/i).length).toBeGreaterThan(0);
     });
     expect(screen.queryByTestId('added-member-row')).toBeNull();
+  });
+
+  // ── The silent button (Vaibhav, 2026-07-29) ────────────────────────────────
+  // "clicking Add member provides no feedback. I left month and year
+  // unpopulated, but there is no error or indication." The button carried
+  // `disabled={!draftComplete}` and nothing styles `.btn:disabled`, so it looked
+  // live, ate the click, and said nothing — and that also made the handler's own
+  // error unreachable. These two assert the click ALWAYS lands and the message
+  // names the field, because a generic "fill in all required fields" is what
+  // sent the reporter hunting.
+  it('naming the missing field: an incomplete child draft reports the exact fields', async () => {
+    const user = userEvent.setup();
+    render(<RegisterFamilyPage />);
+
+    // A child draft complete EXCEPT birth month/year — the reporter's own case.
+    await user.click(screen.getAllByRole('button', { name: /add another member/i })[0]!);
+    await user.type(screen.getAllByLabelText(/member first name/i)[0]!, 'No');
+    await user.type(screen.getAllByLabelText(/member last name/i)[0]!, 'Birthday');
+    await user.click(screen.getAllByRole('button', { name: 'Child' })[0]!);
+    await user.click(screen.getAllByRole('button', { name: 'Male' })[1]!);
+    await user.type(screen.getAllByLabelText(/member food allergies/i)[0]!, 'None known');
+    await user.selectOptions(screen.getAllByLabelText(/member school grade/i)[0]!, '3');
+    await user.click(screen.getAllByRole('button', { name: /^add member$/i })[0]!);
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/birth month & year/i).length).toBeGreaterThan(0);
+    });
+    expect(screen.queryByTestId('added-member-row')).toBeNull();
+  });
+
+  it('the Add member button is never disabled, so the click always explains itself', async () => {
+    const user = userEvent.setup();
+    render(<RegisterFamilyPage />);
+
+    // An EMPTY draft — the state in which the button used to be inert.
+    await user.click(screen.getAllByRole('button', { name: /add another member/i })[0]!);
+    const addBtn = screen.getAllByRole('button', { name: /^add member$/i })[0]!;
+    expect(addBtn).toBeEnabled();
+
+    await user.click(addBtn);
+    await waitFor(() => {
+      expect(screen.getAllByText(/still needed:/i).length).toBeGreaterThan(0);
+    });
   });
 });

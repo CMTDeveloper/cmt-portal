@@ -11,6 +11,7 @@ import {
   CANADIAN_POSTAL_RE,
   CHILD_GRADE_OPTIONS,
   NO_ALLERGIES,
+  MEMBER_FIELD_LABEL,
   type MemberRequiredField,
 } from '@cmt/shared-domain';
 import type { MemberDoc } from '@cmt/shared-domain/setu';
@@ -121,18 +122,10 @@ function draftToMemberShape(m: MemberDoc, d: MemberDraft) {
   };
 }
 
-const FIELD_LABEL: Record<MemberRequiredField, string> = {
-  firstName: 'First name',
-  lastName: 'Last name',
-  gender: 'Gender',
-  type: 'Member type',
-  foodAllergies: 'Food allergies',
-  email: 'Email',
-  phone: 'Phone',
-  volunteeringSkills: 'Volunteering skills',
-  schoolGrade: 'School grade',
-  birthMonthYear: 'Birth month & year',
-};
+// Was a local copy. Shared now, so the register form names a missing field the
+// same way this screen does - see MEMBER_FIELD_LABEL for why it lives beside the
+// field list rather than beside either form.
+const FIELD_LABEL = MEMBER_FIELD_LABEL;
 
 // Fields with NO input on this screen. `type` (Adult/Child) is set at
 // registration / by a sevak — a member missing it is a data error the family

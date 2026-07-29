@@ -4,7 +4,15 @@ import { Suspense, useState, useCallback, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { toast, SetuLogo, SetuAvatar, SetuIcon, Rosette } from '@cmt/ui';
-import { isMemberComplete, NO_ALLERGIES, CANADIAN_POSTAL_RE } from '@cmt/shared-domain';
+import {
+  isMemberComplete,
+  whatsMissingForMember,
+  MEMBER_FIELD_LABEL,
+  CHILD_GRADE_OPTIONS,
+  gradeLabel,
+  NO_ALLERGIES,
+  CANADIAN_POSTAL_RE,
+} from '@cmt/shared-domain';
 import { CspRoot, StepHeader, AddedMemberRow } from '@/features/family/components/atoms';
 import { VolunteeringSkillsPicker } from '@/features/setu/members/volunteering-skills-picker';
 import { ProvinceSelect } from '@/features/setu/members/province-select';
@@ -282,8 +290,23 @@ function RegisterFamilyReal() {
       setDraftError('Enter a valid email address.');
       return;
     }
-    if (!draftComplete || !draftGender) {
-      setDraftError('Please fill in all required fields for this member.');
+    // Name the fields. "Please fill in all required fields" is the message that
+    // sent the reporter looking at the birth-month selects when what the form
+    // wanted was also the grade and the gender - and on a phone the offending
+    // input is often scrolled off screen, so "something below is empty" is not
+    // an answer the family can act on.
+    const missing = whatsMissingForMember({ ...draftMember, gender: draftGender || undefined });
+    // `|| !draftGender` is unreachable at runtime - 'gender' is in REQUIRED_ALL,
+    // so an unset one is already in `missing`. It is here to NARROW draftGender
+    // from GenderChoice ('' | Gender) to Gender for the push below, which the
+    // old `!draftComplete || !draftGender` did implicitly.
+    if (missing.length > 0 || !draftGender) {
+      const names = missing.map(f => MEMBER_FIELD_LABEL[f]);
+      setDraftError(
+        names.length === 1
+          ? `${names[0]} is required.`
+          : `Still needed: ${names.join(', ')}.`,
+      );
       return;
     }
     setDraftError('');
@@ -293,7 +316,7 @@ function RegisterFamilyReal() {
     ]);
     resetDraft();
     setShowAddMember(false);
-  }, [draftComplete, draftGender, draftEmail, draftType, draftMember]);
+  }, [draftGender, draftEmail, draftType, draftMember]);
 
   const handleRemoveMember = useCallback((id: string) => {
     setAdditionalMembers(prev => prev.filter(m => m.id !== id));
@@ -693,21 +716,26 @@ function RegisterFamilyReal() {
       </div>
       <div className="col" style={{ gap: 10, marginBottom: 18 }}>
         {additionalMembers.map(m => (
-          <div key={m.id} style={{ position: 'relative' }}>
-            <AddedMemberRow
-              name={`${m.firstName} ${m.lastName}`}
-              type={`${m.type} · ${m.gender}${m.schoolGrade ? ` · ${m.schoolGrade}` : ''}${m.email ? ` · ${m.email}` : ''}${m.phone ? ` · ${m.phone}` : ''}`}
-            />
-            <button
-              className="focus-ring"
-              onClick={() => handleRemoveMember(m.id)}
-              disabled={submitting}
-              aria-label={`Remove ${m.firstName} ${m.lastName}`}
-              style={{ position: 'absolute', top: 12, right: 12, background: 'transparent', border: 0, color: 'var(--err)', fontSize: 11, padding: 4 }}
-            >
-              Remove
-            </button>
-          </div>
+          <AddedMemberRow
+            key={m.id}
+            name={`${m.firstName} ${m.lastName}`}
+            // gradeLabel, not the raw token: the row showed "Child · Male · 3"
+            // once grade became a select storing ladder tokens.
+            type={`${m.type} · ${m.gender}${m.schoolGrade ? ` · ${gradeLabel(m.schoolGrade)}` : ''}${m.email ? ` · ${m.email}` : ''}${m.phone ? ` · ${m.phone}` : ''}`}
+            // In the row's own trailing slot - it used to be absolutely
+            // positioned on top of the decorative pencil.
+            action={
+              <button
+                className="focus-ring"
+                onClick={() => handleRemoveMember(m.id)}
+                disabled={submitting}
+                aria-label={`Remove ${m.firstName} ${m.lastName}`}
+                style={{ background: 'transparent', border: 0, color: 'var(--err)', fontSize: 11, padding: 4, whiteSpace: 'nowrap' }}
+              >
+                Remove
+              </button>
+            }
+          />
         ))}
 
         {showAddMember ? (
@@ -834,14 +862,25 @@ function RegisterFamilyReal() {
             {draftType === 'Child' && (
               <>
                 <div className="field" style={{ marginBottom: 10 }}>
-                  <input
+                  {/* A SELECT, not free text (Vaibhav, 2026-07-29). This was the
+                      only child-grade capture in the portal still typed by hand;
+                      /family/members/new and the complete-profile form have both
+                      always used CHILD_GRADE_OPTIONS. Free text let a family
+                      register a child as "3rd", "grade three" or "Gr.3", none of
+                      which match the GRADE_LADDER tokens that level assignment
+                      and the annual promotion read - so the child looked enrolled
+                      but sorted into no level. */}
+                  <select
                     className="input"
-                    type="text"
-                    placeholder="School grade (e.g. Grade 3)"
                     value={draftSchoolGrade}
                     onChange={e => setDraftSchoolGrade(e.target.value)}
                     aria-label="Member school grade"
-                  />
+                  >
+                    <option value="">School grade…</option>
+                    {CHILD_GRADE_OPTIONS.map(g => (
+                      <option key={g.value} value={g.value}>{g.label}</option>
+                    ))}
+                  </select>
                 </div>
                 <div className="row" style={{ gap: 8, marginBottom: 10 }}>
                   <select
@@ -871,11 +910,25 @@ function RegisterFamilyReal() {
             {draftError && <div className="field-error" role="alert" style={{ marginBottom: 10 }}>{draftError}</div>}
 
             <div className="row" style={{ gap: 8 }}>
+              {/* ── NOT `disabled={!draftComplete}` ────────────────────────────
+                  Reported 2026-07-29: *"clicking Add member provides no
+                  feedback. I left month and year unpopulated, but there is no
+                  error or indication."* The button WAS disabled, and nothing in
+                  globals.css or setu.css styles `.btn:disabled` - so it looked
+                  exactly like a live primary button, swallowed the click, and
+                  said nothing. Worse, that made handleAddMember's own
+                  "fill in all required fields" message unreachable: the only
+                  path to it was a click that could never happen.
+
+                  So the button always clicks, and the handler names what is
+                  missing. Same rule as the family form: never pair "hidden or
+                  disabled while incomplete" with "the explanation only appears
+                  on submit" - the two conditions are mutually exclusive and the
+                  user is left with a dead control. */}
               <button
                 type="button"
                 className="btn btn--p"
                 onClick={handleAddMember}
-                disabled={!draftComplete}
                 style={{ flex: 1 }}
               >
                 Add member

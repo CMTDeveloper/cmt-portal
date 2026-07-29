@@ -252,9 +252,16 @@ export async function DonateSuccessBody({
               One last thing
             </h2>
             <p style={{ fontSize: 14, color: 'var(--body-text)', lineHeight: 1.6, marginBottom: 16 }}>
+              {/* "it takes a moment, and there is nothing more to pay" was cut
+                  on 2026-07-29 (Vaibhav). Both halves were doing harm: "takes a
+                  moment" is the writer reassuring themselves, and "nothing more
+                  to pay" is only true when the Bala Vihar donation is settled -
+                  AdultClassForm already states the fee, or its absence, from
+                  `bvPaid`, so the sentence could contradict the form directly
+                  under it. */}
               One parent stays on site while Bala Vihar is running, so we ask each family to name
               who will join the Adult Study Class during that hour. Pick anyone who is not already
-              teaching - it takes a moment, and there is nothing more to pay.
+              teaching.
             </p>
             <AdultClassForm
               adults={ask.adults}
