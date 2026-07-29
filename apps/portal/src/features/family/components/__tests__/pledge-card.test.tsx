@@ -78,16 +78,21 @@ describe('PledgeCard', () => {
   // false, because a money ask should have to be asked for.
   describe('a surface that reports but does not solicit', () => {
     it.each([['failed'], ['cancelled']] as const)(
-      '%s says the gift is not active WITHOUT asking for money',
+      '%s renders NOTHING - there is no plan to report',
       (status) => {
-        render(<PledgeCard pledge={pledge({ status })} askAmountCAD={63} canStart={false} />);
-        expect(screen.getByText(/isn't active/i)).toBeTruthy();
-        // No amount: quoting the price IS the ask.
-        expect((document.body.textContent ?? '').includes('63')).toBe(false);
-        expect(screen.queryByText(/support the mission/i)).toBeNull();
-        // And no dangling pointer at a control that is not rendered.
-        expect(screen.queryByText(/below/i)).toBeNull();
-        expect(screen.queryByRole('button')).toBeNull();
+        // CMT Developer, 2026-07-28, on seeing the neutral version: "I think we
+        // can hide this." A card whose entire content is "you do not have one of
+        // these" is noise on a dashboard already headed "Not enrolled · Enroll
+        // now". The card exists to REPORT a plan; with no plan in play there is
+        // nothing to report and, on this surface, nothing to ask.
+        //
+        // Accepted trade: a family whose mandate FAILED at the bank now gets no
+        // dashboard notice. The temple manages cancellations by hand and
+        // contacts families directly, so the signal was never this card's alone.
+        const { container } = render(
+          <PledgeCard pledge={pledge({ status })} askAmountCAD={63} canStart={false} />,
+        );
+        expect(container).toBeEmptyDOMElement();
       },
     );
 

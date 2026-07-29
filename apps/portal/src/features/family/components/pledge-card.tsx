@@ -59,9 +59,19 @@ export function PledgeCard({
   const giving = isPledgeGiving(pledge);
   const inFlight = pledge?.status === 'started';
 
-  // Nothing to report and nothing permitted to ask - an empty "Monthly giving"
-  // heading is worse than no card.
-  if (!pledge && !canAsk) return null;
+  // ── Nothing in play, and this surface does not ask: render NOTHING ─────────
+  //
+  // CMT Developer, 2026-07-28: "I think we can hide this." The neutral version
+  // that replaced the sales copy still said only "your monthly gift isn't
+  // active" - a card whose entire content is the absence of the thing it
+  // describes, sitting on a dashboard already headed "Not enrolled · Enroll
+  // now". This card exists to REPORT a plan; with none in play there is nothing
+  // to report, and on a non-soliciting surface nothing to ask either.
+  //
+  // Accepted trade: a family whose mandate FAILED at the bank gets no dashboard
+  // notice. The temple manages cancellations by hand and contacts families
+  // directly, so this card was never the only signal.
+  if (!canAsk && !giving && !inFlight) return null;
 
   return (
     <div className="card" style={{ padding, marginBottom: mobile ? 12 : 18 }}>
@@ -89,14 +99,13 @@ export function PledgeCard({
         <GivingBody pledge={pledge} />
       ) : inFlight ? (
         <InFlightBody />
-      ) : canAsk ? (
+      ) : (
+        // Only reachable with `canAsk` - the guard above returns null otherwise.
         <AskBody
           askAmountCAD={askAmountCAD}
           canStart={canStart}
           priorStatus={pledge?.status ?? null}
         />
-      ) : (
-        <InactiveBody />
       )}
     </div>
   );
@@ -132,29 +141,6 @@ function InFlightBody() {
       </p>
       <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 8, lineHeight: 1.5 }}>
         We&apos;ll email you once it&apos;s confirmed. Nothing has been taken from your account yet.
-      </p>
-    </>
-  );
-}
-
-/**
- * A terminal pledge on a surface that does not solicit.
- *
- * Reports the fact and points at the one place the plan can be restarted -
- * WITHOUT an amount, because quoting the price is the ask, and without "below",
- * because on these surfaces there is nothing below. Neutral about the cause: we
- * genuinely cannot tell a bank decline from an abandoned page from a temple
- * cancellation, and naming one would be worse than naming none.
- */
-function InactiveBody() {
-  return (
-    <>
-      <p style={{ fontSize: 14, color: 'var(--body-text)', lineHeight: 1.6 }}>
-        Your monthly gift isn&apos;t active.
-      </p>
-      <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 8, lineHeight: 1.5 }}>
-        Monthly giving is one of the two ways to pay your Bala Vihar contribution - you can choose it
-        there, or contact the temple office.
       </p>
     </>
   );
