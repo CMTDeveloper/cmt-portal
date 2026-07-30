@@ -5,9 +5,7 @@ import { SetuIcon } from '@cmt/ui';
 import { CspRoot } from '@/features/family/components/atoms';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 import { markDonationStatus } from '@/features/setu/donations/mark-donation-status';
-import { notifyDonationPending } from '@/features/setu/donations/notify-donation-pending';
-import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
-import { selectBalaViharEnrollment } from '@/app/family/_helpers/select-bv-enrollment';
+import { notifyDonationAbandoned } from '@/features/setu/donations/notify-donation-abandoned';
 
 export const metadata = { title: 'Donation cancelled' };
 
@@ -32,16 +30,14 @@ export default async function DonateCancelPage({
     // page - and never at all if the donation had actually completed (that
     // transition is refused above, so `changed` is false).
     if (marked.changed) {
-      // The BALA VIHAR enrollment specifically - that is what CMT's copy is
-      // about ("We have received your enrollment for Bala Vihar 2026-27"), and
-      // selecting by programKey rather than "first active" is the standing rule
-      // here since a second active enrollment (Tabla, adult class) would
-      // otherwise hijack it. No BV enrollment means the letter would be untrue,
-      // and notifyDonationPending sends nothing without an eid.
-      const bv = selectBalaViharEnrollment(await getEnrollments(familyData.family.fid));
-      await notifyDonationPending({
+      // Keyed on the ABANDONED DONATION, not on "this family has a Bala Vihar
+      // enrollment somewhere". Every programme returns to this same page, and
+      // the notifier refuses anything that is not the BV enrollment donation -
+      // or any family who has already paid it, by donation or by pledge.
+      await notifyDonationAbandoned({
+        did,
         fid: familyData.family.fid,
-        eid: bv?.eid ?? null,
+        legacyFid: familyData.family.legacyFid,
         members: familyData.members,
         currentMid: familyData.currentMid,
         managerMids: familyData.family.managers ?? [],

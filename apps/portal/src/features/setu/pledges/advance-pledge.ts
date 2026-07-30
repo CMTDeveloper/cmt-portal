@@ -6,6 +6,7 @@ import {
   getSubscriptionResult,
 } from './stripe-pad-client';
 import { activatePledgeAndNotify, claimPledgeTransition } from './activate-pledge';
+import { bvEmailRecipient } from '@/features/setu/donations/bv-enrollment-emails';
 
 /** What one pass of the state machine concluded. */
 export type AdvanceOutcome = 'active' | 'processing' | 'failed';
@@ -259,15 +260,35 @@ export async function managerRecipientFor(
 ): Promise<ManagerRecipient> {
   try {
     const fam = await db.collection('families').doc(fid).get();
-    const managers = (fam.data()?.managers ?? []) as string[];
-    const mid = managers[0];
-    if (!mid) return { email: null, name: '' };
-    const m = await db.collection('families').doc(fid).collection('members').doc(mid).get();
-    const d = m.data() as { email?: unknown; firstName?: unknown; lastName?: unknown } | undefined;
-    const email = typeof d?.email === 'string' && d.email !== '' ? d.email : null;
-    const first = typeof d?.firstName === 'string' ? d.firstName : '';
-    const last = typeof d?.lastName === 'string' ? d.lastName : '';
-    return { email, name: `${first} ${last}`.trim() };
+    const managers = ((fam.data()?.managers ?? []) as string[]) ?? [];
+    if (managers.length === 0) return { email: null, name: '' };
+
+    // EVERY manager, not `managers[0]`. Reading only the first meant a family
+    // whose first manager has no address got NO activation email at all, even
+    // when a reachable co-manager was the one who started the pledge - and if
+    // that first manager had an address but no name, the letter opened
+    // "Dear ,". Found by a Codex review, 2026-07-30.
+    //
+    // By document id rather than a collection query: a family has one or two
+    // managers, so this is one or two point reads, and it does not drag the
+    // whole members collection onto the pledge-activation path.
+    const members = await Promise.all(
+      managers.map(async (mid) => {
+        const m = await db.collection('families').doc(fid).collection('members').doc(mid).get();
+        const x = m.data() as { email?: unknown; firstName?: unknown; lastName?: unknown } | undefined;
+        return {
+          mid,
+          email: typeof x?.email === 'string' && x.email !== '' ? x.email : null,
+          firstName: typeof x?.firstName === 'string' ? x.firstName : null,
+          lastName: typeof x?.lastName === 'string' ? x.lastName : null,
+        };
+      }),
+    );
+
+    // The SHARED chooser, so this path and the donation paths address a family
+    // the same way rather than by two hand-rolled rules.
+    const chosen = bvEmailRecipient(members, null, managers);
+    return { email: chosen.to ?? null, name: chosen.registrantName };
   } catch {
     return { email: null, name: '' };
   }

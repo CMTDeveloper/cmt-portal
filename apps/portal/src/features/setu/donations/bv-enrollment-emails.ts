@@ -30,7 +30,15 @@ import { ORG_NAME } from '@/lib/branding';
 /** How SES formats a dollar figure in these templates: no symbol, no decimals
  *  on a whole number ("500"), two decimals otherwise ("51.50"). */
 export function formatAmountForTemplate(amountCAD: number): string {
-  return Number.isInteger(amountCAD) ? String(amountCAD) : amountCAD.toFixed(2);
+  // Guarded, because this string goes straight into a letter about money.
+  // `String(1e21)` is "1e+21" and `String(NaN)` is "NaN"; both would print
+  // verbatim after "CAD $". Anything not a sane positive amount becomes '0',
+  // which reads as obviously wrong rather than as a plausible figure - and
+  // callers refuse to send at all when the amount is unreadable.
+  if (!Number.isFinite(amountCAD) || amountCAD < 0 || amountCAD >= 1e15) return '0';
+  // toFixed avoids exponent notation entirely; whole amounts stay bare so the
+  // common case reads "CAD $500", not "CAD $500.00".
+  return Number.isInteger(amountCAD) ? amountCAD.toFixed(0) : amountCAD.toFixed(2);
 }
 
 export interface BvEnrollmentEmailRecipient {

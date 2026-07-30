@@ -23,7 +23,9 @@ const mockGetCurrentFamily = vi.hoisted(() => vi.fn());
 vi.mock('@/features/setu/members/get-current-family', () => ({ getCurrentFamily: mockGetCurrentFamily }));
 
 const mockMarkDonation = vi.hoisted(() => vi.fn());
+const mockNotifyComplete = vi.hoisted(() => vi.fn());
 vi.mock('@/features/setu/donations/mark-donation-status', () => ({ markDonationStatus: mockMarkDonation }));
+vi.mock('@/features/setu/donations/notify-donation-complete', () => ({ notifyDonationComplete: mockNotifyComplete }));
 
 // BOTH loader variants mocked, so a test can prove WHICH one a receipt page uses.
 const { failSoft, orThrow } = vi.hoisted(() => ({ failSoft: vi.fn(), orThrow: vi.fn() }));
@@ -84,7 +86,13 @@ beforeEach(() => {
   mockFinalizePledge.mockResolvedValue({ state: 'active' });
   mockGetFamilyPledge.mockResolvedValue(null);
   mockGetCurrentFamily.mockResolvedValue(familyData());
-  mockMarkDonation.mockResolvedValue(undefined);
+  // The RESULT OBJECT, not `undefined`. Resolving undefined made the page's
+  // `marked.changed` THROW, which its own catch swallowed - so the suite passed
+  // while never once exercising the confirmation email. Found by a Codex review,
+  // 2026-07-30.
+  mockMarkDonation.mockResolvedValue({ ok: true, changed: true, previousStatus: 'redirected' });
+  mockNotifyComplete.mockReset();
+  mockNotifyComplete.mockResolvedValue(undefined);
   failSoft.mockResolvedValue(gateData());
   orThrow.mockReset();
   mockNeedsSelection.mockReturnValue(true);
@@ -99,6 +107,17 @@ describe('/donate/success - the receipt itself', () => {
   it('marks the donation completed before anything else', async () => {
     await renderPage();
     expect(mockMarkDonation).toHaveBeenCalledWith('don_1', 'CMT-1', 'completed');
+    // The confirmation email fires on the SAME render that won the transition.
+    expect(mockNotifyComplete).toHaveBeenCalledTimes(1);
+    expect(mockNotifyComplete.mock.calls[0]![0]).toMatchObject({ did: 'don_1', fid: 'CMT-1' });
+  });
+
+  // The whole point of `changed`: a reloaded receipt must not re-thank anybody.
+  it('does NOT re-send the confirmation when the donation was already completed', async () => {
+    mockMarkDonation.mockResolvedValue({ ok: true, changed: false, previousStatus: 'completed' });
+    render(await DonateSuccessBody({ searchParams: Promise.resolve({ did: 'don_1' }) }));
+    expect(mockMarkDonation).toHaveBeenCalledWith('don_1', 'CMT-1', 'completed');
+    expect(mockNotifyComplete).not.toHaveBeenCalled();
   });
 
   // The write is best-effort and NOT authoritative (accounting's notification

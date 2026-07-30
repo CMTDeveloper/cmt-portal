@@ -53,13 +53,18 @@ export interface NotifyDonationPendingArgs {
 export async function notifyDonationPending(args: NotifyDonationPendingArgs): Promise<void> {
   try {
     if (!args.eid) return;
+
+    // ── Resolve the recipient BEFORE claiming ───────────────────────────────
+    // The claim burns the 7-day cooldown. Claiming first and then discovering
+    // there is nobody to write to would silence a family who becomes reachable
+    // tomorrow, for a letter that was never sent. Found by a Codex review.
+    const recipient = bvEmailRecipient(args.members, args.currentMid, args.managerMids);
+    if (!recipient.to) return;
+
     if (!(await claimPendingEmail(args.fid, args.eid))) return;
 
     const base = portalBaseUrl(args.req).replace(/\/+$/, '');
-    await sendBvDonationPendingEmail(
-      bvEmailRecipient(args.members, args.currentMid, args.managerMids),
-      `${base}/family/enroll/bala-vihar`,
-    );
+    await sendBvDonationPendingEmail(recipient, `${base}/family/enroll/bala-vihar`);
   } catch (err) {
     console.error(`[bv-email] could not send the pending notice for ${args.fid}`, err);
   }

@@ -16,6 +16,13 @@ import { notifyUnpaidAtDoor } from '@/features/setu/check-in/notify-unpaid-at-do
 // this non-fatal marker rather than failing a check-in that already happened.
 type EnrollResult = AutoEnrollResult | { enrolled: false; reason: 'error' };
 
+/**
+ * How long the door will wait for the "donation still pending" nudge before
+ * moving on. Generous enough for a healthy Firestore read + SES call, short
+ * enough that a sevak never notices. NOT a retry or a poll - one bounded wait.
+ */
+const DOOR_NUDGE_BUDGET_MS = 2500;
+
 const bodySchema = z.object({
   id: z.string().min(1),
   students: z.record(z.string(), z.boolean()),
@@ -101,7 +108,20 @@ export async function POST(req: Request) {
   // for, and running before them would read the pre-enrollment state and say
   // nothing. Never throws, and the check-in is already written and returned
   // below regardless - see notifyUnpaidAtDoor.
-  await notifyUnpaidAtDoor({ fid: family.fid, legacyFid: family.legacyFid });
+  // BOUNDED. The AWS SES client sets no request or connection timeout (Smithy's
+  // default is zero, i.e. wait forever), so a stalled SES call would hold this
+  // response open until the platform killed it - leaving the sevak staring at a
+  // spinner and retrying a check-in whose rows are already written. Found by a
+  // Codex review, 2026-07-30.
+  //
+  // The nudge is abandoned, not cancelled: whatever is in flight completes or
+  // fails on its own, and the 7-day claim it may already have taken means the
+  // worst case is one missed nudge - never a duplicate. A missed nudge costs a
+  // family seeing an outstanding donation their dashboard already shows.
+  await Promise.race([
+    notifyUnpaidAtDoor({ fid: family.fid, legacyFid: family.legacyFid }),
+    new Promise<void>((resolve) => setTimeout(resolve, DOOR_NUDGE_BUDGET_MS)),
+  ]);
 
   return NextResponse.json({
     family: {

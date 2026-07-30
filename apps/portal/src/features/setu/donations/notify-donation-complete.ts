@@ -1,5 +1,6 @@
 import 'server-only';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
+import { BALA_VIHAR } from '@cmt/shared-domain';
 import { bvEmailRecipient, sendBvDonationCompleteEmail } from './bv-enrollment-emails';
 
 export interface NotifyDonationCompleteArgs {
@@ -39,10 +40,27 @@ export async function notifyDonationComplete(args: NotifyDonationCompleteArgs): 
   try {
     const snap = await portalFirestore().collection('donations').doc(args.did).get();
     if (!snap.exists) return;
-    const data = snap.data() as { fid?: unknown; amountCAD?: unknown } | undefined;
+    const data = snap.data() as
+      | { fid?: unknown; amountCAD?: unknown; programKey?: unknown; eid?: unknown }
+      | undefined;
     // The same cross-family guard markDonationStatus applies. This function is
     // exported and could be called from somewhere that has not checked.
     if (!data || data.fid !== args.fid) return;
+
+    // ── 🔴 BALA VIHAR ENROLLMENT DONATIONS ONLY ─────────────────────────────
+    // The subject line is "Your Bala Vihar Enrollment is Confirmed" and the body
+    // names the amount. Without this, completing a TABLA or ADULT STUDY CLASS
+    // donation - both of which land on this same receipt page - told the family
+    // their Bala Vihar enrollment was confirmed, quoting the other programme's
+    // figure. A $101 adult-class payment would have read as a confirmed Bala
+    // Vihar donation of $101. Found by a Codex review, 2026-07-30.
+    //
+    // `eid` as well as programKey: a general year-round gift carries no
+    // enrollment, and CMT's copy ("we have received your donation … for Bala
+    // Vihar 2026-27") is only true of the enrollment donation.
+    if (data.programKey !== BALA_VIHAR || typeof data.eid !== 'string' || data.eid === '') {
+      return;
+    }
 
     const amount = typeof data.amountCAD === 'number' ? data.amountCAD : null;
     // A donation with no readable amount would render "CAD $" - worse than
