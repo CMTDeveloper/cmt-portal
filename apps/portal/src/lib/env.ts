@@ -35,6 +35,12 @@ export const portalEnvSchema = z.object({
   AWS_ACCESS_KEY_ID: z.string().min(1).optional(),
   AWS_SECRET_ACCESS_KEY: z.string().min(1).optional(),
   AWS_SES_FROM_EMAIL: z.string().email().optional(),
+  // The DISPLAY NAME on the From header, e.g. `Chinmaya Mission Toronto
+  // <bvregistration@chinmayatoronto.org>`. Separate from the address on
+  // purpose: AWS_SES_FROM_EMAIL is validated as a bare email above, so folding
+  // a name into it fails at boot. Unset falls back to ORG_NAME - see
+  // lib/aws/ses.ts sesSource().
+  AWS_SES_FROM_NAME: z.string().optional(),
 
   // Cron auth (slice B5)
   CRON_SECRET: z.string().min(16).optional(),

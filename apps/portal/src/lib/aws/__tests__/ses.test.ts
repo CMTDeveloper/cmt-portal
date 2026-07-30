@@ -33,7 +33,9 @@ describe('sendEmail', () => {
       Destination: { ToAddresses: string[] };
       Message: { Subject: { Data: string }; Body: { Html: { Data: string }; Text: { Data: string } } };
     };
-    expect(input.Source).toBe('noreply@chinmayatoronto.org');
+    // WITH a display name since 2026-07-30 - a bare address is what mail
+    // clients showed, and Vaibhav asked for the charity's name.
+    expect(input.Source).toBe('"Chinmaya Mission Toronto" <noreply@chinmayatoronto.org>');
     expect(input.Destination.ToAddresses).toEqual(['a@b.com']);
     expect(input.Message.Subject.Data).toBe('Test');
     expect(input.Message.Body.Html.Data).toBe('<p>Hello</p>');
@@ -66,7 +68,9 @@ describe('sendSesTemplatedEmail', () => {
       Template: string;
       TemplateData: string;
     };
-    expect(input.Source).toBe('noreply@chinmayatoronto.org');
+    // WITH a display name since 2026-07-30 - a bare address is what mail
+    // clients showed, and Vaibhav asked for the charity's name.
+    expect(input.Source).toBe('"Chinmaya Mission Toronto" <noreply@chinmayatoronto.org>');
     expect(input.Destination.ToAddresses).toEqual(['a@b.com']);
     expect(input.Template).toBe('cmt-setu-invite');
     // TemplateData is a JSON STRING, not an object. Passing the object through
@@ -166,5 +170,74 @@ describe('sendSesTemplatedEmail — SES_CONFIGURATION_SET', () => {
       sendSesTemplatedEmail({ to: 'a@b.com', templateName: 'missing', data: {} }),
     ).rejects.toBeInstanceOf(TemplateDoesNotExistException);
     expect(sesMock.commandCalls(SendTemplatedEmailCommand)).toHaveLength(1);
+  });
+});
+
+
+// ── The From display name (Vaibhav, 2026-07-30: "the name, can you adjust?") ──
+// A delivered email showed only `bvregistration@chinmayatoronto.org`. These pin
+// the header composition, because the failure mode is invisible from inside the
+// process: SES accepts a malformed or mojibake From and the only evidence is
+// what a family sees in their inbox.
+describe('the From display name', () => {
+  afterEach(() => {
+    delete process.env.AWS_SES_FROM_NAME;
+  });
+
+  it('defaults to the organisation name, quoted, with the address in angle brackets', async () => {
+    sesMock.on(SendEmailCommand).resolves({ MessageId: 'm' });
+    await sendEmail({ to: 'a@b.com', subject: 'S', text: 'T' });
+    const input = sesMock.commandCalls(SendEmailCommand)[0]!.args[0].input as { Source: string };
+    expect(input.Source).toBe('"Chinmaya Mission Toronto" <noreply@chinmayatoronto.org>');
+  });
+
+  it('applies to TEMPLATED sends too - that is the path CMT\'s three emails use', async () => {
+    sesMock.on(SendTemplatedEmailCommand).resolves({ MessageId: 'm' });
+    await sendSesTemplatedEmail({ to: 'a@b.com', templateName: 'bv_enrolled_donation_complete', data: {} });
+    const input = sesMock.commandCalls(SendTemplatedEmailCommand)[0]!.args[0].input as { Source: string };
+    expect(input.Source).toBe('"Chinmaya Mission Toronto" <noreply@chinmayatoronto.org>');
+  });
+
+  it('AWS_SES_FROM_NAME overrides the default', async () => {
+    process.env.AWS_SES_FROM_NAME = 'CMT Bala Vihar';
+    sesMock.on(SendEmailCommand).resolves({ MessageId: 'm' });
+    await sendEmail({ to: 'a@b.com', subject: 'S', text: 'T' });
+    const input = sesMock.commandCalls(SendEmailCommand)[0]!.args[0].input as { Source: string };
+    expect(input.Source).toBe('"CMT Bala Vihar" <noreply@chinmayatoronto.org>');
+  });
+
+  it('an EMPTY name falls back to the bare address rather than emitting `"" <addr>`', async () => {
+    process.env.AWS_SES_FROM_NAME = '   ';
+    sesMock.on(SendEmailCommand).resolves({ MessageId: 'm' });
+    await sendEmail({ to: 'a@b.com', subject: 'S', text: 'T' });
+    const input = sesMock.commandCalls(SendEmailCommand)[0]!.args[0].input as { Source: string };
+    expect(input.Source).toBe('noreply@chinmayatoronto.org');
+  });
+
+  // An unescaped quote would close the quoted-string early and corrupt the header.
+  it('escapes a quote and a backslash in the name', async () => {
+    process.env.AWS_SES_FROM_NAME = 'CMT "BV" \\ Toronto';
+    sesMock.on(SendEmailCommand).resolves({ MessageId: 'm' });
+    await sendEmail({ to: 'a@b.com', subject: 'S', text: 'T' });
+    const input = sesMock.commandCalls(SendEmailCommand)[0]!.args[0].input as { Source: string };
+    expect(input.Source).toBe('"CMT \\"BV\\" \\\\ Toronto" <noreply@chinmayatoronto.org>');
+  });
+
+  // A raw 8-bit byte in a header is not legal and arrives as mojibake.
+  it('RFC 2047 encodes a non-ASCII name instead of emitting raw bytes', async () => {
+    process.env.AWS_SES_FROM_NAME = 'Chinmaya Mission Torontô';
+    sesMock.on(SendEmailCommand).resolves({ MessageId: 'm' });
+    await sendEmail({ to: 'a@b.com', subject: 'S', text: 'T' });
+    const input = sesMock.commandCalls(SendEmailCommand)[0]!.args[0].input as { Source: string };
+    expect(input.Source).toBe(
+      `=?UTF-8?B?${Buffer.from('Chinmaya Mission Torontô', 'utf8').toString('base64')}?= <noreply@chinmayatoronto.org>`,
+    );
+  });
+
+  it('still refuses to send with no AWS_SES_FROM_EMAIL at all', async () => {
+    delete process.env.AWS_SES_FROM_EMAIL;
+    await expect(sendEmail({ to: 'a@b.com', subject: 'S', text: 'T' })).rejects.toThrow(
+      /AWS_SES_FROM_EMAIL is required/,
+    );
   });
 });
