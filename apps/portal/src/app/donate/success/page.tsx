@@ -6,6 +6,7 @@ import { SetuIcon } from '@cmt/ui';
 import { CspRoot } from '@/features/family/components/atoms';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 import { markDonationStatus } from '@/features/setu/donations/mark-donation-status';
+import { notifyDonationComplete } from '@/features/setu/donations/notify-donation-complete';
 import { LoadingOm } from '@/components/chrome/loading-om';
 import { flags } from '@/lib/flags';
 import { loadAdultClassGateDataFailSoft } from '@/features/setu/adult-class/load-gate-data';
@@ -169,7 +170,26 @@ export async function DonateSuccessBody({
   // markDonationStatus. Not authoritative — accounting's notification is.
   if (familyData && did) {
     try {
-      await markDonationStatus(did, familyData.family.fid, 'completed');
+      const marked = await markDonationStatus(did, familyData.family.fid, 'completed');
+      // ── CMT's confirmation email, ONCE ────────────────────────────────────
+      // Gated on `changed`, never on `ok`. This page re-renders on every
+      // reload, back-button and shared link, so `ok` would mail the family a
+      // fresh "we received your donation" each time they looked at the receipt
+      // they were already reading.
+      //
+      // Inside the same try as the write, and after it, so the email can only
+      // follow a transition this render actually won. sendBv…Email owns its own
+      // failures, so it cannot reach the catch below and cannot cost the family
+      // their receipt.
+      if (marked.changed) {
+        await notifyDonationComplete({
+          did,
+          fid: familyData.family.fid,
+          members: familyData.members,
+          currentMid: familyData.currentMid,
+          managerMids: familyData.family.managers ?? [],
+        });
+      }
     } catch (err) {
       // Best-effort, as its own docstring says, and NOT authoritative -
       // accounting's notification is. Stripe already has the money, so a failed

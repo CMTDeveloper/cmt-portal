@@ -5,6 +5,9 @@ import { SetuIcon } from '@cmt/ui';
 import { CspRoot } from '@/features/family/components/atoms';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 import { markDonationStatus } from '@/features/setu/donations/mark-donation-status';
+import { notifyDonationPending } from '@/features/setu/donations/notify-donation-pending';
+import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
+import { selectBalaViharEnrollment } from '@/app/family/_helpers/select-bv-enrollment';
 
 export const metadata = { title: 'Donation cancelled' };
 
@@ -22,7 +25,28 @@ export default async function DonateCancelPage({
   const { did } = await searchParams;
   // markDonationStatus won't downgrade a 'completed' donation to 'abandoned'.
   if (familyData && did) {
-    await markDonationStatus(did, familyData.family.fid, 'abandoned');
+    const marked = await markDonationStatus(did, familyData.family.fid, 'abandoned');
+    // ── Trigger 1: "came back from Stripe without completing" ──────────────
+    // CMT's `bv_enrolled_donation_pending`. Gated on `changed`, so the family
+    // is mailed once for one abandonment rather than on every reload of this
+    // page - and never at all if the donation had actually completed (that
+    // transition is refused above, so `changed` is false).
+    if (marked.changed) {
+      // The BALA VIHAR enrollment specifically - that is what CMT's copy is
+      // about ("We have received your enrollment for Bala Vihar 2026-27"), and
+      // selecting by programKey rather than "first active" is the standing rule
+      // here since a second active enrollment (Tabla, adult class) would
+      // otherwise hijack it. No BV enrollment means the letter would be untrue,
+      // and notifyDonationPending sends nothing without an eid.
+      const bv = selectBalaViharEnrollment(await getEnrollments(familyData.family.fid));
+      await notifyDonationPending({
+        fid: familyData.family.fid,
+        eid: bv?.eid ?? null,
+        members: familyData.members,
+        currentMid: familyData.currentMid,
+        managerMids: familyData.family.managers ?? [],
+      });
+    }
   }
 
   return (

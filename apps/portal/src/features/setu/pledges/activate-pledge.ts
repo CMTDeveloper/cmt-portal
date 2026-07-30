@@ -1,6 +1,6 @@
 import 'server-only';
 import type { PledgeStatus } from '@cmt/shared-domain/setu';
-import { sendManagedEmail } from '@/lib/aws/send-managed-email';
+import { sendBvPledgeCompleteEmail } from '@/features/setu/donations/bv-enrollment-emails';
 
 /** A terminal status a pledge may be moved to by one pass of the state machine. */
 export type SettledStatus = Extract<PledgeStatus, 'active' | 'failed'>;
@@ -77,6 +77,8 @@ export async function activatePledgeAndNotify(
   args: {
     pid: string;
     toEmail: string | null;
+    /** Fills `{{registrant_name}}`. Empty string is acceptable; see managerRecipientFor. */
+    toName?: string;
     monthlyAmountCAD: number;
     /**
      * The subscription this caller actually confirmed was live.
@@ -100,23 +102,21 @@ export async function activatePledgeAndNotify(
   if (!claim.won) return claim;
 
   if (args.toEmail) {
-    try {
-      await sendManagedEmail({
-        name: 'pledge-activated',
-        to: args.toEmail,
-        data: { amount: String(args.monthlyAmountCAD) },
-        fallback: async () => {
-          // No SES template configured (the flag-off / pre-launch state). The
-          // activation itself already succeeded; say so in the log and move on
-          // rather than throwing and making the caller think it did not.
-          console.info('[pledge] activated %s - no activation template configured', args.pid);
-        },
-      });
-    } catch (err) {
-      // The debit is live and the record says so. A mail failure must not undo
-      // that, and must not make the route report a failure to the family.
-      console.error('[pledge] activation email failed for %s', args.pid, err);
-    }
+    // CMT's own `bv_enrolled_pledge_complete` (2026-07-29), REPLACING the
+    // portal-authored `pledge-activated`. One event must produce one email:
+    // keeping both would have told a family twice, in two different voices,
+    // that the same mandate went live. Nothing was lost in the swap -
+    // SES_TEMPLATE_PLEDGE_ACTIVATED was never set in any environment, so the
+    // in-code fallback is all a family would ever have received.
+    //
+    // `sendBvPledgeCompleteEmail` never throws (it owns its own try/catch and
+    // logs), which is what this path requires: the debit is live and the record
+    // says so, and a mail failure must not undo that or make the caller report a
+    // failure to the family.
+    await sendBvPledgeCompleteEmail(
+      { to: args.toEmail, registrantName: args.toName ?? '' },
+      args.monthlyAmountCAD,
+    );
   }
   return claim;
 }

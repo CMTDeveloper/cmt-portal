@@ -215,14 +215,17 @@ export async function advancePledge(
 
   // Activation goes through the shared transactional claim, so this path and a
   // concurrent one cannot both announce the same activation to the same family.
-  const email = pledge.fid ? await managerEmailFor(db, pledge.fid) : null;
+  const recipient = pledge.fid
+    ? await managerRecipientFor(db, pledge.fid)
+    : { email: null, name: '' };
   // `subscriptionId` here is THIS caller's own, and step 5 above confirmed it
   // live. In the divergent case the document keeps a different (first-written)
   // id, so recording which one was actually verified is what stops a human
   // acting on the wrong subscription.
   const claim = await activatePledgeAndNotify(db, {
     pid,
-    toEmail: email,
+    toEmail: recipient.email,
+    toName: recipient.name,
     monthlyAmountCAD,
     verifiedSubscriptionId: subscriptionId,
   });
@@ -233,20 +236,39 @@ export async function advancePledge(
   return outcomeOf(claim.status);
 }
 
-/** The family's first manager's email, for the activation notice. Never throws. */
-export async function managerEmailFor(
+/**
+ * The family's first manager, for the activation notice. Never throws.
+ *
+ * Returns the NAME as well as the address because CMT's `bv_enrolled_*`
+ * templates open "Dear {{registrant_name}}," and SES does not fail a send on an
+ * unfilled placeholder - it renders "Dear ," and still reports success. The
+ * name therefore has to be fetched wherever the address is, or the omission is
+ * invisible until a family says something.
+ *
+ * `name` falls back to the empty string, never to a guess. A blank greeting is
+ * a poor email; a confidently wrong name is worse.
+ */
+export interface ManagerRecipient {
+  email: string | null;
+  name: string;
+}
+
+export async function managerRecipientFor(
   db: FirebaseFirestore.Firestore,
   fid: string,
-): Promise<string | null> {
+): Promise<ManagerRecipient> {
   try {
     const fam = await db.collection('families').doc(fid).get();
     const managers = (fam.data()?.managers ?? []) as string[];
     const mid = managers[0];
-    if (!mid) return null;
+    if (!mid) return { email: null, name: '' };
     const m = await db.collection('families').doc(fid).collection('members').doc(mid).get();
-    const email = (m.data() as { email?: unknown } | undefined)?.email;
-    return typeof email === 'string' && email !== '' ? email : null;
+    const d = m.data() as { email?: unknown; firstName?: unknown; lastName?: unknown } | undefined;
+    const email = typeof d?.email === 'string' && d.email !== '' ? d.email : null;
+    const first = typeof d?.firstName === 'string' ? d.firstName : '';
+    const last = typeof d?.lastName === 'string' ? d.lastName : '';
+    return { email, name: `${first} ${last}`.trim() };
   } catch {
-    return null;
+    return { email: null, name: '' };
   }
 }

@@ -8,6 +8,7 @@ import {
   type AutoEnrollResult,
 } from '@/features/setu/check-in/auto-enroll-bala-vihar';
 import { markDoorAttendance } from '@/features/setu/check-in/mark-door-attendance';
+import { notifyUnpaidAtDoor } from '@/features/setu/check-in/notify-unpaid-at-door';
 
 // Auto-enroll is a best-effort ADDED step layered on the check-in write. When it
 // throws unexpectedly (offering-disabled/expired/not-found/family-not-found all
@@ -94,6 +95,13 @@ export async function POST(req: Request) {
   } catch (e) {
     console.error('[check-in/setu] door attendance failed (check-in already recorded)', e);
   }
+
+  // LAST, and after auto-enroll: a family who was just auto-enrolled by the two
+  // steps above is exactly the "enrolled, donation pending" case this email is
+  // for, and running before them would read the pre-enrollment state and say
+  // nothing. Never throws, and the check-in is already written and returned
+  // below regardless - see notifyUnpaidAtDoor.
+  await notifyUnpaidAtDoor({ fid: family.fid, legacyFid: family.legacyFid });
 
   return NextResponse.json({
     family: {

@@ -22,7 +22,22 @@ export type ManagedEmailName =
   | 'donation-thank-you'
   | 'setu-invite'
   | 'setu-join-request'
-  | 'pledge-activated';
+  | 'pledge-activated'
+  // ── The Bala Vihar enrollment trio (CMT, 2026-07-29) ──────────────────────
+  // Authored and owned by CMT in SES (`bv_enrolled_*`, ca-central-1), sent from
+  // the verified `bvregistration@chinmayatoronto.org`. The COPY is theirs; this
+  // repo only decides when each one fires and what data it carries.
+  //
+  // ⚠️ The placeholder names below are SES's, not ours - `registrant_name`,
+  // `donation_amount`, `registration_link`. SES does not fail a send when a
+  // placeholder goes unfilled: it renders the message with a blank where the
+  // value should be and still reports a MessageId. So a typo here is invisible
+  // to this process and shows up only as a family receiving "Dear ," - which is
+  // why `SES_CONFIGURATION_SET` with a RENDERING_FAILURE destination matters,
+  // and why the data keys are asserted in __tests__/bv-enrollment-emails.test.ts.
+  | 'bv-enrolled-donation-complete'
+  | 'bv-enrolled-pledge-complete'
+  | 'bv-enrolled-donation-pending';
 
 const ENV_VAR: Record<ManagedEmailName, string> = {
   'payment-reminder': 'SES_TEMPLATE_PAYMENT_REMINDER',
@@ -30,6 +45,9 @@ const ENV_VAR: Record<ManagedEmailName, string> = {
   'setu-invite': 'SES_TEMPLATE_SETU_INVITE',
   'setu-join-request': 'SES_TEMPLATE_SETU_JOIN_REQUEST',
   'pledge-activated': 'SES_TEMPLATE_PLEDGE_ACTIVATED',
+  'bv-enrolled-donation-complete': 'SES_TEMPLATE_BV_ENROLLED_DONATION_COMPLETE',
+  'bv-enrolled-pledge-complete': 'SES_TEMPLATE_BV_ENROLLED_PLEDGE_COMPLETE',
+  'bv-enrolled-donation-pending': 'SES_TEMPLATE_BV_ENROLLED_DONATION_PENDING',
 };
 
 /** Every `SES_TEMPLATE_*` var, for the env inventory and for test cleanup. */

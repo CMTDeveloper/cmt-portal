@@ -166,7 +166,15 @@ describe('reconcilePledges - the orphan mandate', () => {
     fs.docs = [orphan('PLG-1')];
     await reconcilePledges();
     expect(mockEmail).toHaveBeenCalledTimes(1);
-    expect(mockEmail.mock.calls[0]![0]).toMatchObject({ name: 'pledge-activated', to: 'a@b.com' });
+    // CMT's template since 2026-07-30, replacing the portal-authored
+    // 'pledge-activated'. The DATA KEYS are asserted too: SES renders a blank
+    // for an unfilled placeholder and still reports success, so a renamed key
+    // would be invisible everywhere except a family's inbox.
+    expect(mockEmail.mock.calls[0]![0]).toMatchObject({
+      name: 'bv-enrolled-pledge-complete',
+      to: 'a@b.com',
+      data: { donation_amount: '51' },
+    });
   });
 
   it('does NOT re-run step 3 for a pledge that already has a subscription', async () => {

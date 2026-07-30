@@ -32,7 +32,10 @@ const MANAGER = { role: 'family-manager', fid: 'CMT-AB12CD34', mid: 'CMT-AB12CD3
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockMark.mockResolvedValue(true);
+  // The RESULT OBJECT markDonationStatus returns since 2026-07-30, not a bare
+  // boolean. The route destructures `{ ok }`, so a stale `true` here reads as
+  // `ok: undefined` and 404s - which is exactly how this test caught the change.
+  mockMark.mockResolvedValue({ ok: true, changed: true, previousStatus: 'pending' });
 });
 
 describe('POST /api/setu/donations/[did]/status', () => {
@@ -70,7 +73,7 @@ describe('POST /api/setu/donations/[did]/status', () => {
   });
 
   it('returns 404 when the donation is unknown or belongs to another family', async () => {
-    mockMark.mockResolvedValue(false);
+    mockMark.mockResolvedValue({ ok: false, changed: false, previousStatus: null });
     const { req, ctx } = makeRequest('don-x', { status: 'abandoned' }, MANAGER);
     const res = await POST(req, ctx);
     expect(res.status).toBe(404);

@@ -35,7 +35,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ did: string }>
     return NextResponse.json({ error: 'bad-request' }, { status: 400 });
   }
 
-  const ok = await markDonationStatus(did, session.fid, parsed.data.status);
+  // `.ok`, NOT the result object: markDonationStatus returns a record now, and
+  // `if (!result)` on an object is always false - the 404 below would simply
+  // have stopped happening, handing a caller `{ok:true}` for another family's
+  // donation id. Silent, and exactly the kind of thing a return-type widening
+  // does to a boolean call site.
+  const { ok } = await markDonationStatus(did, session.fid, parsed.data.status);
   if (!ok) {
     // Unknown did, or it belongs to another family — don't distinguish.
     return NextResponse.json({ error: 'not-found' }, { status: 404 });
