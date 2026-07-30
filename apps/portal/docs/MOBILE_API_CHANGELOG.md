@@ -22,6 +22,14 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
+## 2026-07-30 - `POST /api/setu/donations/{did}/status` is unchanged, but the portal now EMAILS on these transitions
+
+**No request or response shape changes.** Recorded because the mobile app can now cause a family to receive mail, which it could not before.
+
+- The portal sends CMT's `bv_enrolled_donation_complete` when a donation actually transitions to `completed`, and `bv_enrolled_donation_pending` when one transitions to `abandoned`. Both are gated on a REAL transition, so a repeated call with the same status is a no-op and mails nobody - **but do not call the status route speculatively or "to be safe" on a screen that re-renders.** Set a status because it changed.
+- The pending email is additionally rate-limited to one per Bala Vihar enrollment per 7 days, server-side, so the app cannot spam a family even by accident.
+- The pledge-activation email changed template (`pledge-activated` → `bv_enrolled_pledge_complete`). Nothing the app calls changes; the copy the family receives does.
+
 ## 2026-07-29 - 🔴 `POST /api/setu/register` now REFUSES an off-ladder `schoolGrade` (**breaking for any client that sends a label**)
 
 **What changed.** `additionalMembers[].schoolGrade` was `z.string().optional()` - any string, stored verbatim. It is now validated against `CHILD_GRADE_VALUES` (`Shishu`, `JK`, `SK`, `1`…`12`). An off-ladder value is a **400**, and the family is not created.

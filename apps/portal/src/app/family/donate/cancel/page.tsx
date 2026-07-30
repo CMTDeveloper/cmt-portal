@@ -5,6 +5,7 @@ import { SetuIcon } from '@cmt/ui';
 import { CspRoot } from '@/features/family/components/atoms';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 import { markDonationStatus } from '@/features/setu/donations/mark-donation-status';
+import { notifyDonationAbandoned } from '@/features/setu/donations/notify-donation-abandoned';
 
 export const metadata = { title: 'Donation cancelled' };
 
@@ -22,7 +23,26 @@ export default async function DonateCancelPage({
   const { did } = await searchParams;
   // markDonationStatus won't downgrade a 'completed' donation to 'abandoned'.
   if (familyData && did) {
-    await markDonationStatus(did, familyData.family.fid, 'abandoned');
+    const marked = await markDonationStatus(did, familyData.family.fid, 'abandoned');
+    // ── Trigger 1: "came back from Stripe without completing" ──────────────
+    // CMT's `bv_enrolled_donation_pending`. Gated on `changed`, so the family
+    // is mailed once for one abandonment rather than on every reload of this
+    // page - and never at all if the donation had actually completed (that
+    // transition is refused above, so `changed` is false).
+    if (marked.changed) {
+      // Keyed on the ABANDONED DONATION, not on "this family has a Bala Vihar
+      // enrollment somewhere". Every programme returns to this same page, and
+      // the notifier refuses anything that is not the BV enrollment donation -
+      // or any family who has already paid it, by donation or by pledge.
+      await notifyDonationAbandoned({
+        did,
+        fid: familyData.family.fid,
+        legacyFid: familyData.family.legacyFid,
+        members: familyData.members,
+        currentMid: familyData.currentMid,
+        managerMids: familyData.family.managers ?? [],
+      });
+    }
   }
 
   return (

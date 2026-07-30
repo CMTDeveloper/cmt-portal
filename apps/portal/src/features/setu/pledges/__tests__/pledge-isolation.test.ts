@@ -103,6 +103,15 @@ describe('the pledge feature is quarantined', () => {
     // donation, so they owe the adult-class selection like any other donor -
     // without this they were never asked at all. Added 2026-07-28.
     join('features', 'setu', 'adult-class', 'load-gate-data.ts'),
+    // 🔴 The "you still owe the Bala Vihar donation" letter. Like the
+    // double-charge guard above, this entry exists to REFUSE an action rather
+    // than to report money received: a family on a live monthly pledge owes
+    // nothing further, so ignoring pledge state here would send them a letter
+    // saying their enrollment is not confirmed while their bank is debited
+    // every month. It is the single decision point for both triggers of
+    // `bv_enrolled_donation_pending` (backing out of Stripe, and the door), so
+    // one entry covers both. Added 2026-07-30.
+    join('features', 'setu', 'donations', 'bv-unpaid.ts'),
   ];
 
   /**

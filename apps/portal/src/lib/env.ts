@@ -120,6 +120,13 @@ export const portalEnvSchema = z.object({
   SES_TEMPLATE_SETU_INVITE: z.string().optional(),
   SES_TEMPLATE_SETU_JOIN_REQUEST: z.string().optional(),
   SES_TEMPLATE_PLEDGE_ACTIVATED: z.string().optional(),
+  // CMT's three Bala Vihar enrollment templates (2026-07-30). `.optional()` like
+  // the rest - unset means the portal sends nothing and logs it - but unlike the
+  // rest these ARE set on Preview and Production, because CMT authored the copy
+  // and asked for them live.
+  SES_TEMPLATE_BV_ENROLLED_DONATION_COMPLETE: z.string().optional(),
+  SES_TEMPLATE_BV_ENROLLED_PLEDGE_COMPLETE: z.string().optional(),
+  SES_TEMPLATE_BV_ENROLLED_DONATION_PENDING: z.string().optional(),
   SES_CONFIGURATION_SET: z.string().optional(),
 
 });

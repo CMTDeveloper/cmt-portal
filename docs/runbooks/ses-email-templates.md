@@ -99,7 +99,52 @@ the template uses but the code does not send as a guaranteed blank.
 
 ### 5. `pledge-activated` — env `SES_TEMPLATE_PLEDGE_ACTIVATED`
 
-Reserved for the monthly-pledge feature (P5). Not sent by anything yet.
+**Superseded 2026-07-30 and NOT SENT BY ANYTHING.** The pledge activation now
+sends CMT's `bv_enrolled_pledge_complete` (#7 below) instead — one event must
+produce one email. The registry entry and env var are retained only so that
+setting the var by mistake cannot silently resurrect a second activation email;
+nothing reads them. Do not author a template for this.
+
+## The Bala Vihar enrollment trio — authored by CMT, LIVE in prod
+
+Unlike everything above, these three are **set on Preview and Production**
+(2026-07-30). CMT owns the copy and authored them in SES directly; the portal
+only decides when each fires and what data it carries. All three send from the
+verified `bvregistration@chinmayatoronto.org` (already `AWS_SES_FROM_EMAIL`).
+
+🔴 **The SES copy contains a literal `CAD $` before `{{donation_amount}}`.** The
+portal therefore sends a BARE number (`500`, `51`, `51.50`). A value carrying its
+own symbol renders `CAD $$500`. `formatAmountForTemplate` enforces this and is
+asserted in `features/setu/donations/__tests__/bv-enrollment-emails.test.ts`.
+
+🔴 **`SES_CONFIGURATION_SET` is still unset**, so a render failure in any of these
+three is invisible — SES accepts the message, returns a MessageId, and delivers
+nothing. Set it before Aug 3, and have a human read one real send of each.
+
+### 6. `bv_enrolled_donation_complete` — env `SES_TEMPLATE_BV_ENROLLED_DONATION_COMPLETE`
+
+Subject: *"Your Bala Vihar Enrollment is Confirmed"*.
+Variables: `registrant_name`, `donation_amount` (the one-time amount).
+Sent from `/donate/success`, **only on a real `→ completed` transition**, so a
+reloaded receipt does not re-send.
+
+### 7. `bv_enrolled_pledge_complete` — env `SES_TEMPLATE_BV_ENROLLED_PLEDGE_COMPLETE`
+
+Subject: *"Your Bala Vihar Enrollment is Confirmed"*.
+Variables: `registrant_name`, `donation_amount` — **the MONTHLY figure**, since
+the copy reads "your monthly continued pledge of CAD $…".
+Sent from `activatePledgeAndNotify`, on the `started → active` claim it won.
+
+### 8. `bv_enrolled_donation_pending` — env `SES_TEMPLATE_BV_ENROLLED_DONATION_PENDING`
+
+Subject: *"Your Bala Vihar enrollment is not yet confirmed"*.
+Variables: `registrant_name`, `registration_link` (absolute, points at
+`/family/enroll/bala-vihar` — the donation CHOICE, not `/family/donate`, which
+redirects away).
+**Two triggers:** the family returning from Stripe without completing, and
+check-in. Both go through `claimPendingEmail`, which stamps
+`enrollments/{eid}.pendingEmailSentAt` and enforces a 7-day cooldown so the two
+triggers cannot compound. It fails CLOSED — when in doubt, no mail.
 
 ## `_testRecipient` — reserved, include it in every template
 

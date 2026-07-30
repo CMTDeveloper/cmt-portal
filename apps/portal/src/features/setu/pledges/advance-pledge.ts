@@ -6,6 +6,7 @@ import {
   getSubscriptionResult,
 } from './stripe-pad-client';
 import { activatePledgeAndNotify, claimPledgeTransition } from './activate-pledge';
+import { bvEmailRecipient } from '@/features/setu/donations/bv-enrollment-emails';
 
 /** What one pass of the state machine concluded. */
 export type AdvanceOutcome = 'active' | 'processing' | 'failed';
@@ -215,14 +216,17 @@ export async function advancePledge(
 
   // Activation goes through the shared transactional claim, so this path and a
   // concurrent one cannot both announce the same activation to the same family.
-  const email = pledge.fid ? await managerEmailFor(db, pledge.fid) : null;
+  const recipient = pledge.fid
+    ? await managerRecipientFor(db, pledge.fid)
+    : { email: null, name: '' };
   // `subscriptionId` here is THIS caller's own, and step 5 above confirmed it
   // live. In the divergent case the document keeps a different (first-written)
   // id, so recording which one was actually verified is what stops a human
   // acting on the wrong subscription.
   const claim = await activatePledgeAndNotify(db, {
     pid,
-    toEmail: email,
+    toEmail: recipient.email,
+    toName: recipient.name,
     monthlyAmountCAD,
     verifiedSubscriptionId: subscriptionId,
   });
@@ -233,20 +237,59 @@ export async function advancePledge(
   return outcomeOf(claim.status);
 }
 
-/** The family's first manager's email, for the activation notice. Never throws. */
-export async function managerEmailFor(
+/**
+ * The family's first manager, for the activation notice. Never throws.
+ *
+ * Returns the NAME as well as the address because CMT's `bv_enrolled_*`
+ * templates open "Dear {{registrant_name}}," and SES does not fail a send on an
+ * unfilled placeholder - it renders "Dear ," and still reports success. The
+ * name therefore has to be fetched wherever the address is, or the omission is
+ * invisible until a family says something.
+ *
+ * `name` falls back to the empty string, never to a guess. A blank greeting is
+ * a poor email; a confidently wrong name is worse.
+ */
+export interface ManagerRecipient {
+  email: string | null;
+  name: string;
+}
+
+export async function managerRecipientFor(
   db: FirebaseFirestore.Firestore,
   fid: string,
-): Promise<string | null> {
+): Promise<ManagerRecipient> {
   try {
     const fam = await db.collection('families').doc(fid).get();
-    const managers = (fam.data()?.managers ?? []) as string[];
-    const mid = managers[0];
-    if (!mid) return null;
-    const m = await db.collection('families').doc(fid).collection('members').doc(mid).get();
-    const email = (m.data() as { email?: unknown } | undefined)?.email;
-    return typeof email === 'string' && email !== '' ? email : null;
+    const managers = ((fam.data()?.managers ?? []) as string[]) ?? [];
+    if (managers.length === 0) return { email: null, name: '' };
+
+    // EVERY manager, not `managers[0]`. Reading only the first meant a family
+    // whose first manager has no address got NO activation email at all, even
+    // when a reachable co-manager was the one who started the pledge - and if
+    // that first manager had an address but no name, the letter opened
+    // "Dear ,". Found by a Codex review, 2026-07-30.
+    //
+    // By document id rather than a collection query: a family has one or two
+    // managers, so this is one or two point reads, and it does not drag the
+    // whole members collection onto the pledge-activation path.
+    const members = await Promise.all(
+      managers.map(async (mid) => {
+        const m = await db.collection('families').doc(fid).collection('members').doc(mid).get();
+        const x = m.data() as { email?: unknown; firstName?: unknown; lastName?: unknown } | undefined;
+        return {
+          mid,
+          email: typeof x?.email === 'string' && x.email !== '' ? x.email : null,
+          firstName: typeof x?.firstName === 'string' ? x.firstName : null,
+          lastName: typeof x?.lastName === 'string' ? x.lastName : null,
+        };
+      }),
+    );
+
+    // The SHARED chooser, so this path and the donation paths address a family
+    // the same way rather than by two hand-rolled rules.
+    const chosen = bvEmailRecipient(members, null, managers);
+    return { email: chosen.to ?? null, name: chosen.registrantName };
   } catch {
-    return null;
+    return { email: null, name: '' };
   }
 }
