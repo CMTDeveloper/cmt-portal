@@ -58,6 +58,15 @@ export type ClearAbandonedResult =
  * second provider round trip inside the transaction) trades a rare orphan for
  * network I/O inside a Firestore transaction, which the SDK may retry.
  */
+/**
+ * How long a page render will wait for the abandonment notice before giving up
+ * on it and painting.
+ *
+ * Deliberately tighter than the door's 2500ms: this runs during a React server
+ * render that the family is watching, and the whole page is behind it.
+ */
+const ABANDON_NOTICE_BUDGET_MS = 2000;
+
 export interface ClearAbandonedOptions {
   /**
    * Send the "you are enrolled but the donation is not finished" letter when
@@ -138,9 +147,27 @@ export async function clearAbandonedPledge(
   // hold structurally rather than by trusting what a neighbouring module
   // currently happens to do - the repair has already succeeded by this line, and
   // an email is never a reason to fail it.
+  //
+  // 🔴 BOUNDED, and a try/catch is NOT enough on its own. The AWS SES client
+  // sets no request or connection timeout (Smithy's default is zero, i.e. wait
+  // forever), and a catch only runs once a promise REJECTS - it does nothing for
+  // a connection that never settles. Unbounded, a stalled SES call would hold
+  // open the render of /family, /family/donate AND /family/enroll/bala-vihar
+  // until the platform killed the invocation, so the family would get a spinner
+  // and then a 504 instead of the payment page. The kiosk bounds the identical
+  // notifier at DOOR_NUDGE_BUDGET_MS for exactly this reason; this path reaches
+  // the same SES call from a PAGE, where the cost of hanging is higher. Found by
+  // a Codex review, 2026-07-31.
+  //
+  // The notice is abandoned, not cancelled: whatever is in flight completes or
+  // fails on its own, and because claimPendingEmail has already taken the 7-day
+  // claim the worst case is one MISSED notice, never a duplicate.
   if (opts.notify !== false) {
     try {
-      await notifyPledgeAbandoned({ fid, ...(opts.req ? { req: opts.req } : {}) });
+      await Promise.race([
+        notifyPledgeAbandoned({ fid, ...(opts.req ? { req: opts.req } : {}) }),
+        new Promise<void>((resolve) => setTimeout(resolve, ABANDON_NOTICE_BUDGET_MS)),
+      ]);
     } catch (err) {
       console.error('[pledge] cleared the abandoned attempt but could not send the notice', err);
     }

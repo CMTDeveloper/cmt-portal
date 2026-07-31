@@ -46,6 +46,11 @@ function makeReq(body: unknown, opts: { role?: string; fid?: string; mid?: strin
   const { role = 'family-manager', fid = 'fid1', mid = 'fid1-01' } = opts;
   const headers: Record<string, string> = {
     'content-type': 'application/json',
+    // `host`, not just `origin`. resolveOrigin deliberately ignores the
+    // caller-supplied Origin header (see the route), and a platform always sets
+    // host - a fixture without one was testing a request shape that cannot
+    // reach production.
+    host: 'localhost:3000',
     origin: 'http://localhost:3000',
     'x-forwarded-for': `10.0.0.${++ipCounter}`,
     'x-portal-role': role,
@@ -325,23 +330,26 @@ describe('POST /api/setu/donations/checkout', () => {
   // allowlist knew only *.vercel.app, so this route - which fails CLOSED on an
   // unrecognised origin - would have refused the donation outright, and the
   // pledge flow returned the family to production.
-  it('accepts a CMT custom domain without a base-url env', async () => {
-    delete process.env.NEXT_PUBLIC_PORTAL_BASE_URL;
-    const req = new Request('https://setu-preview.chinmayatoronto.org/api/setu/donations/checkout', {
+  /** A request shaped the way the platform delivers one: host set, no Origin. */
+  function hostReq(headers: Record<string, string>): Request {
+    return new Request('https://x/api/setu/donations/checkout', {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        origin: 'https://setu-preview.chinmayatoronto.org',
-        'x-forwarded-host': 'setu-preview.chinmayatoronto.org',
-        'x-forwarded-proto': 'https',
         'x-forwarded-for': `10.0.0.${++ipCounter}`,
         'x-portal-role': 'family-manager',
         'x-portal-fid': 'fid1',
         'x-portal-mid': 'fid1-01',
+        ...headers,
       },
       body: JSON.stringify({ type: 'general', amountCAD: 100 }),
     });
-    const res = await POST(req);
+  }
+
+  it('accepts a CMT custom domain without a base-url env', async () => {
+    delete process.env.NEXT_PUBLIC_PORTAL_BASE_URL;
+    // No `origin` header: the return url must come from the PLATFORM-set host.
+    const res = await POST(hostReq({ 'x-forwarded-host': 'setu-preview.chinmayatoronto.org' }));
     expect(res.status).toBe(200);
     const fetchBody = JSON.parse(lastFetchInit().body);
     expect(fetchBody.successUrl).toBe(
@@ -352,23 +360,59 @@ describe('POST /api/setu/donations/checkout', () => {
     );
   });
 
-  it('still refuses an origin nobody controls', async () => {
+  it('refuses a host nobody controls, and says WHY', async () => {
     delete process.env.NEXT_PUBLIC_PORTAL_BASE_URL;
-    const req = new Request('https://evil.com/api/setu/donations/checkout', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        origin: 'https://evil.com',
-        'x-forwarded-host': 'evil.com',
-        'x-forwarded-proto': 'https',
-        'x-forwarded-for': `10.0.0.${++ipCounter}`,
-        'x-portal-role': 'family-manager',
-        'x-portal-fid': 'fid1',
-        'x-portal-mid': 'fid1-01',
-      },
-      body: JSON.stringify({ type: 'general', amountCAD: 100 }),
-    });
-    const res = await POST(req);
-    expect(res.status).not.toBe(200);
+    const res = await POST(hostReq({ 'x-forwarded-host': 'evil.com' }));
+    // The specific status AND reason: asserting merely "not 200" would pass on a
+    // 401/429/500 and prove nothing about the origin check.
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'invalid-origin' });
+  });
+
+  // 🔴 The caller-supplied Origin must not steer the money. CMT runs OTHER apps
+  // on chinmayatoronto.org, so once the allowlist covered that domain an Origin
+  // header naming a sibling app became allowlisted too.
+  it('IGNORES the Origin header and uses the platform host', async () => {
+    delete process.env.NEXT_PUBLIC_PORTAL_BASE_URL;
+    const res = await POST(
+      hostReq({
+        origin: 'https://events.chinmayatoronto.org',
+        'x-forwarded-host': 'setu-preview.chinmayatoronto.org',
+      }),
+    );
+    expect(res.status).toBe(200);
+    const fetchBody = JSON.parse(lastFetchInit().body);
+    expect(fetchBody.successUrl).toContain('https://setu-preview.chinmayatoronto.org/');
+    expect(fetchBody.successUrl).not.toContain('events.chinmayatoronto.org');
+  });
+
+  // The old private allowlist tested the whole ORIGIN (`^https://...`), so moving
+  // to a hostname predicate could have silently accepted http:// and odd ports.
+  // The origin is rebuilt rather than echoed, so neither survives.
+  it('forces https and drops a port on a trusted host', async () => {
+    delete process.env.NEXT_PUBLIC_PORTAL_BASE_URL;
+    const res = await POST(
+      hostReq({
+        origin: 'http://setu.chinmayatoronto.org',
+        'x-forwarded-proto': 'http',
+        'x-forwarded-host': 'setu.chinmayatoronto.org:8443',
+      }),
+    );
+    expect(res.status).toBe(200);
+    const fetchBody = JSON.parse(lastFetchInit().body);
+    expect(fetchBody.successUrl).toBe(
+      'https://setu.chinmayatoronto.org/donate/success?did=don_generated',
+    );
+  });
+
+  // A configured base is an operator decision and outranks the request host.
+  it('prefers the configured base over the request host', async () => {
+    process.env.NEXT_PUBLIC_PORTAL_BASE_URL = 'https://setu.chinmayatoronto.org';
+    const res = await POST(hostReq({ 'x-forwarded-host': 'cmt-setu.vercel.app' }));
+    expect(res.status).toBe(200);
+    const fetchBody = JSON.parse(lastFetchInit().body);
+    expect(fetchBody.successUrl).toBe(
+      'https://setu.chinmayatoronto.org/donate/success?did=don_generated',
+    );
   });
 });

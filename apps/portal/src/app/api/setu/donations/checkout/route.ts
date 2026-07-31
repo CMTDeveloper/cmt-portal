@@ -14,7 +14,7 @@ import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
 import { createDonation } from '@/features/setu/donations/create-donation';
 import { BALA_VIHAR } from '@cmt/shared-domain/setu';
 import { getFamilyPledge } from '@/features/setu/pledges/get-family-pledge';
-import { isTrustedPortalHost } from '@/lib/portal-base-url';
+import { trustedOriginFromRequest } from '@/lib/portal-base-url';
 
 // In-memory per-IP rate limiter (5/min), same shape as the events-registration
 // checkout route. Resets per warm Lambda; acceptable for a low-volume donate flow.
@@ -43,35 +43,29 @@ function isRateLimited(ip: string): boolean {
 // (setu-preview.chinmayatoronto.org) was accepted by NEITHER, so the pledge flow
 // returned families to production and this route - which fails closed on an
 // unrecognised origin - would have refused the one-time donation outright.
+// ── Same precedence as portalBaseUrl: configured base, then the request's own
+// host, then nothing ────────────────────────────────────────────────────────
+// This used to build a CANDIDATE LIST headed by the caller's `Origin` header and
+// tailed by the configured base - so the one input a caller controls outranked
+// the one an operator sets. That was survivable while the allowlist was only
+// `*.vercel.app`; it stopped being survivable when the list grew to
+// `*.chinmayatoronto.org`, because CMT runs other apps there and an `Origin` of
+// `https://events.chinmayatoronto.org` would have won over the configured
+// production base and sent this portal's Stripe return urls to a sibling app.
+//
+// Returns null rather than a fallback: unlike the email path, a payment return
+// url must never be quietly built from a host we do not recognise, and the
+// caller turns null into a 400.
 function resolveOrigin(req: Request): string | null {
   const base = process.env.NEXT_PUBLIC_PORTAL_BASE_URL;
-  const candidates: string[] = [];
-  const origin = req.headers.get('origin');
-  if (origin) candidates.push(origin);
-  const proto = req.headers.get('x-forwarded-proto');
-  const xfh = req.headers.get('x-forwarded-host');
-  if (xfh) candidates.push(`${proto ?? 'https'}://${xfh}`);
-  const host = req.headers.get('host');
-  // Scheme from the proxy when it said, else https - guessing http for a real
-  // domain produced an origin that matched nothing and silently fell through.
-  if (host) candidates.push(`${proto ?? (host.startsWith('localhost') ? 'http' : 'https')}://${host}`);
-  if (base) candidates.push(base);
-
-  for (const c of candidates) {
+  if (base) {
     try {
-      const u = new URL(c);
-      const baseOrigin = base ? new URL(base).origin : null;
-      if (
-        isTrustedPortalHost(u.hostname) ||
-        (baseOrigin !== null && u.origin === baseOrigin)
-      ) {
-        return u.origin;
-      }
+      return new URL(base).origin;
     } catch {
-      // skip unparseable candidate
+      // misconfigured env - fall through to the request host
     }
   }
-  return null;
+  return trustedOriginFromRequest(req);
 }
 
 export async function POST(req: Request) {

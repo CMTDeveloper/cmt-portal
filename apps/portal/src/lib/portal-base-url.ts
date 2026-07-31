@@ -69,6 +69,35 @@ export function isTrustedPortalHost(host: string): boolean {
 }
 
 /**
+ * The origin of the request's OWN host, when that host is trusted - else null.
+ *
+ * ── Only the platform-set host, never the client-set `Origin` ───────────────
+ * `Origin` is chosen by the caller; `x-forwarded-host` on Vercel is set by the
+ * platform from the hostname the request actually arrived on, and Vercel
+ * documents that an end user cannot inject it into a hosted Function. Since
+ * widening the allowlist to `*.chinmayatoronto.org`, that distinction became
+ * load-bearing: CMT runs OTHER apps on that domain (events.chinmayatoronto.org),
+ * so a caller-supplied `Origin` naming a sibling app is now allowlisted, and any
+ * resolver that trusted `Origin` first would build this portal's payment return
+ * urls pointing at a different application. Found by a Codex review, 2026-07-31.
+ *
+ * ── The scheme and port are ours to decide, not the caller's ────────────────
+ * https for anything non-loopback, and the port is dropped. The checkout route's
+ * previous private regex tested the whole ORIGIN (`^https://…vercel\.app$`), so
+ * moving to a hostname predicate silently lost the scheme restriction:
+ * `http://setu.chinmayatoronto.org` and `https://setu.chinmayatoronto.org:8443`
+ * both became acceptable. Rebuilding the origin here restores it by construction
+ * rather than by another check someone has to remember.
+ */
+export function trustedOriginFromRequest(req: Request): string | null {
+  const host = req.headers.get('x-forwarded-host') ?? req.headers.get('host');
+  if (!host || !isTrustedPortalHost(host)) return null;
+  const h = hostnameOf(host);
+  // Local dev keeps its port; it is the whole address there.
+  return isLoopback(h) ? `http://${host}` : `https://${h}`;
+}
+
+/**
  * Returns the trusted origin (no trailing slash) to build absolute auth URLs.
  * Order: configured NEXT_PUBLIC_PORTAL_BASE_URL → an allowlisted request host
  * → the hardcoded prod fallback. The result can never be an attacker-chosen
@@ -85,11 +114,8 @@ export function portalBaseUrl(req?: Request): string {
   }
 
   if (req) {
-    const host = req.headers.get('x-forwarded-host') ?? req.headers.get('host');
-    if (host && isTrustedPortalHost(host)) {
-      const proto = isLoopback(hostnameOf(host)) ? 'http' : 'https';
-      return `${proto}://${host}`;
-    }
+    const fromHost = trustedOriginFromRequest(req);
+    if (fromHost) return fromHost;
   }
 
   return PROD_FALLBACK;

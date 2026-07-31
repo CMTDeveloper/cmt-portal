@@ -109,9 +109,16 @@ export default async function DonatePage({
   // `EnrollPanel` -> `EnrollCta` redirects straight here after enrolling, so a
   // family with an earlier abandoned attempt would land on "your bank is
   // confirming it" with no way to pay. Found by a Codex review, 2026-07-29.
+  //
+  // `notify: false`, like /api/pledges/start and unlike the dashboard: a family
+  // reaching THIS page is trying to pay right now, so "your donation is not
+  // finished" would arrive while they are finishing it - and would burn the
+  // 7-day cooldown that the genuine abandonment needs afterwards. The dashboard
+  // and the enroll page stay default-ON: the first is where an abandoned attempt
+  // surfaces days later, and the second is Stripe's own cancel target.
   let existingPledge = pledgeEligible ? await getFamilyPledge(family.fid) : null;
   if (existingPledge?.status === 'started') {
-    if ((await clearAbandonedPledge(family.fid)) === 'cleared') {
+    if ((await clearAbandonedPledge(family.fid, { notify: false })) === 'cleared') {
       existingPledge = await getFamilyPledge(family.fid);
     }
   }
