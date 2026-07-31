@@ -6,7 +6,6 @@ import {
   ConfigurationSetDoesNotExistException,
 } from '@aws-sdk/client-ses';
 import { sesRegion } from './region';
-import { ORG_NAME } from '@/lib/branding';
 
 let cached: SESClient | undefined;
 function client(): SESClient {
@@ -34,19 +33,39 @@ function client(): SESClient {
  * SES verifies the ADDRESS, not the header. Adding a display name needs no new
  * identity and no DNS change.
  *
- * Defaults to `ORG_NAME` rather than to nothing: every email this portal sends
- * is from the charity, so the useful default is the charity's name, and an
- * environment that wants something narrower can set the var.
+ * The default lives in CODE, not in an env var, so preview and production
+ * cannot drift into signing the same letters with two different names - and so
+ * a local run or a new environment is correct without anyone remembering to set
+ * anything. `AWS_SES_FROM_NAME` remains as an override for an environment that
+ * genuinely needs a different one.
  */
 function sesSource(): string {
   const from = process.env.AWS_SES_FROM_EMAIL;
   if (!from) {
     throw new Error('[aws/ses] AWS_SES_FROM_EMAIL is required');
   }
-  const name = (process.env.AWS_SES_FROM_NAME ?? ORG_NAME).trim();
+  const name = (process.env.AWS_SES_FROM_NAME ?? DEFAULT_FROM_NAME).trim();
   if (!name) return from;
   return `${encodeDisplayName(name)} <${from}>`;
 }
+
+/**
+ * The name families see in their inbox.
+ *
+ * CMT's choice, 2026-07-30, replacing an initial `ORG_NAME`: *"instead of this
+ * name "Chinmaya Mission Toronto" <bvregistration@chinmayatoronto.org> name
+ * should be Bala Vihar Registration"*. It matches the `Name:` CMT specified
+ * alongside each of the three SES templates, and it matches the sending address
+ * (`bvregistration@`), which is what a suspicious reader checks the name
+ * against.
+ *
+ * ⚠️ This is the name on EVERY portal email, not only the enrollment three -
+ * sign-in codes, invites and payment reminders included, because they all send
+ * from this one verified address. If a future email genuinely should not be
+ * signed "Bala Vihar Registration", the fix is a per-email sender identity, not
+ * a second default here.
+ */
+const DEFAULT_FROM_NAME = 'Bala Vihar Registration';
 
 /**
  * A display name safe to put in a header.
@@ -55,11 +74,10 @@ function sesSource(): string {
  * unescaped quote would terminate the string early and produce a malformed
  * header. Anything non-ASCII becomes an RFC 2047 encoded-word, because a raw
  * 8-bit byte in a header is not legal and arrives as mojibake even when it is
- * accepted. `Chinmaya Mission Toronto` needs neither today; a future org name
- * with an accent would.
+ * accepted. `Bala Vihar Registration` needs neither today; a name with an
+ * accent would.
  */
 function encodeDisplayName(name: string): string {
-  // eslint-disable-next-line no-control-regex
   if (/[^\x20-\x7E]/.test(name)) {
     return `=?UTF-8?B?${Buffer.from(name, 'utf8').toString('base64')}?=`;
   }

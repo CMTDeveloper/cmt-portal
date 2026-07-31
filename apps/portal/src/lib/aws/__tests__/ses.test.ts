@@ -34,8 +34,8 @@ describe('sendEmail', () => {
       Message: { Subject: { Data: string }; Body: { Html: { Data: string }; Text: { Data: string } } };
     };
     // WITH a display name since 2026-07-30 - a bare address is what mail
-    // clients showed, and Vaibhav asked for the charity's name.
-    expect(input.Source).toBe('"Chinmaya Mission Toronto" <noreply@chinmayatoronto.org>');
+    // clients showed, and CMT asked for a name.
+    expect(input.Source).toBe('"Bala Vihar Registration" <noreply@chinmayatoronto.org>');
     expect(input.Destination.ToAddresses).toEqual(['a@b.com']);
     expect(input.Message.Subject.Data).toBe('Test');
     expect(input.Message.Body.Html.Data).toBe('<p>Hello</p>');
@@ -69,8 +69,8 @@ describe('sendSesTemplatedEmail', () => {
       TemplateData: string;
     };
     // WITH a display name since 2026-07-30 - a bare address is what mail
-    // clients showed, and Vaibhav asked for the charity's name.
-    expect(input.Source).toBe('"Chinmaya Mission Toronto" <noreply@chinmayatoronto.org>');
+    // clients showed, and CMT asked for a name.
+    expect(input.Source).toBe('"Bala Vihar Registration" <noreply@chinmayatoronto.org>');
     expect(input.Destination.ToAddresses).toEqual(['a@b.com']);
     expect(input.Template).toBe('cmt-setu-invite');
     // TemplateData is a JSON STRING, not an object. Passing the object through
@@ -184,18 +184,18 @@ describe('the From display name', () => {
     delete process.env.AWS_SES_FROM_NAME;
   });
 
-  it('defaults to the organisation name, quoted, with the address in angle brackets', async () => {
+  it('defaults to "Bala Vihar Registration", quoted, with the address in angle brackets', async () => {
     sesMock.on(SendEmailCommand).resolves({ MessageId: 'm' });
     await sendEmail({ to: 'a@b.com', subject: 'S', text: 'T' });
     const input = sesMock.commandCalls(SendEmailCommand)[0]!.args[0].input as { Source: string };
-    expect(input.Source).toBe('"Chinmaya Mission Toronto" <noreply@chinmayatoronto.org>');
+    expect(input.Source).toBe('"Bala Vihar Registration" <noreply@chinmayatoronto.org>');
   });
 
   it('applies to TEMPLATED sends too - that is the path CMT\'s three emails use', async () => {
     sesMock.on(SendTemplatedEmailCommand).resolves({ MessageId: 'm' });
     await sendSesTemplatedEmail({ to: 'a@b.com', templateName: 'bv_enrolled_donation_complete', data: {} });
     const input = sesMock.commandCalls(SendTemplatedEmailCommand)[0]!.args[0].input as { Source: string };
-    expect(input.Source).toBe('"Chinmaya Mission Toronto" <noreply@chinmayatoronto.org>');
+    expect(input.Source).toBe('"Bala Vihar Registration" <noreply@chinmayatoronto.org>');
   });
 
   it('AWS_SES_FROM_NAME overrides the default', async () => {
