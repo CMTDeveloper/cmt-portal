@@ -90,7 +90,18 @@ export function isTrustedPortalHost(host: string): boolean {
  * rather than by another check someone has to remember.
  */
 export function trustedOriginFromRequest(req: Request): string | null {
-  const host = req.headers.get('x-forwarded-host') ?? req.headers.get('host');
+  return trustedOriginFromHost(
+    req.headers.get('x-forwarded-host') ?? req.headers.get('host'),
+  );
+}
+
+/**
+ * The same rule, from a bare host string.
+ *
+ * Split out for server components, which have no `Request` at all - they read
+ * the host from `next/headers` instead. See lib/portal-base-url-server.ts.
+ */
+export function trustedOriginFromHost(host: string | null | undefined): string | null {
   if (!host || !isTrustedPortalHost(host)) return null;
   const h = hostnameOf(host);
   // Local dev keeps its port; it is the whole address there.
