@@ -1,13 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockSubmission, mockFind, mockCancel } = vi.hoisted(() => ({
+const { mockSubmission, mockFind, mockCancel, mockNotify } = vi.hoisted(() => ({
   mockSubmission: vi.fn(),
   mockFind: vi.fn(),
   mockCancel: vi.fn(),
+  mockNotify: vi.fn(),
 }));
 vi.mock('../stripe-pad-client', () => ({ getCheckoutSessionSubmission: mockSubmission }));
 vi.mock('../find-started-pledge', () => ({ findStartedPledge: mockFind }));
 vi.mock('../cancel-pledge', () => ({ cancelPledgeRecord: mockCancel }));
+vi.mock('../notify-pledge-abandoned', () => ({ notifyPledgeAbandoned: mockNotify }));
 
 import { clearAbandonedPledge } from '../clear-abandoned-pledge';
 
@@ -18,6 +20,8 @@ beforeEach(() => {
   mockSubmission.mockResolvedValue('not-submitted');
   mockCancel.mockReset();
   mockCancel.mockResolvedValue({ ok: true });
+  mockNotify.mockReset();
+  mockNotify.mockResolvedValue(undefined);
 });
 
 /**
@@ -97,5 +101,69 @@ describe('clearAbandonedPledge', () => {
     expect(mockCancel).toHaveBeenCalledWith(
       expect.objectContaining({ actor: expect.objectContaining({ uid: 'system:abandoned-pad-session' }) }),
     );
+  });
+
+  /**
+   * Vaibhav, 2026-07-30: *"i did not get donation pending email for
+   * family15@gmail.com when I tried PAD option, and cancelled"*.
+   *
+   * The letter had no trigger on this path at all - `notifyDonationAbandoned` is
+   * keyed on a donations document, and the pledge flow never creates one. These
+   * pin the trigger to the one branch that actually cleared an attempt.
+   */
+  describe('the abandonment letter', () => {
+    it('goes out when THIS call cleared the attempt', async () => {
+      await clearAbandonedPledge('CMT-A');
+      expect(mockNotify).toHaveBeenCalledWith(expect.objectContaining({ fid: 'CMT-A' }));
+    });
+
+    // 🔴 The family may still be authorising the mandate. Telling them their
+    // donation is unfinished would be false, and would burn the 7-day cooldown
+    // the genuine abandonment needs later.
+    it('is NOT sent when a mandate may exist', async () => {
+      mockSubmission.mockResolvedValue('submitted');
+      await clearAbandonedPledge('CMT-A');
+      expect(mockNotify).not.toHaveBeenCalled();
+    });
+
+    it('is NOT sent when nothing was in flight', async () => {
+      mockFind.mockResolvedValue(null);
+      await clearAbandonedPledge('CMT-A');
+      expect(mockNotify).not.toHaveBeenCalled();
+    });
+
+    it('is NOT sent when the clear itself failed', async () => {
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      mockCancel.mockRejectedValue(new Error('UNAVAILABLE'));
+      await clearAbandonedPledge('CMT-A');
+      expect(mockNotify).not.toHaveBeenCalled();
+      spy.mockRestore();
+    });
+
+    // The single suppression, used by /api/pledges/start: the family is
+    // restarting payment in the same request.
+    it('is suppressed by notify:false', async () => {
+      await clearAbandonedPledge('CMT-A', { notify: false });
+      expect(mockNotify).not.toHaveBeenCalled();
+    });
+
+    // Safe-direction default: the bug being fixed was an omission, so a caller
+    // that passes nothing must SEND rather than stay silent.
+    it('defaults to sending when a caller passes no options at all', async () => {
+      await clearAbandonedPledge('CMT-A', {});
+      expect(mockNotify).toHaveBeenCalledTimes(1);
+    });
+
+    // The repair has already succeeded by the time the letter is attempted, and
+    // this function's callers are server components rendering a whole page. So
+    // the send is wrapped HERE rather than trusting notifyPledgeAbandoned to keep
+    // owning its own try/catch forever.
+    it('still reports cleared if the letter blows up', async () => {
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      mockNotify.mockRejectedValue(new Error('SES down'));
+      await expect(clearAbandonedPledge('CMT-A')).resolves.toBe('cleared');
+      expect(spy).toHaveBeenCalled();
+      spy.mockRestore();
+    });
   });
 });

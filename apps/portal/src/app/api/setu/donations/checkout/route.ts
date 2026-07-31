@@ -14,6 +14,7 @@ import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
 import { createDonation } from '@/features/setu/donations/create-donation';
 import { BALA_VIHAR } from '@cmt/shared-domain/setu';
 import { getFamilyPledge } from '@/features/setu/pledges/get-family-pledge';
+import { isTrustedPortalHost } from '@/lib/portal-base-url';
 
 // In-memory per-IP rate limiter (5/min), same shape as the events-registration
 // checkout route. Resets per warm Lambda; acceptable for a low-volume donate flow.
@@ -32,23 +33,28 @@ function isRateLimited(ip: string): boolean {
   return entry.count > RATE_LIMIT_MAX;
 }
 
-// The portal is deployed at cmt-setu.vercel.app (and preview deploys like
-// cmt-setu-git-<branch>.vercel.app). cmt-portal* is kept for the older alias.
-// A custom production domain should be set via NEXT_PUBLIC_PORTAL_BASE_URL,
-// which is also accepted below.
-const PORTAL_VERCEL_PATTERN = /^https:\/\/cmt-(setu|portal)[a-z0-9-]*\.vercel\.app$/;
-
 // Anti-phishing: successUrl/cancelUrl are built server-side from a validated
 // origin so a tampered client cannot redirect the donor to a malicious site.
+//
+// ── The allowlist is `isTrustedPortalHost`, NOT a copy of it ────────────────
+// This route used to carry its own `PORTAL_VERCEL_PATTERN`, duplicating the one
+// in lib/portal-base-url. Two copies of a host allowlist is two things to widen,
+// and on 2026-07-30 exactly that bit: a CMT custom domain
+// (setu-preview.chinmayatoronto.org) was accepted by NEITHER, so the pledge flow
+// returned families to production and this route - which fails closed on an
+// unrecognised origin - would have refused the one-time donation outright.
 function resolveOrigin(req: Request): string | null {
   const base = process.env.NEXT_PUBLIC_PORTAL_BASE_URL;
   const candidates: string[] = [];
   const origin = req.headers.get('origin');
   if (origin) candidates.push(origin);
+  const proto = req.headers.get('x-forwarded-proto');
   const xfh = req.headers.get('x-forwarded-host');
-  if (xfh) candidates.push(`${req.headers.get('x-forwarded-proto') ?? 'https'}://${xfh}`);
+  if (xfh) candidates.push(`${proto ?? 'https'}://${xfh}`);
   const host = req.headers.get('host');
-  if (host) candidates.push(`http://${host}`);
+  // Scheme from the proxy when it said, else https - guessing http for a real
+  // domain produced an origin that matched nothing and silently fell through.
+  if (host) candidates.push(`${proto ?? (host.startsWith('localhost') ? 'http' : 'https')}://${host}`);
   if (base) candidates.push(base);
 
   for (const c of candidates) {
@@ -56,8 +62,7 @@ function resolveOrigin(req: Request): string | null {
       const u = new URL(c);
       const baseOrigin = base ? new URL(base).origin : null;
       if (
-        u.hostname === 'localhost' ||
-        PORTAL_VERCEL_PATTERN.test(u.origin) ||
+        isTrustedPortalHost(u.hostname) ||
         (baseOrigin !== null && u.origin === baseOrigin)
       ) {
         return u.origin;

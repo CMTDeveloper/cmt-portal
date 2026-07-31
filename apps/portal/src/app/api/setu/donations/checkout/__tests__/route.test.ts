@@ -320,4 +320,55 @@ describe('POST /api/setu/donations/checkout', () => {
     const fetchBody = JSON.parse(lastFetchInit().body);
     expect(fetchBody.successUrl).toBe('https://cmt-setu.vercel.app/donate/success?did=don_generated');
   });
+
+  // Vaibhav, 2026-07-30, of the CMT custom domain he stood up for preview: the
+  // allowlist knew only *.vercel.app, so this route - which fails CLOSED on an
+  // unrecognised origin - would have refused the donation outright, and the
+  // pledge flow returned the family to production.
+  it('accepts a CMT custom domain without a base-url env', async () => {
+    delete process.env.NEXT_PUBLIC_PORTAL_BASE_URL;
+    const req = new Request('https://setu-preview.chinmayatoronto.org/api/setu/donations/checkout', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        origin: 'https://setu-preview.chinmayatoronto.org',
+        'x-forwarded-host': 'setu-preview.chinmayatoronto.org',
+        'x-forwarded-proto': 'https',
+        'x-forwarded-for': `10.0.0.${++ipCounter}`,
+        'x-portal-role': 'family-manager',
+        'x-portal-fid': 'fid1',
+        'x-portal-mid': 'fid1-01',
+      },
+      body: JSON.stringify({ type: 'general', amountCAD: 100 }),
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const fetchBody = JSON.parse(lastFetchInit().body);
+    expect(fetchBody.successUrl).toBe(
+      'https://setu-preview.chinmayatoronto.org/donate/success?did=don_generated',
+    );
+    expect(fetchBody.cancelUrl).toBe(
+      'https://setu-preview.chinmayatoronto.org/family/donate/cancel?did=don_generated',
+    );
+  });
+
+  it('still refuses an origin nobody controls', async () => {
+    delete process.env.NEXT_PUBLIC_PORTAL_BASE_URL;
+    const req = new Request('https://evil.com/api/setu/donations/checkout', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        origin: 'https://evil.com',
+        'x-forwarded-host': 'evil.com',
+        'x-forwarded-proto': 'https',
+        'x-forwarded-for': `10.0.0.${++ipCounter}`,
+        'x-portal-role': 'family-manager',
+        'x-portal-fid': 'fid1',
+        'x-portal-mid': 'fid1-01',
+      },
+      body: JSON.stringify({ type: 'general', amountCAD: 100 }),
+    });
+    const res = await POST(req);
+    expect(res.status).not.toBe(200);
+  });
 });

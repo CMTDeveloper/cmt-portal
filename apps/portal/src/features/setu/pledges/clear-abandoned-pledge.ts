@@ -2,6 +2,7 @@ import 'server-only';
 import { getCheckoutSessionSubmission } from './stripe-pad-client';
 import { findStartedPledge } from './find-started-pledge';
 import { cancelPledgeRecord } from './cancel-pledge';
+import { notifyPledgeAbandoned } from './notify-pledge-abandoned';
 
 export type ClearAbandonedResult =
   /** There was a `started` pledge the family never submitted; it is now cleared. */
@@ -57,7 +58,35 @@ export type ClearAbandonedResult =
  * second provider round trip inside the transaction) trades a rare orphan for
  * network I/O inside a Firestore transaction, which the SDK may retry.
  */
-export async function clearAbandonedPledge(fid: string): Promise<ClearAbandonedResult> {
+export interface ClearAbandonedOptions {
+  /**
+   * Send the "you are enrolled but the donation is not finished" letter when
+   * this call is the one that clears the attempt.
+   *
+   * ── Defaults to TRUE, deliberately ──────────────────────────────────────────
+   * The bug being fixed (Vaibhav, 2026-07-30) was an OMISSION: abandoning the
+   * monthly option notified nobody, because the only notifier was keyed on a
+   * donations document the pledge flow never creates. An opt-IN flag would
+   * reproduce that failure the next time someone adds a call site and does not
+   * know to pass it. Defaulting to send puts the safe direction on the side of
+   * forgetfulness, and the 7-day cooldown inside `notifyDonationPending` bounds
+   * what a mistake can cost.
+   *
+   * Pass `false` only where the family is RESTARTING payment in the same breath
+   * - `/api/pledges/start` clears any stale attempt before creating the new one,
+   * and a letter saying "your donation is not finished" sent at the instant they
+   * are finishing it would be both wrong and, worse, would burn the cooldown
+   * that the real abandonment needs later.
+   */
+  notify?: boolean;
+  /** Sharpens the email's return link to this deployment. Server components have none. */
+  req?: Request;
+}
+
+export async function clearAbandonedPledge(
+  fid: string,
+  opts: ClearAbandonedOptions = {},
+): Promise<ClearAbandonedResult> {
   let started: Awaited<ReturnType<typeof findStartedPledge>>;
   try {
     started = await findStartedPledge(fid);
@@ -95,6 +124,28 @@ export async function clearAbandonedPledge(fid: string): Promise<ClearAbandonedR
     console.error('[pledge] could not clear an abandoned attempt - leaving it in play', err);
     return 'in-play';
   }
+  // The letter goes out only on THIS branch - the one call that actually cleared
+  // an attempt - so a family browsing three pages after abandoning gets one
+  // notice, not three. (`notifyDonationPending`'s cooldown would catch that
+  // anyway; not depending on it keeps the two independent.)
+  //
+  // Awaited, not fire-and-forget: this runs in a serverless function that may be
+  // frozen the moment the response is returned, and a floating promise there is
+  // a send that silently never happens. `notifyPledgeAbandoned` never throws.
+  //
+  // Wrapped even though `notifyPledgeAbandoned` owns a try/catch of its own.
+  // This function's NEVER-THROWS contract protects page renders, and it must
+  // hold structurally rather than by trusting what a neighbouring module
+  // currently happens to do - the repair has already succeeded by this line, and
+  // an email is never a reason to fail it.
+  if (opts.notify !== false) {
+    try {
+      await notifyPledgeAbandoned({ fid, ...(opts.req ? { req: opts.req } : {}) });
+    } catch (err) {
+      console.error('[pledge] cleared the abandoned attempt but could not send the notice', err);
+    }
+  }
+
   // A lost race - the reconciler or an admin got there first - still means "not
   // in play": whatever they did, this pledge no longer blocks the family.
   // `cancelPledgeRecord` reports that as ok:false, which is not a failure here.
