@@ -39,14 +39,43 @@ function client(): SESClient {
  * anything. `AWS_SES_FROM_NAME` remains as an override for an environment that
  * genuinely needs a different one.
  */
-function sesSource(): string {
-  const from = process.env.AWS_SES_FROM_EMAIL;
+function sesSource(override?: SenderIdentity): string {
+  // `|| undefined`, not `??`: an override of '' or '   ' must fall through to the
+  // portal default rather than throw. That is the shape an operator produces by
+  // clearing AWS_SES_OTP_FROM_EMAIL, and treating it as an address would take
+  // sign-in down for a value someone meant to blank. (Codex review, 2026-07-31.)
+  const from = override?.email?.trim() || process.env.AWS_SES_FROM_EMAIL?.trim();
   if (!from) {
     throw new Error('[aws/ses] AWS_SES_FROM_EMAIL is required');
   }
-  const name = (process.env.AWS_SES_FROM_NAME ?? DEFAULT_FROM_NAME).trim();
+  const name = (override?.name ?? process.env.AWS_SES_FROM_NAME ?? DEFAULT_FROM_NAME).trim();
   if (!name) return from;
   return `${encodeDisplayName(name)} <${from}>`;
+}
+
+/**
+ * A per-email `From`, overriding the portal-wide default.
+ *
+ * ── Why this exists (CMT, 2026-07-31) ───────────────────────────────────────
+ * Their `setu_otp` template specifies a DIFFERENT sender from the Bala Vihar
+ * three: *Name: Chinmaya Setu, From: noreply@chinmayatoronto.org*. Sign-in codes
+ * are not a Bala Vihar registration matter, so signing them "Bala Vihar
+ * Registration" would be wrong - and this is exactly the case the
+ * DEFAULT_FROM_NAME comment anticipated: *"the fix is a per-email sender
+ * identity, not a second default here."*
+ *
+ * 🔴 `email` MUST be covered by a VERIFIED SES identity in AWS_SES_REGION, or
+ * the send fails outright. Checked 2026-07-31 in ca-central-1: the DOMAIN
+ * `chinmayatoronto.org` is verified (status Success), which covers every address
+ * under it - so `noreply@` needs no separate address verification. Note that
+ * `ListVerifiedEmailAddresses` shows only ADDRESS identities and will not list
+ * it; query domain identities before concluding an address is unusable.
+ */
+export interface SenderIdentity {
+  /** Must be verified in SES. Falls back to AWS_SES_FROM_EMAIL when absent. */
+  email?: string | undefined;
+  /** Display name. Falls back to AWS_SES_FROM_NAME, then DEFAULT_FROM_NAME. */
+  name?: string | undefined;
 }
 
 /**
@@ -89,6 +118,8 @@ export interface SendEmailArgs {
   subject: string;
   text: string;
   html?: string;
+  /** Per-email `From`. Omit for the portal-wide default. */
+  from?: SenderIdentity | undefined;
 }
 
 export interface SendSesTemplatedEmailArgs {
@@ -97,6 +128,8 @@ export interface SendSesTemplatedEmailArgs {
   templateName: string;
   /** Serialized to the TemplateData JSON string SES expects. */
   data: Record<string, unknown>;
+  /** Per-email `From`. Omit for the portal-wide default. */
+  from?: SenderIdentity | undefined;
 }
 
 /**
@@ -115,7 +148,7 @@ export interface SendSesTemplatedEmailArgs {
  */
 export async function sendSesTemplatedEmail(args: SendSesTemplatedEmailArgs): Promise<void> {
   const base = {
-    Source: sesSource(),
+    Source: sesSource(args.from),
     Destination: { ToAddresses: [args.to] },
     Template: args.templateName,
     // A JSON STRING, not an object. SES rejects anything else.
@@ -157,7 +190,7 @@ export async function sendSesTemplatedEmail(args: SendSesTemplatedEmailArgs): Pr
 export async function sendEmail(args: SendEmailArgs): Promise<void> {
   await client().send(
     new SendEmailCommand({
-      Source: sesSource(),
+      Source: sesSource(args.from),
       Destination: { ToAddresses: [args.to] },
       Message: {
         Subject: { Data: args.subject },

@@ -12,10 +12,27 @@ import 'server-only';
 /**
  * The emails that MAY be rendered by an SES-managed template.
  *
- * `'otp-code'` is deliberately absent, and its absence is enforced at compile
- * time in `send-managed-email.ts`. OTP is the one email whose content and
- * delivery the portal must fully control: a template edit on the SES side
- * could break every sign-in at once, with no deploy and no review.
+ * ── 🔴 `'otp-code'` was deliberately EXCLUDED until 2026-07-31 ──────────────
+ * The original rule: *"OTP is the one email whose content and delivery the
+ * portal must fully control: a template edit on the SES side could break every
+ * sign-in at once, with no deploy and no review."* That reasoning has not
+ * become wrong - it is the highest-stakes email in the system, because a family
+ * who cannot receive a code cannot sign in at all, and there is no second route
+ * in.
+ *
+ * CMT authored `setu_otp` and asked for it live, which is their call to make.
+ * What could NOT be carried over unchanged is the failure mode, so the risk is
+ * answered a different way: `sendManagedEmail` gives this one email
+ * `fallbackOnAnyError`, so a template that is missing, malformed, throttled or
+ * unreachable falls back to the portal's own renderer instead of failing the
+ * sign-in. The general rule (propagate everything but a missing template, so a
+ * real delivery problem is never masked) still holds for every OTHER email,
+ * where a missed send costs a notice rather than the whole account.
+ *
+ * What no fallback can cover is a template that EXISTS and renders WRONG - SES
+ * returns a MessageId and delivers a blank. For this email that means a code
+ * nobody can read, so `SES_CONFIGURATION_SET` with a RENDERING_FAILURE
+ * destination matters more here than anywhere else.
  */
 export type ManagedEmailName =
   | 'payment-reminder'
@@ -37,7 +54,11 @@ export type ManagedEmailName =
   // and why the data keys are asserted in __tests__/bv-enrollment-emails.test.ts.
   | 'bv-enrolled-donation-complete'
   | 'bv-enrolled-pledge-complete'
-  | 'bv-enrolled-donation-pending';
+  | 'bv-enrolled-donation-pending'
+  // CMT's sign-in template (2026-07-31), `setu_otp`, placeholders `otp_link` and
+  // `otp_pin`, sent as "Chinmaya Setu" <noreply@chinmayatoronto.org>. See the
+  // block above for why this one alone falls back on ANY error.
+  | 'otp-code';
 
 const ENV_VAR: Record<ManagedEmailName, string> = {
   'payment-reminder': 'SES_TEMPLATE_PAYMENT_REMINDER',
@@ -48,7 +69,32 @@ const ENV_VAR: Record<ManagedEmailName, string> = {
   'bv-enrolled-donation-complete': 'SES_TEMPLATE_BV_ENROLLED_DONATION_COMPLETE',
   'bv-enrolled-pledge-complete': 'SES_TEMPLATE_BV_ENROLLED_PLEDGE_COMPLETE',
   'bv-enrolled-donation-pending': 'SES_TEMPLATE_BV_ENROLLED_DONATION_PENDING',
+  'otp-code': 'SES_TEMPLATE_SETU_OTP',
 };
+
+/**
+ * The `From` for one logical email, when it differs from the portal default.
+ *
+ * CMT specified a distinct sender for `setu_otp` - *Name: Chinmaya Setu, From:
+ * noreply@chinmayatoronto.org* - because a sign-in code is not a Bala Vihar
+ * registration matter and should not be signed as one.
+ *
+ * Both halves are CODE defaults, like DEFAULT_FROM_NAME, so preview and
+ * production cannot drift into signing the same letter differently.
+ * `AWS_SES_OTP_FROM_EMAIL` remains as an override for an environment that needs
+ * a different address.
+ *
+ * The address is safe to hardcode because SES verifies the DOMAIN
+ * `chinmayatoronto.org` (confirmed 2026-07-31, ca-central-1, status Success),
+ * which covers every address under it - `noreply@` needs no separate
+ * verification. ⚠️ `ListVerifiedEmailAddresses` lists only ADDRESS identities and
+ * does NOT show it; check domain identities before concluding otherwise.
+ */
+export function senderIdentityFor(name: ManagedEmailName): { email?: string; name?: string } | undefined {
+  if (name !== 'otp-code') return undefined;
+  const email = (process.env.AWS_SES_OTP_FROM_EMAIL ?? '').trim() || 'noreply@chinmayatoronto.org';
+  return { email, name: 'Chinmaya Setu' };
+}
 
 /** Every `SES_TEMPLATE_*` var, for the env inventory and for test cleanup. */
 export const SES_TEMPLATE_ENV_VARS: readonly string[] = Object.values(ENV_VAR);

@@ -20,15 +20,18 @@ vi.mock('../resolve-sender', () => ({
 vi.mock('../ses', () => ({ sendEmail: vi.fn(), sendSesTemplatedEmail: vi.fn() }));
 
 import { sendManagedEmail } from '../send-managed-email';
+import { SES_TEMPLATE_ENV_VARS } from '../email-templates-config';
 import { sendSesTemplatedEmail as rawSendSesTemplatedEmail } from '../ses';
 
-const TEMPLATE_VARS = [
-  'SES_TEMPLATE_PAYMENT_REMINDER',
-  'SES_TEMPLATE_DONATION_THANK_YOU',
-  'SES_TEMPLATE_SETU_INVITE',
-  'SES_TEMPLATE_SETU_JOIN_REQUEST',
-  'SES_TEMPLATE_PLEDGE_ACTIVATED',
-];
+// The REGISTRY's list, not a hand-copy. The hand-copy this replaces had already
+// drifted: it named five vars while eight existed, so the three bv_enrolled_*
+// values in .env.local leaked into every run and the suite's meaning depended on
+// which machine it ran on - the exact failure its own comment warns about. A
+// derived list cannot drift when the ninth template is added.
+// AWS_SES_OTP_FROM_EMAIL is NOT a SES_TEMPLATE_* var, so the registry does not
+// carry it - but senderIdentityFor() reads it, so leaving it set would let
+// .env.local decide what the sender-identity assertions below see.
+const TEMPLATE_VARS = [...SES_TEMPLATE_ENV_VARS, 'AWS_SES_OTP_FROM_EMAIL'];
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -155,24 +158,99 @@ describe('sendManagedEmail', () => {
   });
 });
 
-describe('sendManagedEmail — the OTP exemption', () => {
-  it('refuses an OTP-shaped name at runtime even if the type is bypassed', async () => {
-    // Defence against a cast or `as never`. The compile-time assertion in
-    // send-managed-email.ts is the primary guard; this catches the case where
-    // someone routes around it. OTP must never leave the portal's own renderer:
-    // it is the one email whose delivery latency and content the portal fully
-    // controls, and an SES template edit could break every sign-in at once.
+/**
+ * OTP moved ONTO the managed path on 2026-07-31, when CMT authored `setu_otp`
+ * and asked for it live. This suite used to assert the opposite - that the
+ * module refused any OTP-shaped name outright.
+ *
+ * The reason for that refusal has NOT gone away: a bad SES template would break
+ * every sign-in at once, and a family who cannot receive a code has no other way
+ * in. It is now answered by delivery-first fallback rather than by prohibition,
+ * so these tests pin the property the old refusal was protecting - the family
+ * always gets a code - instead of the mechanism that used to protect it.
+ */
+describe('sendManagedEmail — OTP is delivery-first', () => {
+  beforeEach(() => {
+    process.env.SES_TEMPLATE_SETU_OTP = 'setu_otp';
+  });
+
+  it('uses CMT’s template, with their sender identity', async () => {
+    const fallback = vi.fn(async () => {});
+    await sendManagedEmail({
+      name: 'otp-code',
+      to: 'a@b.com',
+      data: { otp_link: 'https://x/y', otp_pin: '123456' },
+      fallback,
+    });
+
+    expect(mockSendSesTemplatedEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        templateName: 'setu_otp',
+        data: { otp_link: 'https://x/y', otp_pin: '123456' },
+        // A sign-in code is not a Bala Vihar registration matter.
+        from: { email: 'noreply@chinmayatoronto.org', name: 'Chinmaya Setu' },
+      }),
+    );
+    expect(fallback).not.toHaveBeenCalled();
+  });
+
+  // 🔴 The property the old prohibition existed to guarantee. Each of these
+  // would, for any OTHER email, propagate and abort the send.
+  it.each([
+    ['a throttle', new Error('Throttling: Maximum sending rate exceeded')],
+    ['an auth failure', new Error('SignatureDoesNotMatch')],
+    ['a dead network', new Error('ECONNRESET')],
+  ])('still delivers the code through the in-code renderer on %s', async (_label, err) => {
+    mockSendSesTemplatedEmail.mockRejectedValue(err);
+    const fallback = vi.fn(async () => {});
+
+    await sendManagedEmail({ name: 'otp-code', to: 'a@b.com', data: {}, fallback });
+
+    expect(fallback, 'a family who gets no code cannot sign in at all').toHaveBeenCalledTimes(1);
+  });
+
+  it('does NOT extend that leniency to any other email', async () => {
+    // A donation notice that fails on a throttle must surface, not silently
+    // re-render in code and risk double-delivering what SES already accepted.
+    process.env.SES_TEMPLATE_SETU_INVITE = 'setu_invite';
+    mockSendSesTemplatedEmail.mockRejectedValue(new Error('Throttling'));
     const fallback = vi.fn(async () => {});
 
     await expect(
-      sendManagedEmail({
-        name: 'otp-code' as never,
-        to: 'a@b.com',
-        data: {},
-        fallback,
-      }),
-    ).rejects.toThrow(/otp/i);
-    expect(mockSendSesTemplatedEmail).not.toHaveBeenCalled();
+      sendManagedEmail({ name: 'setu-invite', to: 'a@b.com', data: {}, fallback }),
+    ).rejects.toThrow(/throttling/i);
     expect(fallback).not.toHaveBeenCalled();
+  });
+
+  // 🔴 A catch cannot run for a promise that never settles, and the SES client
+  // sets no timeout at all (Smithy's default is zero). Without a deadline the
+  // sign-in request hangs on "Sending…" while the code it already stored
+  // expires. Found by a Codex review, 2026-07-31.
+  it('gives up on a send that never settles, and still delivers a code', async () => {
+    vi.useFakeTimers();
+    try {
+      // Never resolves, never rejects - a stalled socket, not an error.
+      mockSendSesTemplatedEmail.mockReturnValue(new Promise<void>(() => {}));
+      const fallback = vi.fn(async () => {});
+
+      const pending = sendManagedEmail({ name: 'otp-code', to: 'a@b.com', data: {}, fallback });
+      await vi.advanceTimersByTimeAsync(4000);
+      await pending;
+
+      expect(fallback, 'a hang must not cost the family their sign-in').toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('renders in code when the template is not configured at all', async () => {
+    // The steady state until SES_TEMPLATE_SETU_OTP is set: sign-in is untouched.
+    delete process.env.SES_TEMPLATE_SETU_OTP;
+    const fallback = vi.fn(async () => {});
+
+    await sendManagedEmail({ name: 'otp-code', to: 'a@b.com', data: {}, fallback });
+
+    expect(mockSendSesTemplatedEmail).not.toHaveBeenCalled();
+    expect(fallback).toHaveBeenCalledTimes(1);
   });
 });
