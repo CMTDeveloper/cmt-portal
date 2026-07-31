@@ -9,6 +9,7 @@ import {
   REGISTER_RATE_LIMIT_MAX,
 } from '@/features/check-in/shared';
 import { resolveSender } from '@/lib/aws/resolve-sender';
+import { sendManagedEmail } from '@/lib/aws/send-managed-email';
 import { findSetuFamilyByContact } from '@/features/setu/auth/find-family-by-contact';
 import { createMagicLink } from '@/features/setu/auth/magic-links';
 import { portalBaseUrl } from '@/lib/portal-base-url';
@@ -158,15 +159,31 @@ export async function POST(req: Request) {
     // configured NEXT_PUBLIC_PORTAL_BASE_URL and only accepts an allowlisted
     // request host.
     const magicUrl = `${portalBaseUrl(req)}/api/setu/auth/magic/${magicLink.token}`;
-    await resolveSender().sendEmail({
+    // CMT's `setu_otp` (2026-07-31), whose two placeholders are exactly the two
+    // things this email already carried: `otp_link` is the magic link and
+    // `otp_pin` is the typed code. Sent as "Chinmaya Setu"
+    // <noreply@chinmayatoronto.org> per their spec - see senderIdentityFor.
+    //
+    // 🔴 The fallback is not decoration. This is the ONE email with no second
+    // route in: a family who does not receive it cannot sign in at all. So OTP
+    // is on FALLBACK_ON_ANY_ERROR - if the template is missing, malformed,
+    // throttled or unreachable, the portal's own renderer sends the code anyway.
+    // Unset SES_TEMPLATE_SETU_OTP and this whole path is exactly what it was.
+    await sendManagedEmail({
+      name: 'otp-code',
       to: canonicalEmail,
-      subject: 'Your CMT portal sign-in link',
-      text: [
-        `Sign in with this link (expires in 10 minutes):`,
-        magicUrl,
-        ``,
-        `Or enter your verification code: ${code}`,
-      ].join('\n'),
+      data: { otp_link: magicUrl, otp_pin: code },
+      fallback: () =>
+        resolveSender().sendEmail({
+          to: canonicalEmail,
+          subject: 'Your CMT portal sign-in link',
+          text: [
+            `Sign in with this link (expires in 10 minutes):`,
+            magicUrl,
+            ``,
+            `Or enter your verification code: ${code}`,
+          ].join('\n'),
+        }),
     });
   } else {
     // Canonicalize to E.164 (+1XXXXXXXXXX). Without this, users who enter

@@ -241,3 +241,62 @@ describe('the From display name', () => {
     );
   });
 });
+
+/**
+ * The per-email `From` (CMT's `setu_otp` sends as "Chinmaya Setu"
+ * <noreply@chinmayatoronto.org>, not as Bala Vihar Registration).
+ *
+ * These live HERE, at the wire, on purpose. A Codex review (2026-07-31) noted
+ * that the send-managed-email test only proves a `from` object reaches a MOCKED
+ * resolveSender - it would still pass if ses.ts ignored `args.from` entirely.
+ * The Source header is the only thing a family actually sees.
+ */
+describe('a per-email From identity', () => {
+  afterEach(() => {
+    delete process.env.AWS_SES_FROM_NAME;
+  });
+
+  it('overrides BOTH the address and the name on a templated send', async () => {
+    sesMock.on(SendTemplatedEmailCommand).resolves({ MessageId: 'm' });
+    await sendSesTemplatedEmail({
+      to: 'a@b.com',
+      templateName: 'setu_otp',
+      data: { otp_pin: '123456' },
+      from: { email: 'noreply@chinmayatoronto.org', name: 'Chinmaya Setu' },
+    });
+    const input = sesMock.commandCalls(SendTemplatedEmailCommand)[0]!.args[0].input as { Source: string };
+    expect(input.Source).toBe('"Chinmaya Setu" <noreply@chinmayatoronto.org>');
+  });
+
+  // 🔴 A global "everything is Bala Vihar Registration" setting must not relabel
+  // a sender the owner named explicitly.
+  it('BEATS AWS_SES_FROM_NAME rather than being overridden by it', async () => {
+    process.env.AWS_SES_FROM_NAME = 'Bala Vihar Registration';
+    sesMock.on(SendTemplatedEmailCommand).resolves({ MessageId: 'm' });
+    await sendSesTemplatedEmail({
+      to: 'a@b.com',
+      templateName: 'setu_otp',
+      data: {},
+      from: { email: 'noreply@chinmayatoronto.org', name: 'Chinmaya Setu' },
+    });
+    const input = sesMock.commandCalls(SendTemplatedEmailCommand)[0]!.args[0].input as { Source: string };
+    expect(input.Source).toBe('"Chinmaya Setu" <noreply@chinmayatoronto.org>');
+  });
+
+  // An operator clearing AWS_SES_OTP_FROM_EMAIL yields '' - that must fall back
+  // to the portal address, NOT throw and take sign-in down.
+  it('treats a blank override address as absent instead of throwing', async () => {
+    process.env.AWS_SES_FROM_EMAIL = 'bvregistration@chinmayatoronto.org';
+    sesMock.on(SendEmailCommand).resolves({ MessageId: 'm' });
+    await sendEmail({ to: 'a@b.com', subject: 'S', text: 'T', from: { email: '   ', name: 'Chinmaya Setu' } });
+    const input = sesMock.commandCalls(SendEmailCommand)[0]!.args[0].input as { Source: string };
+    expect(input.Source).toBe('"Chinmaya Setu" <bvregistration@chinmayatoronto.org>');
+  });
+
+  it('leaves every other email on the portal default', async () => {
+    sesMock.on(SendTemplatedEmailCommand).resolves({ MessageId: 'm' });
+    await sendSesTemplatedEmail({ to: 'a@b.com', templateName: 'bv_enrolled_donation_pending', data: {} });
+    const input = sesMock.commandCalls(SendTemplatedEmailCommand)[0]!.args[0].input as { Source: string };
+    expect(input.Source).toBe('"Bala Vihar Registration" <noreply@chinmayatoronto.org>');
+  });
+});

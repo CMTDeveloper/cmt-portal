@@ -133,6 +133,16 @@ export const portalEnvSchema = z.object({
   SES_TEMPLATE_BV_ENROLLED_DONATION_COMPLETE: z.string().optional(),
   SES_TEMPLATE_BV_ENROLLED_PLEDGE_COMPLETE: z.string().optional(),
   SES_TEMPLATE_BV_ENROLLED_DONATION_PENDING: z.string().optional(),
+  // CMT's sign-in template (2026-07-31), `setu_otp`, placeholders `otp_link` +
+  // `otp_pin`. Unset means OTP renders in code exactly as before — and unlike
+  // every other entry here, THIS one falls back to the in-code renderer on ANY
+  // error, not only a missing template, because a family who cannot receive a
+  // code cannot sign in at all. See lib/aws/send-managed-email.ts.
+  SES_TEMPLATE_SETU_OTP: z.string().optional(),
+  // Overrides the From ADDRESS for the OTP email only. Defaults in code to
+  // noreply@chinmayatoronto.org, which sends because SES verifies the DOMAIN
+  // chinmayatoronto.org (not the individual address).
+  AWS_SES_OTP_FROM_EMAIL: z.string().email().optional(),
   SES_CONFIGURATION_SET: z.string().optional(),
 
 });

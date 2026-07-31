@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('@/lib/flags', () => ({ flags: { setuAuth: true } }));
 vi.mock('@/features/check-in/shared', () => ({
@@ -147,21 +147,80 @@ describe('POST /api/setu/auth/send-code', () => {
     }
   });
 
-  it('sends the sign-in code through the PLAIN sender, never an SES-managed template', async () => {
-    // The Setu sign-in OTP is one of the two live OTP paths and it does not go
-    // through sendTemplatedEmail at all - it builds its subject and body inline
-    // here. Routing it through SES would put every sign-in behind a template
-    // edit that ships with no deploy and no review, and a template that fails
-    // to render is accepted by SES and delivered to nobody.
-    (findSetuFamilyByContact as ReturnType<typeof vi.fn>).mockResolvedValue({
+  // ── The sign-in email, before and after CMT's template ────────────────────
+  //
+  // This pair replaces a single test named "never an SES-managed template".
+  // That claim stopped being true on 2026-07-31, when CMT authored `setu_otp`
+  // and asked for it live - but the test kept passing, because
+  // SES_TEMPLATE_SETU_OTP is unset in this environment. It therefore asserted a
+  // policy the code no longer had, and would have gone on passing however the
+  // enabled path behaved. Caught by a Codex review.
+  describe('the sign-in email', () => {
+    const KNOWN_FAMILY = {
       source: 'setu', fid: 'FAM001', mid: 'FAM001-01', legacyFid: null, family: {},
+    };
+    afterEach(() => {
+      delete process.env.SES_TEMPLATE_SETU_OTP;
     });
 
-    const res = await POST(makeRequest({ type: 'email', value: 'raj@example.com' }));
+    // 🔴 THE MONDAY-CRITICAL PROPERTY. Until the template exists in
+    // ca-central-1 the var stays unset, and sign-in must behave exactly as it
+    // did before any of this landed.
+    it('is byte-identical to the pre-template path while the var is unset', async () => {
+      (findSetuFamilyByContact as ReturnType<typeof vi.fn>).mockResolvedValue(KNOWN_FAMILY);
 
-    expect(res.status).toBe(200);
-    expect(mockSendEmail).toHaveBeenCalled();
-    expect(mockSendSesTemplatedEmail).not.toHaveBeenCalled();
+      const res = await POST(makeRequest({ type: 'email', value: 'raj@example.com' }));
+
+      expect(res.status).toBe(200);
+      expect(mockSendSesTemplatedEmail).not.toHaveBeenCalled();
+      expect(mockSendEmail).toHaveBeenCalledTimes(1);
+      const sent = mockSendEmail.mock.calls[0]![0] as {
+        to: string; subject: string; text: string; from?: unknown;
+      };
+      expect(sent.to).toBe('raj@example.com');
+      expect(sent.subject).toBe('Your CMT portal sign-in link');
+      expect(sent.text).toMatch(/Sign in with this link \(expires in 10 minutes\):/);
+      expect(sent.text).toMatch(/Or enter your verification code: \d{6}/);
+      // No per-email identity on this path: the From stays the portal default.
+      expect(sent.from).toBeUndefined();
+    });
+
+    it('uses CMT’s template, with both placeholders, once the var is set', async () => {
+      process.env.SES_TEMPLATE_SETU_OTP = 'setu_otp';
+      (findSetuFamilyByContact as ReturnType<typeof vi.fn>).mockResolvedValue(KNOWN_FAMILY);
+
+      const res = await POST(makeRequest({ type: 'email', value: 'raj@example.com' }));
+
+      expect(res.status).toBe(200);
+      expect(mockSendEmail).not.toHaveBeenCalled();
+      expect(mockSendSesTemplatedEmail).toHaveBeenCalledTimes(1);
+      const sent = mockSendSesTemplatedEmail.mock.calls[0]![0] as {
+        to: string; templateName: string;
+        data: { otp_link?: string; otp_pin?: string };
+        from?: { email?: string; name?: string };
+      };
+      expect(sent.to).toBe('raj@example.com');
+      expect(sent.templateName).toBe('setu_otp');
+      // The PIN is the typed code; the link is the magic-link sign-in url.
+      expect(sent.data.otp_pin).toMatch(/^\d{6}$/);
+      expect(sent.data.otp_link).toMatch(/^https?:\/\/.+\/api\/setu\/auth\/magic\/.+/);
+      expect(sent.from).toEqual({ email: 'noreply@chinmayatoronto.org', name: 'Chinmaya Setu' });
+    });
+
+    // 🔴 The property the old blanket refusal existed to protect. The template
+    // is remote-editable and region-scoped, so "it is named but not there" is a
+    // live possibility - and it must not cost anyone their sign-in.
+    it('still delivers a code when the named template is missing', async () => {
+      process.env.SES_TEMPLATE_SETU_OTP = 'setu_otp';
+      mockSendSesTemplatedEmail.mockRejectedValueOnce(new Error('Template setu_otp does not exist.'));
+      (findSetuFamilyByContact as ReturnType<typeof vi.fn>).mockResolvedValue(KNOWN_FAMILY);
+
+      const res = await POST(makeRequest({ type: 'email', value: 'raj@example.com' }));
+
+      expect(res.status).toBe(200);
+      const sent = mockSendEmail.mock.calls[0]![0] as { text: string };
+      expect(sent.text, 'the family must still receive a usable code').toMatch(/\d{6}/);
+    });
   });
 
   // ── SMS sign-in is refused while NEXT_PUBLIC_FEATURE_SMS_OTP is off ────────
