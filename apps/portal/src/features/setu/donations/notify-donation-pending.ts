@@ -2,6 +2,7 @@ import 'server-only';
 import { bvEmailRecipient, sendBvDonationPendingEmail } from './bv-enrollment-emails';
 import { claimPendingEmail } from './claim-pending-email';
 import { portalBaseUrl } from '@/lib/portal-base-url';
+import { portalBaseUrlHere } from '@/lib/portal-base-url-server';
 
 export interface NotifyDonationPendingArgs {
   fid: string;
@@ -63,7 +64,14 @@ export async function notifyDonationPending(args: NotifyDonationPendingArgs): Pr
 
     if (!(await claimPendingEmail(args.fid, args.eid))) return;
 
-    const base = portalBaseUrl(args.req).replace(/\/+$/, '');
+    // With a Request (the kiosk, a route handler) read it directly; without one
+    // (every PAGE-render trigger) recover the host from next/headers. Calling
+    // portalBaseUrl(undefined) here is what made this button point at PRODUCTION
+    // from a preview deployment - see portal-base-url-server.ts.
+    const base = (args.req ? portalBaseUrl(args.req) : await portalBaseUrlHere()).replace(
+      /\/+$/,
+      '',
+    );
     await sendBvDonationPendingEmail(recipient, `${base}/family/enroll/bala-vihar`);
   } catch (err) {
     console.error(`[bv-email] could not send the pending notice for ${args.fid}`, err);

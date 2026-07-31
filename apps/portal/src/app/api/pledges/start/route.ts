@@ -72,7 +72,12 @@ export async function POST(req: Request) {
   // retry hits `already-started` from a session Stripe says was never submitted.
   // Fails CLOSED - only clears what the provider confirms was never submitted,
   // so a real mandate still blocks a second one.
-  await clearAbandonedPledge(session.fid);
+  //
+  // `notify: false` is the ONE place that suppresses the abandonment letter.
+  // The family is starting payment again in this very request, so "your donation
+  // is not finished" would be wrong on arrival - and worse, it would burn the
+  // 7-day cooldown that the real abandonment needs later.
+  await clearAbandonedPledge(session.fid, { notify: false });
 
   try {
     const result = await startPledge({

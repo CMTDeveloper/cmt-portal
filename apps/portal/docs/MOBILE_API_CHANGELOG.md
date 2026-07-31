@@ -475,3 +475,23 @@ givers — it will show a paying family as owing the full amount. Read
 `balaVihar.givenForPeriod` deliberately still counts only **completed one-time
 donations**, so it can legitimately be `0` while `donationComplete` is `true`.
 It is the amount actually received, not the family's standing.
+
+## 2026-07-31 — checkout accepts CMT custom domains (`chinmayatoronto.org`)
+
+**Why:** Vaibhav, 2026-07-30, of the subdomain he stood up for preview: *"the
+Cancel urls look to be hardcoded... on Stripe, it was pointing to vercel Url for
+cancel"* … *"this will be an issue for prod as well since we will be using
+custom domain."*
+
+**POST `/api/setu/donations/checkout` — no request or response shape change, and
+no new error code.** What changed is which `Origin` / `x-forwarded-host` values
+are accepted. The allowlist was `*.vercel.app` + localhost only; it now also
+accepts `chinmayatoronto.org` and any subdomain, via the shared
+`isTrustedPortalHost()` in `lib/portal-base-url.ts` (the route no longer carries
+its own copy).
+
+**What the mobile must do: nothing.** The change is strictly more permissive -
+every origin accepted before is still accepted, and `invalid-origin` now fires in
+strictly fewer cases. Worth knowing only because the returned `successUrl` /
+`cancelUrl` will follow the custom domain once production is cut over to one, so
+any hardcoded expectation of a `*.vercel.app` return host would break.

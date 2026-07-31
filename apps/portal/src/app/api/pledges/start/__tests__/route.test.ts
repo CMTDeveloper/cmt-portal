@@ -144,7 +144,12 @@ describe('POST /api/pledges/start', () => {
   // value, so deleting the call outright left this suite green.
   it('clears an abandoned attempt BEFORE starting a new one', async () => {
     await POST(req(MANAGER));
-    expect(mockClear).toHaveBeenCalledWith('CMT-A');
+    // `notify: false` is required, not incidental: this route clears a stale
+    // attempt as the family is STARTING payment again, so the "your donation is
+    // not finished" letter would be false on arrival - and would burn the 7-day
+    // cooldown the genuine abandonment needs later. It is the only suppression
+    // of that letter in the codebase.
+    expect(mockClear).toHaveBeenCalledWith('CMT-A', { notify: false });
     const clearedAt = mockClear.mock.invocationCallOrder[0]!;
     const startedAt = mockStart.mock.invocationCallOrder[0]!;
     expect(clearedAt, 'startPledge ran before the stale attempt was cleared').toBeLessThan(startedAt);
