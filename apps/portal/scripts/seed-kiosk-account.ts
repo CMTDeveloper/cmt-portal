@@ -9,8 +9,10 @@
  * grants nothing else (admin inherits it; nothing inherits admin from it).
  *
  * What this does:
- *   1. Refuses unless PORTAL_FIREBASE_PROJECT_ID === 'chinmaya-setu-uat' (the
- *      kiosk account must never be seeded into prod 715b8 from this repo).
+ *   1. Refuses unless PORTAL_FIREBASE_PROJECT_ID === 'chinmaya-setu-uat', or
+ *      --allow-prod is passed. The escape hatch was withheld until the kiosk
+ *      cutover and opened on 2026-07-31; see the guard for the hazard it still
+ *      carries (a re-run ROTATES the live door password).
  *   2. Reads KIOSK_ACCOUNT_EMAIL + KIOSK_ACCOUNT_PASSWORD from env
  *      (apps/portal/.env.local - never committed; share out-of-band).
  *   3. Creates-or-updates the password Auth user at the contact-derived uid.
@@ -29,6 +31,7 @@ import { findSetuFamilyByContact } from '@/features/setu/auth/find-family-by-con
 
 const EMAIL = process.env['KIOSK_ACCOUNT_EMAIL'];
 const PASSWORD = process.env['KIOSK_ACCOUNT_PASSWORD'];
+const ALLOW_PROD = process.argv.includes('--allow-prod');
 
 /** Create-or-update the password Auth user at the contact-derived uid. */
 async function ensureAuthPassword(email: string, password: string): Promise<string> {
@@ -51,10 +54,21 @@ async function ensureAuthPassword(email: string, password: string): Promise<stri
 async function main(): Promise<void> {
   const projectId = process.env['PORTAL_FIREBASE_PROJECT_ID'];
   console.log(`\n=== seed-kiosk-account - project: ${projectId} ===\n`);
-  if (projectId !== 'chinmaya-setu-uat') {
-    // No --allow-prod escape hatch on purpose: the generic kiosk account must
-    // never be created in prod from this repo.
-    console.error('REFUSING: PORTAL_FIREBASE_PROJECT_ID is not chinmaya-setu-uat.');
+  if (projectId !== 'chinmaya-setu-uat' && !ALLOW_PROD) {
+    // `--allow-prod` was deliberately withheld until the kiosk cutover, because
+    // this creates a SHARED password credential that authorizes writes against
+    // real family data, and because §8 puts the kiosk flag last. The runbook's
+    // 2026-07-11 entry always anticipated relaxing it here: *"the script hard-
+    // refuses non-UAT today, so relax the guard deliberately at cutover"*.
+    // Opened 2026-07-31 at the real cutover, on CMT Developer's instruction.
+    //
+    // ⚠️ The hazard the guard existed for has NOT gone away, so re-read this
+    // before running it against prod: `ensureAuthPassword` calls updateUser()
+    // on an existing uid, so a re-run ROTATES the live door password to
+    // whatever `KIOSK_ACCOUNT_PASSWORD` is in the operator's local .env.local.
+    // On a Sunday that locks the tablet out mid-session. Re-run against prod
+    // only when you intend to change the password.
+    console.error('REFUSING: PORTAL_FIREBASE_PROJECT_ID is not chinmaya-setu-uat. Pass --allow-prod to bypass.');
     process.exit(1);
   }
   if (!EMAIL) {
