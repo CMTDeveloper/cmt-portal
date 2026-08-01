@@ -2,7 +2,38 @@ import 'server-only';
 import { resolveSender } from '@/lib/aws/resolve-sender';
 import { sendManagedEmail } from '@/lib/aws/send-managed-email';
 import { setuJoinRequestEmail } from '@/lib/aws/templates/setu-join-request-email';
-import { createJoinRequest } from './create-request';
+import { createJoinRequest, markJoinRequestNotified } from './create-request';
+
+/**
+ * Minimum gap between notifications about the SAME join request.
+ *
+ * 🔴 Codex review of 1e498a0: `POST /api/setu/join-request/send` is
+ * unauthenticated, and the `resend` flag added there turned it into a
+ * manager-spam primitive - anyone who knows a pending member's address could
+ * drive repeated email AND SMS to every manager on that family. The only
+ * ceiling was 30 requests per IP per 15 minutes, which a distributed caller
+ * simply steps around.
+ *
+ * The cooldown therefore keys on the REQUEST DOCUMENT, not the caller: rotating
+ * IPs buys nothing, because the state that says "these managers were pinged 90
+ * seconds ago" lives next to the request itself. Ten minutes is long enough to
+ * make bulk sending pointless and short enough that a family member who did not
+ * receive the first mail is not stuck waiting.
+ */
+const RENOTIFY_COOLDOWN_MS = 10 * 60_000;
+
+/**
+ * Ceiling on how long a caller waits for the notification to go out.
+ *
+ * The SES client is documented (send-managed-email.ts) as having NO request
+ * timeout, and verify-code now awaits this on the sign-in path - so a
+ * never-settling send would hang a family's sign-in until the platform killed
+ * the function. It also narrows the timing gap between a real gated address
+ * (which does several reads and then a send) and an unknown one (a single read
+ * that returns immediately), so response time is a weaker signal about whether
+ * an address is real.
+ */
+const NOTIFY_TIMEOUT_MS = 5_000;
 
 /**
  * Create a join request AND notify the family's managers - the single place
@@ -44,6 +75,8 @@ export interface RequestFamilyAccessResult {
   outcome: 'created' | 'deduped' | 'noop';
   /** Notification tasks dispatched (email + SMS across all managers). */
   notified: number;
+  /** True when a re-send was refused because the cooldown had not elapsed. */
+  throttled?: boolean;
 }
 
 export async function requestFamilyAccess(
@@ -60,6 +93,16 @@ export async function requestFamilyAccess(
   const shouldNotify =
     result.outcome === 'created' || (result.outcome === 'deduped' && input.notifyOnExisting === true);
   if (!shouldNotify) return { outcome: result.outcome, notified: 0 };
+
+  // Cooldown applies to the re-send path only. A `created` outcome cannot be
+  // driven in a loop: the doc id is deterministic, so the second attempt
+  // dedupes, and returning to `created` needs a manager to approve or decline.
+  if (result.outcome === 'deduped' && result.lastNotifiedAt) {
+    const since = Date.now() - result.lastNotifiedAt.getTime();
+    if (since < RENOTIFY_COOLDOWN_MS) {
+      return { outcome: result.outcome, notified: 0, throttled: true };
+    }
+  }
 
   const reviewUrl = `${input.baseUrl}/join-request/${result.token}`;
   const sender = resolveSender();
@@ -94,10 +137,24 @@ export async function requestFamilyAccess(
     return perManager;
   });
 
+  // Stamped BEFORE the sends settle, not after. If the process dies mid-send
+  // the stamp is already down, so the cooldown holds; stamping afterwards would
+  // let a caller who kills the connection each time bypass it entirely.
+  await markJoinRequestNotified(result.fid, result.matchedMid);
+
   // Swallowed: a flaky notification must never reveal match state to an
   // anonymous caller (the send route always answers {ok:true}) and must never
-  // fail a sign-in that has already succeeded.
-  await Promise.allSettled(tasks);
+  // fail a sign-in that has already succeeded. Bounded so a hung SES cannot
+  // hold the response open - the sends themselves keep running, we simply stop
+  // waiting on them.
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  await Promise.race([
+    Promise.allSettled(tasks),
+    new Promise((resolve) => {
+      timer = setTimeout(resolve, NOTIFY_TIMEOUT_MS);
+    }),
+  ]);
+  if (timer) clearTimeout(timer);
 
   return { outcome: result.outcome, notified: tasks.length };
 }

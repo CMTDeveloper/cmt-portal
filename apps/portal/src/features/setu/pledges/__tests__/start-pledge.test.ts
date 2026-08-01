@@ -69,6 +69,43 @@ beforeEach(() => {
 const who = { fid: 'CMT-A', mid: 'CMT-A-01', email: 'a@b.com', name: 'Asha Apple' };
 
 describe('startPledge', () => {
+  // ── What actually reaches Stripe ──────────────────────────────────────────
+  //
+  // Asserted on the PROVIDER PAYLOAD, not on the arguments handed to a mocked
+  // startPledge. Codex review of 1e498a0: the route-level test only proved
+  // `publicFid` arrived at this function, which would still pass if the
+  // metadata never carried it - the exact gap that let the old opaque-only
+  // metadata ship.
+  it('labels the Stripe call with the human-readable Family ID', async () => {
+    await startPledge({ ...who, publicFid: '5001' });
+    expect(mockSetupLink).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({ familyId: 'FID-5001', fid: 'CMT-A' }),
+      }),
+    );
+  });
+
+  it('keeps the internal fid alongside it, for support and reconciliation', async () => {
+    // Removing `fid` would be invisible to the assertion above; CMT's payment
+    // service is separate code we cannot see, so the field it has always
+    // received must not quietly disappear.
+    await startPledge({ ...who, publicFid: '5001' });
+    const payload = mockSetupLink.mock.calls.at(-1)![0] as { metadata: Record<string, string> };
+    expect(payload.metadata['fid']).toBe('CMT-A');
+    expect(payload.metadata['pid']).toBeTruthy();
+  });
+
+  it('still identifies the family when publicFid has not been minted yet', async () => {
+    // publicFid is allocated lazily at first enrollment, so the very first
+    // payment a family makes can race it. An awkward label beats a blank one.
+    await startPledge(who);
+    expect(mockSetupLink).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({ familyId: 'FID-CMT-A' }),
+      }),
+    );
+  });
+
   it('creates a started pledge and returns the hosted url', async () => {
     const out = await startPledge(who);
     expect(out.created).toBe(true);

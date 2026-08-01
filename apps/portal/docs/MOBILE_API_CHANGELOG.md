@@ -27,15 +27,16 @@ Everything below is the backlog of contract changes since then.
 **No response shapes changed.** One optional request field was added, and one route gained a side effect the app can now trigger.
 
 **What changed.**
-1. `POST /api/setu/auth/verify-code` — when it answers `{ pendingApproval: true, … }` it now **creates the join request and emails/SMSes the family's managers** before responding. Previously it did neither, so a gated member was told "we've let them know" when nobody had been told (found in production, 2026-07-31). Response body is byte-identical.
+1. **All three sign-in paths** — `POST /api/setu/auth/verify-code`, `GET /api/setu/auth/magic/{token}`, and `POST /api/setu/auth/password-sign-in` — now **create the join request and email/SMS the family's managers** when they gate a member. Previously none of them did, so a gated member was told "we've let them know" when nobody had been told (found in production, 2026-07-31). **All three response shapes are byte-identical to before.**
 2. `POST /api/setu/join-request/send` — request body gains **`resend?: boolean`** (optional, defaults false). Response is unchanged: always `{ ok: true }` for a well-formed body.
 
 **What the mobile must do:**
-- **If the app has its own "pending approval" screen, drop any call it makes to `/join-request/send` on first arrival.** `verify-code` has already created and notified. Sending again without `resend` is a harmless no-op, but it is now redundant.
-- **Pass `resend: true` from an explicit "re-send to my manager" button, and only from there.** Without it the server dedupes against the open request and notifies nobody, while still answering `{ok:true}` — so the app would show "Request sent" over a send that did not happen. This is the exact failure being fixed; do not reproduce it on mobile.
+- **If the app has its own "pending approval" screen, drop any call it makes to `/join-request/send` on first arrival.** The sign-in call has already created and notified. Calling again without `resend` is a harmless no-op, but it is now redundant.
+- **Pass `resend: true` from an explicit "re-send to my manager" button, and only from there.** Without it the server dedupes against the open request and notifies nobody, while still answering `{ok:true}` — so the app would show "Request sent" over a send that did not happen. That is the exact failure being fixed; do not reproduce it on mobile.
 - Do NOT set `resend` on a first-time send (e.g. a registration flow), or a member who signs in repeatedly will re-ping their manager each time.
+- ⚠️ **`resend` is rate-limited server-side per REQUEST, not per caller — expect it to be a silent no-op most of the time.** Re-sends about the same join request are refused within a 10-minute cooldown, and the response is still `{ok:true}`. **Do not build a UI that promises delivery on each tap.** Say "we'll notify your manager" rather than "sent". Retrying, changing IP, or reinstalling does not lift the cooldown.
 - `resend` widens *when* the server notifies, never *who* is a valid match: an unknown contact still notifies nobody and still returns `{ok:true}`. It is not an enumeration oracle and must not be treated as one.
-- Verify-code is now slower on the `pendingApproval` path (it awaits the notification). Do not tighten any client timeout around it.
+- The gated path is now slower on all three sign-in routes (it waits on the notification, bounded at 5s). Do not tighten any client timeout around them.
 
 ## 2026-07-30 - `POST /api/setu/donations/{did}/status` is unchanged, but the portal now EMAILS on these transitions
 

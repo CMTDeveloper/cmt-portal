@@ -11,6 +11,9 @@ import {
   hasSession,
   isPendingApproval,
 } from '@/features/setu/auth/build-session-claims';
+import { requestFamilyAccess } from '@/features/setu/join-request/request-family-access';
+import { portalBaseUrl } from '@/lib/portal-base-url';
+import { portalEnv } from '@/lib/env';
 import { isSafeInternalPath } from '@cmt/shared-domain';
 
 export async function GET(
@@ -40,6 +43,17 @@ export async function GET(
   if (isPendingApproval(sessionResult)) {
     // Gated member — do not mint a session; the gate holds on every sign-in
     // path. Send them to sign-in with a pending-approval notice.
+    //
+    // And notify the manager, as the OTP path does. Codex review of 1e498a0:
+    // the original fix wired verify-code only, leaving this path producing a
+    // pending member that nobody was told about. Clicking a link we emailed to
+    // this address proves ownership of it.
+    await requestFamilyAccess({
+      type: 'email',
+      value: consumed.email,
+      ttlDays: portalEnv().SETU_INVITE_TTL_DAYS,
+      baseUrl: portalBaseUrl(req),
+    }).catch(() => undefined);
     const url = new URL('/sign-in', req.url);
     url.searchParams.set('error', 'pending-approval');
     return NextResponse.redirect(url);

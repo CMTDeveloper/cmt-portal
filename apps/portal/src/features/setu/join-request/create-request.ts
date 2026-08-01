@@ -29,11 +29,19 @@ export type CreateRequestResult =
       outcome: 'created' | 'deduped';
       token: string;
       fid: string;
+      /** Doc id of the request - `families/{fid}/joinRequests/{matchedMid}`. */
+      matchedMid: string;
       familyName: string;
       requesterEmail: string;
       requesterContact: string;
       requesterName: string;
       managers: ManagerNotifyTarget[];
+      /**
+       * When these managers were last notified about THIS request, or null if
+       * never. The re-notify cooldown keys on this rather than on the caller's
+       * IP, so rotating addresses does not buy extra sends.
+       */
+      lastNotifiedAt: Date | null;
     }
   | {
       // No actionable request: the contact didn't match a gated member (no
@@ -136,7 +144,7 @@ export async function createJoinRequest(
   const existingSnap = await requestRef.get();
   if (existingSnap.exists) {
     const existing = existingSnap.data() as
-      | { token?: string; status?: string; expiresAt?: unknown }
+      | { token?: string; status?: string; expiresAt?: unknown; lastNotifiedAt?: unknown }
       | undefined;
     const expiresAt = toDate(existing?.expiresAt);
     const stillOpen =
@@ -147,11 +155,13 @@ export async function createJoinRequest(
         outcome: 'deduped',
         token: existing?.token ?? matchedMid,
         fid,
+        matchedMid,
         familyName,
         requesterEmail,
         requesterContact,
         requesterName,
         managers,
+        lastNotifiedAt: toDate(existing?.lastNotifiedAt),
       };
     }
     // Otherwise (declined/approved/expired) we fall through and OVERWRITE the
@@ -178,12 +188,36 @@ export async function createJoinRequest(
     outcome: 'created',
     token,
     fid,
+    matchedMid,
     familyName,
     requesterEmail,
     requesterContact,
     requesterName,
     managers,
+    // A brand-new request has never been notified about. The caller stamps
+    // `lastNotifiedAt` once the sends are away.
+    lastNotifiedAt: null,
   };
+}
+
+/**
+ * Record that this request's managers have just been notified.
+ *
+ * Kept next to the writer that owns the doc rather than in the notifier, so
+ * there is one module that knows the shape of `joinRequests/{matchedMid}`.
+ * Best-effort: failing to stamp must not fail a notification that already went
+ * out. The cost of a lost stamp is one extra permitted re-send, which is the
+ * safe direction - the opposite (claiming we notified when we did not) is the
+ * bug this whole change set exists to remove.
+ */
+export async function markJoinRequestNotified(fid: string, matchedMid: string): Promise<void> {
+  await portalFirestore()
+    .collection('families')
+    .doc(fid)
+    .collection('joinRequests')
+    .doc(matchedMid)
+    .set({ lastNotifiedAt: FieldValue.serverTimestamp() }, { merge: true })
+    .catch(() => undefined);
 }
 
 async function resolveManagerTargets(

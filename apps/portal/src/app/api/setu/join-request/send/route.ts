@@ -16,12 +16,16 @@ const bodySchema = z.object({
   // An explicit "Re-send request to my manager" click, as opposed to a
   // first-time send from /register.
   //
-  // Since `verify-code` now creates the request the moment a gated member
-  // proves contact ownership, an open request almost always EXISTS by the time
-  // this route is reached from the pending screen - so without this flag the
-  // re-send button would dedupe into silence while the UI answered "Request
-  // sent." Double-clicks are not a concern: the button disables itself while
-  // in flight and is replaced by a status line on success.
+  // Every sign-in path now creates the request the moment a gated member proves
+  // ownership of their contact, so by the time the pending screen is on screen
+  // an open request USUALLY exists (not always - creation can fail, and those
+  // paths swallow it deliberately). Without this flag the re-send button would
+  // dedupe into silence while the UI answered "Request sent."
+  //
+  // ⚠️ This route is UNAUTHENTICATED, so the flag cannot be its own permission
+  // to send: `requestFamilyAccess` enforces a per-request cooldown that keys on
+  // the request document rather than the caller. Do not "simplify" that into an
+  // IP limit - rotating IPs would then re-open unbounded manager spam.
   resend: z.boolean().optional(),
 });
 
