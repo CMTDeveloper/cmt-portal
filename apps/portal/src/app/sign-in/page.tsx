@@ -346,7 +346,7 @@ function SignInReal() {
     if (!trimmed) return;
     setResending(true);
     const contact = contactType === 'email' ? { email: trimmed } : { phone: trimmed };
-    const result = await sendJoinRequestClient(contact);
+    const result = await sendJoinRequestClient(contact, { resend: true });
     if (result.ok) {
       setRequestResent(true);
     } else if (result.error === 'rate-limited') {

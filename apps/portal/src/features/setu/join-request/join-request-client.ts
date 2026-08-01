@@ -8,15 +8,20 @@
 // (anti-enumeration + idempotent) — the server only creates/notifies for a valid
 // gated match and silently no-ops otherwise. We surface a generic failure only on
 // a network error or a non-2xx (e.g. 429 rate-limit / 400 bad body).
+// `opts.resend` marks an explicit "re-send to my manager" click. verify-code
+// already created (and notified) the request when the pending screen appeared,
+// so without this the server would dedupe the click into silence while the UI
+// reported "Request sent."
 export async function sendJoinRequestClient(
   contact: { email?: string; phone?: string },
+  opts?: { resend?: boolean },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
     const res = await fetch('/api/setu/join-request/send', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       credentials: 'same-origin',
-      body: JSON.stringify(contact),
+      body: JSON.stringify({ ...contact, ...(opts?.resend ? { resend: true } : {}) }),
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));

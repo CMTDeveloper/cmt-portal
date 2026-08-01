@@ -22,6 +22,22 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
+## 2026-07-31 - `POST /api/setu/auth/verify-code` now NOTIFIES the manager on `pendingApproval`; `join-request/send` takes an optional `resend`
+
+**No response shapes changed.** One optional request field was added, and one route gained a side effect the app can now trigger.
+
+**What changed.**
+1. **All three sign-in paths** — `POST /api/setu/auth/verify-code`, `GET /api/setu/auth/magic/{token}`, and `POST /api/setu/auth/password-sign-in` — now **create the join request and email/SMS the family's managers** when they gate a member. Previously none of them did, so a gated member was told "we've let them know" when nobody had been told (found in production, 2026-07-31). **All three response shapes are byte-identical to before.**
+2. `POST /api/setu/join-request/send` — request body gains **`resend?: boolean`** (optional, defaults false). Response is unchanged: always `{ ok: true }` for a well-formed body.
+
+**What the mobile must do:**
+- **If the app has its own "pending approval" screen, drop any call it makes to `/join-request/send` on first arrival.** The sign-in call has already created and notified. Calling again without `resend` is a harmless no-op, but it is now redundant.
+- **Pass `resend: true` from an explicit "re-send to my manager" button, and only from there.** Without it the server dedupes against the open request and notifies nobody, while still answering `{ok:true}` — so the app would show "Request sent" over a send that did not happen. That is the exact failure being fixed; do not reproduce it on mobile.
+- Do NOT set `resend` on a first-time send (e.g. a registration flow), or a member who signs in repeatedly will re-ping their manager each time.
+- ⚠️ **`resend` is rate-limited server-side per REQUEST, not per caller — expect it to be a silent no-op most of the time.** Re-sends about the same join request are refused within a 10-minute cooldown, and the response is still `{ok:true}`. **Do not build a UI that promises delivery on each tap.** Say "we'll notify your manager" rather than "sent". Retrying, changing IP, or reinstalling does not lift the cooldown.
+- `resend` widens *when* the server notifies, never *who* is a valid match: an unknown contact still notifies nobody and still returns `{ok:true}`. It is not an enumeration oracle and must not be treated as one.
+- The gated path is now slower on all three sign-in routes (it waits on the notification, bounded at 5s). Do not tighten any client timeout around them.
+
 ## 2026-07-30 - `POST /api/setu/donations/{did}/status` is unchanged, but the portal now EMAILS on these transitions
 
 **No request or response shape changes.** Recorded because the mobile app can now cause a family to receive mail, which it could not before.

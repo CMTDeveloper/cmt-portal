@@ -1,6 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('@/lib/flags', () => ({ flags: { setuAuth: true } }));
+const mockRequestFamilyAccess = vi.hoisted(() =>
+  vi.fn(async () => ({ outcome: 'created' as const, notified: 1 })),
+);
+vi.mock('@/features/setu/join-request/request-family-access', () => ({
+  requestFamilyAccess: mockRequestFamilyAccess,
+}));
+vi.mock('@/lib/portal-base-url', () => ({
+  portalBaseUrl: () => 'https://setu.chinmayatoronto.org',
+}));
+vi.mock('@/lib/env', () => ({ portalEnv: () => ({ SETU_INVITE_TTL_DAYS: 14 }) }));
 
 vi.mock('@/features/check-in/shared', () => ({
   checkAndRecordOtpRateLimit: vi.fn(),
@@ -201,6 +211,24 @@ describe('POST /api/setu/auth/password-sign-in', () => {
       pendingMatchedMid: 'CMT-001-02',
     });
     expect(res.headers.get('set-cookie')).toBeNull();
+    // 🔴 Codex review of 1e498a0: this path gated the member and told nobody.
+    // Worse here than on the OTP path - the UI keeps rendering the password
+    // form, so a CORRECT password looks like it did nothing at all.
+    expect(mockRequestFamilyAccess).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'email', value: 'asha@example.com' }),
+    );
+  });
+
+  it('does NOT raise a join request when the password mints a real session', async () => {
+    mockedSignIn.mockResolvedValue({
+      ok: true, uid: 'uid-ok', email: 'raj@example.com', idToken: 'id-tok', refreshToken: 'ref-tok',
+    });
+    mockedBuildClaims.mockResolvedValue({
+      uid: 'uid-ok', claims: { role: 'family-manager', fid: 'CMT-001' }, redirectTo: '/family',
+    });
+    mockedHasSession.mockReturnValue(true);
+    await POST(makeRequest({ email: 'raj@example.com', password: 'secret' }));
+    expect(mockRequestFamilyAccess).not.toHaveBeenCalled();
   });
 
   it('passes contactProvenance:password to buildSessionClaimsForContact', async () => {

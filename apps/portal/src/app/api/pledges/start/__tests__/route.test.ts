@@ -42,10 +42,16 @@ beforeEach(() => {
   // the customer-name change reading the roster. Two members on purpose (N=2): the
   // manager must be selected by session mid, not by being first.
   mockFamily.mockResolvedValue({
-    family: { fid: 'CMT-A', name: 'Apple Family', publicFid: 5001 },
+    // publicFid is a STRING on the family doc (`z.string().nullable().optional()`),
+    // not a number - the fixture said 5001 and typed the route's own contract wrong.
+    family: { fid: 'CMT-A', name: 'Apple Family', publicFid: '5001' },
+    // The signed-in manager (mid CMT-A-01) is deliberately NOT first. Codex
+    // review: the previous order put them at members[0], so a `members[0]`
+    // implementation would have satisfied the assertion the comment claimed
+    // would catch it.
     members: [
-      { mid: 'CMT-A-01', firstName: 'Anita', lastName: 'Apple' },
       { mid: 'CMT-A-02', firstName: 'Bala', lastName: 'Apple' },
+      { mid: 'CMT-A-01', firstName: 'Anita', lastName: 'Apple' },
     ],
   });
   mockEnrollments.mockReset();
@@ -107,10 +113,19 @@ describe('POST /api/pledges/start', () => {
   it('sends the signed-in PERSON plus the public Family ID to Stripe', async () => {
     await POST(req(MANAGER));
     expect(mockStart).toHaveBeenCalledWith(
-      // 'Anita Apple' is mid CMT-A-01 - the session's mid, and deliberately not
-      // the only member, so picking members[0] would not satisfy this.
+      // 'Anita Apple' is mid CMT-A-01, the session's mid, and sits SECOND in
+      // the fixture - so a members[0] implementation would produce
+      // "Bala Apple (5001)" and fail here.
       expect.objectContaining({ name: 'Anita Apple (5001)' }),
     );
+  });
+
+  // Vaibhav, same sitting, reading the metadata of that live call: it carried
+  // only `fid: "CMT-HTNO0TEG"`. The public id has to reach startPledge for the
+  // Stripe metadata to be able to name it.
+  it('passes the public Family ID through for the Stripe metadata', async () => {
+    await POST(req(MANAGER));
+    expect(mockStart).toHaveBeenCalledWith(expect.objectContaining({ publicFid: '5001' }));
   });
 
   // ── The mandate must have something to fund ────────────────────────────────

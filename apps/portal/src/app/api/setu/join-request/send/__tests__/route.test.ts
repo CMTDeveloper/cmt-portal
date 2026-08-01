@@ -18,8 +18,10 @@ vi.mock('@/lib/aws/resolve-sender', () => ({
 }));
 
 const mockCreate = vi.fn();
+const mockMarkNotified = vi.fn().mockResolvedValue(undefined);
 vi.mock('@/features/setu/join-request/create-request', () => ({
   createJoinRequest: (...args: unknown[]) => mockCreate(...args),
+  markJoinRequestNotified: (...args: unknown[]) => mockMarkNotified(...args),
 }));
 
 // Records the managed-email contract while still running the REAL
@@ -148,7 +150,103 @@ describe('POST /api/setu/join-request/send', () => {
     const res = await POST(makeRequest({ email: 'asha@example.com' }));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true });
-    // A requester re-clicking "Send request" must NOT re-notify the managers.
+    // Default path (e.g. /register's first send): an open request already
+    // exists, so the managers are not pinged again.
+    expect(mockSendEmail).not.toHaveBeenCalled();
+    expect(mockSendSMS).not.toHaveBeenCalled();
+  });
+
+  // ── The re-send button has to actually re-send ────────────────────────────
+  //
+  // verify-code now creates the request the moment a gated member proves
+  // contact ownership, so by the time the pending screen renders its "Re-send
+  // request to my manager" button, an open request ALWAYS exists. Without the
+  // flag every click would take the dedupe path above and the UI would report
+  // "Request sent." over a send that never happened - the same false claim this
+  // whole change set exists to remove, moved one screen later.
+  it('re-send: an EXPLICIT resend DOES re-notify an existing open request', async () => {
+    mockCreate.mockResolvedValue({
+      outcome: 'deduped',
+      token: 'existing',
+      fid: 'F1',
+      matchedMid: 'F1-03',
+      familyName: 'Sharma',
+      requesterEmail: 'asha@example.com',
+      requesterContact: 'asha@example.com',
+      requesterName: 'Asha',
+      managers: [{ email: 'raj@example.com', phone: null, name: 'Raj' }],
+      lastNotifiedAt: null,
+    });
+    const res = await POST(makeRequest({ email: 'asha@example.com', resend: true }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(managedEmailCalls.at(-1)).toMatchObject({
+      name: 'setu-join-request',
+      to: 'raj@example.com',
+      data: { reviewUrl: expect.stringContaining('/join-request/existing') },
+    });
+  });
+
+  // ── The cooldown is what keeps `resend` from being an abuse primitive ──────
+  //
+  // 🔴 Codex review of 1e498a0. This route is UNAUTHENTICATED. `resend` removed
+  // the dedupe ceiling, so anyone who knew a pending member's address could
+  // drive repeated email AND SMS to every manager on that family; the only
+  // limit was 30/IP/15min, which a distributed caller walks straight past.
+  //
+  // The cooldown therefore keys on the REQUEST DOCUMENT, never the caller - so
+  // these tests vary `lastNotifiedAt`, not the IP. If someone later moves this
+  // guard to a per-IP limiter, these tests still pass while the hole reopens,
+  // so the assertion below on `markJoinRequestNotified` matters: it pins that
+  // the server records the send server-side at all.
+  describe('re-notify cooldown', () => {
+    function deduped(lastNotifiedAt: Date | null) {
+      return {
+        outcome: 'deduped' as const,
+        token: 'existing',
+        fid: 'F1',
+        matchedMid: 'F1-03',
+        familyName: 'Sharma',
+        requesterEmail: 'asha@example.com',
+        requesterContact: 'asha@example.com',
+        requesterName: 'Asha',
+        managers: [{ email: 'raj@example.com', phone: '+15550001111', name: 'Raj' }],
+        lastNotifiedAt,
+      };
+    }
+
+    it('REFUSES a resend when the managers were pinged moments ago', async () => {
+      mockCreate.mockResolvedValue(deduped(new Date(Date.now() - 30_000)));
+      const res = await POST(makeRequest({ email: 'asha@example.com', resend: true }));
+      // Still {ok:true}: the caller must not learn that a real request exists.
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ ok: true });
+      expect(mockSendEmail).not.toHaveBeenCalled();
+      expect(mockSendSMS).not.toHaveBeenCalled();
+    });
+
+    it('ALLOWS a resend once the cooldown has elapsed', async () => {
+      mockCreate.mockResolvedValue(deduped(new Date(Date.now() - 60 * 60_000)));
+      await POST(makeRequest({ email: 'asha@example.com', resend: true }));
+      expect(managedEmailCalls.at(-1)).toMatchObject({ to: 'raj@example.com' });
+      expect(mockSendSMS).toHaveBeenCalled();
+    });
+
+    it('records the send on the REQUEST, so rotating IPs cannot buy more sends', async () => {
+      mockCreate.mockResolvedValue(deduped(null));
+      await POST(makeRequest({ email: 'asha@example.com', resend: true }, { 'x-forwarded-for': '9.9.9.9' }));
+      expect(mockMarkNotified).toHaveBeenCalledWith('F1', 'F1-03');
+    });
+  });
+
+  it('re-send on an unknown contact still notifies nobody', async () => {
+    // `resend` widens WHEN we notify, never WHO is a valid match - otherwise it
+    // would be an enumeration oracle: pass resend against any address and watch
+    // whether a manager gets mail.
+    mockCreate.mockResolvedValue({ outcome: 'noop' });
+    const res = await POST(makeRequest({ email: 'stranger@example.com', resend: true }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
     expect(mockSendEmail).not.toHaveBeenCalled();
     expect(mockSendSMS).not.toHaveBeenCalled();
   });

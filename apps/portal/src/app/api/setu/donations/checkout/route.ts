@@ -5,6 +5,7 @@ import {
   checkoutLineItemName,
   processingFeeCAD,
   isSetuManager,
+  paymentFamilyLabel,
   paymentSourceOf,
 } from '@cmt/shared-domain';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
@@ -238,7 +239,17 @@ export async function POST(req: Request) {
     client_reference_id: donation.did,
     successUrl: `${origin}/donate/success?did=${donation.did}`,
     cancelUrl: `${origin}/family/donate/cancel?did=${donation.did}`,
-    metadata: { campaign: 'setu', category: input.type, fid: session.fid },
+    // `fid` is the internal document key and stays put - support and any
+    // downstream reconciliation match on it. `familyId` is the human-readable
+    // one Vaibhav asked for after finding a live record identified only by
+    // "CMT-HTNO0TEG"; the two Stripe paths must agree, so the pledge metadata
+    // carries the same pair.
+    metadata: {
+      campaign: 'setu',
+      category: input.type,
+      fid: session.fid,
+      familyId: paymentFamilyLabel({ fid: session.fid, publicFid: familyData.family.publicFid }),
+    },
     branding_settings: { display_name: 'Chinmaya Mission Toronto' },
   };
 

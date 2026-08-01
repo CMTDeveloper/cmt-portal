@@ -1,6 +1,16 @@
 import { describe, it, expect, vi, beforeEach, type MockedFunction } from 'vitest';
 
 vi.mock('@/lib/flags', () => ({ flags: { setuAuth: true } }));
+const mockRequestFamilyAccess = vi.hoisted(() =>
+  vi.fn(async () => ({ outcome: 'created' as const, notified: 1 })),
+);
+vi.mock('@/features/setu/join-request/request-family-access', () => ({
+  requestFamilyAccess: mockRequestFamilyAccess,
+}));
+vi.mock('@/lib/env', () => ({ portalEnv: () => ({ SETU_INVITE_TTL_DAYS: 14 }) }));
+vi.mock('@/lib/portal-base-url', () => ({
+  portalBaseUrl: () => 'https://setu.chinmayatoronto.org',
+}));
 vi.mock('@/features/setu/auth/magic-links', () => ({
   consumeMagicLink: vi.fn(),
 }));
@@ -145,6 +155,23 @@ describe('GET /api/setu/auth/magic/[token]', () => {
     expect(res.headers.get('location')).toContain('error=pending-approval');
     expect(res.headers.get('set-cookie')).toBeNull();
     expect(mockSetCustomUserClaims).not.toHaveBeenCalled();
+    // 🔴 Codex review of 1e498a0: the first fix wired the OTP route only, so
+    // this path still gated a member and told nobody - the very bug being
+    // fixed, one caller over. Clicking a link we mailed to this address proves
+    // ownership of it, so it is a legitimate trigger.
+    expect(mockRequestFamilyAccess).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'email', value: 'asha@example.com' }),
+    );
+  });
+
+  it('does NOT raise a join request when the magic link mints a real session', async () => {
+    (consumeMagicLink as ReturnType<typeof vi.fn>).mockResolvedValue({ email: 'raj@example.com' });
+    (buildSessionClaimsForContact as ReturnType<typeof vi.fn>).mockResolvedValue({
+      uid: 'uid-1', claims: { role: 'family-manager', fid: 'FAM001' }, redirectTo: '/family',
+    });
+    mockHasSession.mockReturnValue(true);
+    await GET(makeRequest('validtok'), makeParams('validtok'));
+    expect(mockRequestFamilyAccess).not.toHaveBeenCalled();
   });
 
   it('honors safe ?from= param over default redirect', async () => {

@@ -30,6 +30,16 @@ vi.mock('@/features/setu/teacher/assignments', () => ({
 vi.mock('@/features/setu/registration/registration-grant', () => ({
   issueRegistrationGrant: vi.fn(async () => 'grant-tok-xyz'),
 }));
+const mockRequestFamilyAccess = vi.hoisted(() =>
+  vi.fn(async () => ({ outcome: 'created' as const, notified: 1 })),
+);
+vi.mock('@/features/setu/join-request/request-family-access', () => ({
+  requestFamilyAccess: mockRequestFamilyAccess,
+}));
+vi.mock('@/lib/env', () => ({ portalEnv: () => ({ SETU_INVITE_TTL_DAYS: 14 }) }));
+vi.mock('@/lib/portal-base-url', () => ({
+  portalBaseUrl: () => 'https://setu.chinmayatoronto.org',
+}));
 
 import { POST } from '../route';
 import { verifyCode } from '@/features/check-in/shared';
@@ -179,6 +189,67 @@ describe('POST /api/setu/auth/verify-code', () => {
     expect(mockSetCustomUserClaims).not.toHaveBeenCalled();
     expect(res.headers.get('set-cookie')).toBeNull();
     expect(body.redirectTo).toBeUndefined();
+  });
+
+  // ── The pending screen says "We've let them know" ─────────────────────────
+  //
+  // 🔴 Vaibhav, from production 2026-07-31: his wife signed in, was told her
+  // access was pending and that her manager had been notified, and he received
+  // nothing. This branch returned the pending signal and sent NOTHING; the only
+  // notifying code sat behind a button on the next screen labelled "Re-send".
+  //
+  // Asserted at the ROUTE, not only in the helper's own tests, because the
+  // defect was never inside the notifier - it was that this caller did not
+  // reach for it. A helper test would have passed throughout the outage.
+  it('NOTIFIES the family managers when it gates a member', async () => {
+    (verifyCode as ReturnType<typeof vi.fn>).mockResolvedValue(true);
+    (findSetuFamilyByContact as ReturnType<typeof vi.fn>).mockResolvedValue({
+      source: 'setu', fid: 'FAM001', mid: 'FAM001-03', legacyFid: null, family: {},
+      member: { manager: false, portalAccess: 'pending' },
+    });
+    await POST(makeRequest({ type: 'email', value: 'Pending@Example.com', code: '123456' }));
+    expect(mockRequestFamilyAccess).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'email', value: 'Pending@Example.com' }),
+    );
+    // An ABSOLUTE review link. A host-less "/join-request/<token>" in a real
+    // email is the failure this project has already shipped once.
+    expect(mockRequestFamilyAccess).toHaveBeenCalledWith(
+      expect.objectContaining({ baseUrl: 'https://setu.chinmayatoronto.org' }),
+    );
+    // notifyOnExisting stays off here: a member signing in again next week must
+    // not re-ping their manager. Only the explicit re-send button turns it on.
+    expect(mockRequestFamilyAccess).not.toHaveBeenCalledWith(
+      expect.objectContaining({ notifyOnExisting: true }),
+    );
+  });
+
+  it('still gates the member when the notification throws', async () => {
+    // A flaky SES must not fail a sign-in that already succeeded, and must not
+    // turn a correct "pending" answer into an error the family cannot act on.
+    mockRequestFamilyAccess.mockRejectedValueOnce(new Error('SES is down'));
+    (verifyCode as ReturnType<typeof vi.fn>).mockResolvedValue(true);
+    (findSetuFamilyByContact as ReturnType<typeof vi.fn>).mockResolvedValue({
+      source: 'setu', fid: 'FAM001', mid: 'FAM001-03', legacyFid: null, family: {},
+      member: { manager: false, portalAccess: 'pending' },
+    });
+    const res = await POST(makeRequest({ type: 'email', value: 'pending@example.com', code: '123456' }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      pendingApproval: true, pendingFid: 'FAM001', pendingMatchedMid: 'FAM001-03',
+    });
+  });
+
+  it('does NOT raise a join request for a member who is let straight in', async () => {
+    // Only a GATED member is awaiting approval. Asking for access on behalf of
+    // someone who just received a session would email their manager about a
+    // request that does not exist.
+    (verifyCode as ReturnType<typeof vi.fn>).mockResolvedValue(true);
+    (findSetuFamilyByContact as ReturnType<typeof vi.fn>).mockResolvedValue({
+      source: 'setu', fid: 'FAM001', mid: 'FAM001-01', legacyFid: null, family: {},
+      member: { manager: true, portalAccess: 'active' },
+    });
+    await POST(makeRequest({ type: 'email', value: 'raj@example.com', code: '123456' }));
+    expect(mockRequestFamilyAccess).not.toHaveBeenCalled();
   });
 
   it('manager is NOT gated even if portalAccess is pending → normal family-manager claims', async () => {
