@@ -6,6 +6,7 @@ import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
 import { selectBalaViharEnrollment } from '@/app/family/_helpers/select-bv-enrollment';
 import { startPledge } from '@/features/setu/pledges/start-pledge';
 import { clearAbandonedPledge } from '@/features/setu/pledges/clear-abandoned-pledge';
+import { buildPledgeCustomerName } from '@/features/setu/pledges/pledge-customer-name';
 import { flags } from '@/lib/flags';
 
 /**
@@ -84,7 +85,17 @@ export async function POST(req: Request) {
       fid: session.fid,
       mid: session.mid,
       email: session.email,
-      name: fam.family.name,
+      // The PERSON who authorised the mandate, plus the public Family ID -
+      // e.g. "Vaibhav Rana (5001)". Was `fam.family.name`, which put the
+      // derived "Rana family" on the live Stripe Customer beside the manager's
+      // personal email. See buildPledgeCustomerName for why the person is the
+      // correct value on a pre-authorized debit.
+      name: buildPledgeCustomerName({
+        members: fam.members,
+        mid: session.mid,
+        publicFid: fam.family.publicFid,
+        familyName: fam.family.name,
+      }),
       // So a preview deployment returns the family to ITSELF after the mandate,
       // instead of to production (or, before this, to a relative url).
       req,
