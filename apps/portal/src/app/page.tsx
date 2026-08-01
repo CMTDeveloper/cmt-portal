@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { Rosette, SetuLogo } from '@cmt/ui';
 import { CspRoot } from '@/features/family/components/atoms';
+import { CONTACT_EMAIL } from '@/lib/branding';
 
 export default function HomePage() {
   return (
@@ -38,7 +39,7 @@ export default function HomePage() {
               <div className="row" style={{ gap: 18, fontSize: 13, color: 'var(--body-text)' }}>
                 <span style={{ color: 'inherit' }}>About</span>
                 <a href="https://events.chinmayatoronto.org/" style={{ color: 'inherit' }}>Events ↗</a>
-                <a href="mailto:info@chinmayatoronto.org" style={{ color: 'inherit' }}>Contact</a>
+                <a href={`mailto:${CONTACT_EMAIL}`} style={{ color: 'inherit' }}>Contact</a>
               </div>
             </div>
             <div style={{ maxWidth: 520, paddingBottom: 80 }}>

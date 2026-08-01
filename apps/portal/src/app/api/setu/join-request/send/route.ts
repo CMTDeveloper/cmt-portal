@@ -3,10 +3,7 @@ import { z } from 'zod';
 import { flags } from '@/lib/flags';
 import { checkAndRecordOtpRateLimit, LOOKUP_RATE_LIMIT_MAX } from '@/features/check-in/shared';
 import { portalEnv } from '@/lib/env';
-import { resolveSender } from '@/lib/aws/resolve-sender';
-import { sendManagedEmail } from '@/lib/aws/send-managed-email';
-import { setuJoinRequestEmail } from '@/lib/aws/templates/setu-join-request-email';
-import { createJoinRequest } from '@/features/setu/join-request/create-request';
+import { requestFamilyAccess } from '@/features/setu/join-request/request-family-access';
 import { portalBaseUrl } from '@/lib/portal-base-url';
 
 // Open (no session required — a requester may not have one yet). Anti-enumeration:
@@ -16,6 +13,16 @@ import { portalBaseUrl } from '@/lib/portal-base-url';
 const bodySchema = z.object({
   email: z.string().optional(),
   phone: z.string().optional(),
+  // An explicit "Re-send request to my manager" click, as opposed to a
+  // first-time send from /register.
+  //
+  // Since `verify-code` now creates the request the moment a gated member
+  // proves contact ownership, an open request almost always EXISTS by the time
+  // this route is reached from the pending screen - so without this flag the
+  // re-send button would dedupe into silence while the UI answered "Request
+  // sent." Double-clicks are not a concern: the button disables itself while
+  // in flight and is replaced by a status line on success.
+  resend: z.boolean().optional(),
 });
 
 export async function POST(req: Request) {
@@ -49,56 +56,21 @@ export async function POST(req: Request) {
     ? { type: 'email' as const, value: email }
     : { type: 'phone' as const, value: phone };
 
-  const result = await createJoinRequest({ ...contact, ttlDays: env.SETU_INVITE_TTL_DAYS });
-
-  // Notify ONLY when a fresh request was created. A 'deduped' outcome means an
-  // open request already exists, so a requester re-clicking "Send request"
-  // can't spam the managers with repeat notifications. ('noop' notifies no one.)
-  if (result.outcome === 'created') {
-    // Notify ALL family managers by email (+ SMS best-effort). Failures are
-    // swallowed so a flaky notification never reveals match state to the caller
-    // (we always answer {ok:true}).
-    // portalBaseUrl(req), not `env.NEXT_PUBLIC_PORTAL_BASE_URL ?? ''`. The helper
-    // chains configured -> allowlisted request host -> prod fallback and can never
-    // return empty; the old `?? ''` produced a HOST-LESS link ("/join-request/<token>")
-    // in a real email whenever the var was unset - which is exactly the state of
-    // the Vercel PREVIEW environment (2026-07-27), where the var is deliberately
-    // absent because preview URLs are per-deployment.
-    const reviewUrl = `${portalBaseUrl(req)}/join-request/${result.token}`;
-    const sender = resolveSender();
-    await Promise.allSettled(
-      result.managers.flatMap((m) => {
-        const tasks: Array<Promise<unknown>> = [];
-        if (m.email) {
-          const managerEmail = m.email;
-          const emailData = {
-            requesterName: result.requesterName ?? result.requesterContact,
-            requesterContact: result.requesterContact,
-            familyName: result.familyName,
-            reviewUrl,
-          };
-          tasks.push(
-            sendManagedEmail({
-              name: 'setu-join-request',
-              to: managerEmail,
-              data: emailData,
-              fallback: () =>
-                sender.sendEmail({ to: managerEmail, ...setuJoinRequestEmail(emailData) }),
-            }),
-          );
-        }
-        if (m.phone) {
-          tasks.push(
-            sender.sendSMS({
-              phone: m.phone,
-              message: `Hari OM! ${result.requesterContact} asked to join your ${result.familyName} family on Chinmaya Setu. Review: ${reviewUrl}`,
-            }),
-          );
-        }
-        return tasks;
-      }),
-    );
-  }
+  // Create-and-notify is one operation (see request-family-access.ts). Failures
+  // are swallowed in there so a flaky notification never reveals match state.
+  //
+  // portalBaseUrl(req), not `env.NEXT_PUBLIC_PORTAL_BASE_URL ?? ''`. The helper
+  // chains configured -> allowlisted request host -> prod fallback and can never
+  // return empty; the old `?? ''` produced a HOST-LESS link ("/join-request/<token>")
+  // in a real email whenever the var was unset - which is exactly the state of
+  // the Vercel PREVIEW environment (2026-07-27), where the var is deliberately
+  // absent because preview URLs are per-deployment.
+  await requestFamilyAccess({
+    ...contact,
+    ttlDays: env.SETU_INVITE_TTL_DAYS,
+    baseUrl: portalBaseUrl(req),
+    notifyOnExisting: parsed.data.resend === true,
+  });
 
   // Anti-enumeration + idempotent: always {ok:true} for a well-formed body.
   return NextResponse.json({ ok: true }, { status: 200 });

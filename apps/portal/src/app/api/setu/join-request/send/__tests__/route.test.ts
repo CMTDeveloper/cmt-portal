@@ -148,7 +148,49 @@ describe('POST /api/setu/join-request/send', () => {
     const res = await POST(makeRequest({ email: 'asha@example.com' }));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true });
-    // A requester re-clicking "Send request" must NOT re-notify the managers.
+    // Default path (e.g. /register's first send): an open request already
+    // exists, so the managers are not pinged again.
+    expect(mockSendEmail).not.toHaveBeenCalled();
+    expect(mockSendSMS).not.toHaveBeenCalled();
+  });
+
+  // ── The re-send button has to actually re-send ────────────────────────────
+  //
+  // verify-code now creates the request the moment a gated member proves
+  // contact ownership, so by the time the pending screen renders its "Re-send
+  // request to my manager" button, an open request ALWAYS exists. Without the
+  // flag every click would take the dedupe path above and the UI would report
+  // "Request sent." over a send that never happened - the same false claim this
+  // whole change set exists to remove, moved one screen later.
+  it('re-send: an EXPLICIT resend DOES re-notify an existing open request', async () => {
+    mockCreate.mockResolvedValue({
+      outcome: 'deduped',
+      token: 'existing',
+      fid: 'F1',
+      familyName: 'Sharma',
+      requesterEmail: 'asha@example.com',
+      requesterContact: 'asha@example.com',
+      requesterName: 'Asha',
+      managers: [{ email: 'raj@example.com', phone: null, name: 'Raj' }],
+    });
+    const res = await POST(makeRequest({ email: 'asha@example.com', resend: true }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(managedEmailCalls.at(-1)).toMatchObject({
+      name: 'setu-join-request',
+      to: 'raj@example.com',
+      data: { reviewUrl: expect.stringContaining('/join-request/existing') },
+    });
+  });
+
+  it('re-send on an unknown contact still notifies nobody', async () => {
+    // `resend` widens WHEN we notify, never WHO is a valid match - otherwise it
+    // would be an enumeration oracle: pass resend against any address and watch
+    // whether a manager gets mail.
+    mockCreate.mockResolvedValue({ outcome: 'noop' });
+    const res = await POST(makeRequest({ email: 'stranger@example.com', resend: true }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
     expect(mockSendEmail).not.toHaveBeenCalled();
     expect(mockSendSMS).not.toHaveBeenCalled();
   });

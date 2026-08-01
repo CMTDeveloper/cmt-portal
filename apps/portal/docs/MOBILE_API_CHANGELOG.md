@@ -22,6 +22,21 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
+## 2026-07-31 - `POST /api/setu/auth/verify-code` now NOTIFIES the manager on `pendingApproval`; `join-request/send` takes an optional `resend`
+
+**No response shapes changed.** One optional request field was added, and one route gained a side effect the app can now trigger.
+
+**What changed.**
+1. `POST /api/setu/auth/verify-code` — when it answers `{ pendingApproval: true, … }` it now **creates the join request and emails/SMSes the family's managers** before responding. Previously it did neither, so a gated member was told "we've let them know" when nobody had been told (found in production, 2026-07-31). Response body is byte-identical.
+2. `POST /api/setu/join-request/send` — request body gains **`resend?: boolean`** (optional, defaults false). Response is unchanged: always `{ ok: true }` for a well-formed body.
+
+**What the mobile must do:**
+- **If the app has its own "pending approval" screen, drop any call it makes to `/join-request/send` on first arrival.** `verify-code` has already created and notified. Sending again without `resend` is a harmless no-op, but it is now redundant.
+- **Pass `resend: true` from an explicit "re-send to my manager" button, and only from there.** Without it the server dedupes against the open request and notifies nobody, while still answering `{ok:true}` — so the app would show "Request sent" over a send that did not happen. This is the exact failure being fixed; do not reproduce it on mobile.
+- Do NOT set `resend` on a first-time send (e.g. a registration flow), or a member who signs in repeatedly will re-ping their manager each time.
+- `resend` widens *when* the server notifies, never *who* is a valid match: an unknown contact still notifies nobody and still returns `{ok:true}`. It is not an enumeration oracle and must not be treated as one.
+- Verify-code is now slower on the `pendingApproval` path (it awaits the notification). Do not tighten any client timeout around it.
+
 ## 2026-07-30 - `POST /api/setu/donations/{did}/status` is unchanged, but the portal now EMAILS on these transitions
 
 **No request or response shape changes.** Recorded because the mobile app can now cause a family to receive mail, which it could not before.

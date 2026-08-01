@@ -96,6 +96,8 @@ export async function POST(req: Request) {
         publicFid: fam.family.publicFid,
         familyName: fam.family.name,
       }),
+      // Same id the name carries, in a field Stripe can be filtered on.
+      publicFid: fam.family.publicFid,
       // So a preview deployment returns the family to ITSELF after the mandate,
       // instead of to production (or, before this, to a relative url).
       req,

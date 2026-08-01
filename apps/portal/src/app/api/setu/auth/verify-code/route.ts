@@ -16,6 +16,9 @@ import {
   isPendingApproval,
 } from '@/features/setu/auth/build-session-claims';
 import { issueRegistrationGrant } from '@/features/setu/registration/registration-grant';
+import { requestFamilyAccess } from '@/features/setu/join-request/request-family-access';
+import { portalBaseUrl } from '@/lib/portal-base-url';
+import { portalEnv } from '@/lib/env';
 import { isSafeInternalPath } from '@cmt/shared-domain';
 
 
@@ -64,6 +67,33 @@ export async function POST(req: Request) {
   // or set claims. Surface the pending signal so the sign-in UI can show
   // "access pending your manager's approval" and offer to (re)send the request.
   if (isPendingApproval(sessionResult)) {
+    // ── Tell the manager. The screen this produces SAYS we did ────────────────
+    //
+    // 🔴 Vaibhav, from production 2026-07-31: his wife reached
+    // "We've let them know" and he received nothing. Returning the pending
+    // signal used to be the whole of this branch, and the only code that ever
+    // notified a manager sat behind a button on the next screen labelled
+    // "Re-send request" - so the first request was never sent, by construction.
+    //
+    // Notifying HERE rather than from the client is deliberate: this is the
+    // point where the pending state is created, and it is the strongest
+    // evidence we will ever have that the requester owns the contact (they
+    // just proved it with an OTP). A client-side trigger would also have to be
+    // re-added by hand at every future entry point into this state.
+    //
+    // Deduped by an open request, so re-signing-in next week does not re-ping
+    // the manager; failures are swallowed inside the helper.
+    try {
+      await requestFamilyAccess({
+        type,
+        value,
+        ttlDays: portalEnv().SETU_INVITE_TTL_DAYS,
+        baseUrl: portalBaseUrl(req),
+      });
+    } catch {
+      // The member is still correctly pending and the screen still offers an
+      // explicit re-send. Never fail a verified sign-in over a notification.
+    }
     return NextResponse.json(
       {
         pendingApproval: true,

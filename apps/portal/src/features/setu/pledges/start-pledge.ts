@@ -1,6 +1,7 @@
 import 'server-only';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import type { PledgeStatus } from '@cmt/shared-domain/setu';
+import { paymentFamilyLabel } from '@cmt/shared-domain/setu';
 import { createPadSetupLink } from './stripe-pad-client';
 import { configuredMonthlyAmountCAD } from './pledge-amount';
 import { portalBaseUrl as trustedPortalBaseUrl } from '@/lib/portal-base-url';
@@ -17,6 +18,14 @@ export interface StartPledgeActor {
   mid: string;
   email: string;
   name: string;
+  /**
+   * The family's 4-digit public Family ID, for the Stripe metadata a human
+   * actually reads. Optional because it is minted lazily at first enrollment;
+   * `paymentFamilyLabel` falls back to the internal fid when it is absent.
+   */
+  // `| undefined` is explicit because `exactOptionalPropertyTypes` is on and the
+  // family doc types this as `string | null | undefined`.
+  publicFid?: string | null | undefined;
   /**
    * The incoming request, used ONLY to resolve the return origin for Stripe.
    * Optional: without it the origin falls back to the configured env and then to
@@ -121,7 +130,16 @@ export async function startPledge(actor: StartPledgeActor): Promise<StartPledgeR
       // with the abandoned attempt already gone. Cancelling and closing the tab
       // therefore heal by the same path; the difference is only when.
       cancelUrl: `${pledgeReturnOrigin(actor.req)}/family/enroll/bala-vihar`,
-      metadata: { fid: actor.fid, pid },
+      // `fid` is the internal document key and stays put - the pledge record and
+      // any support lookup match on it. `familyId` is the human-readable form
+      // ("FID-5001") Vaibhav asked for after finding a live Stripe call
+      // identified only by "CMT-HTNO0TEG". The donation checkout writes the same
+      // pair, so one family looks the same on both payment paths.
+      metadata: {
+        fid: actor.fid,
+        familyId: paymentFamilyLabel({ fid: actor.fid, publicFid: actor.publicFid }),
+        pid,
+      },
     });
     // Only the handles - explicitly named, never a spread of the provider
     // response, so a field we did not ask for cannot land in the document.

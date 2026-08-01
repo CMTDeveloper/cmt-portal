@@ -19,3 +19,23 @@ export const SITE_TITLE_TEMPLATE = `%s | ${SITE_NAME}`;
 
 /** Default meta description. */
 export const SITE_DESCRIPTION = `Bridging knowledge, community, and spiritual practice — ${ORG_NAME} portal.`;
+
+/**
+ * Where a family writes when they need a human.
+ *
+ * Vaibhav, 2026-07-31, looking at the live home page: the Contact link pointed
+ * at the general `info@` inbox, which nobody on the Bala Vihar registration
+ * team reads. It is the same address the portal already sends FROM
+ * (`AWS_SES_FROM_EMAIL`), so a reply lands with the people who can act.
+ *
+ * Defined here, not inline, because it was previously typed out at three call
+ * sites and only the one on the home page was noticed.
+ *
+ * A plain constant, deliberately not a NEXT_PUBLIC_ override: an unlisted var
+ * is stripped from the Turborepo build sandbox, so an override would appear to
+ * work locally and silently fall back to this default on Vercel.
+ */
+export const CONTACT_EMAIL = 'bvregistration@chinmayatoronto.org';
+
+/** `mailto:` for a Setu account problem, pre-subjected so replies triage easily. */
+export const CONTACT_ACCOUNT_ISSUE_MAILTO = `mailto:${CONTACT_EMAIL}?subject=Chinmaya%20Setu%20account%20issue`;

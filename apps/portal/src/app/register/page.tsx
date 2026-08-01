@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { toast, SetuLogo, SetuAvatar, SetuIcon, Rosette } from '@cmt/ui';
 import { CspRoot, StepHeader } from '@/features/family/components/atoms';
 import { sendJoinRequestClient } from '@/features/setu/join-request';
+import { CONTACT_ACCOUNT_ISSUE_MAILTO } from '@/lib/branding';
 import { flags } from '@/lib/flags';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -457,7 +458,7 @@ function RegisterReal() {
             Sign in to access my family →
           </Link>
           <a
-            href="mailto:info@chinmayatoronto.org?subject=Chinmaya%20Setu%20account%20issue"
+            href={CONTACT_ACCOUNT_ISSUE_MAILTO}
             className="btn btn--g btn--block"
             style={{ fontSize: 13, display: 'flex' }}
           >
@@ -498,7 +499,7 @@ function RegisterReal() {
                 {requesting ? 'Sending…' : 'Send a request to your manager →'}
               </button>
               <a
-                href="mailto:info@chinmayatoronto.org?subject=Chinmaya%20Setu%20account%20issue"
+                href={CONTACT_ACCOUNT_ISSUE_MAILTO}
                 className="btn btn--g btn--block"
                 style={{ fontSize: 13, display: 'flex' }}
               >
