@@ -37,7 +37,17 @@ beforeEach(() => {
   mockStart.mockReset();
   mockStart.mockResolvedValue({ created: true, pid: 'PLG-1', checkoutUrl: 'https://stripe.test/cs_1' });
   mockFamily.mockReset();
-  mockFamily.mockResolvedValue({ family: { fid: 'CMT-A', name: 'Apple Family' } });
+  // Realistic shape: getFamilyByFid returns `{ family, members }` (FamilyAndMembers),
+  // and the earlier fixture omitted `members` entirely - so it could not have caught
+  // the customer-name change reading the roster. Two members on purpose (N=2): the
+  // manager must be selected by session mid, not by being first.
+  mockFamily.mockResolvedValue({
+    family: { fid: 'CMT-A', name: 'Apple Family', publicFid: 5001 },
+    members: [
+      { mid: 'CMT-A-01', firstName: 'Anita', lastName: 'Apple' },
+      { mid: 'CMT-A-02', firstName: 'Bala', lastName: 'Apple' },
+    ],
+  });
   mockEnrollments.mockReset();
   mockEnrollments.mockResolvedValue([BV_ENROLLMENT]);
   mockClear.mockReset();
@@ -80,6 +90,27 @@ describe('POST /api/pledges/start', () => {
     const res = await POST(req(MANAGER));
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({ error: 'already-active', pid: 'PLG-OLD' });
+  });
+
+  // ── The Stripe Customer names the PERSON, not the family ──────────────────
+  //
+  // Vaibhav, 2026-07-31, reading the first REAL Customer record: it said "Rana
+  // family" beside his personal email. A pre-authorized debit is an agreement
+  // with an account holder and a CRA receipt names an individual, and the
+  // one-time donation path already stored `donorName: "Vaibhav Rana"` - so the
+  // two payment paths were labelling the same donor differently. He asked for
+  // the parent's name plus the Family ID.
+  //
+  // Asserted HERE and not only in the helper's own unit tests: without this,
+  // the route could silently go back to `fam.family.name` and every test would
+  // still pass.
+  it('sends the signed-in PERSON plus the public Family ID to Stripe', async () => {
+    await POST(req(MANAGER));
+    expect(mockStart).toHaveBeenCalledWith(
+      // 'Anita Apple' is mid CMT-A-01 - the session's mid, and deliberately not
+      // the only member, so picking members[0] would not satisfy this.
+      expect.objectContaining({ name: 'Anita Apple (5001)' }),
+    );
   });
 
   // ── The mandate must have something to fund ────────────────────────────────
