@@ -1,10 +1,8 @@
 import { Suspense } from 'react';
 import { connection } from 'next/server';
 import Link from 'next/link';
-import { cookies } from 'next/headers';
 import { SetuIcon } from '@cmt/ui';
-import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
-import { isAdmin, type WithRole } from '@cmt/shared-domain';
+import { denyUnlessAdmin } from '@/lib/require-admin-page';
 import { CspRoot } from '@/features/family/components/atoms';
 import { getSevaCompliance } from '@/features/setu/seva/get-seva-compliance';
 import { ComplianceReport } from '@/features/admin/seva/compliance-report';
@@ -23,15 +21,8 @@ export default function WelcomeSevaCompliancePage() {
 // 16 Cache Components require dynamic data access inside <Suspense>).
 export async function CompliancePageBody() {
   await connection();
-  const cookieStore = await cookies();
-  const raw = await verifyPortalSessionCookie(cookieStore.get('__session')?.value ?? '').catch(() => null);
-  if (!raw || !isAdmin(raw as unknown as WithRole)) {
-    return (
-      <div style={{ padding: 32, fontFamily: 'var(--body)' }}>
-        <p style={{ color: 'var(--err)', fontSize: 14 }}>Access denied. Admin role required.</p>
-      </div>
-    );
-  }
+  const denied = await denyUnlessAdmin();
+  if (denied) return denied;
 
   const data = await getSevaCompliance();
   const report = <ComplianceReport initial={data} />;

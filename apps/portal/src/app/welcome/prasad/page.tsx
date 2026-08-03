@@ -1,8 +1,6 @@
 import { Suspense } from 'react';
 import type { Metadata } from 'next';
-import { cookies } from 'next/headers';
-import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
-import { isAdmin, type WithRole } from '@cmt/shared-domain';
+import { denyUnlessAdmin } from '@/lib/require-admin-page';
 import { CspRoot } from '@/features/family/components/atoms';
 import {
   getUpcomingPrasad,
@@ -27,24 +25,13 @@ export default function WelcomePrasadPage() {
 // 16 Cache Components require dynamic data access inside <Suspense>).
 export async function WelcomePrasadBody() {
   // Defensive role check — middleware enforces this but the Server Component
-  // re-verifies (defense in depth). We do NOT read prasad data until welcome-team
-  // is positively confirmed. isAdmin() covers role + extraRoles.
-  const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get('__session')?.value;
-  let allowed = false;
-  if (sessionCookie) {
-    const raw = await verifyPortalSessionCookie(sessionCookie);
-    if (raw && isAdmin(raw as unknown as WithRole)) {
-      allowed = true;
-    }
-  }
-  if (!allowed) {
-    return (
-      <div style={{ padding: 32, fontFamily: 'var(--body)' }}>
-        <p style={{ color: 'var(--err)', fontSize: 14 }}>Access denied. Admin role required.</p>
-      </div>
-    );
-  }
+  // re-verifies (defense in depth). No prasad data is read until admin is
+  // positively confirmed. This used to call verifyPortalSessionCookie WITHOUT a
+  // .catch(), so a malformed or expired cookie threw past the gate into the
+  // error boundary — "Something went wrong" where the user deserved "Access
+  // denied". The shared helper always fails closed.
+  const denied = await denyUnlessAdmin();
+  if (denied) return denied;
 
   const { locations } = await getUpcomingPrasad();
 

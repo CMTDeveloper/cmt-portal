@@ -94,6 +94,29 @@ describe('findUnassignedStudentsByLocation — behaviour', () => {
     expect(byLoc.get('Scarborough')!.map((u) => u.fid)).toEqual(['CMT-B']);
   });
 
+  it('evaluates ONE family enrolled at TWO centres against each centre separately', async () => {
+    // The N=2 case the code comments on but nothing exercised: locationsByFid
+    // holds a SET, so a single child is judged against Brampton's levels and
+    // Scarborough's levels independently. Grade 2 matches Brampton (band 2-3)
+    // and matches nothing at Scarborough (band 5), so the child is unassigned
+    // at Scarborough ONLY. Collapsing the set to one location — or evaluating
+    // the child once and reusing the verdict — fails this in one direction or
+    // the other, which no two-different-families fixture can detect.
+    mockEnrollGet.mockResolvedValue({
+      docs: [
+        { data: () => ({ fid: 'CMT-A', location: 'Brampton', status: 'active' }) },
+        { data: () => ({ fid: 'CMT-A', location: 'Scarborough', status: 'active' }) },
+      ],
+    });
+    mockMembersGet.mockResolvedValue({
+      docs: [member('CMT-A', { mid: 'CMT-A-02', firstName: 'Twin', lastName: 'Centre', type: 'Child', schoolGrade: 'Grade 2' })],
+    });
+
+    const byLoc = await findUnassignedStudentsByLocation(LEVELS, NOW);
+    expect(byLoc.get('Scarborough')!.map((u) => u.mid)).toEqual(['CMT-A-02']);
+    expect(byLoc.get('Brampton') ?? []).toEqual([]);
+  });
+
   it('ignores members of families with no ACTIVE enrollment', async () => {
     mockMembersGet.mockResolvedValue({
       docs: [member('CMT-GONE', { mid: 'CMT-GONE-02', firstName: 'Left', lastName: 'Us', type: 'Child', schoolGrade: 'Grade 7' })],
