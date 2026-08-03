@@ -169,13 +169,30 @@ export function incompleteMembers(
  * the user /complete-profile ⇄ /family).
  */
 export function membersRequiringCompletion<
-  T extends { mid: string; manager?: boolean | null; inviteStatus?: string | null | undefined },
+  T extends {
+    mid: string;
+    manager?: boolean | null;
+    inviteStatus?: string | null | undefined;
+    participation?: string | null | undefined;
+  },
 >(members: readonly T[], currentMid: string, isManager: boolean): T[] {
   // A pending-invite member (created at invite-send, not yet accepted) is nobody's
   // completion task: they have no session and complete their OWN profile after
   // accepting. Drop them up-front so neither the invitee nor any manager is ever
   // blocked by a pending row.
-  const active = members.filter((m) => m.inviteStatus !== 'pending');
+  //
+  // An INACTIVE member is dropped for the same reason, from the other end: they
+  // have finished, or never took part. Reported 2026-08-02 - a father could not
+  // finish registration because the portal demanded a school grade for a son who
+  // had already completed Bala Vihar, and contact details for a spouse who was
+  // not taking part. There was no way to say so, so the family was simply stuck.
+  //
+  // Note this asks about PARTICIPATION, not about whether their record is tidy:
+  // `incompleteMembers()` still reports an inactive member's missing fields, so
+  // staff can see the gap. This helper only decides who BLOCKS.
+  const active = members.filter(
+    (m) => m.inviteStatus !== 'pending' && m.participation !== 'inactive',
+  );
   if (!isManager) return active.filter((m) => m.mid === currentMid);
   return active.filter((m) => m.mid === currentMid || m.manager !== true);
 }

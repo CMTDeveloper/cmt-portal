@@ -350,6 +350,189 @@ describe('updateMember', () => {
 
 // ── deleteMember ──────────────────────────────────────────────────────────────
 
+// ── Participation: the escape hatch, and its guards ──────────────────────────
+//
+// 🔴 Reported from production 2026-08-02. A father could not finish registration:
+// the portal demanded a school grade for a son who had already completed Bala
+// Vihar, and full contact details for a spouse who was not taking part. There
+// was no way to say either thing, so the family was simply stuck.
+//
+// Marking someone inactive excuses them from the completion gate, which makes it
+// the obvious lever for dodging required fields - so every guard below is about
+// what a family must NOT be able to do with it. All of them live inside the
+// mutation's transaction, because each reads state that could otherwise move.
+describe('updateMember - participation', () => {
+  const MANAGER_DOC = {
+    mid: `${FID}-01`, type: 'Adult', manager: true, gender: 'Male',
+    firstName: 'Raj', lastName: 'Patel', email: 'raj@example.com', phone: '+14165550001',
+    schoolGrade: null, birthMonthYear: null, volunteeringSkills: ['seva'], foodAllergies: 'None',
+  };
+  // A second manager, so the family is NOT reduced to one by construction.
+  const CO_MANAGER_DOC = { ...MANAGER_DOC, mid: `${FID}-03`, firstName: 'Meera', email: 'meera@example.com' };
+
+  it('deactivates a child who is missing the very fields that blocked the family', async () => {
+    // The whole point: this must succeed for a member with NO school grade,
+    // otherwise the family is asked for the value they are trying to escape.
+    const gradeless = { ...CHILD_DOC, schoolGrade: null, birthMonthYear: null };
+    const { writes } = useDb(seedFamily({ [`families/${FID}/members/${FID}-02`]: gradeless }));
+
+    const res = await updateMember({
+      fid: FID, mid: `${FID}-02`, body: { participation: 'inactive' },
+      actor: STAFF, canSetManagerFlag: true,
+    });
+
+    expect(res.ok).toBe(true);
+    const memberWrite = writes.find((w) => w.path === `families/${FID}/members/${FID}-02`);
+    expect(memberWrite?.data).toMatchObject({ participation: 'inactive', inactiveSource: 'family' });
+    expect(memberWrite?.data['inactiveAt']).toBeInstanceOf(Date);
+  });
+
+  it('clears the timestamp on reactivate, with null - never undefined', async () => {
+    // A Firestore merge IGNORES undefined, which would strand the old
+    // inactiveAt on a member who is active again.
+    const inactive = { ...CHILD_DOC, participation: 'inactive', inactiveAt: new Date(), inactiveSource: 'family' };
+    const { writes } = useDb(seedFamily({ [`families/${FID}/members/${FID}-02`]: inactive }));
+
+    await updateMember({
+      fid: FID, mid: `${FID}-02`, body: { participation: 'active' },
+      actor: STAFF, canSetManagerFlag: true,
+    });
+
+    const w = writes.find((x) => x.path === `families/${FID}/members/${FID}-02`);
+    expect(w?.data).toMatchObject({ participation: 'active', inactiveAt: null, inactiveSource: null });
+  });
+
+  it('REFUSES to deactivate a child who is still on a teacher roster', async () => {
+    // Fail closed. Deactivating an enrolled child would drop them from the
+    // parent's view while attendance is still being taken for them.
+    const { writes } = useDb(
+      seedFamily({
+        [`families/${FID}/members/${FID}-02`]: CHILD_DOC,
+        [`families/${FID}/enrollments/e1`]: { status: 'active', enrolledMids: [`${FID}-02`] },
+      }),
+    );
+
+    const res = await updateMember({
+      fid: FID, mid: `${FID}-02`, body: { participation: 'inactive' },
+      actor: STAFF, canSetManagerFlag: true,
+    });
+
+    expect(res.ok).toBe(false);
+    expect(res.ok === false && res.body).toEqual({ error: 'enrolled-cannot-deactivate' });
+    expect(writes.find((w) => w.path.includes(`${FID}-02`))).toBeUndefined();
+  });
+
+  it('ALLOWS deactivating a child whose only enrollment is cancelled', async () => {
+    // N=2 on enrollment state: a stale cancelled row must not trap the family
+    // forever. Without the status check this would be indistinguishable.
+    const { writes } = useDb(
+      seedFamily({
+        [`families/${FID}/members/${FID}-02`]: CHILD_DOC,
+        [`families/${FID}/enrollments/e1`]: { status: 'cancelled', enrolledMids: [`${FID}-02`] },
+        [`families/${FID}/enrollments/e2`]: { status: 'active', enrolledMids: [`${FID}-99`] },
+      }),
+    );
+
+    const res = await updateMember({
+      fid: FID, mid: `${FID}-02`, body: { participation: 'inactive' },
+      actor: STAFF, canSetManagerFlag: true,
+    });
+
+    expect(res.ok).toBe(true);
+    expect(writes.some((w) => w.path === `families/${FID}/members/${FID}-02`)).toBe(true);
+  });
+
+  it('REFUSES to deactivate the last PARTICIPATING manager', async () => {
+    // assertNotLastManager counts the managers ARRAY only, so two co-managers
+    // could deactivate each other in sequence - each passing that check - and
+    // leave the family administered by nobody. Here the co-manager is already
+    // inactive, so the array still has 2 entries but only ONE of them counts.
+    const { writes } = useDb(
+      seedFamily({
+        [`families/${FID}`]: { fid: FID, managers: [`${FID}-01`, `${FID}-03`] },
+        [`families/${FID}/members/${FID}-01`]: MANAGER_DOC,
+        [`families/${FID}/members/${FID}-03`]: { ...CO_MANAGER_DOC, participation: 'inactive' },
+      }),
+    );
+
+    const res = await updateMember({
+      fid: FID, mid: `${FID}-01`, body: { participation: 'inactive' },
+      actor: STAFF, canSetManagerFlag: true,
+    });
+
+    expect(res.ok).toBe(false);
+    expect(res.ok === false && res.body).toEqual({ error: 'last-manager-cannot-deactivate' });
+    expect(writes.find((w) => w.path.includes(`${FID}-01`))).toBeUndefined();
+  });
+
+  it('ALLOWS deactivating a manager while another participating manager remains', async () => {
+    const { writes } = useDb(
+      seedFamily({
+        [`families/${FID}`]: { fid: FID, managers: [`${FID}-01`, `${FID}-03`] },
+        [`families/${FID}/members/${FID}-01`]: MANAGER_DOC,
+        [`families/${FID}/members/${FID}-03`]: CO_MANAGER_DOC,
+      }),
+    );
+
+    const res = await updateMember({
+      fid: FID, mid: `${FID}-01`, body: { participation: 'inactive' },
+      actor: STAFF, canSetManagerFlag: true,
+    });
+
+    expect(res.ok).toBe(true);
+    expect(writes.some((w) => w.path === `families/${FID}/members/${FID}-01`)).toBe(true);
+  });
+
+  it('REFUSES to make a Child a manager - the guard runs in BOTH directions', async () => {
+    // Refusing only Adult→Child would miss this: the same mutation happily
+    // promotes an existing Child to manager.
+    const { writes } = useDb(seedFamily({ [`families/${FID}/members/${FID}-02`]: CHILD_DOC }));
+
+    const res = await updateMember({
+      fid: FID, mid: `${FID}-02`, body: { manager: true },
+      actor: STAFF, canSetManagerFlag: true,
+    });
+
+    expect(res.ok).toBe(false);
+    expect(res.ok === false && res.body).toEqual({ error: 'manager-must-be-adult' });
+    expect(writes.find((w) => w.path.includes(`${FID}-02`))).toBeUndefined();
+  });
+
+  it('REFUSES to demote an existing manager to Child', async () => {
+    const { writes } = useDb(
+      seedFamily({
+        [`families/${FID}`]: { fid: FID, managers: [`${FID}-01`, `${FID}-03`] },
+        [`families/${FID}/members/${FID}-01`]: MANAGER_DOC,
+        [`families/${FID}/members/${FID}-03`]: CO_MANAGER_DOC,
+      }),
+    );
+
+    const res = await updateMember({
+      fid: FID, mid: `${FID}-01`,
+      body: { type: 'Child', schoolGrade: '5', birthMonthYear: '2015-05' },
+      actor: STAFF, canSetManagerFlag: true,
+    });
+
+    expect(res.ok).toBe(false);
+    expect(res.ok === false && res.body).toEqual({ error: 'manager-must-be-adult' });
+    expect(writes.find((w) => w.path.includes(`${FID}-01`))).toBeUndefined();
+  });
+
+  it('does not re-stamp inactiveAt on a patch that leaves participation alone', async () => {
+    const inactive = { ...CHILD_DOC, participation: 'inactive', inactiveAt: new Date('2020-01-01') };
+    const { writes } = useDb(seedFamily({ [`families/${FID}/members/${FID}-02`]: inactive }));
+
+    await updateMember({
+      fid: FID, mid: `${FID}-02`, body: { foodAllergies: 'Peanuts' },
+      actor: STAFF, canSetManagerFlag: true,
+    });
+
+    const w = writes.find((x) => x.path === `families/${FID}/members/${FID}-02`);
+    expect(w?.data).not.toHaveProperty('inactiveAt');
+    expect(w?.data).not.toHaveProperty('participation');
+  });
+});
+
 describe('deleteMember', () => {
   it('records the removed member with after: null', async () => {
     const { writes, deletes } = useDb(

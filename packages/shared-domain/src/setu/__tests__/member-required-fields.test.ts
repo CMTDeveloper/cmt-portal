@@ -145,4 +145,50 @@ describe('membersRequiringCompletion', () => {
     // Manager scope: own + non-manager dependents, but NEITHER pending row.
     expect(membersRequiringCompletion(all, 'F-01', true)).toEqual([manager, child]);
   });
+
+  // ── Inactive members do not block ─────────────────────────────────────────
+  //
+  // 🔴 Reported from production 2026-08-02. A father: *"Son Archish has already
+  // finished BV, system is forcing me to pick a grade for him. Similarly it is
+  // forcing pick details for spouse, she has other commitments... for Archish I
+  // need an option, I am blocked."*
+  //
+  // Both of his people are legitimately here - the son has history worth keeping
+  // and the spouse is on the family - they just are not participating. Before
+  // this the only two ways out were to invent a school grade or to delete the
+  // person, and deleting loses the history.
+  describe('inactive members', () => {
+    it('does NOT block on a member who no longer participates', () => {
+      const graduatedSon = { mid: 'F-07', manager: false, participation: 'inactive' as const };
+      const absentSpouse = { mid: 'F-08', manager: false, participation: 'inactive' as const };
+      const all = [manager, child, graduatedSon, absentSpouse];
+      expect(membersRequiringCompletion(all, 'F-01', true)).toEqual([manager, child]);
+    });
+
+    it('still blocks on an ACTIVE member - N=2, so "inactive" is not read as "all of them"', () => {
+      // One inactive sibling must not excuse the other. The single-inactive
+      // fixture would pass even if the filter dropped every dependent.
+      const inactiveSibling = { mid: 'F-07', manager: false, participation: 'inactive' as const };
+      const activeSibling = { mid: 'F-09', manager: false, participation: 'active' as const };
+      const all = [manager, inactiveSibling, activeSibling];
+      expect(membersRequiringCompletion(all, 'F-01', true)).toEqual([manager, activeSibling]);
+    });
+
+    it('treats an ABSENT participation field as active - every migrated doc predates it', () => {
+      // 2033 production member docs have no `participation`. If absent read as
+      // inactive, the gate would silently stop asking anyone for anything.
+      const legacyDoc = { mid: 'F-10', manager: false };
+      expect(membersRequiringCompletion([manager, legacyDoc], 'F-01', true)).toEqual([
+        manager,
+        legacyDoc,
+      ]);
+    });
+
+    it('excuses an inactive member from a PLAIN member scope too, not just a manager scope', () => {
+      // Otherwise a non-manager who was deactivated is trapped on
+      // /complete-profile by their own record, with no way to edit anyone.
+      const self = { mid: 'F-11', manager: false, participation: 'inactive' as const };
+      expect(membersRequiringCompletion([manager, self], 'F-11', false)).toEqual([]);
+    });
+  });
 });

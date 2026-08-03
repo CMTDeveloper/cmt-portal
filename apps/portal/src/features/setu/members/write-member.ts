@@ -97,6 +97,10 @@ export const patchMemberSchema = z
     firstName: z.string().min(1).optional(),
     lastName: z.string().min(1).optional(),
     type: z.enum(['Adult', 'Child']).optional(),
+    // Does this person still take part? See MemberDocSchema for why this is a
+    // third concept rather than a reuse of portalAccess/inviteStatus. Guarded
+    // below - it is not a free-for-all, and it is never a delete.
+    participation: z.enum(['active', 'inactive']).optional(),
     // Capture/write enum is Male|Female only. The read-validated MemberDocSchema
     // keeps 'PreferNotToSay' for the 3 internal sentinel-minting paths; this
     // WRITE route does not accept it.
@@ -502,6 +506,7 @@ export async function updateMember(args: {
         birthMonthYear: string | null;
         volunteeringSkills: string[] | null;
         foodAllergies: string | null;
+        participation?: 'active' | 'inactive';
       };
 
       // Security: ensure member belongs to caller's family by checking document path prefix
@@ -586,8 +591,87 @@ export async function updateMember(args: {
         oldPhoneHash ? txn.get(db.collection('contactKeys').doc(oldPhoneHash)) : Promise.resolve(null),
       ]);
 
+      // ── Participation guards ────────────────────────────────────────────────
+      //
+      // Marking someone inactive is how a family says "they have finished" or
+      // "they are not taking part" (reported 2026-08-02). It excuses them from
+      // the profile-completion gate, so it is also the obvious way to dodge
+      // required fields - hence guards, all of them INSIDE this transaction so
+      // the state they check cannot move underneath them.
+      //
+      // Reactivation is deliberately unguarded: this is a disable, and undoing a
+      // disable can never be the dangerous direction.
+      const deactivating =
+        data.participation === 'inactive' && memberData.participation !== 'inactive';
+
+      if (deactivating) {
+        // (a) Someone on a teacher's roster must not silently vanish from it.
+        //     Fail CLOSED: a child marked inactive while still enrolled would
+        //     disappear from the parent's view while attendance is still being
+        //     taken for them - the family would think they had withdrawn.
+        //     Read the whole subcollection and filter in memory rather than
+        //     `.where('status','==','active')`: a family has a handful of
+        //     enrollments, and it keeps this off the composite-index surface
+        //     entirely (an index this transaction needed but nobody deployed
+        //     would fail CLOSED here, blocking a family from a UI action).
+        const enrollSnap = await txn.get(
+          db.collection('families').doc(fid).collection('enrollments'),
+        );
+        const enrolledHere = enrollSnap.docs.some((e) => {
+          const en = e.data() as { status?: string; enrolledMids?: unknown };
+          if (en.status !== 'active') return false;
+          return Array.isArray(en.enrolledMids) && en.enrolledMids.includes(targetMid);
+        });
+        if (enrolledHere) {
+          throw Object.assign(new Error('enrolled-cannot-deactivate'), {
+            code: 'enrolled-cannot-deactivate',
+          });
+        }
+
+        // (b) The family must keep at least one PARTICIPATING manager.
+        //     `assertNotLastManager` only counts the managers ARRAY, so without
+        //     this two co-managers could deactivate each other in sequence -
+        //     each passing that check - and leave the family administered by
+        //     nobody. Counting participation is the whole point here.
+        if (memberData.manager === true) {
+          const siblingsSnap = await txn.get(
+            db.collection('families').doc(fid).collection('members'),
+          );
+          const otherActiveManagers = siblingsSnap.docs.filter((s) => {
+            const m = s.data() as { mid?: string; manager?: boolean; participation?: string };
+            return m.mid !== targetMid && m.manager === true && m.participation !== 'inactive';
+          });
+          if (otherActiveManagers.length === 0) {
+            throw Object.assign(new Error('last-manager-cannot-deactivate'), {
+              code: 'last-manager-cannot-deactivate',
+            });
+          }
+        }
+      }
+
+      // (c) A manager must be an Adult - in BOTH directions. Refusing only
+      //     Adult→Child would miss promoting an existing Child to manager, which
+      //     this same mutation permits.
+      const willBeManager = 'manager' in data ? data.manager === true : memberData.manager === true;
+      if (willBeManager && effectiveType === 'Child') {
+        throw Object.assign(new Error('manager-must-be-adult'), { code: 'manager-must-be-adult' });
+      }
+
       // Build update payload - only include fields that were provided
       const updates: Record<string, unknown> = { ...data };
+
+      // Stamp the participation transition server-side. `null` rather than
+      // `undefined` on reactivate: exactOptionalPropertyTypes is on, and a
+      // Firestore merge ignores undefined, which would strand the old timestamp.
+      if ('participation' in data) {
+        if (data.participation === 'inactive') {
+          updates['inactiveAt'] = new Date();
+          updates['inactiveSource'] = 'family';
+        } else {
+          updates['inactiveAt'] = null;
+          updates['inactiveSource'] = null;
+        }
+      }
 
       // birthMonth (1-12) is derived from birthMonthYear on any write that sets
       // it, keeping the two columns in sync without the client computing it.
@@ -691,6 +775,18 @@ export async function updateMember(args: {
     }
     if (err instanceof LastManagerError) {
       return { ok: false, status: 409, body: { error: 'last-manager' } };
+    }
+    // 409, not 403: the family is allowed to do this, just not in this order.
+    // Each refusal carries its own code so the UI can say WHY rather than
+    // showing one generic failure for three quite different situations.
+    if (code === 'enrolled-cannot-deactivate') {
+      return { ok: false, status: 409, body: { error: 'enrolled-cannot-deactivate' } };
+    }
+    if (code === 'last-manager-cannot-deactivate') {
+      return { ok: false, status: 409, body: { error: 'last-manager-cannot-deactivate' } };
+    }
+    if (code === 'manager-must-be-adult') {
+      return { ok: false, status: 409, body: { error: 'manager-must-be-adult' } };
     }
     throw err;
   }
