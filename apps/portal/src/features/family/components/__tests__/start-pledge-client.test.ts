@@ -43,6 +43,14 @@ describe('startPledgeCheckout', () => {
   it('distinguishes "enroll first" from "you already have one" - both are 409', async () => {
     fetchMock.mockResolvedValue(jsonResponse(409, { error: 'enrollment-required' }));
     expect(await startPledgeCheckout()).toEqual({ ok: false, reason: 'enrollment-required' });
+  });
+
+  it('distinguishes an EMPTIED enrollment from a missing one', async () => {
+    // Both are 409. Falling through to the catch-all would announce "you already
+    // have a monthly donation in progress" and hard-reload the family into the
+    // same dead end, for a state they are not in.
+    fetchMock.mockResolvedValue(jsonResponse(409, { error: 'no-enrolled-members' }));
+    expect(await startPledgeCheckout()).toEqual({ ok: false, reason: 'no-enrolled-members' });
 
     fetchMock.mockResolvedValue(jsonResponse(409, { error: 'already-active', pid: 'PLG-OLD' }));
     expect(await startPledgeCheckout()).toEqual({ ok: false, reason: 'already-live' });

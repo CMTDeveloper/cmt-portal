@@ -22,6 +22,59 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
+## 2026-08-03 - `68b0a8d`, `e14812c`, `4454e19` (+ the UI commit that follows them) - members gain `participation`; `PATCH /api/setu/members/{mid}` gains 3 new 409s; `POST /api/pledges/start` gains 409 `no-enrolled-members`
+
+**Action required: a new member field the app must read, and four new refusal codes it must not collapse.**
+
+Reported on production 2026-08-02: a father could not finish registration because the portal demanded a school grade for a son who had already completed Bala Vihar, and full contact details for a spouse who does not take part. There was no way to say either, so the family was stuck. A family can now retire a member instead of deleting them (deleting loses the history, which the office needs).
+
+### 1. New member fields (READ)
+
+Every member object the portal returns — `GET /api/setu/family`, the dashboard, the child profile — may now carry:
+
+```ts
+participation?: 'active' | 'inactive'   // ABSENT ⇒ active
+inactiveAt?: string | null              // ISO
+inactiveSource?: 'family' | 'legacy-migration' | null
+graduatedAt?: string | null             // ISO; stamped by the school-year rollover
+```
+
+🔴 **`participation` is optional and ABSENT MEANS ACTIVE.** All 2033 migrated member docs predate the field. A mirror written as `participation === 'active'` would treat every existing member as retired and empty the app. Write the check as `participation !== 'inactive'`, in ONE helper, and call it everywhere.
+
+An inactive member must still be **listed** (their history is the reason they are kept) but should be visibly labelled and excluded from anything that asks for their details or puts them on a roster.
+
+### 2. `PATCH /api/setu/members/{mid}` accepts `participation`
+
+```ts
+{ participation: 'active' | 'inactive' }
+```
+
+**Send it ALONE when retiring someone.** The route enforces required fields only for the fields a patch actually touches, so `{participation:'inactive'}` by itself is accepted for a child with no `schoolGrade` — which is the entire point. Bundling the usual field payload alongside drags those fields back into scope and 400s on the very member you are excusing.
+
+Three NEW **409** codes, each needing different words:
+
+| code | means | what to say |
+|---|---|---|
+| `enrolled-cannot-deactivate` | they are in an active enrollment's roster | "Cancel that enrollment first" |
+| `last-manager-cannot-deactivate` | they are the family's only participating manager | "Make someone else a manager first" |
+| `manager-must-be-adult` | a Child cannot be (or become) a manager | "Only an adult can be a family manager" |
+
+### 3. Child→Adult conversion: send the WHOLE adult record in one PATCH
+
+`type` was already patchable — this is not new — but it is now reachable from the completion screen, so it matters. **Sending `{type:'Adult'}` on its own 400s.** A `type` change re-evaluates *every* required field for the new type in the same request, so the app must collect `email`, `phone` and `volunteeringSkills` (≥1) and send them together with `type`. The portal also sends `schoolGrade: null`, since a grade is not true of an adult.
+
+### 4. `POST /api/pledges/start` gains a fourth 409: `no-enrolled-members`
+
+```ts
+{ error: 'no-enrolled-members' }   // note: NO `pid` field
+```
+
+The active Bala Vihar enrollment exists but names nobody — the usual cause is the only child having been converted to an Adult, which prunes them from `enrolledMids`. Without this the family could authorise a recurring bank mandate to fund nobody, and the portal has no cancel endpoint.
+
+**Do not fold it into the existing `already-started`/`already-active` branch.** A bare `status === 409` check tells the family they already have a monthly gift in progress and reloads them into the same dead end. It is also NOT `enrollment-required` — this family *is* enrolled, so "enrol in Bala Vihar first" is false. Discriminate on `error`, as `start-pledge-client.ts` does.
+
+---
+
 ## 2026-07-31 - `POST /api/setu/auth/verify-code` now NOTIFIES the manager on `pendingApproval`; `join-request/send` takes an optional `resend`
 
 **No response shapes changed.** One optional request field was added, and one route gained a side effect the app can now trigger.

@@ -209,6 +209,10 @@ export function DonationChoice({
         // that enrollment silently did not take, "please try again" would be a
         // lie. Name the real precondition.
         toast.error('Enroll in Bala Vihar first - then you can set up a monthly donation.');
+      } else if (result.reason === 'no-enrolled-members') {
+        // Enrolled, but the enrollment names nobody - the only child was
+        // changed to an adult. "Enroll first" would be false here.
+        toast.error('Your Bala Vihar enrollment has nobody in it - add a child before setting up a monthly donation.');
       } else if (result.reason === 'manager-required') {
         toast.error('Only the family manager can set up a monthly donation.');
       } else if (result.reason === 'no-email') {

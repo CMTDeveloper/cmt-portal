@@ -62,9 +62,33 @@ export async function POST(req: Request) {
   // family FIRST and then starts the pledge, so the intended flow satisfies
   // this by the time it arrives.
   const enrollments = await getEnrollments(session.fid);
-  if (!selectBalaViharEnrollment(enrollments)) {
+  const bv = selectBalaViharEnrollment(enrollments);
+  if (!bv) {
     // 409, not 403: the family is permitted to do this, just not yet.
     return NextResponse.json({ error: 'enrollment-required' }, { status: 409 });
+  }
+
+  // ...and that enrollment has to name somebody.
+  //
+  // The check above asks "is there an enrollment?", which is not the same
+  // question. `syncActiveEnrollmentMemberships` re-derives `enrolledMids` after
+  // every member change and DELIBERATELY permits an empty result - an active
+  // enrollment naming nobody is the truthful state once the last enrolled member
+  // leaves, and keeping stale mids would put a departed child on a teacher's
+  // roster. So a family that converts its only child to Adult (which the member
+  // edit screen has always allowed) keeps an ACTIVE Bala Vihar enrollment with
+  // zero members, satisfies every check above, and can authorise a recurring
+  // bank mandate that funds nobody.
+  //
+  // Fails CLOSED on an absent list: "is there anyone to fund?" has no yes there.
+  //
+  // A DISTINCT code from `enrollment-required` on purpose. This family IS
+  // enrolled, so "enroll in Bala Vihar first" would be false, and the client
+  // maps every OTHER 409 to "you already have a monthly donation in progress" -
+  // which would report a state they are not in and reload them into the same
+  // dead end.
+  if (!Array.isArray(bv.enrolledMids) || bv.enrolledMids.length === 0) {
+    return NextResponse.json({ error: 'no-enrolled-members' }, { status: 409 });
   }
 
   // ── An attempt they never finished must not block the next one ────────────
