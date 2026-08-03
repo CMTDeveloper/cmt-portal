@@ -1,6 +1,7 @@
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
 import { resolveSender } from '@/lib/aws/resolve-sender';
 import { torontoToday, daysUntil, formatPrasadDate } from './constants';
+import { SMS_OPT_OUT_SUFFIX } from '@/lib/branding';
 
 type Kind = 'weekBefore' | 'twoDayBefore';
 const KIND_BY_DAYS: Record<number, Kind> = { 7: 'weekBefore', 2: 'twoDayBefore' };
@@ -56,7 +57,8 @@ export async function sendDuePrasadReminders(now: Date = new Date()): Promise<Re
           : `Namaste ${mem.firstName ?? ''}! Your family's Bala Vihar prasad day ${lead} — ${when}. Please bring prasad for the assembly. — Chinmaya Mission Toronto`;
         const subject = proposed ? `Prasad Sunday — please confirm (${when})` : `Prasad reminder — ${when}`;
         if (mem.email) { await sender.sendEmail({ to: mem.email, subject, text: msg }); dispatched++; }
-        if (mem.phone) { await sender.sendSMS({ phone: mem.phone, message: msg }); dispatched++; }
+        // The TEXT carries the opt-out line; the email above does not need one.
+        if (mem.phone) { await sender.sendSMS({ phone: mem.phone, message: msg + SMS_OPT_OUT_SUFFIX }); dispatched++; }
       }
       // Zero messages dispatched (no manager, or no manager has an email/phone)
       // → do NOT stamp and count as failed, so the family stays visible/retryable

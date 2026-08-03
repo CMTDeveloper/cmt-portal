@@ -3,6 +3,7 @@ import { resolveSender } from '@/lib/aws/resolve-sender';
 import { sendManagedEmail } from '@/lib/aws/send-managed-email';
 import { setuJoinRequestEmail } from '@/lib/aws/templates/setu-join-request-email';
 import { createJoinRequest, markJoinRequestNotified } from './create-request';
+import { SMS_OPT_OUT_SUFFIX } from '@/lib/branding';
 
 /**
  * Minimum gap between notifications about the SAME join request.
@@ -130,7 +131,9 @@ export async function requestFamilyAccess(
       perManager.push(
         sender.sendSMS({
           phone: m.phone,
-          message: `Hari OM! ${result.requesterContact} asked to join your ${result.familyName} family on Chinmaya Setu. Review: ${reviewUrl}`,
+          // SMS_OPT_OUT_SUFFIX only on the TEXT, never the email: this arrives
+          // unprompted, which is the category carriers require an opt-out on.
+          message: `Hari OM! ${result.requesterContact} asked to join your ${result.familyName} family on Chinmaya Setu. Review: ${reviewUrl}${SMS_OPT_OUT_SUFFIX}`,
         }),
       );
     }

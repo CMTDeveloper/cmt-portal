@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { toast, SetuLogo, SetuAvatar, SetuIcon, Rosette } from '@cmt/ui';
 import { CspRoot, StepHeader } from '@/features/family/components/atoms';
 import { sendJoinRequestClient } from '@/features/setu/join-request';
-import { CONTACT_ACCOUNT_ISSUE_MAILTO } from '@/lib/branding';
+import { CONTACT_ACCOUNT_ISSUE_MAILTO, SMS_CONSENT_NOTICE, PRIVACY_PATH } from '@/lib/branding';
 import { flags } from '@/lib/flags';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -95,7 +95,14 @@ function RegisterPrototype() {
       )}
 
       <p style={{ marginTop: 18, fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>
-        We use email + phone only to prevent duplicate family records. Your info isn't shared outside CMT.
+        We use email + phone only to prevent duplicate family records. Your info isn&apos;t shared outside CMT.
+      </p>
+      {/* The phone entered here becomes the number we may text a sign-in code
+          to, so the opt-in disclosure belongs on this screen too - carriers
+          want it at every point of collection, not just the one we screenshot. */}
+      <p data-testid="sms-consent" style={{ marginTop: 8, fontSize: 11.5, color: 'var(--muted)', lineHeight: 1.45 }}>
+        {SMS_CONSENT_NOTICE}{' '}
+        <Link href={PRIVACY_PATH} style={{ color: 'var(--accentDeep)' }}>Privacy policy</Link>.
       </p>
     </>
   );
