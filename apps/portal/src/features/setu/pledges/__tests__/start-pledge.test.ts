@@ -93,6 +93,12 @@ describe('startPledge', () => {
     const payload = mockSetupLink.mock.calls.at(-1)![0] as { metadata: Record<string, string> };
     expect(payload.metadata['fid']).toBe('CMT-A');
     expect(payload.metadata['pid']).toBeTruthy();
+    // Until 2026-08-03 this path sent NO campaign and NO source at all, so every
+    // live monthly mandate reached CMT's accounting unattributed. The doc names
+    // a different campaign for the PAD flow than for the one-time gift - one
+    // word apart, and the difference decides which report it lands in.
+    expect(payload.metadata['campaign']).toBe('BalaViharPledge');
+    expect(payload.metadata['source']).toBe('setu');
   });
 
   it('still identifies the family when publicFid has not been minted yet', async () => {

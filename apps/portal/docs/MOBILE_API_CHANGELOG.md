@@ -22,7 +22,7 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
-## 2026-08-03 - `68b0a8d`, `e14812c`, `4454e19` (+ the UI commit that follows them) - members gain `participation`; `PATCH /api/setu/members/{mid}` gains 3 new 409s; `POST /api/pledges/start` gains 409 `no-enrolled-members`
+## 2026-08-03 - `68b0a8d`..`HEAD` on `develop` - members gain `participation`; `PATCH /api/setu/members/{mid}` gains 3 new 409s; `POST /api/pledges/start` gains 409 `no-enrolled-members`; `checkout` drops `type:"general"`; Stripe metadata matches the integration doc
 
 **Action required: a new member field the app must read, and four new refusal codes it must not collapse.**
 
@@ -77,7 +77,29 @@ The active Bala Vihar enrollment exists but names nobody — the usual cause is 
 
 **Do not fold it into the existing `already-started`/`already-active` branch.** A bare `status === 409` check tells the family they already have a monthly gift in progress and reloads them into the same dead end. It is also NOT `enrollment-required` — this family *is* enrolled, so "enrol in Bala Vihar first" is false. Discriminate on `error`, as `start-pledge-client.ts` does.
 
-### 5. Staff CSV: one new column, no dropped rows
+### 5. `POST /api/setu/donations/checkout` no longer accepts `type: "general"`
+
+**No action needed for the current app — but do not add it back.** `CheckoutVars` in `src/api/donations.ts` is already `type: 'enrollment'`, which is the only member left. A `type:"general"` body now returns **400 `bad-request`**.
+
+Why it went: general year-round giving moved off-portal on 2026-06-04 and `/family/donate` has redirected home ever since — but the ROUTE still accepted the type, so an authenticated manager could hand-POST it and mint a real Stripe checkout under a campaign nobody had defined. A dead branch that can still take money is not dead.
+
+⚠️ **`DonationDocSchema.type` still includes `'general'` and always will.** Donation documents carrying it are in production from before the UI was withdrawn. If the app mirrors the donation-history shape, keep `'general'` in its READ union or those rows will fail to parse. Removing a type from the WRITE path never licenses removing it from the READ path.
+
+### 6. Stripe metadata now matches CMT's integration doc (provider-side)
+
+Neither the request nor the `{url, did}` / `{pid, checkoutUrl}` responses changed — this is what the portal sends onward to CMT's payment service, recorded because the app's own donate flow triggers it:
+
+```ts
+// one-time donation                    // monthly PAD
+{ campaign: 'BalaViharDonation',        { campaign: 'BalaViharPledge',
+  source: 'setu',                         source: 'setu',
+  programKey: 'bala-vihar',               pid: 'PLG-…',
+  fid, familyId }                         fid, familyId }
+```
+
+Previously the donation put `'setu'` — the SOURCE — into the CAMPAIGN field (so campaign was never populated and source was never sent) and the pledge path sent neither. A gift toward a program CMT has not named a campaign for gets `SetuDonation`, never `BalaViharDonation`, with the real `programKey` beside it.
+
+### 7. Staff CSV: one new column, no dropped rows
 
 The roster/enrollment person CSV gains a trailing **`participating`** column (`yes` / `no`). Retired members are **exported, not filtered out** — the office asked to keep the history, and a row silently missing from a roster is what makes staff stop trusting the export. Any mobile or downstream consumer that pins the column count must be updated.
 

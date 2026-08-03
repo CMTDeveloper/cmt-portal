@@ -29,7 +29,6 @@ describe('DonateForm', () => {
 
     render(
       <DonateForm
-        mode="enrollment"
         eid="CMT-AAAA1111-bv-brampton-fall-2026"
         suggestedAmount={500}
         periodLabel="Fall 2026"
@@ -70,7 +69,6 @@ describe('DonateForm', () => {
   it('does not require Bala Vihar acknowledgements for other enrollment donations', () => {
     render(
       <DonateForm
-        mode="enrollment"
         eid="CMT-AAAA1111-tabla-2026"
         suggestedAmount={500}
         periodLabel="2026"

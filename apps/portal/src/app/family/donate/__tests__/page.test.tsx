@@ -15,7 +15,7 @@ vi.mock('@/features/family/components/atoms', () => ({
   CspRoot: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
 vi.mock('@/features/family/components/donate-form', () => ({
-  DonateForm: (props: { mode: string }) => <div data-testid="donate-form">donate-form:{props.mode}</div>,
+  DonateForm: (props: { eid: string }) => <div data-testid="donate-form">donate-form:{props.eid}</div>,
 }));
 
 const mockGetCurrentFamily = vi.fn();
@@ -66,7 +66,9 @@ describe('DonatePage — flag on', () => {
     ]);
     const page = await DonatePage({ searchParams: Promise.resolve({ eid: 'fid1-oid1' }) });
     render(page);
-    expect(screen.getAllByText(/donate-form:enrollment/).length).toBeGreaterThan(0);
+    // The form now renders only for a resolved enrollment, so its eid is the
+    // proof that the page found one - `mode` no longer exists.
+    expect(screen.getAllByText(/donate-form:fid1-oid1/).length).toBeGreaterThan(0);
   });
 
   it('shows teacher-managed message instead of the Stripe form', async () => {

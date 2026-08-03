@@ -40,9 +40,12 @@ export default async function DonatePage({
   const { family, isManager } = familyData;
   const { eid } = await searchParams;
 
-  // Resolve mode. `?eid` → bala-vihar (amount pinned to enrollment snapshot/
-  // override); no eid → general year-round giving.
-  let mode: 'enrollment' | 'general' = 'general';
+  // Did `?eid` resolve to one of this family's ACTIVE enrollments? That is the
+  // only thing this page collects for. It used to be a two-valued `mode` whose
+  // other value was 'general', which read like a donation type the portal still
+  // offered - it has not since 2026-06-04, and as of 2026-08-03 the API refuses
+  // the type outright. A boolean says what is actually being decided.
+  let hasEnrollment = false;
   let suggestedAmount: number | null = null;
   let periodLabel: string | null = null;
   let programLabel: string | null = null;
@@ -57,7 +60,7 @@ export default async function DonatePage({
     const enrollments = await getEnrollments(family.fid);
     const enrollment = enrollments.find((e) => e.eid === eid && e.status === 'active');
     if (enrollment) {
-      mode = 'enrollment';
+      hasEnrollment = true;
       resolvedEid = enrollment.eid;
       suggestedAmount = enrollment.effectiveSuggestedAmount;
       periodLabel = enrollment.termLabel;
@@ -76,19 +79,17 @@ export default async function DonatePage({
     // If the eid is stale/unknown, fall through to general giving rather than erroring.
   }
 
-  // General year-round giving is handled off-portal (CMT decision 2026-06-04):
-  // only the enrollment donation (?eid=) collects through the portal now. A bare
-  // /family/donate (or a stale eid that fell through to 'general') redirects home.
-  if (mode === 'general') {
+  // Year-round general giving is handled off-portal (CMT decision 2026-06-04):
+  // only the enrollment donation (?eid=) collects through the portal. A bare
+  // /family/donate, or a stale/unknown eid, redirects home rather than showing a
+  // form that cannot be submitted.
+  if (!hasEnrollment) {
     redirect('/family');
   }
 
-  const heading = mode === 'enrollment' ? 'Your donation' : 'Make a donation';
-  const backHref = mode === 'enrollment' && programKey ? `/family/enroll/${programKey}` : '/family';
-  const sub =
-    mode === 'enrollment'
-      ? `${programLabel ?? 'Program'}${periodLabel ? ` · ${periodLabel}` : ''} · ${family.location}`
-      : 'A charitable donation to Chinmaya Mission Toronto';
+  const heading = 'Your donation';
+  const backHref = programKey ? `/family/enroll/${programKey}` : '/family';
+  const sub = `${programLabel ?? 'Program'}${periodLabel ? ` · ${periodLabel}` : ''} · ${family.location}`;
 
   // ── The monthly alternative (2026-07-27, Vaibhav) ─────────────────────────
   // "This should not be separate. It's part of Bala Vihar. Instead of straight
@@ -102,7 +103,7 @@ export default async function DonatePage({
   // with no Bala Vihar enrollment at all - the state in the screenshot that
   // prompted the change.
   const pledgeEligible =
-    flags.setuPledge && mode === 'enrollment' && programKey === BALA_VIHAR && !teacherManagedPayment;
+    flags.setuPledge && programKey === BALA_VIHAR && !teacherManagedPayment;
   // Same repair as the enroll page and the dashboard: an attempt the family
   // never submitted must not block the ONE-TIME payment either. Reachable
   // without touching the enroll page - during a multi-offering window
@@ -147,7 +148,7 @@ export default async function DonatePage({
   const pledgeCoversThis =
     existingPledge?.status === 'started' || existingPledge?.status === 'active';
 
-  const form = pledgeCoversThis && mode === 'enrollment' ? (
+  const form = pledgeCoversThis ? (
     <div style={{ padding: '16px 18px', background: 'var(--accentSoft)', color: 'var(--accentDeep)', borderRadius: 'var(--radius)', fontSize: 14, lineHeight: 1.55 }}>
       <strong>
         {existingPledge?.status === 'active'
@@ -180,7 +181,6 @@ export default async function DonatePage({
   ) : isManager ? (
     <>
     <DonateForm
-      mode={mode}
       eid={resolvedEid}
       suggestedAmount={suggestedAmount}
       periodLabel={periodLabel}
@@ -225,7 +225,7 @@ export default async function DonatePage({
               <Link href={backHref} className="focus-ring" style={{ background: 'transparent', border: 0, padding: 6, marginLeft: -6, color: 'var(--body-text)', display: 'inline-flex' }}>
                 <SetuIcon.back />
               </Link>
-              <span style={{ fontSize: 14, fontWeight: 600 }}>{mode === 'enrollment' ? 'Donation' : 'Giving'}</span>
+              <span style={{ fontSize: 14, fontWeight: 600 }}>Donation</span>
               <span style={{ width: 32 }} />
             </div>
             <div style={{ flex: 1, overflowY: 'auto', padding: '20px 18px 84px' }}>
@@ -244,7 +244,7 @@ export default async function DonatePage({
       <div className="hidden md:block">
         <header style={{ marginBottom: 28 }}>
           <Link href={backHref} className="focus-ring" style={{ background: 'transparent', border: 0, color: 'var(--body-text)', fontSize: 13, padding: 0, marginBottom: 10, display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none' }}>
-            <SetuIcon.back /> {mode === 'enrollment' ? 'Back to enrollment' : 'Back to dashboard'}
+            <SetuIcon.back /> Back to enrollment
           </Link>
           <div>
             <p style={{ fontSize: 11, letterSpacing: '.16em', textTransform: 'uppercase', color: 'var(--muted)' }}>{sub}</p>

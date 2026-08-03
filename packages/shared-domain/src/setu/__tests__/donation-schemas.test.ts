@@ -17,10 +17,13 @@ describe('CheckoutInputSchema', () => {
     if (r.success) expect(r.data.coverFee).toBe(false); // default
   });
 
-  it('accepts a valid general checkout', () => {
-    const r = CheckoutInputSchema.safeParse({ type: 'general', amountCAD: 100, coverFee: true });
-    expect(r.success).toBe(true);
-    if (r.success) expect(r.data.coverFee).toBe(true);
+  it('REFUSES a general checkout — the type was removed 2026-08-03', () => {
+    // The UI had already been withdrawn (CMT decision 2026-06-04: /family/donate
+    // redirects home on mode==='general'), but the ROUTE still accepted it. An
+    // authenticated manager hand-POSTing this could still mint a real Stripe
+    // checkout, under a campaign nobody had defined. A dead branch that can
+    // still take money is not dead.
+    expect(CheckoutInputSchema.safeParse({ type: 'general', amountCAD: 100, coverFee: true }).success).toBe(false);
   });
 
   it('rejects enrollment without eid', () => {
@@ -32,15 +35,15 @@ describe('CheckoutInputSchema', () => {
   });
 
   it('rejects non-integer amounts', () => {
-    expect(CheckoutInputSchema.safeParse({ type: 'general', amountCAD: 50.5 }).success).toBe(false);
+    expect(CheckoutInputSchema.safeParse({ type: 'enrollment', eid: 'e1', amountCAD: 50.5 }).success).toBe(false);
   });
 
   it('rejects amount < 1', () => {
-    expect(CheckoutInputSchema.safeParse({ type: 'general', amountCAD: 0 }).success).toBe(false);
+    expect(CheckoutInputSchema.safeParse({ type: 'enrollment', eid: 'e1', amountCAD: 0 }).success).toBe(false);
   });
 
   it('rejects amount above the 100000 cap', () => {
-    expect(CheckoutInputSchema.safeParse({ type: 'general', amountCAD: 100001 }).success).toBe(false);
+    expect(CheckoutInputSchema.safeParse({ type: 'enrollment', eid: 'e1', amountCAD: 100001 }).success).toBe(false);
   });
 });
 
@@ -53,12 +56,12 @@ describe('DonationDocSchema', () => {
     donorMid: 'fid1-01',
     donorName: 'Raj Patel',
     donorEmail: 'raj@example.com',
-    type: 'general' as const,
+    type: 'enrollment' as const,
     programKey: null,
     programLabel: null,
     pid: null,
     eid: null,
-    label: 'General Donation — Chinmaya Mission Toronto',
+    label: 'Bala Vihar Donation — 2026-27',
     amountCAD: 100,
     coverFee: false,
     feeCAD: 0,
@@ -68,8 +71,17 @@ describe('DonationDocSchema', () => {
     updatedAt: new Date(),
   };
 
-  it('accepts a valid general donation doc', () => {
+  it('still READS a doc with null program fields — production has them on file', () => {
     expect(DonationDocSchema.safeParse(valid).success).toBe(true);
+  });
+
+  it('STILL READS a retired general donation — narrowing the enum would orphan them', () => {
+    // The write path no longer accepts `type:'general'`, but documents carrying
+    // it are in production from before the UI was withdrawn. A doc schema
+    // validates on READ; tightening this enum would make every one of them fail
+    // to parse, and the family's own donation history would 500.
+    const legacyGeneral = { ...valid, type: 'general' as const, label: 'General Donation — Chinmaya Mission Toronto' };
+    expect(DonationDocSchema.safeParse(legacyGeneral).success).toBe(true);
   });
 
   it('accepts an enrollment doc with program + pid + eid set', () => {
@@ -127,9 +139,5 @@ describe('checkoutLineItemName', () => {
 
   it('falls back to "Program" when the program label is missing', () => {
     expect(checkoutLineItemName('enrollment')).toBe('Program Donation');
-  });
-
-  it('names a general gift', () => {
-    expect(checkoutLineItemName('general')).toBe('General Donation — Chinmaya Mission Toronto');
   });
 });

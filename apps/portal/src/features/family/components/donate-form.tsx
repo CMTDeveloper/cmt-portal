@@ -6,12 +6,11 @@ import { toast } from '@cmt/ui';
 import { processingFeeCAD } from '@cmt/shared-domain';
 
 export interface DonateFormProps {
-  mode: 'enrollment' | 'general';
   eid: string | null;
-  /** bala-vihar floor (give >=); null for general giving. */
+  /** The enrollment's floor - give this or more. */
   suggestedAmount: number | null;
   periodLabel: string | null;
-  /** bala-vihar quick-pick chips; empty for general. */
+  /** Quick-pick amount chips. */
   tiers: number[];
   requiresAcknowledgements?: boolean;
 }
@@ -33,23 +32,24 @@ function safeFrom(path: string): string {
 }
 
 export function DonateForm({
-  mode,
   eid,
   suggestedAmount,
   periodLabel,
   tiers,
-  requiresAcknowledgements = mode === 'enrollment',
+  requiresAcknowledgements = true,
 }: DonateFormProps) {
   const router = useRouter();
-  const floor = mode === 'enrollment' ? (suggestedAmount ?? 1) : 1;
-  const [amount, setAmount] = useState<number>(mode === 'enrollment' ? floor : 0);
+  // The form only ever renders for a resolved enrollment now - /family/donate
+  // redirects home without one, and the API refuses any non-enrollment type.
+  const floor = suggestedAmount ?? 1;
+  const [amount, setAmount] = useState<number>(floor);
   const [coverFee, setCoverFee] = useState(false);
   const [acceptedDisclaimers, setAcceptedDisclaimers] = useState<boolean[]>(
     () => BALA_VIHAR_DONATION_DISCLAIMERS.map(() => false),
   );
   const [pending, setPending] = useState(false);
 
-  const belowFloor = mode === 'enrollment' && amount < floor;
+  const belowFloor = amount < floor;
   const needsDisclaimers = requiresAcknowledgements;
   const allDisclaimersAccepted = !needsDisclaimers || acceptedDisclaimers.every(Boolean);
   const invalid = amount < 1 || belowFloor || !allDisclaimersAccepted;
@@ -70,10 +70,7 @@ export function DonateForm({
     if (invalid) return;
     setPending(true);
     try {
-      const body =
-        mode === 'enrollment'
-          ? { type: 'enrollment', eid, amountCAD: amount, coverFee }
-          : { type: 'general', amountCAD: amount, coverFee };
+      const body = { type: 'enrollment', eid, amountCAD: amount, coverFee };
 
       const res = await fetch('/api/setu/donations/checkout', {
         method: 'POST',
@@ -169,7 +166,7 @@ export function DonateForm({
           </div>
         )}
 
-        {mode === 'enrollment' && (
+        {(
           <div style={{ marginTop: 10, padding: '10px 12px', background: 'var(--bg)', borderRadius: 'var(--radiusSm)', fontSize: 11, color: belowFloor ? 'var(--err)' : 'var(--muted)', textAlign: 'center', lineHeight: 1.5 }}>
             {belowFloor
               ? `Suggested amount is $${floor}. To give less, please contact the welcome team.`
