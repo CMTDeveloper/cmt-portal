@@ -1,23 +1,23 @@
 import { connection } from 'next/server';
 import Link from 'next/link';
 import { getLevels } from '@/features/setu/teacher/levels';
-import { findUnassignedStudents, type UnassignedStudent } from '@/features/setu/teacher/welcome-read';
+import { findUnassignedStudentsByLocation } from '@/features/setu/teacher/welcome-read';
 import { levelGradeSummary, type Location } from '@cmt/shared-domain';
+import { denyUnlessAdmin } from '@/lib/require-admin-page';
 
 export const metadata = { title: 'Levels & rosters — CMT Welcome' };
 
 export default async function WelcomeLevelsPage() {
   await connection();
+  const denied = await denyUnlessAdmin();
+  if (denied) return denied;
 
   const levels = (await getLevels()).filter((l) => l.enabled);
   const locations = [...new Set(levels.map((l) => l.location))] as Location[];
 
-  const unassignedByLocation = new Map<Location, UnassignedStudent[]>();
-  await Promise.all(
-    locations.map(async (loc) => {
-      unassignedByLocation.set(loc, await findUnassignedStudents(loc));
-    }),
-  );
+  // The levels we already hold are passed straight in — the worklist used to
+  // re-read them from Firestore once per location.
+  const unassignedByLocation = await findUnassignedStudentsByLocation(levels);
 
   return (
     <div className="px-[18px] pt-[14px] pb-[90px] md:p-0" style={{ maxWidth: 760 }}>
