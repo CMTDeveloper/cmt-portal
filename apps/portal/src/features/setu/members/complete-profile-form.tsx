@@ -73,6 +73,13 @@ interface MemberDraft {
   schoolGrade: string;
   birthMonth: string; // '1'..'12'
   birthYear: string;
+  /**
+   * The two answers this screen can give about a member's STATUS rather than
+   * their details (production reports 2026-08-02). Both start at the member's
+   * stored value, so a family that touches neither behaves exactly as before.
+   */
+  type: 'Adult' | 'Child';
+  participation: 'active' | 'inactive';
 }
 
 function seedDraft(m: MemberDoc): MemberDraft {
@@ -97,7 +104,36 @@ function seedDraft(m: MemberDoc): MemberDraft {
     schoolGrade: m.schoolGrade ?? '',
     birthMonth,
     birthYear,
+    type: m.type,
+    // Absent ⇒ active, the same rule `isParticipating()` holds server-side. An
+    // already-inactive member never reaches this screen (they are filtered out
+    // of `membersRequiringCompletion`), so in practice this is always 'active'.
+    participation: m.participation === 'inactive' ? 'inactive' : 'active',
   };
+}
+
+/**
+ * The required fields the SERVER record is missing, evaluated for `type`.
+ *
+ * Derived from the stored member and NEVER from the draft, which is what keeps
+ * the issue-#18 fix intact: the set cannot shrink as the user types. It changes
+ * only when the user deliberately flips the member's type, and then it changes
+ * to the whole matrix for the new type - which is exactly what the write route
+ * will demand in the same request (`typeChanged` widens its scope to everything).
+ */
+function missingForType(m: MemberDoc, type: 'Adult' | 'Child'): MemberRequiredField[] {
+  return whatsMissingForMember({
+    type,
+    gender: m.gender,
+    firstName: m.firstName,
+    lastName: m.lastName,
+    foodAllergies: m.foodAllergies,
+    email: m.email,
+    phone: m.phone,
+    volunteeringSkills: m.volunteeringSkills,
+    schoolGrade: m.schoolGrade,
+    birthMonthYear: m.birthMonthYear,
+  });
 }
 
 // The effective member shape implied by a draft, used to re-check completeness
@@ -107,7 +143,10 @@ function draftToMemberShape(m: MemberDoc, d: MemberDraft) {
   const birthMonthYear = monthNum && d.birthYear ? `${d.birthYear}-${String(monthNum).padStart(2, '0')}` : '';
   const foodAllergies = d.noAllergies ? NO_ALLERGIES : d.foodAllergies.trim();
   return {
-    type: m.type,
+    // The DRAFT's type, not the stored one: a child the family has just marked
+    // as "now an adult" must be judged against the adult matrix from that click
+    // onward, or this screen would let them Save a body the write route rejects.
+    type: d.type,
     gender: d.gender || null,
     // Use the draft's name when the member is filling in a missing one; fall back
     // to the stored value (a member who already has a name never edits it here).
@@ -147,6 +186,11 @@ function validateMember(m: MemberDoc, d: MemberDraft): {
   missing: MemberRequiredField[];
   messages: Partial<Record<MemberRequiredField, string>>;
 } {
+  // Someone the family has said no longer takes part has nothing outstanding.
+  // This mirrors `membersRequiringCompletion()`, which drops inactive members
+  // server-side - but that reads the SAVED value, and the whole point of this
+  // screen is to let the family make the change before anything is saved.
+  if (d.participation === 'inactive') return { missing: [], messages: {} };
   const shape = draftToMemberShape(m, d);
   const missing = whatsMissingForMember(shape);
   const messages: Partial<Record<MemberRequiredField, string>> = {};
@@ -374,7 +418,27 @@ export function CompleteProfileForm() {
       for (const member of scopedMembers) {
         const draft = drafts[member.mid];
         if (!draft) continue;
-        if (isMemberComplete(member)) continue;
+
+        // Retiring someone goes ALONE, and that is load-bearing rather than
+        // tidy. `firstMissingRequiredFieldForPatch` enforces only the fields a
+        // patch actually touches, so `{participation:'inactive'}` by itself is
+        // accepted for a child with no school grade - which is the entire point.
+        // Sending the usual field bundle alongside would pull schoolGrade and
+        // birthMonthYear back into scope and 400 on the very member we are
+        // excusing, leaving the family exactly as stuck as before.
+        if (draft.participation === 'inactive') {
+          const result = await patchMemberClient(member.mid, { participation: 'inactive' });
+          if (!result.ok) {
+            anyFailed = true;
+            toast.error(memberWriteErrorMessage({ error: result.error }));
+          }
+          continue;
+        }
+
+        const typeChanged = draft.type !== member.type;
+        // A complete member needs no write - UNLESS the family just changed
+        // what they are, which is a real change to persist.
+        if (isMemberComplete(member) && !typeChanged) continue;
 
         const monthNum = draft.birthMonth ? Number(draft.birthMonth) : null;
         const birthMonthYear =
@@ -382,7 +446,7 @@ export function CompleteProfileForm() {
         const foodAllergies = draft.noAllergies ? NO_ALLERGIES : draft.foodAllergies.trim() || null;
 
         const body: Record<string, unknown> = {
-          type: member.type,
+          type: draft.type,
           // Only send a name when non-empty (the server requires min length 1);
           // for a member filling in a missing name this is the new value, for one
           // that already had a name it's the unchanged existing value.
@@ -393,7 +457,11 @@ export function CompleteProfileForm() {
           email: draft.email.trim() || null,
           phone: draft.phone.trim() || null,
           volunteeringSkills: draft.volunteeringSkills,
-          schoolGrade: draft.schoolGrade.trim() || null,
+          // A school grade is not true of an adult. Leaving the stored value
+          // behind would keep "Grade 12" on the roster, the CSV export and the
+          // member page for someone the family has just told us has finished.
+          // Their birth month, by contrast, is still true - it stays.
+          schoolGrade: typeChanged && draft.type === 'Adult' ? null : draft.schoolGrade.trim() || null,
           birthMonthYear,
           ...(birthMonthYear ? { birthMonth: monthNum } : {}),
         };
@@ -503,8 +571,35 @@ export function CompleteProfileForm() {
       (f) => !UNFILLABLE_FIELDS.includes(f),
     );
     const fieldErr = (f: MemberRequiredField) => (showErrors ? messages[f] : undefined);
-    // Which fields to render is frozen to the server's missing set at load.
-    const show = (f: MemberRequiredField) => missing.includes(f);
+    // Which fields to render is frozen to the SERVER's missing set - `missing`
+    // while the type is unchanged, re-derived for the new type if the family
+    // flipped it. Never derived from the draft, so nothing unmounts mid-typing.
+    const effectiveMissing =
+      draft.type === member.type ? missing : missingForType(member, draft.type);
+    const retired = draft.participation === 'inactive';
+    const converted = draft.type !== member.type;
+    // A retired member is asked for nothing at all - not even the fields that
+    // are still blank. The card collapses to the explanation + Undo.
+    const show = (f: MemberRequiredField) => !retired && effectiveMissing.includes(f);
+    // Saying "I no longer take part" about YOURSELF, while signed in and using
+    // the portal, is a way to skip your own required fields rather than an
+    // answer - so the action is offered for everyone else and never for you.
+    // (Your own record is the only manager that can appear in this list; the
+    // completion scope excludes co-managers, who complete their own.)
+    const canRetire = member.mid !== data.currentMid;
+    const undoBtn = (
+      <button
+        type="button"
+        className="btn btn--g"
+        data-testid={`member-undo-${member.mid}`}
+        onClick={() =>
+          update(member.mid, { type: member.type, participation: 'active', schoolGrade: member.schoolGrade ?? '' })
+        }
+        style={{ fontSize: 12.5, padding: '6px 12px' }}
+      >
+        Undo
+      </button>
+    );
     return (
       <div
         key={member.mid}
@@ -521,21 +616,78 @@ export function CompleteProfileForm() {
           {`${member.firstName ?? ''} ${member.lastName ?? ''}`.trim() || (data.isManager ? 'New member' : 'Your details')}
         </div>
         <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 14 }}>
-          {member.type}
+          {draft.type}
           {' · '}
-          {ready
-            ? 'all set ✓'
-            : liveRemaining.length > 0
-              ? `still needs ${liveRemaining.map((f) => FIELD_LABEL[f]).join(', ')}`
-              : 'almost there — check the highlighted fields'}
+          {retired
+            ? 'no longer taking part'
+            : ready
+              ? 'all set ✓'
+              : liveRemaining.length > 0
+                ? `still needs ${liveRemaining.map((f) => FIELD_LABEL[f]).join(', ')}`
+                : 'almost there — check the highlighted fields'}
         </div>
+
+        {/* Retired: the record and its history stay exactly where they are, we
+            simply stop asking for details. Nothing below renders, because there
+            is nothing left to ask - which is the whole point of the action. */}
+        {retired && (
+          <div data-testid={`member-retired-${member.mid}`}>
+            <p style={{ fontSize: 13, lineHeight: 1.55, marginBottom: 12 }}>
+              We won&apos;t ask for {member.firstName || 'their'} details any more. Their record and
+              past attendance are kept — you can bring them back any time from Family members.
+            </p>
+            {undoBtn}
+          </div>
+        )}
+
+        {!retired && (canRetire || draft.type === 'Child') && (
+          <div
+            className="row"
+            style={{ gap: 8, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}
+          >
+            {/* Reported 2026-08-02: a father was forced to pick a school grade
+                for a son who had already finished Bala Vihar. The answer is not
+                a grade - it is that the son is an adult now, or that he no
+                longer takes part. These are those two answers. */}
+            {draft.type === 'Child' && !converted && (
+              <button
+                type="button"
+                className="btn btn--s"
+                data-testid={`member-to-adult-${member.mid}`}
+                onClick={() => update(member.mid, { type: 'Adult' })}
+                style={{ fontSize: 12.5, padding: '6px 12px' }}
+              >
+                Now an adult
+              </button>
+            )}
+            {canRetire && !converted && (
+              <button
+                type="button"
+                className="btn btn--s"
+                data-testid={`member-retire-${member.mid}`}
+                onClick={() => update(member.mid, { participation: 'inactive' })}
+                style={{ fontSize: 12.5, padding: '6px 12px' }}
+              >
+                No longer participating
+              </button>
+            )}
+            {converted && (
+              <>
+                <span style={{ fontSize: 12.5, color: 'var(--muted)' }}>
+                  Marked as an adult — please add the details below.
+                </span>
+                {undoBtn}
+              </>
+            )}
+          </div>
+        )}
 
         {/* firstName / lastName / type have NO input on this screen (they're set
             at registration). If one is somehow missing, the card would otherwise
             render an empty shell with no way forward — explain it instead of
             stranding the user. */}
         {(() => {
-          const unfillable = missing.filter((f) => UNFILLABLE_FIELDS.includes(f));
+          const unfillable = retired ? [] : missing.filter((f) => UNFILLABLE_FIELDS.includes(f));
           if (unfillable.length === 0) return null;
           return (
             <p
@@ -621,7 +773,7 @@ export function CompleteProfileForm() {
           </div>
         )}
 
-        {member.type === 'Adult' && (show('email') || show('phone')) && (
+        {draft.type === 'Adult' && (show('email') || show('phone')) && (
           <div className="row" style={{ gap: 8, marginBottom: 14 }}>
             {show('email') && (
               <div className="field" style={{ flex: 1 }}>
