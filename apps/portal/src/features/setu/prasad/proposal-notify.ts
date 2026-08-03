@@ -1,6 +1,7 @@
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
 import { resolveSender } from '@/lib/aws/resolve-sender';
 import { formatPrasadDate } from './constants';
+import { SMS_OPT_OUT_SUFFIX } from '@/lib/branding';
 
 /** `error` is set by the publish route when the whole fan-out threw (the publish itself landed). */
 export interface ProposalNotifyResult { disabled?: boolean; error?: boolean; checked: number; sent: number; skipped: number; failed: number }
@@ -44,7 +45,8 @@ export async function notifyUnnotifiedProposals(pid: string): Promise<ProposalNo
         const mem = m.data() as { email?: string | null; phone?: string | null; firstName?: string };
         const msg = `Namaste ${mem.firstName ?? ''}! Your family's suggested Bala Vihar prasad Sunday is ${when}. Please confirm it or pick another date: ${base}/family/prasad — Chinmaya Mission Toronto`;
         if (mem.email) { await sender.sendEmail({ to: mem.email, subject: `Prasad Sunday — please confirm (${when})`, text: msg }); dispatched++; }
-        if (mem.phone) { await sender.sendSMS({ phone: mem.phone, message: msg }); dispatched++; }
+        // The TEXT carries the opt-out line; the email above does not need one.
+        if (mem.phone) { await sender.sendSMS({ phone: mem.phone, message: msg + SMS_OPT_OUT_SUFFIX }); dispatched++; }
       }
       // Zero messages dispatched → do NOT stamp; surface in the run report.
       if (dispatched === 0) {

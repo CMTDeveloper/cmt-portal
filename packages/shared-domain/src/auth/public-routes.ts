@@ -9,6 +9,12 @@ export const PUBLIC_ROUTES = [
   '/login/teacher',
   '/login/family',
 
+  // Privacy policy. PUBLIC and must stay so: mobile carriers fetch this URL
+  // during toll-free verification, unauthenticated, and the SMS consent notice
+  // on /sign-in and /register links to it. Behind the auth gate it is useless
+  // to both.
+  '/privacy',
+
   // 2026 redesign — Setu family flow entry points (public).
   // /family and /family/ are auth-gated — intentionally NOT listed here.
   '/sign-in',

@@ -8,6 +8,7 @@ import { CspRoot } from '@/features/family/components/atoms';
 import { OtpEntry } from '@/features/family/components/otp-entry';
 import { sendJoinRequestClient } from '@/features/setu/join-request';
 import { flags } from '@/lib/flags';
+import { SMS_CONSENT_NOTICE, PRIVACY_PATH } from '@/lib/branding';
 
 type ContactType = 'email' | 'phone';
 type PageState = 'form' | 'code' | 'verifying' | 'pending-approval';
@@ -247,6 +248,23 @@ function SignInReal() {
     : phoneMatchNotice
       ? 'We recognised your phone number. Text-message sign-in is unavailable right now, so please sign in with the email address on your account.'
       : null;
+
+  // Carrier-required opt-in disclosure, shown wherever a phone number is being
+  // collected. A toll-free number cannot be verified without a screenshot of
+  // this next to the field, and a bare phone input is one of the most common
+  // rejection reasons. Rendered in BOTH layout trees from this one element.
+  const smsConsent = contactType === 'phone' ? (
+    <p
+      data-testid="sms-consent"
+      style={{ fontSize: 11.5, color: 'var(--muted-text)', marginTop: 8, lineHeight: 1.45 }}
+    >
+      {SMS_CONSENT_NOTICE}{' '}
+      <Link href={PRIVACY_PATH} style={{ color: 'var(--accentDeep)' }}>
+        Privacy policy
+      </Link>
+      .
+    </p>
+  ) : null;
 
   async function handleSendCode() {
     // The refusal lives in the shared handler, not in the copy above. This page
@@ -618,6 +636,7 @@ function SignInReal() {
                     {contactHint && (
                       <p style={{ fontSize: 12, color: 'var(--muted-text)', marginTop: 6, lineHeight: 1.4 }}>{contactHint}</p>
                     )}
+                    {smsConsent}
                   </div>
                   <button
                     className="btn btn--p btn--block"
@@ -734,6 +753,7 @@ function SignInReal() {
                     {contactHint && (
                       <p style={{ fontSize: 12, color: 'var(--muted-text)', marginTop: 6, lineHeight: 1.4 }}>{contactHint}</p>
                     )}
+                    {smsConsent}
                   </div>
                   <button
                     className="btn btn--p btn--block"
