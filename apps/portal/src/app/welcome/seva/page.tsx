@@ -1,13 +1,12 @@
 import { connection } from 'next/server';
-import { cookies } from 'next/headers';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
-import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
-import { isAdmin, type WithRole } from '@cmt/shared-domain';
 import { getSevaRequirement } from '@/lib/seva-requirement';
 import { listOpportunities, serializeOpportunity } from '@/features/setu/seva/get-opportunities';
 import { getLiveSchoolYearCached } from '@/features/setu/rollover/live-school-year';
 import { listKnownSchoolYears, resolveViewYear } from '@/features/setu/rollover/view-year';
+import { SchoolYearScopeBar } from '@/features/setu/rollover/components/school-year-scope-bar';
 import { SevaManager } from '@/features/admin/seva/seva-manager';
+import { denyUnlessAdmin } from '@/lib/require-admin-page';
 
 export const metadata = { title: 'Seva' };
 
@@ -17,9 +16,12 @@ export default async function WelcomeSevaPage({
   searchParams: Promise<{ year?: string }>;
 }) {
   await connection();
-  const cookieStore = await cookies();
-  const raw = await verifyPortalSessionCookie(cookieStore.get('__session')?.value ?? '').catch(() => null);
-  const canEditRequirement = !!raw && isAdmin(raw as unknown as WithRole);
+  const denied = await denyUnlessAdmin();
+  if (denied) return denied;
+  // denyUnlessAdmin above is the only way past this line, so the requirement
+  // editor is unconditionally available; this used to re-read the cookie to
+  // decide, back when welcome-team could reach the page read-only.
+  const canEditRequirement = true;
   const db = portalFirestore();
   const liveYear = await getLiveSchoolYearCached();
   const years = await listKnownSchoolYears(db, liveYear);
@@ -37,15 +39,21 @@ export default async function WelcomeSevaPage({
       canCreate={view.status === 'live'}
     />
   );
+  // The scope bar moved out of the welcome layout onto the pages that read
+  // `?year=`. This one drives readOnly/canCreate above, so losing it would
+  // strand a past-year view with no way back.
+  const scopeBar = <SchoolYearScopeBar years={years} liveYear={liveYear} canManage={canEditRequirement} />;
   return (
     <>
       {/* Mobile — the welcome layout's mobile branch gives no padding, so the
           page owns it; bottom padding clears the fixed mobile nav. */}
       <div className="block md:hidden" style={{ padding: '16px 18px 96px' }}>
+        {scopeBar}
         {manager}
       </div>
       {/* Desktop — layout.tsx owns the sidebar + padded <main>; just cap width. */}
       <div className="hidden md:block" style={{ maxWidth: 760 }}>
+        {scopeBar}
         {manager}
       </div>
     </>

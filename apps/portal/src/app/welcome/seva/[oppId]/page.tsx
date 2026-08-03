@@ -2,10 +2,8 @@ import { Suspense } from 'react';
 import { connection } from 'next/server';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import { cookies } from 'next/headers';
 import { SetuIcon } from '@cmt/ui';
-import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
-import { isWelcomeTeam, type WithRole } from '@cmt/shared-domain';
+import { denyUnlessAdmin } from '@/lib/require-admin-page';
 import { CspRoot } from '@/features/family/components/atoms';
 import { getOpportunityRoster } from '@/features/setu/seva/get-opportunity-roster';
 import { RosterManager } from '@/features/admin/seva/roster-manager';
@@ -25,15 +23,8 @@ export default function WelcomeSevaRosterPage({ params }: { params: Promise<{ op
 // 16 Cache Components require dynamic data access inside <Suspense>).
 export async function RosterPageBody({ params }: { params: Promise<{ oppId: string }> }) {
   await connection();
-  const cookieStore = await cookies();
-  const raw = await verifyPortalSessionCookie(cookieStore.get('__session')?.value ?? '').catch(() => null);
-  if (!raw || !isWelcomeTeam(raw as unknown as WithRole)) {
-    return (
-      <div style={{ padding: 32, fontFamily: 'var(--body)' }}>
-        <p style={{ color: 'var(--err)', fontSize: 14 }}>Access denied. Welcome-team role required.</p>
-      </div>
-    );
-  }
+  const denied = await denyUnlessAdmin();
+  if (denied) return denied;
 
   const { oppId } = await params;
   const roster = await getOpportunityRoster(oppId);

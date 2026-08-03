@@ -408,11 +408,14 @@ describe('canAccessRoute — /api/setu/invite/* — Setu family + welcome-team (
   it('allows family-manager on /api/setu/invite/send', () => {
     expect(canAccessRoute(manager, '/api/setu/invite/send')).toBe(true);
   });
-  it('allows welcome-team on /api/setu/invite/send', () => {
-    expect(canAccessRoute(welcomeTeam, '/api/setu/invite/send')).toBe(true);
+  it('DENIES welcome-team on /api/setu/invite/send (2026-08-03 narrowing)', () => {
+    // The front desk has no invite UI, and the role is now scoped to the roster
+    // and the visitors board. Admin keeps it via the same catch-all.
+    expect(canAccessRoute(welcomeTeam, '/api/setu/invite/send')).toBe(false);
+    expect(canAccessRoute(admin, '/api/setu/invite/send')).toBe(true);
   });
   it('denies family-member on /api/setu/invite/send (manager-only future endpoint)', () => {
-    // The catch-all now only permits manager/welcome-team/admin, not family-member
+    // The catch-all now only permits manager/admin, not family-member
     expect(canAccessRoute(member, '/api/setu/invite/send')).toBe(false);
   });
   it('denies legacy family on /api/setu/invite/send', () => {
@@ -619,12 +622,12 @@ describe('canAccessRoute — /api/setu/teacher/* — teacher capability', () => 
   });
 });
 
-describe('canAccessRoute — /api/admin/teacher-assignments — admin + welcome-team', () => {
+describe('canAccessRoute — /api/admin/teacher-assignments — admin + coordinator', () => {
   it('allows admin to POST', () => {
     expect(canAccessRoute(admin, '/api/admin/teacher-assignments', 'POST')).toBe(true);
   });
-  it('allows welcome-team to POST (front-desk flexibility, RBB-2)', () => {
-    expect(canAccessRoute(welcomeTeam, '/api/admin/teacher-assignments', 'POST')).toBe(true);
+  it('DENIES welcome-team to POST (2026-08-03: teacher assignment is not front-desk work)', () => {
+    expect(canAccessRoute(welcomeTeam, '/api/admin/teacher-assignments', 'POST')).toBe(false);
   });
   it('denies family-manager', () => {
     expect(canAccessRoute(manager, '/api/admin/teacher-assignments', 'POST')).toBe(false);
@@ -654,9 +657,10 @@ describe('canAccessRoute — /api/admin/levels/[id]/teachers — admin + welcome
     expect(canAccessRoute(admin, path, 'POST')).toBe(true);
     expect(canAccessRoute(admin, path, 'DELETE')).toBe(true);
   });
-  it('allows welcome-team (front-desk assigns teachers per level)', () => {
-    expect(canAccessRoute(welcomeTeam, path, 'POST')).toBe(true);
-    expect(canAccessRoute(welcomeTeam, path, 'DELETE')).toBe(true);
+  it('DENIES welcome-team (2026-08-03 narrowing); coordinator keeps it', () => {
+    expect(canAccessRoute(welcomeTeam, path, 'POST')).toBe(false);
+    expect(canAccessRoute(welcomeTeam, path, 'DELETE')).toBe(false);
+    expect(canAccessRoute({ uid: 'c', role: 'coordinator' }, path, 'POST')).toBe(true);
   });
   it('denies family-manager and family-member', () => {
     expect(canAccessRoute(manager, path, 'POST')).toBe(false);
@@ -677,8 +681,9 @@ describe('canAccessRoute — /api/admin/teachers/search — admin + welcome-team
   it('allows admin', () => {
     expect(canAccessRoute(admin, '/api/admin/teachers/search', 'GET')).toBe(true);
   });
-  it('allows welcome-team (front-desk assigns teachers)', () => {
-    expect(canAccessRoute(welcomeTeam, '/api/admin/teachers/search', 'GET')).toBe(true);
+  it('DENIES welcome-team (2026-08-03 narrowing); coordinator keeps it', () => {
+    expect(canAccessRoute(welcomeTeam, '/api/admin/teachers/search', 'GET')).toBe(false);
+    expect(canAccessRoute({ uid: 'c', role: 'coordinator' }, '/api/admin/teachers/search', 'GET')).toBe(true);
   });
   it('denies family-manager and family-member', () => {
     expect(canAccessRoute(manager, '/api/admin/teachers/search', 'GET')).toBe(false);
@@ -687,21 +692,21 @@ describe('canAccessRoute — /api/admin/teachers/search — admin + welcome-team
   it('denies a plain teacher (assignable ≠ assigner)', () => {
     expect(canAccessRoute(teacher, '/api/admin/teachers/search', 'GET')).toBe(false);
   });
-  it('keeps the distinct /api/admin/teacher-assignments prefix intact (welcome-team still allowed there)', () => {
+  it('keeps the distinct /api/admin/teacher-assignments prefix intact (coordinator still allowed there)', () => {
     // teacher-assignments must NOT be swallowed by the teachers/ rule and stays
-    // admin + welcome-team via its own earlier rule.
-    expect(canAccessRoute(welcomeTeam, '/api/admin/teacher-assignments', 'POST')).toBe(true);
+    // admin + coordinator via its own earlier rule.
+    expect(canAccessRoute({ uid: 'c', role: 'coordinator' }, '/api/admin/teacher-assignments', 'POST')).toBe(true);
   });
 });
 
-describe('canAccessRoute — /api/admin/calendar — admin + welcome-team', () => {
+describe('canAccessRoute — /api/admin/calendar — admin only', () => {
   it('allows admin', () => {
     expect(canAccessRoute(admin, '/api/admin/calendar', 'POST')).toBe(true);
     expect(canAccessRoute(admin, '/api/admin/calendar/brampton-2025-09-07', 'PATCH')).toBe(true);
   });
-  it('allows welcome-team', () => {
-    expect(canAccessRoute(welcomeTeam, '/api/admin/calendar', 'POST')).toBe(true);
-    expect(canAccessRoute(welcomeTeam, '/api/admin/calendar/weekly', 'PUT')).toBe(true);
+  it('DENIES welcome-team (2026-08-03: publishing the class calendar is admin work)', () => {
+    expect(canAccessRoute(welcomeTeam, '/api/admin/calendar', 'POST')).toBe(false);
+    expect(canAccessRoute(welcomeTeam, '/api/admin/calendar/weekly', 'PUT')).toBe(false);
   });
   it('denies family-manager and teacher', () => {
     expect(canAccessRoute(manager, '/api/admin/calendar', 'POST')).toBe(false);
@@ -851,9 +856,9 @@ describe('canAccessRoute — /api/setu/seva/* — any setu family', () => {
   });
 });
 
-describe('canAccessRoute — /api/welcome/seva/* — welcome-team + admin', () => {
-  it('allows welcome-team and admin', () => {
-    expect(canAccessRoute(welcomeTeam, '/api/welcome/seva/opportunities', 'POST')).toBe(true);
+describe('canAccessRoute — /api/welcome/seva/* — admin only', () => {
+  it('allows admin, denies welcome-team (2026-08-03 narrowing)', () => {
+    expect(canAccessRoute(welcomeTeam, '/api/welcome/seva/opportunities', 'POST')).toBe(false);
     expect(canAccessRoute(admin, '/api/welcome/seva/opportunities', 'GET')).toBe(true);
     expect(canAccessRoute(admin, '/api/welcome/seva/opportunities/abc', 'PATCH')).toBe(true);
   });
@@ -862,13 +867,13 @@ describe('canAccessRoute — /api/welcome/seva/* — welcome-team + admin', () =
     expect(canAccessRoute(member, '/api/welcome/seva/opportunities', 'POST')).toBe(false);
     expect(canAccessRoute(teacher, '/api/welcome/seva/opportunities', 'GET')).toBe(false);
   });
-  it('gates the seva roster + confirm paths to welcome-team (admin inherits)', () => {
-    expect(canAccessRoute(welcomeTeam, '/api/welcome/seva/opportunities/o1/signups', 'GET')).toBe(true);
+  it('gates the seva roster + confirm paths to ADMIN (welcome-team removed 2026-08-03)', () => {
+    expect(canAccessRoute(welcomeTeam, '/api/welcome/seva/opportunities/o1/signups', 'GET')).toBe(false);
     expect(canAccessRoute(admin, '/api/welcome/seva/signups/o1__FAM/confirm', 'POST')).toBe(true);
     expect(canAccessRoute(member, '/api/welcome/seva/signups/o1__FAM/confirm', 'POST')).toBe(false);
   });
-  it('gates the compliance report to welcome-team (admin inherits, family denied)', () => {
-    expect(canAccessRoute(welcomeTeam, '/api/welcome/seva/compliance', 'GET')).toBe(true);
+  it('gates the compliance report to ADMIN (welcome-team + family denied)', () => {
+    expect(canAccessRoute(welcomeTeam, '/api/welcome/seva/compliance', 'GET')).toBe(false);
     expect(canAccessRoute(admin, '/api/welcome/seva/compliance', 'GET')).toBe(true);
     expect(canAccessRoute(member, '/api/welcome/seva/compliance', 'GET')).toBe(false);
   });
@@ -904,10 +909,10 @@ describe('canAccessRoute — roster API (/api/welcome/families)', () => {
 });
 
 describe('canAccessRoute — prasad API (/api/welcome/prasad)', () => {
-  it('admits welcome-team and admin (admin inherits welcome-team)', () => {
-    expect(canAccessRoute(welcomeTeam, '/api/welcome/prasad/upcoming', 'GET')).toBe(true);
+  it('admits ADMIN only (welcome-team removed 2026-08-03)', () => {
     expect(canAccessRoute(admin, '/api/welcome/prasad/upcoming', 'GET')).toBe(true);
-    expect(canAccessRoute(welcomeTeam, '/api/welcome/prasad', 'GET')).toBe(true);
+    expect(canAccessRoute(welcomeTeam, '/api/welcome/prasad/upcoming', 'GET')).toBe(false);
+    expect(canAccessRoute(welcomeTeam, '/api/welcome/prasad', 'GET')).toBe(false);
   });
 
   it('denies family roles', () => {
@@ -917,9 +922,9 @@ describe('canAccessRoute — prasad API (/api/welcome/prasad)', () => {
 });
 
 describe('canAccessRoute — reports API (/api/welcome/reports)', () => {
-  it('enrollment + attendance: welcome-team and admin allowed', () => {
-    expect(canAccessRoute(welcomeTeam, '/api/welcome/reports/enrollment', 'GET')).toBe(true);
-    expect(canAccessRoute(welcomeTeam, '/api/welcome/reports/attendance', 'GET')).toBe(true);
+  it('enrollment + attendance: ADMIN only (welcome-team removed 2026-08-03)', () => {
+    expect(canAccessRoute(welcomeTeam, '/api/welcome/reports/enrollment', 'GET')).toBe(false);
+    expect(canAccessRoute(welcomeTeam, '/api/welcome/reports/attendance', 'GET')).toBe(false);
     expect(canAccessRoute(admin, '/api/welcome/reports/attendance', 'GET')).toBe(true);
   });
   it('family roles denied everywhere under reports', () => {
@@ -1041,28 +1046,95 @@ describe('canAccessRoute — coordinator: denied', () => {
   });
 });
 
-describe('canAccessRoute — welcome-team regressions (must stay true)', () => {
-  // A broad /api/admin/levels clause placed ABOVE the levels/{id}/teachers
-  // regex would win on first match and silently revoke a welcome-team
-  // capability that works in production today. That is what these pin.
-  it('keeps per-level teacher add/remove for welcome-team', () => {
-    expect(canAccessRoute(welcomeTeam, '/api/admin/levels/brampton-l2/teachers', 'POST')).toBe(true);
+/**
+ * THE WELCOME-TEAM CONTRACT (2026-08-03).
+ *
+ * "Welcome team role permissions are not accurate. They need to be able to
+ *  update roster and visitors. No other access needed."  — Vaibhav
+ *
+ * Before this, the role could publish the class calendar, assign teachers,
+ * override what a family owes, and read every report. This table is the whole
+ * grant, stated positively and negatively, in one place: a future route that
+ * quietly re-widens the role has to change a line here to go green.
+ *
+ * Admin is asserted alongside every denial on purpose — `isWelcomeTeam()`
+ * returns true for admin, so the narrowing must not have cost admins anything.
+ */
+describe('canAccessRoute — the welcome-team grant, in full', () => {
+  const ALLOWED: Array<[string, string]> = [
+    // The two screens the role exists for.
+    ['/welcome', 'GET'],
+    ['/welcome/roster', 'GET'],
+    ['/welcome/visitors', 'GET'],
+    // Every roster row links into family detail; without it the screen is a dead end.
+    ['/welcome/family/CMT-AB12CD34', 'GET'],
+    ['/welcome/family/CMT-AB12CD34/members/CMT-AB12CD34-02', 'GET'],
+    // The data behind those screens.
+    ['/api/welcome/roster/report', 'GET'],
+    ['/api/welcome/families', 'GET'],
+    ['/api/welcome/families/migration-status', 'GET'],
+    ['/api/setu/family/search', 'GET'],
+    ['/api/setu/members/CMT-AB12CD34-02/profile', 'GET'],
+    ['/api/setu/programs', 'GET'],
+    // Self-service on their own account, and the guides written for them
+    // (5 entries in the docs registry are tagged `welcome-team`).
+    ['/api/setu/auth/set-password', 'POST'],
+    ['/docs', 'GET'],
+    ['/docs/roster', 'GET'],
+  ];
+
+  const DENIED: Array<[string, string]> = [
+    // Other /welcome sections.
+    ['/welcome/levels', 'GET'],
+    ['/welcome/levels/brampton-l2', 'GET'],
+    ['/welcome/seva', 'GET'],
+    ['/welcome/seva/compliance', 'GET'],
+    ['/welcome/prasad', 'GET'],
+    ['/welcome/reports', 'GET'],
+    // Their APIs.
+    ['/api/welcome/seva/opportunities', 'GET'],
+    ['/api/welcome/prasad/upcoming', 'GET'],
+    ['/api/welcome/reports/enrollment', 'GET'],
+    // Money: rewriting what a family owes.
+    ['/api/welcome/enrollments/e1/override', 'POST'],
+    // Back-office writes.
+    ['/api/admin/calendar', 'POST'],
+    ['/api/admin/calendar/weekly', 'PUT'],
+    ['/api/admin/teacher-assignments', 'POST'],
+    ['/api/admin/teachers/search', 'GET'],
+    ['/api/admin/levels/brampton-l2/teachers', 'POST'],
+    ['/api/admin/levels', 'POST'],
+    ['/api/admin/users', 'GET'],
+    // Family-scoped writes reachable only through the /api/setu catch-all.
+    ['/api/setu/invite/send', 'POST'],
+  ];
+
+  it.each(ALLOWED)('ALLOWS welcome-team: %s %s', (path, method) => {
+    expect(canAccessRoute(welcomeTeam, path, method)).toBe(true);
   });
 
-  it('still denies welcome-team level CRUD', () => {
-    expect(canAccessRoute(welcomeTeam, '/api/admin/levels', 'POST')).toBe(false);
+  it.each(DENIED)('DENIES welcome-team: %s %s', (path, method) => {
+    expect(canAccessRoute(welcomeTeam, path, method)).toBe(false);
   });
 
-  it('keeps calendar publish for welcome-team', () => {
-    expect(canAccessRoute(welcomeTeam, '/api/admin/calendar', 'POST')).toBe(true);
+  it.each([...ALLOWED, ...DENIED])('admin keeps everything: %s %s', (path, method) => {
+    expect(canAccessRoute(admin, path, method)).toBe(true);
   });
 
-  it('keeps reports for welcome-team', () => {
-    expect(canAccessRoute(welcomeTeam, '/welcome/reports', 'GET')).toBe(true);
+  it('a new, unlisted /welcome page defaults to admin-only', () => {
+    // The catch-all denies rather than grants, so the next section someone adds
+    // does not silently land in the front desk's lap.
+    expect(canAccessRoute(welcomeTeam, '/welcome/some-future-section', 'GET')).toBe(false);
+    expect(canAccessRoute(admin, '/welcome/some-future-section', 'GET')).toBe(true);
   });
 
-  it('keeps the roster API for welcome-team', () => {
-    expect(canAccessRoute(welcomeTeam, '/api/welcome/roster/report', 'GET')).toBe(true);
+  it('coordinator is unaffected: still roster + programs + levels, still no visitors', () => {
+    const coord: SessionClaims = { uid: 'c', role: 'coordinator' };
+    expect(canAccessRoute(coord, '/welcome/roster', 'GET')).toBe(true);
+    expect(canAccessRoute(coord, '/api/welcome/roster/report', 'GET')).toBe(true);
+    expect(canAccessRoute(coord, '/admin/levels', 'GET')).toBe(true);
+    expect(canAccessRoute(coord, '/api/admin/teacher-assignments', 'POST')).toBe(true);
+    expect(canAccessRoute(coord, '/welcome/visitors', 'GET')).toBe(false);
   });
 });
 

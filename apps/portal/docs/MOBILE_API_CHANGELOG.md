@@ -22,6 +22,29 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
+## 2026-08-03 - `develop` - the `welcome-team` role is narrowed: it no longer passes the `/api/setu/*` catch-all
+
+**Action required only if the mobile app ever signs in a welcome-team account.** No request or response SHAPE changed; this is an authorization change.
+
+Reported on production 2026-08-03 by Vaibhav: *"Welcome team role permissions are not accurate. They need to be able to update roster and visitors. No other access needed."*
+
+`welcome-team` previously reached every `/api/setu/**` path that has no explicit rule, via the catch-all at the bottom of `canAccessRoute` (`isSetuManager || isWelcomeTeam || isAdmin`). It is now `isSetuManager || isAdmin`. In practice that removes `POST /api/setu/invite/send` and `/api/setu/invite/cancel` from the role.
+
+What a welcome-team session still reaches under `/api/setu/*` (each has its own explicit clause, unchanged):
+
+| Path | Method |
+|---|---|
+| `/api/setu/family/search` | GET |
+| `/api/setu/members/{mid}/profile` | GET |
+| `/api/setu/programs` | GET |
+| `/api/setu/auth/set-password` | POST |
+
+Also now **admin-only** (previously welcome-team), all outside `/api/setu/*` so the mobile mirror is unaffected unless it calls them directly: `/api/welcome/{reports,seva,prasad,enrollments}/*`, `/api/admin/calendar/*`. `/api/welcome/{families,roster}/*` are unchanged.
+
+**Mobile action:** if the app has a welcome-team code path, expect `401` at middleware on any `/api/setu/*` path not in the table above, and surface it as "not permitted" rather than a session-expiry retry loop. `family-manager` / `family-member` sessions are entirely unaffected.
+
+---
+
 ## 2026-08-03 - `68b0a8d`..`HEAD` on `develop` - members gain `participation`; `PATCH /api/setu/members/{mid}` gains 3 new 409s; `POST /api/pledges/start` gains 409 `no-enrolled-members`; `checkout` drops `type:"general"`; Stripe metadata matches the integration doc
 
 **Action required: a new member field the app must read, and four new refusal codes it must not collapse.**

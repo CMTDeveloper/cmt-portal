@@ -65,9 +65,9 @@ describe('POST /api/admin/teacher-assignments', () => {
     expect(mockAssignTeacher).toHaveBeenCalledWith({ ref: 'CMT-FAM1-01', levelIds: ['l1'], byUid: 'uid-admin' });
   });
 
-  it('allows welcome-team (RBB-2)', async () => {
+  it('allows admin (RBB-2)', async () => {
     const { POST } = await import('../route');
-    const res = await POST(makeRequest(body, 'uid-w', 'welcome-team'));
+    const res = await POST(makeRequest(body, 'uid-w', 'admin'));
     expect(res.status).toBe(200);
   });
 

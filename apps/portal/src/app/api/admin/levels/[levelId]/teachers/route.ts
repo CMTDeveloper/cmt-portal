@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { isAdmin, isWelcomeTeam, isCoordinator } from '@cmt/shared-domain';
+import { isAdmin, isCoordinator } from '@cmt/shared-domain';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
 import { assignTeacher, getTeacherLevelIds } from '@/features/setu/teacher/assignments';
@@ -27,7 +27,7 @@ async function guard(
   if (!session || !session.uid) {
     return { err: NextResponse.json({ error: 'no-session' }, { status: 401 }) };
   }
-  if (!isAdmin(session) && !isWelcomeTeam(session) && !isCoordinator(session)) {
+  if (!isAdmin(session) && !isCoordinator(session)) {
     return { err: NextResponse.json({ error: 'forbidden' }, { status: 403 }) };
   }
   // Reject a non-existent level BEFORE assignTeacher — its set-with-merge would

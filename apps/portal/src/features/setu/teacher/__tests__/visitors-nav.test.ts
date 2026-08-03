@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { deriveAdminActive } from '@/features/admin/components/admin-sidebar';
+import { buildWelcomeNavItems } from '@/features/family/components/welcome-mobile-nav';
 
 /**
  * /welcome/visitors has to be reachable from THREE navs, not one.
@@ -30,8 +31,55 @@ describe('/welcome/visitors is reachable', () => {
   });
 
   it('appears in the welcome mobile nav', () => {
-    const src = read('features/family/components/welcome-mobile-nav.tsx');
-    expect(src).toContain('href="/welcome/visitors"');
+    // Real assertion now, not a grep: the nav's items are built by an exported
+    // pure function, so who sees which tab is checkable without a router.
+    const hrefs = buildWelcomeNavItems({}).map((i) => i.href);
+    expect(hrefs).toContain('/welcome/visitors');
+  });
+});
+
+/**
+ * Who sees which tab (2026-08-03). Welcome-team is scoped to the roster and the
+ * visitors board; levels / seva / prasad / reports are admin-only. A tab a role
+ * cannot reach is worse than no tab — it 302s to /sign-in on tap.
+ */
+describe('welcome mobile nav — role scoping', () => {
+  const hrefs = (a: Parameters<typeof buildWelcomeNavItems>[0]) => buildWelcomeNavItems(a).map((i) => i.href);
+
+  it('welcome-team gets the roster and the visitors board, and nothing else', () => {
+    expect(hrefs({ role: 'welcome-team' })).toEqual(['/welcome/roster', '/welcome/visitors']);
+  });
+
+  it('a welcome-team member with their own family also gets a way back to it', () => {
+    expect(hrefs({ role: 'welcome-team', hasFamily: true })).toEqual([
+      '/welcome/roster',
+      '/welcome/visitors',
+      '/family',
+    ]);
+  });
+
+  it('coordinator gets the roster only — the visitors board is not in that grant', () => {
+    expect(hrefs({ role: 'coordinator' })).toEqual(['/welcome/roster']);
+  });
+
+  it('admin keeps every section, because /admin does not link levels or prasad', () => {
+    expect(hrefs({ isAdmin: true })).toEqual([
+      '/welcome/roster',
+      '/welcome/visitors',
+      '/welcome/levels',
+      '/welcome/seva',
+      '/welcome/prasad',
+      '/welcome/reports',
+      '/admin',
+    ]);
+  });
+
+  it('the teacher tab is additive and does not displace a section', () => {
+    expect(hrefs({ role: 'welcome-team', showTeacher: true })).toEqual([
+      '/welcome/roster',
+      '/welcome/visitors',
+      '/teacher',
+    ]);
   });
 });
 
@@ -47,12 +95,28 @@ describe('/welcome/visitors highlights itself, not a sibling', () => {
     expect(deriveAdminActive('/welcome/family/CMT-X')).toBe('/welcome');
   });
 
-  it('is excluded from the mobile nav Roster default', () => {
-    const src = read('features/family/components/welcome-mobile-nav.tsx');
-    // isRosterActive is a negated allowlist: Roster lights up for anything NOT
-    // named there, so an omission is invisible until someone looks at the phone.
-    const fn = /function isRosterActive[\s\S]*?\n}/.exec(src)?.[0] ?? '';
-    expect(fn).toContain("'/welcome/visitors'");
+  it('no longer relies on a negated allowlist to stay out of Roster', () => {
+    // This used to be `isRosterActive()`: Roster lit up for anything NOT named
+    // in it, so a new section was silently absorbed until someone looked at a
+    // phone. Each tab now owns its own matcher, so the property can be asserted
+    // directly and holds for sections that do not exist yet.
+    const items = buildWelcomeNavItems({ isAdmin: true });
+    const roster = items.find((i) => i.href === '/welcome/roster')!;
+
+    // Roster claims the section root and the family drill-down it links to.
+    expect(roster.match('/welcome')).toBe(true);
+    expect(roster.match('/welcome/roster')).toBe(true);
+    expect(roster.match('/welcome/family/CMT-AB12CD34')).toBe(true);
+
+    // ...and nothing else, including a section nobody has written yet.
+    for (const p of ['/welcome/visitors', '/welcome/levels', '/welcome/seva', '/welcome/prasad', '/welcome/reports', '/welcome/some-future-section']) {
+      expect(roster.match(p)).toBe(false);
+    }
+
+    // Exactly one tab lights up per path — no ties, no gaps.
+    for (const item of items.filter((i) => i.href.startsWith('/welcome/'))) {
+      expect(items.filter((i) => i.match(item.href))).toEqual([item]);
+    }
   });
 
   it('is mapped ahead of the desktop sidebar /welcome catch-all', () => {

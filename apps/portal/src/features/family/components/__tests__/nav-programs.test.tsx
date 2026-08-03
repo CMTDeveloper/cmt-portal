@@ -137,9 +137,11 @@ describe('Seva hidden from family navigation when setuSeva is off (default)', ()
     expect(screen.queryByText('Seva')).toBeNull();
   });
 
-  it('keeps the Seva nav item in the welcome-team sidebar (staff still use it)', () => {
+  it('drops Seva from the welcome-team sidebar too (2026-08-03: admin-only)', () => {
+    // Seva moved out of the welcome-team grant along with levels, prasad and
+    // reports. Admins still manage it — from the ADMIN sidebar, which is what
+    // /welcome/layout.tsx renders for them.
     render(<DesktopSidebar role="welcome-team" />);
-    const link = screen.getByRole('link', { name: /^seva$/i });
-    expect(link.getAttribute('href')).toBe('/welcome/seva');
+    expect(screen.queryByRole('link', { name: /^seva$/i })).toBeNull();
   });
 });

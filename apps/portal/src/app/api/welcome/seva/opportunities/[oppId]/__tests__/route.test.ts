@@ -11,7 +11,7 @@ vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
 import { PATCH } from '../route';
 import { getOpportunity } from '@/features/setu/seva/get-opportunities';
 
-function reqCtx(method: string, body: unknown, role: string | null = 'welcome-team') {
+function reqCtx(method: string, body: unknown, role: string | null = 'admin') {
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   if (role) headers['x-portal-role'] = role;
   headers['x-portal-uid'] = 'u-staff';

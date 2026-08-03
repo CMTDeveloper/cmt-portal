@@ -15,7 +15,6 @@ import { searchFamiliesClient } from '@/features/setu/search/search-families-cli
 import type { FamilySearchHit } from '@/features/setu/search/search-families-client';
 import { fetchRosterReportClient } from './roster-client';
 import { RosterExportButton } from './roster-export-button';
-import { MigrationStrip } from './migration-strip';
 
 const INITIAL_SHOWN = 50;
 
@@ -350,8 +349,6 @@ function RosterContent({ year, locationOptions }: { year?: string; locationOptio
 
   return (
     <div className="col" style={{ gap: 16 }}>
-      <MigrationStrip />
-
       {/* Search input */}
       <div style={{ position: 'relative' }}>
         <div style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', pointerEvents: 'none', display: 'inline-flex' }}>

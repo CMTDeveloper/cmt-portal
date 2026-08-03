@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { revalidateTag } from 'next/cache';
 import { randomUUID } from 'node:crypto';
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
-import { isWelcomeTeam, CreateSevaOpportunitySchema } from '@cmt/shared-domain';
+import { isAdmin, CreateSevaOpportunitySchema } from '@cmt/shared-domain';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
 import { getSevaRequirement } from '@/lib/seva-requirement';
 import { listOpportunities, serializeOpportunity } from '@/features/setu/seva/get-opportunities';
@@ -10,7 +10,7 @@ import { listOpportunities, serializeOpportunity } from '@/features/setu/seva/ge
 export async function GET(req: Request) {
   const session = readSessionFromHeaders(req);
   if (!session) return NextResponse.json({ error: 'no-session' }, { status: 401 });
-  if (!isWelcomeTeam(session)) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+  if (!isAdmin(session)) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   const { searchParams } = new URL(req.url);
   const sevaYear = searchParams.get('sevaYear') ?? undefined;
   const opportunities = (await listOpportunities(sevaYear ? { sevaYear } : undefined)).map(serializeOpportunity);
@@ -20,7 +20,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const session = readSessionFromHeaders(req);
   if (!session || !session.uid) return NextResponse.json({ error: 'no-session' }, { status: 401 });
-  if (!isWelcomeTeam(session)) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+  if (!isAdmin(session)) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
 
   const raw = await req.json().catch(() => null);
   const parsed = CreateSevaOpportunitySchema.safeParse(raw);

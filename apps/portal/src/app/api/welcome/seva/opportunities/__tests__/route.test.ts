@@ -16,7 +16,7 @@ import { GET, POST } from '../route';
 import { getSevaRequirement } from '@/lib/seva-requirement';
 import { listOpportunities } from '@/features/setu/seva/get-opportunities';
 
-function req(method: string, body?: unknown, role: string | null = 'welcome-team', uid: string | null = 'u-staff'): Request {
+function req(method: string, body?: unknown, role: string | null = 'admin', uid: string | null = 'u-staff'): Request {
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   if (role) headers['x-portal-role'] = role;
   if (uid) headers['x-portal-uid'] = uid;
@@ -36,7 +36,7 @@ beforeEach(() => {
 describe('GET /api/welcome/seva/opportunities', () => {
   it('401 without session', async () => { expect((await GET(req('GET', undefined, null))).status).toBe(401); });
   it('403 for family-manager', async () => { expect((await GET(req('GET', undefined, 'family-manager'))).status).toBe(403); });
-  it('200 for welcome-team', async () => {
+  it('200 for admin', async () => {
     const res = await GET(req('GET'));
     expect(res.status).toBe(200);
     expect((await res.json()).opportunities).toEqual([]);
@@ -45,7 +45,7 @@ describe('GET /api/welcome/seva/opportunities', () => {
 });
 
 describe('POST /api/welcome/seva/opportunities', () => {
-  it('401 when uid header missing', async () => { expect((await POST(req('POST', valid, 'welcome-team', null))).status).toBe(401); });
+  it('401 when uid header missing', async () => { expect((await POST(req('POST', valid, 'admin', null))).status).toBe(401); });
   it('403 for family-manager', async () => {
     expect((await POST(req('POST', valid, 'family-manager'))).status).toBe(403);
     expect(mockSet).not.toHaveBeenCalled();

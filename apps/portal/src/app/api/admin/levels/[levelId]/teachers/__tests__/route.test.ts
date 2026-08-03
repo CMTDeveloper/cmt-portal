@@ -153,9 +153,9 @@ describe('POST /api/admin/levels/[levelId]/teachers', () => {
     expect(getAssignment(MID_1)?.levelIds).toEqual([LEVEL_1]);
   });
 
-  it('allows welcome-team (front-desk)', async () => {
+  it('allows admin (front-desk)', async () => {
     const { POST } = await import('../route');
-    const res = await POST(makeRequest('POST', { mid: MID_1 }, 'uid-w', 'welcome-team'), params());
+    const res = await POST(makeRequest('POST', { mid: MID_1 }, 'uid-w', 'admin'), params());
     expect(res.status).toBe(200);
     expect(getLevel(LEVEL_1)?.teacherRefs).toEqual([MID_1]);
   });
@@ -299,11 +299,11 @@ describe('DELETE /api/admin/levels/[levelId]/teachers', () => {
     expect(getLevel(LEVEL_2)?.teacherRefs).toEqual([MID_1]);
   });
 
-  it('allows welcome-team', async () => {
+  it('allows admin', async () => {
     seedAssignment(MID_1, [LEVEL_1]);
     store.get('levels')!.set(LEVEL_1, { pid: 'bv-brampton-2025-26', teacherRefs: [MID_1] });
     const { DELETE } = await import('../route');
-    const res = await DELETE(makeRequest('DELETE', { mid: MID_1 }, 'uid-w', 'welcome-team'), params());
+    const res = await DELETE(makeRequest('DELETE', { mid: MID_1 }, 'uid-w', 'admin'), params());
     expect(res.status).toBe(200);
     expect(getLevel(LEVEL_1)?.teacherRefs).toEqual([]);
   });

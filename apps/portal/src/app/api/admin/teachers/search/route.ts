@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { isAdmin, isWelcomeTeam, isCoordinator } from '@cmt/shared-domain';
+import { isAdmin, isCoordinator } from '@cmt/shared-domain';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
 import { searchTeachers } from '@/features/setu/teacher/search-teachers';
 
@@ -9,7 +9,7 @@ import { searchTeachers } from '@/features/setu/teacher/search-teachers';
 export async function GET(req: Request) {
   const session = readSessionFromHeaders(req);
   if (!session || !session.uid) return NextResponse.json({ error: 'no-session' }, { status: 401 });
-  if (!isAdmin(session) && !isWelcomeTeam(session) && !isCoordinator(session)) {
+  if (!isAdmin(session) && !isCoordinator(session)) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
   const q = new URL(req.url).searchParams.get('q') ?? '';

@@ -5,7 +5,7 @@ vi.mock('@/features/setu/seva/get-opportunity-roster', () => ({ getOpportunityRo
 import { GET } from '../route';
 import { getOpportunityRoster } from '@/features/setu/seva/get-opportunity-roster';
 
-function req(role: string | null = 'welcome-team', uid: string | null = 'w1'): Request {
+function req(role: string | null = 'admin', uid: string | null = 'w1'): Request {
   const headers: Record<string, string> = {};
   if (role) headers['x-portal-role'] = role;
   if (uid) headers['x-portal-uid'] = uid;
@@ -28,10 +28,10 @@ describe('GET /api/welcome/seva/opportunities/[oppId]/signups', () => {
   });
   it('404 when roster resolves null', async () => {
     vi.mocked(getOpportunityRoster).mockResolvedValue(null);
-    expect((await GET(req('welcome-team'), ctx)).status).toBe(404);
+    expect((await GET(req('admin'), ctx)).status).toBe(404);
   });
-  it('200 returns { opportunity, rows } for welcome-team', async () => {
-    const res = await GET(req('welcome-team'), ctx);
+  it('200 returns { opportunity, rows } for admin', async () => {
+    const res = await GET(req('admin'), ctx);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual(roster);
   });

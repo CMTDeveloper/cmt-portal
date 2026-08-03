@@ -4,6 +4,7 @@ import { SetuIcon } from '@cmt/ui';
 import { deriveRoster } from '@/features/setu/teacher/roster';
 import { mostRecentSunday } from '@/features/setu/calendar/calendar';
 import type { RosterStatus } from '@cmt/shared-domain';
+import { denyUnlessAdmin } from '@/lib/require-admin-page';
 
 export const metadata = { title: 'Roster — CMT Welcome' };
 
@@ -22,6 +23,8 @@ export default async function WelcomeRosterPage({
   searchParams: Promise<{ date?: string }>;
 }) {
   await connection();
+  const denied = await denyUnlessAdmin();
+  if (denied) return denied;
   const { levelId } = await params;
   const { date: dateParam } = await searchParams;
   // Default to the class day (most recent Sunday), matching the teacher
