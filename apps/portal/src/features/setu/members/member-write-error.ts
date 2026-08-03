@@ -33,6 +33,8 @@ const MESSAGES: Record<string, string> = {
   'last-manager-cannot-deactivate':
     'A family must keep at least one manager who takes part. Make someone else a manager first.',
   'manager-must-be-adult': 'Only an adult can be a family manager.',
+  'participation-requires-another-member':
+    'You can’t change your own participation — ask another family manager to do it.',
   forbidden: 'You don’t have access to that member.',
   'not-found': 'That member could no longer be found.',
 };

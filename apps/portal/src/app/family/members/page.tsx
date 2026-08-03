@@ -95,9 +95,14 @@ export default async function FamilyRosterPage() {
                         <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
                           {m.nameMissing && m.isCurrent ? 'Tap to add your name →' : m.type}
                         </div>
-                        <div style={{ marginTop: 4, display: 'inline-flex', alignItems: 'center', fontSize: 11, fontWeight: 600, padding: '1px 8px', borderRadius: 99, background: memberStatusChip(m).bg, color: memberStatusChip(m).fg }}>
-                          {memberStatusChip(m).labelLong}
-                        </div>
+                        {(() => {
+                          const chip = memberStatusChip(m);
+                          return (
+                            <div style={{ marginTop: 4, display: 'inline-flex', alignItems: 'center', fontSize: 11, fontWeight: 600, padding: '1px 8px', borderRadius: 99, background: chip.bg, color: chip.fg }}>
+                              {chip.labelLong}
+                            </div>
+                          );
+                        })()}
                         {m.warn && <div style={{ marginTop: 6, fontSize: 11, color: 'var(--err)', display: 'flex', alignItems: 'center', gap: 4 }}><SetuIcon.warn/> {m.warn}</div>}
                       </div>
                       <SetuIcon.chevron color="var(--muted)"/>

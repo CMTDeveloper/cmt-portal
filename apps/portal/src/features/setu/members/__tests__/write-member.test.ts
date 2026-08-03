@@ -274,7 +274,7 @@ describe('updateMember', () => {
       mid: `${FID}-02`,
       body: { schoolGrade: 'Grade 6' },
       actor: STAFF,
-      canSetManagerFlag: true,
+      canSetManagerFlag: true, canSetParticipation: true,
     });
 
     expect(res.ok).toBe(true);
@@ -301,7 +301,7 @@ describe('updateMember', () => {
       mid: `${FID}-02`,
       body: { schoolGrade: 'Grade 6' },
       actor: null,
-      canSetManagerFlag: true,
+      canSetManagerFlag: true, canSetParticipation: true,
     });
 
     expect(auditRows(writes)).toHaveLength(0);
@@ -315,7 +315,7 @@ describe('updateMember', () => {
       mid: `${FID}-02`,
       body: { manager: true },
       actor: null,
-      canSetManagerFlag: false,
+      canSetManagerFlag: false, canSetParticipation: true,
     });
 
     expect(res.ok).toBe(false);
@@ -340,7 +340,7 @@ describe('updateMember', () => {
       mid: `${FID}-02`,
       body: { schoolGrade: 'Grade 6' },
       actor: STAFF,
-      canSetManagerFlag: true,
+      canSetManagerFlag: true, canSetParticipation: true,
     });
 
     expect(res.ok).toBe(false);
@@ -378,7 +378,7 @@ describe('updateMember - participation', () => {
 
     const res = await updateMember({
       fid: FID, mid: `${FID}-02`, body: { participation: 'inactive' },
-      actor: STAFF, canSetManagerFlag: true,
+      actor: STAFF, canSetManagerFlag: true, canSetParticipation: true,
     });
 
     expect(res.ok).toBe(true);
@@ -395,7 +395,7 @@ describe('updateMember - participation', () => {
 
     await updateMember({
       fid: FID, mid: `${FID}-02`, body: { participation: 'active' },
-      actor: STAFF, canSetManagerFlag: true,
+      actor: STAFF, canSetManagerFlag: true, canSetParticipation: true,
     });
 
     const w = writes.find((x) => x.path === `families/${FID}/members/${FID}-02`);
@@ -414,7 +414,7 @@ describe('updateMember - participation', () => {
 
     const res = await updateMember({
       fid: FID, mid: `${FID}-02`, body: { participation: 'inactive' },
-      actor: STAFF, canSetManagerFlag: true,
+      actor: STAFF, canSetManagerFlag: true, canSetParticipation: true,
     });
 
     expect(res.ok).toBe(false);
@@ -435,7 +435,7 @@ describe('updateMember - participation', () => {
 
     const res = await updateMember({
       fid: FID, mid: `${FID}-02`, body: { participation: 'inactive' },
-      actor: STAFF, canSetManagerFlag: true,
+      actor: STAFF, canSetManagerFlag: true, canSetParticipation: true,
     });
 
     expect(res.ok).toBe(true);
@@ -457,7 +457,7 @@ describe('updateMember - participation', () => {
 
     const res = await updateMember({
       fid: FID, mid: `${FID}-01`, body: { participation: 'inactive' },
-      actor: STAFF, canSetManagerFlag: true,
+      actor: STAFF, canSetManagerFlag: true, canSetParticipation: true,
     });
 
     expect(res.ok).toBe(false);
@@ -476,7 +476,7 @@ describe('updateMember - participation', () => {
 
     const res = await updateMember({
       fid: FID, mid: `${FID}-01`, body: { participation: 'inactive' },
-      actor: STAFF, canSetManagerFlag: true,
+      actor: STAFF, canSetManagerFlag: true, canSetParticipation: true,
     });
 
     expect(res.ok).toBe(true);
@@ -490,7 +490,7 @@ describe('updateMember - participation', () => {
 
     const res = await updateMember({
       fid: FID, mid: `${FID}-02`, body: { manager: true },
-      actor: STAFF, canSetManagerFlag: true,
+      actor: STAFF, canSetManagerFlag: true, canSetParticipation: true,
     });
 
     expect(res.ok).toBe(false);
@@ -510,7 +510,7 @@ describe('updateMember - participation', () => {
     const res = await updateMember({
       fid: FID, mid: `${FID}-01`,
       body: { type: 'Child', schoolGrade: '5', birthMonthYear: '2015-05' },
-      actor: STAFF, canSetManagerFlag: true,
+      actor: STAFF, canSetManagerFlag: true, canSetParticipation: true,
     });
 
     expect(res.ok).toBe(false);
@@ -533,7 +533,7 @@ describe('updateMember - participation', () => {
       // The edit form's full body - grade and birth month genuinely absent.
       body: { firstName: 'Diya', lastName: 'Patel', type: 'Child', gender: 'Female',
               foodAllergies: 'None', schoolGrade: null, birthMonthYear: null },
-      actor: null, canSetManagerFlag: true,
+      actor: null, canSetManagerFlag: true, canSetParticipation: true,
     });
     expect(res.ok, JSON.stringify(res)).toBe(true);
     expect(fake.writes.find((w) => w.path.endsWith(`${FID}-02`))?.data).toMatchObject({ firstName: 'Diya' });
@@ -547,7 +547,7 @@ describe('updateMember - participation', () => {
       fid: FID, mid: `${FID}-02`,
       body: { firstName: 'Diya', lastName: 'Patel', type: 'Child', gender: 'Female',
               foodAllergies: 'None', schoolGrade: null, birthMonthYear: '2015-05' },
-      actor: null, canSetManagerFlag: true,
+      actor: null, canSetManagerFlag: true, canSetParticipation: true,
     });
     expect(res.ok).toBe(false);
     expect(res).toMatchObject({ status: 400, body: { error: 'grade-required' } });
@@ -563,7 +563,7 @@ describe('updateMember - participation', () => {
     const fake = useDb(seedFamily({ [`families/${FID}/members/${FID}-02`]: inactive }));
     const res = await updateMember({
       fid: FID, mid: `${FID}-02`, body: { participation: 'active' },
-      actor: null, canSetManagerFlag: true,
+      actor: null, canSetManagerFlag: true, canSetParticipation: true,
     });
     expect(res.ok, JSON.stringify(res)).toBe(true);
     expect(fake.writes.find((w) => w.path.endsWith(`${FID}-02`))?.data).toMatchObject({ participation: 'active' });
@@ -575,12 +575,74 @@ describe('updateMember - participation', () => {
 
     await updateMember({
       fid: FID, mid: `${FID}-02`, body: { foodAllergies: 'Peanuts' },
-      actor: STAFF, canSetManagerFlag: true,
+      actor: STAFF, canSetManagerFlag: true, canSetParticipation: true,
     });
 
     const w = writes.find((x) => x.path === `families/${FID}/members/${FID}-02`);
     expect(w?.data).not.toHaveProperty('inactiveAt');
     expect(w?.data).not.toHaveProperty('participation');
+  });
+});
+
+// ── Who may set `participation` (Codex review, 2026-08-03) ──────────────────
+//
+// `manager` has had an authority parameter since it existed
+// (`canSetManagerFlag`). `participation` rode in on the same mutation with only
+// BUSINESS-state guards - enrolled, last participating manager, adult - none of
+// which ask WHO is doing it.
+//
+// Both UIs already refuse to offer it on your own record, and both say so in a
+// comment. But `/api/setu/members/{mid}` PATCH permits a self-edit for any
+// signed-in member, so a curl (or the mobile app, or devtools) could reach it
+// directly. Retiring yourself excuses you from `membersRequiringCompletion()`
+// while your session claims are untouched - `build-session-claims` never reads
+// participation - so a co-managed family's manager could keep every privilege
+// and permanently drop their own required fields. Intent expressed only in the
+// client is not a rule.
+describe('updateMember — participation authority', () => {
+  it('REFUSES a member retiring themselves', async () => {
+    const fake = useDb(seedFamily({ [`families/${FID}/members/${FID}-02`]: CHILD_DOC }));
+    const res = await updateMember({
+      fid: FID, mid: `${FID}-02`, body: { participation: 'inactive' },
+      actor: null, canSetManagerFlag: false, canSetParticipation: false,
+    });
+    expect(res.ok).toBe(false);
+    expect(res).toMatchObject({ status: 403, body: { error: 'participation-requires-another-member' } });
+    // and nothing was written
+    expect(fake.writes.find((w) => w.path.endsWith(`${FID}-02`))).toBeUndefined();
+  });
+
+  it('REFUSES a self-REACTIVATION too — the guard is about authority, not direction', async () => {
+    const inactive = { ...CHILD_DOC, participation: 'inactive' };
+    useDb(seedFamily({ [`families/${FID}/members/${FID}-02`]: inactive }));
+    const res = await updateMember({
+      fid: FID, mid: `${FID}-02`, body: { participation: 'active' },
+      actor: null, canSetManagerFlag: false, canSetParticipation: false,
+    });
+    expect(res.ok).toBe(false);
+    expect(res).toMatchObject({ status: 403 });
+  });
+
+  it('still lets the rest of a self-edit through — only `participation` is gated', async () => {
+    // The refusal must not become a wall around ordinary profile editing: a
+    // member updating their own allergies has nothing to do with this.
+    const fake = useDb(seedFamily({ [`families/${FID}/members/${FID}-02`]: CHILD_DOC }));
+    const res = await updateMember({
+      fid: FID, mid: `${FID}-02`, body: { foodAllergies: 'Peanuts' },
+      actor: null, canSetManagerFlag: false, canSetParticipation: false,
+    });
+    expect(res.ok, JSON.stringify(res)).toBe(true);
+    expect(fake.writes.find((w) => w.path.endsWith(`${FID}-02`))?.data).toMatchObject({ foodAllergies: 'Peanuts' });
+  });
+
+  it('ALLOWS it when the caller has the authority (a manager acting on someone else)', async () => {
+    const fake = useDb(seedFamily({ [`families/${FID}/members/${FID}-02`]: CHILD_DOC }));
+    const res = await updateMember({
+      fid: FID, mid: `${FID}-02`, body: { participation: 'inactive' },
+      actor: null, canSetManagerFlag: true, canSetParticipation: true,
+    });
+    expect(res.ok, JSON.stringify(res)).toBe(true);
+    expect(fake.writes.find((w) => w.path.endsWith(`${FID}-02`))?.data).toMatchObject({ participation: 'inactive' });
   });
 });
 

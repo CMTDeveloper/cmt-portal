@@ -152,6 +152,48 @@ describe('PATCH /api/setu/members/[mid]', () => {
     expect(res.status).toBe(200);
   });
 
+  // ── Nobody retires THEMSELVES (Codex review, 2026-08-03) ──────────────────
+  //
+  // The attack surface is this route, not the screens. Both UIs decline to
+  // offer the control on your own record and both say so in a comment - but a
+  // self-edit PATCH is permitted for any signed-in member, so curl, devtools or
+  // the mobile app reach the mutation directly. Retiring yourself excuses you
+  // from the profile-completion gate while `build-session-claims` leaves every
+  // privilege in place, so intent expressed only in a component is not a rule.
+  it('returns 403 when a family-member retires THEMSELVES', async () => {
+    const res = await PATCH(
+      makeRequest('PATCH', { participation: 'inactive' }, memberHeaders('FAM001ABCD12', 'FAM001ABCD12-02')),
+      { params: Promise.resolve(params) },
+    );
+    expect(res.status).toBe(403);
+    expect((await res.json()).error).toBe('participation-requires-another-member');
+  });
+
+  it('returns 403 when a MANAGER retires themselves', async () => {
+    // The higher-value case: a co-managed family's manager keeps every write
+    // privilege and permanently drops their own required fields.
+    const res = await PATCH(
+      makeRequest('PATCH', { participation: 'inactive' }, managerHeaders('FAM001ABCD12', 'FAM001ABCD12-02')),
+      { params: Promise.resolve(params) },
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it('ALLOWS a manager to retire a DIFFERENT member — the feature still works', async () => {
+    mockGet
+      .mockResolvedValueOnce(familySnap)
+      .mockResolvedValueOnce(memberSnap)
+      // The enrolled-cannot-deactivate guard reads the whole enrollments
+      // subcollection; this child is in none.
+      .mockResolvedValueOnce({ docs: [] });
+
+    const res = await PATCH(
+      makeRequest('PATCH', { participation: 'inactive' }, managerHeaders('FAM001ABCD12', 'FAM001ABCD12-01')),
+      { params: Promise.resolve(params) },
+    );
+    expect(res.status).toBe(200);
+  });
+
   it('returns 403 when family-member self-edits tries to set manager flag', async () => {
     const res = await PATCH(
       makeRequest('PATCH', { manager: true }, memberHeaders('FAM001ABCD12', 'FAM001ABCD12-02')),

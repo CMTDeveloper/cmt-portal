@@ -44,6 +44,7 @@ graduatedAt?: string | null             // ISO; stamped by the school-year rollo
 An inactive member must still be **listed** (their history is the reason they are kept) but should be visibly labelled and excluded from anything that asks for their details or puts them on a roster.
 
 Two related changes on the same responses:
+- `POST /api/setu/enrollments` → **409/400 `no-eligible-members` has a second cause now.** It used to mean "this family has no children"; it can now also mean "every child is marked as no longer participating" (including one the lazy migration retired at import). If the app hard-codes "Add a child" for this code, change it — that sentence tells a family to add a child it is looking at.
 - `GET /api/setu/dashboard` → `family.counts.{children,adults}` now counts **participating** members only. "2 children" for a family whose elder has finished is the first number they see, and it was wrong.
 - The child profile gains `participation: 'active' | 'inactive'` (always present, never absent). The profile is still returned in full for a retired child — the past attendance on it is exactly why the record was kept.
 
@@ -54,6 +55,8 @@ Two related changes on the same responses:
 ```
 
 **Send it ALONE when retiring someone.** The route enforces required fields only for the fields a patch actually touches, so `{participation:'inactive'}` by itself is accepted for a child with no `schoolGrade` — which is the entire point. Bundling the usual field payload alongside drags those fields back into scope and 400s on the very member you are excusing.
+
+🔴 **A member may NOT set their OWN participation.** `PATCH /api/setu/members/{own-mid}` with a `participation` field returns **403 `participation-requires-another-member`**, for a manager and a plain member alike, in both directions (retire *and* reactivate). Retiring yourself would excuse you from the completion gate while your session claims stayed untouched, so the rule is enforced at the route, not just hidden in the UI. **Do not build a "mark myself inactive" affordance** — ask another family manager. The staff route (`/api/welcome/families/{fid}/members/{mid}`) is unaffected.
 
 Three NEW **409** codes, each needing different words:
 

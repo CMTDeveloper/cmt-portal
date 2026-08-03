@@ -448,8 +448,23 @@ export async function updateMember(args: {
   body: unknown;
   actor: Actor | null;
   canSetManagerFlag: boolean;
+  /**
+   * The caller's authority to change `participation` - i.e. to say this person
+   * no longer takes part, or to bring them back.
+   *
+   * A separate parameter for the same reason `canSetManagerFlag` is one: the
+   * guards below check business STATE (are they enrolled, is another manager
+   * left, are they an adult) and none of them asks who is doing it. Both UIs
+   * already refuse to offer the control on your own record - but the family
+   * self-serve PATCH route permits a self-edit for any signed-in member, so
+   * intent expressed only in a component is not a rule. Retiring yourself
+   * excuses you from `membersRequiringCompletion()` while leaving your session
+   * claims untouched (`build-session-claims` never reads participation), so a
+   * co-manager could keep every privilege and drop their own required fields.
+   */
+  canSetParticipation: boolean;
 }): Promise<MutateMemberResult> {
-  const { fid, mid: targetMid, actor, canSetManagerFlag } = args;
+  const { fid, mid: targetMid, actor, canSetManagerFlag, canSetParticipation } = args;
 
   const parsed = patchMemberSchema.safeParse(args.body);
   if (!parsed.success) {
@@ -469,6 +484,14 @@ export async function updateMember(args: {
 
   if ('manager' in data && !canSetManagerFlag) {
     return { ok: false, status: 403, body: { error: 'manager-flag-requires-manager-role' } };
+  }
+
+  // Checked here, beside the manager check and BEFORE the transaction, so the
+  // two authority rules sit together and neither can be reached by a body that
+  // slipped past the other. Symmetric on purpose: reactivating yourself is
+  // refused as well, because this is a question of authority, not of direction.
+  if ('participation' in data && !canSetParticipation) {
+    return { ok: false, status: 403, body: { error: 'participation-requires-another-member' } };
   }
 
   const db = portalFirestore();
