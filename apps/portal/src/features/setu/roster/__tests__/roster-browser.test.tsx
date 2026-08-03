@@ -4,12 +4,11 @@ import userEvent from '@testing-library/user-event';
 import type { RosterReportRow } from '@cmt/shared-domain/setu';
 
 // vi.hoisted so the (hoisted) vi.mock factories can reference these mocks.
-const { fetchRosterReportClient, fetchMigrationStatusClient, searchFamiliesClient } = vi.hoisted(() => ({
+const { fetchRosterReportClient, searchFamiliesClient } = vi.hoisted(() => ({
   fetchRosterReportClient: vi.fn(),
-  fetchMigrationStatusClient: vi.fn(),
   searchFamiliesClient: vi.fn(),
 }));
-vi.mock('../roster-client', () => ({ fetchRosterReportClient, fetchMigrationStatusClient }));
+vi.mock('../roster-client', () => ({ fetchRosterReportClient }));
 vi.mock('@/features/setu/search/search-families-client', () => ({ searchFamiliesClient }));
 
 import { RosterBrowser } from '../roster-browser';
@@ -39,9 +38,7 @@ const PENDING = row({
 
 beforeEach(() => {
   fetchRosterReportClient.mockReset();
-  fetchMigrationStatusClient.mockReset();
   searchFamiliesClient.mockReset();
-  fetchMigrationStatusClient.mockResolvedValue({ legacyTotal: 3, migrated: 3, missing: 0, missingFids: [], checkedAt: 'x' });
   fetchRosterReportClient.mockResolvedValue({ rows: [RANA, SHAH] });
   searchFamiliesClient.mockResolvedValue([]);
 });
