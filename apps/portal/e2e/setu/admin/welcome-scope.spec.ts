@@ -243,6 +243,36 @@ for (const [label, email] of [
   });
 }
 
+/**
+ * Reported on preview 2026-08-03, one click apart: a parent granted welcome-team
+ * saw no staff features in the family navigation, and once they reached the
+ * staff area by URL there was no way back. Both were missing LINKS, not missing
+ * permissions — the grant had landed correctly all along, which is precisely why
+ * a permissions test could not have caught either one.
+ *
+ * Only the family-manager persona applies: setu-test-sevak is standalone and has
+ * no family to cross-link to.
+ */
+test.describe.serial('a parent who is also welcome-team can move between both areas', () => {
+  test.beforeEach(async ({ page }) => signIn(page, FAMILY_SEVAK));
+
+  test('the family dashboard offers a way INTO the staff area', async ({ page }) => {
+    await page.goto('/family');
+    const link = page.getByRole('link', { name: /welcome team/i }).filter({ visible: true }).first();
+    await expect(link, 'no route from /family into the welcome section').toBeVisible({ timeout: 30_000 });
+    await link.click();
+    await expect(page).toHaveURL(/\/welcome\/roster/);
+  });
+
+  test('and the staff area offers a way BACK', async ({ page }) => {
+    await page.goto('/welcome/roster');
+    const back = page.getByRole('link', { name: /my family/i }).filter({ visible: true }).first();
+    await expect(back, 'stranded in /welcome with no route back to /family').toBeVisible({ timeout: 30_000 });
+    await back.click();
+    await expect(page).toHaveURL(/\/family/);
+  });
+});
+
 test.describe.serial('admin keeps everything welcome-team gave up', () => {
   test.beforeEach(async ({ page }) => signIn(page, ADMIN));
 

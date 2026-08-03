@@ -24,6 +24,13 @@ interface DesktopSidebarProps {
   // link this shows in both the family AND welcome-team sidebars (a teacher
   // may be browsing either surface), so it's gated on showTeacher alone.
   showTeacher?: boolean;
+  /** Staff area this family member can also reach, if any. Drives the Sevak
+   *  shortcut for a parent who is also welcome-team or a coordinator. */
+  staffArea?: 'welcome-team' | 'coordinator' | null;
+  /** This staff member ALSO belongs to a family — show them the way back to it.
+   *  Only meaningful for the welcome-team / coordinator sidebars; the teacher
+   *  sidebar already carries "My family" unconditionally. */
+  hasFamily?: boolean;
   // A pre-rendered server element (the async <SchoolYearBadge/>) passed across
   // the RSC boundary as a ReactNode so this 'use client' shell never imports the
   // server-only badge. Optional, so Suspense fallbacks render without it.
@@ -109,10 +116,17 @@ function deriveActiveFromPathname(pathname: string): SidebarTab {
 // DesktopSidebar is pure — it does not call hooks. This lets it render inside
 // Suspense fallbacks (which Next.js 16 cacheComponents prerenders statically).
 // For pathname-driven self-highlighting, use DesktopSidebarLive instead.
-export function DesktopSidebar({ active, role = 'family', displayName, subtitle, showSignOut, isAdmin, showTeacher = false, yearBadge }: DesktopSidebarProps) {
+export function DesktopSidebar({ active, role = 'family', displayName, subtitle, showSignOut, isAdmin, showTeacher = false, staffArea = null, hasFamily = false, yearBadge }: DesktopSidebarProps) {
+  // "My family" is the way BACK for a welcome-team volunteer or coordinator who
+  // is also a parent. The mobile welcome nav has always offered it; this
+  // sidebar did not, so on a desktop they were stranded in the staff section
+  // with only Sign out. The teacher sidebar carries the same link already.
+  const backToFamily: [SidebarTab, string, keyof typeof SetuIcon, string, boolean?] =
+    ['family', 'My family', 'home', '/family'];
+  const staffNav = (items: typeof WELCOME_NAV_ITEMS) => (hasFamily ? [...items, backToFamily] : items);
   const navItems =
-    role === 'welcome-team' ? WELCOME_NAV_ITEMS
-      : role === 'coordinator' ? COORDINATOR_NAV_ITEMS
+    role === 'welcome-team' ? staffNav(WELCOME_NAV_ITEMS)
+      : role === 'coordinator' ? staffNav(COORDINATOR_NAV_ITEMS)
       : role === 'teacher' ? TEACHER_NAV_ITEMS
       : familyNavItems();
   const trimmed = (displayName ?? '').trim();
@@ -129,7 +143,7 @@ export function DesktopSidebar({ active, role = 'family', displayName, subtitle,
   const showAdminLink = isAdmin === true;
   // The Sevak section renders if EITHER a sevak cross-link is available. Teacher
   // is gated on showTeacher alone (shows in both family + welcome sidebars).
-  const showSevakSection = showAdminLink || showTeacher;
+  const showSevakSection = showAdminLink || showTeacher || staffArea !== null;
 
   return (
     <aside style={{ width: 248, background: 'var(--surface)', borderRight: '1px solid var(--line)', padding: '22px 18px', display: 'flex', flexDirection: 'column' }}>
@@ -200,6 +214,23 @@ export function DesktopSidebar({ active, role = 'family', displayName, subtitle,
                 }}
               >
                 <SetuIcon.people/> Teacher
+              </Link>
+            )}
+            {/* A parent who is ALSO on the welcome team (or a coordinator) had
+                no way into their staff screens from here — the grant landed but
+                the chrome never asked about it. Both roles land on the roster. */}
+            {staffArea && (
+              <Link
+                href="/welcome/roster"
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px',
+                  borderRadius: 'var(--radiusSm)',
+                  background: 'transparent',
+                  color: 'var(--body-text)',
+                  fontWeight: 500, textDecoration: 'none',
+                }}
+              >
+                <SetuIcon.search/> {staffArea === 'coordinator' ? 'Coordinator' : 'Welcome team'}
               </Link>
             )}
           </>

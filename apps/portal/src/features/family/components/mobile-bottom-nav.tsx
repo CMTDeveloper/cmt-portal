@@ -65,7 +65,7 @@ function activeTab(pathname: string): Tab {
   return 'home';
 }
 
-export function MobileBottomNav({ isAdmin = false, showTeacher = false }: { isAdmin?: boolean; showTeacher?: boolean }) {
+export function MobileBottomNav({ isAdmin = false, showTeacher = false, staffArea = null }: { isAdmin?: boolean; showTeacher?: boolean; staffArea?: 'welcome-team' | 'coordinator' | null }) {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
   const MORE_ITEMS = moreItems();
@@ -145,6 +145,21 @@ export function MobileBottomNav({ isAdmin = false, showTeacher = false }: { isAd
                   }}
                 >
                   <SetuIcon.people /> Teacher
+                </Link>
+              )}
+              {/* Same omission as the desktop sidebar: a parent on the welcome
+                  team had no route to their staff screens from the family app. */}
+              {staffArea && (
+                <Link
+                  href="/welcome/roster"
+                  onClick={() => setMoreOpen(false)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 14, padding: '14px 14px',
+                    borderRadius: 'var(--radiusSm)', textDecoration: 'none',
+                    color: 'var(--body-text)', background: 'transparent', fontSize: 15, fontWeight: 600,
+                  }}
+                >
+                  <SetuIcon.search /> {staffArea === 'coordinator' ? 'Coordinator' : 'Welcome team'}
                 </Link>
               )}
               <div style={{ height: 1, background: 'var(--line)', margin: '6px 0' }} />
