@@ -53,6 +53,17 @@ export default function PrivacyPage() {
             Vihar programme and other classes. This policy covers information handled through the
             portal.
           </p>
+          <p style={{ marginTop: 10 }}>
+            Our main website has its own terms of use at{' '}
+            <a
+              href="https://chinmayatoronto.org/privacy-policy/"
+              style={{ color: 'var(--accentDeep)' }}
+              rel="noreferrer"
+            >
+              chinmayatoronto.org
+            </a>
+            . Where the two differ about the portal, this page applies.
+          </p>
         </Section>
 
         <Section title="What we collect">
