@@ -72,6 +72,12 @@ export const MemberDocSchema = z.object({
   // family-check-ins collection (which keys students by sid). Null for members
   // with no legacy student row (new portal kids, adults).
   legacySid: z.string().nullable().optional(),
+  // The legacy roster's class level at import time, or null when the office had
+  // stopped assigning one (⇒ they had left Bala Vihar). Kept so the lazy
+  // migration's participation call is auditable and a future correction does
+  // not have to re-derive it from a snapshot. Never a required field on read -
+  // 2033 migrated docs predate it.
+  legacyLevel: z.string().nullable().optional(),
   // 5-digit sequential Member ID (issue #4), e.g. '50001'. The canonical,
   // user-facing member identifier (replaces the legacy SID for humans); the
   // `${fid}-NN` `mid` above stays the internal doc-id / join key. Optional: read-validated.

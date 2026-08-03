@@ -124,6 +124,7 @@ describe('memberStatusChip — one decision for BOTH layout trees', () => {
       mid: 'CMT-FAM1-02', name: 'Asha', type: 'Adult', tag: null, isManager: false,
       isAdult: true, warn: null, email: null, phone: null, role: null, isCurrent: false,
       nameMissing: false, missingCount: 0, invitePending: false, inactive: false,
+      inactiveBySystem: false,
       ...over,
     });
 
@@ -147,5 +148,48 @@ describe('memberStatusChip — one decision for BOTH layout trees', () => {
     expect(chip({ missingCount: 3 }).label).toBe('Complete info (3)');
     expect(chip({ missingCount: 3 }).href).toBe('/family/members/CMT-FAM1-02/edit');
     expect(chip({}).label).toBe('✓ Complete');
+  });
+});
+
+describe('memberStatusChip — whose call it was', () => {
+  const chip = (over: Partial<DisplayMember>) =>
+    memberStatusChip({
+      mid: 'CMT-FAM1-02', name: 'Asha', type: 'Child', tag: null, isManager: false,
+      isAdult: false, warn: null, email: null, phone: null, role: null, isCurrent: false,
+      nameMissing: false, missingCount: 0, invitePending: false, inactive: true,
+      inactiveBySystem: false, ...over,
+    });
+
+  it('says where a migration-made call came from, and links somewhere to fix it', () => {
+    // Lazy migration retires a child whose legacy roster row had no class level.
+    // That is a good guess, not a fact - if the family sees the same words they
+    // would have written themselves, they have no reason to check it. Naming the
+    // source turns a silent wrong guess into a visible, correctable one.
+    const c = chip({ inactiveBySystem: true });
+    expect(c.labelLong).toMatch(/our old records/i);
+    expect(c.href).toBe('/family/members/CMT-FAM1-02/edit');
+  });
+
+  it("does not blame our records when the FAMILY said it", () => {
+    const c = chip({ inactiveBySystem: false });
+    expect(c.labelLong).toBe('No longer participating');
+    expect(c.href).toBeNull();
+  });
+});
+
+describe('memberToDisplay — inactiveSource provenance', () => {
+  it('flags a migration-retired member as the portal\'s call, not the family\'s (N=2)', () => {
+    const bySystem = memberToDisplay(
+      makeMember({ participation: 'inactive', inactiveSource: 'legacy-migration' } as Partial<MemberDoc>), null);
+    const byFamily = memberToDisplay(
+      makeMember({ participation: 'inactive', inactiveSource: 'family' } as Partial<MemberDoc>), null);
+    expect(bySystem.inactiveBySystem).toBe(true);
+    expect(byFamily.inactiveBySystem).toBe(false);
+  });
+
+  it('never claims the portal retired an ACTIVE member', () => {
+    // inactiveSource can linger on a reactivated doc if a writer forgets to
+    // clear it; the flag must be gated on inactive, not on the source alone.
+    expect(memberToDisplay(makeMember({ inactiveSource: 'legacy-migration' } as Partial<MemberDoc>), null).inactiveBySystem).toBe(false);
   });
 });

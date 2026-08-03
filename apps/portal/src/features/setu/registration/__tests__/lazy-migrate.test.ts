@@ -452,3 +452,82 @@ describe('lazyMigrateLegacyFamily — no adult rows', () => {
     });
   });
 });
+
+// ── Departed children must not arrive as active students ─────────────────────
+//
+// The preventive half of the 2026-08-02 reports, and the higher-value one.
+// ~299 dormant families were deliberately skipped at cutover and migrate on
+// FIRST SIGN-IN, carrying roughly 205 children who left Bala Vihar years ago.
+// Without this every one of them lands as an active Child, and the completion
+// gate demands a school grade for someone who finished in 2019 - which is
+// exactly the wall Sadeesh hit, arriving one family at a time, forever.
+//
+// The legacy roster already knows: the office stops assigning a level when a
+// child leaves. `backfill-bv-enrollments.ts:168` has selected current students
+// with exactly `legacyLevel != null` since before this feature existed, so this
+// is that same established rule applied at import rather than at enrollment.
+describe('lazyMigrateLegacyFamily — children with no legacy level', () => {
+  function captureChildDocs(family: unknown) {
+    mockFetchLegacy.mockResolvedValue(family);
+    const txnSetCalls: [unknown, Record<string, unknown>][] = [];
+    mockRunTransaction.mockImplementation(async (fn: (txn: unknown) => Promise<unknown>) => {
+      const txn = {
+        get: vi.fn().mockResolvedValue({ empty: true, docs: [] }),
+        set: vi.fn().mockImplementation((_ref: unknown, data: Record<string, unknown>) => {
+          txnSetCalls.push([_ref, data]);
+        }),
+      };
+      return fn(txn);
+    });
+    return txnSetCalls;
+  }
+
+  // N=2, and the two must come out DIFFERENT - a blanket value passes a
+  // one-child fixture either way.
+  const twoChildren = {
+    ...legacyShahFamily,
+    children: [
+      { ...legacyShahFamily.children[0]!, firstName: 'Anil', legacySid: '2', legacyLevel: 'Level 1 (Gr 1)' },
+      { ...legacyShahFamily.children[0]!, firstName: 'Archish', legacySid: '3', legacyLevel: null },
+    ],
+  };
+
+  it('imports a child with NO level as inactive, and their sibling as active', async () => {
+    const calls = captureChildDocs(twoChildren);
+    await lazyMigrateLegacyFamily('42');
+
+    const kids = calls.map(([, d]) => d).filter((d) => d.type === 'Child');
+    expect(kids).toHaveLength(2);
+
+    const departed = kids.find((d) => d.firstName === 'Archish')!;
+    expect(departed.participation).toBe('inactive');
+    expect(departed.inactiveSource).toBe('legacy-migration');
+    expect(departed.inactiveAt).toBeTruthy();
+
+    const current = kids.find((d) => d.firstName === 'Anil')!;
+    // Deliberately ABSENT rather than 'active'. Absent-means-active is the one
+    // rule every reader already follows; writing the field on new docs only
+    // would tempt someone into a `where('participation','==','active')` query
+    // that silently drops all 2033 already-migrated members.
+    expect(current.participation).toBeUndefined();
+    expect(current.inactiveSource).toBeUndefined();
+  });
+
+  it('records the level it decided from, so the call is auditable', async () => {
+    const calls = captureChildDocs(twoChildren);
+    await lazyMigrateLegacyFamily('42');
+    const kids = calls.map(([, d]) => d).filter((d) => d.type === 'Child');
+    expect(kids.find((d) => d.firstName === 'Anil')!.legacyLevel).toBe('Level 1 (Gr 1)');
+    expect(kids.find((d) => d.firstName === 'Archish')!.legacyLevel).toBeNull();
+  });
+
+  it('never retires an ADULT for the same reason (adults have no level at all)', async () => {
+    // Adults carry no `legacyLevel`, so a rule written against the member rather
+    // than the child row would retire every parent in the roster.
+    const calls = captureChildDocs(twoChildren);
+    await lazyMigrateLegacyFamily('42');
+    const adults = calls.map(([, d]) => d).filter((d) => d.type === 'Adult');
+    expect(adults.length).toBeGreaterThanOrEqual(2);
+    expect(adults.every((d) => d.participation === undefined)).toBe(true);
+  });
+});

@@ -25,6 +25,14 @@ export type DisplayMember = {
    * to say so, or a member nothing asks about any more looks like a normal one.
    */
   inactive: boolean;
+  /**
+   * True when the PORTAL retired them, not the family - lazy migration marks a
+   * child whose legacy roster row had no class level. It is a good guess, not a
+   * fact, so the card has to say where it came from: a family that sees their
+   * own words reflected has nothing to check, but a family that sees a call the
+   * portal made on their behalf can correct it.
+   */
+  inactiveBySystem: boolean;
 };
 
 /** The single status chip on a member card. */
@@ -57,12 +65,16 @@ export interface MemberStatusChip {
 export function memberStatusChip(m: DisplayMember): MemberStatusChip {
   if (m.inactive) {
     return {
-      label: 'No longer participating',
-      labelLong: 'No longer participating',
+      label: m.inactiveBySystem ? 'Finished (from our records)' : 'No longer participating',
+      labelLong: m.inactiveBySystem
+        ? 'Finished — from our old records. Edit if that is wrong.'
+        : 'No longer participating',
       bg: 'var(--surface2)',
       fg: 'var(--muted)',
-      title: 'Kept for their history - nothing is asked of them',
-      href: null,
+      title: m.inactiveBySystem
+        ? 'Our old roster had no class for them, so we assumed they had finished'
+        : 'Kept for their history - nothing is asked of them',
+      href: m.inactiveBySystem ? `/family/members/${m.mid}/edit` : null,
     };
   }
   if (m.invitePending) {
@@ -103,6 +115,7 @@ export function memberToDisplay(m: MemberDoc, currentMid: string | null): Displa
   // Through the shared helper, never `=== 'active'` inline: absent means active,
   // and every migrated member doc predates the field.
   const inactive = !isParticipating(m);
+  const inactiveBySystem = inactive && m.inactiveSource === 'legacy-migration';
   const rawName = `${m.firstName ?? ''} ${m.lastName ?? ''}`.trim();
   const nameMissing = rawName.length === 0;
   const name = nameMissing ? (isCurrent ? 'Your profile' : 'Unnamed member') : rawName;
@@ -131,5 +144,6 @@ export function memberToDisplay(m: MemberDoc, currentMid: string | null): Displa
     missingCount: invitePending || inactive ? 0 : whatsMissingForMember(m).length,
     invitePending,
     inactive,
+    inactiveBySystem,
   };
 }
