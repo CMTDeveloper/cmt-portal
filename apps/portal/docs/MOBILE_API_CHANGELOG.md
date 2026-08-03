@@ -30,7 +30,7 @@ Reported on production 2026-08-02: a father could not finish registration becaus
 
 ### 1. New member fields (READ)
 
-Every member object the portal returns — `GET /api/setu/family`, the dashboard, the child profile — may now carry:
+`GET /api/setu/family`, `GET /api/setu/dashboard` (`members[]`) and the child profile all carry these now. Every member object may have:
 
 ```ts
 participation?: 'active' | 'inactive'   // ABSENT ⇒ active
@@ -42,6 +42,10 @@ graduatedAt?: string | null             // ISO; stamped by the school-year rollo
 🔴 **`participation` is optional and ABSENT MEANS ACTIVE.** All 2033 migrated member docs predate the field. A mirror written as `participation === 'active'` would treat every existing member as retired and empty the app. Write the check as `participation !== 'inactive'`, in ONE helper, and call it everywhere.
 
 An inactive member must still be **listed** (their history is the reason they are kept) but should be visibly labelled and excluded from anything that asks for their details or puts them on a roster.
+
+Two related changes on the same responses:
+- `GET /api/setu/dashboard` → `family.counts.{children,adults}` now counts **participating** members only. "2 children" for a family whose elder has finished is the first number they see, and it was wrong.
+- The child profile gains `participation: 'active' | 'inactive'` (always present, never absent). The profile is still returned in full for a retired child — the past attendance on it is exactly why the record was kept.
 
 ### 2. `PATCH /api/setu/members/{mid}` accepts `participation`
 
@@ -72,6 +76,10 @@ Three NEW **409** codes, each needing different words:
 The active Bala Vihar enrollment exists but names nobody — the usual cause is the only child having been converted to an Adult, which prunes them from `enrolledMids`. Without this the family could authorise a recurring bank mandate to fund nobody, and the portal has no cancel endpoint.
 
 **Do not fold it into the existing `already-started`/`already-active` branch.** A bare `status === 409` check tells the family they already have a monthly gift in progress and reloads them into the same dead end. It is also NOT `enrollment-required` — this family *is* enrolled, so "enrol in Bala Vihar first" is false. Discriminate on `error`, as `start-pledge-client.ts` does.
+
+### 5. Staff CSV: one new column, no dropped rows
+
+The roster/enrollment person CSV gains a trailing **`participating`** column (`yes` / `no`). Retired members are **exported, not filtered out** — the office asked to keep the history, and a row silently missing from a roster is what makes staff stop trusting the export. Any mobile or downstream consumer that pins the column count must be updated.
 
 ---
 

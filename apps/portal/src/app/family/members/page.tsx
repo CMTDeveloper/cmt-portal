@@ -10,7 +10,7 @@ import { type FamilyEmergencyContact, type FamilyAddress } from '@cmt/shared-dom
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 import { FamilyEmergencyContactCard } from '@/features/setu/members/family-emergency-contact-card';
 import { FamilyAddressCard } from '@/features/setu/members/family-address-card';
-import { memberToDisplay, type DisplayMember } from './member-display';
+import { memberToDisplay, memberStatusChip, type DisplayMember } from './member-display';
 
 export default async function FamilyRosterPage() {
   let familyName = mockFamily.name;
@@ -32,6 +32,7 @@ export default async function FamilyRosterPage() {
     nameMissing: false,
     missingCount: 0,
     invitePending: false,
+    inactive: false,
   }));
   // Only a family manager may promote others; the mock view is read-only.
   let canManage = false;
@@ -93,12 +94,8 @@ export default async function FamilyRosterPage() {
                         <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
                           {m.nameMissing && m.isCurrent ? 'Tap to add your name →' : m.type}
                         </div>
-                        <div style={{ marginTop: 4, display: 'inline-flex', alignItems: 'center', fontSize: 11, fontWeight: 600, padding: '1px 8px', borderRadius: 99, background: m.invitePending ? 'var(--info-soft)' : m.missingCount > 0 ? 'var(--setu-warn-soft)' : 'var(--setu-ok-soft)', color: m.invitePending ? 'var(--info-deep)' : m.missingCount > 0 ? 'var(--warn, #a06410)' : 'var(--ok)' }}>
-                          {m.invitePending
-                            ? 'Invite pending · awaiting sign-in'
-                            : m.missingCount > 0
-                              ? `${m.missingCount} field${m.missingCount !== 1 ? 's' : ''} to complete`
-                              : '✓ Complete'}
+                        <div style={{ marginTop: 4, display: 'inline-flex', alignItems: 'center', fontSize: 11, fontWeight: 600, padding: '1px 8px', borderRadius: 99, background: memberStatusChip(m).bg, color: memberStatusChip(m).fg }}>
+                          {memberStatusChip(m).labelLong}
                         </div>
                         {m.warn && <div style={{ marginTop: 6, fontSize: 11, color: 'var(--err)', display: 'flex', alignItems: 'center', gap: 4 }}><SetuIcon.warn/> {m.warn}</div>}
                       </div>
@@ -148,19 +145,20 @@ export default async function FamilyRosterPage() {
                   <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{m.type}</div>
                 </div>
                 <div className="row" style={{ gap: 8 }}>
-                  {m.invitePending ? (
-                    <span className="pill" style={{ background: 'var(--info-soft)', color: 'var(--info-deep)', fontSize: 11, fontWeight: 600 }} title="Invited — awaiting their sign-in">
-                      Invite pending
-                    </span>
-                  ) : m.missingCount > 0 ? (
-                    <Link href={`/family/members/${m.mid}/edit`} className="pill" style={{ background: 'var(--setu-warn-soft)', color: 'var(--warn, #a06410)', textDecoration: 'none', fontSize: 11, fontWeight: 600 }}>
-                      Complete info ({m.missingCount})
-                    </Link>
-                  ) : (
-                    <span className="pill" style={{ background: 'var(--setu-ok-soft)', color: 'var(--ok)', fontSize: 11, fontWeight: 600 }} title="All required profile info is on file">
-                      ✓ Complete
-                    </span>
-                  )}
+                  {(() => {
+                    // Same descriptor the phone card paints — see memberStatusChip.
+                    const chip = memberStatusChip(m);
+                    const style = { background: chip.bg, color: chip.fg, fontSize: 11, fontWeight: 600 } as const;
+                    return chip.href ? (
+                      <Link href={chip.href} className="pill" style={{ ...style, textDecoration: 'none' }}>
+                        {chip.label}
+                      </Link>
+                    ) : (
+                      <span className="pill" style={style} title={chip.title}>
+                        {chip.label}
+                      </span>
+                    );
+                  })()}
                   {canManage && !m.isManager && m.isAdult && (
                     <PromoteManagerButton mid={m.mid} name={m.name} variant="desktop"/>
                   )}

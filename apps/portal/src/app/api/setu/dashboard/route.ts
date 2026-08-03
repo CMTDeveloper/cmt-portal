@@ -76,6 +76,10 @@ export async function GET(req: Request) {
         firstName: m.firstName,
         lastName: m.lastName,
         type: m.type,
+        // Additive, and ABSENT MEANS ACTIVE - a mobile mirror written as
+        // `=== 'active'` would read every migrated member as retired. Sent
+        // rather than filtered: the app must LABEL these people, not lose them.
+        participation: m.participation ?? 'active',
       })),
       balaVihar: {
         isEnrolled: model.isEnrolled,

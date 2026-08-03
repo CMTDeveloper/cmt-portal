@@ -533,7 +533,27 @@ export async function updateMember(args: {
         schoolGrade: 'schoolGrade' in data ? data.schoolGrade ?? null : memberData.schoolGrade,
         birthMonthYear: 'birthMonthYear' in data ? data.birthMonthYear ?? null : memberData.birthMonthYear,
       };
-      const missingError = firstMissingRequiredFieldForPatch(merged, data, typeChanged);
+      // ...but the matrix only applies to someone who still takes part.
+      //
+      // `membersRequiringCompletion()` already excuses an inactive member at the
+      // completion gate. If this route still demanded their school grade the two
+      // would disagree, and the family would hit a wall the moment they opened
+      // that member's edit screen - which sends the whole record, so every
+      // required field is in scope on every save. The same disagreement would
+      // block the undo: a bare `{participation:'active'}` on an incomplete
+      // member (the kind most likely to have been retired) would 400.
+      //
+      // Reactivation needs no special case beyond that. A bare reactivate
+      // touches no required field, so the existing `field in patch` scoping lets
+      // it through, and the completion gate picks the member up on the family's
+      // next visit - which is where that conversation belongs.
+      const willParticipate =
+        'participation' in data
+          ? data.participation !== 'inactive'
+          : memberData.participation !== 'inactive';
+      const missingError = willParticipate
+        ? firstMissingRequiredFieldForPatch(merged, data, typeChanged)
+        : null;
       if (missingError) {
         throw Object.assign(new Error(missingError), { code: 'field-required', errorBody: missingError });
       }

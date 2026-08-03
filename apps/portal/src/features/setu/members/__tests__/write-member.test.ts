@@ -518,6 +518,57 @@ describe('updateMember - participation', () => {
     expect(writes.find((w) => w.path.includes(`${FID}-01`))).toBeUndefined();
   });
 
+  // ── The matrix does not apply to someone who has stopped taking part ─────
+  //
+  // `membersRequiringCompletion()` already excuses an inactive member at the
+  // gate. If the WRITE route still demanded their grade the two would disagree,
+  // and the family would hit a wall the moment they opened that member's edit
+  // screen - the edit form sends the whole record, so every required field is
+  // "in scope" on every save.
+  it('lets a retired child be edited without supplying the fields they no longer need', async () => {
+    const inactive = { ...CHILD_DOC, schoolGrade: null, birthMonthYear: null, participation: 'inactive' };
+    const fake = useDb(seedFamily({ [`families/${FID}/members/${FID}-02`]: inactive }));
+    const res = await updateMember({
+      fid: FID, mid: `${FID}-02`,
+      // The edit form's full body - grade and birth month genuinely absent.
+      body: { firstName: 'Diya', lastName: 'Patel', type: 'Child', gender: 'Female',
+              foodAllergies: 'None', schoolGrade: null, birthMonthYear: null },
+      actor: null, canSetManagerFlag: true,
+    });
+    expect(res.ok, JSON.stringify(res)).toBe(true);
+    expect(fake.writes.find((w) => w.path.endsWith(`${FID}-02`))?.data).toMatchObject({ firstName: 'Diya' });
+  });
+
+  it('STILL demands those fields from a participating child (the guard is not a blanket skip)', async () => {
+    const fake = useDb(seedFamily({
+      [`families/${FID}/members/${FID}-02`]: { ...CHILD_DOC, schoolGrade: null },
+    }));
+    const res = await updateMember({
+      fid: FID, mid: `${FID}-02`,
+      body: { firstName: 'Diya', lastName: 'Patel', type: 'Child', gender: 'Female',
+              foodAllergies: 'None', schoolGrade: null, birthMonthYear: '2015-05' },
+      actor: null, canSetManagerFlag: true,
+    });
+    expect(res.ok).toBe(false);
+    expect(res).toMatchObject({ status: 400, body: { error: 'grade-required' } });
+    expect(fake.writes.find((w) => w.path.endsWith(`${FID}-02`))).toBeUndefined();
+  });
+
+  it('lets an INCOMPLETE member be brought back with a bare reactivate', async () => {
+    // The undo path. If reactivation demanded the matrix, `{participation:
+    // "active"}` would 400 for exactly the member most likely to be retired -
+    // an incomplete one - and the family could never undo their own action.
+    // They are simply picked up by the completion gate on the next visit.
+    const inactive = { ...CHILD_DOC, schoolGrade: null, birthMonthYear: null, participation: 'inactive' };
+    const fake = useDb(seedFamily({ [`families/${FID}/members/${FID}-02`]: inactive }));
+    const res = await updateMember({
+      fid: FID, mid: `${FID}-02`, body: { participation: 'active' },
+      actor: null, canSetManagerFlag: true,
+    });
+    expect(res.ok, JSON.stringify(res)).toBe(true);
+    expect(fake.writes.find((w) => w.path.endsWith(`${FID}-02`))?.data).toMatchObject({ participation: 'active' });
+  });
+
   it('does not re-stamp inactiveAt on a patch that leaves participation alone', async () => {
     const inactive = { ...CHILD_DOC, participation: 'inactive', inactiveAt: new Date('2020-01-01') };
     const { writes } = useDb(seedFamily({ [`families/${FID}/members/${FID}-02`]: inactive }));

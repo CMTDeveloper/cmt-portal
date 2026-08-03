@@ -20,7 +20,7 @@ import {
 import { selectBalaViharEnrollment } from './select-bv-enrollment';
 import { flags } from '@/lib/flags';
 import { getFamilyPledge } from '@/features/setu/pledges/get-family-pledge';
-import { isPledgeGiving } from '@cmt/shared-domain/setu';
+import { isPledgeGiving, isParticipating } from '@cmt/shared-domain/setu';
 
 export interface BvChildView {
   mid: string;
@@ -85,9 +85,13 @@ export async function loadFamilyDashboard(
   const programsById = new Map<string, ProgramDoc>(allPrograms.map((p) => [p.programKey, p]));
 
   // Cheap header counts derived from the already-loaded members — no extra read.
+  // Retired members are excluded: "2 children" on the dashboard header for a
+  // family whose elder has finished is simply wrong, and it is the first number
+  // they see. They remain in `members` - only the COUNT is of who takes part.
+  const participating = members.filter((m) => isParticipating(m));
   const familyCounts = {
-    children: members.filter((m) => m.type === 'Child').length,
-    adults: members.filter((m) => m.type === 'Adult').length,
+    children: participating.filter((m) => m.type === 'Child').length,
+    adults: participating.filter((m) => m.type === 'Adult').length,
   };
 
   // Both of these need `enrollments` (so they can't join the fan-out above),

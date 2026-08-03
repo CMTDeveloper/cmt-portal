@@ -123,9 +123,12 @@ const MEMBER_02 = {
 function makeCurrentFamily({
   isManager,
   currentMid,
+  memberOverrides,
 }: {
   isManager: boolean;
   currentMid: string;
+  /** Reshape MEMBER_02 (the member being edited) per test. */
+  memberOverrides?: Record<string, unknown>;
 }) {
   return {
     family: {
@@ -151,7 +154,7 @@ function makeCurrentFamily({
         schoolGrade: null,
         birthMonthYear: null,
       },
-      MEMBER_02,
+      { ...MEMBER_02, ...(memberOverrides ?? {}) },
     ],
     isManager,
     currentMid,
@@ -593,5 +596,97 @@ describe('EditMemberPage — per-type required blocks submit', () => {
     await waitFor(() => {
       expect(screen.getAllByText(/phone is required for adults/i).length).toBeGreaterThan(0);
     });
+  });
+});
+
+// ── Participation (production reports 2026-08-02) ────────────────────────────
+// Vaibhav: "option for family to disable member who are no longer active, Not
+// to delete as we loose history." Until this, the only thing on this screen for
+// a member who had simply finished was "Remove from family".
+//
+// This is also the ONLY way BACK. /complete-profile can retire someone, but its
+// Undo is a draft that is gone the moment they save.
+describe('EditMemberPage — no longer participating', () => {
+  it('offers the toggle to a manager editing someone else, on the PHONE as well as the desktop', async () => {
+    // Not a detail: `removeButton` renders in the desktop tree ONLY, and most
+    // families are on a phone. A retire control placed beside it would have
+    // been invisible to the people who asked for it. Both trees render at once
+    // in jsdom, so TWO nodes is the assertion that proves it.
+    mockGetCurrentFamily.mockResolvedValue(makeCurrentFamily({ isManager: true, currentMid: MANAGER_MID }));
+    render(<EditMemberPage />);
+    await waitFor(() => expect(screen.getAllByTestId('participation-toggle').length).toBe(2));
+  });
+
+  it('is NOT offered on your own record', async () => {
+    // Same rule /complete-profile uses: retiring yourself while signed in and
+    // using the portal excuses your own required fields, it does not answer
+    // anything about attendance.
+    mockGetCurrentFamily.mockResolvedValue(makeCurrentFamily({ isManager: false, currentMid: MEMBER_MID }));
+    render(<EditMemberPage />);
+    await waitFor(() => expect(document.querySelectorAll('input').length).toBeGreaterThan(0));
+    expect(screen.queryByTestId('participation-toggle')).toBeNull();
+  });
+
+  it('sends participation:"inactive" and keeps the member (no DELETE)', async () => {
+    mockGetCurrentFamily.mockResolvedValue(makeCurrentFamily({ isManager: true, currentMid: MANAGER_MID }));
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ ok: true }) });
+    const user = userEvent.setup();
+    render(<EditMemberPage />);
+    await waitFor(() => expect(screen.getAllByTestId('participation-toggle').length).toBeGreaterThan(0));
+
+    await user.click(screen.getAllByTestId('participation-toggle')[0]!);
+    await user.click(screen.getAllByRole('button', { name: /save|update/i })[0]!);
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const [url, init] = fetchMock.mock.calls.at(-1)!;
+    expect(url).toBe(`/api/setu/members/${MEMBER_MID}`);
+    expect((init as RequestInit).method).toBe('PATCH'); // never DELETE - the history is the point
+    expect(JSON.parse(String((init as RequestInit).body))).toMatchObject({ participation: 'inactive' });
+  });
+
+  it('sends participation:"active" when the family brings someone back', async () => {
+    mockGetCurrentFamily.mockResolvedValue(
+      makeCurrentFamily({ isManager: true, currentMid: MANAGER_MID, memberOverrides: { participation: 'inactive' } }),
+    );
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ ok: true }) });
+    const user = userEvent.setup();
+    render(<EditMemberPage />);
+    // Seeded from the stored value, so it starts CHECKED.
+    await waitFor(() => expect((screen.getAllByTestId('participation-toggle')[0] as HTMLInputElement).checked).toBe(true));
+
+    await user.click(screen.getAllByTestId('participation-toggle')[0]!);
+    await user.click(screen.getAllByRole('button', { name: /save|update/i })[0]!);
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const body = JSON.parse(String((fetchMock.mock.calls.at(-1)![1] as RequestInit).body));
+    expect(body).toMatchObject({ participation: 'active' });
+  });
+
+  it('stops demanding required fields once the member is marked inactive', async () => {
+    // A retired child with no grade: the form would otherwise block a save the
+    // SERVER now accepts, on a field the portal has just promised to stop
+    // asking for - and the family would have no way to record their answer.
+    mockGetCurrentFamily.mockResolvedValue(
+      makeCurrentFamily({
+        isManager: true,
+        currentMid: MANAGER_MID,
+        memberOverrides: { type: 'Child', schoolGrade: null, birthMonthYear: null, email: null, phone: null, volunteeringSkills: [] },
+      }),
+    );
+    const user = userEvent.setup();
+    render(<EditMemberPage />);
+    await waitFor(() => expect(screen.getAllByTestId('participation-toggle').length).toBeGreaterThan(0));
+
+    // Incomplete child ⇒ the submit is blocked and nothing is written.
+    await user.click(screen.getAllByRole('button', { name: /save|update/i })[0]!);
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ ok: true }) });
+    await user.click(screen.getAllByTestId('participation-toggle')[0]!);
+    await user.click(screen.getAllByRole('button', { name: /save|update/i })[0]!);
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(JSON.parse(String((fetchMock.mock.calls.at(-1)![1] as RequestInit).body)))
+      .toMatchObject({ participation: 'inactive' });
   });
 });

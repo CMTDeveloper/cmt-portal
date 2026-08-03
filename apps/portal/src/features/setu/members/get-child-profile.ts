@@ -42,6 +42,13 @@ export interface ChildProfile {
   schoolGrade: string | null;
   birthMonthYear: string | null;
   foodAllergies: string | null;
+  /**
+   * Whether this person still takes part. A NAMED type on purpose - the two
+   * hand-maps that close with `as MemberDoc` would have dropped this silently,
+   * and the compiler is the only thing that catches it. Absent on the doc means
+   * active, so this is always populated.
+   */
+  participation: 'active' | 'inactive';
   programs: ChildProfileProgram[];
   pastPrograms: ChildProfileProgram[];
   achievements: ChildAchievement[];
@@ -133,6 +140,9 @@ export async function getChildProfile(mid: string): Promise<ChildProfile | null>
     firstName: member.firstName, lastName: member.lastName, type: member.type,
     schoolGrade: member.schoolGrade ?? null, birthMonthYear: member.birthMonthYear ?? null,
     foodAllergies: member.foodAllergies ?? null,
+    // Absent ⇒ active. The app labels the profile rather than hiding it: the
+    // past attendance below is precisely why the record was kept.
+    participation: member.participation ?? 'active',
     programs: activePrograms, pastPrograms,
     achievements: achievementsWithLabels,
     stats: { programCount: activePrograms.length, overallAttendedPct, hasAnyAttendance: sumTotal > 0 },

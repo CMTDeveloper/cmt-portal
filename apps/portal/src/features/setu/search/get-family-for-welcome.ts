@@ -73,6 +73,14 @@ export async function getFamilyForWelcome(fid: string): Promise<FamilyForWelcome
       volunteeringSkills: d.volunteeringSkills ?? [],
       foodAllergies: d.foodAllergies ?? null,
       emergencyContacts: d.emergencyContacts ?? [null, null],
+      // The THIRD hand-map (this one backs /welcome/family/[fid]). No spread, so
+      // a field left out here is `undefined` forever no matter what
+      // MemberDocSchema says - and the welcome team would see a retired member
+      // as a normal one and chase their missing details.
+      participation: d.participation ?? 'active',
+      inactiveAt: d.inactiveAt?.toDate?.() ?? null,
+      inactiveSource: d.inactiveSource ?? null,
+      graduatedAt: d.graduatedAt?.toDate?.() ?? null,
     } as MemberDoc;
   });
 

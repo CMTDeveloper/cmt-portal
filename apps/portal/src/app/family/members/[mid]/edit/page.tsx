@@ -83,6 +83,13 @@ export default function EditMemberPage() {
   const [phone, setPhone] = useState('');
   const [volunteeringSkills, setVolunteeringSkills] = useState<string[]>([]);
   const [isManager, setIsManager] = useState(false);
+  // Vaibhav, 2026-08-02: "option for family to disable member who are no longer
+  // active, Not to delete as we loose history." This is that option, and it sits
+  // beside "Remove from family" deliberately - the destructive action was the
+  // only thing here, so a family with a member who had simply finished had to
+  // erase them. It is also the ONLY way back: /complete-profile can retire
+  // someone, but its Undo is a draft, gone the moment they save.
+  const [participation, setParticipation] = useState<'active' | 'inactive'>('active');
   const [saving, setSaving] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [showErrors, setShowErrors] = useState(false);
@@ -91,6 +98,10 @@ export default function EditMemberPage() {
   const isEditingOther = data ? (data.isManager && mid !== data.currentMid) : false;
   // showManagerToggle: only when a manager edits someone other than themselves
   const showManagerToggle = isEditingOther;
+  // Same scope as "Remove from family", and for the same reason /complete-profile
+  // uses it: retiring YOURSELF while signed in and using the portal is a way to
+  // excuse your own required fields, not an answer about attendance.
+  const canSetParticipation = isEditingOther;
 
   // Canonical 'YYYY-MM' from the two dropdowns + the derived birthMonth (1-12).
   const monthNum = birthMonth ? Number(birthMonth) : null;
@@ -117,7 +128,11 @@ export default function EditMemberPage() {
     birthMonthYear: birthMonthYear || null,
   });
   const isMissing = (f: MemberRequiredField) => missing.includes(f);
-  const canSubmit = missing.length === 0;
+  // The required-field matrix does not apply to someone who no longer takes
+  // part - the completion gate excuses them, and `updateMember` now does too.
+  // Without this line the form would block a save the server would accept, on
+  // fields the portal has just promised to stop asking for.
+  const canSubmit = participation === 'inactive' || missing.length === 0;
 
   useEffect(() => {
     // Fetch via the API route — calling getCurrentFamily() directly from a
@@ -156,6 +171,8 @@ export default function EditMemberPage() {
         setPhone(member.phone ?? '');
         setVolunteeringSkills(member.volunteeringSkills);
         setIsManager(member.manager);
+        // Absent ⇒ active. Every migrated member doc predates the field.
+        setParticipation(member.participation === 'inactive' ? 'inactive' : 'active');
         setLoading(false);
       })
       .catch(() => {
@@ -186,6 +203,13 @@ export default function EditMemberPage() {
       email: email || null,
       phone: phone || null,
     };
+
+    // Only a manager editing SOMEONE ELSE sees the control, so only they can
+    // send it. Sending it unconditionally would let a member editing their own
+    // record silently re-assert 'active' on every save.
+    if (canSetParticipation) {
+      body.participation = participation;
+    }
 
     if (showManagerToggle) {
       body.manager = isManager;
@@ -273,6 +297,29 @@ export default function EditMemberPage() {
     showErrors && isMissing(f) ? (
       <p style={{ fontSize: 12, color: 'var(--err)', marginTop: 6 }}>{label}</p>
     ) : null;
+
+  // Offered ABOVE "Remove from family" on purpose: it is the answer a family
+  // usually wants, and until now the only thing on this screen for a member who
+  // had simply finished was the destructive one.
+  const participationSection = !loading && canSetParticipation ? (
+    <div className="field" style={{ marginTop: 22, paddingTop: 18, borderTop: '1px solid var(--line)' }} data-testid="participation-section">
+      <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+        <input
+          type="checkbox"
+          data-testid="participation-toggle"
+          checked={participation === 'inactive'}
+          onChange={(e) => setParticipation(e.target.checked ? 'inactive' : 'active')}
+          style={{ width: 18, height: 18 }}
+        />
+        No longer participating
+      </label>
+      <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6, lineHeight: 1.5 }}>
+        Keeps their record and past attendance. We stop asking for their profile
+        details, and they no longer appear on class rosters or at check-in.
+        Uncheck to bring them back.
+      </p>
+    </div>
+  ) : null;
 
   const formBody = loading ? (
     <LoadingOm padding={40} />
@@ -419,6 +466,12 @@ export default function EditMemberPage() {
           </p>
         </div>
       )}
+
+      {/* Inside formBody, NOT beside removeButton: removeButton renders in the
+          DESKTOP tree only (pre-existing - a phone cannot remove a member from
+          here), and most families are on a phone. A retire control that only
+          half the audience can reach would not fix the thing it was asked for. */}
+      {participationSection}
     </>
   );
 

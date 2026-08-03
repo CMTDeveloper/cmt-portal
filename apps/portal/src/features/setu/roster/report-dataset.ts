@@ -1,6 +1,6 @@
 import 'server-only';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
-import { formatFamilyParentNames } from '@cmt/shared-domain';
+import { formatFamilyParentNames, isParticipating } from '@cmt/shared-domain';
 import type { OfferingDoc, RosterPersonCsvRow, RosterReportRow, RosterReportChild } from '@cmt/shared-domain';
 import { classifyBulkPayment } from './payment';
 import { loadActivePledgeFids } from '@/features/setu/pledges/active-pledge-fids';
@@ -18,7 +18,7 @@ function toDate(v: unknown): Date {
 }
 
 type Meta = { name: string; location: string; legacyFid: string; publicFid: string | null };
-type Member = { mid: string; firstName: string; lastName: string; type: string; grade: string; manager: boolean };
+type Member = { mid: string; firstName: string; lastName: string; type: string; grade: string; manager: boolean; participating: boolean };
 type EnrolledVia = 'family-initiated' | 'first-attendance' | 'welcome-team' | 'promotion' | 'kiosk';
 type ActiveEnr = {
   programKey: string; programLabel: string; oid: string; pid: string; eid: string;
@@ -57,7 +57,7 @@ export async function buildRosterReportDataset(params: { year?: string }): Promi
   for (const m of memberSnap.docs) {
     const fid = m.ref.parent.parent?.id;
     if (!fid || !meta.has(fid)) continue;
-    const d = m.data() as { mid?: unknown; firstName?: unknown; lastName?: unknown; type?: unknown; schoolGrade?: unknown; manager?: unknown };
+    const d = m.data() as { mid?: unknown; firstName?: unknown; lastName?: unknown; type?: unknown; schoolGrade?: unknown; manager?: unknown; participation?: unknown };
     const arr = membersByFid.get(fid) ?? [];
     arr.push({
       mid: typeof d.mid === 'string' ? d.mid : m.id,
@@ -66,6 +66,9 @@ export async function buildRosterReportDataset(params: { year?: string }): Promi
       type: String(d.type ?? ''),
       grade: typeof d.schoolGrade === 'string' ? d.schoolGrade : '',
       manager: d.manager === true,
+      // Through the shared helper: absent means active, and every migrated
+      // member doc predates the field.
+      participating: isParticipating(d as { participation?: string | null }),
     });
     membersByFid.set(fid, arr);
   }
@@ -268,6 +271,7 @@ export async function buildRosterReportDataset(params: { year?: string }): Promi
       location: fam.location,
       programs: programsJoined,
       payment,
+      participating: m.participating ? 'yes' : 'no',
     }));
 
     out.push({ row, personRows });
