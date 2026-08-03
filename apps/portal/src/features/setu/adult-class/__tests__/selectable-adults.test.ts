@@ -39,6 +39,23 @@ describe('selectableAdults - the scenario matrix', () => {
     expect(mids(selectableAdults(members, new Set()))).toEqual(['f-01', 'f-02']);
   });
 
+  it('a retired adult is not offered the class', () => {
+    // N=2: the participating adult must survive, or a filter that dropped
+    // everyone would pass this just as happily.
+    const members = [
+      member({ mid: 'f-01' }),
+      member({ mid: 'f-02', participation: 'inactive' }),
+    ];
+    expect(mids(selectableAdults(members, new Set()))).toEqual(['f-01']);
+  });
+
+  it('an adult with NO participation field is still offered', () => {
+    // Every migrated member doc predates the field; reading absent as retired
+    // would make the class un-joinable for the entire existing roster.
+    const members = [member({ mid: 'f-01', participation: undefined })];
+    expect(mids(selectableAdults(members, new Set()))).toEqual(['f-01']);
+  });
+
   it('row 2: one parent teaches - only the non-teacher is offered', () => {
     const members = [member({ mid: 'f-01' }), member({ mid: 'f-02' })];
     expect(mids(selectableAdults(members, new Set(['f-01'])))).toEqual(['f-02']);

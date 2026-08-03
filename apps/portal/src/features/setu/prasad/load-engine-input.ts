@@ -1,5 +1,5 @@
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
-import { GRADE_LADDER, normalizeGrade, type PrasadEngineFamily, type PrasadEngineInput } from '@cmt/shared-domain';
+import { GRADE_LADDER, isParticipating, normalizeGrade, type PrasadEngineFamily, type PrasadEngineInput } from '@cmt/shared-domain';
 import { torontoToday } from './constants';
 
 const RUNG = new Map<string, number>(GRADE_LADDER.map((g, i) => [normalizeGrade(g), i]));
@@ -68,8 +68,13 @@ export async function loadEngineInput(pid: string, location: string, cap?: numbe
     ]);
     const enrolled = enrolledMidsByFid.get(fid)!;
     const children = memSnap.docs
-      .map((d) => d.data() as { mid: string; firstName?: string; lastName?: string; type?: string; schoolGrade?: string | null; birthMonth?: number | null; birthMonthYear?: string | null })
-      .filter((m) => m.type === 'Child' && enrolled.has(m.mid))
+      .map((d) => d.data() as { mid: string; firstName?: string; lastName?: string; type?: string; schoolGrade?: string | null; birthMonth?: number | null; birthMonthYear?: string | null; participation?: string | null })
+      // `enrolled.has` already excludes most retired children, because
+      // reconciliation prunes them from `enrolledMids` - but only once it has
+      // RUN. Asking directly removes the dependency on that timing: prasad is
+      // assigned from the youngest child's birth month, so one stale mid can
+      // move a family's Sunday.
+      .filter((m) => m.type === 'Child' && enrolled.has(m.mid) && isParticipating(m))
       .map((m) => ({
         mid: m.mid,
         name: `${m.firstName ?? ''} ${m.lastName ?? ''}`.trim() || m.mid,

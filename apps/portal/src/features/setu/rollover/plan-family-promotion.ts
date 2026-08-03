@@ -1,9 +1,10 @@
-import { decidePromotion, type LevelSnapshot, type PromotionRow } from '@cmt/shared-domain';
+import { decidePromotion, isParticipating, type LevelSnapshot, type PromotionRow } from '@cmt/shared-domain';
 import { buildLevelSnapshot } from './school-year';
 
 interface MemberLite {
   mid: string; firstName: string; lastName: string;
   type: 'Adult' | 'Child'; schoolGrade: string | null; birthMonthYear: string | null;
+  participation?: string | null;
 }
 interface LevelLite {
   levelId: string; levelName: string;
@@ -17,6 +18,18 @@ export interface FamilyPromotionPlan {
   fid: string;
   promotedMids: string[];
   gradeUpdates: { mid: string; schoolGrade: string }[];
+  /**
+   * Children who aged out of the programme this rollover.
+   *
+   * Recorded because until now graduation left NO trace: the rollover counted
+   * graduates and wrote nothing, so a grade-12 graduate and a current grade-12
+   * student were indistinguishable afterwards. That is why the family has to be
+   * ASKED what a finished child should become - the system cannot tell.
+   *
+   * Deliberately NOT auto-deactivation: a graduate may stay on as an adult
+   * member. This marks the event; the family decides what it means.
+   */
+  graduatedMids: string[];
   sourceSnapshots: Record<string, LevelSnapshot>;
   targetSnapshots: Record<string, LevelSnapshot>;
   rows: PromotionRow[];
@@ -32,13 +45,19 @@ export interface FamilyPromotionPlan {
 export function planFamilyPromotion(input: PlanInput): FamilyPromotionPlan {
   const byMid = new Map(input.members.map((m) => [m.mid, m]));
   const plan: FamilyPromotionPlan = {
-    fid: input.fid, promotedMids: [], gradeUpdates: [],
+    fid: input.fid, promotedMids: [], gradeUpdates: [], graduatedMids: [],
     sourceSnapshots: {}, targetSnapshots: {}, rows: [],
   };
 
   for (const mid of input.enrolledMids) {
     const m = byMid.get(mid);
     if (!m || m.type !== 'Child') continue; // BV enrolledMids are children
+    // Never promote or graduate someone who has stopped attending. The mid can
+    // still be on a PRIOR-year enrollment (this reads last year's roster to
+    // build next year's), so reconciliation pruning the current one does not
+    // cover this - and a retired child silently gaining a grade every August is
+    // how "why is my son in Grade 9?" starts.
+    if (!isParticipating(m)) continue;
     const src = buildLevelSnapshot(m, input.srcLevels, input.now); // this-year (pre-advance)
     plan.sourceSnapshots[mid] = src;
     const outcome = decidePromotion(m, input.now);
@@ -62,6 +81,7 @@ export function planFamilyPromotion(input: PlanInput): FamilyPromotionPlan {
       row.toGrade = null;
       row.toLevelName = tgt.levelName;
     }
+    if (outcome.kind === 'graduate') plan.graduatedMids.push(mid);
     // graduate / shishu-aged-out / needs-grade → no promotion, no grade update.
     plan.rows.push(row);
   }
