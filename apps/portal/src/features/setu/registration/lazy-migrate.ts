@@ -168,6 +168,21 @@ export async function lazyMigrateLegacyFamily(legacyFid: string): Promise<LazyMi
     for (const child of legacy.children) {
       const mid = `${fid}-${zeroPad(seq++)}`;
       memberMids.push(mid);
+      // A roster row with NO level is someone who has left Bala Vihar: the
+      // office stops assigning a class when a child finishes or moves on.
+      // `backfill-bv-enrollments.ts:168` has selected current students with
+      // exactly `legacyLevel != null` since long before this feature, so this
+      // is an established rule applied at IMPORT instead of at enrollment.
+      //
+      // Without it every child ever on the roster since 2012 arrives as an
+      // active Child and the completion gate demands a school grade for someone
+      // who finished years ago - the wall reported on 2026-08-02, arriving one
+      // dormant family at a time. About 205 such children are still waiting in
+      // the ~299 families that migrate lazily on first sign-in.
+      //
+      // The family can undo it in one click at /family/members/{mid}/edit, and
+      // `inactiveSource` says this was the portal's call rather than theirs.
+      const departed = child.legacyLevel == null;
       txn.set(db.collection('families').doc(fid).collection('members').doc(mid), {
         mid,
         publicMid: publicMids[publicMidCursor++]!,
@@ -182,11 +197,22 @@ export async function lazyMigrateLegacyFamily(legacyFid: string): Promise<LazyMi
         phone: null,
         schoolGrade: child.schoolGrade,
         legacySid: child.legacySid,
+        // The evidence behind `departed`, kept so the decision is auditable and
+        // a future correction does not have to re-derive it from a snapshot.
+        legacyLevel: child.legacyLevel,
         birthMonthYear: null,
         birthMonth: child.birthMonth ?? null,
         volunteeringSkills: [],
         foodAllergies: null,
         emergencyContacts: [null, null],
+        // Spread-omitted for a CURRENT student rather than written as 'active'.
+        // "Absent means active" is the one rule every reader already follows;
+        // writing the field on new docs only would tempt someone into a
+        // `where('participation','==','active')` query that silently drops all
+        // 2033 members migrated before the field existed.
+        ...(departed
+          ? { participation: 'inactive', inactiveAt: new Date(), inactiveSource: 'legacy-migration' }
+          : {}),
       });
     }
 

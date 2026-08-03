@@ -2,7 +2,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Shared mutable state the Firestore + getProgram mocks read from.
 const state = vi.hoisted(() => ({
-  members: [] as Array<{ mid: string; type: 'Adult' | 'Child'; birthMonthYear?: string | null }>,
+  members: [] as Array<{
+    mid: string;
+    type: 'Adult' | 'Child';
+    birthMonthYear?: string | null;
+    participation?: string;
+  }>,
   enrollments: [] as Array<{ eid: string; programKey: string; status: string; enrolledMids: string[]; membershipMode?: 'auto' | 'manual' }>,
   programs: {} as Record<string, { status: string; eligibility: unknown } | null>,
   updates: [] as Array<{ eid: string; enrolledMids: string[] }>,
@@ -67,6 +72,45 @@ describe('syncActiveEnrollmentMemberships', () => {
     expect(res.updated).toEqual(['F-bv']);
     expect(state.updates).toEqual([{ eid: 'F-bv', enrolledMids: ['F-02', 'F-03'] }]);
     expect(state.commits).toBe(1);
+  });
+
+  // A retired member is treated as DEPARTED, in both membership modes. The
+  // alternative - counting them merely ineligible - would leave them on a
+  // manual enrollment, i.e. on a teacher's roster, after their family said they
+  // were done.
+  it('drops a child the family retired (auto mode)', async () => {
+    state.programs = { 'bala-vihar': BV };
+    state.members = [
+      { mid: 'F-01', type: 'Adult' },
+      { mid: 'F-02', type: 'Child', birthMonthYear: null },
+      { mid: 'F-03', type: 'Child', birthMonthYear: null, participation: 'inactive' },
+    ];
+    state.enrollments = [{ eid: 'F-bv', programKey: 'bala-vihar', status: 'active', enrolledMids: ['F-02', 'F-03'] }];
+
+    const res = await syncActiveEnrollmentMemberships('F');
+
+    // F-02 survives: an N=1 fixture could not distinguish "drops the inactive
+    // one" from "drops everybody".
+    expect(res.updated).toEqual(['F-bv']);
+    expect(state.updates).toEqual([{ eid: 'F-bv', enrolledMids: ['F-02'] }]);
+  });
+
+  it('drops a retired member from a MANUAL selection too', async () => {
+    // Manual mode filters by existence only, deliberately - so participation
+    // has to be folded into what "still here" means, or the family's own
+    // choice keeps a retired member on the roster forever.
+    state.programs = { 'bala-vihar': BV };
+    state.members = [
+      { mid: 'F-01', type: 'Adult' },
+      { mid: 'F-02', type: 'Adult', participation: 'inactive' },
+    ];
+    state.enrollments = [
+      { eid: 'F-asc', programKey: 'bala-vihar', status: 'active', enrolledMids: ['F-01', 'F-02'], membershipMode: 'manual' },
+    ];
+
+    await syncActiveEnrollmentMemberships('F');
+
+    expect(state.updates).toEqual([{ eid: 'F-asc', enrolledMids: ['F-01'] }]);
   });
 
   it('excludes adults from a child-only (Bala Vihar) enrollment', async () => {

@@ -37,6 +37,31 @@ export const MemberDocSchema = z.object({
   // contactKey until accept — so it is excluded from the profile-completion gate
   // and shows an "Invite pending" badge instead of a missing-fields count.
   inviteStatus: z.enum(['pending']).nullable().optional(),
+  // ── Does this person still take part? ─────────────────────────────────────
+  //
+  // Absent ⇒ active. It can NEVER be required on read: all 2033 migrated docs
+  // predate it. Required-ness is enforced at the write routes, as with every
+  // other member rule.
+  //
+  // Deliberately a THIRD concept, not a reuse of the two above:
+  //   portalAccess  - may they sign in?
+  //   inviteStatus  - have they accepted an invite?
+  //   participation - do they still attend?
+  // A co-manager can be portalAccess:'active' and participation:'inactive' the
+  // year they stop coming. Reported 2026-08-02: a family had no way to say "my
+  // son finished Bala Vihar" or "my spouse isn't taking part", so the profile
+  // gate demanded a school grade for a graduate and contact details for someone
+  // who never signed up. This is a disable, never a delete - the person, their
+  // attendance and their donation history all stay.
+  participation: z.enum(['active', 'inactive']).optional(),
+  inactiveAt: z.date().nullable().optional(),
+  // Where the deactivation came from, so a bulk migration decision can be told
+  // apart from a family's own choice (and reversed separately if it was wrong).
+  inactiveSource: z.enum(['family', 'legacy-migration']).nullable().optional(),
+  // Set by the annual rollover when a child ages out of the programme. Distinct
+  // from participation: a graduate may well stay on as an adult member. Without
+  // it a grade-12 graduate is indistinguishable from a current grade-12 student.
+  graduatedAt: z.date().nullable().optional(),
   schoolGrade: z.string().nullable(),
   birthMonthYear: z.string().nullable(),
   // Birth month only (1-12), no year — the legacy roster's `dob_m`. Used by the
@@ -47,6 +72,12 @@ export const MemberDocSchema = z.object({
   // family-check-ins collection (which keys students by sid). Null for members
   // with no legacy student row (new portal kids, adults).
   legacySid: z.string().nullable().optional(),
+  // The legacy roster's class level at import time, or null when the office had
+  // stopped assigning one (⇒ they had left Bala Vihar). Kept so the lazy
+  // migration's participation call is auditable and a future correction does
+  // not have to re-derive it from a snapshot. Never a required field on read -
+  // 2033 migrated docs predate it.
+  legacyLevel: z.string().nullable().optional(),
   // 5-digit sequential Member ID (issue #4), e.g. '50001'. The canonical,
   // user-facing member identifier (replaces the legacy SID for humans); the
   // `${fid}-NN` `mid` above stays the internal doc-id / join key. Optional: read-validated.

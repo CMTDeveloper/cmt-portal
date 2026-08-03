@@ -71,9 +71,19 @@ function lastFetchInit(): { body: string; headers: Record<string, string> } {
   return init as { body: string; headers: Record<string, string> };
 }
 
+// The default family has ONE active Bala Vihar enrollment. Before 2026-08-03
+// most of these fixtures used `type:'general'`, which needed no enrollment at
+// all - that type is gone, so the ordinary case is now an enrollment gift.
+const DEFAULT_BV = [
+  { eid: 'fid1-oid1', status: 'active', oid: 'oid1', programKey: 'bala-vihar', programLabel: 'Bala Vihar', termLabel: 'Fall 2026', effectiveSuggestedAmount: 500, offering: { programKey: 'bala-vihar', programLabel: 'Bala Vihar', termLabel: 'Fall 2026' } },
+];
+/** The ordinary at-the-floor Bala Vihar gift. */
+const BV_GIFT = { type: 'enrollment', eid: 'fid1-oid1', amountCAD: 500 };
+
 beforeEach(() => {
   vi.clearAllMocks();
   flagState.setuDonations = true;
+  mockGetEnrollments.mockResolvedValue(DEFAULT_BV);
   // No pledge by default - the ordinary family.
   mockGetFamilyPledge.mockResolvedValue(null);
   process.env.STRIPE_API_KEY = 'sk_test_x';
@@ -94,33 +104,70 @@ beforeEach(() => {
 describe('POST /api/setu/donations/checkout', () => {
   it('returns 404 when the donations flag is off', async () => {
     flagState.setuDonations = false;
-    const res = await POST(makeReq({ type: 'general', amountCAD: 100 }));
+    const res = await POST(makeReq(BV_GIFT));
     expect(res.status).toBe(404);
   });
 
   it('returns 401 with no session', async () => {
-    const res = await POST(makeReq({ type: 'general', amountCAD: 100 }, { role: '' }));
+    const res = await POST(makeReq(BV_GIFT, { role: '' }));
     expect(res.status).toBe(401);
   });
 
   it('returns 403 for a family-member (non-manager)', async () => {
-    const res = await POST(makeReq({ type: 'general', amountCAD: 100 }, { role: 'family-member' }));
+    const res = await POST(makeReq(BV_GIFT, { role: 'family-member' }));
     expect(res.status).toBe(403);
   });
 
   it('returns 400 on an invalid body', async () => {
-    const res = await POST(makeReq({ type: 'general' }));
+    const res = await POST(makeReq({ type: 'enrollment' })); // no eid, no amount
     expect(res.status).toBe(400);
   });
 
   it('returns 503 when Stripe env is not configured', async () => {
     delete process.env.STRIPE_API_KEY;
-    const res = await POST(makeReq({ type: 'general', amountCAD: 100 }));
+    const res = await POST(makeReq(BV_GIFT));
     expect(res.status).toBe(503);
   });
 
-  it('completes a general donation and returns the checkout url', async () => {
-    const res = await POST(makeReq({ type: 'general', amountCAD: 100 }));
+  // ── The metadata CMT's accounting reports on ──────────────────────────────
+  //
+  // Read off the real outgoing request body (lastFetchInit), never off a mocked
+  // helper call: the 2026-08-01 review caught exactly that - a route-level
+  // assertion proving a value reached a mock, not Stripe.
+  //
+  // What shipped until 2026-08-03 was `campaign: 'setu'` - the SOURCE in the
+  // CAMPAIGN field. So on every live donation the campaign was never populated
+  // and the source was never sent, and nothing anywhere failed.
+  it('sends campaign=BalaViharDonation + source=setu on the wire', async () => {
+    await POST(makeReq(BV_GIFT));
+    const body = JSON.parse(lastFetchInit().body);
+    expect(body.metadata.campaign).toBe('BalaViharDonation');
+    expect(body.metadata.source).toBe('setu');
+    expect(body.metadata.programKey).toBe('bala-vihar');
+    // The two family identifiers stay - support and reconciliation match on fid,
+    // and familyId is the human-readable form.
+    expect(body.metadata.fid).toBe('fid1');
+    expect(body.metadata.familyId).toMatch(/^FID-/);
+  });
+
+  it('never labels a NON-Bala-Vihar gift as Bala Vihar', async () => {
+    // A Tabla gift stamped BalaViharDonation lands in the wrong report and
+    // nobody reconciling either one sees a discrepancy. It must also NOT be
+    // refused - paymentSourceOf() defaults to 'portal', so a non-BV offering is
+    // payable today and a refusal would stop money CMT wants.
+    mockGetEnrollments.mockResolvedValue([
+      { eid: 'fid1-tabla', status: 'active', oid: 'tabla-1', programKey: 'tabla', programLabel: 'Tabla classes', termLabel: 'Fall 2026', effectiveSuggestedAmount: 200, offering: { programKey: 'tabla', programLabel: 'Tabla classes', termLabel: 'Fall 2026' } },
+    ]);
+    const res = await POST(makeReq({ type: 'enrollment', eid: 'fid1-tabla', amountCAD: 200 }));
+    expect(res.status).toBe(200);
+    const body = JSON.parse(lastFetchInit().body);
+    expect(body.metadata.campaign).not.toBe('BalaViharDonation');
+    expect(body.metadata.programKey).toBe('tabla');
+    expect(body.metadata.source).toBe('setu');
+  });
+
+  it('completes an enrollment donation and returns the checkout url', async () => {
+    const res = await POST(makeReq(BV_GIFT));
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.url).toBe('https://checkout.stripe.com/x');
@@ -215,12 +262,17 @@ describe('POST /api/setu/donations/checkout', () => {
       expect(res.status).toBe(200);
     });
 
-    it('never blocks a GENERAL gift - a pledging family may still give extra', async () => {
-      mockGetFamilyPledge.mockResolvedValue({ status: 'active' });
+    it('REFUSES type:"general" outright - the type was retired 2026-08-03', async () => {
+      // Until this the branch was merely unreachable from the UI: /family/donate
+      // redirects home without an eid. But an authenticated manager could still
+      // hand-POST it and mint a REAL Stripe checkout, now under a campaign
+      // nobody had defined. A dead branch that can still take money is not dead.
+      mockGetFamilyPledge.mockResolvedValue(null);
 
       const res = await POST(makeReq({ type: 'general', amountCAD: 100 }));
 
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(400);
+      expect(mockCreateDonation).not.toHaveBeenCalled();
     });
 
     it('never blocks a NON-Bala-Vihar enrollment - the pledge does not fund it', async () => {
@@ -282,22 +334,22 @@ describe('POST /api/setu/donations/checkout', () => {
   });
 
   it('adds a processing-fee line item when coverFee is true', async () => {
-    const res = await POST(makeReq({ type: 'general', amountCAD: 100, coverFee: true }));
+    const res = await POST(makeReq({ ...BV_GIFT, coverFee: true }));
     expect(res.status).toBe(200);
     const fetchBody = JSON.parse(lastFetchInit().body);
     expect(fetchBody.lineItems).toHaveLength(2);
     expect(fetchBody.lineItems[1].name).toBe('Processing Fees');
-    expect(fetchBody.lineItems[1].amount).toBe(2.5); // 100*0.022 + 0.30
+    expect(fetchBody.lineItems[1].amount).toBe(11.3); // 500*0.022 + 0.30
   });
 
   it('returns 502 when the Stripe service errors', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('boom', { status: 500 })));
-    const res = await POST(makeReq({ type: 'general', amountCAD: 100 }));
+    const res = await POST(makeReq(BV_GIFT));
     expect(res.status).toBe(502);
   });
 
   it('forwards x-api-key to the Stripe service', async () => {
-    await POST(makeReq({ type: 'general', amountCAD: 100 }));
+    await POST(makeReq(BV_GIFT));
     const headers = lastFetchInit().headers;
     expect(headers['x-api-key']).toBe('sk_test_x');
   });
@@ -318,7 +370,7 @@ describe('POST /api/setu/donations/checkout', () => {
         'x-portal-fid': 'fid1',
         'x-portal-mid': 'fid1-01',
       },
-      body: JSON.stringify({ type: 'general', amountCAD: 100 }),
+      body: JSON.stringify(BV_GIFT),
     });
     const res = await POST(req);
     expect(res.status).toBe(200);
@@ -342,7 +394,7 @@ describe('POST /api/setu/donations/checkout', () => {
         'x-portal-mid': 'fid1-01',
         ...headers,
       },
-      body: JSON.stringify({ type: 'general', amountCAD: 100 }),
+      body: JSON.stringify(BV_GIFT),
     });
   }
 

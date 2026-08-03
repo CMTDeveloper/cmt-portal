@@ -1,5 +1,16 @@
 import { z } from 'zod';
 
+// The READ vocabulary, and it still contains 'general' ON PURPOSE.
+//
+// General donations were retired 2026-08-03 (owner: "there are no general
+// donations in the app") and `CheckoutInputSchema` below no longer accepts the
+// type - but `DonationDocSchema` validates on READ, and donation documents with
+// `type: 'general'` are sitting in production from before the UI was withdrawn
+// (CMT decision 2026-06-04). Narrowing this enum would make every one of them
+// fail to parse, which is the "never tighten a read-validated doc schema" rule
+// this repo has been bitten by before.
+//
+// Removing the type is a WRITE-side change. It stays readable forever.
 export const DONATION_TYPES = ['enrollment', 'general'] as const;
 export type DonationType = (typeof DONATION_TYPES)[number];
 
@@ -20,10 +31,13 @@ export const DonationDocSchema = z.object({
   donorName: z.string().min(1),
   donorEmail: z.string().email(),
   type: z.enum(DONATION_TYPES),
-  programKey: z.string().min(1).nullable(), // enrollment → program key; general → null
-  programLabel: z.string().min(1).nullable(), // enrollment → program display label; general → null
-  pid: z.string().min(1).nullable(), // enrollment → offering id; general → null
-  eid: z.string().min(1).nullable(), // enrollment → enrollment id; general → null
+  // Nullable on READ, not because a general donation leaves them empty (that
+  // type is gone) but because donation docs written before this are still in
+  // production and a doc schema must never gain a required field.
+  programKey: z.string().min(1).nullable(),
+  programLabel: z.string().min(1).nullable(),
+  pid: z.string().min(1).nullable(), // the offering id (legacy field name)
+  eid: z.string().min(1).nullable(),
   label: z.string().min(1),
   amountCAD: z.number().int().min(1),
   coverFee: z.boolean(),
@@ -37,21 +51,17 @@ export const DonationDocSchema = z.object({
 export type DonationDoc = z.infer<typeof DonationDocSchema>;
 
 /**
- * Checkout request body. Discriminated on `type`:
+ * Checkout request body. Discriminated on `type`, which now has exactly one
+ * member - kept as a union so the shape (and the mobile's mirror of it) does not
+ * change, and so a future type is additive.
  * - enrollment: requires `eid`; server enforces amount >= effectiveSuggestedAmount
  *   and derives the program label/key from the enrollment's offering.
- * - general: no enrollment; any positive amount.
  * `amountCAD` is integer dollars (Stripe service receives dollars, not cents).
  */
 export const CheckoutInputSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('enrollment'),
     eid: z.string().min(1),
-    amountCAD: z.number().int().min(1).max(100000),
-    coverFee: z.boolean().default(false),
-  }),
-  z.object({
-    type: z.literal('general'),
     amountCAD: z.number().int().min(1).max(100000),
     coverFee: z.boolean().default(false),
   }),
@@ -88,10 +98,9 @@ export function processingFeeCAD(amountCAD: number): number {
  * "Bala Vihar Donation — 2025-26", "Tabla classes Donation — 2026-27".
  */
 export function checkoutLineItemName(
-  type: DonationType,
+  _type: DonationType,
   opts?: { programLabel?: string; termLabel?: string },
 ): string {
-  if (type === 'general') return 'General Donation — Chinmaya Mission Toronto';
   const programLabel = opts?.programLabel?.trim() || 'Program';
   const base = `${programLabel} Donation`;
   return opts?.termLabel ? `${base} — ${opts.termLabel}` : base;

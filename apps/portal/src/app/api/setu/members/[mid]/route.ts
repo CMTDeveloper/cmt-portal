@@ -47,6 +47,12 @@ export async function PATCH(req: Request, ctx: RouteContext) {
     // Only a manager may grant or revoke manager access; a member editing their
     // own record may not promote themselves.
     canSetManagerFlag: isManager,
+    // Nobody sets their OWN participation. A non-manager can only reach their
+    // own record anyway (the 403 above), so the one case this refuses is the
+    // self-edit - which is exactly the one both UIs already decline to offer,
+    // and the one that would let someone excuse themselves from the profile
+    // gate while keeping every privilege their session grants.
+    canSetParticipation: isManager && !isSelfEdit,
   });
   if (!result.ok) {
     return NextResponse.json(result.body, { status: result.status });

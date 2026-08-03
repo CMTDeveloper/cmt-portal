@@ -59,7 +59,12 @@ export function enrollErrorMessage(error: string | undefined): string {
       // left who could attend the class.
       return 'Everyone in your family is already teaching during this class.';
     case 'no-eligible-members':
-      return 'Add a child to your family before enrolling in Bala Vihar.';
+      // Two causes now, not one. Since 2026-08-03 a family CAN have children
+      // and still hit this - anyone marked "no longer participating" is
+      // filtered server-side, and the lazy migration marks a child inactive
+      // when the legacy roster had no class level for them. "Add a child" told
+      // that family to add someone they were looking at.
+      return 'No child in your family is taking part right now. Add a child, or bring one back from My family.';
     case 'family-not-found':
     case 'missing-fid':
       console.error('[enrollFamily] unexpected error:', error);

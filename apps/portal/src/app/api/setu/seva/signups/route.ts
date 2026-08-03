@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
-import { CreateSevaSignupSchema } from '@cmt/shared-domain';
+import { CreateSevaSignupSchema, isParticipating } from '@cmt/shared-domain';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
+import { getFamilyByFid } from '@/features/setu/members/get-family-by-fid';
 import { getOpportunity } from '@/features/setu/seva/get-opportunities';
 import { getSignup, listSignupsForOpp, signupDocId, isActiveSignup } from '@/features/setu/seva/get-signups';
 
@@ -19,6 +20,19 @@ export async function POST(req: Request) {
   if (!opp) return NextResponse.json({ error: 'not-found' }, { status: 404 });
   if (opp.status !== 'open') return NextResponse.json({ error: 'not-open' }, { status: 409 });
   if (mid && !mid.startsWith(`${session.fid}-`)) return NextResponse.json({ error: 'invalid-member' }, { status: 400 });
+  // The prefix check above proves the mid BELONGS to this family; it does not
+  // prove the member exists or still takes part. Without this, seva credit can
+  // be recorded against a member the family retired - or against a mid that was
+  // never real, since a prefix is trivially constructed. Load the member and
+  // ask the one shared question.
+  if (mid) {
+    const fam = await getFamilyByFid(session.fid);
+    const member = fam?.members.find((m) => m.mid === mid);
+    if (!member) return NextResponse.json({ error: 'invalid-member' }, { status: 400 });
+    if (!isParticipating(member)) {
+      return NextResponse.json({ error: 'member-inactive' }, { status: 409 });
+    }
+  }
 
   const id = signupDocId(oppId, session.fid);
   const existing = await getSignup(id);

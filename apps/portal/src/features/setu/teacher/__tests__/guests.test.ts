@@ -52,6 +52,30 @@ describe('markGuest', () => {
       .toEqual({ ok: false, reason: 'member-not-found' });
   });
 
+  // 🔴 The sharpest edge of the participation feature. This function takes a
+  // client-supplied mid and, a few lines on, AUTO-ENROLS the family and writes
+  // an attendance event. Hiding a retired child from the teacher's picker is
+  // not a control - a stale tab or a hand-made request would put them straight
+  // back on the roster their family had just left.
+  it('refuses a member the family has marked as no longer participating', async () => {
+    mockMemberGet.mockResolvedValue({
+      docs: [{ data: () => ({ firstName: 'Archish', lastName: 'Rana', participation: 'inactive' }), ref: { parent: { parent: { id: 'CMT-Z' } } } }],
+    });
+    const res = await markGuest({ levelId: 'lvl', date: '2025-09-07', mid: 'CMT-Z-09', status: 'present', markedByUid: 'u', markedByMid: null });
+    expect(res).toEqual({ ok: false, reason: 'member-inactive' });
+    // Neither side effect may happen: no enrolment, no attendance row.
+    expect(mockEnroll).not.toHaveBeenCalled();
+    expect(mockSet).not.toHaveBeenCalled();
+  });
+
+  it('still marks a member with NO participation field - every migrated doc has none', async () => {
+    // The 2033 migrated members predate the field. Reading absent as inactive
+    // would empty every roster in the school.
+    mockEnrollGet.mockResolvedValue({ exists: true, data: () => ({ status: 'active' }) });
+    const res = await markGuest({ levelId: 'lvl', date: '2025-09-07', mid: 'CMT-Z-09', status: 'present', markedByUid: 'u', markedByMid: null });
+    expect(res.ok).toBe(true);
+  });
+
   it('auto-enrolls when the guest family has no active enrollment, writes isGuest event', async () => {
     mockEnrollGet.mockResolvedValue({ exists: false }); // no enrollment
     const res = await markGuest({ levelId: 'lvl', date: '2025-09-07', mid: 'CMT-Z-09', status: 'present', markedByUid: 'uid-t', markedByMid: 'CMT-T-01' });

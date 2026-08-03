@@ -24,6 +24,11 @@ export const RosterPersonCsvRowSchema = z.object({
   location: z.string(),
   programs: z.string(), // '; '-joined active program labels
   payment: z.string(),
+  // 'yes' | 'no'. Retired members are EXPORTED, not filtered out - the office
+  // asked to keep the history, and a row silently missing from a roster is the
+  // failure mode that makes staff distrust the whole export. The column lets
+  // them filter; dropping the row would make that choice for them.
+  participating: z.string(),
 });
 export type RosterPersonCsvRow = z.infer<typeof RosterPersonCsvRowSchema>;
 

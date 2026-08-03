@@ -22,6 +22,92 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
+## 2026-08-03 - `68b0a8d`..`HEAD` on `develop` - members gain `participation`; `PATCH /api/setu/members/{mid}` gains 3 new 409s; `POST /api/pledges/start` gains 409 `no-enrolled-members`; `checkout` drops `type:"general"`; Stripe metadata matches the integration doc
+
+**Action required: a new member field the app must read, and four new refusal codes it must not collapse.**
+
+Reported on production 2026-08-02: a father could not finish registration because the portal demanded a school grade for a son who had already completed Bala Vihar, and full contact details for a spouse who does not take part. There was no way to say either, so the family was stuck. A family can now retire a member instead of deleting them (deleting loses the history, which the office needs).
+
+### 1. New member fields (READ)
+
+`GET /api/setu/family`, `GET /api/setu/dashboard` (`members[]`) and the child profile all carry these now. Every member object may have:
+
+```ts
+participation?: 'active' | 'inactive'   // ABSENT ⇒ active
+inactiveAt?: string | null              // ISO
+inactiveSource?: 'family' | 'legacy-migration' | null
+graduatedAt?: string | null             // ISO; stamped by the school-year rollover
+```
+
+🔴 **`participation` is optional and ABSENT MEANS ACTIVE.** All 2033 migrated member docs predate the field. A mirror written as `participation === 'active'` would treat every existing member as retired and empty the app. Write the check as `participation !== 'inactive'`, in ONE helper, and call it everywhere.
+
+An inactive member must still be **listed** (their history is the reason they are kept) but should be visibly labelled and excluded from anything that asks for their details or puts them on a roster.
+
+Two related changes on the same responses:
+- `POST /api/setu/enrollments` → **409/400 `no-eligible-members` has a second cause now.** It used to mean "this family has no children"; it can now also mean "every child is marked as no longer participating" (including one the lazy migration retired at import). If the app hard-codes "Add a child" for this code, change it — that sentence tells a family to add a child it is looking at.
+- `GET /api/setu/dashboard` → `family.counts.{children,adults}` now counts **participating** members only. "2 children" for a family whose elder has finished is the first number they see, and it was wrong.
+- The child profile gains `participation: 'active' | 'inactive'` (always present, never absent). The profile is still returned in full for a retired child — the past attendance on it is exactly why the record was kept.
+
+### 2. `PATCH /api/setu/members/{mid}` accepts `participation`
+
+```ts
+{ participation: 'active' | 'inactive' }
+```
+
+**Send it ALONE when retiring someone.** The route enforces required fields only for the fields a patch actually touches, so `{participation:'inactive'}` by itself is accepted for a child with no `schoolGrade` — which is the entire point. Bundling the usual field payload alongside drags those fields back into scope and 400s on the very member you are excusing.
+
+🔴 **A member may NOT set their OWN participation.** `PATCH /api/setu/members/{own-mid}` with a `participation` field returns **403 `participation-requires-another-member`**, for a manager and a plain member alike, in both directions (retire *and* reactivate). Retiring yourself would excuse you from the completion gate while your session claims stayed untouched, so the rule is enforced at the route, not just hidden in the UI. **Do not build a "mark myself inactive" affordance** — ask another family manager. The staff route (`/api/welcome/families/{fid}/members/{mid}`) is unaffected.
+
+Three NEW **409** codes, each needing different words:
+
+| code | means | what to say |
+|---|---|---|
+| `enrolled-cannot-deactivate` | they are in an active enrollment's roster | "Cancel that enrollment first" |
+| `last-manager-cannot-deactivate` | they are the family's only participating manager | "Make someone else a manager first" |
+| `manager-must-be-adult` | a Child cannot be (or become) a manager | "Only an adult can be a family manager" |
+
+### 3. Child→Adult conversion: send the WHOLE adult record in one PATCH
+
+`type` was already patchable — this is not new — but it is now reachable from the completion screen, so it matters. **Sending `{type:'Adult'}` on its own 400s.** A `type` change re-evaluates *every* required field for the new type in the same request, so the app must collect `email`, `phone` and `volunteeringSkills` (≥1) and send them together with `type`. The portal also sends `schoolGrade: null`, since a grade is not true of an adult.
+
+### 4. `POST /api/pledges/start` gains a fourth 409: `no-enrolled-members`
+
+```ts
+{ error: 'no-enrolled-members' }   // note: NO `pid` field
+```
+
+The active Bala Vihar enrollment exists but names nobody — the usual cause is the only child having been converted to an Adult, which prunes them from `enrolledMids`. Without this the family could authorise a recurring bank mandate to fund nobody, and the portal has no cancel endpoint.
+
+**Do not fold it into the existing `already-started`/`already-active` branch.** A bare `status === 409` check tells the family they already have a monthly gift in progress and reloads them into the same dead end. It is also NOT `enrollment-required` — this family *is* enrolled, so "enrol in Bala Vihar first" is false. Discriminate on `error`, as `start-pledge-client.ts` does.
+
+### 5. `POST /api/setu/donations/checkout` no longer accepts `type: "general"`
+
+**No action needed for the current app — but do not add it back.** `CheckoutVars` in `src/api/donations.ts` is already `type: 'enrollment'`, which is the only member left. A `type:"general"` body now returns **400 `bad-request`**.
+
+Why it went: general year-round giving moved off-portal on 2026-06-04 and `/family/donate` has redirected home ever since — but the ROUTE still accepted the type, so an authenticated manager could hand-POST it and mint a real Stripe checkout under a campaign nobody had defined. A dead branch that can still take money is not dead.
+
+⚠️ **`DonationDocSchema.type` still includes `'general'` and always will.** Donation documents carrying it are in production from before the UI was withdrawn. If the app mirrors the donation-history shape, keep `'general'` in its READ union or those rows will fail to parse. Removing a type from the WRITE path never licenses removing it from the READ path.
+
+### 6. Stripe metadata now matches CMT's integration doc (provider-side)
+
+Neither the request nor the `{url, did}` / `{pid, checkoutUrl}` responses changed — this is what the portal sends onward to CMT's payment service, recorded because the app's own donate flow triggers it:
+
+```ts
+// one-time donation                    // monthly PAD
+{ campaign: 'BalaViharDonation',        { campaign: 'BalaViharPledge',
+  source: 'setu',                         source: 'setu',
+  programKey: 'bala-vihar',               pid: 'PLG-…',
+  fid, familyId }                         fid, familyId }
+```
+
+Previously the donation put `'setu'` — the SOURCE — into the CAMPAIGN field (so campaign was never populated and source was never sent) and the pledge path sent neither. A gift toward a program CMT has not named a campaign for gets `SetuDonation`, never `BalaViharDonation`, with the real `programKey` beside it.
+
+### 7. Staff CSV: one new column, no dropped rows
+
+The roster/enrollment person CSV gains a trailing **`participating`** column (`yes` / `no`). Retired members are **exported, not filtered out** — the office asked to keep the history, and a row silently missing from a roster is what makes staff stop trusting the export. Any mobile or downstream consumer that pins the column count must be updated.
+
+---
+
 ## 2026-07-31 - `POST /api/setu/auth/verify-code` now NOTIFIES the manager on `pendingApproval`; `join-request/send` takes an optional `resend`
 
 **No response shapes changed.** One optional request field was added, and one route gained a side effect the app can now trigger.

@@ -42,6 +42,11 @@ export async function PATCH(req: Request, ctx: RouteContext) {
     // and demoting managers is the point. The last-manager guard inside the
     // core is what keeps that safe.
     canSetManagerFlag: true,
+    // Staff acting on a family they administer. The self-edit concern does not
+    // arise here - this route is cross-family by construction (the fid comes
+    // from the path, not the session) and every write leaves an audit row
+    // naming the actor.
+    canSetParticipation: true,
   });
   if (!result.ok) {
     return NextResponse.json(result.body, { status: result.status });

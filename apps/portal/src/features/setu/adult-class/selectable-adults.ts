@@ -1,3 +1,4 @@
+import { isParticipating } from '@cmt/shared-domain/setu';
 import type { MemberDoc } from '@cmt/shared-domain/setu';
 
 /**
@@ -28,7 +29,11 @@ export function selectableAdults(
   teacherAssignedMids: ReadonlySet<string>,
 ): MemberDoc[] {
   return members.filter(
-    (m) => isCandidateAdult(m) && !teacherAssignedMids.has(m.mid),
+    // A retired adult is not offered the class. Without this they stay
+    // selectable and enrollable long after the family said they were done -
+    // and the adult-class gate would keep asking the family to choose someone
+    // who is no longer taking part.
+    (m) => isCandidateAdult(m) && isParticipating(m) && !teacherAssignedMids.has(m.mid),
   );
 }
 

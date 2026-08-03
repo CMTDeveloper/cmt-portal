@@ -31,6 +31,7 @@ interface MemberLite {
   type: 'Adult' | 'Child';
   schoolGrade: string | null;
   birthMonthYear: string | null;
+  participation?: string | null;
 }
 
 /** Per-sourceOid resolved context: target oid + levels + offering pricing/labels. */
@@ -130,6 +131,10 @@ function mapMembers(docs: Array<{ data: () => Record<string, unknown> }>): Membe
       type: (m['type'] as 'Adult' | 'Child' | undefined) ?? 'Child',
       schoolGrade: (m['schoolGrade'] ?? null) as string | null,
       birthMonthYear: (m['birthMonthYear'] ?? null) as string | null,
+      // Hand-map, no spread: drop this and `planFamilyPromotion` sees
+      // `undefined` and promotes retired children anyway. The rollover is a
+      // once-a-year bulk write, so a miss here is quiet and wide.
+      participation: (m['participation'] ?? null) as string | null,
     };
   });
 }
@@ -309,6 +314,14 @@ export async function promoteFamilies(db: Db, args: PromoteArgs): Promise<Rollov
       if (familyProgressed(familyPlan)) {
         for (const upd of familyPlan.gradeUpdates) {
           txn.set(membersCol.doc(upd.mid), { schoolGrade: upd.schoolGrade }, { merge: true });
+        }
+        // Record the graduation itself. Grade is left alone on purpose (a
+        // graduate stays at '12'), so without this stamp nothing distinguishes
+        // them from a current grade-12 student afterwards - which is exactly
+        // why a parent had to be asked to pick a grade for a son who had
+        // finished. Not a deactivation: the family decides what it means.
+        for (const mid of familyPlan.graduatedMids) {
+          txn.set(membersCol.doc(mid), { graduatedAt: new Date() }, { merge: true });
         }
         txn.set(
           srcRef,

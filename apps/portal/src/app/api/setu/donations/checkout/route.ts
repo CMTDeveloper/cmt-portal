@@ -3,6 +3,7 @@ import { flags } from '@/lib/flags';
 import {
   CheckoutInputSchema,
   checkoutLineItemName,
+  buildPaymentMetadata,
   processingFeeCAD,
   isSetuManager,
   paymentFamilyLabel,
@@ -127,6 +128,8 @@ export async function POST(req: Request) {
   let programKey: string | null = null;
   let programLabel: string | null = null;
   let label: string;
+  // `input.type` is the single-member union 'enrollment'; the general branch was
+  // removed 2026-08-03 (owner: no general donations exist in the app).
 
   if (input.type === 'enrollment') {
     const enrollments = await getEnrollments(session.fid);
@@ -198,7 +201,11 @@ export async function POST(req: Request) {
       }
     }
   } else {
-    label = checkoutLineItemName('general');
+    // Unreachable today: `type` is the single-member union 'enrollment'. Written
+    // as an explicit refusal rather than a definite-assignment assertion on
+    // `label`, so if a second donation type is ever added it fails loudly here
+    // instead of reaching Stripe with an unset line-item name.
+    return NextResponse.json({ error: 'unsupported-donation-type' }, { status: 400 });
   }
 
   const origin = resolveOrigin(req);
@@ -244,11 +251,20 @@ export async function POST(req: Request) {
     // one Vaibhav asked for after finding a live record identified only by
     // "CMT-HTNO0TEG"; the two Stripe paths must agree, so the pledge metadata
     // carries the same pair.
+    // One helper for both Stripe paths - see buildPaymentMetadata for why
+    // `campaign` and `source` are not written inline here. This route used to
+    // put the SOURCE ('setu') in the CAMPAIGN field, so on every live payment
+    // the campaign was empty and the source was never sent at all.
     metadata: {
-      campaign: 'setu',
+      ...buildPaymentMetadata({
+        kind: 'donation',
+        fid: session.fid,
+        familyId: paymentFamilyLabel({ fid: session.fid, publicFid: familyData.family.publicFid }),
+        programKey,
+      }),
+      // Kept from before the helper: coarser than programKey, and someone may
+      // already be reporting on it.
       category: input.type,
-      fid: session.fid,
-      familyId: paymentFamilyLabel({ fid: session.fid, publicFid: familyData.family.publicFid }),
     },
     branding_settings: { display_name: 'Chinmaya Mission Toronto' },
   };

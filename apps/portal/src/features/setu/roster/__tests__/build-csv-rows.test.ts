@@ -16,6 +16,8 @@ interface MemberSeed {
   lastName: string;
   type: string;
   schoolGrade?: string;
+  /** Omitted entirely on most seeds - absent is what every migrated doc looks like. */
+  participation?: string;
 }
 interface EnrollmentSeed {
   oid: string;
@@ -96,6 +98,7 @@ function makeDb(families: FamilySeed[]) {
           lastName: m.lastName,
           type: m.type,
           ...(m.schoolGrade !== undefined ? { schoolGrade: m.schoolGrade } : {}),
+          ...(m.participation !== undefined ? { participation: m.participation } : {}),
         }),
       })),
     );
@@ -371,5 +374,37 @@ describe('buildRosterCsvRows', () => {
 
     const rows = await buildRosterCsvRows({});
     expect(rows[0]!.payment).toBe('outstanding');
+  });
+});
+
+describe('buildRosterCsvRows — retired members (production reports 2026-08-02)', () => {
+  it('exports a retired member with participating:"no" rather than dropping the row', async () => {
+    // Dropping the row would hide the person the office deliberately kept, and a
+    // roster that silently omits people is the thing that makes staff stop
+    // trusting the export. N=2: one retired, one not, so a blanket value fails.
+    const families = [
+      fam({
+        fid: 'CMT-RET',
+        name: 'Retired Family',
+        members: [
+          { firstName: 'Archish', lastName: 'S', type: 'Child', schoolGrade: '12', participation: 'inactive' },
+          { firstName: 'Sibling', lastName: 'S', type: 'Child', schoolGrade: '5' },
+        ],
+      }),
+    ];
+    mockFirestore.mockReturnValue(makeDb(families) as never);
+
+    const rows = await buildRosterCsvRows({});
+    expect(rows).toHaveLength(2);
+    expect(rows.find((r) => r.memberName === 'Archish S')!.participating).toBe('no');
+    expect(rows.find((r) => r.memberName === 'Sibling S')!.participating).toBe('yes');
+  });
+
+  it('reads an ABSENT participation as participating — every migrated doc predates the field', async () => {
+    const families = [
+      fam({ fid: 'CMT-OLD', name: 'Migrated', members: [{ firstName: 'A', lastName: 'B', type: 'Child' }] }),
+    ];
+    mockFirestore.mockReturnValue(makeDb(families) as never);
+    expect((await buildRosterCsvRows({}))[0]!.participating).toBe('yes');
   });
 });

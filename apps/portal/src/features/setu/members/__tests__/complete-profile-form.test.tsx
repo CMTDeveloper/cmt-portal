@@ -538,3 +538,230 @@ describe('CompleteProfileForm — centre confirmation', () => {
     expect(screen.queryByLabelText(/centre/i)).toBeNull();
   });
 });
+
+// ── Participation + Child→Adult (production reports 2026-08-02) ──────────────
+// Sadeesh could not finish registration: the portal demanded a school grade for
+// a son who had already completed Bala Vihar, and full contact details for a
+// spouse who is not taking part. There was no way to say either, so the family
+// was stuck on this screen. Two per-row actions fix that.
+//
+// Both trees (mobile + desktop) render at once, hence getAllBy…[0].
+describe('CompleteProfileForm — "Now an adult" / "No longer participating"', () => {
+  const toAdult = (mid: string) => screen.getAllByTestId(`member-to-adult-${mid}`)[0]!;
+  const retire = (mid: string) => screen.getAllByTestId(`member-retire-${mid}`)[0]!;
+  const undo = (mid: string) => screen.getAllByTestId(`member-undo-${mid}`)[0]!;
+
+  // A second adult who is NOT the signed-in manager — Sadeesh's spouse.
+  const spouse = (over: Partial<MemberDoc> = {}) =>
+    adult({
+      mid: 'CMT-1-03',
+      uid: null,
+      firstName: 'Spouse',
+      manager: false,
+      email: null,
+      phone: null,
+      volunteeringSkills: [],
+      ...over,
+    } as Partial<MemberDoc>);
+
+  it('offers both actions on a Child, retire-only on another adult, and NEITHER on your own record', async () => {
+    getFamily.mockResolvedValue(family([adult({ foodAllergies: null }), spouse(), child()]));
+    render(<CompleteProfileForm />);
+    await waitFor(() => expect(screen.getAllByTestId('member-card-CMT-1-02').length).toBeGreaterThan(0));
+
+    // Child: both.
+    expect(toAdult('CMT-1-02')).toBeInTheDocument();
+    expect(retire('CMT-1-02')).toBeInTheDocument();
+    // Another adult: retire only (they are already an adult).
+    expect(screen.queryByTestId('member-to-adult-CMT-1-03')).toBeNull();
+    expect(retire('CMT-1-03')).toBeInTheDocument();
+    // Yourself: neither. Saying "I do not take part" while signed in and using
+    // the portal is a way to skip your OWN required fields, not a real answer.
+    expect(screen.queryByTestId('member-to-adult-CMT-1-01')).toBeNull();
+    expect(screen.queryByTestId('member-retire-CMT-1-01')).toBeNull();
+  });
+
+  it('retiring a child clears its requirements and PATCHes participation ALONE', async () => {
+    // The heart of the fix. `firstMissingRequiredFieldForPatch` enforces only the
+    // fields a patch TOUCHES, so `{participation:'inactive'}` on its own is
+    // accepted for a child with no grade. Bundling the usual field payload
+    // alongside would drag schoolGrade/birthMonthYear back into scope and 400 on
+    // the very member being excused.
+    getFamily.mockResolvedValue(family([child()]));
+    patchMember.mockResolvedValue({ ok: true, status: 200 });
+    const user = userEvent.setup();
+    render(<CompleteProfileForm />);
+    await waitFor(() => expect(screen.getAllByTestId('member-card-CMT-1-02').length).toBeGreaterThan(0));
+
+    // Before: the grade select blocks Save.
+    expect(screen.getAllByLabelText(/School grade for Lil/i).length).toBeGreaterThan(0);
+
+    await user.click(retire('CMT-1-02'));
+
+    // The inputs are gone and Save goes straight through.
+    expect(screen.queryByLabelText(/School grade for Lil/i)).toBeNull();
+    await user.click(save());
+
+    await waitFor(() => expect(patchMember).toHaveBeenCalledTimes(1));
+    const [mid, body] = patchMember.mock.calls[0]!;
+    expect(mid).toBe('CMT-1-02');
+    expect(body).toEqual({ participation: 'inactive' });
+    await waitFor(() => expect(navigateTo).toHaveBeenCalledWith('/family'));
+  });
+
+  it('undo brings a retired member (and its fields) back', async () => {
+    getFamily.mockResolvedValue(family([child()]));
+    const user = userEvent.setup();
+    render(<CompleteProfileForm />);
+    await waitFor(() => expect(screen.getAllByTestId('member-card-CMT-1-02').length).toBeGreaterThan(0));
+
+    await user.click(retire('CMT-1-02'));
+    expect(screen.queryByLabelText(/School grade for Lil/i)).toBeNull();
+
+    await user.click(undo('CMT-1-02'));
+    expect(screen.getAllByLabelText(/School grade for Lil/i).length).toBeGreaterThan(0);
+
+    // And the requirement is back: Save is blocked again, nothing written.
+    await user.click(save());
+    expect(patchMember).not.toHaveBeenCalled();
+    expect(navigateTo).not.toHaveBeenCalled();
+  });
+
+  it('a retired member does not block a SIBLING who still has to be completed (N=2)', async () => {
+    getFamily.mockResolvedValue(family([child(), child({ mid: 'CMT-1-04', firstName: 'Sib' })]));
+    patchMember.mockResolvedValue({ ok: true, status: 200 });
+    const user = userEvent.setup();
+    render(<CompleteProfileForm />);
+    await waitFor(() => expect(screen.getAllByTestId('member-card-CMT-1-04').length).toBeGreaterThan(0));
+
+    await user.click(retire('CMT-1-02'));
+    // The sibling is untouched and still gates the form.
+    await user.click(save());
+    expect(patchMember).not.toHaveBeenCalled();
+
+    await user.selectOptions(screen.getAllByLabelText(/School grade for Sib/i)[0]!, '5');
+    await user.selectOptions(screen.getAllByLabelText(/Birth month for Sib/i)[0]!, '4');
+    await user.selectOptions(
+      screen.getAllByLabelText(/Birth year for Sib/i)[0]!,
+      String(new Date().getFullYear() - 11),
+    );
+    await user.click(save());
+
+    await waitFor(() => expect(patchMember).toHaveBeenCalledTimes(2));
+    const byMid = Object.fromEntries(patchMember.mock.calls.map((c) => [c[0], c[1]]));
+    expect(byMid['CMT-1-02']).toEqual({ participation: 'inactive' });
+    expect(byMid['CMT-1-04']).toMatchObject({ schoolGrade: '5', birthMonthYear: `${new Date().getFullYear() - 11}-04` });
+  });
+
+  it('"Now an adult" swaps the child fields for the ADULT ones and blocks Save until they are filled', async () => {
+    // The verified blocker: sending `{type:'Adult'}` sets typeChanged on the
+    // server, which re-evaluates EVERY adult required field in the same request.
+    // A bare type PATCH 400s, so this screen has to collect them together.
+    getFamily.mockResolvedValue(family([child()]));
+    const user = userEvent.setup();
+    render(<CompleteProfileForm />);
+    await waitFor(() => expect(screen.getAllByTestId('member-card-CMT-1-02').length).toBeGreaterThan(0));
+
+    await user.click(toAdult('CMT-1-02'));
+
+    // Child-only fields gone, adult-only fields present.
+    expect(screen.queryByLabelText(/School grade for Lil/i)).toBeNull();
+    expect(screen.queryByLabelText(/Birth month for Lil/i)).toBeNull();
+    expect(screen.getAllByLabelText(/Email for Lil/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByLabelText(/Phone for Lil/i).length).toBeGreaterThan(0);
+
+    // Not filled in yet ⇒ no write at all (a 400 would strand them here).
+    await user.click(save());
+    expect(patchMember).not.toHaveBeenCalled();
+  });
+
+  it('lets a converted child SAVE once the adult fields are filled — the grade is never asked for again', async () => {
+    // Sadeesh's son, exactly: a child with no grade and no birth month on file,
+    // which is why the portal was demanding them. After "Now an adult" the form
+    // must judge him by the ADULT matrix. Judged by the CHILD matrix he would
+    // still be "missing" a grade whose input is no longer on screen — Save
+    // blocked forever with nothing to click. That is the mutually-exclusive
+    // trap: a control whose visibility and whose enablement disagree.
+    getFamily.mockResolvedValue(family([child()])); // no grade, no birth month
+    patchMember.mockResolvedValue({ ok: true, status: 200 });
+    const user = userEvent.setup();
+    render(<CompleteProfileForm />);
+    await waitFor(() => expect(screen.getAllByTestId('member-card-CMT-1-02').length).toBeGreaterThan(0));
+
+    await user.click(toAdult('CMT-1-02'));
+    await user.type(screen.getAllByLabelText(/Email for Lil/i)[0]!, 'lil@example.com');
+    await user.type(screen.getAllByLabelText(/Phone for Lil/i)[0]!, '+14165559999');
+    await user.click(within(screen.getAllByTestId('member-card-CMT-1-02')[0]!).getByTestId('skills-add'));
+
+    await user.click(save());
+
+    await waitFor(() => expect(patchMember).toHaveBeenCalledTimes(1));
+    expect(patchMember.mock.calls[0]![1]).toMatchObject({ type: 'Adult', schoolGrade: null });
+    await waitFor(() => expect(navigateTo).toHaveBeenCalledWith('/family'));
+  });
+
+  it('PATCHes a Child→Adult conversion with every adult field and clears the stale grade', async () => {
+    // A real graduated child: grade + birth month already on file (that is why
+    // the roster has them), but the newer required fields never were — which is
+    // exactly why they are on this screen at all.
+    getFamily.mockResolvedValue(
+      family([child({ schoolGrade: '12', birthMonthYear: '2007-06', foodAllergies: null })]),
+    );
+    patchMember.mockResolvedValue({ ok: true, status: 200 });
+    const user = userEvent.setup();
+    render(<CompleteProfileForm />);
+    await waitFor(() => expect(screen.getAllByTestId('member-card-CMT-1-02').length).toBeGreaterThan(0));
+
+    await user.click(toAdult('CMT-1-02'));
+    await user.click(screen.getAllByRole('checkbox', { name: /No known allergies for Lil/i })[0]!);
+    await user.type(screen.getAllByLabelText(/Email for Lil/i)[0]!, 'lil@example.com');
+    await user.type(screen.getAllByLabelText(/Phone for Lil/i)[0]!, '+14165559999');
+    await user.click(within(screen.getAllByTestId('member-card-CMT-1-02')[0]!).getByTestId('skills-add'));
+    await user.click(save());
+
+    await waitFor(() => expect(patchMember).toHaveBeenCalledTimes(1));
+    const [, body] = patchMember.mock.calls[0]!;
+    expect(body).toMatchObject({
+      type: 'Adult',
+      email: 'lil@example.com',
+      phone: '+14165559999',
+      volunteeringSkills: ['Kitchen'],
+      // A school grade is no longer true of them; leaving it behind keeps
+      // "Grade 12" on the roster and the member page for someone who finished.
+      schoolGrade: null,
+    });
+    // Their birth month IS still true — it must survive the conversion.
+    expect(body).toMatchObject({ birthMonthYear: '2007-06' });
+    await waitFor(() => expect(navigateTo).toHaveBeenCalledWith('/family'));
+  });
+
+  it('undo after "Now an adult" restores the child fields', async () => {
+    getFamily.mockResolvedValue(family([child()]));
+    const user = userEvent.setup();
+    render(<CompleteProfileForm />);
+    await waitFor(() => expect(screen.getAllByTestId('member-card-CMT-1-02').length).toBeGreaterThan(0));
+
+    await user.click(toAdult('CMT-1-02'));
+    expect(screen.getAllByLabelText(/Email for Lil/i).length).toBeGreaterThan(0);
+
+    await user.click(undo('CMT-1-02'));
+    expect(screen.queryByLabelText(/Email for Lil/i)).toBeNull();
+    expect(screen.getAllByLabelText(/School grade for Lil/i).length).toBeGreaterThan(0);
+  });
+
+  it('explains a server refusal in words rather than "something went wrong"', async () => {
+    // The three participation guards return codes this screen can provoke. With
+    // no copy for them the user got the generic fallback and no idea what to do.
+    getFamily.mockResolvedValue(family([child()]));
+    patchMember.mockResolvedValue({ ok: false, status: 409, error: 'enrolled-cannot-deactivate' });
+    const user = userEvent.setup();
+    render(<CompleteProfileForm />);
+    await waitFor(() => expect(screen.getAllByTestId('member-card-CMT-1-02').length).toBeGreaterThan(0));
+
+    await user.click(retire('CMT-1-02'));
+    await user.click(save());
+
+    await waitFor(() => expect(toastMock.error).toHaveBeenCalledWith(expect.stringMatching(/enrolled/i)));
+    expect(navigateTo).not.toHaveBeenCalled();
+  });
+});

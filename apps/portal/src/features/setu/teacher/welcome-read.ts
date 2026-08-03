@@ -1,5 +1,5 @@
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
-import { memberMatchesLevel, type LevelDoc, type Location } from '@cmt/shared-domain';
+import { isParticipating, memberMatchesLevel, type LevelDoc, type Location } from '@cmt/shared-domain';
 
 export interface UnassignedStudent {
   mid: string;
@@ -43,6 +43,9 @@ export async function findUnassignedStudents(
     for (const doc of memSnap.docs) {
       const m = doc.data();
       if (m.type !== 'Child') continue;
+      // Same reason as the grade-eligible queue: this is the "needs a level"
+      // worklist, and a child the family has retired needs nothing.
+      if (!isParticipating(m)) continue;
       const member = { type: 'Child' as const, schoolGrade: m.schoolGrade ?? null, birthMonthYear: m.birthMonthYear ?? null };
       const matchesAny = levels.some((lvl) => memberMatchesLevel(member, lvl, now));
       if (!matchesAny) {

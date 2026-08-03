@@ -43,7 +43,13 @@ export async function POST(req: Request) {
 
   const result = await markGuest({ levelId, date, mid, status, markedByUid: session.uid, markedByMid: session.mid });
   if (!result.ok) {
-    return NextResponse.json({ error: result.reason }, { status: 404 });
+    // 409 for an inactive member: they exist, and saying "not found" would send
+    // a teacher hunting for a data problem instead of telling them the family
+    // has retired this child.
+    return NextResponse.json(
+      { error: result.reason },
+      { status: result.reason === 'member-inactive' ? 409 : 404 },
+    );
   }
   return NextResponse.json({ aid: result.aid, autoEnrolled: result.autoEnrolled });
 }

@@ -18,13 +18,19 @@ describe('roster schemas', () => {
     const parsed = RosterPersonCsvRowSchema.parse({
       familyName: 'Patel', fid: 'CMT-X', legacyFid: '123', memberName: 'Ravi Patel',
       type: 'Child', grade: '3', level: 'Level 3', location: 'Brampton', programs: 'Bala Vihar', payment: 'paid',
+      participating: 'yes',
     });
     expect(parsed.type).toBe('Child');
     expect(parsed.level).toBe('Level 3');
+    // A retired member is EXPORTED with participating:'no', never dropped - the
+    // office keeps the history, and a row silently missing from a roster is what
+    // makes staff stop trusting the export.
+    expect(parsed.participating).toBe('yes');
     // level is required (the single-page report + reports enrollment CSV share this shape).
     expect(RosterPersonCsvRowSchema.safeParse({
       familyName: 'Patel', fid: 'CMT-X', legacyFid: '123', memberName: 'Ravi Patel',
       type: 'Child', grade: '3', location: 'Brampton', programs: 'Bala Vihar', payment: 'paid',
+      participating: 'yes',
     }).success).toBe(false);
   });
 

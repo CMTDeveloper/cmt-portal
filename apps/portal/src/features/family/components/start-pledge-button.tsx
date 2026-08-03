@@ -55,6 +55,11 @@ export function StartPledgeButton({ label, block = false }: StartPledgeButtonPro
       // failure. The server refuses because a monthly plan funds Bala Vihar, and
       // this family has no Bala Vihar to fund.
       toast.error('Enroll in Bala Vihar first - then you can set up a monthly donation.');
+    } else if (result.reason === 'no-enrolled-members') {
+      // They ARE enrolled - the enrollment just has nobody in it (the usual
+      // cause is the only child having been changed to an adult). Naming the
+      // real gap is the difference between an action and a mystery.
+      toast.error('Your Bala Vihar enrollment has nobody in it - add a child before setting up a monthly donation.');
     } else if (result.reason === 'manager-required') {
       toast.error('Only the family manager can set up a monthly donation.');
     } else if (result.reason === 'no-email') {

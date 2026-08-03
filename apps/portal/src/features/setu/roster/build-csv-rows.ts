@@ -1,5 +1,6 @@
 import 'server-only';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
+import { isParticipating } from '@cmt/shared-domain';
 import type { OfferingDoc, RosterPersonCsvRow } from '@cmt/shared-domain';
 import { classifyBulkPayment } from './payment';
 import { loadActivePledgeFids } from '@/features/setu/pledges/active-pledge-fids';
@@ -33,17 +34,19 @@ export async function buildRosterCsvRows(filters: { location?: string; program?:
 
   // 2) ALL members (one unfiltered collectionGroup read; group by parent fid)
   const memberSnap = await db.collectionGroup('members').get();
-  const membersByFid = new Map<string, Array<{ firstName: string; lastName: string; type: string; grade: string }>>();
+  const membersByFid = new Map<string, Array<{ firstName: string; lastName: string; type: string; grade: string; participating: boolean }>>();
   for (const m of memberSnap.docs) {
     const fid = m.ref.parent.parent?.id;
     if (!fid || !meta.has(fid)) continue;
-    const d = m.data() as { firstName?: unknown; lastName?: unknown; type?: unknown; schoolGrade?: unknown };
+    const d = m.data() as { firstName?: unknown; lastName?: unknown; type?: unknown; schoolGrade?: unknown; participation?: unknown };
     const arr = membersByFid.get(fid) ?? [];
     arr.push({
       firstName: String(d.firstName ?? ''),
       lastName: String(d.lastName ?? ''),
       type: String(d.type ?? ''),
       grade: typeof d.schoolGrade === 'string' ? d.schoolGrade : '',
+      // Absent means active - via the shared helper, never an inline compare.
+      participating: isParticipating(d as { participation?: string | null }),
     });
     membersByFid.set(fid, arr);
   }
@@ -127,6 +130,7 @@ export async function buildRosterCsvRows(filters: { location?: string; program?:
         familyName: fam.name, fid, legacyFid: fam.legacyFid,
         memberName: `${m.firstName} ${m.lastName}`.trim(),
         type: m.type, grade: m.grade, level: '', location: fam.location, programs, payment,
+        participating: m.participating ? 'yes' : 'no',
       });
     }
   }

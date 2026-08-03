@@ -78,6 +78,18 @@ export async function getFamilyByFid(fid: string): Promise<FamilyAndMembers | nu
       // real data source for /family and the gate; dropping it makes a pending
       // co-manager render as a normal (incomplete) member instead of "pending".
       inviteStatus: d.inviteStatus ?? null,
+      // Participation lifecycle. Same trap as the two fields above, and the
+      // reason this is the FIRST task of the change rather than the last: the
+      // completion gate reads members from HERE, not from Firestore and not
+      // through MemberDocSchema. Add `participation` to the schema, honour it in
+      // `membersRequiringCompletion()`, and forget this line, and the whole
+      // feature is inert - every inactive member still arrives as active, every
+      // unit test still passes, and the family is still stuck. The `as MemberDoc`
+      // below is why the compiler will not save you.
+      participation: d.participation ?? 'active',
+      inactiveAt: d.inactiveAt?.toDate?.() ?? null,
+      inactiveSource: d.inactiveSource ?? null,
+      graduatedAt: d.graduatedAt?.toDate?.() ?? null,
     } as MemberDoc;
   });
 

@@ -1,5 +1,5 @@
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
-import { levelGradeSummary, memberMatchesLevel, type LevelDoc } from '@cmt/shared-domain';
+import { isParticipating, levelGradeSummary, memberMatchesLevel, type LevelDoc } from '@cmt/shared-domain';
 
 /** A candidate child considered for the "registered · not enrolled" list. */
 export interface GradeEligibleCandidate {
@@ -107,6 +107,11 @@ export async function getGradeEligibleUnenrolled(levelId: string, now: Date = ne
     if (!fid || !locationFids.has(fid)) continue;
     const m = md.data() as Record<string, unknown>;
     if (m['type'] !== 'Child') continue;
+    // A retired child must not appear in the "registered but not enrolled"
+    // queue: this list is an ACTION list - a teacher taps a row and markGuest
+    // enrols the family. The write refuses it now, but offering a row that
+    // cannot succeed just wastes a teacher's Sunday morning.
+    if (!isParticipating(m)) continue;
     candidates.push({
       mid: m['mid'] as string,
       fid,

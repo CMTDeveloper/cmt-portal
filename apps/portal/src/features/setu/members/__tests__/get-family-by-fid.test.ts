@@ -146,3 +146,55 @@ describe('getFamilyByFid — multi-contact defaults', () => {
     expect(result!.members[1]!.inviteStatus).toBe('pending');
   });
 });
+
+// ── The hand-map, which is where this whole feature lives or dies ────────────
+//
+// This function does NOT parse member docs with MemberDocSchema. It hand-maps
+// them field by field and closes with `as MemberDoc`, so a field added to the
+// schema and honoured in the shared gate helper still arrives here as
+// `undefined` - correct-looking code, green tests, family still stuck. The type
+// assertion is exactly why the compiler will not say a word. Two comments from
+// two earlier people sit in that file for the same reason
+// (`locationNeedsConfirmation`, `inviteStatus`); these are the tests that
+// should have come with them.
+describe('getFamilyByFid — participation survives the hand-map', () => {
+  const memberDoc = (over: Record<string, unknown> = {}) => ({
+    data: () => ({
+      mid: 'CMT-AB12CD34-02',
+      firstName: 'Archish',
+      lastName: 'S',
+      type: 'Child',
+      gender: 'Male',
+      manager: false,
+      joinedAt: { toDate: () => new Date() },
+      ...over,
+    }),
+  });
+
+  it('carries a retired member through as inactive', async () => {
+    const inactiveAt = new Date('2026-08-02T12:00:00Z');
+    mockMembersGet.mockResolvedValue({
+      docs: [memberDoc({ participation: 'inactive', inactiveAt: { toDate: () => inactiveAt }, inactiveSource: 'family' })],
+    });
+    const m = (await getFamilyByFid('CMT-AB12CD34'))!.members[0]!;
+    expect(m.participation).toBe('inactive');
+    expect(m.inactiveAt).toEqual(inactiveAt);
+    expect(m.inactiveSource).toBe('family');
+  });
+
+  it('defaults an ABSENT participation to active — all 2033 migrated docs predate the field', async () => {
+    // The one that would empty the school if it went the other way.
+    mockMembersGet.mockResolvedValue({ docs: [memberDoc()] });
+    const m = (await getFamilyByFid('CMT-AB12CD34'))!.members[0]!;
+    expect(m.participation).toBe('active');
+    expect(m.inactiveAt).toBeNull();
+    expect(m.inactiveSource).toBeNull();
+    expect(m.graduatedAt).toBeNull();
+  });
+
+  it('carries graduatedAt, which the school-year rollover stamps', async () => {
+    const graduatedAt = new Date('2026-06-30T00:00:00Z');
+    mockMembersGet.mockResolvedValue({ docs: [memberDoc({ graduatedAt: { toDate: () => graduatedAt } })] });
+    expect((await getFamilyByFid('CMT-AB12CD34'))!.members[0]!.graduatedAt).toEqual(graduatedAt);
+  });
+});

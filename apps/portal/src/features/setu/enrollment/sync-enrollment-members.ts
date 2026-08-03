@@ -1,5 +1,5 @@
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
-import { memberEligibleForProgram } from '@cmt/shared-domain';
+import { isParticipating, memberEligibleForProgram } from '@cmt/shared-domain';
 import { getProgram } from '@/features/setu/programs/get-programs';
 
 export interface SyncEnrollmentMembersResult {
@@ -70,17 +70,33 @@ export async function syncActiveEnrollmentMemberships(
   if (enrSnap.empty) return { updated: [] };
 
   const members = memSnap.docs.map(
-    (d) => d.data() as { mid?: string; type?: 'Adult' | 'Child'; birthMonthYear?: string | null },
+    (d) =>
+      d.data() as {
+        mid?: string;
+        type?: 'Adult' | 'Child';
+        birthMonthYear?: string | null;
+        participation?: string | null;
+      },
   );
 
   const programByKey = new Map<string, Awaited<ReturnType<typeof getProgram>>>();
   const batch = db.batch();
   const updated: string[] = [];
 
-  // Every mid that currently exists on the family, regardless of eligibility.
-  // A MANUAL selection is filtered by EXISTENCE only - see below.
+  // Every mid that currently exists on the family AND still takes part,
+  // regardless of eligibility. A MANUAL selection is filtered by this only -
+  // see below.
+  //
+  // A retired member counts as DEPARTED here, deliberately. The alternative -
+  // treating them as merely ineligible - would leave them on a manual
+  // enrollment, i.e. on a teacher's roster, after their family had said they
+  // are done. "Left the household" and "stopped attending" want the same
+  // handling from the roster's point of view.
   const existingMids = new Set(
-    members.map((m) => m.mid).filter((mid): mid is string => typeof mid === 'string'),
+    members
+      .filter((m) => isParticipating(m))
+      .map((m) => m.mid)
+      .filter((mid): mid is string => typeof mid === 'string'),
   );
 
   for (const enrDoc of enrSnap.docs) {
@@ -137,6 +153,7 @@ export async function syncActiveEnrollmentMemberships(
     // Eligible members, in member-doc order (fid-01, fid-02, …) so the child
     // display order on the dashboard stays stable across re-syncs.
     const eligible = members
+      .filter((m) => isParticipating(m))
       .filter(
         (m): m is { mid: string; type: 'Adult' | 'Child'; birthMonthYear?: string | null } =>
           typeof m.mid === 'string' && (m.type === 'Adult' || m.type === 'Child'),

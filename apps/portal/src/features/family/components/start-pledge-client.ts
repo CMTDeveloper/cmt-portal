@@ -9,6 +9,12 @@ export type StartPledgeClientResult =
         | 'already-live'
         /** No active Bala Vihar enrollment - there is nothing for a monthly plan to fund. */
         | 'enrollment-required'
+        /**
+         * Enrolled, but the enrollment names nobody - e.g. the only child was
+         * converted to an Adult. A different ask from `enrollment-required`:
+         * telling this family to "enroll first" would be false.
+         */
+        | 'no-enrolled-members'
         | 'unavailable'
         | 'error';
     };
@@ -42,6 +48,12 @@ export async function startPledgeCheckout(): Promise<StartPledgeClientResult> {
     // would show the same ask again and look like the button does nothing.
     if (res.status === 409 && json.error === 'enrollment-required') {
       return { ok: false, reason: 'enrollment-required' };
+    }
+    // Same shape, different ask - and it MUST be matched before the catch-all
+    // below, which would otherwise announce a monthly donation this family does
+    // not have and reload them straight back into the same dead end.
+    if (res.status === 409 && json.error === 'no-enrolled-members') {
+      return { ok: false, reason: 'no-enrolled-members' };
     }
     // Otherwise 409 means a pledge is already `started` or `active`. Not an
     // error the family can act on - the card is simply stale, so the honest

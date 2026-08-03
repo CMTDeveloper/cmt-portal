@@ -14,7 +14,17 @@ vi.mock('@/features/setu/members/get-family-by-fid', () => ({ getFamilyByFid: mo
 vi.mock('@/features/setu/enrollment/get-enrollments', () => ({ getEnrollments: mockEnrollments }));
 vi.mock('@/features/setu/pledges/clear-abandoned-pledge', () => ({ clearAbandonedPledge: mockClear }));
 
-const BV_ENROLLMENT = { eid: 'CMT-A-bv-2026', programKey: 'bala-vihar', status: 'active' };
+// A realistic enrollment NAMES its members. The earlier fixture omitted
+// `enrolledMids` entirely, so it could not have caught an enrollment that has
+// been emptied - which is exactly the state a Child→Adult conversion leaves
+// behind (`syncActiveEnrollmentMemberships` prunes the converted child and
+// deliberately allows an empty list).
+const BV_ENROLLMENT = {
+  eid: 'CMT-A-bv-2026',
+  programKey: 'bala-vihar',
+  status: 'active',
+  enrolledMids: ['CMT-A-02'],
+};
 
 import { POST } from '../route';
 
@@ -163,6 +173,49 @@ describe('POST /api/pledges/start', () => {
       const res = await POST(req(MANAGER));
       expect(res.status).toBe(409);
       expect(mockStart).not.toHaveBeenCalled();
+    });
+
+    // ── …and that enrollment must name somebody ────────────────────────────
+    //
+    // The hole the enrollment check left open. `syncActiveEnrollmentMemberships`
+    // re-derives `enrolledMids` after every member change and DELIBERATELY
+    // allows the result to be empty ("an active enrollment naming nobody" is the
+    // truthful state, and keeping stale mids would put a departed child on a
+    // teacher's roster). So converting an only child to Adult - which the member
+    // edit screen has always permitted - leaves an ACTIVE Bala Vihar enrollment
+    // with zero members. Every check above passes for that family, and they can
+    // authorise a recurring bank mandate to fund nobody. There is no cancel
+    // endpoint, so this has to be refused before the hosted page.
+    it('409s when the active Bala Vihar enrollment has been emptied', async () => {
+      mockEnrollments.mockResolvedValue([{ ...BV_ENROLLMENT, enrolledMids: [] }]);
+      const res = await POST(req(MANAGER));
+      expect(res.status).toBe(409);
+      // A DISTINCT code from `enrollment-required`: this family IS enrolled, so
+      // "enroll in Bala Vihar first" would be false and would read as the button
+      // doing nothing.
+      expect(await res.json()).toEqual({ error: 'no-enrolled-members' });
+      expect(mockStart).not.toHaveBeenCalled();
+      expect(mockClear).not.toHaveBeenCalled();
+    });
+
+    it('409s when the enrollment carries no enrolledMids field at all', async () => {
+      // A legacy/partial doc must fail CLOSED - the guard asks "is there anyone
+      // to fund?", and an absent list is not a yes.
+      const noMids: Record<string, unknown> = { ...BV_ENROLLMENT };
+      delete noMids['enrolledMids'];
+      mockEnrollments.mockResolvedValue([noMids]);
+      expect((await POST(req(MANAGER))).status).toBe(409);
+      expect(mockStart).not.toHaveBeenCalled();
+    });
+
+    it('proceeds when the emptied enrollment is a DIFFERENT program (N=2)', async () => {
+      // Only the Bala Vihar enrollment's roster decides this. An emptied Tabla
+      // enrollment sitting alongside must not block a funded Bala Vihar one.
+      mockEnrollments.mockResolvedValue([
+        { eid: 'CMT-A-tabla', programKey: 'tabla', status: 'active', enrolledMids: [] },
+        BV_ENROLLMENT,
+      ]);
+      expect((await POST(req(MANAGER))).status).toBe(201);
     });
 
     it('proceeds when a Bala Vihar enrollment sits behind a newer one', async () => {

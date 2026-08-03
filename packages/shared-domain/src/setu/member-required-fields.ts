@@ -66,6 +66,25 @@ export interface MemberCompletenessInput {
   birthMonthYear?: string | null | undefined;
 }
 
+/**
+ * Does this member still take part?
+ *
+ * The ONE place the rule "absent ⇒ active" is written down. Every consumer -
+ * gates, rosters, kiosk, prasad, seva, enrollment - must ask through here rather
+ * than testing `m.participation === 'inactive'` inline, because the interesting
+ * case is the ABSENT field: all 2033 migrated member docs predate it, and a
+ * hand-written `=== 'active'` check would silently treat every one of them as
+ * not participating and empty the school.
+ *
+ * Accepts a loose shape so a MemberDoc, a projection, or a raw Firestore
+ * `data()` can all be passed without casting.
+ */
+export function isParticipating(
+  member: { participation?: string | null | undefined } | null | undefined,
+): boolean {
+  return member?.participation !== 'inactive';
+}
+
 /** The full required-field list for a given member type. */
 export function requiredFieldsForType(type: 'Adult' | 'Child'): MemberRequiredField[] {
   return [...REQUIRED_ALL, ...(type === 'Adult' ? REQUIRED_ADULT : REQUIRED_CHILD)];
@@ -169,13 +188,30 @@ export function incompleteMembers(
  * the user /complete-profile ⇄ /family).
  */
 export function membersRequiringCompletion<
-  T extends { mid: string; manager?: boolean | null; inviteStatus?: string | null | undefined },
+  T extends {
+    mid: string;
+    manager?: boolean | null;
+    inviteStatus?: string | null | undefined;
+    participation?: string | null | undefined;
+  },
 >(members: readonly T[], currentMid: string, isManager: boolean): T[] {
   // A pending-invite member (created at invite-send, not yet accepted) is nobody's
   // completion task: they have no session and complete their OWN profile after
   // accepting. Drop them up-front so neither the invitee nor any manager is ever
   // blocked by a pending row.
-  const active = members.filter((m) => m.inviteStatus !== 'pending');
+  //
+  // An INACTIVE member is dropped for the same reason, from the other end: they
+  // have finished, or never took part. Reported 2026-08-02 - a father could not
+  // finish registration because the portal demanded a school grade for a son who
+  // had already completed Bala Vihar, and contact details for a spouse who was
+  // not taking part. There was no way to say so, so the family was simply stuck.
+  //
+  // Note this asks about PARTICIPATION, not about whether their record is tidy:
+  // `incompleteMembers()` still reports an inactive member's missing fields, so
+  // staff can see the gap. This helper only decides who BLOCKS.
+  const active = members.filter(
+    (m) => m.inviteStatus !== 'pending' && m.participation !== 'inactive',
+  );
   if (!isManager) return active.filter((m) => m.mid === currentMid);
   return active.filter((m) => m.mid === currentMid || m.manager !== true);
 }

@@ -25,6 +25,16 @@ const MESSAGES: Record<string, string> = {
   'grade-required': 'Children need a school grade.',
   'birthmonth-required': 'Children need a birth month and year.',
   'last-manager': 'A family must keep at least one manager.',
+  // The three participation guards in write-member.ts. Without copy here they
+  // fell through to "Something went wrong", which tells a family nothing about
+  // an action they CAN complete once they know the order to do it in.
+  'enrolled-cannot-deactivate':
+    'They are still enrolled in a program this year. Cancel that enrollment first, then mark them as no longer participating.',
+  'last-manager-cannot-deactivate':
+    'A family must keep at least one manager who takes part. Make someone else a manager first.',
+  'manager-must-be-adult': 'Only an adult can be a family manager.',
+  'participation-requires-another-member':
+    'You can’t change your own participation — ask another family manager to do it.',
   forbidden: 'You don’t have access to that member.',
   'not-found': 'That member could no longer be found.',
 };

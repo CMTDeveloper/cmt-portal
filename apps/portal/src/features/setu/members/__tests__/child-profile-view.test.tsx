@@ -34,6 +34,7 @@ function makeProfile(over: Partial<ChildProfile> = {}): ChildProfile {
   return {
     mid: 'CMT-FAM1-03', publicMid: '50001', fid: 'CMT-FAM1', firstName: 'Anaya', lastName: 'Patel',
     type: 'Child', schoolGrade: 'Grade 5', birthMonthYear: '2015-03', foodAllergies: null,
+    participation: 'active',
     programs: [
       makeProgram({ eid: 'e1', label: 'Bala Vihar', programKey: 'bala-vihar', attendance: teacherAtt }),
       makeProgram({ eid: 'e2', label: 'Tabla', programKey: 'tabla', attendance: checkInAtt }),

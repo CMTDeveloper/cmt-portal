@@ -9,7 +9,7 @@ import { EligibleMembersList } from '@/features/family/components/eligible-membe
 import { CompleteDonationButton } from '@/features/family/components/complete-donation-button';
 import { resolveSuggestedAmount, paymentSourceOf, memberEligibleForProgram, gradeLabel, BALA_VIHAR } from '@cmt/shared-domain';
 import type { OfferingDoc, PaymentSource } from '@cmt/shared-domain';
-import { isPledgeGiving } from '@cmt/shared-domain/setu';
+import { isPledgeGiving, isParticipating } from '@cmt/shared-domain/setu';
 import { flags } from '@/lib/flags';
 import { getFamilyPledge } from '@/features/setu/pledges/get-family-pledge';
 import { clearAbandonedPledge } from '@/features/setu/pledges/clear-abandoned-pledge';
@@ -209,9 +209,18 @@ export default async function ProgramEnrollPage({ params }: Props) {
   );
 
   // For BV (child-only): show the children list. For generic: show eligible members.
+  //
+  // Retired members are excluded from BOTH, and that is not cosmetic. `enrollFamily`
+  // filters them server-side, so a page that still counted them would show the
+  // enrol CTA, then answer "Add a child to your family before enrolling" to a
+  // family looking at the child it just listed. That dead end lands hardest on
+  // exactly the families the 2026-08-03 lazy-migration change touches: their
+  // only child may have been auto-retired because the legacy roster had no
+  // class level for them.
+  const participating = members.filter((m) => isParticipating(m));
   const eligibleForDisplay = isBv
-    ? members.filter((m) => m.type === 'Child')
-    : eligibleMembers;
+    ? participating.filter((m) => m.type === 'Child')
+    : eligibleMembers.filter((m) => isParticipating(m));
 
   const [enrollments, openOfferings, donations] = await Promise.all([
     getEnrollments(family.fid),
