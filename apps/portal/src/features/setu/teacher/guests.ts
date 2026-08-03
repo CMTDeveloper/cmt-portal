@@ -1,5 +1,5 @@
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
-import { attendanceAid, type LevelDoc, type SetuAttendanceStatus } from '@cmt/shared-domain';
+import { attendanceAid, isParticipating, type LevelDoc, type SetuAttendanceStatus } from '@cmt/shared-domain';
 import { enrollFamilyOnFirstAttendance } from '@/features/setu/enrollment/enroll-on-first-attendance';
 
 export interface GuestEvent {
@@ -11,12 +11,19 @@ export interface GuestEvent {
 }
 
 /** Find a member by mid across all families → { fid, firstName, lastName }. */
-async function findMemberFid(mid: string): Promise<{ fid: string; firstName: string; lastName: string } | null> {
+async function findMemberFid(
+  mid: string,
+): Promise<{ fid: string; firstName: string; lastName: string; participating: boolean } | null> {
   const snap = await portalFirestore().collectionGroup('members').where('mid', '==', mid).limit(1).get();
   const doc = snap.docs[0];
   if (!doc) return null;
   const d = doc.data();
-  return { fid: doc.ref.parent.parent?.id ?? '', firstName: d.firstName, lastName: d.lastName };
+  return {
+    fid: doc.ref.parent.parent?.id ?? '',
+    firstName: d.firstName,
+    lastName: d.lastName,
+    participating: isParticipating(d),
+  };
 }
 
 /** Has this family an active enrollment for the period? (eid is deterministic.) */
@@ -27,7 +34,7 @@ async function hasActiveEnrollment(fid: string, pid: string): Promise<boolean> {
 
 export type MarkGuestResult =
   | { ok: true; aid: string; autoEnrolled: boolean }
-  | { ok: false; reason: 'level-not-found' | 'member-not-found' };
+  | { ok: false; reason: 'level-not-found' | 'member-not-found' | 'member-inactive' };
 
 /**
  * Mark a student present at a level, auto-enrolling their family on first
@@ -59,6 +66,16 @@ export async function markGuest(params: {
 
   const member = await findMemberFid(params.mid);
   if (!member) return { ok: false, reason: 'member-not-found' };
+
+  // A member the family has marked as no longer participating must not be
+  // marked present. This is the sharpest edge of the whole participation
+  // feature: the mid arrives from the client, and a few lines below it would
+  // AUTO-ENROL the family and write an attendance event - so a stale tab or a
+  // hand-made request could re-enrol a child their family had just retired,
+  // and the family would see them back on a roster they thought they had left.
+  // Hiding them from the teacher's picker is not enough; the refusal belongs
+  // here, at the write.
+  if (!member.participating) return { ok: false, reason: 'member-inactive' };
 
   let autoEnrolled = false;
   if (!(await hasActiveEnrollment(member.fid, level.pid))) {

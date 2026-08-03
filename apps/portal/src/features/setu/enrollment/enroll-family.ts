@@ -1,5 +1,5 @@
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
-import { memberEligibleForProgram, resolveSuggestedAmount, type EnrollmentDoc, type OfferingDoc, type PricingTier } from '@cmt/shared-domain';
+import { isParticipating, memberEligibleForProgram, resolveSuggestedAmount, type EnrollmentDoc, type OfferingDoc, type PricingTier } from '@cmt/shared-domain';
 import { getProgram } from '@/features/setu/programs/get-programs';
 import { ensurePublicFid } from './ensure-public-fid';
 
@@ -221,7 +221,19 @@ export async function enrollFamily(params: EnrollFamilyParams): Promise<EnrollFa
     // caller did not name the members.
     let enrolledMids: string[];
     if (midsSupplied) {
-      enrolledMids = params.enrolledMids!;
+      // An explicit selection still has to be checked. The list arrives from a
+      // client, so "the family picked these" is a claim, not a fact - and a
+      // retired member enrolled this way would land on a teacher's roster with
+      // no screen having offered them. Cheaper than it looks: one subcollection
+      // read, inside the transaction that is already open.
+      const membersSnap = await txn.get(db.collection('families').doc(fid).collection('members'));
+      const inactive = new Set(
+        membersSnap.docs
+          .map((d) => d.data() as { mid?: string; participation?: string | null })
+          .filter((m) => !isParticipating(m))
+          .map((m) => m.mid),
+      );
+      enrolledMids = params.enrolledMids!.filter((mid) => !inactive.has(mid));
     } else {
       // Read members AFTER early-exit checks so we only pay the cost when actually enrolling.
       const membersSnap = await txn.get(
@@ -234,8 +246,17 @@ export async function enrollFamily(params: EnrollFamilyParams): Promise<EnrollFa
       // all matching members. Replaces the old children-only hardcode.
       enrolledMids = [];
       for (const memberDoc of membersSnap.docs) {
-        const m = memberDoc.data() as { type?: 'Adult' | 'Child'; mid?: string; birthMonthYear?: string | null };
+        const m = memberDoc.data() as {
+          type?: 'Adult' | 'Child';
+          mid?: string;
+          birthMonthYear?: string | null;
+          participation?: string | null;
+        };
         if (!m.mid || !m.type) continue;
+        // Someone the family has retired is not enrolled by derivation, however
+        // well they match the programme's age rules - otherwise the first
+        // enrollment of the year quietly puts them back on a roster.
+        if (!isParticipating(m)) continue;
         if (memberEligibleForProgram({ type: m.type, birthMonthYear: m.birthMonthYear ?? null }, program.eligibility, now)) {
           enrolledMids.push(m.mid);
         }

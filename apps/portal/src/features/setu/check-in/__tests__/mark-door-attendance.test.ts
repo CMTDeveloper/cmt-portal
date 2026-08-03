@@ -39,8 +39,13 @@ let created: Array<Record<string, unknown>>;
 let existingAids: Set<string>;
 let membersDocs: Array<{ data: () => Record<string, unknown> }>;
 
-function member(mid: string, type: 'Adult' | 'Child', schoolGrade: string | null) {
-  return { data: () => ({ mid, type, schoolGrade, birthMonthYear: null }) };
+function member(
+  mid: string,
+  type: 'Adult' | 'Child',
+  schoolGrade: string | null,
+  extra: Record<string, unknown> = {},
+) {
+  return { data: () => ({ mid, type, schoolGrade, birthMonthYear: null, ...extra }) };
 }
 
 function makeDb() {
@@ -109,6 +114,30 @@ describe('markDoorAttendance', () => {
     expect(created[1]).toMatchObject({ levelId: 'L-1', mid: 'm2', status: 'present' });
     // Uses the family's location to resolve the current Bala Vihar offering.
     expect(mocks.getOpenOfferingsForFamily).toHaveBeenCalledWith('bala-vihar', 'Brampton');
+  });
+
+  // The kiosk POST takes client-supplied mids, so a stale tablet could send a
+  // child whose family has since retired them. N=2: `m1` is a participating
+  // child in the SAME level, so a filter that dropped everyone would fail here.
+  it('skips a child the family has marked as no longer participating', async () => {
+    membersDocs = [
+      member('m1', 'Child', '6'),
+      member('m8', 'Child', '6', { participation: 'inactive' }),
+    ];
+    const res = await markDoorAttendance({
+      fid: 'CMT-A', location: 'Brampton', presentMids: ['m1', 'm8'], now: NOW,
+    });
+    expect(res).toEqual({ marked: 1, skipped: 1 });
+    expect(created).toHaveLength(1);
+    expect(created[0]).toMatchObject({ mid: 'm1' });
+  });
+
+  it('marks a child with NO participation field - every migrated doc has none', async () => {
+    membersDocs = [member('m1', 'Child', '6', { participation: undefined })];
+    const res = await markDoorAttendance({
+      fid: 'CMT-A', location: 'Brampton', presentMids: ['m1'], now: NOW,
+    });
+    expect(res).toEqual({ marked: 1, skipped: 0 });
   });
 
   it('never overwrites an existing mark (create-only): an already-marked student is respected', async () => {

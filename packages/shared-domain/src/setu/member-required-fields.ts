@@ -66,6 +66,25 @@ export interface MemberCompletenessInput {
   birthMonthYear?: string | null | undefined;
 }
 
+/**
+ * Does this member still take part?
+ *
+ * The ONE place the rule "absent ⇒ active" is written down. Every consumer -
+ * gates, rosters, kiosk, prasad, seva, enrollment - must ask through here rather
+ * than testing `m.participation === 'inactive'` inline, because the interesting
+ * case is the ABSENT field: all 2033 migrated member docs predate it, and a
+ * hand-written `=== 'active'` check would silently treat every one of them as
+ * not participating and empty the school.
+ *
+ * Accepts a loose shape so a MemberDoc, a projection, or a raw Firestore
+ * `data()` can all be passed without casting.
+ */
+export function isParticipating(
+  member: { participation?: string | null | undefined } | null | undefined,
+): boolean {
+  return member?.participation !== 'inactive';
+}
+
 /** The full required-field list for a given member type. */
 export function requiredFieldsForType(type: 'Adult' | 'Child'): MemberRequiredField[] {
   return [...REQUIRED_ALL, ...(type === 'Adult' ? REQUIRED_ADULT : REQUIRED_CHILD)];

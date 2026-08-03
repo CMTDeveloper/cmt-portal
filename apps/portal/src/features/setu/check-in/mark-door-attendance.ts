@@ -1,6 +1,6 @@
 import 'server-only';
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
-import { BALA_VIHAR, attendanceAid, type Location } from '@cmt/shared-domain';
+import { BALA_VIHAR, attendanceAid, isParticipating, type Location } from '@cmt/shared-domain';
 import { getOpenOfferingsForFamily } from '@/features/setu/enrollment/get-open-offerings';
 import {
   fetchEnabledLevelsForPid,
@@ -75,6 +75,7 @@ export async function markDoorAttendance(params: {
           type: (data.type ?? 'Child') as 'Adult' | 'Child',
           schoolGrade: (data.schoolGrade ?? null) as string | null,
           birthMonthYear: (data.birthMonthYear ?? null) as string | null,
+          participating: isParticipating(data),
         },
       ] as const;
     }),
@@ -84,8 +85,11 @@ export async function markDoorAttendance(params: {
   let skipped = 0;
   for (const mid of presentMids) {
     const m = byMid.get(mid);
-    // Only children who match an enabled level get a class-attendance mark.
-    if (!m || m.type === 'Adult') {
+    // Only participating children who match an enabled level get a
+    // class-attendance mark. The `participating` test is not decoration: the
+    // kiosk POST takes client-supplied mids, so without it a stale tablet could
+    // put a child their family had retired back onto a teacher's roster.
+    if (!m || m.type === 'Adult' || !m.participating) {
       skipped++;
       continue;
     }

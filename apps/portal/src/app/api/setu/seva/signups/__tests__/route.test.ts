@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('@/features/setu/seva/get-opportunities', () => ({ getOpportunity: vi.fn() }));
+// N=2 on purpose: one member still taking part, one retired. The route must
+// credit the first and refuse the second, and a single-member fixture could not
+// tell those apart.
+const mockGetFamily = vi.hoisted(() => vi.fn());
+vi.mock('@/features/setu/members/get-family-by-fid', () => ({ getFamilyByFid: mockGetFamily }));
 vi.mock('@/features/setu/seva/get-signups', () => ({
   getSignup: vi.fn(),
   listSignupsForOpp: vi.fn(),
@@ -32,6 +37,14 @@ beforeEach(() => {
   vi.mocked(getOpportunity).mockResolvedValue(openOpp as never);
   vi.mocked(getSignup).mockResolvedValue(null);
   vi.mocked(listSignupsForOpp).mockResolvedValue([]);
+  mockGetFamily.mockResolvedValue({
+    family: { fid: 'CMT-AB12CD34' },
+    members: [
+      { mid: 'CMT-AB12CD34-01', firstName: 'Raj', participation: 'active' },
+      { mid: 'CMT-AB12CD34-02', firstName: 'Diya', participation: 'active' },
+      { mid: 'CMT-AB12CD34-03', firstName: 'Archish', participation: 'inactive' },
+    ],
+  });
 });
 
 describe('POST /api/setu/seva/signups', () => {
@@ -86,5 +99,23 @@ describe('POST /api/setu/seva/signups', () => {
       signupId: 'o1__CMT-AB12CD34', oppId: 'o1', fid: 'CMT-AB12CD34', mid: 'CMT-AB12CD34-02',
       sevaYear: '2025-26', status: 'signed-up', hoursAwarded: 0, signedUpByMid: 'CMT-AB12CD34-01',
     }));
+  });
+
+  // The prefix check that used to be the ONLY validation proves the mid belongs
+  // to this family - not that the member exists, nor that they still take part.
+  it('409s when the credited member no longer participates', async () => {
+    const res = await POST(req({ oppId: 'o1', mid: 'CMT-AB12CD34-03' }));
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: 'member-inactive' });
+    expect(mockSet).not.toHaveBeenCalled();
+  });
+
+  it('400s on a well-prefixed mid that is not a real member', async () => {
+    // A prefix is trivially constructed, so this was previously accepted and
+    // would have written seva credit against a member that never existed.
+    const res = await POST(req({ oppId: 'o1', mid: 'CMT-AB12CD34-99' }));
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'invalid-member' });
+    expect(mockSet).not.toHaveBeenCalled();
   });
 });
