@@ -8,7 +8,7 @@ import { MobileBottomNav } from '@/features/family/components/mobile-bottom-nav'
 import { LoadingOm } from '@/components/chrome/loading-om';
 import { SchoolYearBadge } from '@/components/chrome/school-year-badge';
 import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
-import { isAdmin, isTeacher, type WithRole } from '@cmt/shared-domain';
+import { isAdmin, isTeacher, isWelcomeTeam, isCoordinator, type WithRole } from '@cmt/shared-domain';
 import { profileGatePending, earlierGatesPending, getDisclaimerStateCached } from './_helpers/gates';
 import { loadAdultClassGateDataFailSoft } from '@/features/setu/adult-class/load-gate-data';
 import { needsAdultClassSelection } from '@/features/setu/adult-class/needs-selection';
@@ -128,35 +128,61 @@ async function SidebarWithIdentity() {
     const legacyClause = data.family.legacyFid ? ` · Legacy ${data.family.legacyFid}` : '';
     subtitle = `${data.family.name}${fidClause}${legacyClause}`;
   }
-  return <DesktopSidebarLive displayName={displayName} subtitle={subtitle} showSignOut isAdmin={sevak.isAdmin} showTeacher={sevak.showTeacher} yearBadge={<SchoolYearBadge />}/>;
+  return <DesktopSidebarLive displayName={displayName} subtitle={subtitle} showSignOut isAdmin={sevak.isAdmin} showTeacher={sevak.showTeacher} staffArea={sevak.staffArea} yearBadge={<SchoolYearBadge />}/>;
 }
 
 // Mobile bottom nav needs isAdmin/showTeacher to decide whether the "More" sheet
 // shows the Admin / Teacher shortcuts. Computed the same way as the desktop sidebar.
 async function MobileNavWithIdentity() {
   const sevak = await readSevakFlagsFromCookie();
-  return <MobileBottomNav isAdmin={sevak.isAdmin} showTeacher={sevak.showTeacher} />;
+  return <MobileBottomNav isAdmin={sevak.isAdmin} showTeacher={sevak.showTeacher} staffArea={sevak.staffArea} />;
 }
 
-// Reads the session cookie once and runs isAdmin()/isTeacher() so the chrome can
-// decide whether to show the Admin / Teacher shortcuts. Returns false on any
-// error (missing cookie, expired session, etc.) — silent failure is fine here
-// because middleware already gates access to /admin and /teacher themselves.
-// Teacher is additionally gated on the flags.setuTeacher feature flag.
-async function readSevakFlagsFromCookie(): Promise<{ isAdmin: boolean; showTeacher: boolean }> {
+/** What staff area (if any) this family member can also reach. */
+type SevakFlags = {
+  isAdmin: boolean;
+  showTeacher: boolean;
+  staffArea: 'welcome-team' | 'coordinator' | null;
+};
+
+// Reads the session cookie once and derives which staff shortcuts the family
+// chrome should offer. Returns all-false on any error (missing cookie, expired
+// session) — silent failure is fine because middleware gates the destinations
+// themselves. Teacher is additionally gated on the flags.setuTeacher flag.
+//
+// `staffArea` is the fix for a real report (2026-08-03): an admin granted a
+// parent the welcome-team role, the grant landed correctly in
+// roleAssignments/{mid}, and the parent still saw no way in — because this
+// function only ever asked about admin and teacher, so the Sevak section could
+// only ever render those two links. A capability nobody can navigate to is
+// indistinguishable from a capability that was never granted.
+//
+// Admins are excluded on purpose: they already get the Admin link, and the
+// admin dashboard links /welcome as "Family search". isWelcomeTeam() and
+// isCoordinator() both return true for admin, hence the explicit !isAdmin.
+async function readSevakFlagsFromCookie(): Promise<SevakFlags> {
+  const none: SevakFlags = { isAdmin: false, showTeacher: false, staffArea: null };
   try {
     const cookieStore = await cookies();
     const sessionCookie = cookieStore.get('__session')?.value;
-    if (!sessionCookie) return { isAdmin: false, showTeacher: false };
+    if (!sessionCookie) return none;
     const claims = await verifyPortalSessionCookie(sessionCookie).catch(() => null);
-    if (!claims) return { isAdmin: false, showTeacher: false };
+    if (!claims) return none;
     const withRole = claims as unknown as WithRole;
+    const admin = isAdmin(withRole);
     return {
-      isAdmin: isAdmin(withRole),
+      isAdmin: admin,
       showTeacher: flags.setuTeacher && isTeacher(withRole),
+      staffArea: admin
+        ? null
+        : isWelcomeTeam(withRole)
+          ? 'welcome-team'
+          : isCoordinator(withRole)
+            ? 'coordinator'
+            : null,
     };
   } catch {
-    return { isAdmin: false, showTeacher: false };
+    return none;
   }
 }
 

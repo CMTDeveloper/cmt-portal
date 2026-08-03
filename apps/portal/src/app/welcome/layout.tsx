@@ -56,6 +56,7 @@ async function WelcomeChromeAndChildren({ children }: { children: React.ReactNod
             subtitle={coordinatorOnly ? 'Coordinator' : 'Welcome team'}
             showSignOut
             showTeacher={showTeacher}
+            hasFamily={hasFamily}
           />
         )
       ) : (
