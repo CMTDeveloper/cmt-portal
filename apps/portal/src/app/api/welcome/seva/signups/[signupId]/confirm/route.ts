@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
-import { isWelcomeTeam, ConfirmSevaSignupSchema } from '@cmt/shared-domain';
+import { isAdmin, ConfirmSevaSignupSchema } from '@cmt/shared-domain';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
 import { getSignup } from '@/features/setu/seva/get-signups';
 import { getOpportunity } from '@/features/setu/seva/get-opportunities';
@@ -10,7 +10,7 @@ type RouteContext = { params: Promise<{ signupId: string }> };
 export async function POST(req: Request, ctx: RouteContext) {
   const session = readSessionFromHeaders(req);
   if (!session || !session.uid) return NextResponse.json({ error: 'no-session' }, { status: 401 });
-  if (!isWelcomeTeam(session)) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+  if (!isAdmin(session)) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
 
   const { signupId } = await ctx.params;
   const raw = await req.json().catch(() => null);

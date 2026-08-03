@@ -64,10 +64,17 @@ describe('DesktopSidebar — coordinator', () => {
     expect(screen.queryAllByText('Family member')).toHaveLength(0);
   });
 
-  it('still shows every welcome-team link for welcome-team', () => {
+  it('shows welcome-team the roster and the visitors board, and nothing else', () => {
+    // 2026-08-03: the role is scoped to those two screens. Everything listed in
+    // the second loop now 302s for this role, so a link to it would be a trap.
+    // (This sidebar is only rendered for a NON-admin welcome-team member —
+    // /welcome/layout.tsx gives admins AdminSidebarLive instead.)
     render(<DesktopSidebar role="welcome-team" displayName="Welcome team" showSignOut />);
-    for (const label of ['Roster', 'Reports', 'Levels & rosters', 'Seva', 'Prasad']) {
-      expect(screen.getAllByText(label).length).toBeGreaterThan(0);
+    for (const label of ['Roster', 'Visitors']) {
+      expect(screen.getAllByRole('link', { name: label }).length).toBeGreaterThan(0);
+    }
+    for (const label of ['Reports', 'Levels & rosters', 'Seva', 'Prasad', 'Pending', 'Donation periods']) {
+      expect(screen.queryByText(label)).toBeNull();
     }
   });
 });

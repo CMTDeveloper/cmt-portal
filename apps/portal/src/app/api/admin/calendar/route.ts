@@ -4,7 +4,6 @@ import {
   CreateCalendarEntrySchema,
   calendarEntryId,
   isAdmin,
-  isWelcomeTeam,
   type Location,
 } from '@cmt/shared-domain';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
@@ -19,7 +18,7 @@ import { schoolYearOfDate } from '@/features/setu/rollover/school-year';
 function sevak(req: Request) {
   const session = readSessionFromHeaders(req);
   if (!session || !session.uid) return { error: NextResponse.json({ error: 'no-session' }, { status: 401 }) };
-  if (!isAdmin(session) && !isWelcomeTeam(session)) {
+  if (!isAdmin(session)) {
     return { error: NextResponse.json({ error: 'forbidden' }, { status: 403 }) };
   }
   return { session };

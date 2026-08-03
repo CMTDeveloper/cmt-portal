@@ -31,9 +31,9 @@ beforeEach(() => {
 });
 
 describe('PATCH /api/admin/calendar/[entryId]', () => {
-  it('allows welcome-team to toggle enabled', async () => {
+  it('allows admin to toggle enabled', async () => {
     const { PATCH } = await import('../route');
-    const res = await PATCH(req('PATCH', { enabled: false }, 'uid-w', 'welcome-team'), params());
+    const res = await PATCH(req('PATCH', { enabled: false }, 'uid-w', 'admin'), params());
     expect(res.status).toBe(200);
     expect((mockUpdate.mock.calls[0]![0] as Record<string, unknown>).enabled).toBe(false);
   });

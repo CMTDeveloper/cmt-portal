@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
-import { SetWeeklyScheduleSchema, isAdmin, isWelcomeTeam, type Location } from '@cmt/shared-domain';
+import { SetWeeklyScheduleSchema, isAdmin, type Location } from '@cmt/shared-domain';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
 import { getWeeklySchedule } from '@/features/setu/calendar/calendar';
 import { getLocationOptions } from '@/lib/locations';
@@ -8,7 +8,7 @@ import { getLocationOptions } from '@/lib/locations';
 function sevak(req: Request) {
   const session = readSessionFromHeaders(req);
   if (!session || !session.uid) return { error: NextResponse.json({ error: 'no-session' }, { status: 401 }) };
-  if (!isAdmin(session) && !isWelcomeTeam(session)) {
+  if (!isAdmin(session)) {
     return { error: NextResponse.json({ error: 'forbidden' }, { status: 403 }) };
   }
   return { session };

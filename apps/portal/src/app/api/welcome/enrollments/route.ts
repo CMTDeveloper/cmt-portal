@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { revalidateTag } from 'next/cache';
 import { flags } from '@/lib/flags';
-import { isWelcomeTeam, WelcomePostEnrollmentBodySchema } from '@cmt/shared-domain';
+import { isAdmin, WelcomePostEnrollmentBodySchema } from '@cmt/shared-domain';
 import { enrollFamily } from '@/features/setu/enrollment/enroll-family';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
 
@@ -14,7 +14,7 @@ export async function POST(req: Request) {
   if (!session) {
     return NextResponse.json({ error: 'no-session' }, { status: 401 });
   }
-  if (!isWelcomeTeam(session)) {
+  if (!isAdmin(session)) {
     return NextResponse.json({ error: 'welcome-team-required' }, { status: 403 });
   }
 

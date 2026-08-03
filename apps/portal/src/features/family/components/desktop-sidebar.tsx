@@ -63,20 +63,22 @@ const TEACHER_NAV_ITEMS: [SidebarTab, string, keyof typeof SetuIcon, string, boo
   ['family', 'My family',  'people', '/family'],
 ];
 
+// The welcome-team sidebar. Only reached by a NON-admin welcome-team member —
+// the /welcome layout puts admins on AdminSidebarLive instead — so it must list
+// exactly what the narrowed role can reach (2026-08-03: the roster and the
+// visitors board, nothing else). Reports / Levels & rosters / Seva / Prasad
+// were removed with the grant; they now 302 for this role, and an admin still
+// reaches every one of them from the admin sidebar. The two disabled
+// placeholders ('Pending', 'Donation periods') went too: they pointed at
+// /welcome and did nothing, which is a poor use of a two-item menu.
 const WELCOME_NAV_ITEMS: [SidebarTab, string, keyof typeof SetuIcon, string, boolean?][] = [
-  ['home', 'Roster',            'search',  '/welcome/roster'],
-  ['reports', 'Reports',        'info',    '/welcome/reports'],
-  ['levels', 'Levels & rosters','people',  '/welcome/levels'],
-  ['visitors','Visitors',       'bell',    '/welcome/visitors'],
-  ['seva',   'Seva',            'heart',   '/welcome/seva'],
-  ['prasad', 'Prasad',          'bell',    '/welcome/prasad'],
-  ['family', 'Pending',         'people',  '/welcome', true],
-  ['bv',     'Donation periods','calendar','/welcome', true],
+  ['home', 'Roster',      'search', '/welcome/roster'],
+  ['visitors', 'Visitors', 'bell',  '/welcome/visitors'],
 ];
 
-// A DEDICATED list, not a filtered mirror of WELCOME_NAV_ITEMS: four of those
-// seven (Reports, Levels & rosters, Seva, Prasad) point at paths spec 3.1
-// denies a coordinator, so each would 302 to /sign-in on click.
+// A DEDICATED list, not a filtered mirror of WELCOME_NAV_ITEMS: the coordinator
+// grant is Programs + Levels + Roster and does NOT include the visitors board,
+// so that entry would 302 to /sign-in on click.
 const COORDINATOR_NAV_ITEMS: [SidebarTab, string, keyof typeof SetuIcon, string, boolean?][] = [
   ['home', 'Roster', 'search', '/welcome/roster'],
 ];

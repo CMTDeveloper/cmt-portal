@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { AssignTeacherSchema, isAdmin, isWelcomeTeam, isCoordinator } from '@cmt/shared-domain';
+import { AssignTeacherSchema, isAdmin, isCoordinator } from '@cmt/shared-domain';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
 import { assignTeacher } from '@/features/setu/teacher/assignments';
 import { findMissingLevelIds } from '@/features/setu/teacher/levels';
@@ -24,7 +24,7 @@ export async function POST(req: Request) {
   if (!session || !session.uid) {
     return NextResponse.json({ error: 'no-session' }, { status: 401 });
   }
-  if (!isAdmin(session) && !isWelcomeTeam(session) && !isCoordinator(session)) {
+  if (!isAdmin(session) && !isCoordinator(session)) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
 

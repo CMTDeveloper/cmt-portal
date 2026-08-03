@@ -38,9 +38,9 @@ describe('GET /api/admin/calendar', () => {
     const { GET } = await import('../route');
     expect((await GET(makeRequest('GET', '/api/admin/calendar?location=Brampton', undefined, 'uid-m', 'family-manager'))).status).toBe(403);
   });
-  it('allows welcome-team', async () => {
+  it('allows admin', async () => {
     const { GET } = await import('../route');
-    const res = await GET(makeRequest('GET', '/api/admin/calendar?location=Brampton', undefined, 'uid-w', 'welcome-team'));
+    const res = await GET(makeRequest('GET', '/api/admin/calendar?location=Brampton', undefined, 'uid-w', 'admin'));
     expect(res.status).toBe(200);
     expect(mockGetSerialized).toHaveBeenCalledWith('Brampton');
   });
@@ -55,9 +55,9 @@ describe('POST /api/admin/calendar', () => {
     const { POST } = await import('../route');
     expect((await POST(makeRequest('POST', '/api/admin/calendar', classBody))).status).toBe(401);
   });
-  it('allows welcome-team to create a class day → 201 entryId (programKey-scoped)', async () => {
+  it('allows admin to create a class day → 201 entryId (programKey-scoped)', async () => {
     const { POST } = await import('../route');
-    const res = await POST(makeRequest('POST', '/api/admin/calendar', classBody, 'uid-w', 'welcome-team'));
+    const res = await POST(makeRequest('POST', '/api/admin/calendar', classBody, 'uid-w', 'admin'));
     expect(res.status).toBe(201);
     // id is now {programKey}-{location}-{date}; programKey defaults to bala-vihar.
     expect((await res.json()).entryId).toBe('bala-vihar-brampton-2025-09-07');

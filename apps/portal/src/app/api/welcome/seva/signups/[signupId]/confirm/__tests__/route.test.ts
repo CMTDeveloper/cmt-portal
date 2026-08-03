@@ -12,7 +12,7 @@ import { POST } from '../route';
 import { getSignup } from '@/features/setu/seva/get-signups';
 import { getOpportunity } from '@/features/setu/seva/get-opportunities';
 
-function req(body?: unknown, role: string | null = 'welcome-team', uid: string | null = 'w1'): Request {
+function req(body?: unknown, role: string | null = 'admin', uid: string | null = 'w1'): Request {
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   if (role) headers['x-portal-role'] = role;
   if (uid) headers['x-portal-uid'] = uid;

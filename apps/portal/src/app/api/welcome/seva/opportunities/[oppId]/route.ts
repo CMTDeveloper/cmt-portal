@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { revalidateTag } from 'next/cache';
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
-import { isWelcomeTeam, UpdateSevaOpportunitySchema } from '@cmt/shared-domain';
+import { isAdmin, UpdateSevaOpportunitySchema } from '@cmt/shared-domain';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
 import { getOpportunity } from '@/features/setu/seva/get-opportunities';
 
@@ -10,7 +10,7 @@ type RouteContext = { params: Promise<{ oppId: string }> };
 export async function PATCH(req: Request, ctx: RouteContext) {
   const session = readSessionFromHeaders(req);
   if (!session || !session.uid) return NextResponse.json({ error: 'no-session' }, { status: 401 });
-  if (!isWelcomeTeam(session)) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+  if (!isAdmin(session)) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
 
   const { oppId } = await ctx.params;
   const raw = await req.json().catch(() => null);

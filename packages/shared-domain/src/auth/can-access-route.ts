@@ -56,29 +56,31 @@ export function canAccessRoute(
   }
   // New /admin/* surface (Setu-themed). Pages and APIs both admin-only.
   if (pathname === '/admin' || pathname.startsWith('/admin/')) return isAdmin(claims);
-  // Teacher assignment is writable by admin AND welcome-team (RBB-2 front-desk
-  // flexibility). Must be checked BEFORE the generic admin-only /api/admin/ rule.
+  // Teacher assignment — admin + coordinator. Welcome-team was removed
+  // 2026-08-03: the role is scoped to the roster and the visitors board and
+  // nothing else (see the /welcome clauses below for the full rationale).
+  // Must be checked BEFORE the generic admin-only /api/admin/ rule.
   if (
     pathname === '/api/admin/teacher-assignments' ||
     pathname.startsWith('/api/admin/teacher-assignments/')
   ) {
-    return isAdmin(claims) || isWelcomeTeam(claims) || isCoordinator(claims);
+    return isAdmin(claims) || isCoordinator(claims);
   }
-  // Managed class calendar is published by admin AND welcome-team. Must be
-  // checked before the generic admin-only /api/admin/ rule.
+  // Managed class calendar is published by admin only (welcome-team removed
+  // 2026-08-03). Must be checked before the generic admin-only /api/admin/ rule.
   if (pathname === '/api/admin/calendar' || pathname.startsWith('/api/admin/calendar/')) {
-    return isAdmin(claims) || isWelcomeTeam(claims);
+    return isAdmin(claims);
   }
-  // Teacher name-search — front-desk (welcome-team) may assign teachers too.
+  // Teacher name-search — admin + coordinator, the roles that assign teachers.
   // Distinct prefix from /api/admin/teacher-assignments (handled above). Must be
   // checked before the generic admin-only /api/admin/ rule.
   if (pathname === '/api/admin/teachers/search' || pathname.startsWith('/api/admin/teachers/')) {
-    return isAdmin(claims) || isWelcomeTeam(claims) || isCoordinator(claims);
+    return isAdmin(claims) || isCoordinator(claims);
   }
-  // Per-level teacher add/remove — admin + welcome-team (front-desk). Only the
-  // `/teachers` sub-path opens up; level CRUD stays admin-only via the catch-all.
+  // Per-level teacher add/remove — admin + coordinator. Only the `/teachers`
+  // sub-path opens up; level CRUD stays admin-only via the catch-all.
   if (/^\/api\/admin\/levels\/[^/]+\/teachers\/?$/.test(pathname)) {
-    return isAdmin(claims) || isWelcomeTeam(claims) || isCoordinator(claims);
+    return isAdmin(claims) || isCoordinator(claims);
   }
   // Coordinator API surface: programs, offerings (pricing lives in
   // offering.pricingTiers) and level CRUD.
@@ -159,13 +161,12 @@ export function canAccessRoute(
     return isSetuFamily(claims);
   }
 
-  // Coordinator: roster browse + read-only family detail. `/welcome` root is
-  // included because it redirects to /welcome/roster - denying it would block
-  // the redirect itself. `/welcome/family/*` is included because EVERY roster
-  // row links to it, so without it the one screen the role is granted is a dead
-  // end that 302s on click. Spec 3.1 excludes family EDIT from coordinator, not
-  // family READ, and the roster already exposes the same PII. Reports, seva and
-  // prasad stay welcome-team-only via the catch-all below.
+  // Welcome-team + coordinator: roster browse + read-only family detail.
+  // `/welcome` root is included because it redirects to /welcome/roster -
+  // denying it would block the redirect itself. `/welcome/family/*` is included
+  // because EVERY roster row links to it, so without it the screen is a dead end
+  // that 302s on click. Spec 3.1 excludes family EDIT from coordinator, not
+  // family READ, and the roster already exposes the same PII.
   if (
     pathname === '/welcome' ||
     pathname === '/welcome/roster' ||
@@ -175,9 +176,20 @@ export function canAccessRoute(
   ) {
     return isWelcomeTeam(claims) || isCoordinator(claims);
   }
-  // Welcome-team portal pages
-  if (pathname === '/welcome' || pathname.startsWith('/welcome/')) {
+  // Welcome-team: the Sunday visitors board. Welcome-team only, NOT coordinator
+  // (whose grant is Programs + Levels + Roster).
+  if (pathname === '/welcome/visitors' || pathname.startsWith('/welcome/visitors/')) {
     return isWelcomeTeam(claims);
+  }
+  // Everything else under /welcome — levels, seva, prasad, reports — is
+  // ADMIN-ONLY as of 2026-08-03. The welcome-team role is deliberately scoped to
+  // the two screens above ("they need to be able to update roster and visitors,
+  // no other access needed"). Admins are unaffected: they reach these pages
+  // through the admin nav and inherit every capability the role used to hold.
+  // A new /welcome/* page therefore defaults to admin-only and must be granted
+  // explicitly above, which is the safe direction for this catch-all.
+  if (pathname === '/welcome' || pathname.startsWith('/welcome/')) {
+    return isAdmin(claims);
   }
 
   // Setu API — family search is welcome-team only
@@ -334,28 +346,33 @@ export function canAccessRoute(
     return isWelcomeTeam(claims) || isCoordinator(claims);
   }
 
-  // Welcome-team API — prasad day-of lists (read-only).
+  // Prasad day-of lists (read-only) — ADMIN-ONLY as of 2026-08-03, matching the
+  // /welcome/prasad page above.
   if (pathname === '/api/welcome/prasad' || pathname.startsWith('/api/welcome/prasad/')) {
-    return isWelcomeTeam(claims);
+    return isAdmin(claims);
   }
 
-  // Welcome-team API — enrollments only (donations routes ship in slice 3c)
+  // Enrollment writes incl. the payment OVERRIDE — admin-only as of 2026-08-03.
+  // This one carries money: `/api/welcome/enrollments/{eid}/override` rewrites
+  // what a family owes, which is the clearest case in this file for keeping the
+  // narrowed grant.
   if (
     pathname.startsWith('/api/welcome/enrollments/') ||
     pathname === '/api/welcome/enrollments'
   ) {
-    return isWelcomeTeam(claims);
+    return isAdmin(claims);
   }
 
-  // Seva management — opportunities + (later) signup rosters + confirmations: admin + welcome-team.
+  // Seva management — opportunities, signup rosters, confirmations: admin-only
+  // as of 2026-08-03, matching the /welcome/seva pages above.
   if (pathname === '/api/welcome/seva' || pathname.startsWith('/api/welcome/seva/')) {
-    return isWelcomeTeam(claims);
+    return isAdmin(claims);
   }
 
-  // Welcome-team API — reports hub (enrollment + attendance). The donations
-  // report was removed (no collective financial info in the reports hub).
+  // Reports hub (enrollment + attendance) — admin-only as of 2026-08-03. The
+  // donations report was removed earlier (no collective financial info here).
   if (pathname === '/api/welcome/reports' || pathname.startsWith('/api/welcome/reports/')) {
-    return isWelcomeTeam(claims);
+    return isAdmin(claims);
   }
 
   // Setu API — published class calendar is readable by ANY signed-in user
@@ -388,10 +405,15 @@ export function canAccessRoute(
     return true;
   }
 
-  // Setu API — remaining paths (invite/send, register, etc.): manager + welcome-team + admin
-  // family-member is NOT included here; manager-level is the safe default for unknown setu paths
+  // Setu API — remaining paths (invite/send, register, etc.): manager + admin.
+  // family-member is NOT included here; manager-level is the safe default for
+  // unknown setu paths. Welcome-team was removed 2026-08-03 with the rest of the
+  // narrowing: no /welcome screen calls an unlisted /api/setu/* path (the three
+  // it does use — family/search, members/{mid}/profile, programs — each have an
+  // explicit clause above), and the paths this catch-all actually covers are
+  // family-scoped writes like invite/send that the front desk has no UI for.
   if (pathname.startsWith('/api/setu/')) {
-    return isSetuManager(claims) || isWelcomeTeam(claims) || isAdmin(claims);
+    return isSetuManager(claims) || isAdmin(claims);
   }
 
   // Monthly pledge (P5). FAMILY-MANAGER ONLY - deliberately narrower than every

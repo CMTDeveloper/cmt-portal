@@ -24,9 +24,9 @@ beforeEach(() => {
 });
 
 describe('GET /api/admin/calendar/weekly', () => {
-  it('returns rows for a location (welcome-team)', async () => {
+  it('returns rows for a location (admin)', async () => {
     const { GET } = await import('../route');
-    const res = await GET(req('GET', '/api/admin/calendar/weekly?location=Brampton', undefined, 'uid-w', 'welcome-team'));
+    const res = await GET(req('GET', '/api/admin/calendar/weekly?location=Brampton', undefined, 'uid-w', 'admin'));
     expect(res.status).toBe(200);
     expect((await res.json()).rows).toEqual([{ time: '10:00', label: 'Assembly' }]);
   });
@@ -39,7 +39,7 @@ describe('GET /api/admin/calendar/weekly', () => {
 describe('PUT /api/admin/calendar/weekly', () => {
   it('saves rows for a location', async () => {
     const { PUT } = await import('../route');
-    const res = await PUT(req('PUT', '/api/admin/calendar/weekly', { location: 'Brampton', rows: [{ time: '10:00', label: 'Assembly' }] }, 'uid-w', 'welcome-team'));
+    const res = await PUT(req('PUT', '/api/admin/calendar/weekly', { location: 'Brampton', rows: [{ time: '10:00', label: 'Assembly' }] }, 'uid-w', 'admin'));
     expect(res.status).toBe(200);
     expect(mockSet).toHaveBeenCalledWith(expect.objectContaining({ location: 'Brampton', updatedBy: 'uid-w' }));
   });

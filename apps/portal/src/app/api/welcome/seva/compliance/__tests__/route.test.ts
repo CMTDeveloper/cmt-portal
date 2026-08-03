@@ -5,7 +5,7 @@ vi.mock('@/features/setu/seva/get-seva-compliance', () => ({ getSevaCompliance: 
 import { GET } from '../route';
 import { getSevaCompliance } from '@/features/setu/seva/get-seva-compliance';
 
-function req(role: string | null = 'welcome-team', uid: string | null = 'w1'): Request {
+function req(role: string | null = 'admin', uid: string | null = 'w1'): Request {
   const headers: Record<string, string> = {};
   if (role) headers['x-portal-role'] = role;
   if (uid) headers['x-portal-uid'] = uid;
@@ -31,8 +31,8 @@ describe('GET /api/welcome/seva/compliance', () => {
   it('403 when role is family-member', async () => {
     expect((await GET(req('family-member'))).status).toBe(403);
   });
-  it('200 returns the compliance object for welcome-team', async () => {
-    const res = await GET(req('welcome-team'));
+  it('200 returns the compliance object for admin', async () => {
+    const res = await GET(req('admin'));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual(compliance);
   });

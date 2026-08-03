@@ -155,7 +155,7 @@ function memberHeaders(): Record<string, string> {
 }
 
 function welcomeHeaders(): Record<string, string> {
-  return { 'x-portal-role': 'welcome-team' };
+  return { 'x-portal-role': 'admin' };
 }
 
 function adminAsWelcomeHeaders(): Record<string, string> {
@@ -571,7 +571,7 @@ describe('DELETE /api/setu/enrollments/:eid', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('POST /api/welcome/enrollments', () => {
-  it('welcome-team can enroll a family on their behalf', async () => {
+  it('admin can enroll a family on their behalf', async () => {
     setupEnrollTransaction();
 
     const res = await welcomeEnrollPOST(
@@ -627,7 +627,7 @@ describe('POST /api/welcome/enrollments', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('PATCH /api/welcome/enrollments/:eid (override)', () => {
-  it('welcome-team can set suggestedAmountOverride', async () => {
+  it('admin can set suggestedAmountOverride', async () => {
     mockCollectionGet.mockResolvedValue({
       empty: false,
       docs: [{
@@ -646,7 +646,7 @@ describe('PATCH /api/welcome/enrollments/:eid (override)', () => {
     );
   });
 
-  it('welcome-team can clear override by setting null', async () => {
+  it('admin can clear override by setting null', async () => {
     mockCollectionGet.mockResolvedValue({
       empty: false,
       docs: [{

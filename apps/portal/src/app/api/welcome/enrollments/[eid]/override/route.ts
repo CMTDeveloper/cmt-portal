@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { revalidateTag } from 'next/cache';
 import { flags } from '@/lib/flags';
-import { isWelcomeTeam, OverrideEnrollmentBodySchema } from '@cmt/shared-domain';
+import { isAdmin, OverrideEnrollmentBodySchema } from '@cmt/shared-domain';
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
 
@@ -17,7 +17,7 @@ export async function PATCH(
   if (!session) {
     return NextResponse.json({ error: 'no-session' }, { status: 401 });
   }
-  if (!isWelcomeTeam(session)) {
+  if (!isAdmin(session)) {
     return NextResponse.json({ error: 'welcome-team-required' }, { status: 403 });
   }
 

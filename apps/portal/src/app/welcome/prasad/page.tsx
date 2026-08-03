@@ -2,7 +2,7 @@ import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import { cookies } from 'next/headers';
 import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
-import { isWelcomeTeam, type WithRole } from '@cmt/shared-domain';
+import { isAdmin, type WithRole } from '@cmt/shared-domain';
 import { CspRoot } from '@/features/family/components/atoms';
 import {
   getUpcomingPrasad,
@@ -28,20 +28,20 @@ export default function WelcomePrasadPage() {
 export async function WelcomePrasadBody() {
   // Defensive role check — middleware enforces this but the Server Component
   // re-verifies (defense in depth). We do NOT read prasad data until welcome-team
-  // is positively confirmed. isWelcomeTeam() handles admin inheritance + extraRoles.
+  // is positively confirmed. isAdmin() covers role + extraRoles.
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get('__session')?.value;
   let allowed = false;
   if (sessionCookie) {
     const raw = await verifyPortalSessionCookie(sessionCookie);
-    if (raw && isWelcomeTeam(raw as unknown as WithRole)) {
+    if (raw && isAdmin(raw as unknown as WithRole)) {
       allowed = true;
     }
   }
   if (!allowed) {
     return (
       <div style={{ padding: 32, fontFamily: 'var(--body)' }}>
-        <p style={{ color: 'var(--err)', fontSize: 14 }}>Access denied. Welcome-team role required.</p>
+        <p style={{ color: 'var(--err)', fontSize: 14 }}>Access denied. Admin role required.</p>
       </div>
     );
   }

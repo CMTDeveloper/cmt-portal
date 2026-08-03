@@ -33,9 +33,9 @@ describe('GET /api/admin/teachers/search', () => {
     expect(mockSearchTeachers).toHaveBeenCalledWith('Sharma');
   });
 
-  it('welcome-team → 200 {hits}', async () => {
+  it('admin → 200 {hits}', async () => {
     const { GET } = await import('../route');
-    const res = await GET(makeRequest('/api/admin/teachers/search?q=Sharma', 'welcome-team', 'uid-w'));
+    const res = await GET(makeRequest('/api/admin/teachers/search?q=Sharma', 'admin', 'uid-w'));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ hits: sampleHits });
   });

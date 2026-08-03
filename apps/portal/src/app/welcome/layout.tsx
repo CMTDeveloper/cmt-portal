@@ -8,10 +8,6 @@ import { DesktopSidebarLive } from '@/features/family/components/desktop-sidebar
 import { AdminSidebarLive } from '@/features/admin/components/admin-sidebar';
 import { WelcomeMobileNav } from '@/features/family/components/welcome-mobile-nav';
 import { LoadingOm } from '@/components/chrome/loading-om';
-import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
-import { getLiveSchoolYearCached } from '@/features/setu/rollover/live-school-year';
-import { listKnownSchoolYears } from '@/features/setu/rollover/view-year';
-import { SchoolYearScopeBar } from '@/features/setu/rollover/components/school-year-scope-bar';
 
 // The layout is synchronous so cacheComponents:true can stream the shell.
 // The role check is async (cookies + session verify) so it lives inside its
@@ -48,16 +44,6 @@ async function WelcomeChromeAndChildren({ children }: { children: React.ReactNod
     }
   }
 
-  // Only read Firestore for the school-year set when access is granted — the
-  // denied branch renders an empty rail with no sidebar, so skip the read.
-  let liveYear = '';
-  let years: string[] = [];
-  if (allowed) {
-    const db = portalFirestore();
-    liveYear = await getLiveSchoolYearCached();
-    years = await listKnownSchoolYears(db, liveYear);
-  }
-
   return (
     <CspRoot style={{ display: 'flex', width: '100%', minHeight: '100dvh' }}>
       {allowed ? (
@@ -77,11 +63,7 @@ async function WelcomeChromeAndChildren({ children }: { children: React.ReactNod
       )}
       <main style={{ flex: 1, padding: '32px 40px', overflow: 'auto' }}>
         {allowed ? (
-          <>
-            {/* Welcome-team can switch/view years but only admins manage them. */}
-            <SchoolYearScopeBar years={years} liveYear={liveYear} canManage={admin} />
-            {children}
-          </>
+          children
         ) : (
           <div style={{ padding: 32, fontFamily: 'var(--body)' }}>
             <p style={{ color: 'var(--err)', fontSize: 14 }}>Access denied. Welcome-team or coordinator role required.</p>
@@ -115,25 +97,14 @@ async function WelcomeMobileNavWithIdentity() {
   );
 }
 
-// Mobile scope bar for the welcome section — mirrors the admin mobile chrome so
-// a phone user on /welcome/roster or /welcome/reports (both ?year=-scoped) can
-// see and switch the operating year. Admins manage; welcome-team only switches.
-async function WelcomeMobileScopeBar() {
-  const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get('__session')?.value;
-  if (!sessionCookie) return null;
-  const raw = await verifyPortalSessionCookie(sessionCookie).catch(() => null);
-  if (!raw || !(isWelcomeTeam(raw as unknown as WithRole) || isCoordinator(raw as unknown as WithRole))) return null;
-  const admin = isAdmin(raw as unknown as WithRole);
-  const db = portalFirestore();
-  const liveYear = await getLiveSchoolYearCached();
-  const years = await listKnownSchoolYears(db, liveYear);
-  return (
-    <div style={{ padding: '16px 16px 0' }}>
-      <SchoolYearScopeBar years={years} liveYear={liveYear} canManage={admin} />
-    </div>
-  );
-}
+// The school-year scope bar used to live here, pinned above EVERY welcome page
+// on both phone and desktop. It is a page-level scope control, not chrome: only
+// /welcome/reports and /welcome/seva read `?year=`, and on a phone the banner
+// was consuming the top third of the roster — the screen the front desk opens
+// all day and which is always the live year. Those two pages render it
+// themselves now, which also drops two Firestore reads from every other welcome
+// page load. Trade-off worth stating: the roster keeps honouring an explicit
+// `?year=` in the URL, but has no control to set one.
 
 export default function WelcomeLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -145,9 +116,6 @@ export default function WelcomeLayout({ children }: { children: React.ReactNode 
             themselves (e.g. /welcome/levels). Pages that self-wrap just nest
             harmlessly. No padding here — pages own their own. */}
         <CspRoot style={{ minHeight: '100dvh' }}>
-          <Suspense fallback={null}>
-            <WelcomeMobileScopeBar />
-          </Suspense>
           <Suspense fallback={<LoadingOm />}>
             {children}
           </Suspense>
