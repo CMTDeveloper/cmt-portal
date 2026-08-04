@@ -6,7 +6,7 @@ import { CspRoot } from '@/features/family/components/atoms';
 import { getFamilyForWelcome } from '@/features/setu/search/get-family-for-welcome';
 import { getFamilySevaProgress, type FamilySevaProgress } from '@/features/setu/seva/get-family-seva-progress';
 import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
-import { isWelcomeTeam, isCoordinator, isAdmin, type WithRole } from '@cmt/shared-domain';
+import { isWelcomeTeam, isCoordinator, isAdmin, BALA_VIHAR, type WithRole } from '@cmt/shared-domain';
 import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
 import {
   PaymentOverrideControl,
@@ -85,6 +85,7 @@ export async function WelcomeFamilyDetailBody({
             .filter((e) => e.status === 'active')
             .map((e) => ({
               eid: e.eid,
+              programKey: e.programKey,
               programLabel: e.programLabel,
               termLabel: e.termLabel,
               effectiveSuggestedAmount: e.effectiveSuggestedAmount,
@@ -115,7 +116,7 @@ export async function WelcomeFamilyDetailBody({
               <div style={{ width: 32 }}/>
             </div>
             <div style={{ flex: 1, overflowY: 'auto', padding: '18px 18px 90px' }}>
-              <FamilyDetailBody family={family} members={members} adults={adults} children={children} sevaProgress={sevaProgress} overridable={overridable}/>
+              <FamilyDetailBody family={family} members={members} adults={adults} children={children} sevaProgress={sevaProgress} overridable={overridable} canOverride={admin}/>
             </div>
           </div>
         </CspRoot>
@@ -132,7 +133,7 @@ export async function WelcomeFamilyDetailBody({
           </p>
           <h1 style={{ fontSize: 38, fontWeight: 400, marginTop: 6 }}>The {family.name} Family</h1>
         </header>
-        <FamilyDetailBody family={family} members={members} adults={adults} children={children} sevaProgress={sevaProgress} overridable={overridable}/>
+        <FamilyDetailBody family={family} members={members} adults={adults} children={children} sevaProgress={sevaProgress} overridable={overridable} canOverride={admin}/>
       </div>
     </>
   );
@@ -146,9 +147,17 @@ type FamilyDetailBodyProps = {
   sevaProgress: FamilySevaProgress;
   /** Empty for non-admins - the control is admin-only and the data is not even read. */
   overridable: PaymentOverrideEnrollment[];
+  /**
+   * Whether the viewer may override at all. Tracked SEPARATELY from
+   * `overridable.length`, which was the first cut and was wrong: an admin
+   * looking at a family with no active enrollment saw no Donation section, and
+   * therefore could not tell "nothing to mark" from "this feature is missing".
+   * That exact confusion was reported on preview within an hour of shipping.
+   */
+  canOverride: boolean;
 };
 
-function FamilyDetailBody({ family, members, adults, children, sevaProgress, overridable }: FamilyDetailBodyProps) {
+function FamilyDetailBody({ family, members, adults, children, sevaProgress, overridable, canOverride }: FamilyDetailBodyProps) {
   const sevaMet = sevaProgress.hoursEarned >= sevaProgress.hoursPerYear;
 
   return (
@@ -171,7 +180,7 @@ function FamilyDetailBody({ family, members, adults, children, sevaProgress, ove
           read the enrollments - so this section cannot render for a coordinator
           or a welcome-team volunteer. The route enforces the same rule again;
           this is the page-level half of the repo's three-gate requirement. */}
-      {overridable.length > 0 && (
+      {canOverride && (
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: '.1em', textTransform: 'uppercase', marginBottom: 4 }}>
             Donation
@@ -180,9 +189,35 @@ function FamilyDetailBody({ family, members, adults, children, sevaProgress, ove
             Use this when a family&apos;s donation is already collected outside the portal - an
             existing pre-authorized debit, or a payment handled by the office.
           </p>
-          {overridable.map((e) => (
-            <PaymentOverrideControl key={e.eid} enrollment={e} />
-          ))}
+          {overridable.length === 0 ? (
+            <div className="card" style={{ padding: 16, marginTop: 12 }}>
+              <p style={{ fontSize: 13, color: 'var(--body-text)', lineHeight: 1.55, margin: 0 }}>
+                This family has no active enrollment, so there is nothing to mark as paid yet.
+                A donation is owed against an enrollment - the family enrols from their own
+                dashboard, and this section will list it here once they do.
+              </p>
+            </div>
+          ) : (
+            <>
+              {overridable.map((e) => (
+                <PaymentOverrideControl key={e.eid} enrollment={e} />
+              ))}
+              {/* ── Say WHY Bala Vihar is absent ───────────────────────────────
+                  Reported on preview within an hour of shipping: an admin
+                  looked at a family with an Adult Study Class enrollment and a
+                  child who had been ADDED but never ENROLLED, saw only Adult
+                  Study Class, and could not tell whether Bala Vihar was missing
+                  because the family was not enrolled or because the feature was
+                  broken. Listing only what exists is correct; leaving the
+                  absence unexplained is not. */}
+              {!overridable.some((e) => e.programKey === BALA_VIHAR) && (
+                <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5, margin: '10px 0 0' }}>
+                  No active Bala Vihar enrollment for this family, so it is not listed above.
+                  Adding a child does not enrol them - the family enrols from their own dashboard.
+                </p>
+              )}
+            </>
+          )}
         </div>
       )}
 

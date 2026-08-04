@@ -14,6 +14,7 @@ import { PaymentOverrideControl } from '../payment-override-control';
 
 const UNSET = {
   eid: 'CMT-F1-bv-brampton-2026-27',
+  programKey: 'bala-vihar',
   programLabel: 'Bala Vihar',
   termLabel: '2026-27',
   effectiveSuggestedAmount: 500,

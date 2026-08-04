@@ -6,6 +6,8 @@ import { setEnrollmentOverride } from '../override-client';
 
 export interface PaymentOverrideEnrollment {
   eid: string;
+  /** So the page can say WHY Bala Vihar is absent instead of just omitting it. */
+  programKey: string;
   programLabel: string;
   termLabel: string;
   /** What this family is currently asked for, after any existing override. */
