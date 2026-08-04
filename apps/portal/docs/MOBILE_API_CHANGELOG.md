@@ -32,9 +32,9 @@ Was the bare Firestore document id (`U78VVE09p1jah98WUTj5`), which identifies th
 
 ---
 
-## 2026-08-04 - `develop` - families no longer remove members (product parity, no shape change)
+## 2026-08-04 - `develop` - families no longer remove members (`DELETE` now always 403)
 
-**No request or response shape changed, and `DELETE /api/setu/members/{mid}` is untouched.** This is a product decision the mobile app has to match, or the two clients will disagree about what a family is allowed to do.
+**No request or response SHAPE changed, but `DELETE /api/setu/members/{mid}` now refuses every caller** - see the mobile action below. (This heading previously read "is untouched", which contradicted its own body; the route did change.) It is also a product decision the mobile app has to match, or the two clients will disagree about what a family is allowed to do.
 
 Vaibhav, 2026-08-04: *"remove the option to Remove from family - that should not exist for families - maybe for admins but not for families. Families can disable any member who are no longer valid."* Reason given when the disable control was added on 2026-08-02: *"Not to delete as we loose history."*
 
