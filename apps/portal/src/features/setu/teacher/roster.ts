@@ -54,6 +54,8 @@ export interface RosterEnrollmentMeta {
   enrolledAt: Date;
   suggestedAmountOverride: number | null;
   suggestedAmountSnapshot: number | null;
+  /** Admin-recorded off-portal settlement. See EnrollmentDocSchema. */
+  settledOffPortal: boolean;
 }
 
 export interface RosterResult {
@@ -192,6 +194,7 @@ export async function deriveRoster(
       enrolledAt?: unknown;
       suggestedAmountOverride?: number | null;
       suggestedAmountSnapshot?: number | null;
+      settledOffPortal?: boolean;
     };
     if (e.location !== level.location || typeof e.fid !== 'string') continue;
     const mids = e.enrolledMids ?? [];
@@ -206,6 +209,7 @@ export async function deriveRoster(
       enrolledAt: toDate(e.enrolledAt),
       suggestedAmountOverride: e.suggestedAmountOverride ?? null,
       suggestedAmountSnapshot: e.suggestedAmountSnapshot ?? null,
+      settledOffPortal: e.settledOffPortal === true,
     });
   }
   const fids = [...enrolledMidsByFid.keys()];

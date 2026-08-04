@@ -74,6 +74,21 @@ export async function PATCH(
   // another admin could have set a different amount, and an audit row claiming
   // the wrong previous value is worse than none - it would send whoever reads
   // it looking for a change that never happened.
+  // ── Settlement is a SECOND fact, not a re-spelling of the amount ───────────
+  //
+  // `suggestedAmountOverride: 0` was already taken: it is how the Adult Study
+  // Class waiver is stored for a family who paid Bala Vihar. Writing only the 0
+  // here left every reader unable to tell "we collect this outside the portal"
+  // from "nobody owes anything", and they all chose the second - so a family
+  // this route had just marked as paid read "N/A" on the welcome roster and
+  // dropped out of the Paid filter. The flag is what the readers key on; the
+  // amount is only how the family stops being asked.
+  //
+  // Cleared, not just unset, when the override goes away: an admin pressing
+  // Undo is saying the arrangement is over, and a stale `true` beside a
+  // restored $500 ask would be the same ambiguity pointing the other way.
+  const settledOffPortal = parsed.data.suggestedAmountOverride === 0;
+
   let before: number | null = null;
   try {
     await db.runTransaction(async (txn) => {
@@ -83,6 +98,7 @@ export async function PATCH(
 
       txn.update(enrollmentRef, {
         suggestedAmountOverride: parsed.data.suggestedAmountOverride,
+        settledOffPortal,
         updatedAt: FieldValue.serverTimestamp(),
       });
 
@@ -98,7 +114,11 @@ export async function PATCH(
         fid: enrollmentData.fid,
         mid: null,
         before: { suggestedAmountOverride: before },
-        after: { suggestedAmountOverride: parsed.data.suggestedAmountOverride, note: parsed.data.note },
+        after: {
+          suggestedAmountOverride: parsed.data.suggestedAmountOverride,
+          settledOffPortal,
+          note: parsed.data.note,
+        },
       });
     });
   } catch (err) {

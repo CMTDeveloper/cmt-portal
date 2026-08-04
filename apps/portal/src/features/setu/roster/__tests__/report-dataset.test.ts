@@ -190,4 +190,37 @@ describe('buildRosterReportDataset', () => {
     expect(out.find((f) => f.row.fid === 'CMT-SHAH')!.row.bvEngagement).toBe('confirmed'); // family-initiated
     expect(out.find((f) => f.row.fid === 'CMT-NONE')!.row.bvEngagement).toBeNull();        // no active BV
   });
+  // ── The welcome roster's answer for a family settled off-portal (2026-08-04) ─
+  //
+  // The end-to-end version of the production report: an admin marked a real
+  // family as paying CMT by a long-standing pre-authorized debit, and THIS
+  // dataset - the only source behind /welcome/roster - answered "N/A", so the
+  // family vanished from the Paid filter. The domain test pins the verdict; this
+  // one pins the PLUMBING, which is where a new field silently fails to arrive.
+  it('payment: an admin-settled enrollment reads PAID, the identical waiver still reads N/A', async () => {
+    fs.data.families = [
+      { id: 'CMT-SETTLED', name: 'Settled', location: 'Brampton', legacyFid: '', publicFid: '5006' },
+      { id: 'CMT-WAIVED', name: 'Waived', location: 'Brampton', legacyFid: '', publicFid: '5007' },
+    ];
+    fs.data.members = [
+      { id: 'm1', __fid: 'CMT-SETTLED', mid: 'm1', firstName: 'A', lastName: 'A', type: 'Child', schoolGrade: '2' },
+      { id: 'm2', __fid: 'CMT-WAIVED', mid: 'm2', firstName: 'B', lastName: 'B', type: 'Child', schoolGrade: '2' },
+    ];
+    fs.data.enrollments = [
+      // Both are `suggestedAmountOverride: 0`. The ONLY difference is the flag.
+      { id: 'e1', __fid: 'CMT-SETTLED', fid: 'CMT-SETTLED', status: 'active', programKey: 'bala-vihar',
+        programLabel: 'Bala Vihar', oid: 'off-bv', pid: 'off-bv', termLabel: '2026-27', enrolledMids: ['m1'],
+        suggestedAmountOverride: 0, settledOffPortal: true, suggestedAmountSnapshot: 500, enrolledAt: new Date('2026-09-01') },
+      { id: 'e2', __fid: 'CMT-WAIVED', fid: 'CMT-WAIVED', status: 'active', programKey: 'bala-vihar',
+        programLabel: 'Bala Vihar', oid: 'off-bv', pid: 'off-bv', termLabel: '2026-27', enrolledMids: ['m2'],
+        suggestedAmountOverride: 0, suggestedAmountSnapshot: 500, enrolledAt: new Date('2026-09-01') },
+    ];
+    fs.data.donations = [];
+    fs.data.attendanceEvents = [];
+
+    const out = await buildRosterReportDataset({});
+    const pay = (fid: string) => out.find((f) => f.row.fid === fid)!.row.payment;
+    expect(pay('CMT-SETTLED')).toBe('paid');
+    expect(pay('CMT-WAIVED')).toBe('not-applicable');
+  });
 });

@@ -22,6 +22,24 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
+## 2026-08-04 - `develop` - `settledOffPortal` appears on enrollment objects
+
+**Additive and optional. Nothing breaks if the mobile ignores it** - but it should not, because it changes what "$0 to pay" MEANS.
+
+Affected response: `GET /api/setu/enrollments` returns `{ enrollments }` straight from `getEnrollments`, which spreads the raw Firestore doc - so the new field flows through automatically. Any other route returning an enrollment object carries it too.
+
+```
+settledOffPortal?: boolean   // absent on every enrollment written before 2026-08-04
+```
+
+**What it means:** an admin has recorded that CMT collects this family's donation OUTSIDE the portal (a long-standing pre-authorized debit, a cheque). Written only by the admin-only `PATCH /api/welcome/enrollments/[eid]/override` - not a route the mobile calls.
+
+**Why the mobile must care:** `suggestedAmountOverride: 0` already meant "the Adult Study Class fee is waived because Bala Vihar was paid". The same 0 now also arrives for a settled family, and the two want opposite copy - a waived family owes nothing, a settled family is *paying*. The portal read them as identical and told a settled family *"Your Bala Vihar donation covers this class"* about their Bala Vihar enrollment, and told the welcome desk "N/A" for a family who donates monthly.
+
+**Mobile action:** add the optional boolean to the enrollment schema mirror. Wherever a zero effective amount is rendered, branch on it: `settledOffPortal === true` → "Your donation is already arranged with Chinmaya Mission"; otherwise the existing waived/free copy. Treat absent as `false`.
+
+---
+
 ## 2026-08-03 - `develop` - the `welcome-team` role is narrowed: it no longer passes the `/api/setu/*` catch-all
 
 **Action required only if the mobile app ever signs in a welcome-team account.** No request or response SHAPE changed; this is an authorization change.

@@ -14,7 +14,14 @@ function offering(amountCAD: number | null, paymentSource?: OfferingDoc['payment
 }
 
 function charge(over: Partial<ActiveEnrollmentCharge> = {}): ActiveEnrollmentCharge {
-  return { override: null, snapshot: 0, offering: offering(500), enrolledAt: ENROLLED, ...over };
+  return {
+    override: null,
+    snapshot: 0,
+    offering: offering(500),
+    enrolledAt: ENROLLED,
+    settledOffPortal: false,
+    ...over,
+  };
 }
 
 describe('chargeAmount - what one enrollment costs', () => {
@@ -191,5 +198,47 @@ describe('classifyRosterPayment - corrupt totals must not read as settled', () =
   it('is unknown when a NaN sits beside a real price', () => {
     const active = [charge(), charge({ override: Number.NaN })];
     expect(classifyRosterPayment(active, 500)).toBe('unknown');
+  });
+});
+
+// ── Settled outside the portal (2026-08-04) ──────────────────────────────────
+//
+// The production defect these pin: an admin marked a real family as already
+// paying CMT by a long-standing pre-authorized debit, and the welcome roster
+// answered "N/A" and dropped them out of the Paid filter. The settlement was
+// being stored as the same `override: 0` the Adult Study Class waiver uses, so
+// no reader could tell "we collect this elsewhere" from "nobody owes anything".
+describe('classifyRosterPayment - settled outside the portal', () => {
+  it('reads an admin-settled enrollment as PAID, not N/A', () => {
+    expect(classifyRosterPayment([charge({ override: 0, settledOffPortal: true })], 0)).toBe('paid');
+  });
+
+  // The other half of the same distinction. If this ever starts returning
+  // 'paid', the flag has stopped carrying the meaning and we are back to one
+  // value with two jobs.
+  it('still reads the waiver - the identical 0, without the flag - as N/A', () => {
+    expect(classifyRosterPayment([charge({ override: 0 })], 0)).toBe('not-applicable');
+  });
+
+  // N=2. A settlement answers for its own enrollment and nothing else.
+  it('does not settle the enrollment sitting NEXT to it', () => {
+    const active = [charge({ override: 0, settledOffPortal: true }), charge()];
+    expect(classifyRosterPayment(active, 0)).toBe('outstanding');
+  });
+
+  it('is paid when a settled enrollment sits beside a waived one', () => {
+    const active = [charge({ override: 0, settledOffPortal: true }), charge({ override: 0 })];
+    expect(classifyRosterPayment(active, 0)).toBe('paid');
+  });
+
+  // The cautious verdict still wins. Teacher-managed money is collected where
+  // this function cannot see it, so "Paid" would tell a volunteer the whole
+  // family is square on the strength of one enrollment that is.
+  it('stays unknown when an off-portal-SOURCE enrollment sits beside the settled one', () => {
+    const active = [
+      charge({ override: 0, settledOffPortal: true }),
+      charge({ override: 0, offering: offering(0, 'teacher-managed') }),
+    ];
+    expect(classifyRosterPayment(active, 0)).toBe('unknown');
   });
 });

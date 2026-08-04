@@ -18,6 +18,10 @@ export function chargeFromEnrollment(e: EnrollmentWithOffering): ActiveEnrollmen
     snapshot: e.suggestedAmountSnapshot,
     offering: e.offering,
     enrolledAt: e.enrolledAt,
+    // `=== true`, not a truthiness check: the field is absent on every
+    // enrollment written before 2026-08-04, and absent must read as "not
+    // settled" rather than as `undefined` leaking into a boolean position.
+    settledOffPortal: e.settledOffPortal === true,
   };
 }
 
@@ -27,6 +31,8 @@ export interface BulkActiveEnrollment {
   override: number | null;
   snapshot: number;
   enrolledAt: Date;
+  /** See `ActiveEnrollmentCharge.settledOffPortal` - required for the same reason. */
+  settledOffPortal: boolean;
 }
 
 /**
@@ -46,6 +52,7 @@ export function classifyBulkPayment(
       snapshot: a.snapshot,
       offering: offerings.get(a.oid) ?? null,
       enrolledAt: a.enrolledAt,
+      settledOffPortal: a.settledOffPortal,
     })),
     paidCAD,
   );

@@ -23,6 +23,7 @@ type EnrolledVia = 'family-initiated' | 'first-attendance' | 'welcome-team' | 'p
 type ActiveEnr = {
   programKey: string; programLabel: string; oid: string; pid: string; eid: string;
   schoolGrade: string | null; enrolledMids: string[]; snapshot: number; override: number | null;
+  settledOffPortal: boolean;
   enrolledAt: Date; termLabel: string; enrolledVia: EnrolledVia;
 };
 
@@ -97,6 +98,7 @@ export async function buildRosterReportDataset(params: { year?: string }): Promi
       enrolledMids: Array.isArray(d['enrolledMids']) ? (d['enrolledMids'] as string[]) : [],
       snapshot: typeof d['suggestedAmountSnapshot'] === 'number' ? (d['suggestedAmountSnapshot'] as number) : 0,
       override: typeof d['suggestedAmountOverride'] === 'number' ? (d['suggestedAmountOverride'] as number) : null,
+      settledOffPortal: d['settledOffPortal'] === true,
       enrolledAt: toDate(d['enrolledAt']),
       termLabel,
       enrolledVia: (typeof d['enrolledVia'] === 'string' ? (d['enrolledVia'] as EnrolledVia) : 'promotion'),

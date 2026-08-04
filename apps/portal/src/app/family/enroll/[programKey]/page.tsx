@@ -57,6 +57,7 @@ function renderAlreadyEnrolledBanner(
   usesDonation = false,
   paymentSource: PaymentSource = 'portal',
   nothingToPay = false,
+  nothingToPayReason: NothingToPayReason = 'free',
 ) {
   // "Proceed to donate below." only makes sense when the program actually takes
   // a donation; a free program (usesDonation=false) just confirms enrollment,
@@ -66,7 +67,11 @@ function renderAlreadyEnrolledBanner(
   const message = paid
     ? `Your family is enrolled in ${termLabel} and your contribution is paid. Thank you.`
     : nothingToPay
-      ? `Your family is enrolled in ${termLabel}. There is nothing to pay.`
+      ? nothingToPayReason === 'settled-off-portal'
+        // A bare "There is nothing to pay" reads, to a family who pays CMT every
+        // month by direct debit, as though their arrangement had been forgotten.
+        ? `Your family is enrolled in ${termLabel}. Your donation is already arranged with Chinmaya Mission.`
+        : `Your family is enrolled in ${termLabel}. There is nothing to pay.`
     : usesDonation && paymentSource === 'teacher-managed'
       ? `Your family is already enrolled in ${termLabel}. Payment is managed by the teacher.`
     : usesDonation
@@ -117,6 +122,18 @@ function renderPaidBlockMobile(termLabel: string) {
 }
 
 /**
+ * WHY this family is not being asked for money. Three different facts that all
+ * used to arrive as one `waived` boolean, because all three are stored as a
+ * suggested amount of zero.
+ *
+ * `settled-off-portal` is the one that was being mis-told: an admin has
+ * recorded that CMT collects this family's donation outside the portal (a
+ * long-standing pre-authorized debit), and the family was shown "Your Bala
+ * Vihar donation covers this class" - on the Bala Vihar enrollment itself.
+ */
+type NothingToPayReason = 'settled-off-portal' | 'waived-by-bala-vihar' | 'free';
+
+/**
  * The enrollment costs nothing - so say that, rather than asking for $0.
  *
  * ── Why this is its own state and not `paid` ────────────────────────────────
@@ -134,17 +151,20 @@ function renderPaidBlockMobile(termLabel: string) {
  * looped - `CompleteDonationButton` bails to `/family/donate` below $1, and the
  * checkout API rejects anything under $1 too.
  */
-function renderNothingToPay(waived: boolean, opts: { desktop: boolean }) {
-  const body = waived
-    ? 'Your Bala Vihar donation covers this class — there is nothing to pay here.'
-    : 'There is no donation for this program — you are all set.';
+function renderNothingToPay(reason: NothingToPayReason, opts: { desktop: boolean }) {
+  const body =
+    reason === 'settled-off-portal'
+      ? 'Your donation is already arranged with Chinmaya Mission — there is nothing to pay here.'
+      : reason === 'waived-by-bala-vihar'
+        ? 'Your Bala Vihar donation covers this class — there is nothing to pay here.'
+        : 'There is no donation for this program — you are all set.';
   const inner = (
     <>
       <span
         className="pill"
         style={{ background: opts.desktop ? 'var(--accentSoft)' : 'var(--surface)', color: 'var(--accentDeep)', padding: '6px 12px', fontSize: 12 }}
       >
-        Included
+        {reason === 'settled-off-portal' ? 'Recorded' : 'Included'}
       </span>
       <p style={{ fontSize: 13, color: 'var(--body-text)', marginTop: 12, lineHeight: 1.55 }}>{body}</p>
     </>
@@ -317,7 +337,14 @@ export default async function ProgramEnrollPage({ params }: Props) {
   // enrollment, and "Paid · thank you" would be untrue.
   const nothingToPay =
     !paid && alreadyEnrolled && usesDonation && displaySuggestedAmount === 0;
-  const waivedByBv = activeEnrollment?.suggestedAmountOverride === 0;
+  // Settlement is checked FIRST because it is stored as the same zero override
+  // the waiver uses - the flag is the only thing that tells them apart.
+  const nothingToPayReason: NothingToPayReason =
+    activeEnrollment?.settledOffPortal === true
+      ? 'settled-off-portal'
+      : activeEnrollment?.suggestedAmountOverride === 0
+        ? 'waived-by-bala-vihar'
+        : 'free';
 
   // The OID to use for the EnrollCta — prefer the enrolled offering when already enrolled.
   const ctaOid = enrolledOffering?.oid ?? defaultOffering?.oid ?? '';
@@ -464,7 +491,7 @@ export default async function ProgramEnrollPage({ params }: Props) {
             </div>
 
             <div style={{ flex: 1, overflowY: 'auto', padding: '20px 18px 100px' }}>
-              {alreadyEnrolled && renderAlreadyEnrolledBanner(activeTerm, paid, usesDonation, selectedPaymentSource, nothingToPay)}
+              {alreadyEnrolled && renderAlreadyEnrolledBanner(activeTerm, paid, usesDonation, selectedPaymentSource, nothingToPay, nothingToPayReason)}
               {!enrolledOffering && !alreadyEnrolled && renderNoPeriodBanner(program.label, family.location)}
 
               {enrolledOffering && (
@@ -507,7 +534,7 @@ export default async function ProgramEnrollPage({ params }: Props) {
                       {paid
                         ? renderPaidBlockMobile(activeTerm)
                         : nothingToPay
-                          ? renderNothingToPay(waivedByBv, { desktop: false })
+                          ? renderNothingToPay(nothingToPayReason, { desktop: false })
                           : renderDonationBlock(displaySuggestedAmount ?? 0)}
                     </>
                   )}
@@ -604,7 +631,7 @@ export default async function ProgramEnrollPage({ params }: Props) {
           </div>
         </header>
 
-        {alreadyEnrolled && renderAlreadyEnrolledBanner(activeTerm, paid, usesDonation, selectedPaymentSource, nothingToPay)}
+        {alreadyEnrolled && renderAlreadyEnrolledBanner(activeTerm, paid, usesDonation, selectedPaymentSource, nothingToPay, nothingToPayReason)}
         {!enrolledOffering && !alreadyEnrolled && renderNoPeriodBanner(program.label, family.location)}
 
         {enrolledOffering && (
@@ -663,7 +690,7 @@ export default async function ProgramEnrollPage({ params }: Props) {
             <aside>
               {paid ? renderPaidPanel(activeTerm) : nothingToPay ? (
                 <div style={{ position: 'sticky', top: 0 }}>
-                  {renderNothingToPay(waivedByBv, { desktop: true })}
+                  {renderNothingToPay(nothingToPayReason, { desktop: true })}
                   <Link
                     href="/family"
                     prefetch={false}
