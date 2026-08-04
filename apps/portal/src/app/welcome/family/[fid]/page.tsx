@@ -8,6 +8,12 @@ import { getFamilySevaProgress, type FamilySevaProgress } from '@/features/setu/
 import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
 import { isWelcomeTeam, isCoordinator, isAdmin, BALA_VIHAR, type WithRole } from '@cmt/shared-domain';
 import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
+import { getOpenOfferingsForFamily, resolveCurrentOffering } from '@/features/setu/enrollment/get-open-offerings';
+import { resolveSuggestedAmount } from '@cmt/shared-domain';
+import {
+  AdminEnrollControl,
+  type AdminEnrollOffering,
+} from '@/features/setu/enrollment/components/admin-enroll-control';
 import {
   PaymentOverrideControl,
   type PaymentOverrideEnrollment,
@@ -98,6 +104,35 @@ export async function WelcomeFamilyDetailBody({
         })
     : [];
 
+  // The Bala Vihar offering this family could be enrolled INTO, when they are
+  // not already. Admin-only and only when needed, so no family that is already
+  // enrolled pays for the offerings read.
+  //
+  // `resolveCurrentOffering` rather than `[0]`: it picks the family's own
+  // centre and breaks ties the same way the family's enroll page does, so the
+  // admin cannot enrol them into a different centre's class than the one they
+  // would have joined themselves.
+  const hasActiveBv = overridable.some((e) => e.programKey === BALA_VIHAR);
+  let joinableBv: AdminEnrollOffering | null = null;
+  if (admin && !hasActiveBv) {
+    try {
+      const offerings = await getOpenOfferingsForFamily(BALA_VIHAR, data.family.location);
+      const chosen = resolveCurrentOffering(offerings, data.family.location);
+      if (chosen) {
+        joinableBv = {
+          oid: chosen.oid,
+          programLabel: chosen.programLabel,
+          termLabel: chosen.termLabel,
+          suggestedAmount: resolveSuggestedAmount(chosen, new Date()),
+        };
+      }
+    } catch (err) {
+      // Fail-soft, like the enrollments read above: an admin convenience must
+      // not cost the family detail a coordinator came here for.
+      console.error('[welcome-family] could not resolve a joinable Bala Vihar offering', err);
+    }
+  }
+
   const { family, members } = data;
   const adults = members.filter((m) => m.type !== 'Child');
   const children = members.filter((m) => m.type === 'Child');
@@ -116,7 +151,7 @@ export async function WelcomeFamilyDetailBody({
               <div style={{ width: 32 }}/>
             </div>
             <div style={{ flex: 1, overflowY: 'auto', padding: '18px 18px 90px' }}>
-              <FamilyDetailBody family={family} members={members} adults={adults} children={children} sevaProgress={sevaProgress} overridable={overridable} canOverride={admin}/>
+              <FamilyDetailBody family={family} members={members} adults={adults} children={children} sevaProgress={sevaProgress} overridable={overridable} canOverride={admin} joinableBv={joinableBv} fid={fid}/>
             </div>
           </div>
         </CspRoot>
@@ -133,7 +168,7 @@ export async function WelcomeFamilyDetailBody({
           </p>
           <h1 style={{ fontSize: 38, fontWeight: 400, marginTop: 6 }}>The {family.name} Family</h1>
         </header>
-        <FamilyDetailBody family={family} members={members} adults={adults} children={children} sevaProgress={sevaProgress} overridable={overridable} canOverride={admin}/>
+        <FamilyDetailBody family={family} members={members} adults={adults} children={children} sevaProgress={sevaProgress} overridable={overridable} canOverride={admin} joinableBv={joinableBv} fid={fid}/>
       </div>
     </>
   );
@@ -155,9 +190,12 @@ type FamilyDetailBodyProps = {
    * That exact confusion was reported on preview within an hour of shipping.
    */
   canOverride: boolean;
+  /** The Bala Vihar offering an admin could enrol this family into, if any. */
+  joinableBv: AdminEnrollOffering | null;
+  fid: string;
 };
 
-function FamilyDetailBody({ family, members, adults, children, sevaProgress, overridable, canOverride }: FamilyDetailBodyProps) {
+function FamilyDetailBody({ family, members, adults, children, sevaProgress, overridable, canOverride, joinableBv, fid }: FamilyDetailBodyProps) {
   const sevaMet = sevaProgress.hoursEarned >= sevaProgress.hoursPerYear;
 
   return (
@@ -190,13 +228,16 @@ function FamilyDetailBody({ family, members, adults, children, sevaProgress, ove
             existing pre-authorized debit, or a payment handled by the office.
           </p>
           {overridable.length === 0 ? (
-            <div className="card" style={{ padding: 16, marginTop: 12 }}>
-              <p style={{ fontSize: 13, color: 'var(--body-text)', lineHeight: 1.55, margin: 0 }}>
-                This family has no active enrollment, so there is nothing to mark as paid yet.
-                A donation is owed against an enrollment - the family enrols from their own
-                dashboard, and this section will list it here once they do.
-              </p>
-            </div>
+            joinableBv ? (
+              <AdminEnrollControl fid={fid} offering={joinableBv} />
+            ) : (
+              <div className="card" style={{ padding: 16, marginTop: 12 }}>
+                <p style={{ fontSize: 13, color: 'var(--body-text)', lineHeight: 1.55, margin: 0 }}>
+                  This family has no active enrollment, and there is no open Bala Vihar offering
+                  for their centre to enrol them into.
+                </p>
+              </div>
+            )
           ) : (
             <>
               {overridable.map((e) => (
@@ -210,12 +251,15 @@ function FamilyDetailBody({ family, members, adults, children, sevaProgress, ove
                   because the family was not enrolled or because the feature was
                   broken. Listing only what exists is correct; leaving the
                   absence unexplained is not. */}
-              {!overridable.some((e) => e.programKey === BALA_VIHAR) && (
-                <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5, margin: '10px 0 0' }}>
-                  No active Bala Vihar enrollment for this family, so it is not listed above.
-                  Adding a child does not enrol them - the family enrols from their own dashboard.
-                </p>
-              )}
+              {!overridable.some((e) => e.programKey === BALA_VIHAR) &&
+                (joinableBv ? (
+                  <AdminEnrollControl fid={fid} offering={joinableBv} />
+                ) : (
+                  <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5, margin: '10px 0 0' }}>
+                    No active Bala Vihar enrollment, and no open Bala Vihar offering for this
+                    family&apos;s centre to enrol them into.
+                  </p>
+                ))}
             </>
           )}
         </div>

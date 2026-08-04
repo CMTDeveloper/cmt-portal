@@ -52,3 +52,55 @@ export async function setEnrollmentOverride(
   if (res.status === 400) return { ok: false, reason: 'bad-request' };
   return { ok: false, reason: 'error' };
 }
+
+export type AdminEnrollResult =
+  | { ok: true; eid: string; suggestedAmount: number }
+  | {
+      ok: false;
+      reason:
+        | 'unauthorized'
+        | 'forbidden'
+        /** The family has nobody the program accepts - e.g. no child of eligible grade. */
+        | 'no-eligible-members'
+        /** The offering is gone, disabled, or past its end date. */
+        | 'offering-unavailable'
+        | 'not-found'
+        | 'error';
+    };
+
+/**
+ * POST `/api/welcome/enrollments` - enrol a family on their behalf.
+ *
+ * Admin-only, and the members are chosen by `enrollFamily` from the program's
+ * own eligibility rules rather than by the caller: an admin acting for a family
+ * at the office should not be picking children by hand, and the family's own
+ * enroll page derives the same set.
+ */
+export async function enrollFamilyAsAdmin(fid: string, oid: string): Promise<AdminEnrollResult> {
+  let res: Response;
+  try {
+    res = await fetch('/api/welcome/enrollments', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ fid, oid }),
+    });
+  } catch {
+    return { ok: false, reason: 'error' };
+  }
+
+  if (res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { eid?: string; suggestedAmount?: number };
+    if (!body.eid) return { ok: false, reason: 'error' };
+    return { ok: true, eid: body.eid, suggestedAmount: body.suggestedAmount ?? 0 };
+  }
+  const body = (await res.json().catch(() => ({}))) as { error?: string };
+  if (res.status === 401) return { ok: false, reason: 'unauthorized' };
+  if (res.status === 403) return { ok: false, reason: 'forbidden' };
+  if (body.error === 'no-eligible-members') return { ok: false, reason: 'no-eligible-members' };
+  // 422 covers offering-disabled / offering-expired / program-not-available -
+  // all "this offering cannot be joined", which reads the same to an admin.
+  if (res.status === 422) return { ok: false, reason: 'offering-unavailable' };
+  if (res.status === 404) return { ok: false, reason: 'not-found' };
+  return { ok: false, reason: 'error' };
+}
