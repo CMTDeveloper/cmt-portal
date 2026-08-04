@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { toast, SetuAvatar } from '@cmt/ui';
 import {
   listJoinRequestsClient,
@@ -12,6 +12,22 @@ import {
 interface Props {
   // Mobile branch passes compact for tighter spacing; desktop omits it.
   compact?: boolean;
+  /**
+   * The open requests, already read on the server.
+   *
+   * 🔴 REQUIRED for latency, not an optimisation. This panel used to fetch
+   * `GET /api/setu/join-request` from a mount effect, and `/family` renders it
+   * TWICE (a compact mobile copy and a desktop one, both in the DOM at once).
+   * Measured against deployed preview on 2026-08-03, one dashboard load fired
+   * FOUR identical calls to that endpoint, the slowest finishing 930ms after
+   * navigation - on the page every family lands on, for data the server had
+   * already authenticated the session to read.
+   *
+   * Passing it down instead means zero client round-trips, no empty-then-pop
+   * flash, and both copies showing the same thing by construction rather than
+   * by two requests happening to agree.
+   */
+  initialRequests: JoinRequestListItem[];
 }
 
 // Manager-only pending co-manager join requests. Renders NOTHING until at least
@@ -19,24 +35,22 @@ interface Props {
 // chrome. The parent /family page only mounts this for managers (claims.role ===
 // 'family-manager'); the GET endpoint is also manager-gated server-side, so a
 // non-manager that somehow mounts this just gets an empty list.
-export function PendingJoinRequestsPanel({ compact = false }: Props) {
-  const [requests, setRequests] = useState<JoinRequestListItem[]>([]);
-  const [loaded, setLoaded] = useState(false);
+export function PendingJoinRequestsPanel({ compact = false, initialRequests }: Props) {
+  const [requests, setRequests] = useState<JoinRequestListItem[]>(initialRequests);
   const [busyToken, setBusyToken] = useState<string | null>(null);
 
+  // Re-read AFTER an approve/decline only. There is deliberately no mount
+  // effect: the server already supplied the list, and fetching it again on
+  // mount is what made one page load issue four identical requests.
   const refresh = useCallback(async () => {
     const result = await listJoinRequestsClient();
     if (result.ok) {
       setRequests(result.requests);
     }
-    // On a non-ok (e.g. a family-member who isn't a manager) we leave the list
-    // empty and render nothing — no error toast, this panel is best-effort.
-    setLoaded(true);
+    // On a non-ok (e.g. a family-member who isn't a manager) keep what we have
+    // rather than blanking the panel — no error toast, this panel is
+    // best-effort and the row the user just acted on is removed either way.
   }, []);
-
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
 
   async function handleApprove(token: string) {
     setBusyToken(token);
@@ -62,8 +76,10 @@ export function PendingJoinRequestsPanel({ compact = false }: Props) {
     setBusyToken(null);
   }
 
-  // Nothing to show until we've loaded AND there's at least one open request.
-  if (!loaded || requests.length === 0) return null;
+  // Nothing to show when there is no open request. No "loaded" flag any more:
+  // the server-supplied list is authoritative from the first paint, so an empty
+  // array means empty rather than not-yet-known.
+  if (requests.length === 0) return null;
 
   const pad = compact ? 16 : 24;
 

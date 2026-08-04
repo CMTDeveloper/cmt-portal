@@ -42,7 +42,15 @@ export type JoinRequestListItem = {
   requesterEmail: string;
   requesterPhone?: string;
   matchedMid: string;
-  createdAt: string;
+  /**
+   * ISO string, or null for a doc whose `serverTimestamp()` has not
+   * materialised yet. Was typed `string`, which the SERVER loader
+   * (`listPendingJoinRequests`) has never actually guaranteed - it returns null
+   * in exactly that case. The mismatch was invisible while this type was only
+   * ever filled from `res.json()`; it stops compiling the moment a server-loaded
+   * list is handed to the same component, which is how it was found.
+   */
+  createdAt: string | null;
   status: string;
 };
 

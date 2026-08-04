@@ -134,6 +134,9 @@ export function WelcomeMobileNav(audience: WelcomeNavAudience) {
           <Link
             key={item.href}
             href={item.href}
+            // Chrome navigation does not prefetch — see NAV_PREFETCH in
+            // desktop-sidebar.tsx for the measurement behind this.
+            prefetch={false}
             aria-current={on ? 'page' : undefined}
             style={{ ...cell, color: on ? 'var(--accent)' : 'var(--muted)' }}
           >

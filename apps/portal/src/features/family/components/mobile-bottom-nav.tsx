@@ -21,6 +21,11 @@ const TABS: { id: Tab; label: string; icon: keyof typeof SetuIcon; href: string 
 // so the value inlines into the client bundle.
 const FAMILY_CALENDAR_URL = process.env.NEXT_PUBLIC_FAMILY_CALENDAR_URL;
 
+// Chrome navigation does not prefetch — see the long note on NAV_PREFETCH in
+// desktop-sidebar.tsx for the measurement behind this. Kept as a local constant
+// rather than imported so neither nav depends on the other's module.
+const NAV_PREFETCH = false;
+
 // Secondary destinations that live in the "More" sheet rather than the bar.
 // Built per-render so Seva can be filtered out when flags.setuSeva is off
 // (Slice 1 Part C) and the Calendar entry can swap to the external PDF.
@@ -116,7 +121,7 @@ export function MobileBottomNav({ isAdmin = false, showTeacher = false, staffAre
                     <Icon /> {m.label}
                   </a>
                 ) : (
-                  <Link key={m.href} href={m.href} onClick={() => setMoreOpen(false)} style={style}>
+                  <Link key={m.href} href={m.href} prefetch={NAV_PREFETCH} onClick={() => setMoreOpen(false)} style={style}>
                     <Icon /> {m.label}
                   </Link>
                 );
@@ -124,6 +129,7 @@ export function MobileBottomNav({ isAdmin = false, showTeacher = false, staffAre
               {isAdmin && (
                 <Link
                   href="/admin"
+                  prefetch={NAV_PREFETCH}
                   onClick={() => setMoreOpen(false)}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 14, padding: '14px 14px',
@@ -137,6 +143,7 @@ export function MobileBottomNav({ isAdmin = false, showTeacher = false, staffAre
               {showTeacher && (
                 <Link
                   href="/teacher"
+                  prefetch={NAV_PREFETCH}
                   onClick={() => setMoreOpen(false)}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 14, padding: '14px 14px',
@@ -152,6 +159,7 @@ export function MobileBottomNav({ isAdmin = false, showTeacher = false, staffAre
               {staffArea && (
                 <Link
                   href="/welcome/roster"
+                  prefetch={NAV_PREFETCH}
                   onClick={() => setMoreOpen(false)}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 14, padding: '14px 14px',
@@ -193,7 +201,7 @@ export function MobileBottomNav({ isAdmin = false, showTeacher = false, staffAre
         {TABS.map((t) => {
           const Icon = SetuIcon[t.icon];
           return (
-            <Link key={t.id} href={t.href} style={itemStyle(t.id === active)}>
+            <Link key={t.id} href={t.href} prefetch={NAV_PREFETCH} style={itemStyle(t.id === active)}>
               <Icon /> {t.label}
             </Link>
           );

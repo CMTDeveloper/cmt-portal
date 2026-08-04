@@ -48,6 +48,9 @@ import { hashContactKey } from '@/features/setu/registration/hash-contact-key';
 import { findSetuFamilyByContact } from '@/features/setu/auth/find-family-by-contact';
 import { addCapability, type ClaimsShape } from '@/lib/auth/role-claims';
 import { assignTeacher } from '@/features/setu/teacher/assignments';
+import { recordDisclaimerAcceptance } from '@/features/setu/disclaimers/acceptance';
+import { getDisclaimersConfig } from '@/features/setu/disclaimers/config';
+import { getSchoolYearConfig } from '@/features/setu/rollover/school-year-config';
 
 const PASSWORD = process.env['TEST_ACCOUNTS_PASSWORD'];
 const DOMAIN = 'chinmayatoronto.org';
@@ -55,6 +58,29 @@ const SEED_BY = 'seed-test-accounts';
 // A real volunteering skill so adult personas satisfy the per-type required
 // matrix (>=1 skill) and pass the profile-completion gate.
 const SEED_SKILL = 'General Volunteer Support (happy to help where needed)';
+
+/**
+ * A complete home address per centre, so the manager clears
+ * `isFamilyAddressComplete` and the profile gate lets them onto /family.
+ *
+ * 🔴 Load-bearing for EVERY family E2E, not a cosmetic detail. These personas
+ * predated the home-address requirement, so all five of them landed on
+ * /complete-profile instead of the dashboard - which meant no E2E could reach
+ * the family dashboard at all, and the /family → /welcome navigation bug that
+ * shipped on 2026-08-03 was unit-tested only. A fixture that cannot reach the
+ * screen under test is not a fixture.
+ *
+ * `postalCode` is a real-format Canadian code; `isFamilyAddressComplete` only
+ * checks presence, but a malformed one would trip the form if a spec ever opens
+ * it. `unit` is deliberately empty - it is optional, and leaving it blank keeps
+ * the optional-field path exercised.
+ */
+const SEED_ADDRESS: Record<'Brampton' | 'Scarborough', {
+  street: string; unit: string; city: string; province: string; postalCode: string;
+}> = {
+  Brampton: { street: '12 Test Seed Way', unit: '', city: 'Brampton', province: 'ON', postalCode: 'L6Y 1A1' },
+  Scarborough: { street: '48 Test Seed Cres', unit: '', city: 'Scarborough', province: 'ON', postalCode: 'M1B 2C3' },
+};
 
 let failures = 0;
 
@@ -395,7 +421,20 @@ async function ensureFamily(db: Db, p: FamilyPersona): Promise<{ fid: string; ma
   // have renamed the family; the welcome roster and the persona E2E rely on
   // the canonical name/location/searchKeys.
   await db.collection('families').doc(fid).set(
-    { name: p.familyName, location: p.location, searchKeys: [p.familyName.toLowerCase(), fid], _test: true },
+    {
+      name: p.familyName,
+      location: p.location,
+      searchKeys: [p.familyName.toLowerCase(), fid],
+      // Both of these are profile-GATE fields, not decoration. Without the
+      // address the manager is redirected to /complete-profile on every visit;
+      // `locationNeedsConfirmation: false` means "asked and answered", which is
+      // what a seeded family should look like (absent/null would be fine today
+      // but `needsCentreConfirmation` reads `=== true`, so being explicit keeps
+      // the fixture honest if that ever flips to a tri-state).
+      familyAddress: SEED_ADDRESS[p.location],
+      locationNeedsConfirmation: false,
+      _test: true,
+    },
     { merge: true },
   );
 
@@ -509,7 +548,48 @@ async function ensureFamily(db: Db, p: FamilyPersona): Promise<{ fid: string; ma
     await ensureContactKey(db, 'email', p.secondAdult.email, fid, secondAdultMid);
   }
 
+  // ── The SECOND gate between a seeded family and /family ────────────────────
+  //
+  // Clearing the profile gate above only moves the family to the next one:
+  // DisclaimerGate sends any manager without a current acceptance to
+  // /acknowledgements. Both have to be satisfied or the fixture still cannot
+  // reach the dashboard.
+  //
+  // Read the live version rather than hardcoding one: `isDisclaimerAccepted`
+  // requires `accepted.version >= config.version` AND a matching school year,
+  // so a pinned number would silently stop clearing the gate the first time
+  // anyone edits the disclaimer content. Re-running the seed is the documented
+  // fix after a version bump (disclaimers.spec.ts bumps it deliberately).
+  await acceptCurrentDisclaimers(db, fid, managerMid);
+
   return { fid, managerMid };
+}
+
+/**
+ * Record the manager's acceptance of the CURRENT disclaimer version + school
+ * year, so `DisclaimerGate` lets this family through to /family.
+ *
+ * Fail-soft: a missing `app_config` document is a scaffolding problem, not a
+ * reason to abort the whole seed - the rest of the persona is still useful, and
+ * the console line says exactly what the tester will hit.
+ */
+async function acceptCurrentDisclaimers(db: Db, fid: string, managerMid: string): Promise<void> {
+  try {
+    const [config, schoolYear] = await Promise.all([
+      getDisclaimersConfig(db),
+      getSchoolYearConfig(db),
+    ]);
+    await recordDisclaimerAcceptance(db, fid, {
+      version: config.version,
+      schoolYear: schoolYear.currentYear,
+      byMid: managerMid,
+    });
+  } catch (err) {
+    console.error(
+      `  WARN: could not accept disclaimers for ${fid} - this family will land on /acknowledgements`,
+      err,
+    );
+  }
 }
 
 /**
