@@ -27,5 +27,5 @@ export default async function VisitorsPage({
   const view = await getLevelVisitorsView(levelId, date);
   if (!view) return <p style={{ color: 'var(--muted)', fontSize: 14 }}>That class doesn’t exist.</p>;
 
-  return <VisitorsPanel levelId={view.levelId} levelName={view.levelName} date={view.date} />;
+  return <VisitorsPanel levelId={view.levelId} levelName={view.levelName} date={view.date} initialView={view} />;
 }
