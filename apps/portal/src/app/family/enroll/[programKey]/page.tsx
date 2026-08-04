@@ -456,7 +456,7 @@ export default async function ProgramEnrollPage({ params }: Props) {
         <CspRoot style={{ minHeight: '100dvh' }}>
           <div style={{ height: 'calc(100dvh - 64px)', display: 'flex', flexDirection: 'column' }}>
             <div className="between" style={{ padding: '10px 18px', borderBottom: '1px solid var(--line)' }}>
-              <Link href="/family" className="focus-ring" style={{ background: 'transparent', border: 0, padding: 6, marginLeft: -6, color: 'var(--body-text)', display: 'inline-flex' }}>
+              <Link href="/family" prefetch={false} className="focus-ring" style={{ background: 'transparent', border: 0, padding: 6, marginLeft: -6, color: 'var(--body-text)', display: 'inline-flex' }}>
                 <SetuIcon.back />
               </Link>
               <span style={{ fontSize: 14, fontWeight: 600 }}>Enroll</span>
@@ -545,7 +545,7 @@ export default async function ProgramEnrollPage({ params }: Props) {
                 // "Continue to donation" for $0 led nowhere - both the button and
                 // the checkout API reject anything under $1.
                 paid || nothingToPay ? (
-                  <Link href="/family" className="btn btn--p btn--block" style={{ display: 'block', textAlign: 'center', textDecoration: 'none' }}>
+                  <Link href="/family" prefetch={false} className="btn btn--p btn--block" style={{ display: 'block', textAlign: 'center', textDecoration: 'none' }}>
                     Back to dashboard
                   </Link>
                 ) : onlineDonationsEnabled ? (
@@ -556,7 +556,7 @@ export default async function ProgramEnrollPage({ params }: Props) {
                   </div>
                 )
               ) : showInlinePanel ? (
-                <Link href="/family" className="btn btn--s btn--block" style={{ display: 'block', textAlign: 'center', textDecoration: 'none' }}>
+                <Link href="/family" prefetch={false} className="btn btn--s btn--block" style={{ display: 'block', textAlign: 'center', textDecoration: 'none' }}>
                   Cancel
                 </Link>
               ) : ctaOid && isManager ? (
@@ -585,7 +585,7 @@ export default async function ProgramEnrollPage({ params }: Props) {
       {/* ── Desktop ──────────────────────────────────────────────── */}
       <div className="hidden md:block">
         <header style={{ marginBottom: 26 }}>
-          <Link href="/family" className="focus-ring" style={{ background: 'transparent', border: 0, color: 'var(--body-text)', fontSize: 13, padding: 0, marginBottom: 8, display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none' }}>
+          <Link href="/family" prefetch={false} className="focus-ring" style={{ background: 'transparent', border: 0, color: 'var(--body-text)', fontSize: 13, padding: 0, marginBottom: 8, display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none' }}>
             <SetuIcon.back /> Back to dashboard
           </Link>
           <div className="between">
@@ -666,6 +666,7 @@ export default async function ProgramEnrollPage({ params }: Props) {
                   {renderNothingToPay(waivedByBv, { desktop: true })}
                   <Link
                     href="/family"
+                    prefetch={false}
                     className="btn btn--p btn--block"
                     style={{ display: 'block', textAlign: 'center', textDecoration: 'none', marginTop: 14 }}
                   >

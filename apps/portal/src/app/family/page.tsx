@@ -229,6 +229,7 @@ function FamilyMembers({ adults, children, mobile = false }: { adults: number; c
       </div>
       <Link
         href="/family/members"
+        prefetch={false}
         className={`btn btn--s${mobile ? ' btn--block' : ''}`}
         style={{ textDecoration: 'none', display: mobile ? 'flex' : 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 2 }}
       >
@@ -440,6 +441,7 @@ export default async function FamilyDashboardPage() {
     flags.setuPledge ? (
       <Link
         href="/family/enroll/bala-vihar"
+        prefetch={false}
         className={block ? 'btn btn--p btn--block' : 'btn btn--p'}
         style={block ? { display: 'block', textAlign: 'center', textDecoration: 'none' } : { textDecoration: 'none' }}
       >
@@ -498,7 +500,7 @@ export default async function FamilyDashboardPage() {
         Add a child to enroll
       </Link>
     ) : (
-      <Link href="/family/enroll" className="btn btn--p" style={{ textDecoration: 'none', display: 'inline-block' }}>
+      <Link href="/family/enroll" prefetch={false} className="btn btn--p" style={{ textDecoration: 'none', display: 'inline-block' }}>
         Enroll now
       </Link>
     )
