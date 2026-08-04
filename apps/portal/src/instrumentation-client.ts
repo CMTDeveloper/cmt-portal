@@ -56,41 +56,84 @@ export const onRouterTransitionStart = Sentry.captureRouterTransitionStart;
  * reports messages carrying React's own signatures, capped per page load. A
  * broad console capture would turn every log line into a Sentry event and bury
  * the signal we are adding this for.
+ *
+ * The failures worth waking up for. #418/#422/#423 are hydration bails, #425 is
+ * a text mismatch, and "Unexpected Suspense handler tag" is issue #62 itself.
  */
-const REACT_FAILURE_SIGNATURES = [
-  /Minified React error #(418|421|422|423|425)\b/,
+const SEVERE_SIGNATURES = [
+  /Minified React error #(418|422|423|425)\b/,
   /Hydration failed because/i,
   /There was an error while hydrating/i,
   /Text content does not match server-rendered HTML/i,
   /Unexpected Suspense handler tag/i,
 ];
 
-/** A page in a hydration loop could report forever; three is enough to diagnose. */
-const MAX_HYDRATION_REPORTS = 3;
+/**
+ * #421 gets its OWN budget, and a small one.
+ *
+ * "This Suspense boundary received an update before it finished hydrating" is
+ * something React recovers from, and it fires readily on exactly the conditions
+ * under investigation - a slow connection, 30+ Suspense boundaries, and the
+ * duplicate renders tracked as #103. Sharing one counter with the severe list
+ * meant a page could spend the entire budget on #421 before the rare event
+ * worth catching ever got a chance to report, and we would have read the
+ * resulting stream of hydration events as "the instrumentation works" while the
+ * one that settles #62 was silently dropped. Caught in review.
+ *
+ * Kept rather than dropped: it is still evidence of the hydration races behind
+ * #103/#105, just not the thing to spend the budget on.
+ */
+const RECOVERABLE_SIGNATURES = [/Minified React error #421\b/];
 
-if (typeof window !== 'undefined') {
+const MAX_SEVERE_REPORTS = 3;
+const MAX_RECOVERABLE_REPORTS = 1;
+
+interface PatchedConsole {
+  __cmtHydrationPatch?: true;
+}
+
+if (typeof window !== 'undefined' && !(console as PatchedConsole).__cmtHydrationPatch) {
   const original = console.error;
-  let reported = 0;
+  let severe = 0;
+  let recoverable = 0;
 
   console.error = (...args: unknown[]) => {
     try {
-      if (reported < MAX_HYDRATION_REPORTS) {
-        const text = args
-          .map((a) => (a instanceof Error ? a.message : typeof a === 'string' ? a : ''))
-          .join(' ');
-        if (REACT_FAILURE_SIGNATURES.some((re) => re.test(text))) {
-          reported += 1;
-          const err = args.find((a): a is Error => a instanceof Error) ?? new Error(text.slice(0, 300));
-          Sentry.captureException(err, {
-            tags: { boundary: 'hydration', errorSide: 'client', reactHydration: 'true' },
-            extra: { pathname: window.location.pathname, message: text.slice(0, 1000) },
-          });
-        }
+      const text = args
+        .map((a) => (a instanceof Error ? a.message : typeof a === 'string' ? a : ''))
+        .join(' ');
+
+      const isSevere = SEVERE_SIGNATURES.some((re) => re.test(text));
+      const isRecoverable = !isSevere && RECOVERABLE_SIGNATURES.some((re) => re.test(text));
+      const withinBudget = isSevere
+        ? severe < MAX_SEVERE_REPORTS
+        : isRecoverable && recoverable < MAX_RECOVERABLE_REPORTS;
+
+      if (withinBudget) {
+        if (isSevere) severe += 1;
+        else recoverable += 1;
+        const err = args.find((a): a is Error => a instanceof Error) ?? new Error(text.slice(0, 300));
+        Sentry.captureException(err, {
+          tags: {
+            boundary: 'hydration',
+            errorSide: 'client',
+            reactHydration: isSevere ? 'severe' : 'recoverable',
+          },
+          extra: { pathname: window.location.pathname, message: text.slice(0, 1000) },
+        });
       }
     } catch {
       // Reporting must never be the reason a page breaks. Swallow and fall
       // through to the real console.error below.
     }
-    original(...(args as []));
+    // `.apply`, not a bare call: this forwards into a CHAIN of third-party
+    // patches (Sentry's breadcrumb wrapper, possibly React DevTools), and one
+    // of them being `this`-sensitive is the classic way an unbound forward
+    // breaks something months later.
+    original.apply(console, args as Parameters<typeof console.error>);
   };
+
+  // Idempotent: a dev Fast Refresh cycle re-evaluating this module would
+  // otherwise wrap the wrapper and quietly double every budget.
+  (console as PatchedConsole).__cmtHydrationPatch = true;
 }

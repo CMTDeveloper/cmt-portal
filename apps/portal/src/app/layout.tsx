@@ -1,8 +1,8 @@
 import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
-import { Header } from '@/components/chrome/header';
-import { Footer } from '@/components/chrome/footer';
+import { Header, HeaderFallback } from '@/components/chrome/header';
+import { Footer, FooterFallback } from '@/components/chrome/footer';
 import { ChromeWrapper } from '@/components/chrome/chrome-wrapper';
 import { ToasterMount } from '@/components/chrome/toaster-mount';
 import { SITE_TITLE_DEFAULT, SITE_TITLE_TEMPLATE, SITE_DESCRIPTION } from '@/lib/branding';
@@ -55,15 +55,13 @@ export default function RootLayout({
             Deliberately not a spinner: this resolves in milliseconds on a good
             connection, and a flash of spinner on every navigation is worse than
             a calm empty bar. */}
-        <Suspense
-          fallback={<div className="h-16 border-b border-border bg-background" aria-hidden />}
-        >
+        <Suspense fallback={<HeaderFallback />}>
           <ChromeWrapper>
             <Header />
           </ChromeWrapper>
         </Suspense>
         <main className="flex-1">{children}</main>
-        <Suspense fallback={<div className="h-16" aria-hidden />}>
+        <Suspense fallback={<FooterFallback />}>
           <ChromeWrapper>
             <Footer />
           </ChromeWrapper>

@@ -98,3 +98,44 @@ describe('route coverage is measured, not assumed', () => {
     expect(ownBoundary.length).toBeGreaterThanOrEqual(5);
   });
 });
+
+/**
+ * The fallbacks must stay SHAPED LIKE the things they stand in for.
+ *
+ * The file-reading tests above cannot see this - they proved a fallback existed
+ * and said nothing about whether it matched. It did not: the first version of
+ * the footer placeholder was a bare 64px div against a real footer of ~85px
+ * with a top border and a background, so the reflow moved from the top of the
+ * page to the bottom and gained a border that popped in. Found in review.
+ *
+ * jsdom has no layout engine, so height cannot be measured here. What CAN be
+ * checked is the thing that actually drifts: both now build from the same
+ * exported class constants, so a change to one is a change to both.
+ */
+describe('the chrome fallbacks cannot drift from the real chrome', () => {
+  it('the header fallback is built from the header’s own classes', () => {
+    const src = readFileSync(join(process.cwd(), 'src/components/chrome/header.tsx'), 'utf8');
+    expect(src).toMatch(/export const HEADER_SHELL_CLASS/);
+    expect(src).toMatch(/export function HeaderFallback/);
+    // The real header and the fallback both reference the constant - neither
+    // repeats the literal, which is how they got out of step before.
+    expect(src.match(/HEADER_SHELL_CLASS/g) ?? []).toHaveLength(3); // decl + 2 uses
+  });
+
+  it('the footer fallback is built from the footer’s own classes', () => {
+    const src = readFileSync(join(process.cwd(), 'src/components/chrome/footer.tsx'), 'utf8');
+    expect(src).toMatch(/export const FOOTER_SHELL_CLASS/);
+    expect(src).toMatch(/export function FooterFallback/);
+    expect(src.match(/FOOTER_SHELL_CLASS/g) ?? []).toHaveLength(3);
+    // The inner box too - that is where the HEIGHT comes from, and the height
+    // is what was wrong.
+    expect(src.match(/FOOTER_INNER_CLASS/g) ?? []).toHaveLength(3);
+  });
+
+  it('the layout uses those components rather than inventing its own markup', () => {
+    const src = readFileSync(join(process.cwd(), 'src/app/layout.tsx'), 'utf8');
+    expect(src).toMatch(/fallback=\{<HeaderFallback \/>\}/);
+    expect(src).toMatch(/fallback=\{<FooterFallback \/>\}/);
+  });
+});
+
