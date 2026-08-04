@@ -1,5 +1,5 @@
 'use client';
-import { ErrorFallback } from '@cmt/ui';
+import { ReportingErrorFallback } from '@/components/chrome/reporting-error-fallback';
 export default function GuestsError({ error, reset }: { error: Error; reset: () => void }) {
-  return <ErrorFallback error={error} reset={reset} feature="Admin guests" />;
+  return <ReportingErrorFallback error={error} reset={reset} feature="Admin guests" />;
 }

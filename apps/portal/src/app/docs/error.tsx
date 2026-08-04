@@ -1,6 +1,6 @@
 'use client';
 
-import { ErrorFallback } from '@cmt/ui';
+import { ReportingErrorFallback } from '@/components/chrome/reporting-error-fallback';
 
 export default function DocsError({
   error,
@@ -9,5 +9,5 @@ export default function DocsError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
-  return <ErrorFallback error={error} reset={reset} feature="Guides" />;
+  return <ReportingErrorFallback error={error} reset={reset} feature="Guides" />;
 }

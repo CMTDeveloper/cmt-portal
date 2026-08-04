@@ -1,9 +1,11 @@
 'use client';
 
 import Link from 'next/link';
+import { useReportBoundaryError } from '@/components/chrome/reporting-error-fallback';
 import { CspRoot, DesktopSidebar } from '@/features/family/components/atoms';
 
 export default function EditMemberError({ error, reset }: { error: Error; reset: () => void }) {
+  useReportBoundaryError(error, 'Family / edit member');
   return (
     <>
       <div className="block md:hidden">

@@ -1,6 +1,6 @@
 'use client';
 
-import { ErrorFallback } from '@cmt/ui';
+import { ReportingErrorFallback } from '@/components/chrome/reporting-error-fallback';
 
 export default function TeacherError({
   error,
@@ -9,5 +9,5 @@ export default function TeacherError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
-  return <ErrorFallback error={error} reset={reset} feature="Teacher" />;
+  return <ReportingErrorFallback error={error} reset={reset} feature="Teacher" />;
 }
