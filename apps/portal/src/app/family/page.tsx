@@ -496,7 +496,7 @@ export default async function FamilyDashboardPage() {
   // attendance list (kept — it's real, and a prior regression hid attendance).
   const enrollCta = !isEnrolled && (
     familyCounts.children === 0 ? (
-      <Link href="/family/members/new" className="btn btn--p" style={{ textDecoration: 'none', display: 'inline-block' }}>
+      <Link href="/family/members/new" prefetch={false} className="btn btn--p" style={{ textDecoration: 'none', display: 'inline-block' }}>
         Add a child to enroll
       </Link>
     ) : (
