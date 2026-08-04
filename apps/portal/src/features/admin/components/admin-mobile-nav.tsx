@@ -8,6 +8,12 @@ import { signOut } from '@/features/family/components/sign-out-button';
 
 type Tab = 'home' | 'programs' | 'levels' | 'calendar' | 'more';
 
+/**
+ * Chrome navigation does not prefetch - see the NAV_PREFETCH note in
+ * features/family/components/desktop-sidebar.tsx for the measurement behind it.
+ */
+const NAV_PREFETCH = false;
+
 // `coordinator: true` marks the ONLY entries a coordinator may see. Home and
 // Calendar are both denied to that role, so two of these four must disappear.
 const TABS: { id: Tab; label: string; icon: keyof typeof SetuIcon; href: string; coordinator?: true }[] = [
@@ -93,25 +99,25 @@ export function AdminMobileNav({ hasFamily = false, showTeacher = false, canSeeA
                 const Icon = SetuIcon[m.icon];
                 const on = pathname.startsWith(m.href);
                 return (
-                  <Link key={m.href} href={m.href} onClick={() => setMoreOpen(false)} style={{ ...sheetLink, color: on ? 'var(--accentDeep)' : 'var(--body-text)', background: on ? 'var(--accentSoft)' : 'transparent' }}>
+                  <Link key={m.href} href={m.href} prefetch={NAV_PREFETCH} onClick={() => setMoreOpen(false)} style={{ ...sheetLink, color: on ? 'var(--accentDeep)' : 'var(--body-text)', background: on ? 'var(--accentSoft)' : 'transparent' }}>
                     <Icon /> <span>{m.label}</span>
                   </Link>
                 );
               })}
               <div style={{ padding: '12px 14px 4px', fontSize: 10, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--muted)' }}>Legacy tools</div>
               {moreLegacy.map((m) => (
-                <Link key={m.href} href={m.href} onClick={() => setMoreOpen(false)} style={{ ...sheetLink, color: 'var(--body-text)' }}>
+                <Link key={m.href} href={m.href} prefetch={NAV_PREFETCH} onClick={() => setMoreOpen(false)} style={{ ...sheetLink, color: 'var(--body-text)' }}>
                   <SetuIcon.shield /> <span>{m.label}</span>
                 </Link>
               ))}
               <div style={{ height: 1, background: 'var(--line)', margin: '6px 0' }} />
               {showTeacher && (
-                <Link href="/teacher" onClick={() => setMoreOpen(false)} style={sheetLink}>
+                <Link href="/teacher" prefetch={NAV_PREFETCH} onClick={() => setMoreOpen(false)} style={sheetLink}>
                   <SetuIcon.people /> Teacher
                 </Link>
               )}
               {hasFamily && (
-                <Link href="/family" onClick={() => setMoreOpen(false)} style={sheetLink}>
+                <Link href="/family" prefetch={NAV_PREFETCH} onClick={() => setMoreOpen(false)} style={sheetLink}>
                   <SetuIcon.back /> Back to my family
                 </Link>
               )}
@@ -137,7 +143,7 @@ export function AdminMobileNav({ hasFamily = false, showTeacher = false, canSeeA
         {tabs.map((t) => {
           const Icon = SetuIcon[t.icon];
           return (
-            <Link key={t.id} href={t.href} style={itemStyle(t.id === active)}>
+            <Link key={t.id} href={t.href} prefetch={NAV_PREFETCH} style={itemStyle(t.id === active)}>
               <Icon /> {t.label}
             </Link>
           );

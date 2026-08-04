@@ -47,9 +47,15 @@ export function PendingJoinRequestsPanel({ compact = false, initialRequests }: P
     if (result.ok) {
       setRequests(result.requests);
     }
-    // On a non-ok (e.g. a family-member who isn't a manager) keep what we have
-    // rather than blanking the panel — no error toast, this panel is
-    // best-effort and the row the user just acted on is removed either way.
+    // On a non-ok, keep what we have rather than blanking the panel.
+    //
+    // Note what this does and does NOT guarantee: the row the manager just
+    // acted on stays VISIBLE until the next successful read, because removing
+    // it is the re-read's job and the re-read is what failed. That is a stale
+    // row, not a broken one - the approve/decline already committed server-side,
+    // so clicking it again returns `already-resolved` and shows that toast
+    // rather than acting twice. Blanking the list would be worse: it would hide
+    // the OTHER requests, which are real and still need review.
   }, []);
 
   async function handleApprove(token: string) {

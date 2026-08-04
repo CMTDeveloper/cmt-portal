@@ -20,6 +20,18 @@ interface AdminSidebarProps {
 // `coordinator: true` marks the ONLY two entries a coordinator may see. Every
 // other href is denied by canAccessRoute, so rendering it would be a link that
 // 302s to /sign-in on click.
+/**
+ * Chrome navigation does not prefetch - see the NAV_PREFETCH note in
+ * features/family/components/desktop-sidebar.tsx for the measurement.
+ *
+ * This sidebar is NOT admin-only territory: welcome/layout.tsx renders
+ * AdminSidebarLive for any ADMIN viewer, so an admin on /welcome/roster - the
+ * heaviest-traffic staff screen - was firing a prefetch for every entry below
+ * while the family and welcome-team navs had already been fixed. Found by a
+ * Codex review of a956c7d, which is exactly the miss it was asked to look for.
+ */
+const NAV_PREFETCH = false;
+
 const NAV_GROUPS: Array<{ heading: string; items: Array<{ label: string; href: string; legacy?: boolean; coordinator?: true }> }> = [
   { heading: 'People & access', items: [
     { label: 'Family search', href: '/welcome' },
@@ -90,6 +102,7 @@ export function AdminSidebar({ active = '', displayEmail, hasFamily, showTeacher
             {hasFamily && (
               <Link
                 href="/family"
+                prefetch={NAV_PREFETCH}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 10,
                   padding: '10px 12px', borderRadius: 'var(--radiusSm)',
@@ -103,6 +116,7 @@ export function AdminSidebar({ active = '', displayEmail, hasFamily, showTeacher
             {showTeacher && (
               <Link
                 href="/teacher"
+                prefetch={NAV_PREFETCH}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 10,
                   padding: '10px 12px', borderRadius: 'var(--radiusSm)',
@@ -123,6 +137,7 @@ export function AdminSidebar({ active = '', displayEmail, hasFamily, showTeacher
           return (
             <Link
               href="/admin"
+              prefetch={NAV_PREFETCH}
               aria-current={dashboardActive ? 'page' : undefined}
               style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
@@ -161,6 +176,7 @@ export function AdminSidebar({ active = '', displayEmail, hasFamily, showTeacher
                 <Link
                   key={href}
                   href={href}
+                  prefetch={NAV_PREFETCH}
                   aria-current={isActive ? 'page' : undefined}
                   style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,

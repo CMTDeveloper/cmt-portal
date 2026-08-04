@@ -135,3 +135,44 @@ test.describe('family dashboard request budget', () => {
     ).toBe(0);
   });
 });
+
+/**
+ * The staff side, which the first pass MISSED.
+ *
+ * `/welcome/*` renders `AdminSidebarLive` for an ADMIN viewer and
+ * `DesktopSidebarLive` for everyone else (app/welcome/layout.tsx). Only the
+ * latter had been fixed, so admins - who use the roster daily - kept firing a
+ * prefetch for all 16 admin nav entries on every page. Found by a Codex review
+ * of a956c7d; this test is here so the two sidebars cannot drift apart again.
+ */
+test.describe('welcome roster request budget (admin sidebar)', () => {
+  test.skip(!hasTestAccounts, 'TEST_ACCOUNTS_PASSWORD required (run seed:test-accounts first)');
+  test.setTimeout(120_000);
+
+  test('one /welcome/roster navigation as ADMIN stays within budget', async ({ page }) => {
+    const origin = new URL(E2E_BASE_URL).origin;
+
+    const res = await page.request.post('/api/setu/auth/password-sign-in', {
+      data: { email: TEST_ACCOUNT_EMAILS.admin, password: TEST_ACCOUNTS_PASSWORD },
+    });
+    expect(res.ok(), `admin sign-in failed: ${res.status()} ${await res.text()}`).toBeTruthy();
+
+    const seen = watch(page, origin);
+    await page.goto('/welcome/roster', { waitUntil: 'load' });
+
+    // A redirect here means the admin grant is not what this test assumes, and
+    // the counts below would be measuring /sign-in.
+    expect(new URL(page.url()).pathname, 'admin must reach the roster').toBe('/welcome/roster');
+    await page.waitForTimeout(4000);
+
+    expect(
+      duplicates(seen),
+      'no route should be requested twice for one page view',
+    ).toEqual([]);
+
+    expect(
+      seen.length,
+      `request budget exceeded. Saw:\n${seen.map((s) => `  ${s.path}${s.prefetch ? ' (prefetch)' : ''}`).join('\n')}`,
+    ).toBeLessThanOrEqual(BUDGET);
+  });
+});
