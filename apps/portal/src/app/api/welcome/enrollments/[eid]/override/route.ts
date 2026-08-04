@@ -4,6 +4,7 @@ import { flags } from '@/lib/flags';
 import { isAdmin, OverrideEnrollmentBodySchema } from '@cmt/shared-domain';
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
+import { writeAuditLog } from '@/features/setu/audit/audit-log';
 
 export async function PATCH(
   req: Request,
@@ -52,11 +53,59 @@ export async function PATCH(
     return NextResponse.json({ error: 'enrollment-not-active' }, { status: 409 });
   }
 
-  await enrollmentRef.update({
-    suggestedAmountOverride: parsed.data.suggestedAmountOverride,
-    updatedAt: FieldValue.serverTimestamp(),
-  });
+  // An admin session always carries a uid; refusing without one is not defence
+  // against a real caller but against writing an audit row that names nobody.
+  // The row is the entire justification for allowing this action at all - the
+  // same reasoning as the pledge-cancel route.
+  if (!session.uid) {
+    return NextResponse.json({ error: 'no-actor' }, { status: 401 });
+  }
+
+  // ── Write and record TOGETHER, or not at all ───────────────────────────────
+  //
+  // In a transaction so the audit row cannot be missing for a change that
+  // happened, nor present for one that did not. This route moves MONEY - it
+  // decides whether a family is asked for $500 - so "who did this, when, and
+  // why" has to be a structural guarantee rather than a habit. `writeAuditLog`
+  // takes the caller's transaction for exactly this reason.
+  //
+  // The `before` value is re-read INSIDE the transaction rather than reused
+  // from the query above: between the collectionGroup read and the commit,
+  // another admin could have set a different amount, and an audit row claiming
+  // the wrong previous value is worse than none - it would send whoever reads
+  // it looking for a change that never happened.
+  let before: number | null = null;
+  try {
+    await db.runTransaction(async (txn) => {
+      const fresh = await txn.get(enrollmentRef);
+      const data = fresh.data() as { suggestedAmountOverride?: number | null } | undefined;
+      before = data?.suggestedAmountOverride ?? null;
+
+      txn.update(enrollmentRef, {
+        suggestedAmountOverride: parsed.data.suggestedAmountOverride,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+
+      writeAuditLog(txn, db, {
+        actorUid: session.uid!,
+        actorMid: session.mid ?? null,
+        actorRole: session.role,
+        // Load-bearing: an admin who is also a parent has `family-manager` as
+        // their primary role, so a row naming only that reads as a family
+        // manager rewriting another family's money.
+        actorExtraRoles: session.extraRoles ?? [],
+        action: 'enrollment.payment-override',
+        fid: enrollmentData.fid,
+        mid: null,
+        before: { suggestedAmountOverride: before },
+        after: { suggestedAmountOverride: parsed.data.suggestedAmountOverride, note: parsed.data.note },
+      });
+    });
+  } catch (err) {
+    console.error('[enrollment-override] transaction failed', err);
+    return NextResponse.json({ error: 'write-failed' }, { status: 500 });
+  }
 
   revalidateTag(`family-${enrollmentData.fid}`, 'max');
-  return NextResponse.json({ ok: true }, { status: 200 });
+  return NextResponse.json({ ok: true, before }, { status: 200 });
 }

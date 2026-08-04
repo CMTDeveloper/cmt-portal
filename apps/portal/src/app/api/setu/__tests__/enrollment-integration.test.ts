@@ -155,7 +155,11 @@ function memberHeaders(): Record<string, string> {
 }
 
 function welcomeHeaders(): Record<string, string> {
-  return { 'x-portal-role': 'admin' };
+  // `x-portal-uid` matters: the override route refuses to write without an
+  // actor, because the audit row is the justification for allowing the write at
+  // all and a row naming nobody is worthless. A real admin session always
+  // carries one; a fixture without it was simply unrealistic.
+  return { 'x-portal-role': 'admin', 'x-portal-uid': 'uid-admin-1' };
 }
 
 function adminAsWelcomeHeaders(): Record<string, string> {
@@ -627,7 +631,24 @@ describe('POST /api/welcome/enrollments', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('PATCH /api/welcome/enrollments/:eid (override)', () => {
+  // The route writes the enrollment and its audit row in ONE transaction, so
+  // the callback has to actually run for a write assertion to mean anything.
+  // With no implementation the mock resolves undefined, the callback never
+  // fires, and a test asserting mockDocUpdate fails for a reason unrelated to
+  // the behaviour it is checking.
+  const auditSet = vi.fn();
+  function mockOverrideTxn(existingOverride: number | null = null) {
+    auditSet.mockClear();
+    mockRunTransaction.mockImplementation(async (fn: (txn: unknown) => Promise<unknown>) =>
+      fn({
+        get: async () => ({ data: () => ({ suggestedAmountOverride: existingOverride }) }),
+        update: (_ref: unknown, patch: unknown) => mockDocUpdate(patch),
+        set: (_ref: unknown, row: unknown) => auditSet(row),
+      }),
+    );
+  }
   it('admin can set suggestedAmountOverride', async () => {
+    mockOverrideTxn();
     mockCollectionGet.mockResolvedValue({
       empty: false,
       docs: [{
@@ -637,7 +658,7 @@ describe('PATCH /api/welcome/enrollments/:eid (override)', () => {
     });
 
     const res = await welcomeOverridePATCH(
-      makeRequest('PATCH', `/api/welcome/enrollments/${EID}`, { suggestedAmountOverride: 300 }, welcomeHeaders()),
+      makeRequest('PATCH', `/api/welcome/enrollments/${EID}`, { suggestedAmountOverride: 300, note: 'existing pre-authorized debit with CMT' }, welcomeHeaders()),
       makeCtx('eid', EID),
     );
     expect(res.status).toBe(200);
@@ -647,6 +668,7 @@ describe('PATCH /api/welcome/enrollments/:eid (override)', () => {
   });
 
   it('admin can clear override by setting null', async () => {
+    mockOverrideTxn();
     mockCollectionGet.mockResolvedValue({
       empty: false,
       docs: [{
@@ -656,7 +678,7 @@ describe('PATCH /api/welcome/enrollments/:eid (override)', () => {
     });
 
     const res = await welcomeOverridePATCH(
-      makeRequest('PATCH', `/api/welcome/enrollments/${EID}`, { suggestedAmountOverride: null }, welcomeHeaders()),
+      makeRequest('PATCH', `/api/welcome/enrollments/${EID}`, { suggestedAmountOverride: null, note: 'existing pre-authorized debit with CMT' }, welcomeHeaders()),
       makeCtx('eid', EID),
     );
     expect(res.status).toBe(200);
@@ -669,7 +691,7 @@ describe('PATCH /api/welcome/enrollments/:eid (override)', () => {
     mockCollectionGet.mockResolvedValue({ empty: true, docs: [] });
 
     const res = await welcomeOverridePATCH(
-      makeRequest('PATCH', `/api/welcome/enrollments/${EID}`, { suggestedAmountOverride: 300 }, welcomeHeaders()),
+      makeRequest('PATCH', `/api/welcome/enrollments/${EID}`, { suggestedAmountOverride: 300, note: 'existing pre-authorized debit with CMT' }, welcomeHeaders()),
       makeCtx('eid', EID),
     );
     expect(res.status).toBe(404);
@@ -685,7 +707,7 @@ describe('PATCH /api/welcome/enrollments/:eid (override)', () => {
     });
 
     const res = await welcomeOverridePATCH(
-      makeRequest('PATCH', `/api/welcome/enrollments/${EID}`, { suggestedAmountOverride: 300 }, welcomeHeaders()),
+      makeRequest('PATCH', `/api/welcome/enrollments/${EID}`, { suggestedAmountOverride: 300, note: 'existing pre-authorized debit with CMT' }, welcomeHeaders()),
       makeCtx('eid', EID),
     );
     expect(res.status).toBe(409);
@@ -693,7 +715,7 @@ describe('PATCH /api/welcome/enrollments/:eid (override)', () => {
 
   it('returns 403 for family-manager calling welcome endpoint', async () => {
     const res = await welcomeOverridePATCH(
-      makeRequest('PATCH', `/api/welcome/enrollments/${EID}`, { suggestedAmountOverride: 300 }, managerHeaders()),
+      makeRequest('PATCH', `/api/welcome/enrollments/${EID}`, { suggestedAmountOverride: 300, note: 'existing pre-authorized debit with CMT' }, managerHeaders()),
       makeCtx('eid', EID),
     );
     expect(res.status).toBe(403);
@@ -701,7 +723,7 @@ describe('PATCH /api/welcome/enrollments/:eid (override)', () => {
 
   it('returns 400 on invalid body (non-negative number required, or null)', async () => {
     const res = await welcomeOverridePATCH(
-      makeRequest('PATCH', `/api/welcome/enrollments/${EID}`, { suggestedAmountOverride: -50 }, welcomeHeaders()),
+      makeRequest('PATCH', `/api/welcome/enrollments/${EID}`, { suggestedAmountOverride: -50, note: 'existing pre-authorized debit with CMT' }, welcomeHeaders()),
       makeCtx('eid', EID),
     );
     expect(res.status).toBe(400);
@@ -711,6 +733,7 @@ describe('PATCH /api/welcome/enrollments/:eid (override)', () => {
   // meaningful value - the Adult Study Class exemption for a family that has
   // already paid its Bala Vihar donation - so staff can set it too.
   it('accepts an override of 0 and WRITES the zero (previously a 400)', async () => {
+    mockOverrideTxn();
     // Seeds its own ACTIVE enrollment: the 409 test above uses a persistent
     // mockResolvedValue, so its cancelled doc leaks into every later test here.
     mockCollectionGet.mockResolvedValue({
@@ -719,7 +742,7 @@ describe('PATCH /api/welcome/enrollments/:eid (override)', () => {
     });
 
     const res = await welcomeOverridePATCH(
-      makeRequest('PATCH', `/api/welcome/enrollments/${EID}`, { suggestedAmountOverride: 0 }, welcomeHeaders()),
+      makeRequest('PATCH', `/api/welcome/enrollments/${EID}`, { suggestedAmountOverride: 0, note: 'existing pre-authorized debit with CMT' }, welcomeHeaders()),
       makeCtx('eid', EID),
     );
 
@@ -731,12 +754,69 @@ describe('PATCH /api/welcome/enrollments/:eid (override)', () => {
     );
   });
 
+  it('refuses to write without an actor, so no audit row can name nobody', async () => {
+    mockOverrideTxn();
+    mockCollectionGet.mockResolvedValue({
+      empty: false,
+      docs: [{ ref: { update: mockDocUpdate }, data: () => ({ status: 'active', fid: FID }) }],
+    });
+    const res = await welcomeOverridePATCH(
+      makeRequest('PATCH', `/api/welcome/enrollments/${EID}`, { suggestedAmountOverride: 0, note: 'existing pre-authorized debit with CMT' }, { 'x-portal-role': 'admin' }),
+      makeCtx('eid', EID),
+    );
+    expect(res.status).toBe(401);
+    expect(mockDocUpdate).not.toHaveBeenCalled();
+  });
+
   it('returns 404 when feature flag off', async () => {
     flagsMock.setuAuth = false;
     const res = await welcomeOverridePATCH(
-      makeRequest('PATCH', `/api/welcome/enrollments/${EID}`, { suggestedAmountOverride: 300 }, welcomeHeaders()),
+      makeRequest('PATCH', `/api/welcome/enrollments/${EID}`, { suggestedAmountOverride: 300, note: 'existing pre-authorized debit with CMT' }, welcomeHeaders()),
       makeCtx('eid', EID),
     );
     expect(res.status).toBe(404);
+  });
+
+  // ── The note + audit row (2026-08-03) ─────────────────────────────────────
+  //
+  // This route decides whether a family is asked for $500, so "the write
+  // happened" and "it was recorded" are asserted together - they commit
+  // together or not at all.
+  it('REJECTS an override with no note, however well-formed the amount', async () => {
+    mockOverrideTxn();
+    mockCollectionGet.mockResolvedValue({
+      empty: false,
+      docs: [{ ref: { update: mockDocUpdate }, data: () => ({ status: 'active', fid: FID }) }],
+    });
+    const res = await welcomeOverridePATCH(
+      makeRequest('PATCH', `/api/welcome/enrollments/${EID}`, { suggestedAmountOverride: 0 }, welcomeHeaders()),
+      makeCtx('eid', EID),
+    );
+    expect(res.status).toBe(400);
+    expect(mockDocUpdate).not.toHaveBeenCalled();
+  });
+
+  it('records WHO changed it, from WHAT, and WHY - in the same transaction', async () => {
+    mockOverrideTxn(250); // this family already had a $250 override
+    mockCollectionGet.mockResolvedValue({
+      empty: false,
+      docs: [{ ref: { update: mockDocUpdate }, data: () => ({ status: 'active', fid: FID }) }],
+    });
+
+    const res = await welcomeOverridePATCH(
+      makeRequest('PATCH', `/api/welcome/enrollments/${EID}`, { suggestedAmountOverride: 0, note: 'existing pre-authorized debit with CMT' }, welcomeHeaders()),
+      makeCtx('eid', EID),
+    );
+
+    expect(res.status).toBe(200);
+    expect(auditSet).toHaveBeenCalledTimes(1);
+    const row = auditSet.mock.calls[0]![0] as Record<string, unknown>;
+    expect(row['action']).toBe('enrollment.payment-override');
+    expect(row['fid']).toBe(FID);
+    // BEFORE is re-read INSIDE the transaction, not carried from the earlier
+    // collectionGroup query - so a concurrent change cannot make the row claim
+    // a previous amount that was never there.
+    expect(row['before']).toEqual({ suggestedAmountOverride: 250 });
+    expect(row['after']).toEqual({ suggestedAmountOverride: 0, note: 'existing pre-authorized debit with CMT' });
   });
 });

@@ -88,6 +88,24 @@ export type WelcomePostEnrollmentBody = z.infer<typeof WelcomePostEnrollmentBody
 // Negatives are still rejected.
 export const OverrideEnrollmentBodySchema = z.object({
   suggestedAmountOverride: z.number().int().nonnegative().nullable(),
+  /**
+   * WHY this family's ask was changed. REQUIRED - deliberately not optional.
+   *
+   * Vaibhav, 2026-08-03, on marking legacy pre-authorized-debit donors as
+   * settled: *"we have mark the enrollment manually... we can also add some
+   * notes and record it probably"*.
+   *
+   * The note is the entire point of the audit row. An override with no reason
+   * is indistinguishable from a mistake a year later, when the person who made
+   * it has forgotten and the family is asking why they were never billed. A
+   * `.optional()` here would mean the one field that makes the log worth
+   * keeping is the one every caller can skip.
+   *
+   * Trimmed and length-bounded: `.min(3)` after trim rejects " " and "x",
+   * which are the ways a required field gets defeated in practice; the max
+   * keeps a pasted essay out of a Firestore document.
+   */
+  note: z.string().trim().min(3).max(500),
 });
 
 export type OverrideEnrollmentBody = z.infer<typeof OverrideEnrollmentBodySchema>;

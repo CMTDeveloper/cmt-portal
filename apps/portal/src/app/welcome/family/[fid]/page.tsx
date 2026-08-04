@@ -6,7 +6,12 @@ import { CspRoot } from '@/features/family/components/atoms';
 import { getFamilyForWelcome } from '@/features/setu/search/get-family-for-welcome';
 import { getFamilySevaProgress, type FamilySevaProgress } from '@/features/setu/seva/get-family-seva-progress';
 import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
-import { isWelcomeTeam, isCoordinator, type WithRole } from '@cmt/shared-domain';
+import { isWelcomeTeam, isCoordinator, isAdmin, type WithRole } from '@cmt/shared-domain';
+import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
+import {
+  PaymentOverrideControl,
+  type PaymentOverrideEnrollment,
+} from '@/features/setu/enrollment/components/payment-override-control';
 import { displayFid } from '@cmt/shared-domain/setu';
 import type { FamilyDoc, MemberDoc } from '@cmt/shared-domain/setu';
 import { cookies } from 'next/headers';
@@ -39,6 +44,11 @@ export async function WelcomeFamilyDetailBody({
   // isWelcomeTeam() helper handles multi-role: admin inherits welcome-team,
   // and a family-manager with extraRoles=['welcome-team'] also passes.
   let allowed = false;
+  // Tracked separately from `allowed`: this page admits welcome-team AND
+  // coordinator (both need to read a family), but the payment override is
+  // admin-only. Deriving one from the other is exactly how a money control
+  // leaks to a role that was never granted it.
+  let admin = false;
   if (sessionCookie) {
     const raw = await verifyPortalSessionCookie(sessionCookie);
     // Coordinator reaches this page too: every /welcome/roster row links here,
@@ -46,6 +56,7 @@ export async function WelcomeFamilyDetailBody({
     // Spec 3.1 excludes family EDIT from coordinator, not family READ.
     if (raw && (isWelcomeTeam(raw as unknown as WithRole) || isCoordinator(raw as unknown as WithRole))) {
       allowed = true;
+      admin = isAdmin(raw as unknown as WithRole);
     }
   }
   if (!allowed) {
@@ -62,6 +73,29 @@ export async function WelcomeFamilyDetailBody({
   if (!data) notFound();
 
   const sevaProgress = await getFamilySevaProgress(fid);
+
+  // ADMIN ONLY, and not loaded at all otherwise - a coordinator viewing this
+  // page pays no extra read for a control they will never be shown.
+  // Fail-soft: the override is a staff convenience, and losing it must not cost
+  // the family detail a coordinator actually came here for.
+  const overridable: PaymentOverrideEnrollment[] = admin
+    ? await getEnrollments(fid)
+        .then((rows) =>
+          rows
+            .filter((e) => e.status === 'active')
+            .map((e) => ({
+              eid: e.eid,
+              programLabel: e.programLabel,
+              termLabel: e.termLabel,
+              effectiveSuggestedAmount: e.effectiveSuggestedAmount,
+              suggestedAmountOverride: e.suggestedAmountOverride ?? null,
+            })),
+        )
+        .catch((err) => {
+          console.error('[welcome-family] could not read enrollments for the override control', err);
+          return [];
+        })
+    : [];
 
   const { family, members } = data;
   const adults = members.filter((m) => m.type !== 'Child');
@@ -81,7 +115,7 @@ export async function WelcomeFamilyDetailBody({
               <div style={{ width: 32 }}/>
             </div>
             <div style={{ flex: 1, overflowY: 'auto', padding: '18px 18px 90px' }}>
-              <FamilyDetailBody family={family} members={members} adults={adults} children={children} sevaProgress={sevaProgress}/>
+              <FamilyDetailBody family={family} members={members} adults={adults} children={children} sevaProgress={sevaProgress} overridable={overridable}/>
             </div>
           </div>
         </CspRoot>
@@ -98,7 +132,7 @@ export async function WelcomeFamilyDetailBody({
           </p>
           <h1 style={{ fontSize: 38, fontWeight: 400, marginTop: 6 }}>The {family.name} Family</h1>
         </header>
-        <FamilyDetailBody family={family} members={members} adults={adults} children={children} sevaProgress={sevaProgress}/>
+        <FamilyDetailBody family={family} members={members} adults={adults} children={children} sevaProgress={sevaProgress} overridable={overridable}/>
       </div>
     </>
   );
@@ -110,9 +144,11 @@ type FamilyDetailBodyProps = {
   adults: MemberDoc[];
   children: MemberDoc[];
   sevaProgress: FamilySevaProgress;
+  /** Empty for non-admins - the control is admin-only and the data is not even read. */
+  overridable: PaymentOverrideEnrollment[];
 };
 
-function FamilyDetailBody({ family, members, adults, children, sevaProgress }: FamilyDetailBodyProps) {
+function FamilyDetailBody({ family, members, adults, children, sevaProgress, overridable }: FamilyDetailBodyProps) {
   const sevaMet = sevaProgress.hoursEarned >= sevaProgress.hoursPerYear;
 
   return (
@@ -129,6 +165,26 @@ function FamilyDetailBody({ family, members, adults, children, sevaProgress }: F
           <span>Since: {family.createdAt.getFullYear()}</span>
         </div>
       </div>
+
+      {/* ── Donation, for ADMINS only ──────────────────────────────────────────
+          `overridable` is empty for every other role - the page does not even
+          read the enrollments - so this section cannot render for a coordinator
+          or a welcome-team volunteer. The route enforces the same rule again;
+          this is the page-level half of the repo's three-gate requirement. */}
+      {overridable.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: '.1em', textTransform: 'uppercase', marginBottom: 4 }}>
+            Donation
+          </div>
+          <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5, margin: '0 0 4px' }}>
+            Use this when a family&apos;s donation is already collected outside the portal - an
+            existing pre-authorized debit, or a payment handled by the office.
+          </p>
+          {overridable.map((e) => (
+            <PaymentOverrideControl key={e.eid} enrollment={e} />
+          ))}
+        </div>
+      )}
 
       {/* Seva hours card — omitted entirely when no current seva year is set */}
       {sevaProgress.currentSevaYear && (
