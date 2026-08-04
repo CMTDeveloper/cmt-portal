@@ -31,9 +31,16 @@ import { test, expect, type Page } from '@playwright/test';
 import { TEST_ACCOUNT_EMAILS, TEST_ACCOUNTS_PASSWORD, hasTestAccounts, E2E_BASE_URL } from '../_helpers';
 
 /**
- * Headroom over the measured 2 (the document plus its CORS preflight), so an
- * incidental extra request does not fail the build - while still failing long
- * before anything approaches the 37 that prompted this.
+ * Headroom over the measured 2, so an incidental extra request does not fail
+ * the build - while still failing long before anything approaches the 37 that
+ * prompted this.
+ *
+ * The measured 2 are the page document itself and one `OPTIONS /` that answers
+ * 307. An earlier version of this comment called that second one "the document's
+ * CORS preflight", which is wrong and was worth correcting rather than leaving
+ * to mislead: a same-origin top-level navigation is never preflighted - browsers
+ * do not preflight document navigations at all. If a budget failure ever needs
+ * debugging, read the printed `seen` list rather than trusting a label.
  */
 const BUDGET = 8;
 
@@ -133,6 +140,48 @@ test.describe('family dashboard request budget', () => {
       'the server passes the list to PendingJoinRequestsPanel as initialRequests; ' +
         'a call here means a mount effect came back',
     ).toBe(0);
+  });
+});
+
+/**
+ * The ZERO-CHILDREN dashboard, which the budget above cannot reach.
+ *
+ * `/family/page.tsx` picks its CTA on `familyCounts.children === 0`: no children
+ * gives "Add a child to enroll" (-> /family/members/new), otherwise "Enroll now"
+ * (-> /family/enroll). The parentBrampton fixture has two children, so the
+ * zero-children branch never renders during the test above - and that branch
+ * holds the one Link in `enrollCta` that did NOT get prefetch={false}.
+ *
+ * Flagged by a Codex review as unverified either way. It is plausibly fine
+ * (/family/members/new is a client component with no server data of its own, so
+ * unlike the dynamic /family routes its prefetch may be genuinely reusable) -
+ * but "plausibly fine" is not a measurement, and this is the one code path the
+ * whole effort had not exercised. The teacher personas are seeded with
+ * `children: []` and land on /family, so they render it for free.
+ */
+test.describe('family dashboard request budget (zero children)', () => {
+  test.skip(!hasTestAccounts, 'TEST_ACCOUNTS_PASSWORD required (run seed:test-accounts first)');
+  test.setTimeout(120_000);
+
+  test('the "Add a child" dashboard stays within budget', async ({ page }) => {
+    const origin = new URL(E2E_BASE_URL).origin;
+
+    const res = await page.request.post('/api/setu/auth/password-sign-in', {
+      data: { email: TEST_ACCOUNT_EMAILS.teacherBrampton, password: TEST_ACCOUNTS_PASSWORD },
+    });
+    expect(res.ok(), `sign-in failed: ${res.status()} ${await res.text()}`).toBeTruthy();
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    const seen = watch(page, origin);
+    await page.goto('/family', { waitUntil: 'load' });
+    expect(new URL(page.url()).pathname).toBe('/family');
+    await page.waitForTimeout(4000);
+
+    expect(duplicates(seen), 'no route should be requested twice for one page view').toEqual([]);
+    expect(
+      seen.length,
+      `request budget exceeded. Saw:\n${seen.map((s) => `  ${s.path}${s.prefetch ? ' (prefetch)' : ''}`).join('\n')}`,
+    ).toBeLessThanOrEqual(BUDGET);
   });
 });
 

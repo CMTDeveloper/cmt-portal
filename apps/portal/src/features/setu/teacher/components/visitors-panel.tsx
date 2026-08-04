@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState, useTransition } from 'react';
+import { useCallback, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { toast } from '@cmt/ui';
 import { CHILD_GRADE_OPTIONS, gradeLabel } from '@cmt/shared-domain';
@@ -34,6 +34,28 @@ interface VisitorsPanelProps {
   levelId: string;
   levelName: string;
   date: string;
+  /**
+   * The view the SERVER already computed, so this panel does not ask for it a
+   * second time.
+   *
+   * 🔴 REQUIRED, and the prop that stops a proven double read. `VisitorsPage`
+   * awaits `getLevelVisitorsView(levelId, date)` - three parallel Firestore
+   * reads (door check-ins, portal guest children, detailed guests) - and used
+   * to pass down only `levelId`, `levelName` and `date`, discarding
+   * `doorVisitors` and `confirmed`. This panel's mount effect then called
+   * `GET /api/setu/teacher/visitors`, whose handler calls the very same
+   * `getLevelVisitorsView`. Every teacher opening their Visitors tab paid for
+   * the identical work twice and watched a spinner for data that had already
+   * been fetched before the page was sent.
+   *
+   * Same defect, same week, as the family dashboard's join-request panel; found
+   * by a Codex sweep for that shape after the first one was fixed.
+   *
+   * `load()` still exists and is still correct - it is how the list refreshes
+   * after a teacher confirms a door guest or adds a walk-in. What went away is
+   * the fetch on MOUNT.
+   */
+  initialView: VisitorsView;
 }
 
 /** "Arjun Sharma" → { first: "Arjun", last: "Sharma" }; "Arjun" → { first, last:"" } */
@@ -79,9 +101,11 @@ const sectionHeading: React.CSSProperties = {
   letterSpacing: '0.06em',
 };
 
-export function VisitorsPanel({ levelId, levelName, date }: VisitorsPanelProps) {
-  const [view, setView] = useState<VisitorsView | null>(null);
-  const [loading, setLoading] = useState(true);
+export function VisitorsPanel({ levelId, levelName, date, initialView }: VisitorsPanelProps) {
+  const [view, setView] = useState<VisitorsView | null>(initialView);
+  // Starts false: the server already supplied the view, so the first paint has
+  // real rows rather than a spinner. `load()` sets it true on a REFRESH.
+  const [loading, setLoading] = useState(false);
   const [pending, startTransition] = useTransition();
 
   const [first, setFirst] = useState('');
@@ -102,9 +126,6 @@ export function VisitorsPanel({ levelId, levelName, date }: VisitorsPanelProps) 
     }
   }, [levelId, date]);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
 
   function submitAdd(payload: {
     firstName: string;

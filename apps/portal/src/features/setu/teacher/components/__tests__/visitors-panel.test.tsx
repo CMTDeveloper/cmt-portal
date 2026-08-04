@@ -25,17 +25,34 @@ function mockGetView() {
 }
 
 describe('VisitorsPanel', () => {
+  /**
+   * 🔴 The double-read this panel used to cause.
+   *
+   * `VisitorsPage` awaits `getLevelVisitorsView(levelId, date)` - three parallel
+   * Firestore reads - then passed down only levelId/levelName/date, throwing
+   * `doorVisitors` and `confirmed` away. This panel's mount effect called
+   * `GET /api/setu/teacher/visitors`, whose handler runs the SAME
+   * `getLevelVisitorsView`. So every teacher opening Visitors paid for the
+   * identical work twice and watched a spinner for data already in the page.
+   *
+   * Rendering assertions cannot catch a regression here - re-adding the effect
+   * would still render the right rows. Only counting the fetch can.
+   */
+  it('issues NO request on mount - the server already supplied the view', async () => {
+    render(<VisitorsPanel levelId="L" levelName="Level 1" date="2026-01-04" initialView={VIEW} />);
+    expect(await screen.findByText('Arjun X')).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('loads and shows door visitors, marking already-confirmed ones', async () => {
-    mockGetView();
-    render(<VisitorsPanel levelId="L" levelName="Level 1" date="2026-01-04" />);
+    render(<VisitorsPanel levelId="L" levelName="Level 1" date="2026-01-04" initialView={VIEW} />);
     expect(await screen.findByText('Arjun X')).toBeInTheDocument();
     expect(screen.getByText('Ravi Y')).toBeInTheDocument();
     expect(screen.getByText('Sita Z')).toBeInTheDocument(); // confirmed list
   });
 
   it('quick-adds a walk-in with name only and refetches', async () => {
-    mockGetView(); // initial load
-    render(<VisitorsPanel levelId="L" levelName="Level 1" date="2026-01-04" />);
+    render(<VisitorsPanel levelId="L" levelName="Level 1" date="2026-01-04" initialView={VIEW} />);
     await screen.findByText('Arjun X');
 
     fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ fid: 'CMT-NEW1', childMid: 'CMT-NEW1-02', createdFamily: true, claimable: false }) }); // POST
@@ -52,8 +69,7 @@ describe('VisitorsPanel', () => {
   });
 
   it('renders Grade as a select whose options include the canonical grades', async () => {
-    mockGetView();
-    render(<VisitorsPanel levelId="L" levelName="Level 1" date="2026-01-04" />);
+    render(<VisitorsPanel levelId="L" levelName="Level 1" date="2026-01-04" initialView={VIEW} />);
     await screen.findByText('Arjun X');
 
     // EXACT name, not /grade/i: the door list now has its own "Filter by grade"
@@ -77,13 +93,8 @@ describe('VisitorsPanel', () => {
       { name: 'Ravi Y', grade: '2', parentEmail: 'dad@y.com', parentName: null, phone: null, alreadyConfirmed: true },
     ],
   };
-  function mockMixedView() {
-    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ view: MIXED_VIEW }) });
-  }
-
   it('filters the door list by grade', async () => {
-    mockMixedView();
-    render(<VisitorsPanel levelId="L" levelName="Level 1" date="2026-01-04" />);
+    render(<VisitorsPanel levelId="L" levelName="Level 1" date="2026-01-04" initialView={MIXED_VIEW} />);
     await screen.findByText('Arjun X');
     expect(screen.getByText('Ravi Y')).toBeInTheDocument();
 
@@ -96,16 +107,14 @@ describe('VisitorsPanel', () => {
   // it cannot be filtered even in principle. Pinned so nobody later "fixes" the
   // inconsistency by inventing a grade for it.
   it('leaves the already-marked-present list alone, which has no grade to filter on', async () => {
-    mockMixedView();
-    render(<VisitorsPanel levelId="L" levelName="Level 1" date="2026-01-04" />);
+    render(<VisitorsPanel levelId="L" levelName="Level 1" date="2026-01-04" initialView={MIXED_VIEW} />);
     await screen.findByText('Arjun X');
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Filter by grade' }), '1');
     expect(screen.getByText('Sita Z')).toBeInTheDocument();
   });
 
   it('offers only the grades actually checked in, plus All', async () => {
-    mockMixedView();
-    render(<VisitorsPanel levelId="L" levelName="Level 1" date="2026-01-04" />);
+    render(<VisitorsPanel levelId="L" levelName="Level 1" date="2026-01-04" initialView={MIXED_VIEW} />);
     await screen.findByText('Arjun X');
     const filter = screen.getByRole('combobox', { name: 'Filter by grade' });
     expect(within(filter).getByRole('option', { name: 'Grade 1' })).toBeInTheDocument();
@@ -123,8 +132,7 @@ describe('VisitorsPanel', () => {
   // generic "no door guests match this class" would send them to check the door
   // tablet for a problem that does not exist.
   it('offers a way out when a refetch leaves the chosen grade empty', async () => {
-    mockMixedView();
-    render(<VisitorsPanel levelId="L" levelName="Level 1" date="2026-01-04" />);
+    render(<VisitorsPanel levelId="L" levelName="Level 1" date="2026-01-04" initialView={MIXED_VIEW} />);
     await screen.findByText('Arjun X');
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Filter by grade' }), '2');
     expect(screen.queryByText('Arjun X')).not.toBeInTheDocument();
@@ -145,16 +153,14 @@ describe('VisitorsPanel', () => {
   });
 
   it('hides the filter when every door guest is in the same grade', async () => {
-    mockGetView(); // VIEW: both visitors are grade '1'
-    render(<VisitorsPanel levelId="L" levelName="Level 1" date="2026-01-04" />);
+    render(<VisitorsPanel levelId="L" levelName="Level 1" date="2026-01-04" initialView={VIEW} />);
     await screen.findByText('Arjun X');
     expect(screen.queryByRole('combobox', { name: 'Filter by grade' })).not.toBeInTheDocument();
   });
 
   it('blocks an empty-name quick-add', async () => {
-    mockGetView();
     const { toast } = await import('@cmt/ui');
-    render(<VisitorsPanel levelId="L" levelName="Level 1" date="2026-01-04" />);
+    render(<VisitorsPanel levelId="L" levelName="Level 1" date="2026-01-04" initialView={VIEW} />);
     await screen.findByText('Arjun X');
     await userEvent.click(screen.getByRole('button', { name: /add visitor/i }));
     expect(toast.error).toHaveBeenCalled();
