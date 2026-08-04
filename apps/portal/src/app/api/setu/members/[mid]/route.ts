@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { flags } from '@/lib/flags';
-import { updateMember, deleteMember } from '@/features/setu/members/write-member';
+import { updateMember } from '@/features/setu/members/write-member';
 
 type RouteContext = { params: Promise<{ mid: string }> };
 
@@ -61,29 +61,32 @@ export async function PATCH(req: Request, ctx: RouteContext) {
   return NextResponse.json({ ok: true }, { status: 200 });
 }
 
-export async function DELETE(_req: Request, ctx: RouteContext) {
+/**
+ * CLOSED 2026-08-04. A family cannot remove one of its own members.
+ *
+ * Vaibhav: *"we do not want families to remove any members. At the very least,
+ * they can only disable."* Withdrawing the button was not enough - a rule that
+ * lives only in a component is not a rule, and this handler was still accepting
+ * any family-manager session that reached it (a devtools call, a bookmarked
+ * flow, the mobile app, or the next UI regression).
+ *
+ * It was also the WORST path to leave open: it called `deleteMember` with
+ * `actor: null`, so a family delete wrote no audit row at all. Every remaining
+ * delete goes through `DELETE /api/welcome/families/{fid}/members/{mid}`, which
+ * is admin-only and always names who did it.
+ *
+ * Kept as an explicit 403 rather than deleted outright: a 405 or a 404 tells a
+ * caller nothing, and the mobile app mirrors these routes by hand. A stable
+ * error code is how it learns this is deliberate. Families keep the reversible
+ * answer - PATCH this same member with `{ participation: 'inactive' }`.
+ */
+export async function DELETE(_req: Request, _ctx: RouteContext) {
   if (!flags.setuAuth) {
     return NextResponse.json({ error: 'not-found' }, { status: 404 });
   }
 
-  const role = _req.headers.get('x-portal-role');
-  const fid = _req.headers.get('x-portal-fid');
-  const { mid: targetMid } = await ctx.params;
-
-  if (!role) {
-    return NextResponse.json({ error: 'no-session' }, { status: 401 });
-  }
-  if (role !== 'family-manager') {
-    return NextResponse.json({ error: 'manager-required' }, { status: 403 });
-  }
-  if (!fid) {
-    return NextResponse.json({ error: 'missing-fid' }, { status: 400 });
-  }
-
-  const result = await deleteMember({ fid, mid: targetMid, actor: null });
-  if (!result.ok) {
-    return NextResponse.json(result.body, { status: result.status });
-  }
-
-  return NextResponse.json({ ok: true }, { status: 200 });
+  return NextResponse.json(
+    { error: 'families-cannot-remove-members', hint: 'Set participation to inactive instead.' },
+    { status: 403 },
+  );
 }

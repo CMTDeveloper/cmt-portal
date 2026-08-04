@@ -20,12 +20,13 @@ vi.mock('@/features/setu/registration/hash-contact-key', () => ({
 }));
 
 const mockRevokeMemberSessions = vi.hoisted(() => vi.fn());
-// The mock's RESURRECTABLE_SEVAK_CAPS is DERIVED from the real GRANTABLE_ROLES,
 // never a hardcoded copy. A hardcoded list here would keep this suite green
 // while the production strip-list silently failed to cover a newly grantable
 // role - which is precisely the escalation the constant exists to prevent.
 // Only `revoke-sessions` itself is stubbed; shared-domain is imported for real.
 vi.mock('@/features/setu/auth/revoke-sessions', async () => {
+  // The mock's RESURRECTABLE_SEVAK_CAPS is DERIVED from the real GRANTABLE_ROLES,
+  // never a hand-copied list, so a newly grantable role is covered automatically.
   const { GRANTABLE_ROLES } = await vi.importActual<typeof import('@cmt/shared-domain')>('@cmt/shared-domain');
   return {
     revokeMemberSessions: mockRevokeMemberSessions,
@@ -34,7 +35,6 @@ vi.mock('@/features/setu/auth/revoke-sessions', async () => {
 });
 
 import { PATCH, DELETE } from '../route';
-import { GRANTABLE_ROLES } from '@cmt/shared-domain';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { assertNotLastManager, LastManagerError } from '@/features/setu/members';
 import { revalidateTag } from 'next/cache';
@@ -504,154 +504,44 @@ describe('PATCH /api/setu/members/[mid]', () => {
 
 // ─── DELETE ───────────────────────────────────────────────────────────────────
 
-describe('DELETE /api/setu/members/[mid]', () => {
-  it('returns 401 when no session', async () => {
-    const res = await DELETE(makeRequest('DELETE', null), { params: Promise.resolve(params) });
-    expect(res.status).toBe(401);
-  });
-
-  it('returns 403 when family-member tries to delete', async () => {
-    const res = await DELETE(
-      makeRequest('DELETE', null, memberHeaders()),
-      { params: Promise.resolve(params) },
-    );
-    expect(res.status).toBe(403);
-    const body = await res.json();
-    expect(body.error).toBe('manager-required');
-  });
-
-  it('returns 404 when member does not exist', async () => {
-    mockGet
-      .mockResolvedValueOnce(familySnap)
-      .mockResolvedValueOnce({ exists: false });
-
-    const res = await DELETE(makeRequest('DELETE', null, managerHeaders()), { params: Promise.resolve(params) });
-    expect(res.status).toBe(404);
-  });
-
-  it('calls assertNotLastManager when deleting a manager', async () => {
-    const managerMemberSnap = {
-      exists: true,
-      data: () => ({ ...memberSnap.data(), manager: true, mid: 'FAM001ABCD12-01' }),
-    };
-    const singleManagerFamilySnap = {
-      exists: true,
-      data: () => ({ fid: 'FAM001ABCD12', managers: ['FAM001ABCD12-01'] }),
-    };
-    mockGet
-      .mockResolvedValueOnce(singleManagerFamilySnap)
-      .mockResolvedValueOnce(managerMemberSnap);
-
-    (assertNotLastManager as ReturnType<typeof vi.fn>).mockImplementation(() => {
-      throw new (LastManagerError as unknown as new (op: string) => Error)('remove');
-    });
-
-    const res = await DELETE(makeRequest('DELETE', null, managerHeaders()), {
-      params: Promise.resolve({ mid: 'FAM001ABCD12-01' }),
-    });
-    expect(res.status).toBe(409);
-    const body = await res.json();
-    expect(body.error).toBe('last-manager');
-  });
-
-  it('returns 200 on successful delete of non-manager member', async () => {
-    mockGet
-      .mockResolvedValueOnce(familySnap)
-      .mockResolvedValueOnce(memberSnap);
-
-    const res = await DELETE(makeRequest('DELETE', null, managerHeaders()), { params: Promise.resolve(params) });
-    expect(res.status).toBe(200);
-    expect(vi.mocked(revalidateTag)).toHaveBeenCalledWith('family-FAM001ABCD12', 'max');
-  });
-
-  it('removes contactKey docs the member OWNS (email/phone)', async () => {
-    const memberWithContactSnap = {
-      exists: true,
-      data: () => ({
-        ...memberSnap.data(),
-        email: 'diya@example.com',
-        phone: '4165559999',
-      }),
-    };
-    // targetMid FAM001ABCD12-02 owns both its contactKeys.
-    const ownedKey = { exists: true, data: () => ({ mid: 'FAM001ABCD12-02' }) };
-    mockGet
-      .mockResolvedValueOnce(familySnap)
-      .mockResolvedValueOnce(memberWithContactSnap)
-      .mockResolvedValueOnce(ownedKey) // email contactKey read
-      .mockResolvedValueOnce(ownedKey); // phone contactKey read
-
-    await DELETE(makeRequest('DELETE', null, managerHeaders()), { params: Promise.resolve(params) });
-    // mockTxnDelete called for member + email contactKey + phone contactKey
-    expect(mockTxnDelete).toHaveBeenCalledTimes(3);
-    // The removed member's sessions are revoked and any persisted sevak caps
-    // stripped from both uids (else a deleted admin re-mints on next sign-in).
-    expect(mockRevokeMemberSessions).toHaveBeenCalledWith({
-      email: 'diya@example.com',
-      phone: '4165559999',
-      stripCaps: [...GRANTABLE_ROLES],
-    });
-    // Named explicitly, because `coordinator` is the case that made this
-    // dangerous: a coordinator needs no family, so a surviving claim on a
-    // deleted member re-mints as a STANDALONE session holding every family's
-    // roster PII plus program/level/pricing writes.
-    const { stripCaps } = mockRevokeMemberSessions.mock.calls[0]![0] as { stripCaps: string[] };
-    expect(stripCaps).toContain('coordinator');
-    expect(stripCaps).toContain('admin');
-    expect(stripCaps).toContain('welcome-team');
-  });
-
-  it('does NOT delete a contactKey owned by a relative (shared contact — lockout fix)', async () => {
-    // A child that shares the manager's email: the email contactKey is owned by
-    // the MANAGER (-01), not the deleted child (-02). Deleting the child must
-    // leave the manager's key intact or the manager can no longer sign in.
-    const childSharingManagerEmail = {
-      exists: true,
-      data: () => ({
-        ...memberSnap.data(),
-        mid: 'FAM001ABCD12-02',
-        email: 'manager@example.com',
-        phone: null,
-      }),
-    };
-    mockGet
-      .mockResolvedValueOnce(familySnap)
-      .mockResolvedValueOnce(childSharingManagerEmail)
-      .mockResolvedValueOnce({ exists: true, data: () => ({ mid: 'FAM001ABCD12-01' }) }); // owned by manager
-
+describe('DELETE /api/setu/members/[mid] - CLOSED to families (2026-08-04)', () => {
+  // Vaibhav: "we do not want families to remove any members. At the very least,
+  // they can only disable." Withdrawing the button was not enough - this handler
+  // still accepted any family-manager session that reached it, and called
+  // deleteMember with `actor: null`, so a family delete wrote NO audit row at
+  // all. The remaining delete path is the admin-only welcome route, which always
+  // names who did it.
+  //
+  // The behaviours this describe used to cover (last-manager, 404, contactKey
+  // ownership) did not go with it: they moved to write-member.test.ts, which
+  // tests deleteMember directly and is where the rules actually live.
+  it('refuses a family MANAGER - the role that used to be allowed', async () => {
     const res = await DELETE(makeRequest('DELETE', null, managerHeaders()), {
       params: Promise.resolve(params),
     });
-    expect(res.status).toBe(200);
-    // Only the member doc is deleted — the manager-owned contactKey is preserved.
-    expect(mockTxnDelete).toHaveBeenCalledTimes(1);
+    expect(res.status).toBe(403);
+    expect((await res.json()).error).toBe('families-cannot-remove-members');
   });
 
-  it('removes family managers array entry when deleting a non-last manager', async () => {
-    const twoManagerFamilySnap = {
-      exists: true,
-      data: () => ({ fid: 'FAM001ABCD12', managers: ['FAM001ABCD12-01', 'FAM001ABCD12-02'] }),
-    };
-    const managerMemberSnap = {
-      exists: true,
-      data: () => ({ ...memberSnap.data(), manager: true, mid: 'FAM001ABCD12-02' }),
-    };
-    mockGet
-      .mockResolvedValueOnce(twoManagerFamilySnap)
-      .mockResolvedValueOnce(managerMemberSnap);
-
-    (assertNotLastManager as ReturnType<typeof vi.fn>).mockReturnValue(undefined);
-
-    const res = await DELETE(makeRequest('DELETE', null, managerHeaders()), { params: Promise.resolve(params) });
-    expect(res.status).toBe(200);
-    expect(mockTxnSet).toHaveBeenCalled();
+  it('refuses a plain family member too', async () => {
+    const res = await DELETE(makeRequest('DELETE', null, memberHeaders()), {
+      params: Promise.resolve(params),
+    });
+    expect(res.status).toBe(403);
   });
 
-  it('returns 404 when feature flag is off', async () => {
-    vi.resetModules();
-    vi.doMock('@/lib/flags', () => ({ flags: { setuAuth: false } }));
-    const { DELETE: flaggedDELETE } = await import('../route');
-    const res = await flaggedDELETE(makeRequest('DELETE', null, managerHeaders()), { params: Promise.resolve(params) });
-    expect(res.status).toBe(404);
+  // The point of the whole change: nothing is deleted, by anyone, through here.
+  it('never reaches the delete path', async () => {
+    await DELETE(makeRequest('DELETE', null, managerHeaders()), { params: Promise.resolve(params) });
+    expect(mockTxnDelete).not.toHaveBeenCalled();
+  });
+
+  // The refusal names the alternative, because the mobile app mirrors these
+  // routes by hand and a bare 403 would read as a bug to whoever hits it.
+  it('points the caller at the reversible action instead', async () => {
+    const res = await DELETE(makeRequest('DELETE', null, managerHeaders()), {
+      params: Promise.resolve(params),
+    });
+    expect((await res.json()).hint).toMatch(/inactive/i);
   });
 });

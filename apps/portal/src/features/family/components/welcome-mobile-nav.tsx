@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { SetuIcon } from '@cmt/ui';
@@ -127,6 +127,23 @@ export function WelcomeMobileNav(audience: WelcomeNavAudience) {
   // it. That is what frees the fifth cell for a destination instead.
   const overflowActive = overflow.some((i) => i.match(pathname));
 
+  // Escape closes the sheet.
+  //
+  // On DOCUMENT, not on the overlay: opening the sheet leaves focus on the
+  // "More" button, which sits OUTSIDE the overlay, so a handler on the overlay
+  // would never receive the key. Without this a keyboard user can open the
+  // sheet and has no way out but to activate a link inside it - the backdrop
+  // click is no help to someone with no pointer. Flagged by Codex review; the
+  // family and admin sheets have the same gap, tracked separately.
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMoreOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [moreOpen]);
+
   const cell: React.CSSProperties = {
     background: 'transparent',
     border: 0,
@@ -164,8 +181,17 @@ export function WelcomeMobileNav(audience: WelcomeNavAudience) {
     <>
       {moreOpen && (
         // `csp` so the sheet's brand tokens resolve outside any CspRoot.
+        //
+        // Escape closes it. Without that a keyboard user could OPEN the sheet
+        // and then have no way out except activating one of the links inside -
+        // a trap the backdrop click does nothing about, because there is no
+        // pointer. Flagged by Codex review; the family and admin sheets have the
+        // same gap and are tracked separately rather than changed here.
         <div
           className="csp"
+          role="dialog"
+          aria-modal="true"
+          aria-label="More destinations"
           onClick={() => setMoreOpen(false)}
           style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.32)', display: 'flex', alignItems: 'flex-end' }}
         >

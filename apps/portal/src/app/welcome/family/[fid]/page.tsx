@@ -96,6 +96,12 @@ export async function WelcomeFamilyDetailBody({
               termLabel: e.termLabel,
               effectiveSuggestedAmount: e.effectiveSuggestedAmount,
               suggestedAmountOverride: e.suggestedAmountOverride ?? null,
+              // Absent on every enrollment written before 2026-08-04, so `=== true`
+              // rather than a truthiness check. Omitting it here is what let the
+              // control keep reading a bare `0` as "settled" after the rest of the
+              // app had stopped - a hand-mapped projection dropping a new field,
+              // silently, because the object is built by listing fields.
+              settledOffPortal: e.settledOffPortal === true,
             })),
         )
         .catch((err) => {

@@ -257,6 +257,31 @@ describe('DELETE /api/welcome/families/[fid]/members/[mid]', () => {
     expect(rows[0]).toMatchObject({ action: 'member.delete', fid: TARGET_FID, mid: TARGET_MID, after: null });
   });
 
+  // Moved here 2026-08-04 from the family-scoped DELETE route test, which was
+  // deleted when that route closed. It guards a real escalation: a removed
+  // member's session carries their claims for up to 14 days, and a persisted
+  // sevak capability would re-mint as a STANDALONE session on next sign-in -
+  // holding every family's roster PII, with no family of their own to scope it.
+  it('strips resurrectable sevak capabilities from the removed member', async () => {
+    useDb(seed());
+    const res = await DELETE(makeRequest('DELETE', null, adminHeaders()), ctx);
+
+    expect(res.status).toBe(200);
+    expect(mockRevokeMemberSessions).toHaveBeenCalledTimes(1);
+    // The hoisted mock is declared with no parameters, so its recorded call
+    // tuple is typed empty. Read the arguments through `unknown` rather than
+    // widening the mock's own signature, which would weaken every other
+    // assertion in this file.
+    const [args] = mockRevokeMemberSessions.mock.calls[0] as unknown as [{ stripCaps: string[] }];
+    const { stripCaps } = args;
+    // Named individually rather than compared to the constant: `coordinator` is
+    // the case that made this dangerous, and an assertion against the same
+    // constant the code uses would pass even if that constant lost a role.
+    expect(stripCaps).toContain('coordinator');
+    expect(stripCaps).toContain('admin');
+    expect(stripCaps).toContain('welcome-team');
+  });
+
   it('refuses to remove the last manager', async () => {
     useDb({
       [`families/${TARGET_FID}`]: { fid: TARGET_FID, managers: [TARGET_MID] },
