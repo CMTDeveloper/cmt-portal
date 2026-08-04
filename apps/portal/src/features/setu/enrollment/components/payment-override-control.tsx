@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { toast } from '@cmt/ui';
+import { ADULT_STUDY_CLASS } from '@cmt/shared-domain';
 import { setEnrollmentOverride } from '../override-client';
 
 export interface PaymentOverrideEnrollment {
@@ -81,9 +82,24 @@ export function PaymentOverrideControl({
   // component's own SETTLED fixture was `{ suggestedAmountOverride: 0 }` and
   // encoded the same mistake.
   const settled = enrollment.settledOffPortal;
+  const zeroed = !settled && enrollment.suggestedAmountOverride === 0;
   // A zero the admin did not put there. Nothing to undo - the waiver follows
   // from the Bala Vihar payment, so the way to change it is to change that.
-  const waived = !settled && enrollment.suggestedAmountOverride === 0;
+  //
+  // Scoped to the ADULT STUDY CLASS, because that is the only place the waiver
+  // is ever written: `api/setu/adult-class/route.ts` is the single code path
+  // that emits `suggestedAmountOverride: 0` without a settlement, and it only
+  // ever enrols into this one program. Without the scope this branch swallowed
+  // every bare zero - including the Bala Vihar enrollment of the ONE production
+  // family settled before the flag existed, which would have shown them "covered
+  // by this family's Bala Vihar donation" ON their Bala Vihar enrollment and,
+  // far worse, offered no button at all to re-record the settlement.
+  const waived = zeroed && enrollment.programKey === ADULT_STUDY_CLASS;
+  // A zero with no recorded reason: a settlement made before `settledOffPortal`
+  // existed, or a staff amount nobody explained. It still needs the action -
+  // that is how it acquires a reason - but never "Undo", which on an
+  // unattributed zero could just as easily be clearing something load-bearing.
+  const unexplainedZero = zeroed && !waived;
   // Trimmed, because the server trims too - a form that enables Save on "   "
   // and then shows a 400 has taught the user nothing.
   const noteOk = note.trim().length >= 3;
@@ -141,7 +157,9 @@ export function PaymentOverrideControl({
               ? 'Marked settled outside the portal - not being asked to donate'
               : waived
                 ? 'Included - covered by this family’s Bala Vihar donation'
-                : `Currently asked for $${enrollment.effectiveSuggestedAmount}`}
+                : unexplainedZero
+                  ? 'Not being asked to donate - no reason recorded'
+                  : `Currently asked for $${enrollment.effectiveSuggestedAmount}`}
           </div>
         </div>
         {/* No button on a WAIVED enrollment. The zero was not an admin decision,
