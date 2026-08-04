@@ -54,20 +54,63 @@ describe('EnrollmentDocSchema.suggestedAmountOverride', () => {
 });
 
 describe('OverrideEnrollmentBodySchema', () => {
+  // 2026-08-03: `note` became REQUIRED. Every case below carries one, because
+  // the amount rules and the note rule are independent and a fixture that
+  // omitted it would only ever prove the note rule.
+  const note = 'Existing pre-authorized debit with CMT';
+
   // Same relaxation on the write side. This WIDENS the welcome-team
   // PATCH /api/welcome/enrollments/[eid]/override contract: staff can now zero
   // an override deliberately, which previously 400'd.
   it('accepts 0 so staff can zero an override deliberately', () => {
-    expect(OverrideEnrollmentBodySchema.safeParse({ suggestedAmountOverride: 0 }).success).toBe(true);
+    expect(OverrideEnrollmentBodySchema.safeParse({ suggestedAmountOverride: 0, note }).success).toBe(true);
   });
 
   it('accepts null and a positive amount', () => {
-    expect(OverrideEnrollmentBodySchema.safeParse({ suggestedAmountOverride: null }).success).toBe(true);
-    expect(OverrideEnrollmentBodySchema.safeParse({ suggestedAmountOverride: 750 }).success).toBe(true);
+    expect(OverrideEnrollmentBodySchema.safeParse({ suggestedAmountOverride: null, note }).success).toBe(true);
+    expect(OverrideEnrollmentBodySchema.safeParse({ suggestedAmountOverride: 750, note }).success).toBe(true);
   });
 
   it('still rejects a negative amount', () => {
-    expect(OverrideEnrollmentBodySchema.safeParse({ suggestedAmountOverride: -50 }).success).toBe(false);
+    expect(OverrideEnrollmentBodySchema.safeParse({ suggestedAmountOverride: -50, note }).success).toBe(false);
+  });
+
+  // ── The note (2026-08-03) ─────────────────────────────────────────────────
+  //
+  // This route decides whether a family is asked for $500. The audit row is the
+  // justification for allowing it at all, and the note is the only part of that
+  // row a human can actually learn from a year later. So the schema - not the
+  // form - is where it is enforced: a UI-only rule is not a rule.
+  it('REJECTS a body with no note at all', () => {
+    expect(OverrideEnrollmentBodySchema.safeParse({ suggestedAmountOverride: 0 }).success).toBe(false);
+  });
+
+  it('rejects the ways a required string gets defeated in practice', () => {
+    // Empty, whitespace-only, and too short to mean anything. `.trim()` runs
+    // before `.min(3)`, so "  " has length 0 by the time the check happens.
+    for (const bad of ['', '   ', 'x', 'ok']) {
+      expect(
+        OverrideEnrollmentBodySchema.safeParse({ suggestedAmountOverride: 0, note: bad }).success,
+        `note ${JSON.stringify(bad)} should be rejected`,
+      ).toBe(false);
+    }
+  });
+
+  it('trims the stored note, so padding cannot smuggle in a blank-looking reason', () => {
+    const parsed = OverrideEnrollmentBodySchema.parse({
+      suggestedAmountOverride: 0,
+      note: '   paid by cheque   ',
+    });
+    expect(parsed.note).toBe('paid by cheque');
+  });
+
+  it('rejects an essay - the row lands in a Firestore document', () => {
+    expect(
+      OverrideEnrollmentBodySchema.safeParse({ suggestedAmountOverride: 0, note: 'a'.repeat(501) }).success,
+    ).toBe(false);
+    expect(
+      OverrideEnrollmentBodySchema.safeParse({ suggestedAmountOverride: 0, note: 'a'.repeat(500) }).success,
+    ).toBe(true);
   });
 });
 

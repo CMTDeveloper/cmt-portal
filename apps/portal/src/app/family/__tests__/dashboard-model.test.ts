@@ -428,3 +428,52 @@ describe('an active monthly pledge satisfies the Bala Vihar donation', () => {
     expect(m.bvState).toBe('registered');
   });
 });
+
+// ── Marked settled off-portal (2026-08-03) ──────────────────────────────────
+//
+// The admin control on /welcome/family/[fid] writes `suggestedAmountOverride: 0`
+// for a family whose donation is already collected outside the portal - a
+// long-standing pre-authorized debit with CMT. `getEnrollments` resolves
+// `effectiveSuggestedAmount` FROM that override, so the family's ask becomes 0.
+//
+// 🔴 These assert the thing that would embarrass us: telling a family they are
+// settled and then still showing them a payment button. The dashboard suppresses
+// the donate banner with `!donationComplete` (page.tsx), so `complete` is the
+// flag the whole outcome hangs on - and it becomes true here only because
+// `givenForPeriod (0) >= suggestedAmount (0)`, which is easy to break by
+// "tightening" that comparison to `> 0`.
+describe('an enrollment marked settled off-portal (override 0)', () => {
+  const SETTLED = makeEnrollment({ suggestedAmountOverride: 0, effectiveSuggestedAmount: 0 });
+
+  it('reads as donation-complete with no donation recorded', () => {
+    const model = buildFamilyDashboardModel({
+      enrollments: [SETTLED], donations: [], programsById: new Map(),
+      legacyPaymentStatus: null, bvAttendedCount: 0, hasActivePledge: false,
+    });
+    expect(model.donation.complete).toBe(true);
+  });
+
+  it('does not ask a settled family for money', () => {
+    const model = buildFamilyDashboardModel({
+      enrollments: [SETTLED], donations: [], programsById: new Map(),
+      legacyPaymentStatus: null, bvAttendedCount: 0, hasActivePledge: false,
+    });
+    // The page renders the donate CTA only when `showGive && !complete`, so a
+    // complete model is what removes the button. Pinned as a pair because
+    // showGive alone does NOT consult the override - checked deliberately
+    // rather than assumed, on 2026-08-03.
+    expect(model.donation.showGive && !model.donation.complete).toBe(false);
+  });
+
+  it('still reads as unpaid when the override is merely CLEARED, not zeroed', () => {
+    // null and 0 are not interchangeable: null removes the override and the
+    // family owes the snapshot again. Reversing the two in the UI would look
+    // like nothing happened.
+    const cleared = makeEnrollment({ suggestedAmountOverride: null, effectiveSuggestedAmount: 200 });
+    const model = buildFamilyDashboardModel({
+      enrollments: [cleared], donations: [], programsById: new Map(),
+      legacyPaymentStatus: null, bvAttendedCount: 0, hasActivePledge: false,
+    });
+    expect(model.donation.complete).toBe(false);
+  });
+});
