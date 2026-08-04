@@ -22,6 +22,20 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
+## 2026-08-04 - `develop` - families no longer remove members (product parity, no shape change)
+
+**No request or response shape changed, and `DELETE /api/setu/members/{mid}` is untouched.** This is a product decision the mobile app has to match, or the two clients will disagree about what a family is allowed to do.
+
+Vaibhav, 2026-08-04: *"remove the option to Remove from family - that should not exist for families - maybe for admins but not for families. Families can disable any member who are no longer valid."* Reason given when the disable control was added on 2026-08-02: *"Not to delete as we loose history."*
+
+**Mobile action, if the app offers a family-facing member delete:** withdraw it, and point at the reversible control instead - `PATCH /api/setu/members/{mid}` with `{ participation: 'inactive' }`, which keeps the record and past attendance and can be undone. The web copy is now "Not taking part - hide from class lists" rather than "No longer participating", which Vaibhav found unclear.
+
+Also on the web, and worth mirroring: the **Family manager** toggle is hidden on Child records. The server has always refused it (`manager-must-be-adult`, 409), so offering it was only ever a way to fail. And a new **"Graduated / not in school"** checkbox on a child record converts them to an adult - it is the existing member-type change under the name a parent actually looks for.
+
+Staff-side (not mobile): `DELETE /api/welcome/families/{fid}/members/{mid}` is now **admin-only** (was welcome-team). Irrelevant to the family app; noted so the two repos' permission notes stay in step.
+
+---
+
 ## 2026-08-04 - `develop` - `settledOffPortal` appears on enrollment objects
 
 **Additive and optional. Nothing breaks if the mobile ignores it** - but it should not, because it changes what "$0 to pay" MEANS.

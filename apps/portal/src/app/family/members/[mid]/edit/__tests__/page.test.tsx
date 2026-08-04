@@ -302,70 +302,53 @@ describe('EditMemberPage — successful PATCH submit', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Remove button (managers only) → confirm dialog → DELETE → navigate to roster
+// No remove button - families disable, they do not delete (2026-08-04)
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe('EditMemberPage — remove member (manager-only)', () => {
-  it('manager sees remove button; clicking it confirms then DELETEs', async () => {
+describe('EditMemberPage — families cannot remove a member', () => {
+  // Vaibhav, 2026-08-04: "please remove the button as we do not want families to
+  // remove any members. At the very least, they can only disable."
+  //
+  // Asserted for a MANAGER, the only role that ever had the button - checking a
+  // non-manager could not fail. The reversible control is asserted in the same
+  // test: withdrawing the destructive one is only correct because the family
+  // still has a way to say someone has stepped away.
+  it('a manager editing another member sees no remove control, only the reversible one', async () => {
     mockGetCurrentFamily.mockResolvedValue(makeCurrentFamily({ isManager: true, currentMid: MANAGER_MID }));
-    fetchMock.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ success: true }),
-    });
 
-    const user = userEvent.setup();
     render(<EditMemberPage />);
 
+    // BOTH layout trees, not one: this screen renders mobile and desktop at the
+    // same time, and the button being withdrawn was DESKTOP-ONLY - so a family
+    // on a phone never had it, and the control that replaces it has to be
+    // somewhere they can actually reach.
     await waitFor(() => {
-      const removeBtn = screen.queryByRole('button', { name: /remove from family|remove member|delete/i });
-      expect(removeBtn).not.toBeNull();
+      expect(screen.getAllByTestId('participation-section')).toHaveLength(2);
     });
 
-    const removeBtn = screen.getAllByRole('button', { name: /remove from family|remove member|delete/i })[0];
-    await user.click(removeBtn!);
-
-    await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith(
-        `/api/setu/members/${MEMBER_MID}`,
-        expect.objectContaining({ method: 'DELETE' }),
-      );
-    });
-
-    await waitFor(() => {
-      expect(mockAssign).toHaveBeenCalledWith('/family/members');
-    });
+    expect(
+      screen.queryByRole('button', { name: /remove from family|remove member|delete/i }),
+    ).toBeNull();
   });
 
-  it('non-manager editing own profile does NOT see remove button', async () => {
-    mockGetCurrentFamily.mockResolvedValue(makeCurrentFamily({ isManager: false, currentMid: MEMBER_MID }));
+  // The button is gone, so the call it made must be gone too. A handler left
+  // wired to nothing is how a withdrawn feature comes back.
+  it('never issues a DELETE from this screen', async () => {
+    mockGetCurrentFamily.mockResolvedValue(makeCurrentFamily({ isManager: true, currentMid: MANAGER_MID }));
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ ok: true }) });
 
+    const user = userEvent.setup();
     render(<EditMemberPage />);
 
     await waitFor(() => {
       expect(document.querySelectorAll('input').length).toBeGreaterThan(0);
     });
+    await user.click(screen.getAllByRole('button', { name: /save|update/i })[0]!);
 
-    const removeBtn = screen.queryByRole('button', { name: /remove from family|remove member|delete/i });
-    expect(removeBtn).toBeNull();
-  });
-
-  it('cancelling the confirm dialog does not call DELETE', async () => {
-    mockGetCurrentFamily.mockResolvedValue(makeCurrentFamily({ isManager: true, currentMid: MANAGER_MID }));
-    vi.mocked(confirm).mockReturnValueOnce(false);
-
-    const user = userEvent.setup();
-    render(<EditMemberPage />);
-
-    await waitFor(() => {
-      expect(screen.queryByRole('button', { name: /remove from family|remove member|delete/i })).not.toBeNull();
-    });
-
-    const removeBtn = screen.getAllByRole('button', { name: /remove from family|remove member|delete/i })[0];
-    await user.click(removeBtn!);
-
-    expect(fetchMock).not.toHaveBeenCalled();
-    expect(mockPush).not.toHaveBeenCalled();
-    expect(mockAssign).not.toHaveBeenCalled();
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    for (const [, init] of fetchMock.mock.calls) {
+      expect((init as { method?: string } | undefined)?.method).not.toBe('DELETE');
+    }
   });
 });
 
@@ -422,31 +405,6 @@ describe('EditMemberPage — server validation errors', () => {
 
     await waitFor(() => {
       expect(toastMock.error).toHaveBeenCalled();
-    });
-  });
-
-  it('shows last-manager error toast when trying to remove last manager', async () => {
-    mockGetCurrentFamily.mockResolvedValue(makeCurrentFamily({ isManager: true, currentMid: MANAGER_MID }));
-    fetchMock.mockResolvedValueOnce({
-      ok: false,
-      status: 400,
-      json: async () => ({ error: 'last-manager' }),
-    });
-
-    const user = userEvent.setup();
-    render(<EditMemberPage />);
-
-    await waitFor(() => {
-      expect(screen.queryByRole('button', { name: /remove from family|remove member|delete/i })).not.toBeNull();
-    });
-
-    const removeBtn = screen.getAllByRole('button', { name: /remove from family|remove member|delete/i })[0];
-    await user.click(removeBtn!);
-
-    await waitFor(() => {
-      expect(toastMock.error).toHaveBeenCalledWith(
-        expect.stringMatching(/last manager|cannot remove/i),
-      );
     });
   });
 });
@@ -688,5 +646,121 @@ describe('EditMemberPage — no longer participating', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     expect(JSON.parse(String((fetchMock.mock.calls.at(-1)![1] as RequestInit).body)))
       .toMatchObject({ participation: 'inactive' });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Graduation, and the manager toggle a child should never have been offered
+// ─────────────────────────────────────────────────────────────────────────────
+
+const CHILD_OVERRIDES = {
+  type: 'Child' as const,
+  schoolGrade: '12',
+  birthMonthYear: '2008-04',
+  email: null,
+  phone: null,
+  volunteeringSkills: [],
+};
+
+describe('EditMemberPage — graduated / not in school', () => {
+  // Vaibhav, 2026-08-04: "for graduates or children who are no longer in school,
+  // can we have a check box instead 'Graduated / Not In School' - so when that
+  // is checked then, the child is converted to adult".
+  it('offers the graduation checkbox on a CHILD record', async () => {
+    mockGetCurrentFamily.mockResolvedValue(
+      makeCurrentFamily({ isManager: true, currentMid: MANAGER_MID, memberOverrides: CHILD_OVERRIDES }),
+    );
+
+    render(<EditMemberPage />);
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId('graduation-toggle').length).toBeGreaterThan(0);
+    });
+    expect(screen.getAllByText(/graduated \/ not in school/i).length).toBeGreaterThan(0);
+  });
+
+  it('does NOT offer it on an adult record', async () => {
+    mockGetCurrentFamily.mockResolvedValue(makeCurrentFamily({ isManager: true, currentMid: MANAGER_MID }));
+
+    render(<EditMemberPage />);
+
+    await waitFor(() => {
+      expect(document.querySelectorAll('input').length).toBeGreaterThan(0);
+    });
+    expect(screen.queryByTestId('graduation-toggle')).toBeNull();
+  });
+
+  // The conversion IS the feature - the checkbox is a findable name for the
+  // "Member type: Adult" toggle nobody was using. Asserted through the member
+  // TYPE control rather than the checkbox's own state, so a checkbox wired to
+  // nothing could not pass.
+  it('ticking it switches the member to Adult, and says so before they save', async () => {
+    mockGetCurrentFamily.mockResolvedValue(
+      makeCurrentFamily({ isManager: true, currentMid: MANAGER_MID, memberOverrides: CHILD_OVERRIDES }),
+    );
+
+    const user = userEvent.setup();
+    render(<EditMemberPage />);
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId('graduation-toggle').length).toBeGreaterThan(0);
+    });
+
+    await user.click(screen.getAllByTestId('graduation-toggle')[0]!);
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/saved as an adult/i).length).toBeGreaterThan(0);
+    });
+  });
+});
+
+describe('EditMemberPage — the Family manager toggle', () => {
+  // Vaibhav, 2026-08-04: "Child record should not have an option 'Family
+  // manager'". The server has always refused it (manager-must-be-adult), so the
+  // control was offering a click that could only come back as a 409.
+  it('is hidden on a child record', async () => {
+    mockGetCurrentFamily.mockResolvedValue(
+      makeCurrentFamily({ isManager: true, currentMid: MANAGER_MID, memberOverrides: CHILD_OVERRIDES }),
+    );
+
+    render(<EditMemberPage />);
+
+    await waitFor(() => {
+      expect(document.querySelectorAll('input').length).toBeGreaterThan(0);
+    });
+    expect(screen.queryByTestId('manager-toggle')).toBeNull();
+  });
+
+  it('is still offered on an adult record', async () => {
+    mockGetCurrentFamily.mockResolvedValue(makeCurrentFamily({ isManager: true, currentMid: MANAGER_MID }));
+
+    render(<EditMemberPage />);
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId('manager-toggle').length).toBeGreaterThan(0);
+    });
+  });
+
+  // Keyed on the LIVE type: a child who is being graduated in this same edit
+  // becomes eligible, and a stale tick must never ride into a save the API
+  // would reject.
+  it('appears once a child is graduated to adult in the same edit', async () => {
+    mockGetCurrentFamily.mockResolvedValue(
+      makeCurrentFamily({ isManager: true, currentMid: MANAGER_MID, memberOverrides: CHILD_OVERRIDES }),
+    );
+
+    const user = userEvent.setup();
+    render(<EditMemberPage />);
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId('graduation-toggle').length).toBeGreaterThan(0);
+    });
+    expect(screen.queryByTestId('manager-toggle')).toBeNull();
+
+    await user.click(screen.getAllByTestId('graduation-toggle')[0]!);
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId('manager-toggle').length).toBeGreaterThan(0);
+    });
   });
 });

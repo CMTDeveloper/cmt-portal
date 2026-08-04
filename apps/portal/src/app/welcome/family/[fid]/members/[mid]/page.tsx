@@ -12,6 +12,7 @@ import { getChildProfile } from '@/features/setu/members/get-child-profile';
 import { ChildProfileView } from '@/features/setu/members/child-profile-view';
 import { getChildBalaViharJourney } from '@/features/setu/rollover/get-child-journey';
 import { MemberGradeEditor } from '@/features/setu/rollover/member-grade-editor';
+import { RemoveMemberControl } from '@/features/setu/members/components/remove-member-control';
 
 export const metadata = { title: 'Profile' };
 
@@ -84,6 +85,20 @@ export async function WelcomeMemberProfileBody({
           childName={profile.firstName}
           currentGrade={profile.schoolGrade}
           staff={!admin}
+        />
+      )}
+      {/* ADMIN only, and deliberately NOT `canEditGrade`: welcome-team is
+          "roster + visitors, and nothing else" (2026-08-03), and deleting a
+          person is neither. This is the office's replacement for the "Remove
+          from family" button withdrawn from the family's own edit screen on
+          2026-08-04 - families disable, staff delete, and only staff leave an
+          audit row. */}
+      {admin && (
+        <RemoveMemberControl
+          fid={profile.fid}
+          mid={profile.mid}
+          memberName={`${profile.firstName} ${profile.lastName}`.trim()}
+          isManager={profile.manager}
         />
       )}
     </>

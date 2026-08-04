@@ -335,6 +335,13 @@ export function canAccessRoute(
   // should get 404/501.
 
   // Welcome-team API — roster browse/filter/CSV + migration reconciliation.
+  //
+  // NOTE: this rule is method-blind, and one handler underneath is STRICTER than
+  // it looks here. `DELETE /api/welcome/families/{fid}/members/{mid}` requires
+  // `isAdmin` in the handler itself (2026-08-04): permanently removing a person
+  // is not "roster + visitors". Middleware lets a welcome-team volunteer through
+  // to that path; the route answers 403. Do not read this line as the whole
+  // grant for anything under it.
   if (pathname === '/api/welcome/families' || pathname.startsWith('/api/welcome/families/')) {
     return isWelcomeTeam(claims);
   }

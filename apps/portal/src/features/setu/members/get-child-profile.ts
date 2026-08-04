@@ -49,6 +49,12 @@ export interface ChildProfile {
    * active, so this is always populated.
    */
   participation: 'active' | 'inactive';
+  /**
+   * Whether this person manages the family. Read here only so the staff remove
+   * control can WARN before it asks - the last-manager rule itself is enforced
+   * in `deleteMember`'s transaction, never by this field.
+   */
+  manager: boolean;
   programs: ChildProfileProgram[];
   pastPrograms: ChildProfileProgram[];
   achievements: ChildAchievement[];
@@ -143,6 +149,7 @@ export async function getChildProfile(mid: string): Promise<ChildProfile | null>
     // Absent ⇒ active. The app labels the profile rather than hiding it: the
     // past attendance below is precisely why the record was kept.
     participation: member.participation ?? 'active',
+    manager: member.manager === true,
     programs: activePrograms, pastPrograms,
     achievements: achievementsWithLabels,
     stats: { programCount: activePrograms.length, overallAttendedPct, hasAnyAttendance: sumTotal > 0 },
