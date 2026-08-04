@@ -182,16 +182,18 @@ export function WelcomeMobileNav(audience: WelcomeNavAudience) {
       {moreOpen && (
         // `csp` so the sheet's brand tokens resolve outside any CspRoot.
         //
-        // Escape closes it. Without that a keyboard user could OPEN the sheet
-        // and then have no way out except activating one of the links inside -
-        // a trap the backdrop click does nothing about, because there is no
-        // pointer. Flagged by Codex review; the family and admin sheets have the
-        // same gap and are tracked separately rather than changed here.
+        // Deliberately NOT role="dialog" / aria-modal="true". A conformant modal
+        // moves focus INTO itself and traps it there; this one does neither
+        // (focus stays on the More button, which is why the Escape listener is
+        // on document). Claiming the role anyway would announce "dialog, modal"
+        // to a screen reader while focus and Tab order both said otherwise, and
+        // would tell assistive tech the page behind is inert while a keyboard
+        // user can still Tab straight into it. An honest non-modal popover that
+        // closes on Escape is a real improvement; a mislabelled one is a
+        // regression wearing a badge. Codex review, 2026-08-04 - the full
+        // treatment lands with the shared component in the tracked follow-up.
         <div
           className="csp"
-          role="dialog"
-          aria-modal="true"
-          aria-label="More destinations"
           onClick={() => setMoreOpen(false)}
           style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.32)', display: 'flex', alignItems: 'flex-end' }}
         >

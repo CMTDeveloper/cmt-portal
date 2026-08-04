@@ -523,6 +523,22 @@ describe('DELETE /api/setu/members/[mid] - CLOSED to families (2026-08-04)', () 
     expect((await res.json()).error).toBe('families-cannot-remove-members');
   });
 
+  // Parity with the PATCH block in this file, which still tests the flag. The
+  // old DELETE describe had this and it did not survive the rewrite - a 403 and
+  // a 404 are both refusals, so nothing else here would notice the flag guard
+  // disappearing.
+  it('returns 404, not 403, when the feature flag is off', async () => {
+    // Same resetModules + doMock + re-import dance the PATCH block uses: this
+    // file's flags mock is a frozen literal, not a mutable object.
+    vi.resetModules();
+    vi.doMock('@/lib/flags', () => ({ flags: { setuAuth: false } }));
+    const { DELETE: flaggedDELETE } = await import('../route');
+    const res = await flaggedDELETE(makeRequest('DELETE', null, managerHeaders()), {
+      params: Promise.resolve(params),
+    });
+    expect(res.status).toBe(404);
+  });
+
   it('refuses a plain family member too', async () => {
     const res = await DELETE(makeRequest('DELETE', null, memberHeaders()), {
       params: Promise.resolve(params),

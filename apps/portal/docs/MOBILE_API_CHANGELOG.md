@@ -60,7 +60,15 @@ settledOffPortal?: boolean   // absent on every enrollment written before 2026-0
 
 **Why the mobile must care:** `suggestedAmountOverride: 0` already meant "the Adult Study Class fee is waived because Bala Vihar was paid". The same 0 now also arrives for a settled family, and the two want opposite copy - a waived family owes nothing, a settled family is *paying*. The portal read them as identical and told a settled family *"Your Bala Vihar donation covers this class"* about their Bala Vihar enrollment, and told the welcome desk "N/A" for a family who donates monthly.
 
-**Mobile action:** add the optional boolean to the enrollment schema mirror. Wherever a zero effective amount is rendered, branch on it: `settledOffPortal === true` → "Your donation is already arranged with Chinmaya Mission"; otherwise the existing waived/free copy. Treat absent as `false`.
+**Mobile action:** add the optional boolean to the enrollment schema mirror. Wherever a zero effective amount is rendered, branch on it:
+
+1. `settledOffPortal === true` → "Your donation is already arranged with Chinmaya Mission".
+2. amount is 0, no flag, **and `programKey === 'adult-study-class'`** → the existing "covered by your Bala Vihar donation" copy.
+3. amount is 0, no flag, any OTHER program → a neutral "nothing to pay" that makes no claim about why.
+
+Treat absent as `false`.
+
+⚠️ **The `programKey` check in (2) is not optional** - an earlier version of this entry said "otherwise the existing waived/free copy", and implementing that literally reproduces a bug the web hit on 2026-08-04. The Bala-Vihar-paid waiver has exactly one writer and it only ever enrols into the adult study class; every other bare zero is something else. Without the scope, a family whose **Bala Vihar** was settled off-portal before this field existed gets told "your Bala Vihar donation covers this class" about their Bala Vihar enrollment. At least one production family is in that state right now.
 
 ---
 

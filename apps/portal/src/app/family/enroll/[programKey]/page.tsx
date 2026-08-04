@@ -7,7 +7,7 @@ import { EnrollCta } from '@/features/family/components/enroll-cta';
 import { EnrollPanel } from '@/features/family/components/enroll-panel';
 import { EligibleMembersList } from '@/features/family/components/eligible-members-list';
 import { CompleteDonationButton } from '@/features/family/components/complete-donation-button';
-import { resolveSuggestedAmount, paymentSourceOf, memberEligibleForProgram, gradeLabel, BALA_VIHAR } from '@cmt/shared-domain';
+import { resolveSuggestedAmount, paymentSourceOf, memberEligibleForProgram, gradeLabel, BALA_VIHAR, ADULT_STUDY_CLASS } from '@cmt/shared-domain';
 import type { OfferingDoc, PaymentSource } from '@cmt/shared-domain';
 import { isPledgeGiving, isParticipating } from '@cmt/shared-domain/setu';
 import { flags } from '@/lib/flags';
@@ -339,10 +339,24 @@ export default async function ProgramEnrollPage({ params }: Props) {
     !paid && alreadyEnrolled && usesDonation && displaySuggestedAmount === 0;
   // Settlement is checked FIRST because it is stored as the same zero override
   // the waiver uses - the flag is the only thing that tells them apart.
+  //
+  // And the waiver is scoped to the ADULT STUDY CLASS, for the same reason the
+  // admin control is (see payment-override-control.tsx): the Bala-Vihar-paid
+  // waiver has exactly one writer, `api/setu/adult-class/route.ts`, and it only
+  // ever enrols into that program. Unscoped, this branch told a family whose
+  // Bala Vihar was settled off-portal before the flag existed that "Your Bala
+  // Vihar donation covers this class" - about their Bala Vihar enrollment. That
+  // is live for CMT-SXO5QWFI until an admin re-records the settlement, and it
+  // is the family-facing half of a bug I fixed on the staff side first.
+  //
+  // A bare zero on any other program falls through to 'free', which says
+  // "There is no donation for this program - you are all set." That is true as
+  // far as the family is concerned (they are not being asked for anything) and
+  // makes no claim about WHY, which is the part we cannot know here.
   const nothingToPayReason: NothingToPayReason =
     activeEnrollment?.settledOffPortal === true
       ? 'settled-off-portal'
-      : activeEnrollment?.suggestedAmountOverride === 0
+      : activeEnrollment?.suggestedAmountOverride === 0 && programKey === ADULT_STUDY_CLASS
         ? 'waived-by-bala-vihar'
         : 'free';
 
