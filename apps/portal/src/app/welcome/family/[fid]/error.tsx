@@ -1,6 +1,6 @@
 'use client';
 
-import { ErrorFallback } from '@cmt/ui';
+import { ReportingErrorFallback } from '@/components/chrome/reporting-error-fallback';
 
 export default function WelcomeFamilyDetailError({
   error,
@@ -9,5 +9,5 @@ export default function WelcomeFamilyDetailError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
-  return <ErrorFallback error={error} reset={reset} feature="Welcome · Family detail" />;
+  return <ReportingErrorFallback error={error} reset={reset} feature="Welcome · Family detail" />;
 }

@@ -1,5 +1,5 @@
 'use client';
-import { ErrorFallback } from '@cmt/ui';
+import { ReportingErrorFallback } from '@/components/chrome/reporting-error-fallback';
 export default function AdminUsersError({ error, reset }: { error: Error; reset: () => void }) {
-  return <ErrorFallback error={error} reset={reset} feature="Admin users" />;
+  return <ReportingErrorFallback error={error} reset={reset} feature="Admin users" />;
 }

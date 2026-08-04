@@ -1,6 +1,6 @@
 'use client';
 
-import { ErrorFallback } from '@cmt/ui';
+import { ReportingErrorFallback } from '@/components/chrome/reporting-error-fallback';
 
 export default function SchoolYearError({
   error,
@@ -9,5 +9,5 @@ export default function SchoolYearError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
-  return <ErrorFallback error={error} reset={reset} feature="School year rollover" />;
+  return <ReportingErrorFallback error={error} reset={reset} feature="School year rollover" />;
 }

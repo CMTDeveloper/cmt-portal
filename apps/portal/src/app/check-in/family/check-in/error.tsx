@@ -1,6 +1,6 @@
 'use client';
 
-import { ErrorFallback } from '@cmt/ui';
+import { ReportingErrorFallback } from '@/components/chrome/reporting-error-fallback';
 
 export default function FamilyCheckInError({
   error,
@@ -9,5 +9,5 @@ export default function FamilyCheckInError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
-  return <ErrorFallback error={error} reset={reset} feature="Family check-in" />;
+  return <ReportingErrorFallback error={error} reset={reset} feature="Family check-in" />;
 }

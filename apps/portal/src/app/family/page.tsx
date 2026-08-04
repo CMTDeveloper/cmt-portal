@@ -6,6 +6,7 @@ import { CspRoot } from '@/features/family/components/atoms';
 import { flags } from '@/lib/flags';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
 import { PendingJoinRequestsPanel } from '@/features/family/components/pending-join-requests-panel';
+import { listPendingJoinRequests, type JoinRequestListItem } from '@/features/setu/join-request/list-requests';
 import { CompleteDonationButton } from '@/features/family/components/complete-donation-button';
 import { loadPledgeSlot, type PledgeSlot } from '@/features/setu/pledges/load-pledge-slot';
 import { clearAbandonedPledge } from '@/features/setu/pledges/clear-abandoned-pledge';
@@ -228,6 +229,7 @@ function FamilyMembers({ adults, children, mobile = false }: { adults: number; c
       </div>
       <Link
         href="/family/members"
+        prefetch={false}
         className={`btn btn--s${mobile ? ' btn--block' : ''}`}
         style={{ textDecoration: 'none', display: mobile ? 'flex' : 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 2 }}
       >
@@ -294,6 +296,7 @@ export default async function FamilyDashboardPage() {
   let familyFid: string | null = null;
   let familyLegacyId: string | null = null;
   let pledgeSlot: PledgeSlot | null = null;
+  let joinRequests: JoinRequestListItem[] = [];
 
   if (flags.setuAuth) {
     const data = await getCurrentFamily();
@@ -306,13 +309,36 @@ export default async function FamilyDashboardPage() {
       // which would fall back to the internal CMT- id and show it to the family.
       familyFid = data.family.publicFid ?? null;
       familyLegacyId = data.family.legacyFid;
-      const dash = await loadFamilyDashboard(data.family, data.members);
+      // Three independent loads, fanned out rather than awaited in a row. The
+      // pledge slot used to sit behind the whole dashboard load and the join
+      // requests were not read here at all - the panel fetched them from the
+      // browser, four times over. Nothing here depends on anything else here.
+      const [dash, slot, requests] = await Promise.all([
+        loadFamilyDashboard(data.family, data.members),
+        // Null with the flag off, and null on a read error - loadPledgeSlot owns
+        // both, so the dashboard never 500s over an optional ask.
+        loadPledgeSlot({ fid: data.family.fid, isManager: data.isManager }),
+        // Manager-only, and skipped entirely for everyone else: the endpoint
+        // this replaces is manager-gated, so reading it for a second parent
+        // would be a query that can only ever return their own family's
+        // requests to someone with no control to act on them.
+        //
+        // Fail-soft. A join-request panel is not worth the dashboard: before
+        // this it lived behind a fetch whose failure the panel already
+        // swallowed, and moving the read server-side must not quietly upgrade
+        // that to a 500 on the page every family lands on.
+        data.isManager
+          ? listPendingJoinRequests(data.family.fid).catch((err) => {
+              console.error('[family] could not read join requests - hiding the panel', err);
+              return [] as JoinRequestListItem[];
+            })
+          : Promise.resolve([] as JoinRequestListItem[]),
+      ]);
       model = dash.model;
       bvChildren = dash.bvChildren;
       familyCounts = dash.familyCounts;
-      // Null with the flag off, and null on a read error - loadPledgeSlot owns
-      // both, so the dashboard never 500s over an optional ask.
-      pledgeSlot = await loadPledgeSlot({ fid: data.family.fid, isManager: data.isManager });
+      pledgeSlot = slot;
+      joinRequests = requests;
 
       // ── Repair an unfinished attempt, but ONLY when there is one ───────────
       //
@@ -415,6 +441,7 @@ export default async function FamilyDashboardPage() {
     flags.setuPledge ? (
       <Link
         href="/family/enroll/bala-vihar"
+        prefetch={false}
         className={block ? 'btn btn--p btn--block' : 'btn btn--p'}
         style={block ? { display: 'block', textAlign: 'center', textDecoration: 'none' } : { textDecoration: 'none' }}
       >
@@ -473,7 +500,7 @@ export default async function FamilyDashboardPage() {
         Add a child to enroll
       </Link>
     ) : (
-      <Link href="/family/enroll" className="btn btn--p" style={{ textDecoration: 'none', display: 'inline-block' }}>
+      <Link href="/family/enroll" prefetch={false} className="btn btn--p" style={{ textDecoration: 'none', display: 'inline-block' }}>
         Enroll now
       </Link>
     )
@@ -535,7 +562,7 @@ export default async function FamilyDashboardPage() {
             </div>
 
             {/* Join requests (managers only; renders null when none) */}
-            {isManager && <PendingJoinRequestsPanel compact />}
+            {isManager && <PendingJoinRequestsPanel compact initialRequests={joinRequests} />}
 
             {/* Bala Vihar card */}
             <div className="card" style={{ padding: 18, marginBottom: 12 }}>
@@ -616,7 +643,7 @@ export default async function FamilyDashboardPage() {
         </div>
 
         {/* Join requests (managers only; renders null when none) */}
-        {isManager && <PendingJoinRequestsPanel />}
+        {isManager && <PendingJoinRequestsPanel initialRequests={joinRequests} />}
 
         {/* Bala Vihar card */}
         <div className="card" style={{ padding: 24, marginBottom: 18 }}>

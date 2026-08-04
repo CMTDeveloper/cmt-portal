@@ -42,6 +42,33 @@ interface DesktopSidebarProps {
 // process.env access so the value inlines into the client bundle.
 const FAMILY_CALENDAR_URL = process.env.NEXT_PUBLIC_FAMILY_CALENDAR_URL;
 
+/**
+ * 🔴 Chrome navigation does NOT prefetch. Applied to every Link in this file.
+ *
+ * Measured against deployed preview, 2026-08-03: ONE load of /family issued 37
+ * requests to our own origin, 31 of them prefetches, with the same route
+ * requested up to SIX times (/welcome/roster x6, /family/settings/security x6,
+ * /family/enroll/bala-vihar x5). Two causes compound:
+ *
+ *  1. The family layout renders this sidebar as a Suspense FALLBACK and again
+ *     as DesktopSidebarLive, and the mobile bar alongside both - so every nav
+ *     entry exists several times over in one page.
+ *  2. Every one of these destinations is fully dynamic (`await connection()`),
+ *     and Next gives a dynamic route a client staleTime of 0. There is nothing
+ *     to cache, so each mount re-requests rather than reusing the last answer.
+ *
+ * The trade is not close. These are persistent chrome links a family clicks at
+ * most one of; prefetching all of them, repeatedly, buys a little click latency
+ * and costs ~30 authenticated server renders per page view - which is what a
+ * family on a phone reported as the portal hanging between clicks.
+ *
+ * Deliberately NOT `prefetch={null}` (Next's "static shell only"): these routes
+ * have no meaningful static shell to fetch, so it would keep the requests and
+ * drop the benefit. Content links inside pages are untouched - they point at
+ * where the user is actually going next.
+ */
+const NAV_PREFETCH = false;
+
 // Built per-render so Seva can be filtered out when flags.setuSeva is off
 // (Slice 1 Part C) and the Calendar href can swap to the external PDF. Only the
 // FAMILY nav is gated here — WELCOME_NAV_ITEMS keeps its Seva/Prasad entries.
@@ -172,7 +199,7 @@ export function DesktopSidebar({ active, role = 'family', displayName, subtitle,
               <Icon/> {label}
             </a>
           ) : (
-            <Link key={id} href={href} style={{
+            <Link key={id} href={href} prefetch={NAV_PREFETCH} style={{
               display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px',
               borderRadius: 'var(--radiusSm)',
               background: a ? 'var(--accentSoft)' : 'transparent',
@@ -191,6 +218,7 @@ export function DesktopSidebar({ active, role = 'family', displayName, subtitle,
             {showAdminLink && (
               <Link
                 href="/admin"
+                prefetch={NAV_PREFETCH}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px',
                   borderRadius: 'var(--radiusSm)',
@@ -205,6 +233,7 @@ export function DesktopSidebar({ active, role = 'family', displayName, subtitle,
             {showTeacher && (
               <Link
                 href="/teacher"
+                prefetch={NAV_PREFETCH}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px',
                   borderRadius: 'var(--radiusSm)',
@@ -222,6 +251,7 @@ export function DesktopSidebar({ active, role = 'family', displayName, subtitle,
             {staffArea && (
               <Link
                 href="/welcome/roster"
+                prefetch={NAV_PREFETCH}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px',
                   borderRadius: 'var(--radiusSm)',
