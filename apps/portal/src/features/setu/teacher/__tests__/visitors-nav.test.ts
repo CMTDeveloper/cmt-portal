@@ -2,7 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { deriveAdminActive } from '@/features/admin/components/admin-sidebar';
-import { buildWelcomeNavItems } from '@/features/family/components/welcome-mobile-nav';
+import {
+  buildWelcomeNavItems,
+  splitWelcomeNavItems,
+  WELCOME_NAV_VISIBLE,
+} from '@/features/family/components/welcome-mobile-nav';
 
 /**
  * /welcome/visitors has to be reachable from THREE navs, not one.
@@ -126,5 +130,50 @@ describe('/welcome/visitors highlights itself, not a sibling', () => {
     expect(visitors).toBeGreaterThan(-1);
     expect(catchAll).toBeGreaterThan(-1);
     expect(visitors).toBeLessThan(catchAll);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The bar is ONE row (2026-08-04)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Vaibhav, with a screenshot of /welcome/roster on a phone: "can you make the
+// bottom panel consistent on all page as it's now occupies large space. If you
+// can have single row and rest of icons can go in popup menu".
+//
+// An admin sees eight destinations, so the previous five-column grid ALWAYS
+// wrapped to a second row on the one screen whose job is showing a roster.
+describe('welcome bottom nav fits one row', () => {
+  const AUDIENCES = [
+    { name: 'admin (the worst case - every destination)', audience: { isAdmin: true, showTeacher: true, hasFamily: true } },
+    { name: 'welcome-team volunteer', audience: { hasFamily: true } },
+    { name: 'coordinator', audience: { role: 'coordinator' as const, hasFamily: true } },
+  ];
+
+  for (const { name, audience } of AUDIENCES) {
+    it(`keeps at most ${WELCOME_NAV_VISIBLE} destinations in the bar for a ${name}`, () => {
+      const { visible } = splitWelcomeNavItems(buildWelcomeNavItems(audience));
+      // +1 for the More cell. Five cells is the row.
+      expect(visible.length).toBeLessThanOrEqual(WELCOME_NAV_VISIBLE);
+    });
+
+    // The point of the sheet is that it HOLDS the rest, not that it hides them.
+    // A split that dropped a destination would still pass the row-width check.
+    it(`loses nothing for a ${name}`, () => {
+      const all = buildWelcomeNavItems(audience);
+      const { visible, overflow } = splitWelcomeNavItems(all);
+      expect([...visible, ...overflow].map((i) => i.href)).toEqual(all.map((i) => i.href));
+    });
+  }
+
+  // Order is the builder's, so a role's bar cannot rearrange between pages.
+  it('an admin keeps the roster and visitors tabs in the bar', () => {
+    const { visible, overflow } = splitWelcomeNavItems(
+      buildWelcomeNavItems({ isAdmin: true, showTeacher: true, hasFamily: true }),
+    );
+    expect(visible.map((i) => i.href)).toContain('/welcome/roster');
+    expect(visible.map((i) => i.href)).toContain('/welcome/visitors');
+    // And the admin section is still REACHABLE, one tap into the sheet.
+    expect(overflow.map((i) => i.href)).toContain('/admin');
   });
 });
