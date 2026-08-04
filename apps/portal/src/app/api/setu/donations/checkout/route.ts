@@ -215,10 +215,15 @@ export async function POST(req: Request) {
 
   const feeCAD = input.coverFee ? processingFeeCAD(input.amountCAD) : 0;
 
-  // Persist the donation doc first; its id is our client_reference_id so the
-  // Stripe dashboard row maps back to a portal record.
+  // Persist the donation doc first; it owns the client_reference_id, so the
+  // Stripe dashboard row maps back to a portal record AND names the family.
+  const familyLabel = paymentFamilyLabel({
+    fid: session.fid,
+    publicFid: familyData.family.publicFid,
+  });
   const donation = await createDonation({
     fid: session.fid,
+    familyLabel,
     donorMid: session.mid,
     donorName,
     donorEmail: donor.email,
@@ -243,7 +248,9 @@ export async function POST(req: Request) {
   const payload = {
     lineItems,
     customerEmail: donor.email,
-    client_reference_id: donation.did,
+    // The stored value, not a second construction of it: if these two ever
+    // disagreed, the donation doc would name a Stripe row that does not exist.
+    client_reference_id: donation.clientReferenceId,
     successUrl: `${origin}/donate/success?did=${donation.did}`,
     cancelUrl: `${origin}/family/donate/cancel?did=${donation.did}`,
     // `fid` is the internal document key and stays put - support and any
@@ -259,7 +266,7 @@ export async function POST(req: Request) {
       ...buildPaymentMetadata({
         kind: 'donation',
         fid: session.fid,
-        familyId: paymentFamilyLabel({ fid: session.fid, publicFid: familyData.family.publicFid }),
+        familyId: familyLabel,
         programKey,
       }),
       // Kept from before the helper: coarser than programKey, and someone may
