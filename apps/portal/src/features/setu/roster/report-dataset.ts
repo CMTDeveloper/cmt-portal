@@ -198,10 +198,22 @@ export async function buildRosterReportDataset(params: { year?: string }): Promi
     const pid = typeof x.pid === 'string' ? x.pid : '';
     const levelName = typeof x.levelName === 'string' ? x.levelName : '';
     if (!pid || !levelName) continue;
+    // `levelKind` is required by LevelDoc and present on every level in both
+    // projects - but it is now load-bearing in a way it was not before. The old
+    // grade-band map was kind-blind, so a doc missing the field still placed
+    // children by its band; `memberMatchesLevel` falls through to `return
+    // false` on an unknown kind and places NOBODY. That is the safer direction
+    // (never guess a child into a class), but it would be silent, so say it
+    // out loud rather than let a level quietly empty itself.
+    const levelKind = x.levelKind;
+    if (levelKind !== 'level' && levelKind !== 'pre-level' && levelKind !== 'shishu' && levelKind !== 'parents') {
+      console.warn(`[roster-report] level "${levelName}" (pid ${pid}) has no usable levelKind (${String(levelKind)}); it will place nobody`);
+      continue;
+    }
     const arr = levelsByPid.get(pid) ?? [];
     arr.push({
       levelName,
-      levelKind: x.levelKind as LevelKind,
+      levelKind,
       gradeBand: Array.isArray(x.gradeBand) ? x.gradeBand.map(String) : [],
     });
     levelsByPid.set(pid, arr);
@@ -210,11 +222,12 @@ export async function buildRosterReportDataset(params: { year?: string }): Promi
   // are (audited 2026-08-05: no two enabled levels in either offering claim the
   // same normalized grade). But `memberMatchesLevel` normalizes both sides, so
   // an admin entering "3" on one level and "Grade 3" on another WOULD make both
-  // match - and `.find()` would then be decided by Firestore's snapshot order,
-  // which is not guaranteed stable between requests. Sorting by name makes the
-  // answer the same on every run and the same as a human reading the levels
-  // list, so a data-entry mistake surfaces as a consistently wrong level rather
-  // than a child who moves between two levels at random.
+  // match, and `.find()` would then be settled by document-id order - stable,
+  // but arbitrary, and different from the order `fetchEnabledLevelsForPid`
+  // happens to return for the family dashboard. Sorting by name makes the
+  // winner the same on both surfaces and the same as a human reading the
+  // levels list, so a data-entry mistake shows up as one consistently wrong
+  // level rather than two screens naming different ones.
   for (const arr of levelsByPid.values()) arr.sort((a, b) => a.levelName.localeCompare(b.levelName));
   // One clock for the whole report, so two children of the same age cannot land
   // in different levels because the loop crossed a month boundary.

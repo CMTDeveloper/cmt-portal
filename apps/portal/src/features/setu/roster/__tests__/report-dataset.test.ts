@@ -158,13 +158,19 @@ describe('buildRosterReportDataset', () => {
     expect(vedant.level).toBe('Shishu Vihar');
   });
 
-  it('leaves a child too young for Shishu Vihar unplaced rather than guessing', async () => {
+  it('leaves a child ONE MONTH too young for Shishu Vihar unplaced rather than guessing', async () => {
     // One of the five real children (FID 5011) is 17 months - one month under
     // SHISHU_MIN_MONTHS. She stays "(no level)" even after this fix, and that
     // is the honest answer: no level currently accepts her.
+    //
+    // Exactly 17 months, not "comfortably young": this test exists to stop the
+    // age window being widened to make the "(no level)" count look better, and
+    // a 10-month-old - which is what this fixture used at first - would keep
+    // passing while SHISHU_MIN_MONTHS was lowered anywhere from 18 to 11. Only
+    // a fixture ON the boundary can fail the change it is meant to catch.
     const now = new Date();
-    const born10MonthsAgo = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 10, 1));
-    const bmy = `${born10MonthsAgo.getUTCFullYear()}-${String(born10MonthsAgo.getUTCMonth() + 1).padStart(2, '0')}`;
+    const born17MonthsAgo = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 17, 1));
+    const bmy = `${born17MonthsAgo.getUTCFullYear()}-${String(born17MonthsAgo.getUTCMonth() + 1).padStart(2, '0')}`;
 
     fs.data.members = [
       ...fs.data.members!,

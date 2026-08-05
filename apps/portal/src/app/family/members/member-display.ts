@@ -1,4 +1,4 @@
-import { whatsMissingForMember, isParticipating, gradeLabel, recordedAllergy, type MemberDoc } from '@cmt/shared-domain/setu';
+import { whatsMissingForMember, isParticipating, gradeLabel, recordedAllergy, INACTIVE_LABEL, INACTIVE_FROM_LEGACY_LABEL, type MemberDoc } from '@cmt/shared-domain/setu';
 
 /** The roster-card view of a member used by the My Family page. */
 export type DisplayMember = {
@@ -65,10 +65,12 @@ export interface MemberStatusChip {
 export function memberStatusChip(m: DisplayMember): MemberStatusChip {
   if (m.inactive) {
     return {
-      label: m.inactiveBySystem ? 'Finished (from our records)' : 'No longer participating',
+      // Through the shared labels, so this screen and /welcome/family/{fid}
+      // can never name the same person's status differently.
+      label: m.inactiveBySystem ? INACTIVE_FROM_LEGACY_LABEL : INACTIVE_LABEL,
       labelLong: m.inactiveBySystem
         ? 'Finished — from our old records. Edit if that is wrong.'
-        : 'No longer participating',
+        : INACTIVE_LABEL,
       bg: 'var(--surface2)',
       fg: 'var(--muted)',
       title: m.inactiveBySystem

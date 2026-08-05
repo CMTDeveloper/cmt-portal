@@ -197,9 +197,15 @@ describe('WelcomeFamilyDetailPage — with data', () => {
 
     // Counted against Deepika's OWN row count rather than a hardcoded 1: this
     // page renders a mobile tree and a desktop tree at once, so every row
-    // appears more than once. Tying the two together still discriminates - if
-    // Pranav picked the marker up too it would be twice this number - without
-    // baking in how many layout trees exist.
+    // appears more than once, and tying the two counts together avoids baking
+    // in how many trees exist.
+    //
+    // What this catches on its own is the marker LEAKING - Pranav getting one
+    // too would double the count. It does NOT catch an inverted predicate that
+    // marks Pranav INSTEAD of Deepika: that swaps which row carries it and the
+    // totals still match. The legacy-retired test below is what fails on an
+    // inversion, because it asserts the OTHER label is absent. The pair is
+    // adequate; neither test is on its own.
     const deepikaRows = screen.getAllByTestId('setu-avatar').filter((a) => a.textContent?.includes('Deepika')).length;
     expect(deepikaRows).toBeGreaterThan(0);
     expect(screen.getAllByText('No longer participating')).toHaveLength(deepikaRows);

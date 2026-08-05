@@ -130,6 +130,29 @@ export function isParticipating(
   return member?.participation !== 'inactive';
 }
 
+/**
+ * What to call a member who no longer takes part.
+ *
+ * TWO labels because there are two ways to arrive at the state, and they are
+ * not equally certain: a family that said someone has finished gets plain
+ * language, while a member the legacy migration retired on their behalf is
+ * told where that came from - that one is a guess we made and might have got
+ * wrong, and a family reading "No longer participating" about a child who is
+ * still coming would rightly be alarmed.
+ *
+ * Shared because the family's own view and the welcome-team view show the same
+ * member. They had the same two strings typed out separately for a day, which
+ * is one rewording away from two screens disagreeing about a person's status.
+ */
+export const INACTIVE_LABEL = 'No longer participating';
+export const INACTIVE_FROM_LEGACY_LABEL = 'Finished (from our records)';
+
+export function inactiveLabelFor(
+  member: { inactiveSource?: string | null | undefined } | null | undefined,
+): string {
+  return member?.inactiveSource === 'legacy-migration' ? INACTIVE_FROM_LEGACY_LABEL : INACTIVE_LABEL;
+}
+
 /** The full required-field list for a given member type. */
 export function requiredFieldsForType(type: 'Adult' | 'Child'): MemberRequiredField[] {
   return [...REQUIRED_ALL, ...(type === 'Adult' ? REQUIRED_ADULT : REQUIRED_CHILD)];

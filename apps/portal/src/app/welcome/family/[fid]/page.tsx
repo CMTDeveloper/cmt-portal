@@ -6,7 +6,7 @@ import { CspRoot } from '@/features/family/components/atoms';
 import { getFamilyForWelcome } from '@/features/setu/search/get-family-for-welcome';
 import { getFamilySevaProgress, type FamilySevaProgress } from '@/features/setu/seva/get-family-seva-progress';
 import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
-import { isWelcomeTeam, isCoordinator, isAdmin, BALA_VIHAR, recordedAllergy, isParticipating, type WithRole } from '@cmt/shared-domain';
+import { isWelcomeTeam, isCoordinator, isAdmin, BALA_VIHAR, recordedAllergy, isParticipating, inactiveLabelFor, type WithRole } from '@cmt/shared-domain';
 import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
 import { adultStudyClassProgramKeys } from '@/features/setu/adult-class/program-keys';
 import { deriveFamilyPayment } from '@/features/setu/roster/payment';
@@ -372,9 +372,7 @@ function MemberRow({ m, fid }: { m: MemberDoc; fid: string }) {
   // while a member the legacy migration retired on their behalf is told where
   // that came from, because it is a guess we made and might have got wrong.
   const inactive = !isParticipating(m);
-  const inactiveLabel = m.inactiveSource === 'legacy-migration'
-    ? 'Finished (from our records)'
-    : 'No longer participating';
+  const inactiveLabel = inactiveLabelFor(m);
 
   return (
     <div style={{ padding: 14, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radius)', display: 'flex', alignItems: 'center', gap: 12 }}>

@@ -238,9 +238,14 @@ interface AllergyCalloutProps {
  * wrong answer for a FAMILY looking at their own child - it reads as "we never
  * asked" and invites them to type it in again.
  *
- * Family-facing surfaces should use this rather than `AllergyCallout` directly.
- * Teacher surfaces null the sentinel in their data layer instead (see
- * `teacher/roster.ts`), because there the absence of a marker IS the answer.
+ * Use this rather than `AllergyCallout` directly on any surface that shows one
+ * member's full record - which includes `/welcome/family/{fid}/members/{mid}`,
+ * so staff see the "No known allergies" line too. That is fine and arguably
+ * better; it is only the LIST surfaces (the teacher attendance marker, the
+ * family's own member cards) that stay silent, because there the absence of a
+ * marker is the answer and a line per member would be noise. Those null the
+ * sentinel in their data layer instead - see `teacher/roster.ts` and
+ * `member-display.ts`.
  */
 export function AllergyBlock({ value }: { value: string | null }) {
   const allergy = recordedAllergy(value);
