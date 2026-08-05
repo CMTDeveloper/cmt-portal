@@ -1,11 +1,16 @@
 import 'server-only';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
-import { formatFamilyParentNames, isParticipating } from '@cmt/shared-domain';
+import { formatFamilyParentNames, isParticipating, memberMatchesLevel } from '@cmt/shared-domain';
+import type { LevelKind } from '@cmt/shared-domain';
 import type { OfferingDoc, RosterPersonCsvRow, RosterReportRow, RosterReportChild } from '@cmt/shared-domain';
 import { classifyBulkPayment } from './payment';
 import { loadActivePledgeFids } from '@/features/setu/pledges/active-pledge-fids';
 
 export type RosterReportFamilyFull = { row: RosterReportRow; personRows: RosterPersonCsvRow[] };
+
+/** A level, shaped for `memberMatchesLevel`. Mirrors `LevelForMatch` in
+ *  derive-child-level.ts, minus the levelId this builder does not use. */
+type LevelForMatch = { levelName: string; levelKind: LevelKind; gradeBand: string[] };
 
 const OFFERING_CHUNK = 300;
 const BV_PROGRAM_KEY = 'bala-vihar';
@@ -18,7 +23,7 @@ function toDate(v: unknown): Date {
 }
 
 type Meta = { name: string; location: string; legacyFid: string; publicFid: string | null };
-type Member = { mid: string; firstName: string; lastName: string; type: string; grade: string; manager: boolean; participating: boolean };
+type Member = { mid: string; firstName: string; lastName: string; type: string; grade: string; birthMonthYear: string | null; manager: boolean; participating: boolean };
 type EnrolledVia = 'family-initiated' | 'first-attendance' | 'welcome-team' | 'promotion' | 'kiosk';
 type ActiveEnr = {
   programKey: string; programLabel: string; oid: string; pid: string; eid: string;
@@ -58,7 +63,7 @@ export async function buildRosterReportDataset(params: { year?: string }): Promi
   for (const m of memberSnap.docs) {
     const fid = m.ref.parent.parent?.id;
     if (!fid || !meta.has(fid)) continue;
-    const d = m.data() as { mid?: unknown; firstName?: unknown; lastName?: unknown; type?: unknown; schoolGrade?: unknown; manager?: unknown; participation?: unknown };
+    const d = m.data() as { mid?: unknown; firstName?: unknown; lastName?: unknown; type?: unknown; schoolGrade?: unknown; birthMonthYear?: unknown; manager?: unknown; participation?: unknown };
     const arr = membersByFid.get(fid) ?? [];
     arr.push({
       mid: typeof d.mid === 'string' ? d.mid : m.id,
@@ -66,6 +71,9 @@ export async function buildRosterReportDataset(params: { year?: string }): Promi
       lastName: String(d.lastName ?? ''),
       type: String(d.type ?? ''),
       grade: typeof d.schoolGrade === 'string' ? d.schoolGrade : '',
+      // Needed to place a shishu child: their level is matched by AGE, not by
+      // grade band. Omitting it here is what put all 5 in "(no level)".
+      birthMonthYear: typeof d.birthMonthYear === 'string' ? d.birthMonthYear : null,
       manager: d.manager === true,
       // Through the shared helper: absent means active, and every migrated
       // member doc predates the field.
@@ -149,12 +157,17 @@ export async function buildRosterReportDataset(params: { year?: string }): Promi
     for (const snap of got) if (snap.exists) offerings.set(snap.id, snap.data() as OfferingDoc);
   }
 
-  // 5b) levels -> a BV child's level is their school grade matched to a level's
-  // gradeBand, scoped by the enrollment's pid (which encodes location + year).
-  // Enrollment docs do NOT carry per-child level (the enrollment is at the program
-  // level), so we derive it here - the same grade-band rule the teacher roster uses.
-  // Key: `${pid}|${grade}` -> levelName. Bands within one pid are disjoint by design;
-  // a stray overlap is last-write-wins (rare, non-fatal).
+  // 5b) levels -> a BV child's level, scoped by the enrollment's pid (which
+  // encodes location + year). Enrollment docs do NOT carry per-child level (the
+  // enrollment is at the program level), so it is derived here.
+  //
+  // Through `memberMatchesLevel`, the SAME predicate the teacher roster, the
+  // family dashboard and the annual rollover use. This used to be a
+  // `${pid}|${grade}` -> levelName map built from gradeBand alone, which cannot
+  // express the rule for a shishu level: Shishu Vihar carries `gradeBand: []` and
+  // is matched by AGE (18-60 months from birthMonthYear). So every shishu child
+  // fell into "(no level)" here while the teacher roster placed them correctly -
+  // 5 of the 27 enrolled children in production, reported 2026-08-05.
   const levelSnap = await db.collection('levels').get();
 
   // The monthly pledge IS the Bala Vihar donation, paid monthly (2026-07-27), so
@@ -167,16 +180,28 @@ export async function buildRosterReportDataset(params: { year?: string }): Promi
   // paginated browse - so the screen welcome-team uses every day showed a
   // pledging family as "Registered"/"outstanding" permanently. Caught in review.
   const pledgedFids = await loadActivePledgeFids();
-  const levelByPidGrade = new Map<string, string>();
+  const levelsByPid = new Map<string, LevelForMatch[]>();
   for (const d of levelSnap.docs) {
-    const x = d.data() as { pid?: unknown; levelName?: unknown; programKey?: unknown; gradeBand?: unknown };
+    const x = d.data() as { pid?: unknown; levelName?: unknown; levelKind?: unknown; programKey?: unknown; gradeBand?: unknown; enabled?: unknown };
     if (x.programKey !== BV_PROGRAM_KEY) continue;
+    // A paused level must not place a child - the same exclusion
+    // `fetchEnabledLevelsForPid` makes. `!== false` because the field is absent
+    // on older level docs and absent means enabled.
+    if (x.enabled === false) continue;
     const pid = typeof x.pid === 'string' ? x.pid : '';
     const levelName = typeof x.levelName === 'string' ? x.levelName : '';
     if (!pid || !levelName) continue;
-    const band = Array.isArray(x.gradeBand) ? x.gradeBand : [];
-    for (const g of band) levelByPidGrade.set(`${pid}|${String(g)}`, levelName);
+    const arr = levelsByPid.get(pid) ?? [];
+    arr.push({
+      levelName,
+      levelKind: x.levelKind as LevelKind,
+      gradeBand: Array.isArray(x.gradeBand) ? x.gradeBand.map(String) : [],
+    });
+    levelsByPid.set(pid, arr);
   }
+  // One clock for the whole report, so two children of the same age cannot land
+  // in different levels because the loop crossed a month boundary.
+  const now = new Date();
 
   // 6) which families appear: all of them (live year), or year-scoped enrollees only
   const fids = params.year ? [...meta.keys()].filter((fid) => (activeByFid.get(fid) ?? []).length > 0) : [...meta.keys()];
@@ -213,7 +238,16 @@ export async function buildRosterReportDataset(params: { year?: string }): Promi
       for (const mid of a.enrolledMids) {
         const mem = memberByMid.get(mid);
         const grade = mem?.grade || a.schoolGrade || '';
-        const levelName = grade ? (levelByPidGrade.get(`${a.pid}|${grade}`) ?? null) : null;
+        // A mid with no member doc still gets a shot at a level from the
+        // enrollment's own grade - and is treated as a Child, which is what
+        // being in `enrolledMids` on a Bala Vihar enrollment means.
+        const forMatch = {
+          type: 'Child' as const,
+          schoolGrade: grade || null,
+          birthMonthYear: mem?.birthMonthYear ?? null,
+        };
+        const match = (levelsByPid.get(a.pid) ?? []).find((l) => memberMatchesLevel(forMatch, l, now));
+        const levelName = match?.levelName ?? null;
         bvChildren.push({ grade: grade || null, levelName });
         if (levelName) levelByMid.set(mid, levelName);
       }
