@@ -110,12 +110,16 @@ const WELCOME_NAV_ITEMS: [SidebarTab, string, keyof typeof SetuIcon, string, boo
   ['visitors', 'Visitors', 'bell',  '/welcome/visitors'],
 ];
 
-// A DEDICATED list, not a filtered mirror of WELCOME_NAV_ITEMS: the coordinator
-// grant is Programs + Levels + Roster and does NOT include the visitors board,
-// so that entry would 302 to /sign-in on click.
-const COORDINATOR_NAV_ITEMS: [SidebarTab, string, keyof typeof SetuIcon, string, boolean?][] = [
-  ['home', 'Roster', 'search', '/welcome/roster'],
-];
+// Coordinator uses the SAME list. It used to have a dedicated Roster-only one,
+// because the visitors board was outside its grant and the tab would have 302'd
+// on click. Since 2026-08-05 coordinator inherits the whole welcome-team grant,
+// so a separate list could only ever drift from this one. The role keeps its own
+// DISPLAY LABEL below - the job title is still different from a volunteer's.
+//
+// Not covered here: the coordinator's own Programs + Levels grant lives under
+// /admin/*, which this sidebar does not link to, so a coordinator on the roster
+// has no way to navigate to the screens the role exists for. That gap predates
+// this change and is tracked separately.
 
 function deriveActiveFromPathname(pathname: string): SidebarTab {
   // Teacher area: every /teacher/* route is the "My classes" (home) tab.
@@ -152,8 +156,7 @@ export function DesktopSidebar({ active, role = 'family', displayName, subtitle,
     ['family', 'My family', 'home', '/family'];
   const staffNav = (items: typeof WELCOME_NAV_ITEMS) => (hasFamily ? [...items, backToFamily] : items);
   const navItems =
-    role === 'welcome-team' ? staffNav(WELCOME_NAV_ITEMS)
-      : role === 'coordinator' ? staffNav(COORDINATOR_NAV_ITEMS)
+    role === 'welcome-team' || role === 'coordinator' ? staffNav(WELCOME_NAV_ITEMS)
       : role === 'teacher' ? TEACHER_NAV_ITEMS
       : familyNavItems();
   const trimmed = (displayName ?? '').trim();

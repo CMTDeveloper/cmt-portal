@@ -104,7 +104,7 @@ for (const [label, email] of [
       }
     });
 
-    test('the welcome sidebar shows Roster and none of the welcome-team-only links', async ({ page }) => {
+    test('the welcome sidebar shows Roster and none of the admin-only links', async ({ page }) => {
       await page.goto('/welcome/roster');
       await expect(visible(page, /^Roster$/).first()).toBeVisible({ timeout: 20_000 });
       // Each of these 302s at middleware for this role, so rendering the link
@@ -116,6 +116,46 @@ for (const [label, email] of [
           `${denied} link rendered for a coordinator`,
         ).toHaveCount(0);
       }
+    });
+
+    // ── What coordinator GAINED on 2026-08-05 ───────────────────────────────
+    //
+    // Vaibhav: "Coordinator gets everything Welcome team has and plus". The
+    // tests above pin where the role still stops; these pin that the widening
+    // actually reached a deployed request, which is the half a unit test on
+    // canAccessRoute cannot show (middleware, layout gate and in-handler check
+    // all have to agree).
+    test('reaches the visitors board, which used to be welcome-team-only', async ({ page }) => {
+      await page.goto('/welcome/visitors');
+      await expect(page, '/welcome/visitors redirected away').toHaveURL(/\/welcome\/visitors/);
+      await expect(
+        visible(page, /Access denied/i),
+        '/welcome/visitors rendered the gate for a coordinator',
+      ).toHaveCount(0);
+      await expect(visible(page, /^Visitors$/).first()).toBeVisible({ timeout: 20_000 });
+    });
+
+    test('the Visitors tab is rendered, not withheld', async ({ page }) => {
+      await page.goto('/welcome/roster');
+      await expect(
+        page.getByRole('link', { name: /^Visitors$/ }).filter({ visible: true }).first(),
+        'Visitors link withheld from a coordinator',
+      ).toBeVisible({ timeout: 20_000 });
+    });
+
+    test('a family-edit PATCH is no longer refused', async ({ page }) => {
+      // Deliberately a request the server must ACCEPT authorization-wise. It is
+      // asserted as "not 403" rather than "200": the fid below may not exist on
+      // UAT, and a 404 still proves the authorization gate opened, which is the
+      // only thing this test is about. A 403 is the failure.
+      const res = await page.request.patch('/api/welcome/families/CMT-DOES-NOT-EXIST', {
+        data: { location: 'Brampton' },
+        failOnStatusCode: false,
+      });
+      expect(
+        res.status(),
+        `coordinator PATCH /api/welcome/families returned ${res.status()} - the role should now reach it`,
+      ).not.toBe(403);
     });
   });
 }

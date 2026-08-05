@@ -6,7 +6,7 @@ import { CspRoot } from '@/features/family/components/atoms';
 import { getFamilyForWelcome } from '@/features/setu/search/get-family-for-welcome';
 import { getFamilySevaProgress, type FamilySevaProgress } from '@/features/setu/seva/get-family-seva-progress';
 import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
-import { isWelcomeTeam, isCoordinator, isAdmin, BALA_VIHAR, recordedAllergy, isParticipating, inactiveLabelFor, type WithRole } from '@cmt/shared-domain';
+import { isWelcomeTeam, isAdmin, BALA_VIHAR, recordedAllergy, isParticipating, inactiveLabelFor, type WithRole } from '@cmt/shared-domain';
 import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
 import { adultStudyClassProgramKeys } from '@/features/setu/adult-class/program-keys';
 import { deriveFamilyPayment } from '@/features/setu/roster/payment';
@@ -62,7 +62,9 @@ export async function WelcomeFamilyDetailBody({
     // Coordinator reaches this page too: every /welcome/roster row links here,
     // so without it the one screen the role is granted dead-ends on click.
     // Spec 3.1 excludes family EDIT from coordinator, not family READ.
-    if (raw && (isWelcomeTeam(raw as unknown as WithRole) || isCoordinator(raw as unknown as WithRole))) {
+    // isCoordinator dropped: isWelcomeTeam() covers it since 2026-08-05, and
+    // naming it again would suggest coordinator needs per-route mention.
+    if (raw && isWelcomeTeam(raw as unknown as WithRole)) {
       allowed = true;
       admin = isAdmin(raw as unknown as WithRole);
     }

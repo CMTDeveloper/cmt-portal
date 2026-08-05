@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { isWelcomeTeam, isCoordinator, matchesRosterFilters, type RosterReportFilters, ROSTER_PAYMENTS } from '@cmt/shared-domain';
+import { isWelcomeTeam, matchesRosterFilters, type RosterReportFilters, ROSTER_PAYMENTS } from '@cmt/shared-domain';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
 import { flags } from '@/lib/flags';
 import { buildRosterReportDataset } from '@/features/setu/roster/report-dataset';
@@ -21,7 +21,8 @@ export async function GET(req: Request) {
   // non-OK response, so a 403 here renders an empty roster rather than an error
   // - the failure mode looks like "there is no data" instead of "denied".
   const claims = { role: session.role, extraRoles: session.extraRoles };
-  if (!isWelcomeTeam(claims) && !isCoordinator(claims)) {
+  // isCoordinator dropped - subsumed by isWelcomeTeam since 2026-08-05.
+  if (!isWelcomeTeam(claims)) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
 

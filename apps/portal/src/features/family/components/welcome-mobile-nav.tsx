@@ -70,7 +70,6 @@ export interface WelcomeNavAudience {
   isAdmin?: boolean;
   hasFamily?: boolean;
   showTeacher?: boolean;
-  role?: 'welcome-team' | 'coordinator';
 }
 
 /**
@@ -82,12 +81,18 @@ export function buildWelcomeNavItems({
   isAdmin = false,
   hasFamily = false,
   showTeacher = false,
-  role = 'welcome-team',
 }: WelcomeNavAudience): WelcomeNavItem[] {
-  const items: Item[] = [ROSTER];
-  // Coordinator's grant is Programs + Levels + Roster; the visitors board is not
-  // part of it, so the tab would 302 on tap.
-  if (role !== 'coordinator') items.push(VISITORS);
+  // Every audience that reaches this nav gets both boards.
+  //
+  // There used to be a `role` prop here, solely to run
+  // `if (role !== 'coordinator') items.push(VISITORS)` - the board sat outside
+  // the coordinator grant and the tab would have 302'd on tap. Coordinator
+  // inherits the whole welcome-team grant as of 2026-08-05, so the gate would
+  // now withhold a screen the role can open, and with it gone `role` had no
+  // remaining reader HERE. The coordinator/welcome-team label distinction is
+  // real but lives elsewhere: the welcome layout picks the sidebar's
+  // displayName, and the FAMILY bottom nav switches on `staffArea`.
+  const items: Item[] = [ROSTER, VISITORS];
   // Levels / Seva / Prasad / Reports became admin-only on 2026-08-03.
   if (isAdmin) items.push(LEVELS, SEVA, PRASAD, REPORTS);
   if (showTeacher) items.push({ href: '/teacher', label: 'Teacher', icon: 'people', match: under('/teacher') });
