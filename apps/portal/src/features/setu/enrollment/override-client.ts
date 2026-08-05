@@ -57,9 +57,13 @@ export async function setEnrollmentOverride(
   // real answer was "this is a waiver" or "they already paid" - a message that
   // sends someone looking for a problem that does not exist.
   if (res.status === 409) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string };
-    if (body.error === 'waived-not-settleable') return { ok: false, reason: 'waived' };
-    if (body.error === 'already-paid-in-portal') return { ok: false, reason: 'already-paid' };
+    // `body?.error`, not `body.error`: a literal JSON `null` body survives the
+    // catch and would throw a TypeError here - which rejects out of this
+    // function, past a caller with no try/catch, leaving the button stuck on
+    // "Saving…". Our server never emits it; a proxy might.
+    const body = (await res.json().catch(() => ({}))) as { error?: string } | null;
+    if (body?.error === 'waived-not-settleable') return { ok: false, reason: 'waived' };
+    if (body?.error === 'already-paid-in-portal') return { ok: false, reason: 'already-paid' };
     return { ok: false, reason: 'not-active' };
   }
   if (res.status === 400) return { ok: false, reason: 'bad-request' };

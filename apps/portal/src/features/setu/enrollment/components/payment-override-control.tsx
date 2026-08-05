@@ -73,11 +73,18 @@ export interface PaymentOverrideEnrollment {
    * enrollment - and Undo does not restore the previous state, it writes null
    * and restores the ask. Recovery takes the audit row and an engineer.
    *
-   * The verdict comes from `classifyRosterPayment`, the SAME function behind the
-   * roster's Paid chip, so the two screens cannot drift. Only a positive 'paid'
-   * suppresses the action: 'unknown' leaves it available, because removing a
-   * legitimate tool on a failed read is its own harm and the route refuses the
-   * dangerous write anyway.
+   * The verdict comes from `deriveFamilyPayment`, which the route's guard also
+   * calls - one predicate, so the screen and the rule behind it move together.
+   * Only a positive 'paid' suppresses the action: 'unknown' leaves it available,
+   * because removing a legitimate tool on a failed read is its own harm.
+   *
+   * Note what that does NOT promise. The route re-runs the SAME predicate, so it
+   * refuses only when ITS read also returns 'paid'; if that read fails, both
+   * allow. This is a de-duplication guard, not authorization - admin-only, a
+   * required note, and a transactional audit row are what actually protect the
+   * action. And 'paid' ultimately rests on donation `status: 'completed'`, which
+   * is client-reported (there is no Stripe webhook), so it means "our records
+   * say the money arrived", not "the bank confirmed it".
    */
   familyHasPaid: boolean;
 }

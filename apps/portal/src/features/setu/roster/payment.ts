@@ -3,6 +3,7 @@ import { getEnrollments, type EnrollmentWithOffering } from '@/features/setu/enr
 import { classifyRosterPayment, type ActiveEnrollmentCharge } from '@cmt/shared-domain/setu';
 import type { OfferingDoc, RosterPayment } from '@cmt/shared-domain/setu';
 import { sumCompletedDonations } from './donations-sum';
+import { getFamilyPledge } from '@/features/setu/pledges/get-family-pledge';
 
 /**
  * The one adapter from a joined enrollment to a payment charge.
@@ -62,10 +63,36 @@ export function classifyBulkPayment(
  * Best-effort payment status for a family. NEVER throws — a derivation failure
  * for one family must not break the roster page (returns 'unknown').
  * Classifies ALL active enrollments (N=2 safe), not the first.
+ *
+ * ── A LIVE MONTHLY PLEDGE COUNTS AS PAID ────────────────────────────────────
+ * Since 2026-07-27 the monthly pledge IS the Bala Vihar enrollment donation,
+ * and a live plan writes NO completed donation docs - there is no Stripe
+ * webhook (task #64/#54), so `sumCompletedDonations` returns 0 for a family
+ * paying every month. Classified on donations alone they read 'outstanding'
+ * forever.
+ *
+ * Every other paid-verdict surface already knows this and ORs the pledge in:
+ * report-dataset.ts:197 (the welcome roster's Paid chip), build-csv-rows.ts,
+ * teacher/roster-confirmation.ts, reports/enrollment-report.ts and the family's
+ * own dashboard. This one did not, so the family-detail screen would have
+ * called every pledge family unpaid while the roster called them Paid - which
+ * is the exact "two screens disagree" report this was written to fix
+ * (Vaibhav, FID 5010), reproduced for a different payment method. Caught in
+ * review before it shipped.
+ *
+ * `getFamilyPledge` rather than `loadActivePledgeFids`: this is one family, and
+ * the bulk set exists so the ~870-row roster does not fan out per family.
+ * `active` only, never `started` - `started` means the family was sent to
+ * Stripe and nothing came back: no mandate, no money.
  */
 export async function deriveFamilyPayment(fid: string): Promise<RosterPayment> {
   try {
-    const [enrollments, paid] = await Promise.all([getEnrollments(fid), sumCompletedDonations(fid)]);
+    const [enrollments, paid, pledge] = await Promise.all([
+      getEnrollments(fid),
+      sumCompletedDonations(fid),
+      getFamilyPledge(fid).catch(() => null),
+    ]);
+    if (pledge?.status === 'active') return 'paid';
     const active = enrollments.filter((e) => e.status === 'active');
     return classifyRosterPayment(active.map(chargeFromEnrollment), paid);
   } catch {

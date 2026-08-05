@@ -120,8 +120,17 @@ export async function PATCH(
   // of a real Stripe payment claims CMT collected the money twice, and Undo does
   // not take it back - it writes null and restores the ask.
   //
-  // Same verdict function as the roster's Paid chip, so the screen the admin
-  // read and the rule that stops them cannot disagree.
+  // `deriveFamilyPayment` is the same function the family-detail page uses to
+  // decide whether to SHOW the button, so the screen an admin read and the rule
+  // that stops them are one predicate rather than two kept in step by hand. It
+  // ORs in a live monthly pledge, which writes no completed donations - without
+  // that, every pledge family would be settleable here while the roster called
+  // them Paid.
+  //
+  // The page and this guard can still DISAGREE across time: the page may have
+  // rendered before a donation completed. That asymmetry is the design - the UI
+  // is advisory, the server is authoritative, and the 409 carries its own
+  // sentence so the admin learns why.
   //
   // Only a POSITIVE 'paid' refuses. 'unknown' (an unpriceable enrollment, a
   // failed read) must stay settleable: this route is the only way to record a

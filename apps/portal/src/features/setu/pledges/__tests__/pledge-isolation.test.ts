@@ -91,6 +91,21 @@ describe('the pledge feature is quarantined', () => {
     join('features', 'setu', 'roster', 'report-dataset.ts'),
     // The enrollment report's CSV half.
     join('features', 'setu', 'roster', 'build-csv-rows.ts'),
+    // 🔴 `deriveFamilyPayment` - the single-family verdict. TWO reasons, and the
+    // second is the refusing kind:
+    //   1. It reports money received, like report-dataset.ts does for the
+    //      roster chip. Without the pledge it would call every monthly-plan
+    //      family 'outstanding' forever, because a live plan writes no
+    //      completed donation docs (there is no Stripe webhook, #54/#64) - so
+    //      the family-detail screen would contradict the roster it was opened
+    //      from.
+    //   2. It gates the off-portal settlement at
+    //      api/welcome/enrollments/[eid]/override. A pledging family's money is
+    //      already arriving by pre-authorized debit; recording an off-portal
+    //      settlement on top claims CMT collected it twice, and Undo does not
+    //      take it back. Added 2026-08-05 after review caught the first draft
+    //      leaving that write open for the whole pledge population.
+    join('features', 'setu', 'roster', 'payment.ts'),
     // 🔴 The double-charge guard. This entry is NOT the usual "a pledge counts
     // as paid" claim the warning above describes - it is the opposite, and the
     // only entry that REFUSES money rather than reporting it received. A family
