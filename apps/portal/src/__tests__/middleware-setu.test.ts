@@ -419,9 +419,9 @@ describe('Auth-entry pages redirect signed-in users to their dashboard', () => {
   it.each([
     ['/', 'family-manager', '/family'],
     ['/', 'family-member', '/family'],
-    ['/', 'welcome-team', '/welcome'],
+    ['/', 'welcome-team', '/welcome/roster'],
     ['/sign-in', 'family-manager', '/family'],
-    ['/sign-in', 'welcome-team', '/welcome'],
+    ['/sign-in', 'welcome-team', '/welcome/roster'],
     ['/register', 'family-manager', '/family'],
     ['/register/family', 'family-member', '/family'],
   ])('%s with role=%s → redirects to %s', async (from, role, expected) => {
@@ -486,7 +486,9 @@ describe('Auth-entry pages redirect signed-in users to their dashboard', () => {
       makeReq('http://localhost/?from=https://evil.com', { cookie: 'good' }),
     );
     expect(res.status).toBe(307);
-    expect(res.headers.get('location')).toBe('http://localhost/welcome');
+    // '/welcome/roster', not '/welcome': the index is a next.config redirect
+    // now, so naming it here would cost a signed-in sevak an extra round trip.
+    expect(res.headers.get('location')).toBe('http://localhost/welcome/roster');
   });
 });
 

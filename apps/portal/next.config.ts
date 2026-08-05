@@ -37,12 +37,77 @@ const config: NextConfig = {
     '/docs': ['docs/runbooks/**/*.md', '../../docs/runbooks/**/*.md'],
     '/docs/*': ['docs/runbooks/**/*.md', '../../docs/runbooks/**/*.md'],
   },
-  // The family acknowledgements screen moved from /disclaimers to
-  // /acknowledgements. Keep the old path working for any in-flight session or
-  // stale link (the route is a server-redirect gate target, so inbound links
-  // are near-zero, but the redirect is cheap insurance).
+  /**
+   * ── EVERY path-to-path redirect belongs HERE, not in a page ────────────────
+   *
+   * These were `page.tsx` files whose whole body was `redirect('/somewhere')`.
+   * That looks equivalent and is not. With `cacheComponents: true`, a page
+   * renders inside the layout's <Suspense>, so Next sends **HTTP 200 plus a
+   * prerendered shell first** and delivers the redirect as the LAST BYTES OF
+   * THE STREAMED BODY. Measured on `/welcome` for a signed-in admin,
+   * 2026-08-05:
+   *
+   *     status=200  x-nextjs-prerender=1  20655 bytes  4198ms
+   *     body ends: $RX("B:1","NEXT_REDIRECT;replace;/welcome/roster;307;")
+   *
+   * Cut that stream anywhere in those 4.2 seconds - cold start, function
+   * timeout, a phone changing network - and the browser is left holding a 200,
+   * a partial shell, and no instruction to go anywhere. It shows its OWN error
+   * page ("This page couldn't load"), which is why the report never looked like
+   * a server error and why reloading always fixed it. Three people hit it on
+   * three platforms between 2026-08-04 and 2026-08-05 (task #114); `/welcome`
+   * is the first thing staff open each session, so it is the most likely of all
+   * of them to meet a cold function.
+   *
+   * `redirects` here is step 2 of Next's routing order - BEFORE middleware and
+   * long before any React renders - so the answer is a real 3xx with an empty
+   * body. There is no stream to truncate.
+   *
+   * NINE pages had this shape. The first sweep found eight and said so; the
+   * parameterized one under /teacher was missed because it was not a bare
+   * `redirect('/literal')`. Every remaining `redirect()` in a page is
+   * CONDITIONAL - an auth or state gate - and those must stay pages, so they
+   * keep the streamed shape by necessity. If a "couldn't load" report ever
+   * points at one of THOSE paths, this is the mechanism to suspect again.
+   *
+   * `permanent: false` (307) on purpose for the app's own paths: a 308 is
+   * cached by the browser more or less forever, so getting a destination wrong
+   * would strand staff on their own machines with no way for us to correct it.
+   * The one genuinely permanent move (/disclaimers) keeps its 308.
+   *
+   * Query strings are preserved automatically. If a redirect ever needs to READ
+   * something - a session, a role, a flag - it does not belong here; put it in
+   * middleware, which is also a real redirect and also never streams.
+   */
   async redirects() {
-    return [{ source: '/disclaimers', destination: '/acknowledgements', permanent: true }];
+    return [
+      // The family acknowledgements screen moved from /disclaimers to
+      // /acknowledgements. Genuinely permanent, and the only 308 here.
+      { source: '/disclaimers', destination: '/acknowledgements', permanent: true },
+
+      // Section indexes: the segment has no page of its own, it opens on one.
+      { source: '/welcome', destination: '/welcome/roster', permanent: false },
+      { source: '/admin/welcome', destination: '/welcome/roster', permanent: false },
+      { source: '/family/enroll', destination: '/family/enroll/bala-vihar', permanent: false },
+
+      // Screens that were folded into another one.
+      { source: '/family/donations', destination: '/family', permanent: false },
+      { source: '/admin/welcome-team', destination: '/admin/users', permanent: false },
+      { source: '/admin/donation-periods', destination: '/admin/programs', permanent: false },
+      { source: '/check-in/admin/reports', destination: '/welcome/reports', permanent: false },
+      { source: '/check-in/teacher/attendance', destination: '/check-in/teacher', permanent: false },
+
+      // Parameterized, and the query string rides along automatically - which
+      // is the whole reason this one had a page: it was re-appending ?date
+      // by hand. It validated the date format first; the attendance screen
+      // validates its own `date` param regardless, so passing one through
+      // unchecked is no different from a teacher typing it there directly.
+      {
+        source: '/teacher/levels/:levelId/previous',
+        destination: '/teacher/levels/:levelId/attendance',
+        permanent: false,
+      },
+    ];
   },
   // Baseline browser-security headers on every response. HSTS is already added
   // by the Vercel platform. A full script-src/default-src CSP is intentionally

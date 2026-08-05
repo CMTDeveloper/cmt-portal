@@ -139,7 +139,9 @@ describe('build-session-claims - coordinator role', () => {
     expect(hasSession(res)).toBe(true);
     if (!hasSession(res)) return;
     expect(res.claims.role).toBe('welcome-team');
-    expect(res.redirectTo).toBe('/welcome');
+    // '/welcome/roster', not '/welcome': the index is a next.config redirect
+    // now, so naming it here would cost a signed-in sevak an extra round trip.
+    expect(res.redirectTo).toBe('/welcome/roster');
   });
 
   it('still redirects a brand-new no-role account to register (guard intact)', async () => {

@@ -222,7 +222,10 @@ export async function buildSessionClaimsForContact(
       redirectTo = '/admin';
     } else if (isWelcomeTeamUser) {
       claims = { role: 'welcome-team', ...contactClaim };
-      redirectTo = '/welcome';
+      // Names the roster directly. '/welcome' is a config redirect now, so
+      // sending them there would spend a round trip arriving at the same place
+      // - and this is the very first request after signing in.
+      redirectTo = '/welcome/roster';
     } else if (isCoordinatorUser) {
       // Standalone coordinator (no family). Ordered AFTER welcome-team on
       // purpose: the two are siblings with disjoint grants, and welcome-team is

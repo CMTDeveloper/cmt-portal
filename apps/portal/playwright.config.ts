@@ -106,6 +106,14 @@ export default defineConfig({
       use: { ...devices['iPhone 13'], storageState: STORAGE },
     },
     {
+      // No `dependencies` on purpose - see the spec's own header. These are
+      // pure HTTP assertions and must not be able to skip because a session
+      // mint failed.
+      name: 'redirects',
+      testMatch: /e2e\/redirects\.spec\.ts$/,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
       name: 'unauthenticated',
       testMatch: /e2e\/unauth\.spec\.ts$/,
       use: { ...devices['Desktop Chrome'] },

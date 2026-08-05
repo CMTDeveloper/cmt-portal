@@ -15,6 +15,7 @@ interface Extra {
   donations?: Array<{ fid: string; status: string; eid: string | null; amountCAD: number }>;
   attendance?: Array<{ pid: string; mid: string; status: string }>;
   offerings?: Record<string, { paymentSource?: string; location?: string | null; termLabel?: string }>;
+  members?: Array<{ id?: string; mid: string; type?: 'Adult' | 'Child'; schoolGrade?: string | null; birthMonthYear?: string | null }>;
 }
 
 // Chainable fake supporting: collectionGroup('enrollments'|'donations'),
@@ -36,6 +37,9 @@ function makeDb(enrollments: SeedDoc[], levels: SeedDoc[], extra: Extra = {}) {
     collectionGroup: (g: string) => {
       if (g === 'enrollments') return { get: async () => snap(enrollments) };
       if (g === 'donations') return { get: async () => ({ docs: cgDonationDocs }) };
+      // Members feed the live level derivation used when an enrollment has no
+      // levelSnapshots - which, in production, is all of them.
+      if (g === 'members') return { get: async () => snap(extra.members ?? []) };
       throw new Error(`unexpected group ${g}`);
     },
     collection: (c: string) => {
@@ -197,3 +201,69 @@ describe('buildEnrollmentReport', () => {
     expect(bv.registered).toBe(1);  // F2 not paid
   });
 });
+
+describe('buildEnrollmentReport - per-level counts without a levelSnapshot', () => {
+  // Production, 2026-08-05: 18 active Bala Vihar enrollments, ZERO with a
+  // levelSnapshots entry - only the annual rollover writes that field, and no
+  // family has been through one yet. So every per-level row on /welcome/reports
+  // read 0 while the roster showed the same children in real classes.
+  it('derives the level from the child when the enrollment carries no snapshot', async () => {
+    mockFs.mockReturnValue(makeDb(
+      [
+        {
+          fid: 'F1', programKey: 'bala-vihar', programLabel: 'Bala Vihar', status: 'active',
+          pid: 'off-bv', enrolledMids: ['F1-1', 'F1-2'], levelSnapshots: {},
+        },
+      ],
+      [
+        { id: 'l2', pid: 'off-bv', levelName: 'Level 2', levelKind: 'level', programKey: 'bala-vihar', gradeBand: ['2', '3'] },
+        { id: 'lS', pid: 'off-bv', levelName: 'Shishu Vihar', levelKind: 'shishu', programKey: 'bala-vihar', gradeBand: [] },
+      ],
+      {
+        members: [
+          { mid: 'F1-1', type: 'Child', schoolGrade: '2' },
+          // Shishu is matched by AGE, never by grade band - 30 months old.
+          { mid: 'F1-2', type: 'Child', schoolGrade: 'Shishu', birthMonthYear: shishuAgedBirthMonth() },
+        ],
+      },
+    ) as never);
+
+    const r = await buildEnrollmentReport({ format: 'json' });
+    expect(r.byLevel.find((l) => l.levelId === 'l2')!.members).toBe(1);
+    expect(r.byLevel.find((l) => l.levelId === 'lS')!.members).toBe(1);
+  });
+
+  it('PREFERS a stored snapshot over the live derivation (a shape today\'s writers cannot produce)', async () => {
+    // Precedence, not live behaviour. `promote-families` is the only writer of
+    // levelSnapshots and it cancels the enrollment in the same transaction, so
+    // an ACTIVE enrollment with a snapshot - what this fixture builds - cannot
+    // currently exist. The branch is guarded here so that if the rollover model
+    // ever leaves the source enrollment active, the report keeps reporting
+    // where a child ACTUALLY sat rather than re-filing them by this year's
+    // grade. The fixture makes snapshot and live grade disagree on purpose.
+    mockFs.mockReturnValue(makeDb(
+      [
+        {
+          fid: 'F1', programKey: 'bala-vihar', programLabel: 'Bala Vihar', status: 'active',
+          pid: 'off-bv', enrolledMids: ['F1-1'], levelSnapshots: { 'F1-1': { levelId: 'l2' } },
+        },
+      ],
+      [
+        { id: 'l2', pid: 'off-bv', levelName: 'Level 2', levelKind: 'level', programKey: 'bala-vihar', gradeBand: ['2'] },
+        { id: 'l5', pid: 'off-bv', levelName: 'Level 5', levelKind: 'level', programKey: 'bala-vihar', gradeBand: ['8'] },
+      ],
+      { members: [{ mid: 'F1-1', type: 'Child', schoolGrade: '8' }] },
+    ) as never);
+
+    const r = await buildEnrollmentReport({ format: 'json' });
+    expect(r.byLevel.find((l) => l.levelId === 'l2')!.members).toBe(1);
+    expect(r.byLevel.find((l) => l.levelId === 'l5')?.members ?? 0).toBe(0);
+  });
+});
+
+/** A birthMonthYear 30 months back - inside the 18..60 month shishu window. */
+function shishuAgedBirthMonth(): string {
+  const now = new Date();
+  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 30, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+}

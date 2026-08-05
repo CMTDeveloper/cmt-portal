@@ -145,7 +145,11 @@ export async function middleware(req: NextRequest) {
 function dashboardForRole(role: unknown): string | null {
   if (role === 'family-manager' || role === 'family-member') return '/family';
   if (role === 'admin') return '/admin';
-  if (role === 'welcome-team') return '/welcome';
+  // '/welcome/roster', not '/welcome': the latter is now a config redirect, so
+  // landing there would cost every welcome-team sign-in an extra round trip to
+  // be told what we already know. Coordinator below has always named its
+  // destination directly.
+  if (role === 'welcome-team') return '/welcome/roster';
   if (role === 'kiosk') return '/check-in';
   // Separate code path from build-session-claims' redirectTo. Returning null
   // here does NOT mean "no dashboard" - it means a signed-in coordinator
