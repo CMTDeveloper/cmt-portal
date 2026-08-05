@@ -174,6 +174,52 @@ describe('WelcomeFamilyDetailPage — with data', () => {
     expect(avatars.length).toBeGreaterThanOrEqual(2);
   });
 
+  it('marks a member who no longer participates, and leaves the others unmarked (N=2)', async () => {
+    // Vaibhav, 2026-08-05: "one of their child does not have any grade assigned
+    // - how is that possible?" It is possible because she is inactive, and
+    // `membersRequiringCompletion` deliberately stops asking for a school grade
+    // once a family says a child has finished (shipped 2026-08-02 for Sadeesh,
+    // who could not otherwise complete registration). The record was right; this
+    // screen just drew her identically to an active child with a hole in her
+    // profile. get-family-for-welcome has projected `participation` all along -
+    // its own comment says the welcome team "would see a retired member as a
+    // normal one and chase their missing details" - the page never read it.
+    mockGetFamilyForWelcome.mockResolvedValue({
+      family: SAMPLE_FAMILY,
+      members: [
+        { ...SAMPLE_MEMBERS[1]!, mid: 'MID005', firstName: 'Deepika', schoolGrade: null, participation: 'inactive' },
+        { ...SAMPLE_MEMBERS[1]!, mid: 'MID006', firstName: 'Pranav', schoolGrade: '10' },
+      ],
+    });
+
+    const page = await WelcomeFamilyDetailPage({ params: Promise.resolve({ fid: 'FAM001' }) });
+    render(page as React.ReactElement);
+
+    // Counted against Deepika's OWN row count rather than a hardcoded 1: this
+    // page renders a mobile tree and a desktop tree at once, so every row
+    // appears more than once. Tying the two together still discriminates - if
+    // Pranav picked the marker up too it would be twice this number - without
+    // baking in how many layout trees exist.
+    const deepikaRows = screen.getAllByTestId('setu-avatar').filter((a) => a.textContent?.includes('Deepika')).length;
+    expect(deepikaRows).toBeGreaterThan(0);
+    expect(screen.getAllByText('No longer participating')).toHaveLength(deepikaRows);
+  });
+
+  it('says a legacy-retired member finished, rather than implying the family chose it', async () => {
+    mockGetFamilyForWelcome.mockResolvedValue({
+      family: SAMPLE_FAMILY,
+      members: [
+        { ...SAMPLE_MEMBERS[1]!, mid: 'MID007', firstName: 'Old', participation: 'inactive', inactiveSource: 'legacy-migration' },
+      ],
+    });
+
+    const page = await WelcomeFamilyDetailPage({ params: Promise.resolve({ fid: 'FAM001' }) });
+    render(page as React.ReactElement);
+
+    expect(screen.getAllByText('Finished (from our records)').length).toBeGreaterThan(0);
+    expect(screen.queryByText('No longer participating')).toBeNull();
+  });
+
   it('shows a real allergy in red but NOT the "no known allergies" answer (N=2)', async () => {
     // Vaibhav, 2026-08-05: a red ⚠ None under a child who has no allergies.
     // Both children present on purpose - the sentinel must go quiet WITHOUT
