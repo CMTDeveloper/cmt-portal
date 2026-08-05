@@ -185,8 +185,15 @@ export async function buildRosterReportDataset(params: { year?: string }): Promi
     const x = d.data() as { pid?: unknown; levelName?: unknown; levelKind?: unknown; programKey?: unknown; gradeBand?: unknown; enabled?: unknown };
     if (x.programKey !== BV_PROGRAM_KEY) continue;
     // A paused level must not place a child - the same exclusion
-    // `fetchEnabledLevelsForPid` makes. `!== false` because the field is absent
+    // `fetchEnabledLevelsForPid` makes. `=== false` because the field is absent
     // on older level docs and absent means enabled.
+    //
+    // No effect on today's data, but NOT for the reason first written here: the
+    // one disabled level (Scarborough "Parents") could never have matched
+    // anyway, because every mid in `enrolledMids` is matched as a Child below
+    // and a 'parents' level matches Adults only. Its empty gradeBand is
+    // irrelevant to its own matching branch. The skip earns its place against
+    // a future paused LEVEL, not against that one.
     if (x.enabled === false) continue;
     const pid = typeof x.pid === 'string' ? x.pid : '';
     const levelName = typeof x.levelName === 'string' ? x.levelName : '';
@@ -199,6 +206,16 @@ export async function buildRosterReportDataset(params: { year?: string }): Promi
     });
     levelsByPid.set(pid, arr);
   }
+  // Bands within a pid are meant to be disjoint, and in production today they
+  // are (audited 2026-08-05: no two enabled levels in either offering claim the
+  // same normalized grade). But `memberMatchesLevel` normalizes both sides, so
+  // an admin entering "3" on one level and "Grade 3" on another WOULD make both
+  // match - and `.find()` would then be decided by Firestore's snapshot order,
+  // which is not guaranteed stable between requests. Sorting by name makes the
+  // answer the same on every run and the same as a human reading the levels
+  // list, so a data-entry mistake surfaces as a consistently wrong level rather
+  // than a child who moves between two levels at random.
+  for (const arr of levelsByPid.values()) arr.sort((a, b) => a.levelName.localeCompare(b.levelName));
   // One clock for the whole report, so two children of the same age cannot land
   // in different levels because the loop crossed a month boundary.
   const now = new Date();

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { NO_ALLERGIES } from '@cmt/shared-domain';
+import { NO_ALLERGIES, recordedAllergy } from '@cmt/shared-domain';
 import type { ChildAchievement, ChildProfile, ChildProfileProgram, ChildProgramAttendance } from '../get-child-profile';
 
 vi.mock('@cmt/ui', () => ({
@@ -32,9 +32,14 @@ function makeProgram(over: Partial<ChildProfileProgram> = {}): ChildProfileProgr
 }
 
 function makeProfile(over: Partial<ChildProfile> = {}): ChildProfile {
+  // `recordedAllergy` is DERIVED from foodAllergies here, exactly as
+  // getChildProfile derives it, so a test that overrides only the answer cannot
+  // silently produce a pair the real code could never emit.
+  const answer = over.foodAllergies !== undefined ? over.foodAllergies : null;
   return {
     mid: 'CMT-FAM1-03', publicMid: '50001', fid: 'CMT-FAM1', firstName: 'Anaya', lastName: 'Patel',
-    type: 'Child', schoolGrade: 'Grade 5', birthMonthYear: '2015-03', foodAllergies: null,
+    type: 'Child', schoolGrade: 'Grade 5', birthMonthYear: '2015-03', foodAllergies: answer,
+    recordedAllergy: recordedAllergy(answer),
     participation: 'active',
     manager: false,
     programs: [

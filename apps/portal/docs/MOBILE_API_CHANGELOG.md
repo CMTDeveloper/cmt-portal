@@ -22,6 +22,35 @@ Everything below is the backlog of contract changes since then.
 
 ---
 
+## 2026-08-05 - `develop` - 🔴 SAFETY: never warn off `foodAllergies` again - use the new `recordedAllergy`
+
+**Affects `GET /api/setu/members/[mid]/profile` (`ChildProfile`). Additive - nothing was removed or renamed, so the mobile keeps building. But the app is showing false allergy warnings TODAY and only adopting the new field fixes it.**
+
+The portal's "No known allergies" checkbox **writes the literal string `'None'`** into `foodAllergies`, so a family can satisfy the required field without inventing an allergy. Every reader that asked only "is this a non-empty string?" therefore treated it as an allergy. Measured in production on 2026-08-05: **2044 member docs, 105 with any `foodAllergies` value, 104 of them exactly `'None'`, and ONE real (`'nuts, pollen'`)**. Seven portal surfaces were showing 104 false severe-allergy markers against one true one - which is worse than useless, because it teaches staff to stop reading the marker.
+
+Fixed portal-side in `e1a09be`. The API response could not be fixed the same way: `foodAllergies` is the family's **answer** and the edit form round-trips it (`'None'` is what re-ticks the checkbox), so it must stay raw.
+
+**What changed in the response:** a new sibling field.
+
+```jsonc
+{
+  "profile": {
+    "foodAllergies": "None",        // unchanged: the family's raw ANSWER
+    "recordedAllergy": null         // NEW: the allergy to WARN about, or null
+  }
+}
+```
+
+**What the mobile must do:**
+1. Add `recordedAllergy: z.string().nullable()` to the `ChildProfile` schema.
+2. **Drive every allergy badge, banner, icon and colour off `recordedAllergy`, never off `foodAllergies`.** Show the warning only when it is non-null.
+3. If the app displays the answer itself (e.g. a "Food allergies" detail row), keep reading `foodAllergies` - showing "None" as a *value* is correct; showing it as a *warning* is not.
+4. If the app hardcodes the word "severe" anywhere near this, drop it. The portal collects allergy TEXT and has never collected a severity - the web was printing `"nuts, pollen · severe"`, asserting something nobody recorded.
+
+The rule itself lives in `recordedAllergy()` in `@cmt/shared-domain`, which mobile cannot import - that is precisely why the server now sends the answer instead of the input. **Do not reimplement the matching**; a near-miss here means either a false alarm on 104 children or, far worse, silence on the one who has a real allergy.
+
+---
+
 ## 2026-08-04 - `develop` - `clientReferenceId` on a donation is now `FID-5006-<did>`, not `<did>`
 
 **Field name and type unchanged; the VALUE format changed.** Affects `DonationDoc.clientReferenceId` wherever the mobile reads donations (e.g. `GET /api/setu/donations`).

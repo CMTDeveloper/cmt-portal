@@ -45,7 +45,7 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
       {/* Safety-first: always-visible allergy + emergency banner (brief §9) */}
       {s.foodAllergies ? (
         <div style={{ marginTop: 16 }}>
-          <AllergyCallout severity="severe" summary={s.foodAllergies} detail={ec ? `Emergency: ${ec.relation} · ${ec.phone}` : 'Please inform the class teacher.'} />
+          <AllergyCallout summary={s.foodAllergies} detail={ec ? `Emergency: ${ec.relation} · ${ec.phone}` : 'Please inform the class teacher.'} />
         </div>
       ) : ec ? (
         <div style={{ marginTop: 16, padding: '12px 14px', borderRadius: 'var(--radius)', background: 'var(--surface2)', fontSize: 13 }}>
