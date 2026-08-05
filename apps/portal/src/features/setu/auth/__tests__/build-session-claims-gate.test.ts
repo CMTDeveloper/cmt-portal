@@ -181,4 +181,58 @@ describe('build-session-claims — sign-in gate (pending members)', () => {
     expect(res.claims.role).toBe('family-member');
     expect(res.claims.extraRoles).toEqual(['welcome-team']);
   });
+
+  // The same rule has to cover coordinator as of 2026-08-05, when it became a
+  // SUPERSET of welcome-team. This function does not call isWelcomeTeam() - it
+  // derives its own boolean from the grant docs - so the one-line inheritance
+  // in role.ts does NOT reach it.
+  //
+  // The failure it prevents is the worst shape available: a coordinator whose
+  // own family record is pending gets no session at all, so the route-layer
+  // inheritance never runs. They are not degraded, they are locked out, and the
+  // screen tells them to go ask their family manager for approval.
+  it('a pending member who is ALSO a coordinator is NOT gated either', async () => {
+    mockFind.mockResolvedValue({
+      source: 'setu',
+      fid: 'CMT-FAM1',
+      mid: 'CMT-FAM1-04',
+      legacyFid: null,
+      member: { manager: false, portalAccess: 'pending' },
+    });
+    mockGetMemberRoles.mockResolvedValue(['coordinator']);
+
+    const res = await buildSessionClaimsForContact({
+      type: 'email',
+      value: 'coord-pending@example.com',
+      contactProvenance: 'otp',
+    });
+
+    expect(isPendingApproval(res)).toBe(false);
+    expect(hasSession(res)).toBe(true);
+    if (!hasSession(res)) return;
+    expect(res.claims.role).toBe('family-member');
+    expect(res.claims.extraRoles).toEqual(['coordinator']);
+  });
+
+  // The gate must still hold for someone with NO sevak role - the bypass is for
+  // staff, not a hole. Without this the test above would pass just as well if
+  // the gate were deleted outright.
+  it('still gates a pending member who holds no sevak role at all', async () => {
+    mockFind.mockResolvedValue({
+      source: 'setu',
+      fid: 'CMT-FAM1',
+      mid: 'CMT-FAM1-04',
+      legacyFid: null,
+      member: { manager: false, portalAccess: 'pending' },
+    });
+    mockGetMemberRoles.mockResolvedValue([]);
+
+    const res = await buildSessionClaimsForContact({
+      type: 'email',
+      value: 'plain-pending@example.com',
+      contactProvenance: 'otp',
+    });
+
+    expect(isPendingApproval(res)).toBe(true);
+  });
 });

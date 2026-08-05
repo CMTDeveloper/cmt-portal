@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import {
-  isWelcomeTeam,
+  isAdmin,
   ReportQuerySchema,
   REPORT_KINDS,
   type ReportKind,
@@ -42,7 +42,14 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
   const session = readSessionFromHeaders(req);
   if (!session) return NextResponse.json({ error: 'no-session' }, { status: 401 });
   const claims = { role: session.role, extraRoles: session.extraRoles };
-  if (!isWelcomeTeam(claims)) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+  // isAdmin, NOT isWelcomeTeam. Middleware already restricts this path to
+  // admins (can-access-route.ts), and this in-handler check was left behind at
+  // the 2026-08-03 narrowing - gate 1 moved, gate 3 did not. It is unreachable
+  // today, which is exactly why it is worth closing: it is a trap primed to
+  // fire the moment the middleware rule is loosened, and since 2026-08-05
+  // isWelcomeTeam() also answers true for a coordinator, so the blast radius
+  // silently grew.
+  if (!isAdmin(claims)) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
 
   const parsed = ReportQuerySchema.safeParse(
     Object.fromEntries(new URL(req.url).searchParams.entries()),
