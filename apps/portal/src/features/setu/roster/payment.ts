@@ -4,6 +4,7 @@ import { classifyRosterPayment, type ActiveEnrollmentCharge } from '@cmt/shared-
 import type { OfferingDoc, RosterPayment } from '@cmt/shared-domain/setu';
 import { sumCompletedDonations } from './donations-sum';
 import { getFamilyPledge } from '@/features/setu/pledges/get-family-pledge';
+import { flags } from '@/lib/flags';
 
 /**
  * The one adapter from a joined enrollment to a payment charge.
@@ -81,16 +82,31 @@ export function classifyBulkPayment(
  * review before it shipped.
  *
  * `getFamilyPledge` rather than `loadActivePledgeFids`: this is one family, and
- * the bulk set exists so the ~870-row roster does not fan out per family.
- * `active` only, never `started` - `started` means the family was sent to
- * Stripe and nothing came back: no mandate, no money.
+ * the bulk set exists so the ~870-row roster does not fan out per family. The
+ * two agree by construction - `selectFamilyPledge` ranks `active` above every
+ * other status, so if ANY doc for the fid is active this returns it, which is
+ * the same membership test the bulk set performs.
+ *
+ * `active` only, never `started`. NOT because `started` means nothing happened:
+ * a pre-authorized debit "settles in days, not minutes" (reconcile-pledges.ts:9,
+ * STALE_AFTER_DAYS = 14), so `started` routinely IS a real mandate the portal
+ * has not observed yet. It means UNRESOLVED - possibly abandoned mid-flow,
+ * possibly awaiting the daily reconcile - and unresolved is not paid. Counting
+ * it would label a family who clicked once and left as Paid; refusing
+ * settlement on it would strand an abandoned-pledge family for up to 14 days
+ * when they arrange a genuine off-portal payment instead.
  */
 export async function deriveFamilyPayment(fid: string): Promise<RosterPayment> {
   try {
     const [enrollments, paid, pledge] = await Promise.all([
       getEnrollments(fid),
       sumCompletedDonations(fid),
-      getFamilyPledge(fid).catch(() => null),
+      // Flag-gated to match `loadActivePledgeFids`, which returns an empty set
+      // when the feature is dark. Without this, flipping the kill switch would
+      // silence pledges on every roster and report while THIS predicate alone
+      // kept answering 'paid' and refusing settlements - the "one answer across
+      // surfaces" property holding right up until the moment it is most needed.
+      flags.setuPledge ? getFamilyPledge(fid).catch(() => null) : Promise.resolve(null),
     ]);
     if (pledge?.status === 'active') return 'paid';
     const active = enrollments.filter((e) => e.status === 'active');

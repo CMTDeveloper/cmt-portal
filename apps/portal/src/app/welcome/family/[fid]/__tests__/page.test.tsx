@@ -67,12 +67,13 @@ vi.mock('@/features/setu/adult-class/program-keys', () => ({
   adultStudyClassProgramKeys: mockAdultClassKeys,
   isAdultStudyClassKey: vi.fn(),
 }));
-// The donation sum + the shared roster classifier, so the panel can tell a
-// family who has already paid from one who has not. Unmocked, the real
-// donations read reaches Firestore, the joint promise rejects, and the panel
-// correctly disappears - which is the fail-closed path, not a test fixture.
-const mockPaidCAD = vi.hoisted(() => vi.fn());
-vi.mock('@/features/setu/roster/payment', () => ({ deriveFamilyPayment: mockPaidCAD }));
+// The SHARED payment verdict - the same function the override route's guard
+// calls, so page and route cannot drift. It never throws (it catches internally
+// and returns 'unknown'), so unlike the enrollments and programs reads beside
+// it, a failure here does NOT collapse the panel: it leaves the action
+// available, which is the deliberate 'unknown'-stays-settleable direction.
+const mockVerdict = vi.hoisted(() => vi.fn());
+vi.mock('@/features/setu/roster/payment', () => ({ deriveFamilyPayment: mockVerdict }));
 vi.mock('@/features/setu/enrollment/get-open-offerings', () => ({
   getOpenOfferingsForFamily: vi.fn(async () => []),
   resolveCurrentOffering: vi.fn(() => null),
@@ -100,9 +101,9 @@ beforeEach(() => {
   // Both centres' adult classes, so a fixture using only the literal key cannot
   // pass by accident.
   mockAdultClassKeys.mockResolvedValue(['adult-study-class', 'adult-study-east']);
-  mockPaidCAD.mockReset();
+  mockVerdict.mockReset();
   // Nothing paid: the state in which the off-portal action is legitimate.
-  mockPaidCAD.mockResolvedValue('outstanding');
+  mockVerdict.mockResolvedValue('outstanding');
 });
 
 const SAMPLE_FAMILY = {
@@ -409,7 +410,7 @@ describe('WelcomeFamilyDetailPage — a family paying by monthly pledge', () => 
       },
     ]);
     // deriveFamilyPayment is what ORs the pledge in; the page must take its word.
-    mockPaidCAD.mockResolvedValue('paid');
+    mockVerdict.mockResolvedValue('paid');
 
     const page = await WelcomeFamilyDetailPage({ params: Promise.resolve({ fid: 'FAM001' }) });
     render(page as React.ReactElement);
