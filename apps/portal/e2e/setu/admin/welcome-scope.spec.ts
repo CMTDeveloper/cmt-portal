@@ -294,6 +294,22 @@ test.describe.serial('admin keeps everything welcome-team gave up', () => {
     });
   }
 
+  test('the sidebar "Family search" link survives being a CONFIG redirect now', async ({ page }) => {
+    // admin-sidebar.tsx:37 links href="/welcome", which as of 2026-08-05 is a
+    // next.config redirect rather than a page. That makes this a CLIENT-side
+    // navigation through an HTTP 307 - App Router has to follow the redirect on
+    // its RSC fetch and update the URL. That behaviour is the one part of the
+    // change that could not be verified by reading code, and a client-side nav
+    // that half-works is exactly the shape of issue #62, so it gets a click.
+    await page.goto('/admin');
+    const link = page.getByRole('link', { name: 'Family search' }).filter({ visible: true }).first();
+    await expect(link).toBeVisible({ timeout: 30_000 });
+    await link.click();
+
+    await expect(page, 'clicking Family search did not land on the roster').toHaveURL(/\/welcome\/roster/, { timeout: 30_000 });
+    await expect(page.getByRole('heading', { level: 1, name: 'Roster' }).filter({ visible: true })).toBeVisible({ timeout: 30_000 });
+  });
+
   test('and the admin phone nav still REACHES them, four in the bar and the rest in More', async ({ page }) => {
     // The admin is the case this bar exists for: /admin links seva and reports
     // but NOT /welcome/levels or /welcome/prasad, so losing them here loses
