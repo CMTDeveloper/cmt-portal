@@ -127,6 +127,31 @@ export async function buildSessionClaimsForContact(
   const isCoordinatorUser =
     allExistingRoles.has('coordinator') || memberRoles.includes('coordinator');
 
+  /**
+   * Extras for the FAMILY-LESS sevak chain, given the role that won the primary
+   * slot. Ordering alone cannot carry every combination: it works for the
+   * welcome-team/coordinator pair because one subsumes the other, but
+   * isTeacher({role:'coordinator'}) is false, so a sevak who both coordinates
+   * and teaches loses one grant whichever way the if/else is written. Only
+   * extras can hold both.
+   *
+   * The primary is filtered out so a role never appears twice in one session.
+   */
+  function standaloneExtras(primary: string): string[] {
+    const all: string[] = [];
+    if (isAdminUser) all.push('admin');
+    if (isWelcomeTeamUser) all.push('welcome-team');
+    if (isCoordinatorUser) all.push('coordinator');
+    if (isTeacherUser) all.push('teacher');
+    if (isKioskUser) all.push('kiosk');
+    return all.filter((r) => r !== primary);
+  }
+
+  function withExtras(role: string): Record<string, unknown> {
+    const extras = standaloneExtras(role);
+    return extras.length > 0 ? { extraRoles: extras } : {};
+  }
+
   function preservedExtras(): string[] {
     const extras: string[] = [];
     if (isAdminUser) extras.push('admin');
@@ -236,7 +261,7 @@ export async function buildSessionClaimsForContact(
   // Family-manager who also has admin claim stays in their family role.
   if (result.source === null && !hasPendingInvite) {
     if (isAdminUser) {
-      claims = { role: 'admin', ...contactClaim };
+      claims = { role: 'admin', ...contactClaim, ...withExtras('admin') };
       redirectTo = '/admin';
     } else if (isCoordinatorUser) {
       // Standalone coordinator (no family). Ordered BEFORE welcome-team, and
@@ -254,10 +279,10 @@ export async function buildSessionClaimsForContact(
       // Putting the SUPERSET first fixes it without needing extraRoles at all:
       // isWelcomeTeam() returns true for coordinator, so this session carries
       // the whole welcome-team grant too.
-      claims = { role: 'coordinator', ...contactClaim };
+      claims = { role: 'coordinator', ...contactClaim, ...withExtras('coordinator') };
       redirectTo = '/welcome/roster';
     } else if (isWelcomeTeamUser) {
-      claims = { role: 'welcome-team', ...contactClaim };
+      claims = { role: 'welcome-team', ...contactClaim, ...withExtras('welcome-team') };
       // Names the roster directly. '/welcome' is a config redirect now, so
       // sending them there would spend a round trip arriving at the same place
       // - and this is the very first request after signing in.
@@ -265,7 +290,7 @@ export async function buildSessionClaimsForContact(
     } else if (isKioskUser) {
       // Generic kiosk tablet account: mint a kiosk session and land on the
       // check-in kiosk. isKiosk() inherits admin, so an admin above wins first.
-      claims = { role: 'kiosk', ...contactClaim };
+      claims = { role: 'kiosk', ...contactClaim, ...withExtras('kiosk') };
       redirectTo = '/check-in';
     }
   }

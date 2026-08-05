@@ -25,10 +25,15 @@ export const GuestCheckInSchema = z.object({
   // later claim their account (Vaibhav). phone.min(7) mirrors registration.
   email: z.string().email(),
   phone: z.string().min(7),
-  numberOfAdults: z.coerce.number().int().min(0),
+  // Bounded, not just non-negative. Nothing downstream sanity-checks these, and
+  // both feed screens that render per-row: an unbounded children array is an
+  // unbounded teacher class list, and a five-digit adult count is a number that
+  // appears verbatim on the visitors board. Generous enough that no real family
+  // meets it.
+  numberOfAdults: z.coerce.number().int().min(0).max(50),
   // Per-child name + grade (may be empty for an adults-only visit). The store
   // derives numberOfChildren from this.
-  children: z.array(GuestChildSchema).default([]),
+  children: z.array(GuestChildSchema).max(20).default([]),
   notes: z.string().optional(),
 });
 

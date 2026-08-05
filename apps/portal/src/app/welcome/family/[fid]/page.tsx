@@ -59,11 +59,14 @@ export async function WelcomeFamilyDetailBody({
   let admin = false;
   if (sessionCookie) {
     const raw = await verifyPortalSessionCookie(sessionCookie);
-    // Coordinator reaches this page too: every /welcome/roster row links here,
-    // so without it the one screen the role is granted dead-ends on click.
-    // Spec 3.1 excludes family EDIT from coordinator, not family READ.
-    // isCoordinator dropped: isWelcomeTeam() covers it since 2026-08-05, and
-    // naming it again would suggest coordinator needs per-route mention.
+    // Coordinator reaches this page through isWelcomeTeam(), which has covered
+    // it since 2026-08-05 - so isCoordinator is not named again here.
+    //
+    // This block used to add "Spec 3.1 excludes family EDIT from coordinator,
+    // not family READ", and the coordinator note was appended BELOW that rather
+    // than replacing it, leaving a comment that contradicted itself in a file
+    // the same commit was editing. Spec 3.1 was reversed by the owner: family
+    // edit is coordinator's now.
     if (raw && isWelcomeTeam(raw as unknown as WithRole)) {
       allowed = true;
       admin = isAdmin(raw as unknown as WithRole);

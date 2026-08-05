@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { isWelcomeTeam, isCoordinator, type WithRole } from '@cmt/shared-domain';
+import { isWelcomeTeam, isCoordinator, isTeacher, type WithRole } from '@cmt/shared-domain';
 
 // The coordinator role must be able to hold a session with NO family. Three
 // separate sites decide that, and preservedExtras() is only one of them: the
@@ -188,5 +188,43 @@ describe('build-session-claims - coordinator role', () => {
 
     expect(hasSession(res)).toBe(false);
     expect('redirectTo' in res && res.redirectTo).toBe('/register?contact=verified');
+  });
+
+  // ── The family-less chain must not DROP a capability ──────────────────────
+  //
+  // Ordering fixes the welcome-team/coordinator pair because one subsumes the
+  // other. It cannot fix teacher: isTeacher({role:'coordinator'}) is false, so
+  // a standalone sevak who both coordinates AND teaches loses one of the two
+  // whichever way the if/else is ordered. Only extras can carry both.
+  it('a standalone coordinator who also TEACHES keeps both capabilities', async () => {
+    mockGetUser.mockResolvedValue({ customClaims: { role: 'coordinator', extraRoles: ['teacher'] } });
+
+    const res = await buildSessionClaimsForContact({
+      type: 'email',
+      value: 'coach@chinmayatoronto.org',
+      contactProvenance: 'password',
+    });
+
+    expect(hasSession(res)).toBe(true);
+    if (!hasSession(res)) return;
+    const claims = { role: res.claims.role, extraRoles: res.claims.extraRoles } as WithRole;
+    expect(isCoordinator(claims), 'lost the coordinator grant').toBe(true);
+    expect(isTeacher(claims), 'lost the teacher grant').toBe(true);
+  });
+
+  it('a standalone welcome-team volunteer who also TEACHES keeps both', async () => {
+    mockGetUser.mockResolvedValue({ customClaims: { role: 'welcome-team', extraRoles: ['teacher'] } });
+
+    const res = await buildSessionClaimsForContact({
+      type: 'email',
+      value: 'desk-teacher@chinmayatoronto.org',
+      contactProvenance: 'password',
+    });
+
+    expect(hasSession(res)).toBe(true);
+    if (!hasSession(res)) return;
+    const claims = { role: res.claims.role, extraRoles: res.claims.extraRoles } as WithRole;
+    expect(isWelcomeTeam(claims), 'lost the welcome-team grant').toBe(true);
+    expect(isTeacher(claims), 'lost the teacher grant').toBe(true);
   });
 });

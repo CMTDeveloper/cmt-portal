@@ -250,8 +250,12 @@ export function canAccessRoute(
   //     to match the invite email; a fresh OTP-signed-in invitee has
   //     role='family' (no fid yet) and must be allowed through middleware.
   // POST /api/setu/invite/send and /api/setu/invite/cancel are intentionally NOT
-  // covered here — they fall through to the catch-all below and are manager +
-  // welcome-team + admin only (the handlers further enforce own-family scope).
+  // covered here — they fall through to the catch-all below, which is
+  // `isSetuManager || isAdmin`: MANAGER + ADMIN only (the handlers further
+  // enforce own-family scope). This said "manager + welcome-team + admin" until
+  // 2026-08-05, and had been wrong since the 2026-08-03 narrowing that the
+  // catch-all's own comment thirty lines below already documents - i.e. the
+  // file contradicted itself, in the too-WIDE direction.
   if (
     pathname.startsWith('/api/setu/invite/') &&
     !pathname.startsWith('/api/setu/invite/send') &&
