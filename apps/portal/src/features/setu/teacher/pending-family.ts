@@ -2,6 +2,7 @@ import { FieldValue, portalFirestore } from '@cmt/firebase-shared/admin/firestor
 import { generateFid } from '@/features/setu/registration/generate-fid';
 import { hashContactKey } from '@/features/setu/registration/hash-contact-key';
 import { allocateMemberPublicIds } from '@/features/setu/ids/public-id-allocator';
+import { nextMemberMid } from '@/features/setu/ids/member-mid';
 
 // The portal has no direct firebase-admin dep, so we derive the Firestore type
 // from the portal handle factory (mirrors check-in-source.ts's pattern).
@@ -21,10 +22,6 @@ export interface PendingChildResult {
   fid: string;
   childMid: string;
   createdFamily: boolean;
-}
-
-function zeroPad(n: number): string {
-  return n.toString().padStart(2, '0');
 }
 
 function baseMemberFields(now: FirebaseFirestore.FieldValue) {
@@ -81,7 +78,15 @@ export async function upsertPendingFamilyChild(db: Db, params: PendingChildParam
 
     if (existingFid) {
       const memSnap = await txn.get(db.collection('families').doc(existingFid).collection('members'));
-      const nextMid = `${existingFid}-${zeroPad(memSnap.size + 1)}`;
+      // Highest existing suffix + 1, NEVER the member count. count+1 collides
+      // with a live member the moment the numbering has a gap, and the txn.set
+      // below SILENTLY OVERWRITES - which is how a real family lost a child
+      // before `nextMemberMid` was written (see ids/member-mid.ts). This path
+      // was not moved onto the helper at the time; it is now.
+      const nextMid = nextMemberMid(
+        existingFid,
+        (memSnap.docs as Array<{ id: string }>).map((d) => d.id),
+      );
       txn.set(db.collection('families').doc(existingFid).collection('members').doc(nextMid), {
         mid: nextMid,
         publicMid: publicMids[0]!,

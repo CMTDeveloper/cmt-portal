@@ -11,6 +11,7 @@ import {
 import { getSessionContactFromHeaders } from '@/features/setu/auth/get-current-session-email';
 import { hashContactKey } from '@/features/setu/registration/hash-contact-key';
 import { allocateMemberPublicIds } from '@/features/setu/ids/public-id-allocator';
+import { nextMemberMid } from '@/features/setu/ids/member-mid';
 
 
 const bodySchema = z.object({
@@ -19,9 +20,6 @@ const bodySchema = z.object({
   mode: z.enum(['web', 'mobile']).optional(),
 });
 
-function zeroPad(n: number): string {
-  return n.toString().padStart(2, '0');
-}
 
 export async function POST(req: Request) {
   if (!flags.setuAuth) {
@@ -137,10 +135,17 @@ export async function POST(req: Request) {
 
       // Resolve the member id being bound. Link path reuses the pending member's
       // mid; create path mints the next sequence id.
+      // Highest existing suffix + 1, NEVER the member count. count+1 collides
+      // with a live member as soon as the numbering has a gap, and the txn.set
+      // on the create branch below SILENTLY OVERWRITES - the failure that lost
+      // a real child before `nextMemberMid` was written (ids/member-mid.ts).
       const boundMid =
         existingMemberRef && existingMemberSnap?.exists
           ? memberMid!
-          : `${fid}-${zeroPad(((membersSnap as { size: number } | null)?.size ?? 0) + 1)}`;
+          : nextMemberMid(
+              fid,
+              ((membersSnap as { docs?: Array<{ id: string }> } | null)?.docs ?? []).map((d) => d.id),
+            );
       const memberRef = db.collection('families').doc(fid).collection('members').doc(boundMid);
 
       if (existingMemberRef && existingMemberSnap?.exists) {

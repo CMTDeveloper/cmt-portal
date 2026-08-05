@@ -265,6 +265,55 @@ describe('POST /api/setu/invite/accept', () => {
     expect(memberWrite?.[1]).toMatchObject({ publicMid: '50001', firstName: 'Priya', lastName: 'Patel', manager: true });
   });
 
+  // ── mid allocation must survive a gap in the numbering (task #129) ─────────
+  //
+  // Second of the two callsites that minted `count + 1` instead of calling
+  // `nextMemberMid`. The helper exists BECAUSE this arithmetic once wrote a new
+  // member over a live one (see ids/member-mid.ts) - so a family that has ever
+  // had a member removed could lose a second one here, on the legacy create
+  // path, at the moment someone accepts an invite to join them.
+  it('legacy create path: a DELETED member in the numbering does not get overwritten', async () => {
+    mockGetSession.mockReturnValue(validSession);
+    const inviteSnap = {
+      exists: true,
+      data: () => ({
+        token: validInvite.token,
+        firstName: 'Priya',
+        lastName: 'Patel',
+        inviterMid: validInvite.inviterMid,
+        inviterName: validInvite.inviterName,
+        familyName: validInvite.familyName,
+        relation: validInvite.relation,
+        email: validInvite.email,
+        expiresAt: { toDate: () => validInvite.expiresAt },
+        acceptedAt: null,
+        acceptedByMid: null,
+      }),
+      ref: { parent: { parent: { id: 'FAM001ABCD12' } }, update: mockUpdate },
+    };
+    mockGet.mockReset();
+    mockGet
+      .mockResolvedValueOnce(inviteSnap)
+      .mockResolvedValueOnce({ exists: true, data: () => ({ fid: 'FAM001ABCD12', name: 'Patel Family', managers: ['FAM001ABCD12-01'] }) })
+      // -02 was deleted. Two members remain, so count+1 lands on -03, which is
+      // TAKEN by a living person. Correct answer is highest-suffix+1 = -04.
+      .mockResolvedValueOnce({ docs: [{ id: 'FAM001ABCD12-01' }, { id: 'FAM001ABCD12-03' }] })
+      .mockResolvedValueOnce({ exists: false });
+
+    const res = await POST(makeRequest({ token: 'tok-abc123' }));
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.mid).toBe('FAM001ABCD12-04');
+    // The member doc is the only set() payload carrying firstName. Assert the
+    // payload's own mid too - a correct return value written to the wrong doc
+    // is the shape of the failure that actually loses someone.
+    const memberWrite = mockSet.mock.calls.find(
+      ([, data]) => data && typeof data === 'object' && 'firstName' in data,
+    );
+    expect((memberWrite?.[1] as { mid: string }).mid).toBe('FAM001ABCD12-04');
+  });
+
   it('happy path: sets __session cookie with refreshed claims after invite accept', async () => {
     mockGetSession.mockReturnValueOnce(validSession);
     mockRunTransaction.mockImplementationOnce(async (fn: (txn: unknown) => unknown) => {
