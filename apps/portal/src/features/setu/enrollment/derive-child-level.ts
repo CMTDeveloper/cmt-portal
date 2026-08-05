@@ -43,5 +43,14 @@ export async function fetchEnabledLevelsForPid(pid: string): Promise<LevelForMat
       levelName: String(l['levelName']),
       levelKind: l['levelKind'] as LevelKind,
       gradeBand: (l['gradeBand'] as string[]) ?? [],
-    }));
+    }))
+    // Same order as `report-dataset.ts` builds, and for the same reason.
+    // `matchChildLevel` takes the FIRST match, and bands are only disjoint by
+    // convention - nothing enforces it, and `memberMatchesLevel` normalizes
+    // both sides, so "3" on one level and "Grade 3" on another would both
+    // match. Ordering by name makes the winner the same here and on the
+    // roster; without it the family dashboard and the welcome roster could
+    // name DIFFERENT levels for one child, which is worse than either being
+    // wrong. (No such overlap exists in production - audited 2026-08-05.)
+    .sort((a, b) => a.levelName.localeCompare(b.levelName));
 }

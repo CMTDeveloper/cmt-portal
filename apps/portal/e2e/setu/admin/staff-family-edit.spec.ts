@@ -30,6 +30,14 @@ const STAFF = `setu-test-sevak@${DOMAIN}`;
  */
 const VOLUNTEER_PARENT = `setu-test-parent-volunteer@${DOMAIN}`;
 const PLAIN_PARENT = `setu-test-parent-scarborough@${DOMAIN}`;
+/**
+ * Deleting a member is ADMIN-only (`requireAdmin: true` on the DELETE route,
+ * tightened by 94f091b on 2026-08-04). A sevak may add and edit; only an admin
+ * may remove. This spec kept asking the sevak to delete and so had been failing
+ * on preview ever since - and, worse, its cleanup used the same denied context,
+ * leaving a probe child on a real UAT family on every run.
+ */
+const ADMIN = `setu-test-admin@${DOMAIN}`;
 const COORDINATOR = `setu-test-coordinator@${DOMAIN}`;
 
 test.skip(!PASSWORD, 'TEST_ACCOUNTS_PASSWORD required (run seed:test-accounts first)');
@@ -77,8 +85,10 @@ test.afterAll(async () => {
   // Belt and braces: the probe is also removed inline, but a mid-spec failure
   // must not leave a stray child on a real UAT family.
   if (probeMid) {
-    const staff = await ctxFor(STAFF);
-    await staff.delete(`/api/welcome/families/${fid}/members/${probeMid}`, { failOnStatusCode: false });
+    // ADMIN, not STAFF: a sevak's delete is refused, so a staff-context cleanup
+    // silently leaves the probe behind - which is exactly what happened.
+    const admin = await ctxFor(ADMIN);
+    await admin.delete(`/api/welcome/families/${fid}/members/${probeMid}`, { failOnStatusCode: false });
   }
   for (const ctx of contexts.values()) await ctx.dispose();
 });
@@ -126,7 +136,7 @@ test.describe.serial('staff cross-family edit', () => {
     expect((await res.json()).error).toBe('grade-required');
   });
 
-  test('staff can add, edit and remove a member of another family', async () => {
+  test('a sevak can add and edit another family member, but only an ADMIN may remove', async () => {
     const staff = await ctxFor(STAFF);
 
     const created = await staff.post(`/api/welcome/families/${fid}/members`, {
@@ -158,8 +168,16 @@ test.describe.serial('staff cross-family edit', () => {
         failOnStatusCode: false,
       });
       expect([401, 403]).toContain(stolen.status());
+      // Removal is ADMIN-only. Asserting the refusal here rather than in a
+      // separate test keeps it next to the add + edit a sevak IS allowed, so
+      // the boundary between the two is visible in one place.
+      const refused = await staff.delete(`/api/welcome/families/${fid}/members/${probeMid}`, {
+        failOnStatusCode: false,
+      });
+      expect(refused.status(), await refused.text()).toBe(403);
     } finally {
-      const removed = await staff.delete(`/api/welcome/families/${fid}/members/${probeMid}`, {
+      const admin = await ctxFor(ADMIN);
+      const removed = await admin.delete(`/api/welcome/families/${fid}/members/${probeMid}`, {
         failOnStatusCode: false,
       });
       expect(removed.status(), await removed.text()).toBe(200);
@@ -181,10 +199,21 @@ test.describe.serial('staff cross-family edit', () => {
     const mid = ((await created.json()) as { mid: string }).mid;
     probeMid = mid;
 
-    const removed = await volunteer.delete(`/api/welcome/families/${fid}/members/${mid}`, {
+    // The point of this test is the ADD - that a volunteer whose primary role
+    // is family-manager is still recognised as staff. Removal is admin-only for
+    // them exactly as for any other sevak, so the delete below is CLEANUP and
+    // is done as admin; asserting 200 on the volunteer's own delete was the
+    // second place this spec quietly required a permission the route refuses.
+    const refused = await volunteer.delete(`/api/welcome/families/${fid}/members/${mid}`, {
       failOnStatusCode: false,
     });
-    expect(removed.status()).toBe(200);
+    expect(refused.status(), await refused.text()).toBe(403);
+
+    const admin = await ctxFor(ADMIN);
+    const removed = await admin.delete(`/api/welcome/families/${fid}/members/${mid}`, {
+      failOnStatusCode: false,
+    });
+    expect(removed.status(), await removed.text()).toBe(200);
     probeMid = null;
   });
 });

@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { SetuIcon, toast } from '@cmt/ui';
-import { CHILD_GRADE_OPTIONS, NO_ALLERGIES, whatsMissingForMember, type MemberRequiredField } from '@cmt/shared-domain';
+import { CHILD_GRADE_OPTIONS, NO_ALLERGIES, recordedAllergy, whatsMissingForMember, type MemberRequiredField } from '@cmt/shared-domain';
 import { CspRoot, FieldError } from '@/features/family/components/atoms';
 import { VolunteeringSkillsPicker } from '@/features/setu/members/volunteering-skills-picker';
 import { getCurrentFamilyClient } from '@/features/setu/members/get-current-family-client';
@@ -176,12 +176,21 @@ export default function EditMemberPage() {
         const parsedBirth = parseBirthMonthYear(member.birthMonthYear ?? '');
         setBirthMonth(parsedBirth.month);
         setBirthYear(parsedBirth.year);
+        // Through `recordedAllergy`, so the box is ticked for every answer the
+        // DISPLAY surfaces treat as "no known allergies" - not only the exact
+        // 'None' the checkbox writes. Without this a family who typed "n/a"
+        // reads as having no allergies everywhere else in the portal, then
+        // opens this form and finds the box unticked with "n/a" sitting in the
+        // free-text box, i.e. the two disagree about their own answer.
+        // Currently inert against production data (all 104 hold exactly
+        // 'None'), and kept in step deliberately rather than left to diverge.
         const allergies = member.foodAllergies ?? '';
-        if (allergies === NO_ALLERGIES) {
+        const real = recordedAllergy(allergies);
+        if (allergies.trim() !== '' && real === null) {
           setNoAllergies(true);
           setFoodAllergies('');
         } else {
-          setFoodAllergies(allergies);
+          setFoodAllergies(real ?? '');
         }
         setEmail(member.email ?? '');
         setPhone(member.phone ?? '');

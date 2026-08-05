@@ -1,4 +1,4 @@
-import { whatsMissingForMember, isParticipating, gradeLabel, type MemberDoc } from '@cmt/shared-domain/setu';
+import { whatsMissingForMember, isParticipating, gradeLabel, recordedAllergy, INACTIVE_LABEL, INACTIVE_FROM_LEGACY_LABEL, type MemberDoc } from '@cmt/shared-domain/setu';
 
 /** The roster-card view of a member used by the My Family page. */
 export type DisplayMember = {
@@ -65,10 +65,12 @@ export interface MemberStatusChip {
 export function memberStatusChip(m: DisplayMember): MemberStatusChip {
   if (m.inactive) {
     return {
-      label: m.inactiveBySystem ? 'Finished (from our records)' : 'No longer participating',
+      // Through the shared labels, so this screen and /welcome/family/{fid}
+      // can never name the same person's status differently.
+      label: m.inactiveBySystem ? INACTIVE_FROM_LEGACY_LABEL : INACTIVE_LABEL,
       labelLong: m.inactiveBySystem
         ? 'Finished — from our old records. Edit if that is wrong.'
-        : 'No longer participating',
+        : INACTIVE_LABEL,
       bg: 'var(--surface2)',
       fg: 'var(--muted)',
       title: m.inactiveBySystem
@@ -130,7 +132,10 @@ export function memberToDisplay(m: MemberDoc, currentMid: string | null): Displa
     type: typeLabel,
     isManager: m.manager,
     isAdult: m.type === 'Adult',
-    warn: m.foodAllergies ?? null,
+    // The card renders this in red as "Allergy: …", so it must be the allergy
+    // the family actually recorded - not the 'None' the "No known allergies"
+    // box writes. See `recordedAllergy`.
+    warn: recordedAllergy(m.foodAllergies),
     email: m.email,
     phone: m.phone,
     role: m.volunteeringSkills.length > 0 ? m.volunteeringSkills.join(', ') : null,

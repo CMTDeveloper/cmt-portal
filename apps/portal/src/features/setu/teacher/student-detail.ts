@@ -1,5 +1,5 @@
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
-import { isAdmin, type WithRole } from '@cmt/shared-domain';
+import { isAdmin, recordedAllergy, type WithRole } from '@cmt/shared-domain';
 import { getMyLevels } from './levels';
 import { deriveRoster } from './roster';
 import { getAttendanceForMember, summarize, type AttendanceRecord, type AttendanceSummary } from './get-attendance';
@@ -74,7 +74,9 @@ export async function getStudentDetail(mid: string): Promise<StudentDetail | nul
     lastName: m.lastName,
     type: m.type,
     schoolGrade: m.schoolGrade ?? null,
-    foodAllergies: m.foodAllergies ?? null,
+    // null for the "no known allergies" answer, so the page's severe red banner
+    // marks the children who actually have one. See `recordedAllergy`.
+    foodAllergies: recordedAllergy(m.foodAllergies),
     emergencyContacts: (m.emergencyContacts ?? [null, null]) as StudentDetail['emergencyContacts'],
     parents,
     summary: summarize(records),

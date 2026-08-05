@@ -2,6 +2,7 @@
 
 import type { ReactNode, CSSProperties } from 'react';
 import { SetuAvatar, SetuIcon } from '@cmt/ui';
+import { recordedAllergy } from '@cmt/shared-domain';
 
 export { DesktopSidebar } from './desktop-sidebar';
 
@@ -212,12 +213,59 @@ export function AddedMemberRow({ name, type, action }: AddedMemberRowProps) {
 // ─── AllergyCallout ───────────────────────────────────────────────────────────
 
 interface AllergyCalloutProps {
+  /**
+   * Optional, and omitted by every caller reading a real member: the portal
+   * collects allergy TEXT and has never collected a severity, so printing
+   * "· severe" after it asserted something no one recorded. Only the mock
+   * prototype data, which carries a real severity field, still passes it.
+   */
   severity?: string;
   summary: string;
   detail: string;
 }
 
-export function AllergyCallout({ severity = 'severe', summary, detail }: AllergyCalloutProps) {
+/**
+ * The whole allergy story for one member, in the three states it actually has.
+ *
+ *   a real allergy      → the red callout
+ *   "no known allergies" → a plain line confirming we asked and they answered
+ *   nothing recorded    → nothing
+ *
+ * The middle state is why this component exists. `NO_ALLERGIES` writes the
+ * literal 'None', and rendering that through the callout produced a severe red
+ * allergy warning for 104 of the 105 production members holding any value
+ * (2026-08-05) against ONE real allergy. Silence would have been the other
+ * wrong answer for a FAMILY looking at their own child - it reads as "we never
+ * asked" and invites them to type it in again.
+ *
+ * Use this rather than `AllergyCallout` directly on any surface that shows one
+ * member's full record - which includes `/welcome/family/{fid}/members/{mid}`,
+ * so staff see the "No known allergies" line too. That is fine and arguably
+ * better; it is only the LIST surfaces (the teacher attendance marker, the
+ * family's own member cards) that stay silent, because there the absence of a
+ * marker is the answer and a line per member would be noise. Those null the
+ * sentinel in their data layer instead - see `teacher/roster.ts` and
+ * `member-display.ts`.
+ */
+export function AllergyBlock({ value }: { value: string | null }) {
+  const allergy = recordedAllergy(value);
+  if (allergy) return <AllergyCallout summary={allergy} detail="Please inform class teacher."/>;
+  if (recordedAnswer(value)) {
+    return (
+      <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 16 }}>
+        No known allergies
+      </div>
+    );
+  }
+  return null;
+}
+
+/** Whether the family answered the allergy question at all (either way). */
+function recordedAnswer(value: string | null): boolean {
+  return typeof value === 'string' && value.trim() !== '';
+}
+
+export function AllergyCallout({ severity, summary, detail }: AllergyCalloutProps) {
   return (
     <div style={{
       padding: 16, background: '#fff3ec', border: '2px solid var(--err)', borderRadius: 'var(--radius)',
@@ -229,7 +277,7 @@ export function AllergyCallout({ severity = 'severe', summary, detail }: Allergy
         </div>
         <strong style={{ fontSize: 13, color: 'var(--err)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Food allergies</strong>
       </div>
-      <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--ink)', marginBottom: 4 }}>{summary} · {severity}</div>
+      <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--ink)', marginBottom: 4 }}>{summary}{severity ? ` · ${severity}` : ''}</div>
       <div style={{ fontSize: 12, color: 'var(--body-text)' }}>{detail}</div>
     </div>
   );

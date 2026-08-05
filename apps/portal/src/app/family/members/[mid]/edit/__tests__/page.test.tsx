@@ -525,6 +525,55 @@ describe('EditMemberPage — foodAllergies shown for all members', () => {
     expect(screen.getAllByLabelText(/food allergies/i).length).toBeGreaterThan(0);
     expect(screen.getAllByTestId('no-allergies').length).toBeGreaterThan(0);
   });
+
+  it('ticks "No known allergies" for the stored sentinel', async () => {
+    mockGetCurrentFamily.mockResolvedValue(makeCurrentFamily({
+      isManager: true, currentMid: MANAGER_MID,
+      memberOverrides: { foodAllergies: 'None' },
+    }));
+
+    render(<EditMemberPage />);
+    await waitFor(() => expect(document.querySelectorAll('input').length).toBeGreaterThan(0));
+
+    const boxes = screen.getAllByTestId('no-allergies') as HTMLInputElement[];
+    expect(boxes.every((b) => b.checked)).toBe(true);
+  });
+
+  it('ticks the box for a hand-typed "n/a" too, and NORMALIZES it to the sentinel on save', async () => {
+    // The display surfaces treat "n/a" as "no known allergies" (see
+    // `recordedAllergy`), so the form has to agree - otherwise the portal tells
+    // a family one thing everywhere and shows them an unticked box with "n/a"
+    // in it here.
+    //
+    // The consequence is deliberate and worth stating plainly: saving ANY edit
+    // on such a member rewrites the stored value from "n/a" to 'None'. The
+    // meaning is identical and it makes their record match every other
+    // family's, but it IS the form normalizing stored data, so it is pinned
+    // here rather than left as a surprise. No production member holds such a
+    // value today (all 104 hold exactly 'None', measured 2026-08-05).
+    mockGetCurrentFamily.mockResolvedValue(makeCurrentFamily({
+      isManager: true, currentMid: MANAGER_MID,
+      memberOverrides: { foodAllergies: 'n/a' },
+    }));
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ mid: MEMBER_MID }) });
+
+    const user = userEvent.setup();
+    render(<EditMemberPage />);
+    await waitFor(() => expect(document.querySelectorAll('input').length).toBeGreaterThan(0));
+
+    const boxes = screen.getAllByTestId('no-allergies') as HTMLInputElement[];
+    expect(boxes.every((b) => b.checked)).toBe(true);
+    // The free-text box is cleared, so "n/a" is not shown back to them as if it
+    // were an allergy they had recorded.
+    for (const input of screen.getAllByLabelText(/food allergies/i) as HTMLInputElement[]) {
+      expect(input.value).toBe('');
+    }
+
+    await user.click(screen.getAllByRole('button', { name: /save|update/i })[0]!);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const body = JSON.parse((fetchMock.mock.calls[0]![1] as { body: string }).body);
+    expect(body.foodAllergies).toBe('None');
+  });
 });
 
 describe('EditMemberPage — per-type required blocks submit', () => {

@@ -78,10 +78,15 @@ beforeEach(() => {
       { id: 'off-bv', oid: 'off-bv', programKey: 'bala-vihar', enabled: true,
         pricingTiers: [{ effectiveFrom: '2026-09-01', amountCAD: 500, label: 'Full year' }] },
     ],
-    // Level = child grade matched to a gradeBand, keyed by the enrollment's pid.
+    // Levels carry `levelKind`, exactly as the real docs do (LevelDoc requires
+    // it) - a fixture without it does not exercise the kind-aware matching that
+    // places a shishu child.
     levels: [
-      { id: 'lvl2', pid: 'off-bv', levelName: 'Level 2', programKey: 'bala-vihar', location: 'Brampton', gradeBand: ['2', '3'] },
-      { id: 'lvl4', pid: 'off-bv', levelName: 'Level 4', programKey: 'bala-vihar', location: 'Scarborough', gradeBand: ['6', '7'] },
+      { id: 'lvl2', pid: 'off-bv', levelName: 'Level 2', levelKind: 'level', programKey: 'bala-vihar', location: 'Brampton', gradeBand: ['2', '3'] },
+      { id: 'lvl4', pid: 'off-bv', levelName: 'Level 4', levelKind: 'level', programKey: 'bala-vihar', location: 'Scarborough', gradeBand: ['6', '7'] },
+      // Shishu Vihar has an EMPTY gradeBand by design: it is matched by AGE.
+      // Both real offerings carry one.
+      { id: 'lvlS', pid: 'off-bv', levelName: 'Shishu Vihar', levelKind: 'shishu', programKey: 'bala-vihar', location: 'Brampton', gradeBand: [] },
     ],
   };
 });
@@ -117,6 +122,67 @@ describe('buildRosterReportDataset', () => {
     expect(child).toMatchObject({ type: 'Child', grade: '2', level: 'Level 2' });
     const adult = ranaPeople.find((p) => p.memberName === 'Vaibhav Rana')!;
     expect(adult).toMatchObject({ type: 'Adult', level: '' });
+  });
+
+  it('places a SHISHU child in Shishu Vihar, which has no gradeBand at all', async () => {
+    // Vaibhav, 2026-08-05: "(no level) · 5" on /welcome/roster. All five were
+    // schoolGrade 'Shishu'. Shishu Vihar exists and is enabled in both centres
+    // with gradeBand: [] - `memberMatchesLevel` places it by AGE (18-60 months
+    // from birthMonthYear), never by grade - so a grade-band lookup structurally
+    // cannot find it. The teacher roster placed these children correctly the
+    // whole time; only this builder disagreed.
+    //
+    // N=2 with the graded child above still in the fixture: the age rule must
+    // not disturb grade matching.
+    const now = new Date();
+    const born30MonthsAgo = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 30, 1));
+    const bmy = `${born30MonthsAgo.getUTCFullYear()}-${String(born30MonthsAgo.getUTCMonth() + 1).padStart(2, '0')}`;
+
+    fs.data.members = [
+      ...fs.data.members!,
+      { id: 'm4', __fid: 'CMT-RANA', mid: 'm4', firstName: 'Vedant', lastName: 'Rana', type: 'Child', schoolGrade: 'Shishu', birthMonthYear: bmy },
+    ];
+    fs.data.enrollments = fs.data.enrollments!.map((e) =>
+      e['id'] === 'e1' ? { ...e, enrolledMids: ['m2', 'm4'] } : e,
+    );
+
+    const out = await buildRosterReportDataset({});
+    const rana = out.find((f) => f.row.fid === 'CMT-RANA')!;
+
+    expect(rana.row.bvChildren).toEqual([
+      { grade: '2', levelName: 'Level 2' },
+      { grade: 'Shishu', levelName: 'Shishu Vihar' },
+    ]);
+    // And the per-person CSV level column agrees.
+    const vedant = rana.personRows.find((p) => p.memberName === 'Vedant Rana')!;
+    expect(vedant.level).toBe('Shishu Vihar');
+  });
+
+  it('leaves a child ONE MONTH too young for Shishu Vihar unplaced rather than guessing', async () => {
+    // One of the five real children (FID 5011) is 17 months - one month under
+    // SHISHU_MIN_MONTHS. She stays "(no level)" even after this fix, and that
+    // is the honest answer: no level currently accepts her.
+    //
+    // Exactly 17 months, not "comfortably young": this test exists to stop the
+    // age window being widened to make the "(no level)" count look better, and
+    // a 10-month-old - which is what this fixture used at first - would keep
+    // passing while SHISHU_MIN_MONTHS was lowered anywhere from 18 to 11. Only
+    // a fixture ON the boundary can fail the change it is meant to catch.
+    const now = new Date();
+    const born17MonthsAgo = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 17, 1));
+    const bmy = `${born17MonthsAgo.getUTCFullYear()}-${String(born17MonthsAgo.getUTCMonth() + 1).padStart(2, '0')}`;
+
+    fs.data.members = [
+      ...fs.data.members!,
+      { id: 'm5', __fid: 'CMT-RANA', mid: 'm5', firstName: 'Baby', lastName: 'Rana', type: 'Child', schoolGrade: 'Shishu', birthMonthYear: bmy },
+    ];
+    fs.data.enrollments = fs.data.enrollments!.map((e) =>
+      e['id'] === 'e1' ? { ...e, enrolledMids: ['m5'] } : e,
+    );
+
+    const out = await buildRosterReportDataset({});
+    const rana = out.find((f) => f.row.fid === 'CMT-RANA')!;
+    expect(rana.row.bvChildren).toEqual([{ grade: 'Shishu', levelName: null }]);
   });
 
   // This builder is the live surface behind BOTH the /welcome/roster payload and

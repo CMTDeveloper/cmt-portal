@@ -1,3 +1,4 @@
+import { recordedAllergy } from '@cmt/shared-domain';
 import type { ProgramDoc } from '@cmt/shared-domain';
 import { getFamilyByFid } from './get-family-by-fid';
 import { getEnrollments, type EnrollmentWithOffering } from '@/features/setu/enrollment/get-enrollments';
@@ -41,7 +42,19 @@ export interface ChildProfile {
   type: 'Adult' | 'Child';
   schoolGrade: string | null;
   birthMonthYear: string | null;
+  /** The family's raw ANSWER, including the 'None' the "no known allergies"
+   *  checkbox writes. Kept raw because it is their answer and the edit form
+   *  round-trips it. Do NOT drive a warning off this - see `recordedAllergy`. */
   foodAllergies: string | null;
+  /**
+   * The allergy to WARN about, or null when the family answered that there is
+   * none. Derived here rather than left to each reader because this shape also
+   * crosses the API boundary to the React Native app, which cannot import
+   * `@cmt/shared-domain` and would otherwise have to reimplement the rule -
+   * and getting it wrong means a severe-allergy banner on the 104 of 105
+   * members who recorded no allergy (production, 2026-08-05).
+   */
+  recordedAllergy: string | null;
   /**
    * Whether this person still takes part. A NAMED type on purpose - the two
    * hand-maps that close with `as MemberDoc` would have dropped this silently,
@@ -146,6 +159,7 @@ export async function getChildProfile(mid: string): Promise<ChildProfile | null>
     firstName: member.firstName, lastName: member.lastName, type: member.type,
     schoolGrade: member.schoolGrade ?? null, birthMonthYear: member.birthMonthYear ?? null,
     foodAllergies: member.foodAllergies ?? null,
+    recordedAllergy: recordedAllergy(member.foodAllergies),
     // Absent ⇒ active. The app labels the profile rather than hiding it: the
     // past attendance below is precisely why the record was kept.
     participation: member.participation ?? 'active',

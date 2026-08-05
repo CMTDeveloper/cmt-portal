@@ -19,6 +19,51 @@ import type { MemberDoc } from './schemas/member';
 // the required foodAllergies field without inventing an allergy.
 export const NO_ALLERGIES = 'None';
 
+/**
+ * Whole-string answers that mean "no allergy". `NO_ALLERGIES` is what the
+ * checkbox writes; the rest are what people type into the free-text box to say
+ * the same thing. Compared after trim + lowercase, and only ever WHOLE-string -
+ * see `recordedAllergy`.
+ */
+const NO_ALLERGY_ANSWERS: ReadonlySet<string> = new Set([
+  NO_ALLERGIES.toLowerCase(),
+  'none.',
+  'no',
+  'no.',
+  'n/a',
+  'na',
+  'nil',
+  'no allergies',
+  'no known allergies',
+  'no known allergy',
+]);
+
+/**
+ * The allergy a member has actually recorded, or null if they recorded that
+ * they have none. The READER half of `NO_ALLERGIES` - use it everywhere an
+ * allergy is displayed or turned into a safety marker.
+ *
+ * Why this exists: the "No known allergies" affordance writes the literal
+ * string 'None', and for two months every reader asked only whether the field
+ * was a non-empty string. On 2026-08-05 production held 105 members with a
+ * value - 104 of them exactly 'None', and ONE real ("nuts, pollen"). All 105
+ * rendered as a severe allergy: a red dot on the teacher's attendance marker
+ * and class list, and a red "severe" callout on both student profiles and the
+ * staff family page. The cost is not the wrong badge, it is that 104 false
+ * markers teach a teacher to stop reading the one that is real.
+ *
+ * The comparison is WHOLE-STRING on purpose. An allergy is often phrased as a
+ * negative - "no nuts", "none except dairy" - and hiding one of those is worse
+ * than the noise this removes, so anything not matched exactly is returned as
+ * a real allergy. When in doubt, show the warning.
+ */
+export function recordedAllergy(value: string | null | undefined): string | null {
+  if (typeof value !== 'string') return null;
+  const text = value.trim();
+  if (text === '') return null;
+  return NO_ALLERGY_ANSWERS.has(text.toLowerCase()) ? null : text;
+}
+
 export type MemberRequiredField =
   | 'firstName'
   | 'lastName'
@@ -83,6 +128,29 @@ export function isParticipating(
   member: { participation?: string | null | undefined } | null | undefined,
 ): boolean {
   return member?.participation !== 'inactive';
+}
+
+/**
+ * What to call a member who no longer takes part.
+ *
+ * TWO labels because there are two ways to arrive at the state, and they are
+ * not equally certain: a family that said someone has finished gets plain
+ * language, while a member the legacy migration retired on their behalf is
+ * told where that came from - that one is a guess we made and might have got
+ * wrong, and a family reading "No longer participating" about a child who is
+ * still coming would rightly be alarmed.
+ *
+ * Shared because the family's own view and the welcome-team view show the same
+ * member. They had the same two strings typed out separately for a day, which
+ * is one rewording away from two screens disagreeing about a person's status.
+ */
+export const INACTIVE_LABEL = 'No longer participating';
+export const INACTIVE_FROM_LEGACY_LABEL = 'Finished (from our records)';
+
+export function inactiveLabelFor(
+  member: { inactiveSource?: string | null | undefined } | null | undefined,
+): string {
+  return member?.inactiveSource === 'legacy-migration' ? INACTIVE_FROM_LEGACY_LABEL : INACTIVE_LABEL;
 }
 
 /** The full required-field list for a given member type. */

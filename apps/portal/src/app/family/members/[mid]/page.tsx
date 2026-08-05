@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { SetuAvatar, SetuIcon } from '@cmt/ui';
 import { displayMid, gradeLabel, isParticipating } from '@cmt/shared-domain/setu';
-import { CspRoot, AllergyCallout, SectionLabel, DetailGroup } from '@/features/family/components/atoms';
+import { CspRoot, AllergyBlock, AllergyCallout, SectionLabel, DetailGroup } from '@/features/family/components/atoms';
 import { mockFamily } from '@/features/family/data/mock';
 import { flags } from '@/lib/flags';
 import { getCurrentFamily } from '@/features/setu/members/get-current-family';
@@ -119,9 +119,7 @@ export default async function MemberDetailPage({ params }: Props) {
 
                 <Link href={`/family/members/${mid}/profile`} className="btn btn--s" style={{ marginBottom: 20, display: 'inline-flex' }}>View profile</Link>
 
-                {member.foodAllergies && (
-                  <AllergyCallout severity="severe" summary={member.foodAllergies} detail="Please inform class teacher."/>
-                )}
+                <AllergyBlock value={member.foodAllergies}/>
 
                 <SectionLabel>Identity</SectionLabel>
                 <DetailGroup rows={[
@@ -180,9 +178,7 @@ export default async function MemberDetailPage({ params }: Props) {
           </header>
 
           <div style={{ maxWidth: 720 }}>
-            {member.foodAllergies && (
-              <AllergyCallout severity="severe" summary={member.foodAllergies} detail="Please inform class teacher."/>
-            )}
+            <AllergyBlock value={member.foodAllergies}/>
 
             <SectionLabel>Identity</SectionLabel>
             <DetailGroup rows={[

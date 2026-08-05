@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { NO_ALLERGIES } from '@cmt/shared-domain';
 
 vi.mock('../get-family-by-fid', () => ({
   getFamilyByFid: vi.fn(),
@@ -49,7 +50,7 @@ const mockGetCheckInAttendance = vi.mocked(getCheckInAttendance);
 const FID = 'CMT-FAM1';
 const MID = 'CMT-FAM1-03';
 
-function makeFamily(overrides?: { legacySid?: string | null }) {
+function makeFamily(overrides?: { legacySid?: string | null; foodAllergies?: string | null }) {
   return {
     family: {
       fid: FID,
@@ -94,7 +95,7 @@ function makeFamily(overrides?: { legacySid?: string | null }) {
         legacySid: overrides?.legacySid !== undefined ? overrides.legacySid : 'S9',
         birthMonthYear: '2016-05',
         volunteeringSkills: [],
-        foodAllergies: 'peanuts',
+        foodAllergies: overrides?.foodAllergies !== undefined ? overrides.foodAllergies : 'peanuts',
         emergencyContacts: [null, null],
       },
     ],
@@ -185,6 +186,22 @@ describe('getChildProfile', () => {
     expect(result).toBeNull();
   });
 
+  it('separates the family ANSWER from the allergy to warn about', async () => {
+    // This shape crosses the API boundary to the React Native app, which cannot
+    // import `recordedAllergy` and must be handed the answer rather than the
+    // input. `foodAllergies` stays raw because the edit form round-trips it -
+    // 'None' is what re-ticks the "No known allergies" box.
+    mockGetFamilyByFid.mockResolvedValue(makeFamily({ foodAllergies: NO_ALLERGIES }) as never);
+    mockGetEnrollments.mockResolvedValue([] as never);
+    mockListPrograms.mockResolvedValue([] as never);
+    mockGetAttendanceForMember.mockResolvedValue([] as never);
+    mockGetCheckInAttendance.mockResolvedValue([] as never);
+
+    const result = await getChildProfile(MID);
+    expect(result!.foodAllergies).toBe(NO_ALLERGIES);
+    expect(result!.recordedAllergy).toBeNull();
+  });
+
   it('returns null when the member is not in the family', async () => {
     mockGetFamilyByFid.mockResolvedValue(makeFamily() as never);
     mockGetEnrollments.mockResolvedValue([] as never);
@@ -234,6 +251,8 @@ describe('getChildProfile', () => {
     expect(result!.type).toBe('Child');
     expect(result!.schoolGrade).toBe('Grade 3');
     expect(result!.foodAllergies).toBe('peanuts');
+    // A real allergy appears in BOTH: the raw answer and the warn-worthy value.
+    expect(result!.recordedAllergy).toBe('peanuts');
     expect(result!.programs).toHaveLength(3);
 
     const tabla = result!.programs.find((p) => p.programKey === 'tabla')!;

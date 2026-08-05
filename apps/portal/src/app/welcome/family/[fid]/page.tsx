@@ -6,7 +6,7 @@ import { CspRoot } from '@/features/family/components/atoms';
 import { getFamilyForWelcome } from '@/features/setu/search/get-family-for-welcome';
 import { getFamilySevaProgress, type FamilySevaProgress } from '@/features/setu/seva/get-family-seva-progress';
 import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
-import { isWelcomeTeam, isCoordinator, isAdmin, BALA_VIHAR, type WithRole } from '@cmt/shared-domain';
+import { isWelcomeTeam, isCoordinator, isAdmin, BALA_VIHAR, recordedAllergy, isParticipating, inactiveLabelFor, type WithRole } from '@cmt/shared-domain';
 import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
 import { adultStudyClassProgramKeys } from '@/features/setu/adult-class/program-keys';
 import { deriveFamilyPayment } from '@/features/setu/roster/payment';
@@ -360,6 +360,20 @@ function MemberRow({ m, fid }: { m: MemberDoc; fid: string }) {
     ? `Child${m.schoolGrade ? ` · ${m.schoolGrade}` : ''}`
     : 'Adult';
 
+  // A member who no longer takes part. Without this the row is identical to an
+  // active one, so a child with no school grade reads as an incomplete record
+  // to chase - reported by Vaibhav on 2026-08-05, on a family whose record was
+  // in fact correct. The grade requirement is deliberately waived for an
+  // inactive member (`membersRequiringCompletion`), so the absent grade is the
+  // EXPECTED state here and the row has to say why.
+  //
+  // Same two labels as the family's own view (`memberStatusChip`), and the same
+  // distinction: a family that marked someone as finished gets plain language,
+  // while a member the legacy migration retired on their behalf is told where
+  // that came from, because it is a guess we made and might have got wrong.
+  const inactive = !isParticipating(m);
+  const inactiveLabel = inactiveLabelFor(m);
+
   return (
     <div style={{ padding: 14, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 'var(--radius)', display: 'flex', alignItems: 'center', gap: 12 }}>
       <SetuAvatar name={name} size={44}/>
@@ -367,13 +381,22 @@ function MemberRow({ m, fid }: { m: MemberDoc; fid: string }) {
         <div className="row" style={{ gap: 8 }}>
           <span style={{ fontWeight: 600, fontSize: 14 }}>{name}</span>
           {m.manager && <span style={{ fontSize: 10, padding: '1px 7px', background: 'var(--accentSoft)', color: 'var(--accentDeep)', borderRadius: 99, fontWeight: 600 }}>Manager</span>}
+          {inactive && (
+            <span style={{ fontSize: 10, padding: '1px 7px', background: 'var(--surface2)', color: 'var(--muted)', borderRadius: 99, fontWeight: 600 }}>
+              {inactiveLabel}
+            </span>
+          )}
         </div>
         <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{typeLabel}</div>
         {m.email && <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2, fontFamily: 'var(--mono)' }}>{m.email}</div>}
         {m.phone && <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2, fontFamily: 'var(--mono)' }}>{m.phone}</div>}
-        {m.foodAllergies && (
+        {/* Only a REAL allergy earns the red row. The "No known allergies"
+            answer stores the literal 'None', which used to render here as a
+            red ⚠ None - reported by Vaibhav 2026-08-05. Staff need the
+            exception, not the answer. */}
+        {recordedAllergy(m.foodAllergies) && (
           <div style={{ marginTop: 6, fontSize: 11, color: 'var(--err)', display: 'flex', alignItems: 'center', gap: 4 }}>
-            <SetuIcon.warn/> {m.foodAllergies}
+            <SetuIcon.warn/> {recordedAllergy(m.foodAllergies)}
           </div>
         )}
         <Link href={`/welcome/family/${fid}/members/${m.mid}`} style={{ display: 'inline-block', marginTop: 8, fontSize: 12, color: 'var(--accent)', textDecoration: 'none', fontWeight: 600 }}>
