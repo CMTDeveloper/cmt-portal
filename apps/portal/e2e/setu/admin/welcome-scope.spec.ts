@@ -294,23 +294,42 @@ test.describe.serial('admin keeps everything welcome-team gave up', () => {
     });
   }
 
-  test('and the admin phone nav still LISTS them, laid out legibly', async ({ page }) => {
-    // The admin is the case the grid exists for: /admin links seva and reports
-    // but NOT /welcome/levels or /welcome/prasad, so this bar is the only route
-    // to those two — they must survive the declutter. Seven tabs plus sign-out
-    // is also the density that was smearing the labels together.
+  test('and the admin phone nav still REACHES them, four in the bar and the rest in More', async ({ page }) => {
+    // The admin is the case this bar exists for: /admin links seva and reports
+    // but NOT /welcome/levels or /welcome/prasad, so losing them here loses
+    // them entirely. The REACHABILITY is the requirement; where each one sits
+    // is not.
+    //
+    // This test used to demand all seven as direct links in the bar, and to
+    // assert they "must have wrapped" onto more than one row - which was right
+    // for the seven-tabs-plus-sign-out design and became wrong the moment
+    // 2932623 gave the bar four cells plus a More sheet. It had been failing on
+    // preview ever since, asserting a layout the product deliberately replaced.
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/welcome/roster');
 
     const nav = page.getByRole('navigation', { name: 'Welcome team' });
     await expect(nav).toBeVisible({ timeout: 30_000 });
-    for (const kept of ['/welcome/roster', '/welcome/visitors', '/welcome/levels', '/welcome/seva', '/welcome/prasad', '/welcome/reports', '/admin']) {
-      await expect(
-        nav.locator(`a[href="${kept}"]`),
-        `${kept} vanished from the admin phone nav — for levels and prasad this bar is the only way in`,
-      ).toHaveCount(1);
+
+    // Four destinations stay put (WELCOME_NAV_VISIBLE), in the builder's order.
+    for (const kept of ['/welcome/roster', '/welcome/visitors', '/welcome/levels', '/welcome/seva']) {
+      await expect(nav.locator(`a[href="${kept}"]`), `${kept} vanished from the admin phone bar`).toHaveCount(1);
     }
 
+    // The rest are one tap away, and MUST be somewhere - for prasad especially,
+    // this sheet is the only route in.
+    await nav.getByRole('button', { name: /more/i }).click();
+    for (const inSheet of ['/welcome/prasad', '/welcome/reports', '/admin']) {
+      await expect(
+        page.locator(`a[href="${inSheet}"]`).filter({ visible: true }),
+        `${inSheet} is in neither the admin phone bar nor its More sheet - it is unreachable on a phone`,
+      ).toHaveCount(1);
+    }
+    await page.keyboard.press('Escape');
+
+    // Legibility, on the design that actually ships: five cells on ONE row,
+    // none overlapping, each wide enough for its label. The original bug was
+    // labels smearing into each other.
     const boxes = await Promise.all((await nav.locator('a, button').all()).map((t) => t.boundingBox()));
     const rows = new Map<number, Array<{ x: number; right: number }>>();
     for (const b of boxes) {
@@ -319,14 +338,13 @@ test.describe.serial('admin keeps everything welcome-team gave up', () => {
       row.push({ x: b!.x, right: b!.x + b!.width });
       rows.set(Math.round(b!.y), row);
     }
-    // Eight cells cannot fit legibly on one 390px row; they must have wrapped.
-    expect(rows.size, 'eight tabs are still crammed onto a single row').toBeGreaterThan(1);
+    expect(rows.size, 'the staff bar has wrapped to two rows again').toBe(1);
     for (const [y, row] of rows) {
       const sorted = [...row].sort((a, b) => a.x - b.x);
       for (let i = 1; i < sorted.length; i++) {
         expect(
           sorted[i]!.x,
-          `two admin bottom-nav tabs overlap on row y=${y} — this is the reported bug`,
+          `two admin bottom-nav tabs overlap on row y=${y} - this is the reported bug`,
         ).toBeGreaterThanOrEqual(sorted[i - 1]!.right - 1);
       }
     }
