@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { toast } from '@cmt/ui';
-import { ADULT_STUDY_CLASS } from '@cmt/shared-domain';
 import { setEnrollmentOverride } from '../override-client';
 
 export interface PaymentOverrideEnrollment {
@@ -29,6 +28,29 @@ export interface PaymentOverrideEnrollment {
    * the old meaning of `0` after the rest of the app had moved on.
    */
   settledOffPortal: boolean;
+  /**
+   * Is this enrollment's program an Adult Study Class? REQUIRED, and resolved on
+   * the SERVER - it cannot be derived here.
+   *
+   * ── Why this is a prop and not `programKey === ADULT_STUDY_CLASS` ───────────
+   * It was that literal, from 2026-08-04 until Vaibhav reported FID 5010 the
+   * same evening: a Scarborough family's genuinely-waived adult class rendered
+   * as "Not being asked to donate - no reason recorded" WITH a "Mark paid
+   * off-portal" button. Clicking it would have recorded a payment that never
+   * happened.
+   *
+   * "Which programs are the adult class" is DATA, not a key. Each centre may run
+   * its own (CMT decision 2026-07-29); Scarborough's is `adult-study-east`, and
+   * `isAdultStudyClassProgram()` reads `capabilities.isAdultStudyClass`, falling
+   * back to the literal key only when that flag is ABSENT. The literal can
+   * therefore never identify anything but Brampton's.
+   *
+   * features/setu/adult-class/program-keys.ts exists for exactly this reason and
+   * already documented the trap - "none of them could ever fire for a
+   * Scarborough family" - which is why this is a required prop rather than a
+   * comment asking the next caller to remember.
+   */
+  isAdultClass: boolean;
 }
 
 /**
@@ -87,14 +109,23 @@ export function PaymentOverrideControl({
   // from the Bala Vihar payment, so the way to change it is to change that.
   //
   // Scoped to the ADULT STUDY CLASS, because that is the only place the waiver
-  // is ever written: `api/setu/adult-class/route.ts` is the single code path
-  // that emits `suggestedAmountOverride: 0` without a settlement, and it only
-  // ever enrols into this one program. Without the scope this branch swallowed
-  // every bare zero - including the Bala Vihar enrollment of the ONE production
-  // family settled before the flag existed, which would have shown them "covered
-  // by this family's Bala Vihar donation" ON their Bala Vihar enrollment and,
-  // far worse, offered no button at all to re-record the settlement.
-  const waived = zeroed && enrollment.programKey === ADULT_STUDY_CLASS;
+  // is ever written. TWO routes emit `suggestedAmountOverride: 0` without a
+  // settlement - `api/setu/adult-class/route.ts` and the generic
+  // `api/setu/enrollments/route.ts` (via `resolveAdultClassEnrollParams`,
+  // enroll-params.ts:90) - and BOTH are gated on `isAdultStudyClassKey`, so the
+  // invariant holds: a bare unexplained zero never sits on an adult-class
+  // enrollment. Check that gate before adding a third writer; an ungated one
+  // would land here as "no reason recorded" with a money button beside it.
+  // Without the scope this branch
+  // swallowed every bare zero - including the Bala Vihar enrollment of the ONE
+  // production family settled before the flag existed, which would have shown
+  // them "covered by this family's Bala Vihar donation" ON their Bala Vihar
+  // enrollment and, far worse, offered no button at all to re-record it.
+  //
+  // `isAdultClass` is resolved on the server. It was `programKey ===
+  // ADULT_STUDY_CLASS` for one day, which silently excluded every centre whose
+  // adult class is its own program - see the prop's note.
+  const waived = zeroed && enrollment.isAdultClass;
   // A zero with no recorded reason: a settlement made before `settledOffPortal`
   // existed, or a staff amount nobody explained. It still needs the action -
   // that is how it acquires a reason - but never "Undo", which on an

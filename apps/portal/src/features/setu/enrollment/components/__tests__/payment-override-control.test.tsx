@@ -20,6 +20,7 @@ const UNSET = {
   effectiveSuggestedAmount: 500,
   suggestedAmountOverride: null,
   settledOffPortal: false,
+  isAdultClass: false,
 };
 // An admin recorded an off-portal arrangement. THIS is what "settled" means.
 const SETTLED = { ...UNSET, effectiveSuggestedAmount: 0, suggestedAmountOverride: 0, settledOffPortal: true };
@@ -36,6 +37,21 @@ const WAIVED = {
   effectiveSuggestedAmount: 0,
   suggestedAmountOverride: 0,
   settledOffPortal: false,
+  isAdultClass: true,
+};
+// ── The N=2 case, and the whole reason `isAdultClass` is a prop ──────────────
+// Scarborough runs its OWN adult-class program (`adult-study-east`, created
+// 2026-07-28) because CMT decided each centre may. A fixture with only the
+// literal-keyed Brampton class above passes while the bug is live, which is
+// exactly what happened: for one day the control asked
+// `programKey === ADULT_STUDY_CLASS`, so this family's genuine waiver rendered
+// as an unexplained zero WITH a "Mark paid off-portal" button - one click from
+// recording a payment that never happened. Reported on FID 5010, 2026-08-04.
+const WAIVED_OTHER_CENTRE = {
+  ...WAIVED,
+  eid: 'CMT-F1-adult-east-2026-27',
+  programKey: 'adult-study-east',
+  programLabel: 'Adult Class Scarborough',
 };
 
 beforeEach(() => {
@@ -231,3 +247,39 @@ describe('PaymentOverrideControl — a bare zero outside the adult class', () =>
   });
 });
 
+
+describe('PaymentOverrideControl — a centre whose adult class is its own program', () => {
+  // Guards the one-day regression: these assertions all PASS for the
+  // literal-keyed Brampton fixture while failing for Scarborough's, so a
+  // single-program fixture cannot catch it. Keep BOTH.
+  it('treats a waived enrollment as waived even when the key is not the literal one', () => {
+    render(<PaymentOverrideControl enrollment={WAIVED_OTHER_CENTRE} />);
+    expect(
+      // Matched loosely on purpose: the copy uses a typographic apostrophe
+      // (family’s), and a plain ' in the pattern silently never matches.
+      screen.getByText(/covered by this family/i),
+    ).toBeInTheDocument();
+  });
+
+  it('does NOT label it "no reason recorded" - the reason is known', () => {
+    render(<PaymentOverrideControl enrollment={WAIVED_OTHER_CENTRE} />);
+    expect(screen.queryByText(/no reason recorded/i)).not.toBeInTheDocument();
+  });
+
+  it('offers NO button, so a waiver cannot be mis-recorded as money collected', () => {
+    render(<PaymentOverrideControl enrollment={WAIVED_OTHER_CENTRE} />);
+    expect(screen.queryByRole('button', { name: /mark paid off-portal/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /undo/i })).not.toBeInTheDocument();
+  });
+
+  it('still shows the action on a NON-adult-class bare zero at the same centre', () => {
+    // The scope must not widen into "any zero is a waiver": the one production
+    // family settled before the flag existed needs that button to re-record it.
+    render(
+      <PaymentOverrideControl
+        enrollment={{ ...WAIVED_OTHER_CENTRE, programKey: 'bala-vihar', isAdultClass: false }}
+      />,
+    );
+    expect(screen.getByRole('button', { name: /mark paid off-portal/i })).toBeInTheDocument();
+  });
+});

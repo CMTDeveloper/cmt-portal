@@ -115,6 +115,15 @@ vi.mock('@/features/setu/programs/get-programs', () => ({
 vi.mock('@/features/setu/donations/legacy-payment', () => ({
   getLegacyPaymentStatus: (...args: unknown[]) => mockGetLegacyPaymentStatus(...args),
 }));
+// Which programs are the adult class is DATA (each centre may run its own), so
+// the page asks this helper instead of comparing against the literal
+// ADULT_STUDY_CLASS key. The mock mirrors reality: Brampton's legacy key AND
+// Scarborough's own program both count.
+vi.mock('@/features/setu/adult-class/program-keys', () => ({
+  isAdultStudyClassKey: vi.fn(async (k: string | null) =>
+    k === 'adult-study-class' || k === 'adult-study-east'),
+  adultStudyClassProgramKeys: vi.fn(async () => ['adult-study-class', 'adult-study-east']),
+}));
 vi.mock('@/features/setu/donations/get-donations', () => ({
   getDonations: (...args: unknown[]) => mockGetDonations(...args),
 }));
