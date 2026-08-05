@@ -86,25 +86,52 @@ export async function buildEnrollmentReport(params: ReportQuery): Promise<Enroll
    * 2026-08-05: 18 active Bala Vihar enrollments, ZERO with a snapshot.
    *
    * So: the snapshot when there is one, otherwise derive from the member's
-   * grade/age exactly as the roster and the teacher roster do. That order is
-   * deliberate and not just a fallback - for a PAST year the snapshot is the
-   * honest record of where a child actually sat, and deriving live would
-   * re-file them by the grade they are in NOW.
+   * grade/age exactly as the roster and the teacher roster do.
+   *
+   * ⚠️ THE SNAPSHOT BRANCH IS CURRENTLY UNREACHABLE, and the first version of
+   * this comment claimed the opposite. `promote-families.ts:326-336` is the
+   * only writer of `levelSnapshots`, and it writes them in the SAME
+   * `txn.set` that sets `status: 'cancelled'` - while the loop below skips
+   * non-active enrollments (:143) before it even looks at the year (:145). So
+   * an enrollment carrying a snapshot can never reach the per-level count.
+   * Production's "18 active, 0 snapshots" is not a transitional state; it is
+   * the permanent shape of the current model.
+   *
+   * The branch is kept because it is free and because it states the intended
+   * precedence: a past year's snapshot is the honest record of where a child
+   * ACTUALLY sat, and deriving live would re-file them by the grade they are in
+   * now. It is future-proofing, not live behaviour - and the test that covers
+   * it is exercising a shape the writers cannot presently produce.
+   *
+   * The consequence to be honest about: a year-scoped query for a PAST year
+   * returns only the stragglers promotion left active, and those ARE derived
+   * from their current grade. Year-scoped history is shallower than it looks
+   * here - the same family of problem as task #117.
    */
-  const levelsByPid = new Map<string, Array<{ levelId: string; levelKind: LevelKind; gradeBand: string[] }>>();
+  const levelsByPid = new Map<string, Array<{ levelId: string; name: string; levelKind: LevelKind; gradeBand: string[] }>>();
   for (const d of lvlSnap.docs) {
-    const x = d.data() as { pid?: unknown; levelKind?: unknown; gradeBand?: unknown; enabled?: unknown };
+    const x = d.data() as { pid?: unknown; levelName?: unknown; levelKind?: unknown; gradeBand?: unknown; enabled?: unknown };
     if (x.enabled === false) continue;
     const pid = typeof x.pid === 'string' ? x.pid : '';
     const kind = x.levelKind;
     if (!pid || (kind !== 'level' && kind !== 'pre-level' && kind !== 'shishu' && kind !== 'parents')) continue;
     const arr = levelsByPid.get(pid) ?? [];
-    arr.push({ levelId: d.id, levelKind: kind, gradeBand: Array.isArray(x.gradeBand) ? x.gradeBand.map(String) : [] });
+    arr.push({
+      levelId: d.id,
+      name: typeof x.levelName === 'string' ? x.levelName : d.id,
+      levelKind: kind,
+      gradeBand: Array.isArray(x.gradeBand) ? x.gradeBand.map(String) : [],
+    });
     levelsByPid.set(pid, arr);
   }
-  // Ordered by levelId so an overlapping band resolves the same way here, on the
-  // roster and on the family dashboard - see report-dataset.ts for why.
-  for (const arr of levelsByPid.values()) arr.sort((a, b) => a.levelId.localeCompare(b.levelId));
+  // Ordered by level NAME, matching report-dataset.ts:231 and
+  // derive-child-level.ts. The key matters: this sort exists only for the case
+  // where two levels in one pid claim the same normalized grade, and in that
+  // case ALL THREE surfaces have to pick the same winner or the report files a
+  // child into a different class than the roster and the family dashboard show.
+  // Sorting by document id here - the first version of this line - would have
+  // been a different order from both, which is the disagreement this is for.
+  for (const arr of levelsByPid.values()) arr.sort((a, b) => a.name.localeCompare(b.name));
 
   const memberByMid = new Map<string, { type: 'Adult' | 'Child'; schoolGrade: string | null; birthMonthYear: string | null }>();
   for (const d of memSnap.docs) {
@@ -159,8 +186,10 @@ export async function buildEnrollmentReport(params: ReportQuery): Promise<Enroll
       let levelId = snapped;
       if (!levelId) {
         const mem = memberByMid.get(mid);
-        // A mid with no member doc is still matched as a Child - that is what
-        // being in `enrolledMids` means - so it can place on grade alone.
+        // A mid with no member doc is matched as a Child - that is what being
+        // in `enrolledMids` means. It then places NOWHERE, because it has no
+        // grade and no birth month either; the default's only real effect is to
+        // keep such a mid out of a 'parents' level.
         const forMatch = {
           type: mem?.type ?? ('Child' as const),
           schoolGrade: mem?.schoolGrade ?? null,

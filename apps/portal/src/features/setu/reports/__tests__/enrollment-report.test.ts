@@ -233,10 +233,14 @@ describe('buildEnrollmentReport - per-level counts without a levelSnapshot', () 
     expect(r.byLevel.find((l) => l.levelId === 'lS')!.members).toBe(1);
   });
 
-  it('PREFERS a stored snapshot over the live derivation', async () => {
-    // For a past year the snapshot is the honest record of where a child
-    // actually sat; deriving live would re-file them by the grade they are in
-    // now. The fixture makes the two disagree on purpose.
+  it('PREFERS a stored snapshot over the live derivation (a shape today\'s writers cannot produce)', async () => {
+    // Precedence, not live behaviour. `promote-families` is the only writer of
+    // levelSnapshots and it cancels the enrollment in the same transaction, so
+    // an ACTIVE enrollment with a snapshot - what this fixture builds - cannot
+    // currently exist. The branch is guarded here so that if the rollover model
+    // ever leaves the source enrollment active, the report keeps reporting
+    // where a child ACTUALLY sat rather than re-filing them by this year's
+    // grade. The fixture makes snapshot and live grade disagree on purpose.
     mockFs.mockReturnValue(makeDb(
       [
         {

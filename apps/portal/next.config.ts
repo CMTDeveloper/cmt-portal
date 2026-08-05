@@ -63,6 +63,13 @@ const config: NextConfig = {
    * long before any React renders - so the answer is a real 3xx with an empty
    * body. There is no stream to truncate.
    *
+   * NINE pages had this shape. The first sweep found eight and said so; the
+   * parameterized one under /teacher was missed because it was not a bare
+   * `redirect('/literal')`. Every remaining `redirect()` in a page is
+   * CONDITIONAL - an auth or state gate - and those must stay pages, so they
+   * keep the streamed shape by necessity. If a "couldn't load" report ever
+   * points at one of THOSE paths, this is the mechanism to suspect again.
+   *
    * `permanent: false` (307) on purpose for the app's own paths: a 308 is
    * cached by the browser more or less forever, so getting a destination wrong
    * would strand staff on their own machines with no way for us to correct it.
@@ -89,6 +96,17 @@ const config: NextConfig = {
       { source: '/admin/donation-periods', destination: '/admin/programs', permanent: false },
       { source: '/check-in/admin/reports', destination: '/welcome/reports', permanent: false },
       { source: '/check-in/teacher/attendance', destination: '/check-in/teacher', permanent: false },
+
+      // Parameterized, and the query string rides along automatically - which
+      // is the whole reason this one had a page: it was re-appending ?date
+      // by hand. It validated the date format first; the attendance screen
+      // validates its own `date` param regardless, so passing one through
+      // unchecked is no different from a teacher typing it there directly.
+      {
+        source: '/teacher/levels/:levelId/previous',
+        destination: '/teacher/levels/:levelId/attendance',
+        permanent: false,
+      },
     ];
   },
   // Baseline browser-security headers on every response. HSTS is already added

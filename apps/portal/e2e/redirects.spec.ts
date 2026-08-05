@@ -1,5 +1,5 @@
 import { test, expect, request as apiRequest } from '@playwright/test';
-import { E2E_BASE_URL } from '../_helpers';
+import { E2E_BASE_URL } from './_helpers';
 
 /**
  * Every path-to-path redirect must be a REAL HTTP redirect.
@@ -17,6 +17,12 @@ import { E2E_BASE_URL } from '../_helpers';
  * shell, and no instruction to go anywhere - so it shows its own error page.
  * Three people hit it on three platforms in two days, and a reload always
  * "fixed" it, which is why it read as flaky infrastructure rather than a bug.
+ *
+ * It lives OUTSIDE e2e/setu/ and has its own Playwright project with NO
+ * `dependencies: ['setup']`. Under the `setu` project it would have inherited
+ * the Admin-SDK session mint, and a credentials or env drift there would have
+ * made this guardrail silently not run at all - the failure mode where the
+ * suite goes green because the test never executed.
  *
  * WHY THIS TEST IS UNAUTHENTICATED, deliberately: a config redirect runs at
  * routing step 2, BEFORE middleware. So it must answer with a 3xx even to a
@@ -41,6 +47,9 @@ const REDIRECTS: ReadonlyArray<{ from: string; to: string }> = [
   { from: '/check-in/teacher/attendance', to: '/check-in/teacher' },
   // The one genuinely permanent move, and the only 308 in the set.
   { from: '/disclaimers', to: '/acknowledgements' },
+  // Parameterized. The levelId is arbitrary - nothing is read, the mapping is
+  // pure path rewriting, which is the point.
+  { from: '/teacher/levels/e2e-any-level/previous', to: '/teacher/levels/e2e-any-level/attendance' },
 ];
 
 test.describe('path redirects are real HTTP redirects, never streamed', () => {
@@ -68,4 +77,22 @@ test.describe('path redirects are real HTTP redirects, never streamed', () => {
       }
     });
   }
+
+  test('a parameterized redirect carries the query string through', async () => {
+    // The page this replaced re-appended `?date` by hand. Next does it for
+    // free - but "for free" is worth an assertion, because losing it would
+    // silently drop a teacher onto today's class instead of the date they
+    // bookmarked, and nothing else would complain.
+    const ctx = await apiRequest.newContext({ baseURL: E2E_BASE_URL });
+    try {
+      const res = await ctx.get('/teacher/levels/e2e-any-level/previous?date=2026-05-17', {
+        maxRedirects: 0,
+        failOnStatusCode: false,
+      });
+      expect(res.status()).toBeGreaterThanOrEqual(300);
+      expect(res.headers()['location']).toBe('/teacher/levels/e2e-any-level/attendance?date=2026-05-17');
+    } finally {
+      await ctx.dispose();
+    }
+  });
 });
