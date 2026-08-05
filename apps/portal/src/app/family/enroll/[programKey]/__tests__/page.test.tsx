@@ -845,3 +845,35 @@ describe('ProgramEnrollPage (bala-vihar) — the monthly alternative', () => {
     });
   });
 });
+
+// ── The family-facing half, at a centre with its OWN adult-class program ──────
+// Every other case in this file runs `makeParams()`, which defaults to
+// 'bala-vihar'. Nothing here ever rendered an adult-class programKey, so when
+// this page decided the waiver with a bare `programKey === ADULT_STUDY_CLASS`
+// on 2026-08-04, reverting the fix broke ZERO tests - the same single-fixture
+// blindness that let the bug ship in the first place. Found by Fable review.
+describe('ProgramEnrollPage - the waiver copy at a non-literal-keyed centre', () => {
+  beforeEach(() => {
+    vi.stubEnv('NEXT_PUBLIC_FEATURE_SETU_DONATIONS', 'true');
+    // `adult-study-east` is Scarborough's own program. `isAdultStudyClassKey`
+    // (mocked at the top of this file) knows both centres, exactly as
+    // `capabilities.isAdultStudyClass` does in Firestore.
+    mockGetEnrollments.mockResolvedValue([
+      { ...ACTIVE_ENROLLMENT_WAIVED, programKey: 'adult-study-east' },
+    ]);
+    mockGetOpenOfferingsForFamily.mockResolvedValue([ACTIVE_PERIOD]);
+    mockGetDonations.mockResolvedValue([]);
+  });
+
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('tells the family their Bala Vihar donation covers it', async () => {
+    const page = await ProgramEnrollPage({ params: makeParams('adult-study-east') });
+    const { container } = render(page);
+    // Assert the DISCRIMINATING sentence, not "nothing to pay" - the 'free'
+    // fallback says that too, so a looser matcher passes while the bug is live.
+    // This is the copy a Scarborough family was denied: true, and about WHY.
+    expect(container.textContent).toMatch(/Bala Vihar donation covers this class/i);
+    expect(container.textContent).not.toMatch(/\$0/);
+  });
+});
