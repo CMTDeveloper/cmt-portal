@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { NO_ALLERGIES } from '@cmt/shared-domain';
 
 // ── Next.js ───────────────────────────────────────────────────────────────────
 vi.mock('next/navigation', () => ({
@@ -171,6 +172,25 @@ describe('WelcomeFamilyDetailPage — with data', () => {
 
     const avatars = screen.getAllByTestId('setu-avatar');
     expect(avatars.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('shows a real allergy in red but NOT the "no known allergies" answer (N=2)', async () => {
+    // Vaibhav, 2026-08-05: a red ⚠ None under a child who has no allergies.
+    // Both children present on purpose - the sentinel must go quiet WITHOUT
+    // taking the real one with it.
+    mockGetFamilyForWelcome.mockResolvedValue({
+      family: SAMPLE_FAMILY,
+      members: [
+        { ...SAMPLE_MEMBERS[1]!, mid: 'MID003', firstName: 'Nikhil', foodAllergies: NO_ALLERGIES },
+        { ...SAMPLE_MEMBERS[1]!, mid: 'MID004', firstName: 'Anaya', foodAllergies: 'nuts, pollen' },
+      ],
+    });
+
+    const page = await WelcomeFamilyDetailPage({ params: Promise.resolve({ fid: 'FAM001' }) });
+    render(page as React.ReactElement);
+
+    expect(screen.getAllByText(/nuts, pollen/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(NO_ALLERGIES)).toBeNull();
   });
 
   it('renders a View profile link to each member profile', async () => {

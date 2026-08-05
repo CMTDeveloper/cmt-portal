@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { NO_ALLERGIES } from '@cmt/shared-domain';
 
 const { mockCollectionGroupGet, mockMembersGet, mockGetMyLevels, mockDeriveRoster, mockAttendance } = vi.hoisted(() => ({
   mockCollectionGroupGet: vi.fn(),
@@ -53,6 +54,21 @@ describe('getStudentDetail', () => {
     expect(d!.foodAllergies).toBe('Peanuts');
     expect(d!.parents).toEqual([{ name: 'Asha Apple', phone: '416-555', email: 'asha@e.com' }]);
     expect(d!.summary).toMatchObject({ present: 1, absent: 1, total: 2, attendedPct: 50 });
+  });
+
+  it('reports NO allergy for the "no known allergies" answer', async () => {
+    // The page renders a severe red banner on any non-null value here, with an
+    // emergency-contact line under it. 104 of the 105 production members with
+    // a value held exactly this string on 2026-08-05.
+    mockCollectionGroupGet.mockResolvedValue({
+      docs: [{
+        data: () => ({ mid: 'CMT-A-02', firstName: 'Arjun', lastName: 'Apple', type: 'Child', schoolGrade: 'Grade 2', foodAllergies: NO_ALLERGIES, emergencyContacts: [null, null] }),
+        ref: { parent: { parent: { id: 'CMT-A' } } },
+      }],
+    });
+    mockMembersGet.mockResolvedValue({ docs: [] });
+    const d = await getStudentDetail('CMT-A-02');
+    expect(d!.foodAllergies).toBeNull();
   });
 });
 

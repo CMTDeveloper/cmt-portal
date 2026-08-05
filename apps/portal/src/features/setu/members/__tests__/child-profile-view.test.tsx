@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { NO_ALLERGIES } from '@cmt/shared-domain';
 import type { ChildAchievement, ChildProfile, ChildProfileProgram, ChildProgramAttendance } from '../get-child-profile';
 
 vi.mock('@cmt/ui', () => ({
@@ -173,6 +174,35 @@ describe('ChildProfileView', () => {
     it('hides the Achievements section when there are none', () => {
       render(<ChildProfileView profile={makeProfile()} />);
       expect(screen.queryByText('Achievements')).toBeNull();
+    });
+  });
+
+  describe('food allergies', () => {
+    it('shows the severe callout for a real allergy', () => {
+      render(<ChildProfileView profile={makeProfile({ foodAllergies: 'nuts, pollen' })} />);
+      expect(screen.getByText('Food allergies')).toBeTruthy();
+      expect(screen.getByText(/nuts, pollen/)).toBeTruthy();
+    });
+
+    it('does NOT raise a severe callout when the family answered "no known allergies"', () => {
+      // 104 of the 105 production members with any value held exactly this
+      // string on 2026-08-05, against ONE real allergy - and every one of them
+      // rendered this red banner, which read "None · severe".
+      render(<ChildProfileView profile={makeProfile({ foodAllergies: NO_ALLERGIES })} />);
+      expect(screen.queryByText('Food allergies')).toBeNull();
+      expect(screen.queryByText(/severe/)).toBeNull();
+    });
+
+    it('still tells the family their answer was recorded', () => {
+      // Silence would read as "we never asked" and invite them to re-enter it.
+      render(<ChildProfileView profile={makeProfile({ foodAllergies: NO_ALLERGIES })} />);
+      expect(screen.getByText('No known allergies')).toBeTruthy();
+    });
+
+    it('says nothing at all when no answer has been recorded', () => {
+      render(<ChildProfileView profile={makeProfile({ foodAllergies: null })} />);
+      expect(screen.queryByText('No known allergies')).toBeNull();
+      expect(screen.queryByText('Food allergies')).toBeNull();
     });
   });
 });

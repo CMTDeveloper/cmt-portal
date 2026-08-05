@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { NO_ALLERGIES } from '@cmt/shared-domain';
 import { buildRoster, type RosterFamily, type RosterEventInput } from '../roster';
 
 const NOW = new Date('2026-01-15T17:00:00Z');
@@ -102,6 +103,25 @@ describe('buildRoster', () => {
     const r = buildRoster(level2, families, [], '2026-01-18', NOW, new Set(families.map((f) => f.fid)));
     expect(r.members[0]!.hasSafetyInfo).toBe(false);
     expect(r.members[0]!.foodAllergies).toBeNull();
+  });
+
+  it('does NOT light the safety dot for the "No known allergies" answer (N=2 with a real one)', () => {
+    // In production on 2026-08-05, 104 of the 105 members with any allergy
+    // value held exactly this sentinel and ONE held a real allergy - and the
+    // roster lit the dot for all 105. Two children here on purpose: the point
+    // is not that the sentinel goes quiet, it is that the REAL one still
+    // stands out next to it.
+    const families: RosterFamily[] = [
+      { fid: 'CMT-A', legacyFid: 'legacy-A', enrolledMids: ['CMT-A-02'], members: [child('CMT-A-02', 'Apple', 'Grade 2', { foodAllergies: NO_ALLERGIES })] },
+      { fid: 'CMT-B', legacyFid: 'legacy-B', enrolledMids: ['CMT-B-02'], members: [child('CMT-B-02', 'Berry', 'Grade 2', { foodAllergies: 'nuts, pollen' })] },
+    ];
+    const r = buildRoster(level2, families, [], '2026-01-18', NOW, new Set(families.map((f) => f.fid)));
+    const apple = r.members.find((m) => m.lastName === 'Apple')!;
+    const berry = r.members.find((m) => m.lastName === 'Berry')!;
+    expect(apple.hasSafetyInfo).toBe(false);
+    expect(apple.foodAllergies).toBeNull();
+    expect(berry.hasSafetyInfo).toBe(true);
+    expect(berry.foodAllergies).toBe('nuts, pollen');
   });
 
   it('leaves a child with nothing on file null, not the empty string', () => {

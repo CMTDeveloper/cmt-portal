@@ -1,5 +1,5 @@
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
-import { levelGradeSummary, memberMatchesLevel, type LevelDoc, type RosterStatus, type SetuAttendanceStatus } from '@cmt/shared-domain';
+import { levelGradeSummary, memberMatchesLevel, recordedAllergy, type LevelDoc, type RosterStatus, type SetuAttendanceStatus } from '@cmt/shared-domain';
 import { deriveConfirmedFidsForLevel, type LevelEnrollment } from './roster-confirmation';
 
 export interface RosterMemberInput {
@@ -129,11 +129,14 @@ export function buildRoster(
         lastName: m.lastName,
         type: m.type,
         schoolGrade: m.schoolGrade,
-        // Whitespace-only text is not a safety note: it must not light the dot
-        // and it must not render as an empty "Safety & medical" block either,
-        // so both fields agree on what counts.
-        foodAllergies: m.foodAllergies && m.foodAllergies.trim().length > 0 ? m.foodAllergies : null,
-        hasSafetyInfo: Boolean(m.foodAllergies && m.foodAllergies.trim().length > 0),
+        // `recordedAllergy` decides what counts, and BOTH fields are derived
+        // from that one call - a lit dot with an empty "Safety & medical" block
+        // reads to a teacher as "there is something here and I cannot see it".
+        // It returns null for whitespace AND for the "No known allergies"
+        // answer, which 104 of the 105 members carrying any value held in
+        // production on 2026-08-05.
+        foodAllergies: recordedAllergy(m.foodAllergies),
+        hasSafetyInfo: recordedAllergy(m.foodAllergies) !== null,
         status,
         legacySid: m.legacySid,
         legacyFid: fam.legacyFid,

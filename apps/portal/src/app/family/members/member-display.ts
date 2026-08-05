@@ -1,4 +1,4 @@
-import { whatsMissingForMember, isParticipating, gradeLabel, type MemberDoc } from '@cmt/shared-domain/setu';
+import { whatsMissingForMember, isParticipating, gradeLabel, recordedAllergy, type MemberDoc } from '@cmt/shared-domain/setu';
 
 /** The roster-card view of a member used by the My Family page. */
 export type DisplayMember = {
@@ -130,7 +130,10 @@ export function memberToDisplay(m: MemberDoc, currentMid: string | null): Displa
     type: typeLabel,
     isManager: m.manager,
     isAdult: m.type === 'Adult',
-    warn: m.foodAllergies ?? null,
+    // The card renders this in red as "Allergy: …", so it must be the allergy
+    // the family actually recorded - not the 'None' the "No known allergies"
+    // box writes. See `recordedAllergy`.
+    warn: recordedAllergy(m.foodAllergies),
     email: m.email,
     phone: m.phone,
     role: m.volunteeringSkills.length > 0 ? m.volunteeringSkills.join(', ') : null,

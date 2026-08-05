@@ -6,7 +6,7 @@ import { CspRoot } from '@/features/family/components/atoms';
 import { getFamilyForWelcome } from '@/features/setu/search/get-family-for-welcome';
 import { getFamilySevaProgress, type FamilySevaProgress } from '@/features/setu/seva/get-family-seva-progress';
 import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
-import { isWelcomeTeam, isCoordinator, isAdmin, BALA_VIHAR, type WithRole } from '@cmt/shared-domain';
+import { isWelcomeTeam, isCoordinator, isAdmin, BALA_VIHAR, recordedAllergy, type WithRole } from '@cmt/shared-domain';
 import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
 import { adultStudyClassProgramKeys } from '@/features/setu/adult-class/program-keys';
 import { deriveFamilyPayment } from '@/features/setu/roster/payment';
@@ -371,9 +371,13 @@ function MemberRow({ m, fid }: { m: MemberDoc; fid: string }) {
         <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{typeLabel}</div>
         {m.email && <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2, fontFamily: 'var(--mono)' }}>{m.email}</div>}
         {m.phone && <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2, fontFamily: 'var(--mono)' }}>{m.phone}</div>}
-        {m.foodAllergies && (
+        {/* Only a REAL allergy earns the red row. The "No known allergies"
+            answer stores the literal 'None', which used to render here as a
+            red ⚠ None - reported by Vaibhav 2026-08-05. Staff need the
+            exception, not the answer. */}
+        {recordedAllergy(m.foodAllergies) && (
           <div style={{ marginTop: 6, fontSize: 11, color: 'var(--err)', display: 'flex', alignItems: 'center', gap: 4 }}>
-            <SetuIcon.warn/> {m.foodAllergies}
+            <SetuIcon.warn/> {recordedAllergy(m.foodAllergies)}
           </div>
         )}
         <Link href={`/welcome/family/${fid}/members/${m.mid}`} style={{ display: 'inline-block', marginTop: 8, fontSize: 12, color: 'var(--accent)', textDecoration: 'none', fontWeight: 600 }}>

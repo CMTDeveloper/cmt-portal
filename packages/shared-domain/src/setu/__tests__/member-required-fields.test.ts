@@ -7,6 +7,7 @@ import {
   isMemberComplete,
   incompleteMembers,
   membersRequiringCompletion,
+  recordedAllergy,
   type MemberCompletenessInput,
 } from '../member-required-fields';
 
@@ -189,6 +190,55 @@ describe('membersRequiringCompletion', () => {
       // /complete-profile by their own record, with no way to edit anyone.
       const self = { mid: 'F-11', manager: false, participation: 'inactive' as const };
       expect(membersRequiringCompletion([manager, self], 'F-11', false)).toEqual([]);
+    });
+  });
+
+  describe('recordedAllergy', () => {
+    // The reader half of NO_ALLERGIES. The "No known allergies" affordance
+    // WRITES the literal 'None' so a family can satisfy the required
+    // foodAllergies field without inventing an allergy - but for two months
+    // every reader treated "non-empty string" as "has an allergy". In
+    // production on 2026-08-05 that was 104 members reading as a SEVERE
+    // allergy against ONE real one ("nuts, pollen"), on the teacher attendance
+    // marker, the class list, both student profiles and the staff family page.
+    // The harm is not the badge, it is that 104 false markers teach staff to
+    // ignore the one that matters.
+
+    it('returns null for the sentinel the "No known allergies" box writes', () => {
+      expect(recordedAllergy(NO_ALLERGIES)).toBeNull();
+    });
+
+    it('returns the text for a real allergy', () => {
+      expect(recordedAllergy('nuts, pollen')).toBe('nuts, pollen');
+    });
+
+    it('returns null for absent, empty and whitespace-only values', () => {
+      expect(recordedAllergy(null)).toBeNull();
+      expect(recordedAllergy(undefined)).toBeNull();
+      expect(recordedAllergy('')).toBeNull();
+      expect(recordedAllergy('   ')).toBeNull();
+    });
+
+    it('matches the sentinel regardless of case or surrounding space', () => {
+      // The same string arrives typed by hand into the free-text box, not only
+      // from the checkbox.
+      for (const v of ['none', 'NONE', '  None  ', 'N/A', 'nil', 'no known allergies']) {
+        expect(recordedAllergy(v), v).toBeNull();
+      }
+    });
+
+    it('NEVER matches on a substring - "no nuts" is a real allergy', () => {
+      // The whole reason this compares whole strings: an allergy phrased as a
+      // negative ("no nuts", "none except dairy") is still an allergy, and
+      // silencing it is the one failure mode worse than the noise we are
+      // fixing. Fail toward showing the warning.
+      expect(recordedAllergy('no nuts')).toBe('no nuts');
+      expect(recordedAllergy('none except dairy')).toBe('none except dairy');
+      expect(recordedAllergy('No dairy or eggs')).toBe('No dairy or eggs');
+    });
+
+    it('trims the text it returns, so a padded value cannot render as blank', () => {
+      expect(recordedAllergy('  peanuts  ')).toBe('peanuts');
     });
   });
 });

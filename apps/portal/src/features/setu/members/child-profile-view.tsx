@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { SetuAvatar, SetuIcon } from '@cmt/ui';
 import { displayMid, gradeLabel } from '@cmt/shared-domain/setu';
-import { AllergyCallout, SectionLabel } from '@/features/family/components/atoms';
+import { AllergyBlock, SectionLabel } from '@/features/family/components/atoms';
 import { JourneyStrip } from '@/features/setu/rollover/components/journey-strip';
 import type { JourneyRow } from '@/features/setu/rollover/get-child-journey';
 import type { ChildAchievement, ChildProfile, ChildProfileProgram, ChildProgramAttendance } from './get-child-profile';
@@ -430,9 +430,7 @@ export function ChildProfileView({ profile, editHref, journey }: ChildProfileVie
         </div>
       </header>
 
-      {profile.foodAllergies && (
-        <AllergyCallout severity="severe" summary={profile.foodAllergies} detail="Please inform class teacher." />
-      )}
+      <AllergyBlock value={profile.foodAllergies} />
 
       {renderQuickStats(stats)}
 

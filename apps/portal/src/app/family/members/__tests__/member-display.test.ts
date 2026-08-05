@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { MemberDoc } from '@cmt/shared-domain/setu';
+import { NO_ALLERGIES, type MemberDoc } from '@cmt/shared-domain/setu';
 import { memberToDisplay, memberStatusChip, type DisplayMember } from '../member-display';
 
 function makeMember(overrides: Partial<MemberDoc> = {}): MemberDoc {
@@ -56,6 +56,27 @@ describe('memberToDisplay — missingCount (Slice 1 Part D)', () => {
   it('counts a child missing schoolGrade + birthMonthYear as 2', () => {
     const m = makeMember({ type: 'Child', foodAllergies: 'None', schoolGrade: null, birthMonthYear: null });
     expect(memberToDisplay(m, 'FAM1-01').missingCount).toBe(2);
+  });
+});
+
+describe('memberToDisplay — warn (the red allergy line on the member card)', () => {
+  // 'None' is what the "No known allergies" checkbox writes. Note the fixtures
+  // ABOVE have been passing it as the value for a "fully-complete" member since
+  // this file was written - which is exactly right for completeness, and was
+  // exactly wrong for the warning, because `warn` took the raw string.
+  it('is null when the family answered "no known allergies"', () => {
+    const m = makeMember({ type: 'Child', foodAllergies: NO_ALLERGIES });
+    expect(memberToDisplay(m, 'FAM1-01').warn).toBeNull();
+  });
+
+  it('still carries a real allergy through', () => {
+    const m = makeMember({ type: 'Child', foodAllergies: 'nuts, pollen' });
+    expect(memberToDisplay(m, 'FAM1-01').warn).toBe('nuts, pollen');
+  });
+
+  it('keeps an allergy phrased as a negative - "no nuts" is not "none"', () => {
+    const m = makeMember({ type: 'Child', foodAllergies: 'no nuts' });
+    expect(memberToDisplay(m, 'FAM1-01').warn).toBe('no nuts');
   });
 });
 
