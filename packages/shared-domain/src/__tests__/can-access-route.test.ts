@@ -1072,6 +1072,12 @@ describe('canAccessRoute — the welcome-team grant, in full', () => {
     // Every roster row links into family detail; without it the screen is a dead end.
     ['/welcome/family/CMT-AB12CD34', 'GET'],
     ['/welcome/family/CMT-AB12CD34/members/CMT-AB12CD34-02', 'GET'],
+    // The staff member EDIT screen (2026-08-05). It rides the /welcome/family/
+    // prefix rather than having a clause of its own, so it is pinned here: a
+    // future narrowing of that prefix would otherwise strand the screen
+    // silently, and the failure would look like a redirect loop rather than a
+    // permission change.
+    ['/welcome/family/CMT-AB12CD34/members/CMT-AB12CD34-02/edit', 'GET'],
     // The data behind those screens.
     ['/api/welcome/roster/report', 'GET'],
     ['/api/welcome/families', 'GET'],

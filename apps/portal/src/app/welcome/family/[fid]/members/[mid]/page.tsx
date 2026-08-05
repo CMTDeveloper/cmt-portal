@@ -79,6 +79,21 @@ export async function WelcomeMemberProfileBody({
   const view = (
     <>
       <ChildProfileView profile={profile} journey={journey} />
+      {/* Vaibhav, 2026-08-05: staff need to be able to set the graduation and
+          "not taking part" flags on a family's behalf, and correct a record
+          while they have the family on the phone. The full form lives one
+          route down and reuses the family's own; this is the way in.
+          Gated on `canEditGrade` (= isWelcomeTeam) rather than on page access,
+          so it never renders for someone the PATCH route would refuse. */}
+      {canEditGrade && (
+        <Link
+          href={`/welcome/family/${fid}/members/${mid}/edit`}
+          className="btn btn--g"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 18 }}
+        >
+          Edit member
+        </Link>
+      )}
       {canEditGrade && profile.type === 'Child' && (
         <MemberGradeEditor
           fid={profile.fid}
