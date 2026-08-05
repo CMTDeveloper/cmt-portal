@@ -97,6 +97,7 @@ function meta(over: Partial<AttendanceEnrollmentMeta> = {}): AttendanceEnrollmen
     enrolledAt: ENROLLED_AT,
     suggestedAmountOverride: null,
     suggestedAmountSnapshot: 0,
+    settledOffPortal: false,
     ...over,
   };
 }

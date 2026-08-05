@@ -53,7 +53,7 @@ export async function buildRosterCsvRows(filters: { location?: string; program?:
 
   // 3) ALL enrollments (one unfiltered read; keep active only, group by fid)
   const enrSnap = await db.collectionGroup('enrollments').get();
-  type ActiveEnr = { oid: string; programKey: string; programLabel: string; snapshot: number; override: number | null; enrolledAt: Date };
+  type ActiveEnr = { oid: string; programKey: string; programLabel: string; snapshot: number; override: number | null; settledOffPortal: boolean; enrolledAt: Date };
   const activeByFid = new Map<string, ActiveEnr[]>();
   for (const e of enrSnap.docs) {
     const d = e.data() as Record<string, unknown>;
@@ -67,6 +67,7 @@ export async function buildRosterCsvRows(filters: { location?: string; program?:
       programLabel: String(d['programLabel'] ?? ''),
       snapshot: typeof d['suggestedAmountSnapshot'] === 'number' ? (d['suggestedAmountSnapshot'] as number) : 0,
       override: typeof d['suggestedAmountOverride'] === 'number' ? (d['suggestedAmountOverride'] as number) : null,
+      settledOffPortal: d['settledOffPortal'] === true,
       enrolledAt: toDate(d['enrolledAt']),
     });
     activeByFid.set(fid, arr);

@@ -20,6 +20,14 @@ export interface ActiveEnrollmentCharge {
   offering: Pick<OfferingDoc, 'pricingTiers' | 'paymentSource'> | null;
   /** Selects the pricing tier that applied when the family enrolled. */
   enrolledAt: Date;
+  /**
+   * An admin has recorded that this enrollment is settled outside the portal.
+   *
+   * REQUIRED, not optional-with-a-default, so the compiler names every caller
+   * that builds a charge. There are five, in three packages; a defaulted field
+   * would have let four of them keep the old verdict silently.
+   */
+  settledOffPortal: boolean;
 }
 
 /**
@@ -93,6 +101,19 @@ export function classifyRosterPayment(
   // Tested against `!== 'portal'` rather than the two names on purpose: a fourth
   // payment source added to PAYMENT_SOURCES later inherits the cautious verdict
   // instead of silently defaulting to "nothing is owed".
+  //
+  // This check stays FIRST, ahead of the settlement one below. A settled Bala
+  // Vihar sitting next to a teacher-managed program still leaves cash we cannot
+  // see, and "Paid" would tell a volunteer the family is square when it may not
+  // be. Settlement answers for its own enrollment, never for the one beside it.
   const anyOffPortal = active.some((c) => sourceOf(c.offering) !== 'portal');
-  return anyOffPortal ? 'unknown' : 'not-applicable';
+  if (anyOffPortal) return 'unknown';
+
+  // An admin has recorded that this family's donation arrives outside the
+  // portal. That is a PAYMENT we simply cannot see, not the absence of one, so
+  // it reads as `paid` - the same word the family's own dashboard uses. Without
+  // this the settlement was indistinguishable from the Adult Study Class
+  // waiver, and the welcome desk was told "N/A" about a family who pays every
+  // month. See `settledOffPortal` on EnrollmentDocSchema for the whole story.
+  return active.some((c) => c.settledOffPortal) ? 'paid' : 'not-applicable';
 }

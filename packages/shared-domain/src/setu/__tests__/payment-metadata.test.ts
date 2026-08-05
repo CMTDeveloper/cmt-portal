@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  buildClientReferenceId,
   buildPaymentMetadata,
   campaignForProgram,
   hasNamedCampaign,
@@ -97,5 +98,39 @@ describe('the constants themselves', () => {
   it('are the literals from the doc', () => {
     expect(PAYMENT_SOURCE).toBe('setu');
     expect(CAMPAIGN_PLEDGE).toBe('BalaViharPledge');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// client_reference_id (2026-08-04)
+// ─────────────────────────────────────────────────────────────────────────────
+describe('buildClientReferenceId', () => {
+  it('puts the family FIRST, then the record', () => {
+    expect(buildClientReferenceId({ familyLabel: 'FID-5006', recordId: 'U78VVE09p1jah98WUTj5' })).toBe(
+      'FID-5006-U78VVE09p1jah98WUTj5',
+    );
+  });
+
+  // The whole reason it is not simply the family id: a family makes many
+  // payments, and this string is the only thing tying a Stripe row to one of
+  // them. Losing either half defeats one of the two people who read it.
+  it('keeps the record id intact, so a Stripe row still maps to one payment', () => {
+    const ref = buildClientReferenceId({ familyLabel: 'FID-5006', recordId: 'abc123' });
+    expect(ref.endsWith('abc123')).toBe(true);
+    expect(ref).toContain('FID-5006');
+  });
+
+  // publicFid is minted lazily at first enrollment, so the very first payment a
+  // family makes can race it and `paymentFamilyLabel` falls back to the internal
+  // fid. Awkward, but it must still be unambiguous rather than blank.
+  it('survives the pre-publicFid fallback label', () => {
+    expect(buildClientReferenceId({ familyLabel: 'FID-CMT-SXO5QWFI', recordId: 'pid1' })).toBe(
+      'FID-CMT-SXO5QWFI-pid1',
+    );
+  });
+
+  it('stays far inside Stripe’s 200-character limit', () => {
+    expect(buildClientReferenceId({ familyLabel: 'FID-CMT-SXO5QWFI', recordId: 'U78VVE09p1jah98WUTj5' }).length)
+      .toBeLessThan(200);
   });
 });

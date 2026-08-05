@@ -51,6 +51,8 @@ export interface AttendanceEnrollmentMeta {
   enrolledAt: Date;
   suggestedAmountOverride: number | null;
   suggestedAmountSnapshot: number | null;
+  /** Admin-recorded off-portal settlement. See EnrollmentDocSchema. */
+  settledOffPortal: boolean;
 }
 
 /** Firestore's `in` cap. HARD: an over-long array throws INVALID_ARGUMENT
@@ -184,6 +186,7 @@ export async function buildAttendanceDetailIndex(
           override: enr!.suggestedAmountOverride,
           snapshot: enr!.suggestedAmountSnapshot ?? 0,
           enrolledAt: enr!.enrolledAt,
+          settledOffPortal: enr!.settledOffPortal,
         }]
       : [];
     out.set(fid, {

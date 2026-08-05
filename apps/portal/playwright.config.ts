@@ -83,6 +83,29 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'], storageState: STORAGE },
     },
     {
+      // ── The engine half our families actually use ──────────────────────────
+      // Every other project here is Chromium. On 2026-08-04 that gap let issue
+      // #62 run for a month: client-side navigation in the whole signed-in app
+      // was dead on iOS Safari - tap "Manage family", nothing happens - while
+      // the suite stayed green.
+      //
+      // `devices['iPhone 13']` carries `defaultBrowserType: 'webkit'`, so this
+      // is real WebKit, NOT Chromium wearing an iPhone user-agent. That
+      // distinction is the entire bug: "it works in browser responsive view"
+      // was the owner's most useful sentence, and it means Chromium.
+      //
+      // client-navigation.spec.ts deliberately runs under BOTH this project and
+      // `setu` above (Desktop Chrome). It is not a Safari-only fault - Chromium
+      // failed the same bottom-nav hop 2 runs in 3 - so pinning it to one engine
+      // would under-test it.
+      //
+      // Cheap by construction: loads and clicks, no mutations.
+      name: 'mobile-webkit',
+      testMatch: /e2e\/setu\/client-navigation\.spec\.ts$/,
+      dependencies: ['setup'],
+      use: { ...devices['iPhone 13'], storageState: STORAGE },
+    },
+    {
       name: 'unauthenticated',
       testMatch: /e2e\/unauth\.spec\.ts$/,
       use: { ...devices['Desktop Chrome'] },

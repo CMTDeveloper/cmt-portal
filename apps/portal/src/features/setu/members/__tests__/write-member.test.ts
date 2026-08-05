@@ -689,6 +689,56 @@ describe('deleteMember', () => {
     expect(res.ok === false && (res.body as { error: string }).error).toBe('last-manager');
   });
 
+  // ── contactKey ownership (moved here 2026-08-04) ──────────────────────────
+  //
+  // These two lived on the family-scoped DELETE route test until that route was
+  // closed to families. The rule belongs to `deleteMember` anyway, and the
+  // second one is a LOCKOUT fix - losing its coverage with the route would have
+  // been the expensive half of a cleanup.
+  it('removes a contactKey the member OWNS', async () => {
+    const { deletes } = useDb({
+      [`families/${FID}`]: { fid: FID, managers: [`${FID}-01`] },
+      [`families/${FID}/members/${FID}-02`]: {
+        ...CHILD_DOC,
+        mid: `${FID}-02`,
+        email: 'diya@example.com',
+        phone: null,
+      },
+      // The module's hashContactKey is mocked at the top of this file as
+      // `hash:${type}:${value}`, so the key path is spelled out rather than
+      // recomputed - recomputing it here would just re-derive the mock.
+      ['contactKeys/hash:email:diya@example.com']: { mid: `${FID}-02`, fid: FID },
+    });
+
+    const res = await deleteMember({ fid: FID, mid: `${FID}-02`, actor: STAFF });
+
+    expect(res.ok).toBe(true);
+    expect(deletes).toContain('contactKeys/hash:email:diya@example.com');
+  });
+
+  // 🔴 A child on the manager's email. The key belongs to the MANAGER, so
+  // deleting the child must leave it alone - otherwise removing a child signs
+  // the parent out of the portal permanently.
+  it('does NOT delete a contactKey owned by a RELATIVE', async () => {
+    const sharedKey = 'contactKeys/hash:email:manager@example.com';
+    const { deletes } = useDb({
+      [`families/${FID}`]: { fid: FID, managers: [`${FID}-01`] },
+      [`families/${FID}/members/${FID}-02`]: {
+        ...CHILD_DOC,
+        mid: `${FID}-02`,
+        email: 'manager@example.com',
+        phone: null,
+      },
+      [sharedKey]: { mid: `${FID}-01`, fid: FID },
+    });
+
+    const res = await deleteMember({ fid: FID, mid: `${FID}-02`, actor: STAFF });
+
+    expect(res.ok).toBe(true);
+    expect(deletes).toContain(`families/${FID}/members/${FID}-02`);
+    expect(deletes).not.toContain(sharedKey);
+  });
+
   it('returns not-found for a member that does not exist', async () => {
     useDb(seedFamily());
 

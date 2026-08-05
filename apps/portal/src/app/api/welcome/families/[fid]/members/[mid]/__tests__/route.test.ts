@@ -50,6 +50,16 @@ function staffHeaders(extra: Record<string, string> = {}): Record<string, string
   };
 }
 
+/**
+ * DELETE is ADMIN-only (2026-08-04) while PATCH stays welcome-team, so the
+ * delete tests below need their own headers. Written as an override of
+ * `staffHeaders` rather than a second literal, so a change to the session shape
+ * cannot leave the two flavours disagreeing about anything but the role.
+ */
+function adminHeaders(extra: Record<string, string> = {}): Record<string, string> {
+  return staffHeaders({ 'x-portal-role': 'admin', ...extra });
+}
+
 function volunteerParentHeaders(): Record<string, string> {
   return staffHeaders({ 'x-portal-role': 'family-manager', 'x-portal-extra-roles': 'welcome-team' });
 }
@@ -209,9 +219,36 @@ describe('DELETE /api/welcome/families/[fid]/members/[mid]', () => {
     expect(res.status).toBe(403);
   });
 
+  // ── ADMIN-ONLY, tightened 2026-08-04 ──────────────────────────────────────
+  //
+  // The welcome-team grant is "roster + visitors, and nothing else" (Vaibhav,
+  // 2026-08-03) and permanently deleting a person is neither. This is the test
+  // that makes the rule real: the admin control on the member page is UI, and a
+  // control that declines to render has never stopped a request.
+  it('refuses a welcome-team volunteer - DELETE is admin-only, unlike PATCH', async () => {
+    const { deletes } = useDb(seed());
+    const res = await DELETE(makeRequest('DELETE', null, staffHeaders()), ctx);
+    expect(res.status).toBe(403);
+    expect((await res.json()).error).toBe('admin-required');
+    expect(deletes).toHaveLength(0);
+  });
+
+  // An admin who is also a parent: `role` is family-manager and the capability
+  // that authorizes this lives in extraRoles. Strict equality on `role` would
+  // refuse the very people who do this job.
+  it('allows an admin whose PRIMARY role is family-manager', async () => {
+    const { deletes } = useDb(seed());
+    const res = await DELETE(
+      makeRequest('DELETE', null, staffHeaders({ 'x-portal-role': 'family-manager', 'x-portal-extra-roles': 'admin' })),
+      ctx,
+    );
+    expect(res.status).toBe(200);
+    expect(deletes).toContain(`families/${TARGET_FID}/members/${TARGET_MID}`);
+  });
+
   it('removes the member from the ROUTE family and audits it', async () => {
     const { writes, deletes } = useDb(seed());
-    const res = await DELETE(makeRequest('DELETE', null, staffHeaders()), ctx);
+    const res = await DELETE(makeRequest('DELETE', null, adminHeaders()), ctx);
 
     expect(res.status).toBe(200);
     expect(deletes).toContain(`families/${TARGET_FID}/members/${TARGET_MID}`);
@@ -220,20 +257,45 @@ describe('DELETE /api/welcome/families/[fid]/members/[mid]', () => {
     expect(rows[0]).toMatchObject({ action: 'member.delete', fid: TARGET_FID, mid: TARGET_MID, after: null });
   });
 
+  // Moved here 2026-08-04 from the family-scoped DELETE route test, which was
+  // deleted when that route closed. It guards a real escalation: a removed
+  // member's session carries their claims for up to 14 days, and a persisted
+  // sevak capability would re-mint as a STANDALONE session on next sign-in -
+  // holding every family's roster PII, with no family of their own to scope it.
+  it('strips resurrectable sevak capabilities from the removed member', async () => {
+    useDb(seed());
+    const res = await DELETE(makeRequest('DELETE', null, adminHeaders()), ctx);
+
+    expect(res.status).toBe(200);
+    expect(mockRevokeMemberSessions).toHaveBeenCalledTimes(1);
+    // The hoisted mock is declared with no parameters, so its recorded call
+    // tuple is typed empty. Read the arguments through `unknown` rather than
+    // widening the mock's own signature, which would weaken every other
+    // assertion in this file.
+    const [args] = mockRevokeMemberSessions.mock.calls[0] as unknown as [{ stripCaps: string[] }];
+    const { stripCaps } = args;
+    // Named individually rather than compared to the constant: `coordinator` is
+    // the case that made this dangerous, and an assertion against the same
+    // constant the code uses would pass even if that constant lost a role.
+    expect(stripCaps).toContain('coordinator');
+    expect(stripCaps).toContain('admin');
+    expect(stripCaps).toContain('welcome-team');
+  });
+
   it('refuses to remove the last manager', async () => {
     useDb({
       [`families/${TARGET_FID}`]: { fid: TARGET_FID, managers: [TARGET_MID] },
       [`families/${TARGET_FID}/members/${TARGET_MID}`]: { ...CHILD_DOC, manager: true },
     });
 
-    const res = await DELETE(makeRequest('DELETE', null, staffHeaders()), ctx);
+    const res = await DELETE(makeRequest('DELETE', null, adminHeaders()), ctx);
     expect(res.status).toBe(409);
     expect((await res.json()).error).toBe('last-manager');
   });
 
   it('returns 404 for a member that does not exist', async () => {
     useDb({ [`families/${TARGET_FID}`]: { fid: TARGET_FID, managers: [] } });
-    const res = await DELETE(makeRequest('DELETE', null, staffHeaders()), ctx);
+    const res = await DELETE(makeRequest('DELETE', null, adminHeaders()), ctx);
     expect(res.status).toBe(404);
   });
 });

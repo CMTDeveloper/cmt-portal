@@ -213,20 +213,62 @@ export default function FamilyLayout({ children }: { children: React.ReactNode }
         <AdultClassGate />
       </Suspense>
 
-      {/* Mobile: pass-through. Each page renders its own mobile chrome.
-          Wrapped in <Suspense> so dynamic children stream under cacheComponents. */}
-      <div className="block md:hidden">
-        <Suspense fallback={<LoadingOm />}>
-          {children}
-        </Suspense>
-        <Suspense fallback={null}>
-          <MobileNavWithIdentity />
-        </Suspense>
-      </div>
+      {/* ── 🔴 {children} IS MOUNTED EXACTLY ONCE. DO NOT SPLIT IT AGAIN. ──────
+          This layout used to render {children} TWICE - once inside a
+          `block md:hidden` div for phones and again inside a `hidden md:flex`
+          div for desktop - each in its own <Suspense>. Same element, two
+          independent mounts, both live in the DOM at once with CSS hiding one.
 
-      {/* Desktop: shared sidebar around the children main area. */}
-      <div className="hidden md:flex" style={{ minHeight: '100dvh' }}>
-        <CspRoot style={{ display: 'flex', width: '100%', minHeight: '100dvh' }}>
+          That is what broke the portal. On 2026-08-04 the owner reported that
+          on Safari on a real iPhone, tapping anything did nothing: "Manage
+          family", the bottom nav, "Add a child to enroll" - all dead - while
+          "in browser responsive view everything works".
+
+          It was never slowness. The server answers the destination's RSC
+          request in ~170ms. What died was the client-side NAVIGATION: React
+          threw while applying the payload and the router transition never
+          committed, so the URL never changed. The page you were standing on
+          stayed fully interactive - sheets opened, toggles worked - which is
+          precisely why families described it as the app freezing rather than
+          as a broken page, and why it survived a month as issue #62 (in Sentry
+          since 2026-07-10).
+
+          MEASURED, against a local production build, tapping a nav link and
+          timing the URL change, 3 runs per hop per engine:
+
+            two mounts (before)   WebKit  DEAD >15s  6/6     Chromium DEAD 2/6
+            one mount  (this)     WebKit  272-286ms 12/12    Chromium ok 12/12
+
+          Note the Chromium column: this was NOT a Safari-only fault. Safari
+          lost the race almost every time and Chromium about a third of the
+          time, which is why it read as random and why laptop testing missed it.
+
+          The likely mechanism is that Next treats the resolved route segment as
+          a single owned resource; asking for it from two independent Suspense
+          positions means one mount claims it and the other silently never does.
+          Whichever internal system is responsible, the precondition is the
+          duplication - so removing the duplication is the fix, not tuning the
+          boundaries around it.
+
+          Two things that did NOT work, so nobody re-tries them: giving each
+          gate <Suspense> its own container element made it WORSE (it broke
+          Chromium too, 2/2), and wrapping the three gates in a Fragment fixed it
+          while producing byte-identical DOM, i.e. for no explicable reason.
+
+          The mobile/desktop difference is now pure CSS around this one mount.
+          `md:` utilities hide the sidebar and drop the desktop padding on
+          phones; every page keeps its own responsive branching internally,
+          which is safe - that is one component returning both variants from a
+          single render, not two mounts of a shared subtree.
+
+          Guarded by e2e/setu/client-navigation.spec.ts, which runs under real
+          WebKit and fails if a nav tap stops navigating.
+
+          Bonus fix: the inner element is a <div>, not <main>. The root layout
+          (app/layout.tsx:63) already renders <main className="flex-1">, and the
+          HTML spec forbids <main> inside <main>. The welcome and admin layouts
+          still have that nesting. */}
+      <CspRoot className="flex" style={{ minHeight: '100dvh' }}>
           {/* ── 🔴 The wrapper is load-bearing, not cosmetic ────────────────────
               Reported repeatedly as "blank page / broken CSS after a mutation,
               fixed by a hard refresh". Caught live on 2026-07-28 in the owner's
@@ -279,18 +321,31 @@ export default function FamilyLayout({ children }: { children: React.ReactNode }
               wired since 2026-06-26 and would have been recording React #418 /
               #423 / #425 all along. Vercel Skew Protection (which would remove
               the deploy-boundary trigger) is Pro-only; this team is on Hobby. */}
-          <div style={{ display: 'flex' }}>
-            <Suspense fallback={<DesktopSidebar showSignOut/>}>
-              <SidebarWithIdentity />
-            </Suspense>
-          </div>
-          <main style={{ flex: 1, padding: '32px 48px', overflow: 'auto' }}>
-            <Suspense fallback={<LoadingOm />}>
-              {children}
-            </Suspense>
-          </main>
-        </CspRoot>
-      </div>
+        {/* Sidebar is desktop-only; `hidden md:flex` replaces the old
+            `display:flex` wrapper AND the outer breakpoint div in one element,
+            keeping the boundary contained exactly as the note above requires. */}
+        <div className="hidden md:flex">
+          <Suspense fallback={<DesktopSidebar showSignOut/>}>
+            <SidebarWithIdentity />
+          </Suspense>
+        </div>
+
+        {/* THE single {children} mount. Desktop padding/scrolling only; on a
+            phone each page supplies its own padding, exactly as before. */}
+        <div className="flex-1 md:overflow-auto md:px-12 md:py-8">
+          <Suspense fallback={<LoadingOm />}>
+            {children}
+          </Suspense>
+        </div>
+
+        {/* Bottom nav is phone-only. It renders a position:fixed bar, so this
+            wrapper takes no space in the flex row. */}
+        <div className="block md:hidden">
+          <Suspense fallback={null}>
+            <MobileNavWithIdentity />
+          </Suspense>
+        </div>
+      </CspRoot>
     </>
   );
 }

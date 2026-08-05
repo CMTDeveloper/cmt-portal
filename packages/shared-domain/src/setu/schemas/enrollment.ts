@@ -29,6 +29,31 @@ export const EnrollmentDocSchema = z.object({
   // override, use the snapshot"; negatives stay rejected because an expected
   // amount below zero would read as the org owing the family money.
   suggestedAmountOverride: z.number().int().nonnegative().nullable(),
+  /**
+   * An admin has recorded that this enrollment's donation is collected OUTSIDE
+   * the portal - a legacy pre-authorized debit, a cheque, cash at the office.
+   * Written by the admin "mark paid off-portal" action and by nothing else.
+   *
+   * WHY IT EXISTS, given `suggestedAmountOverride: 0` already says "asks for
+   * nothing": because 0 already meant something different first. The Adult
+   * Study Class fee is WAIVED for a family who paid Bala Vihar, and that waiver
+   * is stored as the same 0 (`api/setu/adult-class/route.ts`). Reusing the
+   * value for settlement made the two facts indistinguishable, and every reader
+   * had already picked the waiver reading - so a family an admin had just
+   * marked paid showed on the welcome roster as "N/A" and disappeared from the
+   * Paid filter. Vaibhav, 2026-08-04, on a real family: *"I marked this for
+   * Sadeesh's family but in the roster I still don't see them paid"*.
+   *
+   * The two are different facts, not two spellings of one: a waiver means
+   * nobody owes anything, a settlement means the money arrives somewhere this
+   * system cannot see. Only the second one is "paid".
+   *
+   * Bare `.optional()`, never `.default()`: doc schemas validate on READ and
+   * every enrollment written before 2026-08-04 lacks the field. Absent means
+   * not settled. Who did it, when and why live in the `audit_log` row written
+   * in the same transaction - this flag is only what the READERS need.
+   */
+  settledOffPortal: z.boolean().optional(),
   status: z.enum(['active', 'cancelled']),
   cancelledAt: z.date().nullable(),
   cancelledReason: z.string().nullable(),

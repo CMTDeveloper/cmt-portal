@@ -94,7 +94,6 @@ import { PATCH as memberPATCH, DELETE as memberDELETE } from '../members/[mid]/r
 const MEMBER_01_MID = 'FAMA0001ABCD-01';
 const MEMBER_02_MID = 'FAMA0001ABCD-02';
 const FAMILY_FID = 'FAMA0001ABCD';
-const FAMILY_B_FID = 'FAMB0001WXYZ';
 
 const FAMILY_A = {
   fid: FAMILY_FID,
@@ -142,15 +141,6 @@ const MEMBER_02: Record<string, unknown> = {
   birthMonthYear: null,
 };
 
-const FAMILY_B = {
-  fid: FAMILY_B_FID,
-  name: 'Shah',
-  location: 'Mississauga',
-  managers: ['FAMB0001WXYZ-01'],
-  createdAt: { toDate: () => new Date('2024-09-01') },
-  legacyFid: null,
-  searchKeys: ['shah', FAMILY_B_FID],
-};
 
 // ── Request factories ─────────────────────────────────────────────────────────
 
@@ -548,77 +538,29 @@ describe('PATCH /api/setu/members/:mid', () => {
 // DELETE /api/setu/members/:mid
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe('DELETE /api/setu/members/:mid', () => {
-  it('manager can delete a non-manager member', async () => {
+describe('DELETE /api/setu/members/:mid - CLOSED to families (2026-08-04)', () => {
+  // Vaibhav: "we do not want families to remove any members. At the very least,
+  // they can only disable." The button went first; this handler is the rule.
+  // Every case this describe used to cover (last-manager, cross-family, the
+  // transactional contactKey removal) still runs - against `deleteMember` in
+  // write-member.test.ts and against the admin-only welcome route, which is the
+  // one remaining way to remove a person and always writes an audit row.
+  it('refuses a family manager, the role that used to be allowed', async () => {
     setupTransaction('success', FAMILY_A, MEMBER_02);
 
     const res = await memberDELETE(
       makeRequest('DELETE', `/api/setu/members/${MEMBER_02_MID}`, null, managerHeaders(FAMILY_FID, MEMBER_01_MID)),
       makeCtx(MEMBER_02_MID),
-    );
-    expect(res.status).toBe(200);
-  });
-
-  it('non-manager cannot DELETE → 403', async () => {
-    const res = await memberDELETE(
-      makeRequest('DELETE', `/api/setu/members/${MEMBER_01_MID}`, null, memberHeaders(FAMILY_FID, MEMBER_02_MID)),
-      makeCtx(MEMBER_01_MID),
     );
     expect(res.status).toBe(403);
-    const body = await res.json() as { error: string };
-    expect(body.error).toMatch(/manager-required/);
+    expect((await res.json()).error).toBe('families-cannot-remove-members');
   });
 
-  it('DELETE last manager → 409 (last-manager guard)', async () => {
-    const singleManagerFamily = { ...FAMILY_A, managers: [MEMBER_01_MID] };
-    setupTransaction('success', singleManagerFamily, MEMBER_01);
-
+  it('refuses a non-manager member as well', async () => {
     const res = await memberDELETE(
-      makeRequest('DELETE', `/api/setu/members/${MEMBER_01_MID}`, null, managerHeaders(FAMILY_FID, MEMBER_01_MID)),
-      makeCtx(MEMBER_01_MID),
-    );
-    expect(res.status).toBe(409);
-    const body = await res.json() as { error: string };
-    expect(body.error).toMatch(/last-manager/);
-  });
-
-  it('DELETE uses a transaction (contactKey docs removed atomically)', async () => {
-    setupTransaction('success', FAMILY_A, MEMBER_02);
-
-    const res = await memberDELETE(
-      makeRequest('DELETE', `/api/setu/members/${MEMBER_02_MID}`, null, managerHeaders(FAMILY_FID, MEMBER_01_MID)),
+      makeRequest('DELETE', `/api/setu/members/${MEMBER_02_MID}`, null, memberHeaders(FAMILY_FID, MEMBER_02_MID)),
       makeCtx(MEMBER_02_MID),
     );
-    expect(res.status).toBe(200);
-    expect(mockRunTransaction).toHaveBeenCalledOnce();
-  });
-
-  it('cross-family: manager from Family B cannot DELETE member in Family A → 404', async () => {
-    // Family B manager's fid is FAMB; looking up families/FAMB/members/FAMA-02 returns not-found
-    setupTransaction('not-found', FAMILY_B, MEMBER_02);
-
-    const res = await memberDELETE(
-      makeRequest('DELETE', `/api/setu/members/${MEMBER_02_MID}`, null, managerHeaders(FAMILY_B_FID, 'FAMB0001WXYZ-01')),
-      makeCtx(MEMBER_02_MID),
-    );
-    expect(res.status).toBe(404);
-  });
-
-  it('returns 401 when no auth headers', async () => {
-    const res = await memberDELETE(
-      makeRequest('DELETE', `/api/setu/members/${MEMBER_02_MID}`),
-      makeCtx(MEMBER_02_MID),
-    );
-    expect(res.status).toBe(401);
-  });
-
-  it('returns 404 when feature flag off', async () => {
-    flagsMock.setuAuth = false;
-
-    const res = await memberDELETE(
-      makeRequest('DELETE', `/api/setu/members/${MEMBER_02_MID}`, null, managerHeaders(FAMILY_FID, MEMBER_01_MID)),
-      makeCtx(MEMBER_02_MID),
-    );
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(403);
   });
 });

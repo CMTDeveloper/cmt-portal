@@ -90,14 +90,29 @@ export default function EditMemberPage() {
   // erase them. It is also the ONLY way back: /complete-profile can retire
   // someone, but its Undo is a draft, gone the moment they save.
   const [participation, setParticipation] = useState<'active' | 'inactive'>('active');
+  // What this member WAS when the screen loaded. The graduation control below is
+  // offered on the strength of this, not of `type`, so that ticking it does not
+  // make the control that produced it disappear mid-edit.
+  const [loadedType, setLoadedType] = useState<MemberType | null>(null);
   const [saving, setSaving] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [showErrors, setShowErrors] = useState(false);
 
   // isEditingOther: manager editing a different member's profile
   const isEditingOther = data ? (data.isManager && mid !== data.currentMid) : false;
-  // showManagerToggle: only when a manager edits someone other than themselves
-  const showManagerToggle = isEditingOther;
+  // showManagerToggle: only when a manager edits someone other than themselves,
+  // and only on an ADULT record.
+  //
+  // Vaibhav, 2026-08-04: *"Child record should not have an option 'Family
+  // manager'"*. The server has always refused it (`manager-must-be-adult`,
+  // write-member.ts), so offering the checkbox on a child was offering a click
+  // that could only ever come back as a 409 - the control was never a
+  // permission, just a way to fail.
+  //
+  // Keyed on the LIVE `type`, not the loaded one, so switching a member to
+  // Child hides it immediately rather than letting a stale tick ride along
+  // into a save the API would reject.
+  const showManagerToggle = isEditingOther && type === 'Adult';
   // Same scope as "Remove from family", and for the same reason /complete-profile
   // uses it: retiring YOURSELF while signed in and using the portal is a way to
   // excuse your own required fields, not an answer about attendance.
@@ -154,6 +169,7 @@ export default function EditMemberPage() {
         setFirstName(member.firstName);
         setLastName(member.lastName);
         setType(member.type);
+        setLoadedType(member.type);
         // Legacy 'PreferNotToSay' sentinel → no-selection (must pick Male/Female).
         setGender(member.gender === 'Male' || member.gender === 'Female' ? member.gender : '');
         setSchoolGrade(member.schoolGrade ?? '');
@@ -252,35 +268,6 @@ export default function EditMemberPage() {
     }
   }
 
-  async function handleRemove() {
-    if (!data) return;
-    if (!confirm('Remove this member from the family?')) return;
-
-    try {
-      const res = await fetch(`/api/setu/members/${mid}`, { method: 'DELETE' });
-
-      if (res.ok) {
-        // Hard nav. `/family/members` sits under src/app/family/layout.tsx and
-        // its three redirect() gates, which read `use cache` data this DELETE
-        // just invalidated. A soft push can be bounced by a stale read and
-        // leave the manager sitting on the edit screen of a member who no
-        // longer exists. A document load re-runs the gates server-side on fresh
-        // data. See CLAUDE.md discipline #9.
-        window.location.assign('/family/members');
-        return;
-      }
-
-      const json = await res.json().catch(() => ({})) as { error?: string };
-      if (json.error === 'last-manager') {
-        toast.error('Cannot remove the last manager from a family');
-      } else {
-        toast.error(json.error ?? 'Remove failed');
-      }
-    } catch {
-      toast.error('Network error — please try again');
-    }
-  }
-
   // Member not found in family — show explicit message (notFound() not available in client components)
   if (!loading && (!data || !data.members.find((m) => m.mid === mid))) {
     return (
@@ -298,9 +285,50 @@ export default function EditMemberPage() {
       <p style={{ fontSize: 12, color: 'var(--err)', marginTop: 6 }}>{label}</p>
     ) : null;
 
-  // Offered ABOVE "Remove from family" on purpose: it is the answer a family
-  // usually wants, and until now the only thing on this screen for a member who
-  // had simply finished was the destructive one.
+  // ── Graduated / no longer in school ────────────────────────────────────────
+  //
+  // Vaibhav, 2026-08-04: *"for graduates or children who are no longer in
+  // school, can we have a check box instead 'Graduated / Not In School' - so
+  // when that is checked then, the child is converted to adult"*.
+  //
+  // It is deliberately NOT a repurposing of "No longer participating", which he
+  // suggested: the two say opposite things about the same person. A graduate is
+  // still IN the family and may well join the Adult Study Class; someone who no
+  // longer participates has stepped away. Merging them would have made the one
+  // clear case - a child who finished school - the way to also disappear them
+  // from everything.
+  //
+  // Mechanically this is the "Member type: Adult" toggle above, which already
+  // did the conversion. Nobody found it, because "is this person an adult?" is
+  // not the question a parent is asking - "has my child finished school?" is.
+  const showGraduation = !loading && isEditingOther && loadedType === 'Child';
+  const graduating = type === 'Adult' && loadedType === 'Child';
+  const graduationSection = showGraduation ? (
+    <div className="field" style={{ marginTop: 22, paddingTop: 18, borderTop: '1px solid var(--line)' }} data-testid="graduation-section">
+      <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+        <input
+          type="checkbox"
+          data-testid="graduation-toggle"
+          checked={graduating}
+          onChange={(e) => setType(e.target.checked ? 'Adult' : 'Child')}
+          style={{ width: 18, height: 18 }}
+        />
+        Graduated / not in school
+      </label>
+      <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6, lineHeight: 1.5 }}>
+        {graduating
+          // Said plainly BEFORE they save, because the adult fields appear the
+          // instant this is ticked and an unexplained wall of new required
+          // fields reads as the form breaking.
+          ? 'They will be saved as an adult and leave the children’s class lists. We will ask for their own email and phone, as we do for every adult.'
+          : 'Tick this when your child has finished school. They stay in your family as an adult and can join adult programs.'}
+      </p>
+    </div>
+  ) : null;
+
+  // The answer a family usually wants for someone who has stepped away, and -
+  // since 2026-08-04 - the ONLY thing on this screen for them, the destructive
+  // "Remove from family" having been withdrawn.
   const participationSection = !loading && canSetParticipation ? (
     <div className="field" style={{ marginTop: 22, paddingTop: 18, borderTop: '1px solid var(--line)' }} data-testid="participation-section">
       <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
@@ -311,12 +339,16 @@ export default function EditMemberPage() {
           onChange={(e) => setParticipation(e.target.checked ? 'inactive' : 'active')}
           style={{ width: 18, height: 18 }}
         />
-        No longer participating
+        {/* Vaibhav, 2026-08-04: *"'No longer participating' is not clear to
+            everyone. What exactly does it do?"* - so the label now says what it
+            DOES rather than naming a state, and the help text leads with what
+            is kept, since the fear behind the question is losing the record. */}
+        Not taking part — hide from class lists
       </label>
       <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6, lineHeight: 1.5 }}>
-        Keeps their record and past attendance. We stop asking for their profile
-        details, and they no longer appear on class rosters or at check-in.
-        Uncheck to bring them back.
+        Nothing is deleted: their record and past attendance are kept. They stop
+        appearing on class rosters and at check-in, and we stop asking you to
+        complete their profile. Untick to bring them back at any time.
       </p>
     </div>
   ) : null;
@@ -467,24 +499,31 @@ export default function EditMemberPage() {
         </div>
       )}
 
-      {/* Inside formBody, NOT beside removeButton: removeButton renders in the
-          DESKTOP tree only (pre-existing - a phone cannot remove a member from
-          here), and most families are on a phone. A retire control that only
-          half the audience can reach would not fix the thing it was asked for. */}
+      {/* Graduation first: it is the happier and far more common event, and a
+          family who ticks it should never have had to read past "not taking
+          part" to find it. */}
+      {graduationSection}
       {participationSection}
     </>
   );
 
-  const removeButton = !loading && data?.isManager && mid !== data.currentMid ? (
-    <button
-      type="button"
-      onClick={handleRemove}
-      className="focus-ring"
-      style={{ width: '100%', marginTop: 22, background: 'transparent', border: '1px solid var(--err)', color: 'var(--err)', padding: '12px 16px', borderRadius: 'var(--radiusSm)', fontWeight: 600, fontSize: 13 }}
-    >
-      Remove from family
-    </button>
-  ) : null;
+  // ── "Remove from family" is gone from the family's own screen ──────────────
+  //
+  // Vaibhav, 2026-08-04: *"please remove the button as we do not want families
+  // to remove any members. At the very least, they can only disable."* Same
+  // reasoning he gave on 2026-08-02 for adding the disable control in the first
+  // place: *"Not to delete as we loose history."*
+  //
+  // Deleting a member is not a small edit - it drops their attendance, their
+  // contact key, and their place in a family's record, permanently and with no
+  // undo. The reversible control is right above, and it is what a family
+  // actually wants in every case they reached for this one.
+  //
+  // Staff keep the capability: `DELETE /api/welcome/families/[fid]/members/[mid]`
+  // is unchanged, and the office can reach it from `/welcome/family/[fid]` (see
+  // the RemoveMemberControl added in the same change) - so a duplicate created
+  // by mistake is still fixable, just not by the family, and never without an
+  // audit row naming who did it.
 
   return (
     <form onSubmit={handleSubmit}>
@@ -527,7 +566,6 @@ export default function EditMemberPage() {
 
         <div style={{ maxWidth: 720 }}>
           {formBody}
-          {removeButton}
           <div style={{ marginTop: 28, paddingTop: 22, borderTop: '1px solid var(--line)', display: 'flex', gap: 10 }}>
             <button type="submit" className="btn btn--p" style={{ padding: '14px 28px' }} disabled={saving || loading}>
               {saving ? 'Saving…' : 'Save changes'}

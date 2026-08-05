@@ -1,7 +1,7 @@
 import 'server-only';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import type { PledgeStatus } from '@cmt/shared-domain/setu';
-import { paymentFamilyLabel, buildPaymentMetadata } from '@cmt/shared-domain/setu';
+import { paymentFamilyLabel, buildPaymentMetadata, buildClientReferenceId } from '@cmt/shared-domain/setu';
 import { createPadSetupLink } from './stripe-pad-client';
 import { configuredMonthlyAmountCAD } from './pledge-amount';
 import { portalBaseUrl as trustedPortalBaseUrl } from '@/lib/portal-base-url';
@@ -114,7 +114,12 @@ export async function startPledge(actor: StartPledgeActor): Promise<StartPledgeR
     const link = await createPadSetupLink({
       customerEmail: actor.email,
       customerName: actor.name,
-      clientReferenceId: pid,
+      // Family FIRST, then the pledge record - the same shape the one-time
+      // donation now sends, so one family looks the same on both Stripe paths.
+      clientReferenceId: buildClientReferenceId({
+        familyLabel: paymentFamilyLabel({ fid: actor.fid, publicFid: actor.publicFid }),
+        recordId: pid,
+      }),
       successUrl: `${pledgeReturnOrigin(actor.req)}/donate/success?pledge=${encodeURIComponent(pid)}`,
       // ── Cancel returns to the CHOICE, not to the dashboard ─────────────────
       // Vaibhav, 2026-07-29: *"they need to be taken back to options again where

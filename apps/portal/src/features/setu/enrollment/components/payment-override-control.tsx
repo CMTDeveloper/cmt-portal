@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { toast } from '@cmt/ui';
+import { ADULT_STUDY_CLASS } from '@cmt/shared-domain';
 import { setEnrollmentOverride } from '../override-client';
 
 export interface PaymentOverrideEnrollment {
@@ -12,8 +13,22 @@ export interface PaymentOverrideEnrollment {
   termLabel: string;
   /** What this family is currently asked for, after any existing override. */
   effectiveSuggestedAmount: number;
-  /** null = no override in place; 0 = already marked settled off-portal. */
+  /**
+   * The raw amount override. `null` = none in place.
+   *
+   * A `0` here is NOT enough to conclude anything: it is written both by an
+   * admin settling a family off-portal AND by the Adult Study Class waiver for
+   * a family who has paid Bala Vihar. Read `settledOffPortal` for the first.
+   */
   suggestedAmountOverride: number | null;
+  /**
+   * An admin recorded that CMT collects this family's donation outside the
+   * portal. REQUIRED, so the page that builds this object cannot forget it -
+   * that object is hand-mapped from `getEnrollments`, and a hand-mapped
+   * projection silently dropping a new field is precisely how this control kept
+   * the old meaning of `0` after the rest of the app had moved on.
+   */
+  settledOffPortal: boolean;
 }
 
 /**
@@ -55,7 +70,36 @@ export function PaymentOverrideControl({
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const settled = enrollment.suggestedAmountOverride === 0;
+  // ── The three states, and why `0` alone decides none of them ───────────────
+  //
+  // Keyed on the FLAG, not on the amount. Until 2026-08-04 this read
+  // `suggestedAmountOverride === 0`, which is also how the Adult Study Class
+  // fee is waived for a family who has paid Bala Vihar. So a family with both
+  // enrollments showed their WAIVED adult class as "Marked settled outside the
+  // portal" with an Undo button - and Undo clears the override, which would
+  // have started asking that family to pay for a class their Bala Vihar
+  // donation already covers. Found by Codex review, not by a test: the
+  // component's own SETTLED fixture was `{ suggestedAmountOverride: 0 }` and
+  // encoded the same mistake.
+  const settled = enrollment.settledOffPortal;
+  const zeroed = !settled && enrollment.suggestedAmountOverride === 0;
+  // A zero the admin did not put there. Nothing to undo - the waiver follows
+  // from the Bala Vihar payment, so the way to change it is to change that.
+  //
+  // Scoped to the ADULT STUDY CLASS, because that is the only place the waiver
+  // is ever written: `api/setu/adult-class/route.ts` is the single code path
+  // that emits `suggestedAmountOverride: 0` without a settlement, and it only
+  // ever enrols into this one program. Without the scope this branch swallowed
+  // every bare zero - including the Bala Vihar enrollment of the ONE production
+  // family settled before the flag existed, which would have shown them "covered
+  // by this family's Bala Vihar donation" ON their Bala Vihar enrollment and,
+  // far worse, offered no button at all to re-record the settlement.
+  const waived = zeroed && enrollment.programKey === ADULT_STUDY_CLASS;
+  // A zero with no recorded reason: a settlement made before `settledOffPortal`
+  // existed, or a staff amount nobody explained. It still needs the action -
+  // that is how it acquires a reason - but never "Undo", which on an
+  // unattributed zero could just as easily be clearing something load-bearing.
+  const unexplainedZero = zeroed && !waived;
   // Trimmed, because the server trims too - a form that enables Save on "   "
   // and then shows a 400 has taught the user nothing.
   const noteOk = note.trim().length >= 3;
@@ -111,10 +155,19 @@ export function PaymentOverrideControl({
           <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
             {settled
               ? 'Marked settled outside the portal - not being asked to donate'
-              : `Currently asked for $${enrollment.effectiveSuggestedAmount}`}
+              : waived
+                ? 'Included - covered by this family’s Bala Vihar donation'
+                : unexplainedZero
+                  ? 'Not being asked to donate - no reason recorded'
+                  : `Currently asked for $${enrollment.effectiveSuggestedAmount}`}
           </div>
         </div>
-        {!open && (
+        {/* No button on a WAIVED enrollment. The zero was not an admin decision,
+            so there is nothing here to undo - and "Undo" would have cleared the
+            waiver and started billing a family for a class they had already
+            paid for. If the waiver is wrong, the Bala Vihar payment behind it is
+            what changed. */}
+        {!open && !waived && (
           <button
             type="button"
             className={settled ? 'btn btn--g' : 'btn btn--p'}

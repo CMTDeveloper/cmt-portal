@@ -817,6 +817,74 @@ describe('PATCH /api/welcome/enrollments/:eid (override)', () => {
     // collectionGroup query - so a concurrent change cannot make the row claim
     // a previous amount that was never there.
     expect(row['before']).toEqual({ suggestedAmountOverride: 250 });
-    expect(row['after']).toEqual({ suggestedAmountOverride: 0, note: 'existing pre-authorized debit with CMT' });
+    expect(row['after']).toEqual({
+      suggestedAmountOverride: 0,
+      settledOffPortal: true,
+      note: 'existing pre-authorized debit with CMT',
+    });
+  });
+
+  // ── The settlement FLAG (2026-08-04) ──────────────────────────────────────
+  //
+  // Writing only the zero was the production bug: `suggestedAmountOverride: 0`
+  // already meant "the Adult Study Class fee is waived", so the welcome roster
+  // read a family an admin had just marked as paid as "N/A" and dropped them
+  // from the Paid filter. The flag is the fact the readers key on.
+  it('records the SETTLEMENT, not just the zero, when marking paid off-portal', async () => {
+    mockOverrideTxn();
+    mockCollectionGet.mockResolvedValue({
+      empty: false,
+      docs: [{ ref: { update: mockDocUpdate }, data: () => ({ status: 'active', fid: FID }) }],
+    });
+
+    const res = await welcomeOverridePATCH(
+      makeRequest('PATCH', `/api/welcome/enrollments/${EID}`, { suggestedAmountOverride: 0, note: 'existing pre-authorized debit with CMT' }, welcomeHeaders()),
+      makeCtx('eid', EID),
+    );
+
+    expect(res.status).toBe(200);
+    expect(mockDocUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ suggestedAmountOverride: 0, settledOffPortal: true }),
+    );
+  });
+
+  // Undo has to clear it. A stale `true` beside a restored $500 ask is the same
+  // ambiguity pointing the other way - a family who owes money reading as paid.
+  it('CLEARS the settlement when the override is removed', async () => {
+    mockOverrideTxn(0);
+    mockCollectionGet.mockResolvedValue({
+      empty: false,
+      docs: [{ ref: { update: mockDocUpdate }, data: () => ({ status: 'active', fid: FID }) }],
+    });
+
+    const res = await welcomeOverridePATCH(
+      makeRequest('PATCH', `/api/welcome/enrollments/${EID}`, { suggestedAmountOverride: null, note: 'arrangement ended - back to the standard ask' }, welcomeHeaders()),
+      makeCtx('eid', EID),
+    );
+
+    expect(res.status).toBe(200);
+    expect(mockDocUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ suggestedAmountOverride: null, settledOffPortal: false }),
+    );
+  });
+
+  // A REDUCED amount is a discount, not a settlement: the family is still being
+  // asked for money, so nothing about it has been received off-portal.
+  it('does not treat a reduced positive amount as a settlement', async () => {
+    mockOverrideTxn();
+    mockCollectionGet.mockResolvedValue({
+      empty: false,
+      docs: [{ ref: { update: mockDocUpdate }, data: () => ({ status: 'active', fid: FID }) }],
+    });
+
+    const res = await welcomeOverridePATCH(
+      makeRequest('PATCH', `/api/welcome/enrollments/${EID}`, { suggestedAmountOverride: 250, note: 'hardship - agreed with the office' }, welcomeHeaders()),
+      makeCtx('eid', EID),
+    );
+
+    expect(res.status).toBe(200);
+    expect(mockDocUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ suggestedAmountOverride: 250, settledOffPortal: false }),
+    );
   });
 });
