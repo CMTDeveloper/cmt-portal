@@ -5,6 +5,7 @@ import { isAdmin, OverrideEnrollmentBodySchema } from '@cmt/shared-domain';
 import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestore';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
 import { writeAuditLog } from '@/features/setu/audit/audit-log';
+import { adultStudyClassProgramKeys } from '@/features/setu/adult-class/program-keys';
 
 export async function PATCH(
   req: Request,
@@ -89,12 +90,48 @@ export async function PATCH(
   // restored $500 ask would be the same ambiguity pointing the other way.
   const settledOffPortal = parsed.data.suggestedAmountOverride === 0;
 
+  // ── A WAIVER IS NOT SETTLEABLE, AND THE SERVER IS WHERE THAT IS DECIDED ─────
+  //
+  // The Adult Study Class fee is waived for a family who has paid Bala Vihar,
+  // stored as a bare `suggestedAmountOverride: 0` with no settlement flag. Two
+  // writes against such a row are both wrong and both were accepted here:
+  //   - amount 0   -> stamps settledOffPortal, recording money CMT never
+  //                   collected, on a row that only ever meant "covered".
+  //   - amount null -> clears the waiver and starts billing a family for a class
+  //                   their Bala Vihar donation already paid for.
+  //
+  // The control stopped OFFERING those on 2026-08-04 (FID 5010, Scarborough).
+  // That is not a rule: this repo's own lesson is that money rules belong at the
+  // server chokepoint and a UI-only restriction is not one. Concretely, an admin
+  // whose family page was opened BEFORE that deploy still has the old button in
+  // front of them, and the route is a plain authenticated PATCH.
+  //
+  // Keyed on the PRE-EXISTING bare zero, read fresh inside the transaction - not
+  // on the incoming amount. An adult-class family who genuinely owes the fee has
+  // `override: null`, so settling them off-portal still works; only a row that
+  // is ALREADY a waiver is protected.
+  const adultClassKeys = await adultStudyClassProgramKeys();
+
   let before: number | null = null;
+  let refusedWaiver = false;
   try {
     await db.runTransaction(async (txn) => {
       const fresh = await txn.get(enrollmentRef);
-      const data = fresh.data() as { suggestedAmountOverride?: number | null } | undefined;
+      const data = fresh.data() as
+        | { suggestedAmountOverride?: number | null; settledOffPortal?: boolean; programKey?: string }
+        | undefined;
       before = data?.suggestedAmountOverride ?? null;
+
+      const isWaiver =
+        before === 0
+        && data?.settledOffPortal !== true
+        && adultClassKeys.includes(data?.programKey ?? '');
+      if (isWaiver) {
+        // Abort the transaction WITHOUT writing, and without an audit row: no
+        // change happened, so a row claiming one would be noise.
+        refusedWaiver = true;
+        return;
+      }
 
       txn.update(enrollmentRef, {
         suggestedAmountOverride: parsed.data.suggestedAmountOverride,
@@ -124,6 +161,13 @@ export async function PATCH(
   } catch (err) {
     console.error('[enrollment-override] transaction failed', err);
     return NextResponse.json({ error: 'write-failed' }, { status: 500 });
+  }
+
+  // 409, with its OWN reason rather than a generic bad-request: the caller did
+  // nothing malformed, the row is simply not settleable. A shared error code
+  // here would be indistinguishable from a validation failure in the UI.
+  if (refusedWaiver) {
+    return NextResponse.json({ error: 'waived-not-settleable' }, { status: 409 });
   }
 
   revalidateTag(`family-${enrollmentData.fid}`, 'max');

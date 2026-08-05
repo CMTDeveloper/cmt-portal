@@ -51,6 +51,27 @@ vi.mock('@/features/setu/search/get-family-for-welcome', () => ({
   getFamilyForWelcome: mockGetFamilyForWelcome,
 }));
 
+// ── The ADMIN-only override wiring ───────────────────────────────────────────
+// Everything below existed untested until 2026-08-04: every test in this file
+// signs in as `welcome-team`, and `admin = isAdmin(raw)` gates the whole
+// `overridable` computation - so the code that reads enrollments, resolves which
+// programs are the adult class, and threads `isAdultClass` per row had ZERO
+// coverage, on the very page whose one-day regression prompted this. Found by
+// Codex review, not by the suite.
+const mockGetEnrollments = vi.hoisted(() => vi.fn());
+vi.mock('@/features/setu/enrollment/get-enrollments', () => ({
+  getEnrollments: mockGetEnrollments,
+}));
+const mockAdultClassKeys = vi.hoisted(() => vi.fn());
+vi.mock('@/features/setu/adult-class/program-keys', () => ({
+  adultStudyClassProgramKeys: mockAdultClassKeys,
+  isAdultStudyClassKey: vi.fn(),
+}));
+vi.mock('@/features/setu/enrollment/get-open-offerings', () => ({
+  getOpenOfferingsForFamily: vi.fn(async () => []),
+  resolveCurrentOffering: vi.fn(() => null),
+}));
+
 // ── get-family-seva-progress helper ───────────────────────────────────────────
 const mockGetFamilySevaProgress = vi.hoisted(() => vi.fn());
 vi.mock('@/features/setu/seva/get-family-seva-progress', () => ({
@@ -67,6 +88,12 @@ beforeEach(() => {
   mockVerifyPortalSessionCookie.mockResolvedValue({ uid: 'wt-1', role: 'welcome-team' } as never);
   mockGetFamilySevaProgress.mockReset();
   mockGetFamilySevaProgress.mockResolvedValue({ currentSevaYear: null, hoursPerYear: 20, hoursEarned: 0 });
+  mockGetEnrollments.mockReset();
+  mockGetEnrollments.mockResolvedValue([]);
+  mockAdultClassKeys.mockReset();
+  // Both centres' adult classes, so a fixture using only the literal key cannot
+  // pass by accident.
+  mockAdultClassKeys.mockResolvedValue(['adult-study-class', 'adult-study-east']);
 });
 
 const SAMPLE_FAMILY = {
@@ -261,5 +288,97 @@ describe('WelcomeFamilyDetailPage — defense-in-depth role gate', () => {
 
     expect(screen.getByText(/access denied/i)).toBeDefined();
     expect(mockGetFamilyForWelcome).not.toHaveBeenCalled();
+  });
+});
+
+// ── The admin override wiring, end to end through the PAGE ────────────────────
+// Not the leaf control with hand-built props - the page's own job of reading
+// enrollments, resolving which programs are the adult class, and threading
+// `isAdultClass` onto each row. That wiring is where the 2026-08-04 regression
+// lived and it had no test: every other case in this file is `welcome-team`, so
+// `admin` is false and none of this code runs.
+describe('WelcomeFamilyDetailPage — the off-portal panel as an ADMIN', () => {
+  const asAdmin = () =>
+    mockVerifyPortalSessionCookie.mockResolvedValue({ uid: 'ad-1', role: 'admin' } as never);
+
+  const enrollment = (over: Record<string, unknown>) => ({
+    eid: 'CMT-F1-e1',
+    programKey: 'bala-vihar',
+    programLabel: 'Bala Vihar',
+    termLabel: '2026-27',
+    status: 'active',
+    effectiveSuggestedAmount: 400,
+    suggestedAmountOverride: null,
+    settledOffPortal: false,
+    ...over,
+  });
+
+  it("calls a Scarborough adult-class waiver 'covered', not 'no reason recorded'", async () => {
+    asAdmin();
+    mockGetFamilyForWelcome.mockResolvedValue({ family: SAMPLE_FAMILY, members: SAMPLE_MEMBERS });
+    // `adult-study-east` is NOT the literal ADULT_STUDY_CLASS key. Before the
+    // fix this rendered as an unexplained zero WITH a "Mark paid off-portal"
+    // button - one click from recording a payment that never happened.
+    mockGetEnrollments.mockResolvedValue([
+      enrollment({
+        eid: 'CMT-F1-adult-east',
+        programKey: 'adult-study-east',
+        programLabel: 'Adult Class Scarborough',
+        effectiveSuggestedAmount: 0,
+        suggestedAmountOverride: 0,
+      }),
+    ]);
+
+    const page = await WelcomeFamilyDetailPage({ params: Promise.resolve({ fid: 'FAM001' }) });
+    render(page as React.ReactElement);
+
+    // getAllBy*, because the PAGE renders a mobile and a desktop variant from a
+    // single component - that is the safe form of responsive branching, not the
+    // duplicated-Suspense-mount that broke navigation. A bare getBy* throws
+    // "found multiple elements" and reads like a failure of the fix.
+    expect(screen.getAllByText(/covered by this family/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/no reason recorded/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: /mark paid off-portal/i })).toBeNull();
+  });
+
+  it('still offers the action on a bare zero that is NOT an adult class', async () => {
+    // The remediation path must survive: the production family settled before
+    // `settledOffPortal` existed needs this button to re-record it.
+    asAdmin();
+    mockGetFamilyForWelcome.mockResolvedValue({ family: SAMPLE_FAMILY, members: SAMPLE_MEMBERS });
+    mockGetEnrollments.mockResolvedValue([
+      enrollment({ effectiveSuggestedAmount: 0, suggestedAmountOverride: 0 }),
+    ]);
+
+    const page = await WelcomeFamilyDetailPage({ params: Promise.resolve({ fid: 'FAM001' }) });
+    render(page as React.ReactElement);
+
+    expect(screen.getAllByText(/no reason recorded/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: /mark paid off-portal/i }).length).toBeGreaterThan(0);
+  });
+
+  it('hides the whole panel when the programs read fails, rather than guessing', async () => {
+    // Fail CLOSED. Defaulting isAdultClass to false on a read error would put
+    // the money button back on every waiver - the exact bug, reintroduced by a
+    // transient Firestore blip.
+    asAdmin();
+    mockGetFamilyForWelcome.mockResolvedValue({ family: SAMPLE_FAMILY, members: SAMPLE_MEMBERS });
+    mockGetEnrollments.mockResolvedValue([
+      enrollment({
+        programKey: 'adult-study-east',
+        effectiveSuggestedAmount: 0,
+        suggestedAmountOverride: 0,
+      }),
+    ]);
+    mockAdultClassKeys.mockRejectedValue(new Error('firestore unavailable'));
+
+    const page = await WelcomeFamilyDetailPage({ params: Promise.resolve({ fid: 'FAM001' }) });
+    render(page as React.ReactElement);
+
+    expect(screen.queryByRole('button', { name: /mark paid off-portal/i })).toBeNull();
+    expect(screen.queryByText(/no reason recorded/i)).toBeNull();
+    // ...and the page still RENDERED. Without this the test would pass just as
+    // happily if the page had thrown, which is the trap of asserting absence.
+    expect(screen.getAllByText(/Patel/i).length).toBeGreaterThan(0);
   });
 });

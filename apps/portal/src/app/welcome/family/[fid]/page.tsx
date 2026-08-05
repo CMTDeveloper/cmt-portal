@@ -8,6 +8,7 @@ import { getFamilySevaProgress, type FamilySevaProgress } from '@/features/setu/
 import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
 import { isWelcomeTeam, isCoordinator, isAdmin, BALA_VIHAR, type WithRole } from '@cmt/shared-domain';
 import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
+import { adultStudyClassProgramKeys } from '@/features/setu/adult-class/program-keys';
 import { getOpenOfferingsForFamily, resolveCurrentOffering } from '@/features/setu/enrollment/get-open-offerings';
 import { resolveSuggestedAmount } from '@cmt/shared-domain';
 import {
@@ -84,12 +85,26 @@ export async function WelcomeFamilyDetailBody({
   // page pays no extra read for a control they will never be shown.
   // Fail-soft: the override is a staff convenience, and losing it must not cost
   // the family detail a coordinator actually came here for.
+  // Which programs ARE the adult class is data, not a key - each centre may run
+  // its own (Scarborough's is `adult-study-east`). Read once here and passed
+  // down, because the control is a client component and cannot ask. Resolving it
+  // with a literal key comparison inside the control is what mislabelled a
+  // Scarborough family's genuine waiver as "no reason recorded" and offered to
+  // record a payment they never made (reported on FID 5010, 2026-08-04).
+  // `listPrograms()` behind this is `use cache`d on the 'programs' tag.
+  //
+  // Deliberately INSIDE the try, not `.catch(() => [])`: an empty list would
+  // make every waived enrollment look like an unexplained zero and put the
+  // "Mark paid off-portal" button back on it - i.e. a transient read failure
+  // would fail OPEN, into exactly the false money record this fixes. Losing the
+  // whole panel for one render is the cheaper failure.
   const overridable: PaymentOverrideEnrollment[] = admin
-    ? await getEnrollments(fid)
-        .then((rows) =>
+    ? await Promise.all([getEnrollments(fid), adultStudyClassProgramKeys()])
+        .then(([rows, adultClassKeys]) =>
           rows
             .filter((e) => e.status === 'active')
             .map((e) => ({
+              isAdultClass: adultClassKeys.includes(e.programKey),
               eid: e.eid,
               programKey: e.programKey,
               programLabel: e.programLabel,
