@@ -1,6 +1,7 @@
 import 'server-only';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
-import { paymentSourceOf } from '@cmt/shared-domain';
+import { paymentSourceOf, memberMatchesLevel } from '@cmt/shared-domain';
+import type { LevelKind } from '@cmt/shared-domain';
 import type { DonationDoc, EnrollmentReport, PaymentSource, ReportQuery } from '@cmt/shared-domain';
 import { getLegacyPaymentStatus } from '@/features/setu/donations/legacy-payment';
 import { isEnrollmentConfirmed } from '@/app/family/_helpers/enrollment-confirmation';
@@ -32,7 +33,7 @@ function normalizeEnrolledVia(v: unknown): EnrolledVia {
 type RawEnr = {
   fid?: unknown; programKey?: unknown; programLabel?: unknown; status?: unknown;
   enrolledMids?: unknown; levelSnapshots?: unknown; termLabel?: unknown;
-  eid?: unknown; oid?: unknown; enrolledVia?: unknown;
+  eid?: unknown; oid?: unknown; pid?: unknown; enrolledVia?: unknown;
 };
 
 /** An active Bala Vihar enrollment, distilled for the confirmed/registered split. */
@@ -43,12 +44,15 @@ export async function buildEnrollmentReport(params: ReportQuery): Promise<Enroll
   // All bulk reads up front (the enrollment kind aggregates ~800 families — never
   // per-family fan-out). families → legacyFid, donations → per-fid completed set;
   // both feed the issue #23 confirmed/registered split.
-  const [enrSnap, lvlSnap, famSnap, donSnap, offSnap] = await Promise.all([
+  const [enrSnap, lvlSnap, famSnap, donSnap, offSnap, memSnap] = await Promise.all([
     db.collectionGroup('enrollments').get(),
     db.collection('levels').get(),
     db.collection('families').get(),
     db.collectionGroup('donations').get(),
     db.collection('offerings').get(),
+    // Members join the bulk set for the level derivation below. Unfiltered, so
+    // it needs no index - the same shape every other bulk pass here uses.
+    db.collectionGroup('members').get(),
   ]);
 
   // pid → {location, termLabel} so a level row can be disambiguated by its offering
@@ -71,6 +75,50 @@ export async function buildEnrollmentReport(params: ReportQuery): Promise<Enroll
       pid: String(x.pid ?? ''),
     });
   }
+
+  /**
+   * ── WHY THIS REPORT DERIVES A LEVEL AT ALL ─────────────────────────────────
+   *
+   * It used to count `enrollment.levelSnapshots[mid].levelId` and nothing else.
+   * Only the ANNUAL ROLLOVER writes that field - `enrollFamily` never does - so
+   * for a school year nobody has rolled over yet, it is empty on every
+   * enrollment and every per-level row reads 0. Measured in production
+   * 2026-08-05: 18 active Bala Vihar enrollments, ZERO with a snapshot.
+   *
+   * So: the snapshot when there is one, otherwise derive from the member's
+   * grade/age exactly as the roster and the teacher roster do. That order is
+   * deliberate and not just a fallback - for a PAST year the snapshot is the
+   * honest record of where a child actually sat, and deriving live would
+   * re-file them by the grade they are in NOW.
+   */
+  const levelsByPid = new Map<string, Array<{ levelId: string; levelKind: LevelKind; gradeBand: string[] }>>();
+  for (const d of lvlSnap.docs) {
+    const x = d.data() as { pid?: unknown; levelKind?: unknown; gradeBand?: unknown; enabled?: unknown };
+    if (x.enabled === false) continue;
+    const pid = typeof x.pid === 'string' ? x.pid : '';
+    const kind = x.levelKind;
+    if (!pid || (kind !== 'level' && kind !== 'pre-level' && kind !== 'shishu' && kind !== 'parents')) continue;
+    const arr = levelsByPid.get(pid) ?? [];
+    arr.push({ levelId: d.id, levelKind: kind, gradeBand: Array.isArray(x.gradeBand) ? x.gradeBand.map(String) : [] });
+    levelsByPid.set(pid, arr);
+  }
+  // Ordered by levelId so an overlapping band resolves the same way here, on the
+  // roster and on the family dashboard - see report-dataset.ts for why.
+  for (const arr of levelsByPid.values()) arr.sort((a, b) => a.levelId.localeCompare(b.levelId));
+
+  const memberByMid = new Map<string, { type: 'Adult' | 'Child'; schoolGrade: string | null; birthMonthYear: string | null }>();
+  for (const d of memSnap.docs) {
+    const x = d.data() as { mid?: unknown; type?: unknown; schoolGrade?: unknown; birthMonthYear?: unknown };
+    const mid = typeof x.mid === 'string' ? x.mid : d.id;
+    memberByMid.set(mid, {
+      type: x.type === 'Adult' ? 'Adult' : 'Child',
+      schoolGrade: typeof x.schoolGrade === 'string' ? x.schoolGrade : null,
+      birthMonthYear: typeof x.birthMonthYear === 'string' ? x.birthMonthYear : null,
+    });
+  }
+  // One clock for the whole report, so two children of the same age cannot land
+  // in different levels because the loop crossed a month boundary.
+  const now = new Date();
 
   const byProgramFamilies = new Map<string, Set<string>>();
   const byProgramMembers = new Map<string, Set<string>>();
@@ -105,8 +153,21 @@ export async function buildEnrollmentReport(params: ReportQuery): Promise<Enroll
       });
     }
     const snaps = (e.levelSnapshots && typeof e.levelSnapshots === 'object') ? (e.levelSnapshots as Record<string, { levelId?: unknown }>) : {};
-    for (const [mid, snap] of Object.entries(snaps)) {
-      const levelId = typeof snap?.levelId === 'string' ? snap.levelId : null;
+    const pid = String(e.pid ?? e.oid ?? '');
+    for (const mid of mids) {
+      const snapped = typeof snaps[mid]?.levelId === 'string' ? (snaps[mid]!.levelId as string) : null;
+      let levelId = snapped;
+      if (!levelId) {
+        const mem = memberByMid.get(mid);
+        // A mid with no member doc is still matched as a Child - that is what
+        // being in `enrolledMids` means - so it can place on grade alone.
+        const forMatch = {
+          type: mem?.type ?? ('Child' as const),
+          schoolGrade: mem?.schoolGrade ?? null,
+          birthMonthYear: mem?.birthMonthYear ?? null,
+        };
+        levelId = (levelsByPid.get(pid) ?? []).find((l) => memberMatchesLevel(forMatch, l, now))?.levelId ?? null;
+      }
       if (!levelId) continue;
       if (!byLevelMembers.has(levelId)) byLevelMembers.set(levelId, new Set());
       byLevelMembers.get(levelId)!.add(mid);
