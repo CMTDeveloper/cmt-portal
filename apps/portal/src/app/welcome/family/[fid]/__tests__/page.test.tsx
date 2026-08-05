@@ -67,6 +67,14 @@ vi.mock('@/features/setu/adult-class/program-keys', () => ({
   adultStudyClassProgramKeys: mockAdultClassKeys,
   isAdultStudyClassKey: vi.fn(),
 }));
+// The donation sum + the shared roster classifier, so the panel can tell a
+// family who has already paid from one who has not. Unmocked, the real
+// donations read reaches Firestore, the joint promise rejects, and the panel
+// correctly disappears - which is the fail-closed path, not a test fixture.
+const mockPaidCAD = vi.hoisted(() => vi.fn());
+vi.mock('@/features/setu/roster/donations-sum', () => ({
+  sumCompletedDonations: mockPaidCAD,
+}));
 vi.mock('@/features/setu/enrollment/get-open-offerings', () => ({
   getOpenOfferingsForFamily: vi.fn(async () => []),
   resolveCurrentOffering: vi.fn(() => null),
@@ -94,6 +102,9 @@ beforeEach(() => {
   // Both centres' adult classes, so a fixture using only the literal key cannot
   // pass by accident.
   mockAdultClassKeys.mockResolvedValue(['adult-study-class', 'adult-study-east']);
+  mockPaidCAD.mockReset();
+  // Nothing donated: the state in which the off-portal action is legitimate.
+  mockPaidCAD.mockResolvedValue(0);
 });
 
 const SAMPLE_FAMILY = {

@@ -6,6 +6,7 @@ import { portalFirestore, FieldValue } from '@cmt/firebase-shared/admin/firestor
 import { readSessionFromHeaders } from '@/lib/auth/headers';
 import { writeAuditLog } from '@/features/setu/audit/audit-log';
 import { adultStudyClassProgramKeys } from '@/features/setu/adult-class/program-keys';
+import { deriveFamilyPayment } from '@/features/setu/roster/payment';
 
 export async function PATCH(
   req: Request,
@@ -111,6 +112,36 @@ export async function PATCH(
   // `override: null`, so settling them off-portal still works; only a row that
   // is ALREADY a waiver is protected.
   const adultClassKeys = await adultStudyClassProgramKeys();
+
+  // ── AND A FAMILY WHO ALREADY PAID CANNOT BE SETTLED OFF-PORTAL ─────────────
+  //
+  // Vaibhav, 2026-08-04, FID 5010: "this family has completed the donation, why
+  // are we still seeing that button?" Recording an off-portal settlement on top
+  // of a real Stripe payment claims CMT collected the money twice, and Undo does
+  // not take it back - it writes null and restores the ask.
+  //
+  // Same verdict function as the roster's Paid chip, so the screen the admin
+  // read and the rule that stops them cannot disagree.
+  //
+  // Only a POSITIVE 'paid' refuses. 'unknown' (an unpriceable enrollment, a
+  // failed read) must stay settleable: this route is the only way to record a
+  // real off-portal arrangement, and blocking it on absence of evidence would
+  // strand the families it exists for. Refusing SETTLEMENT only - `null` still
+  // clears an override, so an admin can always undo their own work.
+  const settling = parsed.data.suggestedAmountOverride === 0;
+  let alreadyPaid = false;
+  if (settling) {
+    try {
+      alreadyPaid = (await deriveFamilyPayment(enrollmentData.fid)) === 'paid';
+    } catch {
+      // deriveFamilyPayment already swallows and returns 'unknown'; this is
+      // belt-and-braces so a guard can never 500 the action it guards.
+      alreadyPaid = false;
+    }
+  }
+  if (alreadyPaid) {
+    return NextResponse.json({ error: 'already-paid-in-portal' }, { status: 409 });
+  }
 
   let before: number | null = null;
   let refusedWaiver = false;

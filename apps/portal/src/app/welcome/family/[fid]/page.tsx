@@ -9,6 +9,9 @@ import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
 import { isWelcomeTeam, isCoordinator, isAdmin, BALA_VIHAR, type WithRole } from '@cmt/shared-domain';
 import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
 import { adultStudyClassProgramKeys } from '@/features/setu/adult-class/program-keys';
+import { chargeFromEnrollment } from '@/features/setu/roster/payment';
+import { sumCompletedDonations } from '@/features/setu/roster/donations-sum';
+import { classifyRosterPayment } from '@cmt/shared-domain/setu';
 import { getOpenOfferingsForFamily, resolveCurrentOffering } from '@/features/setu/enrollment/get-open-offerings';
 import { resolveSuggestedAmount } from '@cmt/shared-domain';
 import {
@@ -98,12 +101,27 @@ export async function WelcomeFamilyDetailBody({
   // "Mark paid off-portal" button back on it - i.e. a transient read failure
   // would fail OPEN, into exactly the false money record this fixes. Losing the
   // whole panel for one render is the cheaper failure.
+  //
+  // The donation sum joins the SAME promise for the same reason: a family whose
+  // money already arrived must not be offered "Mark paid off-portal", and a
+  // partial read that defaulted them to unpaid would re-offer it. The verdict
+  // comes from `classifyRosterPayment` - the very function behind the roster's
+  // Paid chip - so the detail page and the roster cannot disagree about whether
+  // a family has paid. They did until 2026-08-04: the roster said Paid for
+  // FID 5010 while this page said "Currently asked for $400" beside a button.
   const overridable: PaymentOverrideEnrollment[] = admin
-    ? await Promise.all([getEnrollments(fid), adultStudyClassProgramKeys()])
-        .then(([rows, adultClassKeys]) =>
-          rows
-            .filter((e) => e.status === 'active')
+    ? await Promise.all([getEnrollments(fid), adultStudyClassProgramKeys(), sumCompletedDonations(fid)])
+        .then(([rows, adultClassKeys, paidCAD]) => {
+          const active = rows.filter((e) => e.status === 'active');
+          // Classified over ALL active enrollments, never the first: a family
+          // with Bala Vihar AND an adult class owes the sum, and donations are
+          // recorded against the family rather than the row - which is why this
+          // verdict is family-level and every row receives the same answer.
+          const familyHasPaid =
+            classifyRosterPayment(active.map(chargeFromEnrollment), paidCAD) === 'paid';
+          return active
             .map((e) => ({
+              familyHasPaid,
               isAdultClass: adultClassKeys.includes(e.programKey),
               eid: e.eid,
               programKey: e.programKey,
@@ -117,8 +135,8 @@ export async function WelcomeFamilyDetailBody({
               // app had stopped - a hand-mapped projection dropping a new field,
               // silently, because the object is built by listing fields.
               settledOffPortal: e.settledOffPortal === true,
-            })),
-        )
+            }));
+        })
         .catch((err) => {
           console.error('[welcome-family] could not read enrollments for the override control', err);
           return [];

@@ -21,6 +21,9 @@ const UNSET = {
   suggestedAmountOverride: null,
   settledOffPortal: false,
   isAdultClass: false,
+  // The default fixture is a family who has NOT paid - that is the state in
+  // which the off-portal action is legitimate.
+  familyHasPaid: false,
 };
 // An admin recorded an off-portal arrangement. THIS is what "settled" means.
 const SETTLED = { ...UNSET, effectiveSuggestedAmount: 0, suggestedAmountOverride: 0, settledOffPortal: true };
@@ -281,5 +284,49 @@ describe('PaymentOverrideControl — a centre whose adult class is its own progr
       />,
     );
     expect(screen.getByRole('button', { name: /mark paid off-portal/i })).toBeInTheDocument();
+  });
+});
+
+// ── A family who already paid through the portal ─────────────────────────────
+// Vaibhav, 2026-08-04, FID 5010: "this family has completed the donation, why
+// are we still seeing that button?" The roster labelled them Paid while this
+// row read "Currently asked for $400" beside "Mark paid off-portal" - two
+// screens in one app disagreeing about whether money arrived. Recording an
+// off-portal settlement on top of a real Stripe payment is not recoverable
+// through the UI: Undo writes null and restores the ask.
+const PAID = { ...UNSET, familyHasPaid: true };
+
+describe('PaymentOverrideControl — the money already arrived', () => {
+  it('says so, instead of naming an amount the family no longer owes', () => {
+    render(<PaymentOverrideControl enrollment={PAID} />);
+    expect(screen.getByText(/paid through the portal/i)).toBeTruthy();
+    expect(screen.queryByText(/Currently asked for/i)).toBeNull();
+  });
+
+  it('offers NO off-portal action - there is nothing to collect elsewhere', () => {
+    render(<PaymentOverrideControl enrollment={PAID} />);
+    expect(screen.queryByRole('button', { name: /mark paid off-portal/i })).toBeNull();
+  });
+
+  it('still offers it to a family who has NOT paid', () => {
+    // The guard must not swallow the feature: this control exists for families
+    // whose donation CMT collects outside the portal.
+    render(<PaymentOverrideControl enrollment={UNSET} />);
+    expect(screen.getByRole('button', { name: /mark paid off-portal/i })).toBeTruthy();
+  });
+
+  it('keeps Undo on a deliberately settled row even if a portal payment exists', () => {
+    // A settlement is a statement about THIS enrollment; the payment is a
+    // family-level fact. Both being true is worth showing, not hiding - and the
+    // admin must retain the way to reverse what they recorded.
+    render(<PaymentOverrideControl enrollment={{ ...SETTLED, familyHasPaid: true }} />);
+    expect(screen.getByRole('button', { name: /undo/i })).toBeTruthy();
+    expect(screen.getByText(/settled outside the portal/i)).toBeTruthy();
+  });
+
+  it('does not relabel a WAIVED row, which is a different fact', () => {
+    render(<PaymentOverrideControl enrollment={{ ...WAIVED, familyHasPaid: true }} />);
+    expect(screen.getByText(/covered by this family/i)).toBeTruthy();
+    expect(screen.queryByText(/paid through the portal/i)).toBeNull();
   });
 });
