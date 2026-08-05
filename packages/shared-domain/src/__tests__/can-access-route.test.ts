@@ -1080,6 +1080,11 @@ describe('canAccessRoute — the welcome-team grant, in full', () => {
     ['/welcome/family/CMT-AB12CD34/members/CMT-AB12CD34-02/edit', 'GET'],
     // The data behind those screens.
     ['/api/welcome/roster/report', 'GET'],
+    // Recording a walk-in visitor from the desk (2026-08-05). There is no
+    // /api/welcome catch-all, so a path with no clause of its own default-denies
+    // at the bottom of canAccessRoute - for admins too. This row is the proof
+    // the clause exists, not a formality.
+    ['/api/welcome/visitors', 'POST'],
     ['/api/welcome/families', 'GET'],
     ['/api/welcome/families/migration-status', 'GET'],
     ['/api/setu/family/search', 'GET'],

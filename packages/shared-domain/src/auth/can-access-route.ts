@@ -356,6 +356,16 @@ export function canAccessRoute(
     return isWelcomeTeam(claims);
   }
 
+  // Welcome-team API - the Sunday visitors board's writes (2026-08-05). The
+  // desk records a walk-in the kiosk would otherwise have to.
+  //
+  // An explicit clause is REQUIRED, not optional tidiness: there is no
+  // /api/welcome catch-all, so a path without one falls to the default-deny at
+  // the end of this function and 401s for every role, admin included.
+  if (pathname === '/api/welcome/visitors' || pathname.startsWith('/api/welcome/visitors/')) {
+    return isWelcomeTeam(claims);
+  }
+
   // Welcome-team API - single-page roster report (browse/filter dataset + CSV).
   // Coordinator reaches this through isWelcomeTeam now (role.ts, 2026-08-05);
   // the explicit `|| isCoordinator` it used to carry was made redundant by that
