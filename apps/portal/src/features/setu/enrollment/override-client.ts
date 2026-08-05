@@ -8,6 +8,10 @@ export type OverrideResult =
         | 'forbidden'
         /** The enrollment is cancelled - there is nothing live to mark paid. */
         | 'not-active'
+        /** The zero is a Bala-Vihar waiver, not a settlement. Nothing to record. */
+        | 'waived'
+        /** The family's donation already arrived through the portal. */
+        | 'already-paid'
         | 'not-found'
         /** The note failed validation (blank, or under 3 characters after trim). */
         | 'bad-request'
@@ -48,7 +52,20 @@ export async function setEnrollmentOverride(
   if (res.status === 401) return { ok: false, reason: 'unauthorized' };
   if (res.status === 403) return { ok: false, reason: 'forbidden' };
   if (res.status === 404) return { ok: false, reason: 'not-found' };
-  if (res.status === 409) return { ok: false, reason: 'not-active' };
+  // Three different 409s, and they need three different sentences. Collapsing
+  // them to 'not-active' told an admin their enrollment was cancelled when the
+  // real answer was "this is a waiver" or "they already paid" - a message that
+  // sends someone looking for a problem that does not exist.
+  if (res.status === 409) {
+    // `body?.error`, not `body.error`: a literal JSON `null` body survives the
+    // catch and would throw a TypeError here - which rejects out of this
+    // function, past a caller with no try/catch, leaving the button stuck on
+    // "Saving…". Our server never emits it; a proxy might.
+    const body = (await res.json().catch(() => ({}))) as { error?: string } | null;
+    if (body?.error === 'waived-not-settleable') return { ok: false, reason: 'waived' };
+    if (body?.error === 'already-paid-in-portal') return { ok: false, reason: 'already-paid' };
+    return { ok: false, reason: 'not-active' };
+  }
   if (res.status === 400) return { ok: false, reason: 'bad-request' };
   return { ok: false, reason: 'error' };
 }

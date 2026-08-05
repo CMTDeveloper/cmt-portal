@@ -51,6 +51,42 @@ export interface PaymentOverrideEnrollment {
    * comment asking the next caller to remember.
    */
   isAdultClass: boolean;
+  /**
+   * Has this family's donation ALREADY arrived through the portal? REQUIRED,
+   * and family-level rather than per-enrollment because donations are recorded
+   * against the family, not the row.
+   *
+   * ── Why ─────────────────────────────────────────────────────────────────────
+   * Vaibhav, 2026-08-04, on FID 5010: "this family has completed the donation,
+   * why are we still seeing that button?" The row read "Currently asked for
+   * $400" beside "Mark paid off-portal" for a family the ROSTER already labels
+   * Paid - two screens in one app disagreeing about whether money arrived.
+   *
+   * The control could not have known: its inputs were the suggested amount, the
+   * override, the settled flag and the program key. `effectiveSuggestedAmount`
+   * is the term's ASK, not a balance owing, so it says $400 whether the family
+   * paid last week or never.
+   *
+   * That is worse than confusing on a money screen. An admin reasonably reads
+   * "asked for $400" as "owes $400", settles them off-portal, and now a real
+   * Stripe payment and a fabricated off-portal settlement both exist against one
+   * enrollment - and Undo does not restore the previous state, it writes null
+   * and restores the ask. Recovery takes the audit row and an engineer.
+   *
+   * The verdict comes from `deriveFamilyPayment`, which the route's guard also
+   * calls - one predicate, so the screen and the rule behind it move together.
+   * Only a positive 'paid' suppresses the action: 'unknown' leaves it available,
+   * because removing a legitimate tool on a failed read is its own harm.
+   *
+   * Note what that does NOT promise. The route re-runs the SAME predicate, so it
+   * refuses only when ITS read also returns 'paid'; if that read fails, both
+   * allow. This is a de-duplication guard, not authorization - admin-only, a
+   * required note, and a transactional audit row are what actually protect the
+   * action. And 'paid' ultimately rests on donation `status: 'completed'`, which
+   * is client-reported (there is no Stripe webhook), so it means "our records
+   * say the money arrived", not "the bank confirmed it".
+   */
+  familyHasPaid: boolean;
 }
 
 /**
@@ -131,6 +167,12 @@ export function PaymentOverrideControl({
   // that is how it acquires a reason - but never "Undo", which on an
   // unattributed zero could just as easily be clearing something load-bearing.
   const unexplainedZero = zeroed && !waived;
+  // The money already arrived through Stripe. Ranked BELOW settled and waived on
+  // purpose: those are statements about this enrollment, while this is a
+  // family-level fact, and a row an admin deliberately settled should keep
+  // saying so (and keep its Undo) even if a portal donation also exists - that
+  // combination is worth showing, not hiding.
+  const alreadyPaid = !settled && !waived && !zeroed && enrollment.familyHasPaid;
   // Trimmed, because the server trims too - a form that enables Save on "   "
   // and then shows a 400 has taught the user nothing.
   const noteOk = note.trim().length >= 3;
@@ -163,6 +205,12 @@ export function PaymentOverrideControl({
     toast.error(
       result.reason === 'forbidden'
         ? 'Only an admin can change what a family is asked to give.'
+        : result.reason === 'waived'
+          // Not an error the admin caused. The waiver follows from the Bala
+          // Vihar payment, so that is where a change would have to happen.
+          ? 'This class is covered by the family’s Bala Vihar donation - there is nothing to record here.'
+        : result.reason === 'already-paid'
+          ? 'This family has already donated through the portal - recording an off-portal payment would double-count it.'
         : result.reason === 'not-active'
           ? 'That enrollment is no longer active.'
           : result.reason === 'bad-request'
@@ -188,9 +236,13 @@ export function PaymentOverrideControl({
               ? 'Marked settled outside the portal - not being asked to donate'
               : waived
                 ? 'Included - covered by this family’s Bala Vihar donation'
-                : unexplainedZero
-                  ? 'Not being asked to donate - no reason recorded'
-                  : `Currently asked for $${enrollment.effectiveSuggestedAmount}`}
+                : alreadyPaid
+                  // States the FACT rather than the ask. "Currently asked for
+                  // $400" is what made an admin reach for the button.
+                  ? 'Paid through the portal - nothing outstanding'
+                  : unexplainedZero
+                    ? 'Not being asked to donate - no reason recorded'
+                    : `Currently asked for $${enrollment.effectiveSuggestedAmount}`}
           </div>
         </div>
         {/* No button on a WAIVED enrollment. The zero was not an admin decision,
@@ -198,7 +250,11 @@ export function PaymentOverrideControl({
             waiver and started billing a family for a class they had already
             paid for. If the waiver is wrong, the Bala Vihar payment behind it is
             what changed. */}
-        {!open && !waived && (
+        {/* Nor on a family whose donation already arrived through Stripe. The
+            button's whole purpose is to record money collected ELSEWHERE; here
+            it would add a fabricated off-portal settlement on top of a real
+            payment, and Undo would not take it back. */}
+        {!open && !waived && !alreadyPaid && (
           <button
             type="button"
             className={settled ? 'btn btn--g' : 'btn btn--p'}

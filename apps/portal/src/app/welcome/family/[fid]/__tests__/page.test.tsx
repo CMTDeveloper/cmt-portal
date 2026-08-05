@@ -67,6 +67,13 @@ vi.mock('@/features/setu/adult-class/program-keys', () => ({
   adultStudyClassProgramKeys: mockAdultClassKeys,
   isAdultStudyClassKey: vi.fn(),
 }));
+// The SHARED payment verdict - the same function the override route's guard
+// calls, so page and route cannot drift. It never throws (it catches internally
+// and returns 'unknown'), so unlike the enrollments and programs reads beside
+// it, a failure here does NOT collapse the panel: it leaves the action
+// available, which is the deliberate 'unknown'-stays-settleable direction.
+const mockVerdict = vi.hoisted(() => vi.fn());
+vi.mock('@/features/setu/roster/payment', () => ({ deriveFamilyPayment: mockVerdict }));
 vi.mock('@/features/setu/enrollment/get-open-offerings', () => ({
   getOpenOfferingsForFamily: vi.fn(async () => []),
   resolveCurrentOffering: vi.fn(() => null),
@@ -94,6 +101,9 @@ beforeEach(() => {
   // Both centres' adult classes, so a fixture using only the literal key cannot
   // pass by accident.
   mockAdultClassKeys.mockResolvedValue(['adult-study-class', 'adult-study-east']);
+  mockVerdict.mockReset();
+  // Nothing paid: the state in which the off-portal action is legitimate.
+  mockVerdict.mockResolvedValue('outstanding');
 });
 
 const SAMPLE_FAMILY = {
@@ -380,5 +390,32 @@ describe('WelcomeFamilyDetailPage — the off-portal panel as an ADMIN', () => {
     // ...and the page still RENDERED. Without this the test would pass just as
     // happily if the page had thrown, which is the trap of asserting absence.
     expect(screen.getAllByText(/Patel/i).length).toBeGreaterThan(0);
+  });
+});
+
+describe('WelcomeFamilyDetailPage — a family paying by monthly pledge', () => {
+  // A live pledge writes NO completed donation docs (there is no webhook), so a
+  // verdict built on donations alone calls them unpaid forever - while the
+  // roster's Paid chip ORs the pledge in and calls them Paid. That is the same
+  // "two screens disagree" report this whole change exists to fix, and the
+  // first draft reproduced it for the pledge population. Found in review.
+  it('suppresses the off-portal action for a live pledge', async () => {
+    mockVerifyPortalSessionCookie.mockResolvedValue({ uid: 'ad-1', role: 'admin' } as never);
+    mockGetFamilyForWelcome.mockResolvedValue({ family: SAMPLE_FAMILY, members: SAMPLE_MEMBERS });
+    mockGetEnrollments.mockResolvedValue([
+      {
+        eid: 'CMT-F1-e1', programKey: 'bala-vihar', programLabel: 'Bala Vihar',
+        termLabel: '2026-27', status: 'active', effectiveSuggestedAmount: 400,
+        suggestedAmountOverride: null, settledOffPortal: false,
+      },
+    ]);
+    // deriveFamilyPayment is what ORs the pledge in; the page must take its word.
+    mockVerdict.mockResolvedValue('paid');
+
+    const page = await WelcomeFamilyDetailPage({ params: Promise.resolve({ fid: 'FAM001' }) });
+    render(page as React.ReactElement);
+
+    expect(screen.queryByRole('button', { name: /mark paid off-portal/i })).toBeNull();
+    expect(screen.getAllByText(/paid through the portal/i).length).toBeGreaterThan(0);
   });
 });

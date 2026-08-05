@@ -8,6 +8,8 @@ vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
 }));
 vi.mock('@/features/setu/audit/audit-log', () => ({ writeAuditLog: vi.fn() }));
 const mockAdultClassKeys = vi.hoisted(() => vi.fn());
+const mockFamilyPayment = vi.hoisted(() => vi.fn());
+vi.mock('@/features/setu/roster/payment', () => ({ deriveFamilyPayment: mockFamilyPayment }));
 vi.mock('@/features/setu/adult-class/program-keys', () => ({
   adultStudyClassProgramKeys: mockAdultClassKeys,
   isAdultStudyClassKey: vi.fn(),
@@ -79,6 +81,8 @@ beforeEach(() => {
   // BOTH centres. A fixture with only the literal key would let a key-sniffing
   // regression pass - that is precisely the bug this guard backs up.
   mockAdultClassKeys.mockResolvedValue(['adult-study-class', 'adult-study-east']);
+  mockFamilyPayment.mockReset();
+  mockFamilyPayment.mockResolvedValue('outstanding');
 });
 
 describe('PATCH override — a waiver is not settleable', () => {
@@ -164,5 +168,49 @@ describe('PATCH override — the legitimate paths still work', () => {
       expect.anything(),
       expect.objectContaining({ suggestedAmountOverride: null, settledOffPortal: false }),
     );
+  });
+});
+
+describe('PATCH override — a family who already paid in the portal', () => {
+  it('refuses to settle them off-portal, and writes NOTHING', async () => {
+    mockFamilyPayment.mockResolvedValue('paid');
+    setup({ programKey: 'bala-vihar', suggestedAmountOverride: null });
+
+    const res = await PATCH(makeRequest({ suggestedAmountOverride: 0, note: 'office collected' }), {
+      params: Promise.resolve({ eid: 'E1' }),
+    });
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: 'already-paid-in-portal' });
+    expect(mockTxnUpdate).not.toHaveBeenCalled();
+    expect(writeAuditLog).not.toHaveBeenCalled();
+  });
+
+  it('still lets an admin CLEAR an override on a paid family', async () => {
+    // Only settlement is refused. Undo must always work, or an admin cannot
+    // reverse their own mistake.
+    mockFamilyPayment.mockResolvedValue('paid');
+    setup({ programKey: 'bala-vihar', suggestedAmountOverride: 0, settledOffPortal: true });
+
+    const res = await PATCH(makeRequest({ suggestedAmountOverride: null, note: 'undo' }), {
+      params: Promise.resolve({ eid: 'E1' }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockTxnUpdate).toHaveBeenCalled();
+  });
+
+  it('does NOT refuse on an unknown verdict - absence of evidence is not payment', async () => {
+    // 'unknown' means we could not price the family, not that they paid.
+    // Refusing here would strand exactly the families this feature exists for.
+    mockFamilyPayment.mockResolvedValue('unknown');
+    setup({ programKey: 'bala-vihar', suggestedAmountOverride: null });
+
+    const res = await PATCH(makeRequest({ suggestedAmountOverride: 0, note: 'pre-authorized debit' }), {
+      params: Promise.resolve({ eid: 'E1' }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockTxnUpdate).toHaveBeenCalled();
   });
 });

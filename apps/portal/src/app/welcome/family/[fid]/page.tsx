@@ -9,6 +9,7 @@ import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
 import { isWelcomeTeam, isCoordinator, isAdmin, BALA_VIHAR, type WithRole } from '@cmt/shared-domain';
 import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
 import { adultStudyClassProgramKeys } from '@/features/setu/adult-class/program-keys';
+import { deriveFamilyPayment } from '@/features/setu/roster/payment';
 import { getOpenOfferingsForFamily, resolveCurrentOffering } from '@/features/setu/enrollment/get-open-offerings';
 import { resolveSuggestedAmount } from '@cmt/shared-domain';
 import {
@@ -98,12 +99,30 @@ export async function WelcomeFamilyDetailBody({
   // "Mark paid off-portal" button back on it - i.e. a transient read failure
   // would fail OPEN, into exactly the false money record this fixes. Losing the
   // whole panel for one render is the cheaper failure.
+  //
+  // The payment verdict joins the SAME promise: a family whose money already
+  // arrived must not be offered "Mark paid off-portal".
+  //
+  // `deriveFamilyPayment` rather than calling `classifyRosterPayment` here -
+  // the route's guard calls the SAME function, so the screen and the rule that
+  // stops the write are ONE predicate rather than two that must be kept in
+  // step. The first draft of this inlined the classifier and consequently
+  // missed live monthly pledges, which write no completed donations and would
+  // have read as unpaid on this page while the roster read Paid. It never
+  // throws (returns 'unknown'), so it cannot be what collapses the panel.
   const overridable: PaymentOverrideEnrollment[] = admin
-    ? await Promise.all([getEnrollments(fid), adultStudyClassProgramKeys()])
-        .then(([rows, adultClassKeys]) =>
-          rows
-            .filter((e) => e.status === 'active')
+    ? await Promise.all([getEnrollments(fid), adultStudyClassProgramKeys(), deriveFamilyPayment(fid)])
+        .then(([rows, adultClassKeys, verdict]) => {
+          const active = rows.filter((e) => e.status === 'active');
+          // Family-level, and every row receives the same answer: donations are
+          // recorded against the family, and a live pledge is a family-level
+          // arrangement. Only a POSITIVE 'paid' suppresses - 'unknown' leaves
+          // the action available, because this route is the only way to record
+          // a genuine off-portal arrangement.
+          const familyHasPaid = verdict === 'paid';
+          return active
             .map((e) => ({
+              familyHasPaid,
               isAdultClass: adultClassKeys.includes(e.programKey),
               eid: e.eid,
               programKey: e.programKey,
@@ -117,8 +136,8 @@ export async function WelcomeFamilyDetailBody({
               // app had stopped - a hand-mapped projection dropping a new field,
               // silently, because the object is built by listing fields.
               settledOffPortal: e.settledOffPortal === true,
-            })),
-        )
+            }));
+        })
         .catch((err) => {
           console.error('[welcome-family] could not read enrollments for the override control', err);
           return [];

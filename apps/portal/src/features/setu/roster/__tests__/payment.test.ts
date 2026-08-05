@@ -1,11 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { getEnrollments, sumCompletedDonations } = vi.hoisted(() => ({
+const { getEnrollments, sumCompletedDonations, getFamilyPledge } = vi.hoisted(() => ({
   getEnrollments: vi.fn(),
   sumCompletedDonations: vi.fn(),
+  getFamilyPledge: vi.fn(),
 }));
 vi.mock('@/features/setu/enrollment/get-enrollments', () => ({ getEnrollments }));
 vi.mock('../donations-sum', () => ({ sumCompletedDonations }));
+vi.mock('@/features/setu/pledges/get-family-pledge', () => ({ getFamilyPledge }));
+// The pledge read is flag-gated, matching `loadActivePledgeFids`. Default ON so
+// the pledge cases below exercise the real path.
+const flagsMock = vi.hoisted(() => ({ setuPledge: true }));
+vi.mock('@/lib/flags', () => ({ flags: flagsMock }));
 
 import { deriveFamilyPayment } from '../payment';
 
@@ -40,7 +46,13 @@ function enrollment(over: {
   };
 }
 
-beforeEach(() => { getEnrollments.mockReset(); sumCompletedDonations.mockReset(); });
+beforeEach(() => {
+  getEnrollments.mockReset();
+  sumCompletedDonations.mockReset();
+  getFamilyPledge.mockReset();
+  // No pledge is the default: most families pay in one go.
+  getFamilyPledge.mockResolvedValue(null);
+});
 
 describe('deriveFamilyPayment', () => {
   it("returns 'unknown' when there are no active enrollments", async () => {
@@ -78,5 +90,65 @@ describe('deriveFamilyPayment', () => {
   it("returns 'unknown' (never throws) when a dependency rejects", async () => {
     getEnrollments.mockRejectedValue(new Error('firestore down'));
     expect(await deriveFamilyPayment('CMT-X')).toBe('unknown');
+  });
+});
+
+describe('deriveFamilyPayment — a live monthly pledge is paid', () => {
+  // A live plan writes NO completed donation docs: there is no Stripe webhook
+  // (#54/#64), so `sumCompletedDonations` is 0 for a family paying every month.
+  // Judged on donations alone they read 'outstanding' forever. Every other
+  // paid-verdict surface already ORs the pledge in (report-dataset.ts:197 and
+  // four more); this one did not until review caught it, which would have told
+  // the family-detail screen that every pledge family was unpaid while the
+  // roster called them Paid - the very disagreement this work set out to end.
+  it("is 'paid' on an active pledge even with zero completed donations", async () => {
+    getEnrollments.mockResolvedValue([enrollment({ amountCAD: 400 })]);
+    sumCompletedDonations.mockResolvedValue(0);
+    getFamilyPledge.mockResolvedValue({ status: 'active' });
+    expect(await deriveFamilyPayment('CMT-X')).toBe('paid');
+  });
+
+  it("does NOT count a 'started' pledge - nothing came back from Stripe", async () => {
+    // `started` means the family was sent to Stripe and no mandate returned:
+    // no arrangement, no money. Counting it would call a family paid because
+    // they once clicked a button.
+    getEnrollments.mockResolvedValue([enrollment({ amountCAD: 400 })]);
+    sumCompletedDonations.mockResolvedValue(0);
+    getFamilyPledge.mockResolvedValue({ status: 'started' });
+    expect(await deriveFamilyPayment('CMT-X')).toBe('outstanding');
+  });
+
+  it("does NOT count a cancelled pledge", async () => {
+    getEnrollments.mockResolvedValue([enrollment({ amountCAD: 400 })]);
+    sumCompletedDonations.mockResolvedValue(0);
+    getFamilyPledge.mockResolvedValue({ status: 'cancelled' });
+    expect(await deriveFamilyPayment('CMT-X')).toBe('outstanding');
+  });
+
+  it('survives a failed pledge read rather than reporting unknown for everyone', async () => {
+    // The pledge lookup is the newest of the three reads; a failure in it must
+    // not erase a verdict the other two can still answer.
+    getEnrollments.mockResolvedValue([enrollment({ amountCAD: 400 })]);
+    sumCompletedDonations.mockResolvedValue(400);
+    getFamilyPledge.mockRejectedValue(new Error('firestore unavailable'));
+    expect(await deriveFamilyPayment('CMT-X')).toBe('paid');
+  });
+});
+
+describe('deriveFamilyPayment — the pledge kill switch', () => {
+  it('ignores pledges entirely when the feature is dark', async () => {
+    // `loadActivePledgeFids` returns an empty set with the flag off ("dark means
+    // dark"), so every roster and report stops counting pledges. If this
+    // predicate kept counting them, the kill switch would make the surfaces
+    // disagree at exactly the moment someone reached for it - and this one alone
+    // would go on refusing off-portal settlements citing money the rest of the
+    // app no longer believes in.
+    flagsMock.setuPledge = false;
+    getEnrollments.mockResolvedValue([enrollment({ amountCAD: 400 })]);
+    sumCompletedDonations.mockResolvedValue(0);
+    getFamilyPledge.mockResolvedValue({ status: 'active' });
+    expect(await deriveFamilyPayment('CMT-X')).toBe('outstanding');
+    expect(getFamilyPledge).not.toHaveBeenCalled();
+    flagsMock.setuPledge = true;
   });
 });
