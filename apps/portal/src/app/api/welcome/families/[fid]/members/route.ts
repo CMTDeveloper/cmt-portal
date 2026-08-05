@@ -14,9 +14,13 @@ type RouteContext = { params: Promise<{ fid: string }> };
  * would silently write the staff member's own family.
  *
  * `canAccessRoute` already gates the whole `/api/welcome/families/` prefix on
- * `isWelcomeTeam` (which inherits admin, and deliberately does NOT inherit
- * coordinator - spec 3.1 grants coordinator family READ but not EDIT). The
- * check here is the second of the three gates, not a duplicate: middleware
+ * `isWelcomeTeam`, which inherits admin AND - since 2026-08-05 - coordinator.
+ * This comment previously said coordinator was deliberately excluded, citing
+ * spec 3.1; the owner reversed that, and this file was the one place the
+ * reversal was not carried through. It was wrong in the dangerous direction,
+ * describing a NARROWER grant than the code enforces, in an auth-critical file.
+ *
+ * The check here is the second of the three gates, not a duplicate: middleware
  * rules and handlers drift, and this is the one that stops a mistake in the
  * former from becoming a data leak.
  *

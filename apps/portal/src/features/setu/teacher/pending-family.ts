@@ -79,15 +79,21 @@ export async function upsertPendingFamilyChild(db: Db, params: PendingChildParam
     if (existingFid) {
       const memSnap = await txn.get(db.collection('families').doc(existingFid).collection('members'));
       // Highest existing suffix + 1, NEVER the member count. count+1 collides
-      // with a live member the moment the numbering has a gap, and the txn.set
-      // below SILENTLY OVERWRITES - which is how a real family lost a child
-      // before `nextMemberMid` was written (see ids/member-mid.ts). This path
-      // was not moved onto the helper at the time; it is now.
+      // with a live member the moment the numbering has a gap - which is how a
+      // real family lost a child, back when this wrote with `set` and the
+      // overwrite was silent (see ids/member-mid.ts). This path was not moved
+      // onto the helper at the time; it is now, and the write below is a
+      // `create` so a future regression is loud rather than lossy.
       const nextMid = nextMemberMid(
         existingFid,
         (memSnap.docs as Array<{ id: string }>).map((d) => d.id),
       );
-      txn.set(db.collection('families').doc(existingFid).collection('members').doc(nextMid), {
+      // `create`, not `set`. nextMemberMid should always hand back a free id, so
+      // this can only fire if that invariant breaks - a refactor hoisting the
+      // read out of the transaction, or an id shape the allocator does not
+      // model. `set` would absorb exactly that silently, by overwriting a live
+      // member, which is the failure this whole path was just fixed for.
+      txn.create(db.collection('families').doc(existingFid).collection('members').doc(nextMid), {
         mid: nextMid,
         publicMid: publicMids[0]!,
         firstName: params.firstName,

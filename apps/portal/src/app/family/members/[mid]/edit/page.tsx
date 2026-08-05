@@ -19,6 +19,9 @@ import type { FamilyWithMembers } from '@/features/setu/members/get-current-fami
  * The extraction was made behaviour-neutral on purpose - this file's existing
  * test suite passed unchanged across it, which is the only real evidence that
  * ~570 households editing their own members every week were not disturbed.
+ * One exception, found by review afterwards and kept deliberately: the shared
+ * form now clears "no known allergies" when it is re-seeded with a different
+ * member, which the old code here did not. See member-edit-form.tsx.
  *
  * "Remove from family" is deliberately absent. Vaibhav, 2026-08-04: *"please
  * remove the button as we do not want families to remove any members. At the

@@ -15,6 +15,7 @@ import { createMagicLink } from '@/features/setu/auth/magic-links';
 import { portalBaseUrl } from '@/lib/portal-base-url';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { portalAuth } from '@cmt/firebase-shared/admin/auth';
+import { isWelcomeTeam, type WithRole } from '@cmt/shared-domain';
 import { normalizeContactForKey } from '@cmt/shared-domain/setu';
 
 
@@ -117,16 +118,28 @@ export async function POST(req: Request) {
     }
   }
 
-  // Admin / welcome-team path: a Firebase auth user with the admin or
-  // welcome-team claim (granted by admin tooling — no family attached).
-  // Without this branch they'd get the anti-enum silent-200 just like an
-  // unknown contact.
-  let hasAdminRoleUser = false;
+  // SEVAK path: a Firebase auth user holding a staff grant and no family record
+  // (granted by admin tooling). Without this branch they get the anti-enum
+  // silent-200 exactly like an unknown contact - a cheerful 200 and no code,
+  // with nothing on screen to say why.
+  //
+  // Asked through `isWelcomeTeam()`, never by comparing `role` to strings. The
+  // previous form was `role === 'welcome-team' || role === 'admin'`, and it was
+  // wrong twice over: it had no idea `coordinator` existed (a grantable,
+  // first-class role since before this file was last touched), and it read only
+  // the PRIMARY role, so ANY sevak - admin included - carrying their grant in
+  // `extraRoles` was invisible to it. Both are the documented reason this
+  // codebase forbids strict role equality. isWelcomeTeam covers welcome-team,
+  // coordinator and admin, and reads extraRoles.
+  //
+  // Kiosk is deliberately absent: the shared tablet account signs in with a
+  // password (see scripts/seed-kiosk-account.ts), so it never reaches an OTP.
+  let hasStaffRoleUser = false;
   if (result.source === null && type === 'email') {
     try {
       const user = await portalAuth().getUserByEmail(value).catch(() => null);
-      const role = (user?.customClaims as Record<string, unknown> | undefined)?.role;
-      if (role === 'welcome-team' || role === 'admin') hasAdminRoleUser = true;
+      const claims = (user?.customClaims ?? {}) as WithRole;
+      if (isWelcomeTeam(claims)) hasStaffRoleUser = true;
     } catch (err) {
       console.error(`[send-code] hash=${hashPrefix} role lookup failed:`, err);
     }
@@ -141,7 +154,7 @@ export async function POST(req: Request) {
     purpose !== 'register' &&
     result.source === null &&
     !hasPendingInvite &&
-    !hasAdminRoleUser
+    !hasStaffRoleUser
   ) {
     return NextResponse.json({ success: true }, { status: 200 });
   }

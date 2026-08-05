@@ -19,6 +19,15 @@ const COORDINATOR = { 'x-portal-role': 'coordinator', 'x-portal-extra-roles': ''
 const ADMIN = { 'x-portal-role': 'admin', 'x-portal-extra-roles': '' };
 const FAMILY = { 'x-portal-role': 'family-manager', 'x-portal-extra-roles': '' };
 
+/** A date inside the recording window, computed rather than hard-coded: a
+ *  literal like '2026-03-08' silently ages out of the 90-day bound and turns a
+ *  passing test into a 400 months later, for no reason the reader can see. */
+function daysAgo(n: number): string {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() - n);
+  return d.toISOString().slice(0, 10);
+}
+
 const GUEST = {
   firstName: 'Asha',
   lastName: 'Sharma',
@@ -92,6 +101,25 @@ describe('POST /api/welcome/visitors - validation', () => {
     expect(res.status).toBe(400);
     expect(recordGuestCheckIn).not.toHaveBeenCalled();
   });
+
+  // Shape is not enough. '2099-01-03' and '1970-01-04' are both well-formed,
+  // and both would be written verbatim as `date` AND as the derived
+  // `sessionDate`, polluting attendance history and every report over it.
+  // Nothing downstream re-checks: recordGuestCheckIn trusts what it is handed
+  // and the UI's native date input has no min/max.
+  it.each([
+    ['far future', '2099-01-03'],
+    ['far past', '1970-01-04'],
+  ])('400 on a %s date that is well-formed but absurd', async (_label, date) => {
+    const res = await POST(req({ ...GUEST, date }, WELCOME));
+    expect(res.status).toBe(400);
+    expect(recordGuestCheckIn).not.toHaveBeenCalled();
+  });
+
+  it('accepts the Sunday just gone - catching up is the normal case', async () => {
+    const res = await POST(req({ ...GUEST, date: daysAgo(7) }, WELCOME));
+    expect(res.status).toBe(201);
+  });
 });
 
 describe('POST /api/welcome/visitors - what it writes', () => {
@@ -110,8 +138,9 @@ describe('POST /api/welcome/visitors - what it writes', () => {
   // otherwise stamps TODAY. A desk adding a visitor while viewing last Sunday
   // would file them on a day the person who just typed them in cannot see.
   it('forwards the viewed date as the walk-in day', async () => {
-    await POST(req({ ...GUEST, date: '2026-03-08' }, WELCOME));
-    expect(recordGuestCheckIn.mock.calls[0]![1]).toBe('2026-03-08');
+    const viewed = daysAgo(14);
+    await POST(req({ ...GUEST, date: viewed }, WELCOME));
+    expect(recordGuestCheckIn.mock.calls[0]![1]).toBe(viewed);
   });
 
   it('omits the date entirely when none is given, so the store uses today', async () => {
@@ -123,7 +152,7 @@ describe('POST /api/welcome/visitors - what it writes', () => {
     // `date` is a transport concern of this route; the store owns stamping it
     // alongside the derived sessionDate. Leaking it into the doc payload would
     // put an un-normalized value beside a normalized one.
-    await POST(req({ ...GUEST, date: '2026-03-08' }, WELCOME));
+    await POST(req({ ...GUEST, date: daysAgo(14) }, WELCOME));
     expect(recordGuestCheckIn.mock.calls[0]![0]).not.toHaveProperty('date');
   });
 });

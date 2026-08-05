@@ -18,6 +18,13 @@ vi.mock('@/features/setu/auth/find-family-by-contact', () => ({
 vi.mock('@/features/setu/auth/magic-links', () => ({
   createMagicLink: vi.fn(),
 }));
+// The staff branch (a sevak with no family record) reads the Firebase auth
+// user's custom claims. It was never mocked here, so that whole branch had no
+// coverage at all - which is how a role could be missing from it unnoticed.
+const mockGetUserByEmail = vi.hoisted(() => vi.fn());
+vi.mock('@cmt/firebase-shared/admin/auth', () => ({
+  portalAuth: () => ({ getUserByEmail: mockGetUserByEmail }),
+}));
 
 import { POST } from '../route';
 import { checkAndRecordOtpRateLimit, storeVerificationCode } from '@/features/check-in/shared';
@@ -52,6 +59,7 @@ beforeEach(() => {
   });
   mockSendEmail.mockResolvedValue(undefined);
   mockSendSMS.mockResolvedValue(undefined);
+  mockGetUserByEmail.mockResolvedValue(null);
 });
 
 describe('POST /api/setu/auth/send-code', () => {
@@ -285,5 +293,57 @@ describe('POST /api/setu/auth/send-code', () => {
     const { POST: flaggedPOST } = await import('../route');
     const res = await flaggedPOST(makeRequest({ type: 'email', value: 'raj@example.com' }));
     expect(res.status).toBe(404);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// A SEVAK WITH NO FAMILY still has to receive a code.
+//
+// The anti-enumeration silent-200 hides whether a contact is known, and a
+// family-less staff account looks exactly like an unknown contact to it. The
+// route therefore checks the auth user's claims to make an exception - and that
+// check was written as `role === 'welcome-team' || role === 'admin'`, which:
+//   - missed `coordinator` entirely (a grantable, first-class role), so a
+//     standalone coordinator got a cheerful 200 and NO CODE, forever; and
+//   - read only the PRIMARY role, so any sevak carrying their grant in
+//     `extraRoles` was equally invisible.
+// Both are the documented "never compare role with strict equality" trap.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('POST /api/setu/auth/send-code - family-less sevaks', () => {
+  const noFamily = { source: null, fid: null, mid: null, legacyFid: null, family: null };
+
+  beforeEach(() => {
+    (findSetuFamilyByContact as ReturnType<typeof vi.fn>).mockResolvedValue(noFamily);
+  });
+
+  it.each([
+    ['admin', { role: 'admin' }],
+    ['welcome-team', { role: 'welcome-team' }],
+    ['coordinator', { role: 'coordinator' }],
+    ['a coordinator carrying the grant in extraRoles', { role: 'family-member', extraRoles: ['coordinator'] }],
+    ['an admin carrying the grant in extraRoles', { role: 'family-member', extraRoles: ['admin'] }],
+  ])('sends a code to %s', async (_label, customClaims) => {
+    mockGetUserByEmail.mockResolvedValue({ customClaims });
+    const res = await POST(makeRequest({ type: 'email', value: 'sevak@chinmayatoronto.org' }));
+    expect(res.status).toBe(200);
+    expect(storeVerificationCode).toHaveBeenCalled();
+    expect(mockSendEmail).toHaveBeenCalled();
+  });
+
+  it('still says nothing to a genuine stranger - the anti-enum gate is intact', async () => {
+    // Without this the tests above would pass just as well if the exception
+    // swallowed the whole gate.
+    mockGetUserByEmail.mockResolvedValue({ customClaims: {} });
+    const res = await POST(makeRequest({ type: 'email', value: 'stranger@example.com' }));
+    expect(res.status).toBe(200);
+    expect(storeVerificationCode).not.toHaveBeenCalled();
+    expect(mockSendEmail).not.toHaveBeenCalled();
+  });
+
+  it('and to a family role with no family record', async () => {
+    mockGetUserByEmail.mockResolvedValue({ customClaims: { role: 'family-member' } });
+    const res = await POST(makeRequest({ type: 'email', value: 'orphan@example.com' }));
+    expect(res.status).toBe(200);
+    expect(mockSendEmail).not.toHaveBeenCalled();
   });
 });

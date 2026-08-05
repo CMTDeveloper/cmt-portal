@@ -48,6 +48,9 @@ const mockRunTransaction = vi.fn();
 const mockGet = vi.fn();
 const mockSet = vi.fn();
 const mockUpdate = vi.fn();
+// The legacy CREATE branch writes the new member with txn.create(), not set(),
+// so a taken id fails loudly rather than overwriting a live member.
+const mockCreate = vi.fn();
 
 function makeRequest(body: unknown) {
   return new Request('http://localhost/api/setu/invite/accept', {
@@ -99,7 +102,7 @@ beforeEach(() => {
   (createPortalSessionCookie as ReturnType<typeof vi.fn>).mockResolvedValue('session-cookie');
 
   mockRunTransaction.mockImplementation(async (fn: (txn: unknown) => unknown) => {
-    const txn = { get: mockGet, set: mockSet, update: mockUpdate };
+    const txn = { get: mockGet, set: mockSet, update: mockUpdate, create: mockCreate };
     return fn(txn);
   });
 
@@ -232,7 +235,7 @@ describe('POST /api/setu/invite/accept', () => {
   it('happy path: creates member, updates family.managers, writes contactKey, marks acceptedAt', async () => {
     mockGetSession.mockReturnValueOnce(validSession);
     mockRunTransaction.mockImplementationOnce(async (fn: (txn: unknown) => unknown) => {
-      const txn = { get: mockGet, set: mockSet, update: mockUpdate };
+      const txn = { get: mockGet, set: mockSet, update: mockUpdate, create: mockCreate };
       return fn(txn);
     });
     const res = await POST(makeRequest({ token: 'tok-abc123' }));
@@ -252,13 +255,13 @@ describe('POST /api/setu/invite/accept', () => {
   it('assigns a publicMid to the new co-manager member doc (issue #4)', async () => {
     mockGetSession.mockReturnValueOnce(validSession);
     mockRunTransaction.mockImplementationOnce(async (fn: (txn: unknown) => unknown) => {
-      const txn = { get: mockGet, set: mockSet, update: mockUpdate };
+      const txn = { get: mockGet, set: mockSet, update: mockUpdate, create: mockCreate };
       return fn(txn);
     });
     const res = await POST(makeRequest({ token: 'tok-abc123' }));
     expect(res.status).toBe(200);
     // The new member doc is the only set() payload carrying a firstName field.
-    const memberWrite = mockSet.mock.calls.find(
+    const memberWrite = mockCreate.mock.calls.find(
       ([, data]) => data && typeof data === 'object' && 'firstName' in data,
     );
     // Named from the invite (not empty) + carries the allocated publicMid.
@@ -308,7 +311,7 @@ describe('POST /api/setu/invite/accept', () => {
     // The member doc is the only set() payload carrying firstName. Assert the
     // payload's own mid too - a correct return value written to the wrong doc
     // is the shape of the failure that actually loses someone.
-    const memberWrite = mockSet.mock.calls.find(
+    const memberWrite = mockCreate.mock.calls.find(
       ([, data]) => data && typeof data === 'object' && 'firstName' in data,
     );
     expect((memberWrite?.[1] as { mid: string }).mid).toBe('FAM001ABCD12-04');
@@ -317,7 +320,7 @@ describe('POST /api/setu/invite/accept', () => {
   it('happy path: sets __session cookie with refreshed claims after invite accept', async () => {
     mockGetSession.mockReturnValueOnce(validSession);
     mockRunTransaction.mockImplementationOnce(async (fn: (txn: unknown) => unknown) => {
-      const txn = { get: mockGet, set: mockSet, update: mockUpdate };
+      const txn = { get: mockGet, set: mockSet, update: mockUpdate, create: mockCreate };
       return fn(txn);
     });
     const res = await POST(makeRequest({ token: 'tok-abc123' }));

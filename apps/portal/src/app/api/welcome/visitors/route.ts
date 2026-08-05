@@ -26,11 +26,41 @@ import { recordGuestCheckIn } from '@/features/check-in/shared';
  * 2026-08-03. Those rows are history, and history is read-only.
  */
 
+/**
+ * How far either side of today a walk-in may be recorded.
+ *
+ * Format alone is not enough: `2099-01-03` and `1970-01-04` are both
+ * well-formed Sundays, and both would be written verbatim as `date` AND as the
+ * derived `sessionDate`, quietly polluting attendance history and the reports
+ * built on it. Nothing else validates this - `recordGuestCheckIn` trusts what
+ * it is handed, and the UI's native date input has no min/max.
+ *
+ * The window is deliberately generous rather than "today only": the desk
+ * legitimately catches up on the Sunday just gone, and a Monday-morning
+ * correction is normal. It is a sanity bound, not a policy.
+ */
+const MAX_BACKDATE_DAYS = 90;
+const MAX_FUTUREDATE_DAYS = 7;
+
+function withinRecordingWindow(ymd: string): boolean {
+  const day = Date.parse(`${ymd}T12:00:00Z`);
+  if (Number.isNaN(day)) return false;
+  const today = Date.parse(`${new Date().toISOString().slice(0, 10)}T12:00:00Z`);
+  const days = (day - today) / 86_400_000;
+  return days >= -MAX_BACKDATE_DAYS && days <= MAX_FUTUREDATE_DAYS;
+}
+
 const bodySchema = GuestCheckInSchema.extend({
   // The Sunday the desk is looking at. Optional; absent means today, which is
-  // what the kiosk does. Validated as a plain date so a malformed value can
-  // never reach the sessionDate normalization.
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  // what the kiosk does. Validated for shape AND range - a malformed or absurd
+  // value must never reach the sessionDate normalization.
+  date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .refine(withinRecordingWindow, {
+      message: `date must be within ${MAX_BACKDATE_DAYS} days back and ${MAX_FUTUREDATE_DAYS} days ahead`,
+    })
+    .optional(),
 });
 
 export async function POST(req: Request) {

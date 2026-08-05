@@ -27,6 +27,15 @@ import { LoadingOm } from '@/components/chrome/loading-om';
  * A second copy of those is the same failure that produced three different
  * level derivations in this codebase, except with medical data attached.
  *
+ * ONE deliberate behaviour CHANGE came out of the extraction, and it is not
+ * cosmetic: the family page's old seed never cleared `noAllergies` in its
+ * else-branch, so handing the same mounted form a member with 'None' and then
+ * one with a real allergy left the box ticked and the allergy hidden. A false
+ * NEGATIVE, which is the worse direction than the false-positive incident that
+ * produced `recordedAllergy`. It is fixed here and pinned by a test. Anywhere
+ * this extraction is described as "behaviour-neutral", read it as "neutral
+ * except for that, which was a latent bug".
+ *
  * WHAT THIS COMPONENT DOES NOT DO: it holds no role checks and no fetching. It
  * is handed a loaded member, three booleans describing what the caller is
  * ALLOWED to offer, and a `save` function. Authority is decided by the caller

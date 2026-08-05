@@ -136,9 +136,9 @@ export async function POST(req: Request) {
       // Resolve the member id being bound. Link path reuses the pending member's
       // mid; create path mints the next sequence id.
       // Highest existing suffix + 1, NEVER the member count. count+1 collides
-      // with a live member as soon as the numbering has a gap, and the txn.set
-      // on the create branch below SILENTLY OVERWRITES - the failure that lost
-      // a real child before `nextMemberMid` was written (ids/member-mid.ts).
+      // with a live member as soon as the numbering has a gap - the failure
+      // that lost a real child back when the create branch below wrote with
+      // `set` and the overwrite was silent (ids/member-mid.ts).
       const boundMid =
         existingMemberRef && existingMemberSnap?.exists
           ? memberMid!
@@ -159,7 +159,10 @@ export async function POST(req: Request) {
         });
       } else {
         // CREATE (legacy invite with no pending member): mint the co-manager now.
-        txn.set(memberRef, {
+        // `create`, not `set` - see the note in teacher/pending-family.ts. The
+        // id comes from nextMemberMid and should always be free; if it ever is
+        // not, this fails loudly instead of writing over whoever holds it.
+        txn.create(memberRef, {
           mid: boundMid,
           publicMid: newPublicMid,
           uid: session.uid,
