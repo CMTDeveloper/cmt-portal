@@ -1,5 +1,11 @@
 import { test, expect, type Page } from '@playwright/test';
 import { hasFamilyCreds } from '../../_helpers';
+// STATIC, not `await import(...)`. The dynamic form dies under Playwright's
+// loader with "./apps does not provide an export named getMasterApp" (#123) -
+// the named exports of a TS module are not discoverable when it is pulled in at
+// runtime rather than transformed at load. Every seed that used it was silently
+// broken, and so was its cleanup.
+import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 
 // Teacher attendance - the consolidated "Not in this class yet" section, deployed
 // UAT. Previous students + Registered-not-enrolled are merged into ONE inline
@@ -54,7 +60,6 @@ async function expandSection(page: Page): Promise<void> {
 }
 
 async function resetLevelAttendance(): Promise<void> {
-  const { portalFirestore } = await import('@cmt/firebase-shared/admin/firestore');
   const db = portalFirestore();
   const snap = await db.collection('attendanceEvents').where('levelId', '==', LEVEL_ID).get();
   for (const d of snap.docs) await d.ref.delete();
@@ -151,7 +156,6 @@ test.describe('Teacher - consolidated "Not in this class yet" section', () => {
     ]);
     expect(saveResp.status(), await saveResp.text()).toBe(200);
 
-    const { portalFirestore } = await import('@cmt/firebase-shared/admin/firestore');
     const db = portalFirestore();
     // Psolo Prev (previous) - no attendance event written for this date.
     const prevDoc = await db.collection('attendanceEvents').doc(`${LEVEL_ID}-${SOLO_MID}-${DATE}`).get();
@@ -167,7 +171,6 @@ test.describe('Teacher - consolidated "Not in this class yet" section', () => {
   // never marks anyone present, so no real family's attendance is mutated. Pool
   // size comes from the deployed API's own response (no re-derivation in the spec).
   test('busy location: the registered list caps at 20 behind a search box (read-only)', async ({ page }) => {
-    const { portalFirestore } = await import('@cmt/firebase-shared/admin/firestore');
     const db = portalFirestore();
 
     // Cheap lookup: Brampton "Level 2" (the level Vaibhav flagged) — one indexed

@@ -62,6 +62,12 @@
  */
 import { test, expect, request, type APIRequestContext } from '@playwright/test';
 import { BALA_VIHAR } from '@cmt/shared-domain';
+// STATIC, not `await import(...)`. The dynamic form dies under Playwright's
+// loader with "./apps does not provide an export named getMasterApp" (#123) -
+// the named exports of a TS module are not discoverable when it is pulled in at
+// runtime rather than transformed at load. Every seed that used it was silently
+// broken, and so was its cleanup.
+import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 
 // ── Owner-supplied creds + fixture identity (read in-spec, mirroring how
 // mobile-bearer / public-ids read FIREBASE_API_KEY directly from process.env). ──
@@ -146,7 +152,6 @@ test.describe('Setu kiosk new-ID lookup + auto-enroll (deployed UAT) — UNRUN',
   // if a prior run leaked an enrollment) and as teardown after it.
   async function cleanFixtureBvEnrollments(): Promise<void> {
     if (!familyDocFid) return;
-    const { portalFirestore } = await import('@cmt/firebase-shared/admin/firestore');
     const db = portalFirestore();
     const enr = await db.collection('families').doc(familyDocFid).collection('enrollments').get();
     for (const d of enr.docs) {
@@ -158,7 +163,6 @@ test.describe('Setu kiosk new-ID lookup + auto-enroll (deployed UAT) — UNRUN',
   test.beforeAll(async ({ baseURL }) => {
     // Resolve the fixture family's CMT- doc id from its publicFid (admin SDK), so
     // both the enrollment assertion and cleanup have it even if a test fails early.
-    const { portalFirestore } = await import('@cmt/firebase-shared/admin/firestore');
     const snap = await portalFirestore()
       .collection('families')
       .where('publicFid', '==', FIXTURE_PUBLIC_FID)
@@ -181,7 +185,6 @@ test.describe('Setu kiosk new-ID lookup + auto-enroll (deployed UAT) — UNRUN',
     // run can't leave the fixture enrolled; the check_in_events this run appended
     // are cleared too so the fixture's history stays clean.
     try {
-      const { portalFirestore } = await import('@cmt/firebase-shared/admin/firestore');
       const db = portalFirestore();
       await cleanFixtureBvEnrollments();
       for (const id of writtenCheckInIds) {
@@ -327,7 +330,6 @@ test.describe('Setu kiosk new-ID lookup + auto-enroll (deployed UAT) — UNRUN',
     // (both need a family or welcome/admin session), so verify the enrollment
     // straight from Firestore with the admin SDK — the same reader the cleanup
     // targets (pattern: admin/level-management.spec.ts).
-    const { portalFirestore } = await import('@cmt/firebase-shared/admin/firestore');
     const db = portalFirestore();
     const snap = await db
       .collection('families')

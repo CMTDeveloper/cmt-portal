@@ -1,5 +1,11 @@
 import { test, expect, type Page } from '@playwright/test';
 import { hasFamilyCreds } from '../../_helpers';
+// STATIC, not `await import(...)`. The dynamic form dies under Playwright's
+// loader with "./apps does not provide an export named getMasterApp" (#123) -
+// the named exports of a TS module are not discoverable when it is pulled in at
+// runtime rather than transformed at load. Every seed that used it was silently
+// broken, and so was its cleanup.
+import { FieldValue, portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 
 // Slice 3 · Workstreams A + B — Level management (/admin/levels), deployed UAT.
 // The single seeded UAT user is family-manager + admin, so family.json reaches
@@ -74,7 +80,6 @@ test.describe('Admin — Level management', () => {
     // No HTTP DELETE for a level — clean up directly with the SAME admin SDK the
     // seed uses (playwright.config loads .env.local, so the portal creds are in
     // process.env). Also unwind any teacherAssignments so no dangling refs remain.
-    const { portalFirestore, FieldValue } = await import('@cmt/firebase-shared/admin/firestore');
     const db = portalFirestore();
     for (const levelId of createdLevelIds) {
       try {

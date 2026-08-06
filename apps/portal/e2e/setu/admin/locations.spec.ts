@@ -1,5 +1,11 @@
 import { test, expect, type Page } from '@playwright/test';
 import { hasFamilyCreds } from '../../_helpers';
+// STATIC, not `await import(...)`. The dynamic form dies under Playwright's
+// loader with "./apps does not provide an export named getMasterApp" (#123) -
+// the named exports of a TS module are not discoverable when it is pulled in at
+// runtime rather than transformed at load. Every seed that used it was silently
+// broken, and so was its cleanup.
+import { FieldValue, portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 
 // Admin-managed centre locations editor (/admin/locations), deployed UAT. The
 // single seeded UAT user is family-manager + admin, so family.json reaches the
@@ -33,7 +39,6 @@ test.describe('Admin — Locations editor', () => {
 
   test.beforeAll(async () => {
     if (!hasFamilyCreds) return;
-    const { portalFirestore } = await import('@cmt/firebase-shared/admin/firestore');
     const snap = await portalFirestore().collection('app_config').doc('locations').get();
     originalExisted = snap.exists;
     const opts = snap.data()?.['options'];
@@ -44,7 +49,6 @@ test.describe('Admin — Locations editor', () => {
     if (!hasFamilyCreds) return;
     // Restore the config doc to exactly what we found: rewrite the original
     // options if the doc existed, otherwise delete it (it never existed).
-    const { portalFirestore, FieldValue } = await import('@cmt/firebase-shared/admin/firestore');
     const doc = portalFirestore().collection('app_config').doc('locations');
     try {
       if (originalExisted && originalOptions) {

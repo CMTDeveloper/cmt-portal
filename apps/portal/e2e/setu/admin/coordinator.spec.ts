@@ -1,5 +1,11 @@
 import { test, expect, request as apiRequest, type Page, type APIRequestContext } from '@playwright/test';
 import { E2E_BASE_URL } from '../../_helpers';
+// STATIC, not `await import(...)`. The dynamic form dies under Playwright's
+// loader with "./apps does not provide an export named getMasterApp" (#123) -
+// the named exports of a TS module are not discoverable when it is pulled in at
+// runtime rather than transformed at load. Every seed that used it was silently
+// broken, and so was its cleanup.
+import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 
 /**
  * The coordinator role, walked against DEPLOYED UAT. Everything Track A added
@@ -162,7 +168,6 @@ for (const [label, email] of [
 
 /** The one mutation in this file. UAT is real, so remove it either side. */
 async function deleteProbeProgram(): Promise<void> {
-  const { portalFirestore } = await import('@cmt/firebase-shared/admin/firestore');
   await portalFirestore().collection('programs').doc(PROBE_PROGRAM).delete();
 }
 
