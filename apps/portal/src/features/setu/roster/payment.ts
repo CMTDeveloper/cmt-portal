@@ -1,9 +1,17 @@
 import 'server-only';
 import { getEnrollments, type EnrollmentWithOffering } from '@/features/setu/enrollment/get-enrollments';
-import { classifyRosterPayment, type ActiveEnrollmentCharge } from '@cmt/shared-domain/setu';
+import {
+  classifyRosterPayment,
+  explainRosterPayment,
+  type ActiveEnrollmentCharge,
+  type RosterPaymentUnknownReason,
+} from '@cmt/shared-domain/setu';
 import type { OfferingDoc, RosterPayment } from '@cmt/shared-domain/setu';
-import { sumCompletedDonations } from './donations-sum';
-import { getFamilyPledge } from '@/features/setu/pledges/get-family-pledge';
+import type { DonationDoc } from '@cmt/shared-domain';
+import { sumCompleted } from './donations-sum';
+import { getDonations } from '@/features/setu/donations/get-donations';
+import { selectFamilyPledge } from '@/features/setu/pledges/select-family-pledge';
+import { getPledgesForStaff, type StaffPledgeView } from '@/features/setu/pledges/get-pledges-for-staff';
 import { flags } from '@/lib/flags';
 
 /**
@@ -98,20 +106,151 @@ export function classifyBulkPayment(
  */
 export async function deriveFamilyPayment(fid: string): Promise<RosterPayment> {
   try {
-    const [enrollments, paid, pledge] = await Promise.all([
-      getEnrollments(fid),
-      sumCompletedDonations(fid),
-      // Flag-gated to match `loadActivePledgeFids`, which returns an empty set
-      // when the feature is dark. Without this, flipping the kill switch would
-      // silence pledges on every roster and report while THIS predicate alone
-      // kept answering 'paid' and refusing settlements - the "one answer across
-      // surfaces" property holding right up until the moment it is most needed.
-      flags.setuPledge ? getFamilyPledge(fid).catch(() => null) : Promise.resolve(null),
-    ]);
-    if (pledge?.status === 'active') return 'paid';
-    const active = enrollments.filter((e) => e.status === 'active');
-    return classifyRosterPayment(active.map(chargeFromEnrollment), paid);
+    return (await loadFamilyPaymentData(fid)).verdict;
   } catch {
+    // KEPT, and load-bearing. The off-portal override route calls this as its
+    // money guard and its own comment records the contract: "deriveFamilyPayment
+    // already swallows and returns 'unknown'" (override/route.ts:146). The
+    // loader below deliberately THROWS on an enrollments failure so the page can
+    // collapse its write panel closed; this catch is what keeps that new
+    // behaviour from reaching the five callers who were promised a word.
     return 'unknown';
   }
+}
+
+/**
+ * A family's payment picture: the verdict AND the evidence behind it, from ONE
+ * set of reads.
+ *
+ * ── Why this exists ─────────────────────────────────────────────────────────
+ * `deriveFamilyPayment` used to read enrollments, donations and the pledge, then
+ * throw all three away and return a single word. The welcome desk got that word
+ * and nothing else - and because `explainRosterPayment` can reach `unknown` four
+ * different ways, "Unknown" told a volunteer nothing they could repeat to a
+ * family on the phone. They opened the Stripe dashboard instead (Vaibhav,
+ * 2026-08-05). This returns what was already being read.
+ *
+ * ── It is CHEAPER than what it replaces ─────────────────────────────────────
+ * The family-detail page ran `getEnrollments(fid)` twice per admin render: once
+ * directly for the override control, once inside `deriveFamilyPayment`. And
+ * `sumCompletedDonations` re-queried donations the page then had no way to show.
+ * One loader, one read per collection, all three in parallel - so a page showing
+ * far more costs fewer round trips than the one showing less.
+ *
+ * ── The three failure directions are NOT the same ───────────────────────────
+ * They are chosen so that every failure lands on the safe side of a DIFFERENT
+ * decision, which is why this is not a single try/catch:
+ *
+ *  1. Enrollments fail → THROW. The caller cannot render a payment panel without
+ *     them, and the page's own comment explains why a soft empty list is worse
+ *     than no panel: it would make every waived enrollment look like an
+ *     unexplained zero and re-offer "Mark paid off-portal" on money already
+ *     handled. Failing OPEN there writes a false money record.
+ *  2. Donations fail → 'unavailable', and the verdict is forced to 'unknown'.
+ *     Never classify with `paidCAD: 0` on a failed read: that reports a paid-up
+ *     family as `outstanding`, which is a dunning letter to someone who already
+ *     gave.
+ *  3. Pledge fails → 'unavailable', verdict 'unknown' by the same argument (a
+ *     live monthly pledge writes no completed donations, so a lost pledge read
+ *     is indistinguishable from a family who never gave).
+ *
+ * `unknown` deliberately leaves the off-portal override AVAILABLE - the route
+ * refuses only on a positive 'paid', because blocking settlement on absence of
+ * evidence would strand the families that action exists for.
+ */
+export interface FamilyPaymentData {
+  /** ALL enrollments, active and cancelled, newest first. */
+  enrollments: EnrollmentWithOffering[];
+  /** Newest first, or 'unavailable' when the read failed. */
+  donations: DonationDoc[] | 'unavailable';
+  /**
+   * Every pledge attempt, newest first. 'unavailable' on a failed read;
+   * an EMPTY ARRAY when the feature flag is dark, which is a different fact and
+   * must not be conflated - a dark flag is not a broken read.
+   */
+  pledges: StaffPledgeView[] | 'unavailable';
+  verdict: RosterPayment;
+  /** What the family owes across active enrollments; null when unknowable. */
+  expectedCAD: number | null;
+  /** Completed donations, ALL TIME (#117). Null when the read failed. */
+  paidCAD: number | null;
+  /** Which of the four routes to `unknown` was taken. Null otherwise. */
+  unknownReason: RosterPaymentUnknownReason | null;
+  /** True when an active pledge is what makes this family 'paid'. */
+  paidByPledge: boolean;
+}
+
+export async function loadFamilyPaymentData(fid: string): Promise<FamilyPaymentData> {
+  // Enrollments are NOT caught here - see failure direction 1 above.
+  const [enrollments, donations, pledges] = await Promise.all([
+    getEnrollments(fid),
+    getDonations(fid).catch(() => 'unavailable' as const),
+    // Flag-gated to match `loadActivePledgeFids`, which returns an empty set
+    // when the feature is dark. Without this, flipping the kill switch would
+    // silence pledges on every roster and report while THIS predicate alone
+    // kept answering 'paid' and refusing settlements - the "one answer across
+    // surfaces" property holding right up until the moment it is most needed.
+    flags.setuPledge
+      ? getPledgesForStaff(fid).catch(() => 'unavailable' as const)
+      : Promise.resolve([] as StaffPledgeView[]),
+  ]);
+
+  const active = enrollments.filter((e) => e.status === 'active');
+
+  // ── Donations lost: the verdict is UNKNOWN ─────────────────────────────────
+  // A lost read is not evidence of absence. Classifying with `paidCAD: 0` would
+  // report a paid-up family as `outstanding` - a dunning letter to someone who
+  // already gave. This matches the behaviour of the original try/catch, which
+  // swallowed a donations failure into 'unknown'.
+  if (donations === 'unavailable') {
+    return {
+      enrollments,
+      donations,
+      pledges,
+      verdict: 'unknown',
+      expectedCAD: null,
+      paidCAD: null,
+      unknownReason: null,
+      paidByPledge: false,
+    };
+  }
+
+  const paidCAD = sumCompleted(donations);
+
+  // ── Pledges lost: fall through, do NOT force unknown ───────────────────────
+  // The asymmetry with donations above is deliberate and pre-dates this loader:
+  // a pinned test names it ("survives a failed pledge read rather than reporting
+  // unknown for everyone"). The pledge read is one query behind a feature flag,
+  // and a single outage would otherwise blank the payment column for EVERY
+  // family on the roster at once. Falling back to the enrollment arithmetic
+  // costs a pledge-paying family with no completed donations a false
+  // 'outstanding' - bad, but bounded to the families it actually describes,
+  // where the alternative is bad for all of them. The screen is told separately
+  // (`pledges === 'unavailable'`) so it can say the pledge history is missing
+  // rather than implying the family has none.
+  //
+  // `selectFamilyPledge` over the staff rows rather than a fresh
+  // `.some(p => p.status === 'active')`: StaffPledgeView structurally extends
+  // FamilyPledgeView precisely so the ranking rule stays defined in exactly one
+  // place. The two agree by construction instead of by inspection.
+  const ranked = pledges === 'unavailable' ? null : selectFamilyPledge(pledges);
+  const paidByPledge = ranked?.status === 'active';
+
+  // The pledge short-circuit is preserved verbatim from the original: a live
+  // monthly plan writes no completed donation docs (there is no Stripe webhook),
+  // so classifying such a family on donations alone reads 'outstanding' forever.
+  const explained = explainRosterPayment(active.map(chargeFromEnrollment), paidCAD);
+
+  return {
+    enrollments,
+    donations,
+    pledges,
+    verdict: paidByPledge ? 'paid' : explained.verdict,
+    expectedCAD: explained.expectedCAD,
+    paidCAD,
+    // A pledge-paid family has no unresolved question, so no reason is offered
+    // even when the enrollment arithmetic alone could not settle it.
+    unknownReason: paidByPledge ? null : explained.unknownReason,
+    paidByPledge,
+  };
 }

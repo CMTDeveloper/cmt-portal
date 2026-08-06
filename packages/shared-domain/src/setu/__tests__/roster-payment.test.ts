@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import type { OfferingDoc } from '../schemas/offering';
-import { chargeAmount, classifyRosterPayment, type ActiveEnrollmentCharge } from '../roster-payment';
+import {
+  chargeAmount,
+  classifyRosterPayment,
+  explainRosterPayment,
+  type ActiveEnrollmentCharge,
+} from '../roster-payment';
 
 const ENROLLED = new Date('2026-09-15T12:00:00Z');
 
@@ -240,5 +245,88 @@ describe('classifyRosterPayment - settled outside the portal', () => {
       charge({ override: 0, offering: offering(0, 'teacher-managed') }),
     ];
     expect(classifyRosterPayment(active, 0)).toBe('unknown');
+  });
+});
+
+// ── explainRosterPayment - the arithmetic behind the one-word verdict ────────
+//
+// The verdict alone is what the welcome desk has had until now, and it is why
+// Vaibhav ends up in the Stripe dashboard: `unknown` is reachable five distinct
+// ways and the chip cannot say which. A volunteer told "Unknown" has learned
+// nothing they can act on or repeat back to the family on the phone.
+//
+// `classifyRosterPayment` delegates here, so the explanation cannot drift from
+// the verdict it explains - that one-predicate property is the whole reason
+// this is not a second function computing the same thing beside it.
+describe('explainRosterPayment - why, not just what', () => {
+  it('agrees with classifyRosterPayment on every case that file already pins', () => {
+    // The delegation, asserted rather than assumed. If someone re-implements
+    // the classifier body instead of delegating, this is what fails.
+    const cases: ReadonlyArray<readonly [ActiveEnrollmentCharge[], number]> = [
+      [[], 0],
+      [[charge()], 500],
+      [[charge()], 0],
+      [[charge({ override: 0 })], 0],
+      [[charge({ offering: null, snapshot: 0 })], 0],
+      [[charge({ override: 0, offering: offering(0, 'teacher-managed') })], 0],
+      [[charge({ override: 0, settledOffPortal: true })], 0],
+      [[charge(), charge({ override: 250 })], 750],
+    ];
+    for (const [active, paid] of cases) {
+      expect(explainRosterPayment(active, paid).verdict).toBe(classifyRosterPayment(active, paid));
+    }
+  });
+
+  it('reports the expected total so the desk can say what was owed', () => {
+    const r = explainRosterPayment([charge(), charge({ override: 250 })], 100);
+    expect(r.verdict).toBe('outstanding');
+    expect(r.expectedCAD).toBe(750);
+    expect(r.unknownReason).toBeNull();
+  });
+
+  it('names an EMPTY roster as the reason, not a priced total', () => {
+    const r = explainRosterPayment([], 0);
+    expect(r.verdict).toBe('unknown');
+    expect(r.unknownReason).toBe('no-active-enrollment');
+    // Not 0 - a family with no enrollment owes nothing *known*, and printing
+    // "$0 expected" beside "Unknown" is the contradiction this whole change
+    // exists to avoid.
+    expect(r.expectedCAD).toBeNull();
+  });
+
+  it('names the UNPRICEABLE enrollment as the reason and refuses a total', () => {
+    const r = explainRosterPayment([charge(), charge({ offering: null, snapshot: 0 })], 0);
+    expect(r.verdict).toBe('unknown');
+    expect(r.unknownReason).toBe('unpriceable-enrollment');
+    expect(r.expectedCAD).toBeNull();
+  });
+
+  it('names an OFF-PORTAL program as the reason, which is a different fix', () => {
+    // Distinct from unpriceable on purpose: this family IS priced (at 0), and
+    // the money is collected somewhere the portal cannot see. "Ask the teacher"
+    // and "this enrollment has no price" send staff to different places.
+    const r = explainRosterPayment(
+      [charge({ override: 0, offering: offering(0, 'teacher-managed') })],
+      0,
+    );
+    expect(r.verdict).toBe('unknown');
+    expect(r.unknownReason).toBe('off-portal-program');
+    expect(r.expectedCAD).toBe(0);
+  });
+
+  it('names a CORRUPT total rather than reporting it', () => {
+    const r = explainRosterPayment([charge({ override: Number.NaN })], 0);
+    expect(r.verdict).toBe('unknown');
+    expect(r.unknownReason).toBe('corrupt-total');
+    expect(r.expectedCAD).toBeNull();
+  });
+
+  it('leaves unknownReason null on every verdict that is NOT unknown (N=4)', () => {
+    expect(explainRosterPayment([charge()], 500).unknownReason).toBeNull();
+    expect(explainRosterPayment([charge()], 0).unknownReason).toBeNull();
+    expect(explainRosterPayment([charge({ override: 0 })], 0).unknownReason).toBeNull();
+    expect(
+      explainRosterPayment([charge({ override: 0, settledOffPortal: true })], 0).unknownReason,
+    ).toBeNull();
   });
 });
