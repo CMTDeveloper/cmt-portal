@@ -154,9 +154,16 @@ export async function PATCH(req: Request) {
 
   if (!result.ok) {
     // Distinct codes, not one generic failure: each means something different
-    // for the person at the desk to do next, and the form's copy branches on it.
-    // 409 for `changed` because the request was well-formed and authorized - it
-    // simply lost a race, and retrying after a refresh is the correct response.
+    // for the person at the desk to do next, and the form's copy branches on the
+    // reason rather than on the status.
+    //
+    // 409 covers all three survivors, for one shared reason - the request was
+    // well-formed and authorized, and the CONFLICT is with the document's
+    // current state. They are not all races, though. Only `changed` is one;
+    // `no-children` and `index-out-of-range` are permanent for that document, so
+    // an identical retry fails identically. FAILURE_COPY draws that line: two of
+    // them say refresh, and `no-children` says there is nothing to correct at
+    // all, because for a pre-`children[]` record that is the truth.
     const status = result.reason === 'not-found' ? 404 : 409;
     return NextResponse.json({ error: result.reason }, { status });
   }

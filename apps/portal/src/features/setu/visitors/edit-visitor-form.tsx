@@ -247,7 +247,7 @@ export function EditVisitorForm({ visitor, siblingCount }: { visitor: EditableVi
       {siblingCount > 0 && (
         <p style={{ fontSize: 12, color: 'var(--muted)', margin: '0 0 10px' }}>
           The contact is shared with {siblingCount === 1 ? 'the other child' : `the other ${siblingCount} children`} who
-          checked in on this visit, so changing it here updates {siblingCount === 1 ? 'theirs' : 'theirs'} too.
+          checked in on this visit, so changing it here updates theirs too.
         </p>
       )}
 
