@@ -130,12 +130,19 @@ export async function deriveFamilyPayment(fid: string): Promise<RosterPayment> {
  * family on the phone. They opened the Stripe dashboard instead (Vaibhav,
  * 2026-08-05). This returns what was already being read.
  *
- * ── It is CHEAPER than what it replaces ─────────────────────────────────────
- * The family-detail page ran `getEnrollments(fid)` twice per admin render: once
- * directly for the override control, once inside `deriveFamilyPayment`. And
- * `sumCompletedDonations` re-queried donations the page then had no way to show.
- * One loader, one read per collection, all three in parallel - so a page showing
- * far more costs fewer round trips than the one showing less.
+ * ── What it costs, by viewer ────────────────────────────────────────────────
+ * For an ADMIN it is strictly cheaper. The family-detail page ran
+ * `getEnrollments(fid)` TWICE per render - once directly for the override
+ * control, once inside `deriveFamilyPayment` - and `sumCompletedDonations`
+ * re-queried donations the page then had no way to show. One loader means one
+ * read per collection, so the admin view now shows far more for one fewer query.
+ *
+ * For a welcome-team volunteer or a coordinator it is NOT cheaper: that page
+ * previously performed NO payment reads at all (the whole block was behind
+ * `admin`), and now performs three. They are single-family, indexed, and issued
+ * in one `Promise.all` beside the existing seva read, so they add no waterfall
+ * depth - but "fewer reads" is an admin-only claim and saying it unqualified
+ * would be false for most of the people who open this page.
  *
  * ── The three failure directions are NOT the same ───────────────────────────
  * They are chosen so that every failure lands on the safe side of a DIFFERENT

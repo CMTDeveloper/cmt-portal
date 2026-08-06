@@ -72,11 +72,25 @@ async function cookiesFor(email: string): Promise<Cookies> {
   }
 }
 
+/**
+ * The VISIBLE copy of some text.
+ *
+ * This page renders its whole body TWICE - once under `.block md:hidden` and
+ * once under `.hidden md:block` - so every string exists twice in the DOM. At
+ * Playwright's default 1280px viewport the MOBILE copy is the `display: none`
+ * one, and a bare `.first()` resolves to exactly that: the first run of this
+ * spec failed with "28 x locator resolved to <div>Programs & payment</div> -
+ * unexpected value hidden", i.e. the feature worked and the locator did not.
+ */
+function visible(page: Page, text: string | RegExp) {
+  return page.getByText(text).filter({ visible: true }).first();
+}
+
 async function openFamilyAs(page: Page, email: string, fid: string): Promise<void> {
   await page.context().addCookies(await cookiesFor(email));
   await page.goto(`/welcome/family/${fid}`);
   await expect(
-    page.getByText(/Programs & payment/i).first(),
+    visible(page, /Programs & payment/i),
     `the payment section never rendered for ${email}`,
   ).toBeVisible({ timeout: 30_000 });
 }
@@ -177,16 +191,16 @@ test.describe('/welcome/family/[fid] - the payment answer (deployed UAT)', () =>
   test('an ADMIN sees the donation history, both statuses distinguished', async ({ page }) => {
     await openFamilyAs(page, ADMIN, fid);
 
-    await expect(page.getByText(/Payment activity/i).first()).toBeVisible();
+    await expect(visible(page, /Payment activity/i)).toBeVisible();
     // The distinction that stops a family being told they never paid.
-    await expect(page.getByText(/Completed \(confirmed at the Stripe return page\)/).first()).toBeVisible();
-    await expect(page.getByText(/Started - never confirmed back to the portal/).first()).toBeVisible();
+    await expect(visible(page, /Completed \(confirmed at the Stripe return page\)/)).toBeVisible();
+    await expect(visible(page, /Started - never confirmed back to the portal/)).toBeVisible();
   });
 
   test("an ADMIN sees the payment service's own error words", async ({ page }) => {
     // The whole "transaction history of stripe feedback" ask, in one assertion.
     await openFamilyAs(page, ADMIN, fid);
-    await expect(page.getByText(PROVIDER_ERROR).first()).toBeVisible();
+    await expect(visible(page, PROVIDER_ERROR)).toBeVisible();
   });
 
   test('an ADMIN is told what Stripe knows that the portal does not', async ({ page }) => {
@@ -194,7 +208,7 @@ test.describe('/welcome/family/[fid] - the payment answer (deployed UAT)', () =>
     // family never paid, when the truth is refunds and monthly debits are simply
     // never sent to us.
     await openFamilyAs(page, ADMIN, fid);
-    await expect(page.getByText(/is not sent to the portal/i).first()).toBeVisible();
+    await expect(visible(page, /is not sent to the portal/i)).toBeVisible();
   });
 
   for (const [label, email] of [
@@ -206,9 +220,15 @@ test.describe('/welcome/family/[fid] - the payment answer (deployed UAT)', () =>
 
       // They DO get the section and the verdict - that is the point of the
       // change, and the verdict is already theirs on the roster.
-      await expect(page.getByText(/Programs & payment/i).first()).toBeVisible();
+      await expect(visible(page, /Programs & payment/i)).toBeVisible();
 
       // ...and none of the admin-only half.
+      //
+      // These stay UNFILTERED by visibility, unlike the positive assertions
+      // above, and the difference is deliberate. "Must not see" is a question
+      // about what the SERVER SENT: a hidden element is still in the HTML the
+      // volunteer's browser received, so `toHaveCount(0)` over the whole DOM is
+      // the honest test and `visible: true` would pass on a real leak.
       await expect(page.getByText(/Payment activity/i)).toHaveCount(0);
       await expect(page.getByText(PROVIDER_ERROR)).toHaveCount(0);
       await expect(page.getByText(/Expected \$/)).toHaveCount(0);

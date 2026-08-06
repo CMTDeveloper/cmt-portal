@@ -90,10 +90,11 @@ const VERDICT_TONE: Record<RosterPayment, 'good' | 'warn' | 'neutral'> = {
  * Why the portal cannot answer - in words, and WITHOUT money figures, so this
  * is safe for a welcome-team volunteer who is not shown amounts.
  *
- * This is the sentence that ends the Stripe-dashboard trip. Three of these four
- * are answered inside CMT's own data and are not in Stripe at all, so a desk
- * that only saw "Unknown" was being sent to look in the one place the answer
- * could never be.
+ * This is the sentence that ends the Stripe-dashboard trip. NOT ONE of these
+ * four is a Stripe question - every one is answered inside CMT's own data (an
+ * empty roster, a missing offering price, a program the teacher collects for, a
+ * corrupt amount). So a desk that saw only "Unknown" was being sent to look in
+ * the one place the answer could never be.
  */
 const UNKNOWN_COPY: Record<RosterPaymentUnknownReason, string> = {
   'no-active-enrollment': 'Nobody in this family is enrolled in a program this year, so there is nothing to pay.',
