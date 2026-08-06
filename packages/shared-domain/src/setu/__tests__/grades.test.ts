@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { GRADE_BAND_OPTIONS, CHILD_GRADE_OPTIONS, CHILD_GRADE_VALUES, isChildGradeValue, gradeLabel } from '../grades';
+import {
+  GRADE_BAND_OPTIONS, CHILD_GRADE_OPTIONS, CHILD_GRADE_VALUES,
+  isChildGradeValue, isMatchableChildGrade, gradeLabel,
+} from '../grades';
+import { normalizeGrade } from '../schemas/level';
 
 describe('grade options', () => {
   it('GRADE_BAND_OPTIONS is JK, SK, then Grade 1..12 in order (no Shishu, no 3K)', () => {
@@ -69,5 +73,48 @@ describe('isChildGradeValue - write-path guard', () => {
 
   it('CHILD_GRADE_VALUES stays in step with the options list', () => {
     expect(CHILD_GRADE_VALUES).toEqual(CHILD_GRADE_OPTIONS.map((g) => g.value));
+  });
+});
+
+// The looser sibling, added for the guest write path (#130). A door/desk guest's
+// grade is the ONLY thing routing them to a teacher, so the question that matters
+// is not "is this the canonical token" but "can a class ever be matched to it" -
+// which is what `guestMatchesLevel` asks, on both sides, through normalizeGrade.
+describe('isMatchableChildGrade - the guest write-path guard', () => {
+  it('accepts every value the pickers offer', () => {
+    for (const g of CHILD_GRADE_OPTIONS) expect(isMatchableChildGrade(g.value)).toBe(true);
+  });
+
+  it('accepts the spellings isChildGradeValue rejects but a class still matches', () => {
+    // The distinction this predicate exists for. These all normalize onto the
+    // ladder, so `guestMatchesLevel` places the child in a real class - and the
+    // guest routes' own fixtures have posted "Grade N" since they were written.
+    // An exact-token check here would reject input that works in production.
+    for (const spelling of ['Grade 3', 'grade 3', 'Gr 3', 'gr3', ' 3', '3']) {
+      expect(isMatchableChildGrade(spelling), `${spelling} should be matchable`).toBe(true);
+      expect(normalizeGrade(spelling)).toBe('3');
+    }
+    expect(isMatchableChildGrade('jk')).toBe(true);
+    expect(isMatchableChildGrade('shishu')).toBe(true);
+  });
+
+  it('still rejects what genuinely reaches no teacher', () => {
+    // Each of these normalizes to something absent from the ladder, so the child
+    // lands in "Not matched to a class" however many levels exist.
+    for (const junk of ['', '3rd', 'grade three', 'E', 'kindergarten', 'Grade 13']) {
+      expect(isMatchableChildGrade(junk), `${junk} should NOT be matchable`).toBe(false);
+    }
+  });
+
+  it('is strictly looser than isChildGradeValue, never narrower', () => {
+    // A one-way implication, asserted rather than assumed: anything the exact
+    // guard accepts must stay acceptable here, or tightening the guest routes
+    // would silently break the member write path's canonical values.
+    for (const g of CHILD_GRADE_VALUES) {
+      expect(isChildGradeValue(g)).toBe(true);
+      expect(isMatchableChildGrade(g)).toBe(true);
+    }
+    expect(isChildGradeValue('Grade 3')).toBe(false);
+    expect(isMatchableChildGrade('Grade 3')).toBe(true);
   });
 });

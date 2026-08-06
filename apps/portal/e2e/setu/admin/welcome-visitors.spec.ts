@@ -173,8 +173,17 @@ test.describe('/welcome/visitors - the day’s door guests, grouped by class (de
     await expect(group(page, BRAMPTON_4).getByText(ALPHA.child)).toHaveCount(0);
 
     // Grade is shown per row so the desk can see why a child was placed there.
-    await expect(group(page, BRAMPTON_1).getByText('Grade 1')).toBeVisible();
-    await expect(group(page, BRAMPTON_4).getByText('Grade 6')).toBeVisible();
+    //
+    // Scoped to THIS run's own row, not to the group. `group(...).getByText('Grade 1')`
+    // matched every grade-1 row in the section, so any guest another spec left
+    // behind on the same Sunday turned this into a strict-mode violation - a
+    // failure that says nothing about the behaviour under test.
+    await expect(
+      group(page, BRAMPTON_1).getByTestId('visitor-row').filter({ hasText: ALPHA.child }).getByText('Grade 1'),
+    ).toBeVisible();
+    await expect(
+      group(page, BRAMPTON_4).getByTestId('visitor-row').filter({ hasText: BRAVO.child }).getByText('Grade 6'),
+    ).toBeVisible();
 
     // Nobody vanishes: a grade that matches no enabled class still surfaces.
     await expect(
@@ -210,5 +219,181 @@ test.describe('/welcome/visitors - the day’s door guests, grouped by class (de
       'href',
       `/teacher/levels/brampton-level-1-bv-brampton-2026-27/visitors?date=${sunday}`,
     );
+  });
+
+  // ── #130, the correction half ────────────────────────────────────────────────
+  // Seeded HERE rather than alongside ALPHA/BRAVO/CHARLIE so the count arithmetic
+  // in the tests above ("moved by 3") stays true. Serial mode makes the order a
+  // guarantee, not a hope.
+  const DELTA = { key: 'delta', wrongGrade: 'Shishu', rightGrade: '6', child: `Deltaguest ${RUN}` };
+  /** The visit's contact as seeded - the compare-and-swap baseline for the
+   *  contact half, which every PATCH must now carry. */
+  const DELTA_CONTACT = {
+    firstName: DELTA.key,
+    lastName: `Parent ${RUN}`,
+    email: `e2e-visitors-${DELTA.key}-${RUN}@chinmayatoronto.org`,
+    phone: '4165550102',
+  };
+  let deltaId = '';
+
+  test('a guest recorded with the wrong grade sits in the unmatched bucket, correctable', async ({ page, request }) => {
+    const res = await request.post('/api/check-in/guests', {
+      data: {
+        firstName: DELTA.key,
+        lastName: `Parent ${RUN}`,
+        email: `e2e-visitors-${DELTA.key}-${RUN}@chinmayatoronto.org`,
+        phone: '4165550102',
+        numberOfAdults: 1,
+        children: [{ name: DELTA.child, grade: DELTA.wrongGrade }],
+      },
+    });
+    expect(res.status(), `seeding the correctable guest failed: ${await res.text()}`).toBe(200);
+    deltaId = ((await res.json()) as { id: string }).id;
+    writtenIds.push(deltaId);
+
+    await openVisitors(page);
+    // Shishu matches no enabled class, so this is the real-world failure being
+    // fixed: the desk can SEE that nobody is expecting this child.
+    await expect(group(page, UNMATCHED).getByText(DELTA.child)).toBeVisible();
+    // ...and now has a control to do something about it. A row with no Edit
+    // button is the entire bug this feature closes.
+    const row = group(page, UNMATCHED).getByTestId('visitor-row').filter({ hasText: DELTA.child });
+    await expect(row.getByTestId('edit-visitor-open'), 'no Edit control on a portal guest row').toBeVisible();
+  });
+
+  test('correcting the grade re-files the child under their real class', async ({ page }) => {
+    await openVisitors(page);
+
+    const row = group(page, UNMATCHED).getByTestId('visitor-row').filter({ hasText: DELTA.child });
+    await row.getByTestId('edit-visitor-open').click();
+    await row.getByTestId('edit-visitor-grade').selectOption(DELTA.rightGrade);
+    await row.getByTestId('edit-visitor-save').click();
+
+    // THE assertion this whole feature exists for. A grade is the only thing
+    // routing a guest to a teacher, so "saved successfully" is not the outcome -
+    // "a teacher can now see them" is. Grade 6 matches Brampton Level 4 (band
+    // ['6','7']) and Scarborough Level C (['5','6']), same as BRAVO.
+    await expect(
+      group(page, BRAMPTON_4).getByText(DELTA.child),
+      'the corrected grade was saved but the child never reached a class list',
+    ).toBeVisible({ timeout: 20_000 });
+    await expect(group(page, SCARBOROUGH_C).getByText(DELTA.child)).toBeVisible();
+
+    // ...and is GONE from the unmatched bucket. Without this, a correction that
+    // added the child to a class while leaving the stale row behind would pass.
+    await expect(group(page, UNMATCHED).getByText(DELTA.child)).toHaveCount(0);
+  });
+
+  test('a stale correction is refused rather than overwriting a newer one', async ({ request }) => {
+    // The compare-and-swap, end to end. `expected` is what the PREVIOUS test
+    // already changed away from, which is exactly the state a second desk holds
+    // when it loaded the page before that correction landed.
+    const res = await request.patch('/api/welcome/visitors', {
+      data: {
+        id: deltaId,
+        childIndex: 0,
+        expected: { name: DELTA.child, grade: DELTA.wrongGrade, contact: DELTA_CONTACT },
+        child: { name: DELTA.child, grade: '1' },
+        contact: {
+          firstName: DELTA.key,
+          lastName: `Parent ${RUN}`,
+          email: `e2e-visitors-${DELTA.key}-${RUN}@chinmayatoronto.org`,
+          phone: '4165550102',
+        },
+      },
+    });
+    // 401/403 here would mean the session is not welcome-team, NOT that the
+    // guard works - so assert the exact code.
+    expect(res.status(), `expected a 409 conflict, got: ${await res.text()}`).toBe(409);
+    expect(((await res.json()) as { error: string }).error).toBe('changed');
+
+    // And the earlier correction is still standing - a refusal must not have
+    // written anything.
+    const snap = await portalFirestore().collection('guest_check_ins').doc(deltaId).get();
+    const kids = (snap.data() as { children?: Array<{ grade?: string }> }).children ?? [];
+    expect(kids[0]?.grade, 'the refused write clobbered the good value anyway').toBe(DELTA.rightGrade);
+  });
+
+  test('a grade-only correction does not revert a contact fix made in between', async ({ request }) => {
+    // The lost update, end to end. Desk A corrects the email. Desk B is holding
+    // a form opened BEFORE that, so its four contact inputs still carry the old
+    // email - and every save submits all four whether or not they were touched.
+    //
+    // B must be able to fix a grade without pushing its stale contact over A's
+    // work, and without being refused for a field it never edited. Before the
+    // fix this test would find `corrected@` reverted to the seeded address, with
+    // `lastEditedByUid` pinning it on B.
+    const correctedEmail = `e2e-visitors-corrected-${RUN}@chinmayatoronto.org`;
+
+    const deskA = await request.patch('/api/welcome/visitors', {
+      data: {
+        id: deltaId,
+        childIndex: 0,
+        expected: { name: DELTA.child, grade: DELTA.rightGrade, contact: DELTA_CONTACT },
+        child: { name: DELTA.child, grade: DELTA.rightGrade },
+        contact: { ...DELTA_CONTACT, email: correctedEmail },
+      },
+    });
+    expect(deskA.status(), `desk A's contact fix failed: ${await deskA.text()}`).toBe(200);
+
+    const deskB = await request.patch('/api/welcome/visitors', {
+      data: {
+        id: deltaId,
+        childIndex: 0,
+        // B's snapshot: taken before A saved, so it holds the ORIGINAL email.
+        expected: { name: DELTA.child, grade: DELTA.rightGrade, contact: DELTA_CONTACT },
+        child: { name: DELTA.child, grade: '5' },
+        contact: DELTA_CONTACT, // untouched, therefore stale
+      },
+    });
+    expect(
+      deskB.status(),
+      `a grade-only save was refused for a contact it never edited: ${await deskB.text()}`,
+    ).toBe(200);
+
+    const snap = await portalFirestore().collection('guest_check_ins').doc(deltaId).get();
+    const doc = snap.data() as { email?: string; children?: Array<{ grade?: string }> };
+    // Both survive: B's grade landed AND A's email is intact.
+    expect(doc.children?.[0]?.grade, "desk B's grade correction did not land").toBe('5');
+    expect(doc.email, "desk B's stale contact reverted desk A's email fix").toBe(correctedEmail);
+
+    // Put the grade back so the following test's `expected` still describes the
+    // document. Serial mode makes that ordering a guarantee.
+    const restore = await request.patch('/api/welcome/visitors', {
+      data: {
+        id: deltaId,
+        childIndex: 0,
+        expected: { name: DELTA.child, grade: '5', contact: { ...DELTA_CONTACT, email: correctedEmail } },
+        child: { name: DELTA.child, grade: DELTA.rightGrade },
+        contact: { ...DELTA_CONTACT, email: correctedEmail },
+      },
+    });
+    expect(restore.status()).toBe(200);
+  });
+
+  test('a grade no class could match is refused at the write route', async ({ request }) => {
+    // The dropdown cannot be the rule: a stale tab or any direct caller posts
+    // whatever it likes, and a grade that normalizes to nothing on the ladder is
+    // as invisible to teachers as a blank one.
+    //
+    // '3rd' specifically, NOT 'Grade 6'. `normalizeGrade` maps "Grade 6"/"Gr 6"
+    // /"6" to the same rung, so all three DO match a class and must keep being
+    // accepted - the guest routes' own fixtures have always posted the "Grade N"
+    // spelling. Rejecting those would be a regression dressed up as a tightening.
+    const res = await request.patch('/api/welcome/visitors', {
+      data: {
+        id: deltaId,
+        childIndex: 0,
+        expected: { name: DELTA.child, grade: DELTA.rightGrade, contact: DELTA_CONTACT },
+        child: { name: DELTA.child, grade: '3rd' },
+        contact: {
+          firstName: DELTA.key,
+          lastName: `Parent ${RUN}`,
+          email: `e2e-visitors-${DELTA.key}-${RUN}@chinmayatoronto.org`,
+          phone: '4165550102',
+        },
+      },
+    });
+    expect(res.status(), `expected 400 for an unmatchable grade, got: ${await res.text()}`).toBe(400);
   });
 });

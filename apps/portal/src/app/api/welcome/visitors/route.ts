@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { isWelcomeTeam, GuestCheckInSchema } from '@cmt/shared-domain';
+import { isWelcomeTeam, GuestCheckInSchema, GuestUpdateSchema } from '@cmt/shared-domain';
 import { readSessionFromHeaders } from '@/lib/auth/headers';
 import { flags } from '@/lib/flags';
-import { recordGuestCheckIn } from '@/features/check-in/shared';
+import { recordGuestCheckIn, updateGuestChild } from '@/features/check-in/shared';
+import type { PortalSessionHeaders } from '@/lib/auth/headers';
 
 /**
  * Front-desk visitor capture.
@@ -63,18 +64,29 @@ const bodySchema = GuestCheckInSchema.extend({
     .optional(),
 });
 
-export async function POST(req: Request) {
+/**
+ * Gate 3 of three, shared by every method on this route.
+ *
+ * Middleware carries the same rule, but `canAccessRoute`'s clause for this path
+ * is METHOD-BLIND: it grants `/api/welcome/visitors` and everything under it to
+ * welcome-team regardless of verb. So a new method added to this file inherits
+ * middleware's yes automatically and would ship with no gate of its own unless
+ * the check lives somewhere every handler must pass through. Returns a Response
+ * to send, or the session when the caller may proceed.
+ */
+function requireWelcomeTeam(req: Request): NextResponse | PortalSessionHeaders {
   if (!flags.setuAuth) return NextResponse.json({ error: 'not-found' }, { status: 404 });
-
-  // Gate 3 of three. Middleware carries the same rule; this is here so the
-  // route is not one canAccessRoute edit away from being open, which is the
-  // lesson `participation` taught when two screens declined to offer a control
-  // and the route accepted it anyway.
   const session = readSessionFromHeaders(req);
   if (!session) return NextResponse.json({ error: 'no-session' }, { status: 401 });
   if (!isWelcomeTeam({ role: session.role, extraRoles: session.extraRoles })) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
+  return session;
+}
+
+export async function POST(req: Request) {
+  const gate = requireWelcomeTeam(req);
+  if (gate instanceof NextResponse) return gate;
 
   const raw = await req.json().catch(() => null);
   const parsed = bodySchema.safeParse(raw);
@@ -91,4 +103,84 @@ export async function POST(req: Request) {
   const id = await recordGuestCheckIn(guest, date);
 
   return NextResponse.json({ ok: true, id }, { status: 201 });
+}
+
+/**
+ * Correct one child of a visit already on the board, plus the visit's contact.
+ *
+ * The half that matters. A guest child's `grade` is the ONLY thing that routes
+ * them to a teacher - `guestMatchesLevel` compares it to each level's gradeBand
+ * - so a wrong or missing grade means no teacher ever sees that child. That is
+ * exactly what the "Not matched to a class" bucket on /welcome/visitors is full
+ * of, and until now the desk could see the problem and not fix it.
+ *
+ * Only PORTAL guest documents are addressable here. The board also shows rows
+ * from the legacy standalone door app, which live in a different Firebase
+ * project and whose kiosk shut down 2026-08-03; those carry `editRef: null` and
+ * the UI offers them no control.
+ *
+ * ── What a correction does NOT reach back and change ────────────────────────
+ * If a teacher has ALREADY confirmed this guest (`addVisitorOnPrompt` creates a
+ * pending family and marks attendance), that record stands:
+ *   - a corrected GRADE moves the guest onto the new level's visitor list as
+ *     unconfirmed, while the old level keeps its attendance mark. That mark is
+ *     history - the child really was in that room that morning - so rewriting it
+ *     would be falsifying the register, not fixing it.
+ *   - a corrected EMAIL changes the key `getLevelVisitorsView` hashes into
+ *     `contactKeys`, so the teacher's "already confirmed" flag can flip back to
+ *     false. Display only; the attendance record is untouched.
+ * Both are deliberate and neither loses data. Revisit only if the desk reports
+ * being confused by it.
+ *
+ * ── No reverse gear, and one contact with no way in ─────────────────────────
+ * This slice can correct a visit but not undo one. There is no delete and no
+ * date-move, so a duplicate visit (the desk records someone the kiosk already
+ * caught) and a visit filed on the wrong Sunday are both permanent: the child is
+ * listed twice to a teacher, and the daily counts and CSV stay inflated. Fixing
+ * a wrong date by re-adding on the right one manufactures a second, equally
+ * permanent row. A `voided: true` flag honoured by the board reader, the stats
+ * query and the CSV would cover both far more cheaply than a real delete, and
+ * would keep the forensic record - flagged to the owner rather than assumed.
+ *
+ * Separately: an adults-only visit (`children: []`) produces NO board row, so
+ * its contact has no edit entry point anywhere. Out of scope here because this
+ * board is child-oriented by construction.
+ */
+export async function PATCH(req: Request) {
+  const gate = requireWelcomeTeam(req);
+  if (gate instanceof NextResponse) return gate;
+
+  const raw = await req.json().catch(() => null);
+  const parsed = GuestUpdateSchema.safeParse(raw);
+  if (!parsed.success) {
+    return NextResponse.json({ error: 'bad-request', issues: parsed.error.issues }, { status: 400 });
+  }
+
+  const { id, childIndex, expected, child, contact } = parsed.data;
+  const result = await updateGuestChild({
+    docId: id,
+    childIndex,
+    expected,
+    child,
+    contact,
+    editedByUid: gate.uid,
+  });
+
+  if (!result.ok) {
+    // Distinct codes, not one generic failure: each means something different
+    // for the person at the desk to do next, and the form's copy branches on the
+    // reason rather than on the status.
+    //
+    // 409 covers all three survivors, for one shared reason - the request was
+    // well-formed and authorized, and the CONFLICT is with the document's
+    // current state. They are not all races, though. Only `changed` is one;
+    // `no-children` and `index-out-of-range` are permanent for that document, so
+    // an identical retry fails identically. FAILURE_COPY draws that line: two of
+    // them say refresh, and `no-children` says there is nothing to correct at
+    // all, because for a pre-`children[]` record that is the truth.
+    const status = result.reason === 'not-found' ? 404 : 409;
+    return NextResponse.json({ error: result.reason }, { status });
+  }
+
+  return NextResponse.json({ ok: true }, { status: 200 });
 }

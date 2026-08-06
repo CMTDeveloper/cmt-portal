@@ -83,6 +83,10 @@ export async function getLevelVisitorsView(levelId: string, date: string): Promi
       } catch {
         // a contactKey read miss just means "not yet confirmed" — never fail the view
       }
+      // `editRef` is dropped on purpose: correcting a guest is the front desk's
+      // job on /welcome/visitors, and the teacher screen offers no such control.
+      // Said out loud because a hand-mapped projection quietly losing a new
+      // field is a bug this repo has shipped before - here it is the intent.
       return {
         name: c.name,
         grade: c.grade,

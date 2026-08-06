@@ -1,4 +1,8 @@
 import { GRADE_LADDER } from './grade-ladder';
+// No cycle: grade-ladder.ts already imports this same module, and schemas/level
+// imports neither of them (it inlines its own ladder order for exactly that
+// reason). This is a diamond, not a loop.
+import { normalizeGrade } from './schemas/level';
 
 // The single canonical source for EVERY grade dropdown (owner's Bala Vihar level
 // table, 2026-07-03). No '3K': the youngest tier is the age-based Shishu bucket.
@@ -38,6 +42,38 @@ export const CHILD_GRADE_VALUES: readonly string[] = CHILD_GRADE_OPTIONS.map((g)
 /** Is this exactly one of the canonical child-grade values? Write-path only. */
 export function isChildGradeValue(value: string): boolean {
   return CHILD_GRADE_VALUES.includes(value);
+}
+
+/** The canonical values under `normalizeGrade`, computed once. */
+const NORMALIZED_CHILD_GRADES = new Set(CHILD_GRADE_VALUES.map((g) => normalizeGrade(g)));
+
+/**
+ * Is this a grade a child can legitimately be RECORDED with - i.e. one of the
+ * canonical values under `normalizeGrade`?
+ *
+ * The looser sibling of `isChildGradeValue`, and the right check for a guest.
+ * Level matching (`guestMatchesLevel`) compares `normalizeGrade(childGrade)`
+ * against `normalizeGrade(band)`, so 'Grade 2', 'Gr 2', 'grade 2' and '2' are
+ * all the same class - demanding the exact canonical token would reject three
+ * spellings that work perfectly today, including the one the guest-route tests
+ * have always sent.
+ *
+ * What it rejects is what no spelling can rescue: '', '3rd', 'grade three',
+ * 'kindergarten', 'Grade 13'. Those normalize to nothing on the ladder, so the
+ * child lands in "Not matched to a class" however many levels exist.
+ *
+ * ⚠️ It is NOT the same question as "will a class match this child". 'Shishu'
+ * passes here and `guestMatchesLevel` can still never match it: that function
+ * only considers `level`/`pre-level` kinds, so shishu classes are excluded by
+ * design and those visitors are routed by in-class quick-add instead. Accepting
+ * 'Shishu' is correct - a shishu-age guest must be recordable - but do not read
+ * a promise about matching into the name.
+ *
+ * WRITE-path only, same as `CHILD_GRADE_VALUES` - never use it to validate a
+ * READ.
+ */
+export function isMatchableChildGrade(value: string): boolean {
+  return NORMALIZED_CHILD_GRADES.has(normalizeGrade(value));
 }
 
 /** Friendly label for a stored child grade value, for display next to a child's
