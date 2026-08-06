@@ -48,7 +48,8 @@ export function isChildGradeValue(value: string): boolean {
 const NORMALIZED_CHILD_GRADES = new Set(CHILD_GRADE_VALUES.map((g) => normalizeGrade(g)));
 
 /**
- * Can a class ever be found for this grade?
+ * Is this a grade a child can legitimately be RECORDED with - i.e. one of the
+ * canonical values under `normalizeGrade`?
  *
  * The looser sibling of `isChildGradeValue`, and the right check for a guest.
  * Level matching (`guestMatchesLevel`) compares `normalizeGrade(childGrade)`
@@ -57,10 +58,16 @@ const NORMALIZED_CHILD_GRADES = new Set(CHILD_GRADE_VALUES.map((g) => normalizeG
  * spellings that work perfectly today, including the one the guest-route tests
  * have always sent.
  *
- * What it still rejects is what genuinely reaches no teacher: '', '3rd',
- * 'grade three', 'kindergarten', a typo. Those normalize to nothing on the
- * ladder, so the child lands in "Not matched to a class" however many levels
- * exist.
+ * What it rejects is what no spelling can rescue: '', '3rd', 'grade three',
+ * 'kindergarten', 'Grade 13'. Those normalize to nothing on the ladder, so the
+ * child lands in "Not matched to a class" however many levels exist.
+ *
+ * ⚠️ It is NOT the same question as "will a class match this child". 'Shishu'
+ * passes here and `guestMatchesLevel` can still never match it: that function
+ * only considers `level`/`pre-level` kinds, so shishu classes are excluded by
+ * design and those visitors are routed by in-class quick-add instead. Accepting
+ * 'Shishu' is correct - a shishu-age guest must be recordable - but do not read
+ * a promise about matching into the name.
  *
  * WRITE-path only, same as `CHILD_GRADE_VALUES` - never use it to validate a
  * READ.

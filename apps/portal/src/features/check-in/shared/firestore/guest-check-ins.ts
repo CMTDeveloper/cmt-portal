@@ -47,6 +47,15 @@ export async function recordGuestCheckIn(
   const ymd = onDate && /^\d{4}-\d{2}-\d{2}$/.test(onDate) ? onDate : torontoYMD();
   const ref = await portalFirestore().collection('guest_check_ins').add({
     ...input,
+    // ⚠️ INVARIANT: `children` is APPEND-AT-CREATION ONLY. Nothing reorders it,
+    // inserts into it, or removes from it - this function writes it once, and
+    // `updateGuestChild` only ever rewrites an element in place. The whole
+    // correction feature addresses a child by its POSITION here, so the first
+    // writer that shifts elements silently re-points every open edit form at a
+    // different child. If a delete-child or add-child slice ever ships, give
+    // each child a stable id first and address by that; do not just add the
+    // operation. The compare-and-swap would be the only thing left standing
+    // between a reorder and a wrong-child write.
     // Keep the derived count so the admin guest list / stats / reports (which
     // read numberOfChildren) keep working without change.
     numberOfChildren: input.children.length,
@@ -88,13 +97,39 @@ export type UpdateGuestChildResult = { ok: true } | { ok: false; reason: UpdateG
 export interface UpdateGuestChildParams {
   docId: string;
   childIndex: number;
-  /** What the desk was SHOWN. The write refuses unless it is still true. */
-  expected: { name: string; grade: string };
+  /** What the desk was SHOWN, child AND visit contact. The write refuses unless
+   *  it is still true - see the contact rules in the docblock below. */
+  expected: { name: string; grade: string; contact: GuestVisitContact };
   child: { name: string; grade: string };
   /** Belongs to the VISIT, so it necessarily applies to that visit's other
    *  children too. The form says so. */
-  contact: { firstName: string; lastName: string; email: string; phone: string };
+  contact: GuestVisitContact;
   editedByUid: string | null;
+}
+
+export interface GuestVisitContact {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+}
+
+const CONTACT_FIELDS = ['firstName', 'lastName', 'email', 'phone'] as const;
+
+/**
+ * Field-by-field equality under the display normalization, so a stored null
+ * phone and a form's '' are the same contact and not a phantom edit.
+ *
+ * `b` is deliberately `unknown`: it is called both with a typed snapshot and
+ * with the raw Firestore document, and an interface has no index signature so it
+ * is not assignable to `Record<string, unknown>`. Narrowing here keeps both call
+ * sites honest without casting at either of them.
+ */
+function sameContact(a: GuestVisitContact, b: unknown): boolean {
+  const other = (b ?? {}) as Record<string, unknown>;
+  return CONTACT_FIELDS.every(
+    (f) => normalizeGuestChildField(a[f]) === normalizeGuestChildField(other[f]),
+  );
 }
 
 /**
@@ -136,13 +171,39 @@ export async function updateGuestChild(
     // Array.isArray, not a truthiness check: documents written before b1395e0
     // carry `numberOfChildren` and no `children` key at all.
     if (!Array.isArray(kids)) return { ok: false, reason: 'no-children' };
-    if (params.childIndex >= kids.length) return { ok: false, reason: 'index-out-of-range' };
+    // `< 0` as well as `>= length`. The route's schema already blocks a negative
+    // index, but this helper is exported and a caller reaching it directly with
+    // -1 would slip through every check below: `kids[-1]` is undefined, which
+    // normalizes to two empty strings and can SATISFY the compare-and-swap, and
+    // the map then matches no element - so the write would touch no child, still
+    // rewrite the contact, and answer ok. Cheap to close here rather than rely
+    // on one caller's validation forever.
+    if (params.childIndex < 0 || params.childIndex >= kids.length) {
+      return { ok: false, reason: 'index-out-of-range' };
+    }
 
     const current = (kids[params.childIndex] ?? {}) as { name?: unknown; grade?: unknown };
     if (
       normalizeGuestChildField(current.name) !== params.expected.name ||
       normalizeGuestChildField(current.grade) !== params.expected.grade
     ) {
+      return { ok: false, reason: 'changed' };
+    }
+
+    // ── The contact, which is the visit's and not this child's ───────────────
+    // Every correction submits all four contact fields whether or not the desk
+    // touched them, so writing them unconditionally would let a grade-only save
+    // push its stale contact over somebody else's fix.
+    //
+    // Decided by comparing the submission to the SNAPSHOT, not to the document:
+    //   - unchanged  -> do not write the contact at all. A grade fix then cannot
+    //                   disturb a contact fix, and needs no conflict to say so.
+    //   - changed    -> the desk means it, so require the document to still hold
+    //                   what they were shown before overwriting it.
+    // Strictly better than always comparing: same protection, no false 409 for
+    // the common case of correcting only a grade.
+    const contactEdited = !sameContact(params.contact, params.expected.contact);
+    if (contactEdited && !sameContact(params.expected.contact, data)) {
       return { ok: false, reason: 'changed' };
     }
 
@@ -158,10 +219,14 @@ export async function updateGuestChild(
     txn.update(ref, {
       children: next,
       numberOfChildren: next.length,
-      firstName: params.contact.firstName,
-      lastName: params.contact.lastName,
-      email: params.contact.email,
-      phone: params.contact.phone,
+      ...(contactEdited
+        ? {
+            firstName: params.contact.firstName,
+            lastName: params.contact.lastName,
+            email: params.contact.email,
+            phone: params.contact.phone,
+          }
+        : {}),
       // Denormalized onto the document instead of `audit_log`, which is
       // write-only in this codebase (zero readers) and has no index to read by.
       lastEditedAt: new Date().toISOString(),

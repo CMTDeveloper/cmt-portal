@@ -53,6 +53,11 @@ function twoChildVisit() {
 
 const CONTACT = { firstName: 'Carol', lastName: 'Visitor', email: 'c@v.com', phone: '+16475550100' };
 
+/** `expected` for a desk that opened the row and did NOT touch the contact. */
+function expectChild(name: string, grade: string) {
+  return { name, grade, contact: CONTACT };
+}
+
 describe('recordGuestCheckIn', () => {
   it('writes to guest_check_ins with children, a derived count, a date, and a timestamp', async () => {
     const id = await recordGuestCheckIn({
@@ -172,7 +177,7 @@ describe('updateGuestChild', () => {
     store.stored = twoChildVisit();
     const res = await updateGuestChild({
       docId: 'g-carol', childIndex: 1,
-      expected: { name: 'Diya Visitor', grade: 'JK' },
+      expected: { name: 'Diya Visitor', grade: 'JK', contact: CONTACT },
       child: { name: 'Diya Visitor', grade: 'SK' },
       contact: CONTACT, editedByUid: 'u-desk',
     });
@@ -191,7 +196,7 @@ describe('updateGuestChild', () => {
     const res = await updateGuestChild({
       docId: 'g-carol', childIndex: 1,
       // Someone else already corrected this child to SK; the desk still holds JK.
-      expected: { name: 'Diya Visitor', grade: 'Grade 1' },
+      expected: { name: 'Diya Visitor', grade: 'Grade 1', contact: CONTACT },
       child: { name: 'Diya Visitor', grade: 'SK' },
       contact: CONTACT, editedByUid: 'u-desk',
     });
@@ -211,7 +216,7 @@ describe('updateGuestChild', () => {
     };
     const res = await updateGuestChild({
       docId: 'g-carol', childIndex: 0,
-      expected: { name: 'No Grade Kid', grade: '' },
+      expected: { name: 'No Grade Kid', grade: '', contact: CONTACT },
       child: { name: 'No Grade Kid', grade: '3' },
       contact: CONTACT, editedByUid: 'u-desk',
     });
@@ -226,7 +231,7 @@ describe('updateGuestChild', () => {
     store.stored = { ...twoChildVisit(), children: [{ name: '  Padded Kid ', grade: 2 }], numberOfChildren: 1 };
     const res = await updateGuestChild({
       docId: 'g-carol', childIndex: 0,
-      expected: { name: 'Padded Kid', grade: '2' },
+      expected: { name: 'Padded Kid', grade: '2', contact: CONTACT },
       child: { name: 'Padded Kid', grade: '3' },
       contact: CONTACT, editedByUid: 'u-desk',
     });
@@ -243,7 +248,7 @@ describe('updateGuestChild', () => {
     };
     await updateGuestChild({
       docId: 'g-carol', childIndex: 0,
-      expected: { name: 'Aarav Visitor', grade: '2' },
+      expected: { name: 'Aarav Visitor', grade: '2', contact: CONTACT },
       child: { name: 'Aarav Visitor', grade: '3' },
       contact: CONTACT, editedByUid: 'u-desk',
     });
@@ -256,7 +261,7 @@ describe('updateGuestChild', () => {
     store.stored = twoChildVisit();
     await updateGuestChild({
       docId: 'g-carol', childIndex: 0,
-      expected: { name: 'Aarav Visitor', grade: '2' },
+      expected: { name: 'Aarav Visitor', grade: '2', contact: CONTACT },
       child: { name: 'Aarav Visitor', grade: '3' },
       contact: CONTACT, editedByUid: 'u-desk',
     });
@@ -272,7 +277,7 @@ describe('updateGuestChild', () => {
     store.stored = twoChildVisit();
     await updateGuestChild({
       docId: 'g-carol', childIndex: 0,
-      expected: { name: 'Aarav Visitor', grade: '2' },
+      expected: { name: 'Aarav Visitor', grade: '2', contact: CONTACT },
       child: { name: 'Aarav Visitor', grade: '3' },
       contact: CONTACT, editedByUid: 'u-desk',
     });
@@ -285,7 +290,7 @@ describe('updateGuestChild', () => {
     store.stored = twoChildVisit();
     await updateGuestChild({
       docId: 'g-carol', childIndex: 1,
-      expected: { name: 'Diya Visitor', grade: 'JK' },
+      expected: { name: 'Diya Visitor', grade: 'JK', contact: CONTACT },
       child: { name: 'Diya Visitor', grade: 'SK' },
       contact: { firstName: 'Carol', lastName: 'Newname', email: 'new@v.com', phone: '+16475559999' },
       editedByUid: 'u-desk',
@@ -299,7 +304,7 @@ describe('updateGuestChild', () => {
     store.stored = null;
     const res = await updateGuestChild({
       docId: 'gone', childIndex: 0,
-      expected: { name: 'A', grade: '1' }, child: { name: 'A', grade: '2' },
+      expected: { name: 'A', grade: '1', contact: CONTACT }, child: { name: 'A', grade: '2' },
       contact: CONTACT, editedByUid: 'u-desk',
     });
     expect(res).toEqual({ ok: false, reason: 'not-found' });
@@ -316,10 +321,101 @@ describe('updateGuestChild', () => {
     };
     const res = await updateGuestChild({
       docId: 'pdsBr0M0QutelNwyX2vn', childIndex: 0,
-      expected: { name: '', grade: '' }, child: { name: 'Someone', grade: '2' },
+      expected: { name: '', grade: '', contact: CONTACT }, child: { name: 'Someone', grade: '2' },
       contact: CONTACT, editedByUid: 'u-desk',
     });
     expect(res).toEqual({ ok: false, reason: 'no-children' });
+    expect(txnUpdate).not.toHaveBeenCalled();
+  });
+
+  // ── The lost update (Fable review) ──────────────────────────────────────────
+  // Every correction submits all four contact fields whether or not the desk
+  // touched them. Before this, the write applied them unconditionally while the
+  // compare-and-swap covered only name/grade - so a grade-only save silently
+  // reverted somebody else's contact fix and stamped its own uid on the damage.
+  // Reachable by ONE person with two edit forms open on one visit, which is the
+  // natural way to fix two siblings.
+  it('does NOT write the contact when the desk did not touch it', async () => {
+    // A colleague has already corrected the email on this visit; this desk is
+    // holding the OLD one in its form and is only fixing a grade.
+    store.stored = { ...twoChildVisit(), email: 'corrected@v.com' };
+    const res = await updateGuestChild({
+      docId: 'g-carol', childIndex: 0,
+      expected: expectChild('Aarav Visitor', '2'),
+      child: { name: 'Aarav Visitor', grade: '3' },
+      contact: CONTACT, // stale email, resubmitted untouched
+      editedByUid: 'u-desk',
+    });
+    expect(res).toEqual({ ok: true });
+    // The grade fix lands...
+    expect(store.written?.['children']).toEqual([
+      { name: 'Aarav Visitor', grade: '3' },
+      { name: 'Diya Visitor', grade: 'JK' },
+    ]);
+    // ...and the contact is not in the payload at all, so the colleague's
+    // correction survives. Absent, not merely equal: an equal-but-present write
+    // would still clobber a change that landed between the read and the write.
+    expect(store.written).not.toHaveProperty('email');
+    expect(store.written).not.toHaveProperty('firstName');
+    expect(store.written).not.toHaveProperty('lastName');
+    expect(store.written).not.toHaveProperty('phone');
+  });
+
+  it('refuses a contact edit built on a stale view instead of overwriting', async () => {
+    store.stored = { ...twoChildVisit(), email: 'corrected@v.com' };
+    const res = await updateGuestChild({
+      docId: 'g-carol', childIndex: 0,
+      expected: expectChild('Aarav Visitor', '2'), // saw the OLD email
+      child: { name: 'Aarav Visitor', grade: '2' },
+      contact: { ...CONTACT, email: 'mine@v.com' }, // and means to change it
+      editedByUid: 'u-desk',
+    });
+    expect(res).toEqual({ ok: false, reason: 'changed' });
+    expect(txnUpdate).not.toHaveBeenCalled();
+  });
+
+  it('writes a deliberate contact edit when the document still matches', async () => {
+    store.stored = twoChildVisit();
+    const res = await updateGuestChild({
+      docId: 'g-carol', childIndex: 0,
+      expected: expectChild('Aarav Visitor', '2'),
+      child: { name: 'Aarav Visitor', grade: '2' },
+      contact: { ...CONTACT, email: 'fixed@v.com' },
+      editedByUid: 'u-desk',
+    });
+    expect(res).toEqual({ ok: true });
+    expect(store.written?.['email']).toBe('fixed@v.com');
+  });
+
+  it('treats a stored null phone and a form empty string as the same contact', async () => {
+    // Otherwise every correction on a phone-less visit reads as a contact edit
+    // and demands a conflict check it can never satisfy.
+    store.stored = { ...twoChildVisit(), phone: null };
+    const res = await updateGuestChild({
+      docId: 'g-carol', childIndex: 0,
+      expected: { name: 'Aarav Visitor', grade: '2', contact: { ...CONTACT, phone: '' } },
+      child: { name: 'Aarav Visitor', grade: '3' },
+      contact: { ...CONTACT, phone: '' },
+      editedByUid: 'u-desk',
+    });
+    expect(res).toEqual({ ok: true });
+    expect(store.written).not.toHaveProperty('phone');
+  });
+
+  it('rejects a negative childIndex rather than writing the contact alone', async () => {
+    // The route's schema blocks this, but the helper is exported: `kids[-1]` is
+    // undefined, which normalizes to two empty strings and could SATISFY the
+    // compare-and-swap, after which the map matches nothing and the write would
+    // touch no child yet still answer ok.
+    store.stored = twoChildVisit();
+    const res = await updateGuestChild({
+      docId: 'g-carol', childIndex: -1,
+      expected: { name: '', grade: '', contact: CONTACT },
+      child: { name: 'Ghost', grade: '2' },
+      contact: { ...CONTACT, email: 'sneak@v.com' },
+      editedByUid: 'u-desk',
+    });
+    expect(res).toEqual({ ok: false, reason: 'index-out-of-range' });
     expect(txnUpdate).not.toHaveBeenCalled();
   });
 
@@ -327,7 +423,7 @@ describe('updateGuestChild', () => {
     store.stored = twoChildVisit();
     const res = await updateGuestChild({
       docId: 'g-carol', childIndex: 7,
-      expected: { name: 'Ghost', grade: '1' }, child: { name: 'Ghost', grade: '2' },
+      expected: { name: 'Ghost', grade: '1', contact: CONTACT }, child: { name: 'Ghost', grade: '2' },
       contact: CONTACT, editedByUid: 'u-desk',
     });
     expect(res).toEqual({ ok: false, reason: 'index-out-of-range' });

@@ -226,6 +226,14 @@ test.describe('/welcome/visitors - the day’s door guests, grouped by class (de
   // in the tests above ("moved by 3") stays true. Serial mode makes the order a
   // guarantee, not a hope.
   const DELTA = { key: 'delta', wrongGrade: 'Shishu', rightGrade: '6', child: `Deltaguest ${RUN}` };
+  /** The visit's contact as seeded - the compare-and-swap baseline for the
+   *  contact half, which every PATCH must now carry. */
+  const DELTA_CONTACT = {
+    firstName: DELTA.key,
+    lastName: `Parent ${RUN}`,
+    email: `e2e-visitors-${DELTA.key}-${RUN}@chinmayatoronto.org`,
+    phone: '4165550102',
+  };
   let deltaId = '';
 
   test('a guest recorded with the wrong grade sits in the unmatched bucket, correctable', async ({ page, request }) => {
@@ -284,7 +292,7 @@ test.describe('/welcome/visitors - the day’s door guests, grouped by class (de
       data: {
         id: deltaId,
         childIndex: 0,
-        expected: { name: DELTA.child, grade: DELTA.wrongGrade },
+        expected: { name: DELTA.child, grade: DELTA.wrongGrade, contact: DELTA_CONTACT },
         child: { name: DELTA.child, grade: '1' },
         contact: {
           firstName: DELTA.key,
@@ -306,6 +314,63 @@ test.describe('/welcome/visitors - the day’s door guests, grouped by class (de
     expect(kids[0]?.grade, 'the refused write clobbered the good value anyway').toBe(DELTA.rightGrade);
   });
 
+  test('a grade-only correction does not revert a contact fix made in between', async ({ request }) => {
+    // The lost update, end to end. Desk A corrects the email. Desk B is holding
+    // a form opened BEFORE that, so its four contact inputs still carry the old
+    // email - and every save submits all four whether or not they were touched.
+    //
+    // B must be able to fix a grade without pushing its stale contact over A's
+    // work, and without being refused for a field it never edited. Before the
+    // fix this test would find `corrected@` reverted to the seeded address, with
+    // `lastEditedByUid` pinning it on B.
+    const correctedEmail = `e2e-visitors-corrected-${RUN}@chinmayatoronto.org`;
+
+    const deskA = await request.patch('/api/welcome/visitors', {
+      data: {
+        id: deltaId,
+        childIndex: 0,
+        expected: { name: DELTA.child, grade: DELTA.rightGrade, contact: DELTA_CONTACT },
+        child: { name: DELTA.child, grade: DELTA.rightGrade },
+        contact: { ...DELTA_CONTACT, email: correctedEmail },
+      },
+    });
+    expect(deskA.status(), `desk A's contact fix failed: ${await deskA.text()}`).toBe(200);
+
+    const deskB = await request.patch('/api/welcome/visitors', {
+      data: {
+        id: deltaId,
+        childIndex: 0,
+        // B's snapshot: taken before A saved, so it holds the ORIGINAL email.
+        expected: { name: DELTA.child, grade: DELTA.rightGrade, contact: DELTA_CONTACT },
+        child: { name: DELTA.child, grade: '5' },
+        contact: DELTA_CONTACT, // untouched, therefore stale
+      },
+    });
+    expect(
+      deskB.status(),
+      `a grade-only save was refused for a contact it never edited: ${await deskB.text()}`,
+    ).toBe(200);
+
+    const snap = await portalFirestore().collection('guest_check_ins').doc(deltaId).get();
+    const doc = snap.data() as { email?: string; children?: Array<{ grade?: string }> };
+    // Both survive: B's grade landed AND A's email is intact.
+    expect(doc.children?.[0]?.grade, "desk B's grade correction did not land").toBe('5');
+    expect(doc.email, "desk B's stale contact reverted desk A's email fix").toBe(correctedEmail);
+
+    // Put the grade back so the following test's `expected` still describes the
+    // document. Serial mode makes that ordering a guarantee.
+    const restore = await request.patch('/api/welcome/visitors', {
+      data: {
+        id: deltaId,
+        childIndex: 0,
+        expected: { name: DELTA.child, grade: '5', contact: { ...DELTA_CONTACT, email: correctedEmail } },
+        child: { name: DELTA.child, grade: DELTA.rightGrade },
+        contact: { ...DELTA_CONTACT, email: correctedEmail },
+      },
+    });
+    expect(restore.status()).toBe(200);
+  });
+
   test('a grade no class could match is refused at the write route', async ({ request }) => {
     // The dropdown cannot be the rule: a stale tab or any direct caller posts
     // whatever it likes, and a grade that normalizes to nothing on the ladder is
@@ -319,7 +384,7 @@ test.describe('/welcome/visitors - the day’s door guests, grouped by class (de
       data: {
         id: deltaId,
         childIndex: 0,
-        expected: { name: DELTA.child, grade: DELTA.rightGrade },
+        expected: { name: DELTA.child, grade: DELTA.rightGrade, contact: DELTA_CONTACT },
         child: { name: DELTA.child, grade: '3rd' },
         contact: {
           firstName: DELTA.key,

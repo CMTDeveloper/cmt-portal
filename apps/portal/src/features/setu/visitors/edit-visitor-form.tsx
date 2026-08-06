@@ -59,9 +59,29 @@ function canonicalGrade(stored: string): string {
   return CHILD_GRADE_OPTIONS.find((g) => normalizeGrade(g.value) === target)?.value ?? '';
 }
 
+/** What the row held at the moment the desk opened it. */
+interface OpenSnapshot {
+  name: string;
+  grade: string;
+  contact: { firstName: string; lastName: string; email: string; phone: string };
+}
+
 export function EditVisitorForm({ visitor, siblingCount }: { visitor: EditableVisitor; siblingCount: number }) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  /**
+   * Open-ness and the compare-and-swap baseline are ONE piece of state, so the
+   * form cannot be open without a snapshot and the snapshot cannot drift from
+   * what is on screen.
+   *
+   * This is not tidiness. `expected` used to be read from `visitor` props at
+   * submit time, and props re-render underneath an open form after any
+   * `router.refresh()` - including one fired by saving a DIFFERENT row of the
+   * same visit. The baseline would then silently become the freshly-saved
+   * values, match the document, and wave the stale contact still sitting in
+   * these inputs straight past the server's check. Captured on open, `expected`
+   * means what it says: what the desk was actually shown.
+   */
+  const [editing, setEditing] = useState<OpenSnapshot | null>(null);
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState(visitor.name);
   // Seeded with the CANONICAL option matching what is stored, not the raw value.
@@ -74,21 +94,38 @@ export function EditVisitorForm({ visitor, siblingCount }: { visitor: EditableVi
   const [email, setEmail] = useState(visitor.email);
   const [phone, setPhone] = useState(visitor.phone);
 
-  function cancel() {
-    // Back to what is STORED, not to whatever was last typed: reopening the form
-    // must show the row as it actually is, or the next save's `expected` would
-    // be built from abandoned edits.
+  /** Seed every input AND the baseline from the current props. Re-seeding on
+   *  each open also fixes a quieter bug: `useState` initialisers only run on
+   *  first mount, so without this a form reopened after someone else's
+   *  correction would show the values from before it. */
+  function open() {
     setName(visitor.name);
     setGrade(canonicalGrade(visitor.grade));
     setFirstName(visitor.firstName);
     setLastName(visitor.lastName);
     setEmail(visitor.email);
     setPhone(visitor.phone);
-    setOpen(false);
+    setEditing({
+      name: visitor.name,
+      grade: visitor.grade,
+      contact: {
+        firstName: visitor.firstName,
+        lastName: visitor.lastName,
+        email: visitor.email,
+        phone: visitor.phone,
+      },
+    });
+  }
+
+  function cancel() {
+    // Dropping the snapshot closes the form; the next open re-seeds everything,
+    // so abandoned edits can never reach a later save's baseline.
+    setEditing(null);
   }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (!editing) return;
     setSaving(true);
     try {
       const res = await fetch('/api/welcome/visitors', {
@@ -97,8 +134,10 @@ export function EditVisitorForm({ visitor, siblingCount }: { visitor: EditableVi
         body: JSON.stringify({
           id: visitor.docId,
           childIndex: visitor.childIndex,
-          // What we were shown, verbatim - the server compares against this.
-          expected: { name: visitor.name, grade: visitor.grade },
+          // The snapshot taken when this form OPENED - never today's props. The
+          // server compares against it, and also uses the contact half to tell a
+          // deliberate contact edit from four fields merely being resubmitted.
+          expected: editing,
           child: { name: name.trim(), grade },
           contact: {
             firstName: firstName.trim(),
@@ -110,7 +149,7 @@ export function EditVisitorForm({ visitor, siblingCount }: { visitor: EditableVi
       });
       if (res.ok) {
         toast.success('Visitor updated');
-        setOpen(false);
+        setEditing(null);
         // Server-rendered board: refresh re-reads it, so a corrected grade moves
         // the child out of "Not matched to a class" and under their real class.
         router.refresh();
@@ -125,13 +164,13 @@ export function EditVisitorForm({ visitor, siblingCount }: { visitor: EditableVi
     }
   }
 
-  if (!open) {
+  if (!editing) {
     return (
       <button
         type="button"
         className="btn btn--g"
         data-testid="edit-visitor-open"
-        onClick={() => setOpen(true)}
+        onClick={open}
         style={{ minHeight: 32, padding: '0 10px', fontSize: 12 }}
       >
         Edit
@@ -189,6 +228,18 @@ export function EditVisitorForm({ visitor, siblingCount }: { visitor: EditableVi
               <option key={g.value} value={g.value}>{g.label}</option>
             ))}
           </select>
+          {/* Shishu is a legitimate, storable grade that STILL matches no class:
+              `guestMatchesLevel` only considers level/pre-level kinds, so shishu
+              classes are excluded by design and those visitors are added by the
+              teacher in class instead. Without this line the desk opens an
+              unmatched Shishu row, sees an ordinary-looking select, and has no
+              way to tell a correct record from a broken one - which is the
+              question this whole screen exists to answer. */}
+          {grade === 'Shishu' && (
+            <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6 }}>
+              Shishu visitors are not matched to a class by grade - their teacher adds them in class.
+            </p>
+          )}
         </div>
       </div>
 

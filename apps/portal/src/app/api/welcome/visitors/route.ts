@@ -131,6 +131,20 @@ export async function POST(req: Request) {
  *     false. Display only; the attendance record is untouched.
  * Both are deliberate and neither loses data. Revisit only if the desk reports
  * being confused by it.
+ *
+ * ── No reverse gear, and one contact with no way in ─────────────────────────
+ * This slice can correct a visit but not undo one. There is no delete and no
+ * date-move, so a duplicate visit (the desk records someone the kiosk already
+ * caught) and a visit filed on the wrong Sunday are both permanent: the child is
+ * listed twice to a teacher, and the daily counts and CSV stay inflated. Fixing
+ * a wrong date by re-adding on the right one manufactures a second, equally
+ * permanent row. A `voided: true` flag honoured by the board reader, the stats
+ * query and the CSV would cover both far more cheaply than a real delete, and
+ * would keep the forensic record - flagged to the owner rather than assumed.
+ *
+ * Separately: an adults-only visit (`children: []`) produces NO board row, so
+ * its contact has no edit entry point anywhere. Out of scope here because this
+ * board is child-oriented by construction.
  */
 export async function PATCH(req: Request) {
   const gate = requireWelcomeTeam(req);

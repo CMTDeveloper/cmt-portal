@@ -80,6 +80,18 @@ const GuestChildSnapshotSchema = z.object({
 });
 
 /**
+ * The VISIT's contact as the desk was shown it. Lax for the same reason as
+ * above - a stored phone may be absent and normalizes to '' - and it is a
+ * snapshot of what is, not a proposal for what should be.
+ */
+const GuestContactSnapshotSchema = z.object({
+  firstName: z.string(),
+  lastName: z.string(),
+  email: z.string(),
+  phone: z.string(),
+});
+
+/**
  * A correction to ONE child of an existing guest visit, from the front desk
  * (`PATCH /api/welcome/visitors`).
  *
@@ -93,6 +105,15 @@ const GuestChildSnapshotSchema = z.object({
  * Editing it from any child's row necessarily changes it for that visit's other
  * children, and the UI says so.
  *
+ * ⚠️ `expected.contact` is REQUIRED, and covering it was not optional tidiness.
+ * Every correction submits all four contact fields, so without a baseline to
+ * compare against, a save that only touched a grade would still write back
+ * whatever contact the form was holding - silently reverting a colleague's
+ * email fix, with `lastEditedByUid` then attributing the reversion to the wrong
+ * person. It is reachable by ONE person with two edit forms open on one visit,
+ * which is the natural way to fix two siblings. The write uses this to decide
+ * BOTH whether the contact may be written and whether it should be at all.
+ *
  * The contact rules are PICKED from `GuestCheckInSchema` rather than restated,
  * so a field cannot end up required when adding a visitor and optional when
  * correcting one. Same reason this file exists at all.
@@ -102,7 +123,7 @@ export const GuestUpdateSchema = z.object({
   // Upper bound mirrors `children`'s own .max(20): index 19 is the last element
   // a document is allowed to have, so anything beyond it addresses nothing.
   childIndex: z.number().int().min(0).max(19),
-  expected: GuestChildSnapshotSchema,
+  expected: GuestChildSnapshotSchema.extend({ contact: GuestContactSnapshotSchema }),
   // The NEW values go through the same rule as creation: what you may write here
   // is exactly what you may write at the door. Non-empty grade is the point of
   // the feature - saving a blank one back would re-hide the child from teachers.
