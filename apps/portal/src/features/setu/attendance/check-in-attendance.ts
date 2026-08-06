@@ -1,4 +1,5 @@
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
+import { normalizeGuestChildField } from '@cmt/shared-domain';
 import { checkInSourceFirestore } from './check-in-source';
 
 /**
@@ -94,13 +95,50 @@ export async function readDoorPresentSids(
   return present;
 }
 
-/** One door guest check-in child for a date (no portal id — door has none). */
+/**
+ * Where a guest row can be corrected: the portal `guest_check_ins` document it
+ * came from, and this child's position in that document's `children` array.
+ *
+ * The index is the address because the array element has no id of its own -
+ * `recordGuestCheckIn` stores plain `{name, grade}` objects. Any writer using it
+ * MUST therefore compare-and-swap against the values it expects to find there,
+ * or a concurrent edit silently rewrites a different child.
+ */
+export interface GuestChildRef {
+  docId: string;
+  childIndex: number;
+  /**
+   * The VISIT's contact, as stored - carried in full rather than reconstructed
+   * from the row. `parentName` above is a DISPLAY join of two stored fields, and
+   * splitting a joined name back apart guesses wrong on any name that is not
+   * exactly two words. The correction form edits these, so it needs the originals.
+   */
+  contact: { firstName: string; lastName: string; email: string; phone: string };
+  /**
+   * How many OTHER children checked in on this same visit. The contact belongs
+   * to the visit, so correcting it from one child's row necessarily changes it
+   * for these too - the form says so, and only when this is non-zero.
+   */
+  siblingCount: number;
+}
+
+/** One door guest check-in child for a date. */
 export interface DoorGuestChild {
   name: string;
   grade: string; // door stores string|number; normalized to string here
   parentEmail: string;
   parentName: string | null;
   phone: string | null;
+  /**
+   * Where to correct this row, or null if it cannot be corrected.
+   *
+   * Null for LEGACY door rows: those live in the standalone check-in app's own
+   * Firebase project (`checkInSourceFirestore`), whose kiosk shut down
+   * 2026-08-03. They are history, and history is read-only. Deliberately one
+   * nullable field rather than two optional ones, so that both readers are
+   * forced by the compiler to state which kind of row they are producing.
+   */
+  editRef: GuestChildRef | null;
 }
 
 /**
@@ -144,6 +182,9 @@ export async function readDoorGuestCheckIns(date: string): Promise<DoorGuestChil
             parentEmail,
             parentName: data.parentName ?? null,
             phone: data.phone ?? null,
+            // Another Firebase project, and its kiosk is shut down. Not ours to
+            // rewrite - see GuestChildRef.
+            editRef: null,
           });
         }
       } catch (err) {
@@ -209,15 +250,38 @@ export async function readPortalGuestChildren(sessionDate: string): Promise<Door
     };
     const parentName = [data.firstName, data.lastName].filter(Boolean).join(' ').trim() || null;
     const parentEmail = (data.email ?? '') || '';
-    for (const c of data.children ?? []) {
+    // Array.isArray, not `?? []`. Documents written before b1395e0 (2026-07-24)
+    // carry the OLD shape - a bare `numberOfChildren` count and no `children`
+    // key at all. One such doc is still live in UAT
+    // (`pdsBr0M0QutelNwyX2vn`, created hours before that commit). `?? []` covers
+    // the absent case but not a present-and-not-an-array one, and `for...of`
+    // over a number throws, which would take out the whole day's board.
+    const kids = Array.isArray(data.children) ? data.children : [];
+    kids.forEach((c, childIndex) => {
       out.push({
-        name: String(c.name ?? '').trim(),
-        grade: c.grade == null ? '' : String(c.grade).trim(),
+        // The SAME normalization the correction writer compares against - these
+        // rendered values are what the desk sends back as `expected`, so a drift
+        // between the two would fail every correction as a phantom conflict.
+        name: normalizeGuestChildField(c.name),
+        grade: normalizeGuestChildField(c.grade),
         parentEmail,
         parentName,
         phone: data.phone ?? null,
+        // The index is into THIS doc's `children`, so it stays valid however the
+        // caller later merges, filters or re-groups these rows.
+        editRef: {
+          docId: doc.id,
+          childIndex,
+          contact: {
+            firstName: normalizeGuestChildField(data.firstName),
+            lastName: normalizeGuestChildField(data.lastName),
+            email: normalizeGuestChildField(data.email),
+            phone: normalizeGuestChildField(data.phone),
+          },
+          siblingCount: kids.length - 1,
+        },
       });
-    }
+    });
   }
   return out;
 }

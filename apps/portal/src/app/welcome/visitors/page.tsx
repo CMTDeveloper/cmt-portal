@@ -7,6 +7,7 @@ import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
 import { gradeLabel, isWelcomeTeam, type WithRole } from '@cmt/shared-domain';
 import { getAllVisitorsView, type VisitorLevelGroup } from '@/features/setu/teacher/all-visitors';
 import { AddVisitorForm } from '@/features/setu/visitors/add-visitor-form';
+import { EditVisitorForm } from '@/features/setu/visitors/edit-visitor-form';
 import { mostRecentSunday } from '@/features/setu/calendar/calendar';
 import type { DoorGuestChild } from '@/features/setu/attendance/check-in-attendance';
 
@@ -166,14 +167,16 @@ function VisitorGroup({ group, date }: { group: VisitorLevelGroup; date: string 
 
 function ChildRow({ child }: { child: DoorGuestChild }) {
   const contact = [child.parentName, child.phone, child.parentEmail].filter(Boolean).join(' · ');
+  const ref = child.editRef;
   return (
     <div
+      data-testid="visitor-row"
       style={{
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center',
         gap: 10, padding: '10px 12px', borderBottom: '1px solid var(--line)',
       }}
     >
-      <div style={{ minWidth: 0 }}>
+      <div style={{ minWidth: 0, flex: 1 }}>
         <div style={{ fontSize: 14, fontWeight: 600 }}>{child.name || 'Unnamed guest'}</div>
         {contact && (
           <div style={{ fontSize: 12, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -184,6 +187,32 @@ function ChildRow({ child }: { child: DoorGuestChild }) {
       <span style={{ fontSize: 12, color: 'var(--muted)', whiteSpace: 'nowrap' }}>
         {child.grade ? gradeLabel(child.grade) : 'No grade'}
       </span>
+      {/* A DIRECT child of the wrapping flex row, not nested beside the grade:
+          closed it is a small button that sits on this line, open it takes a
+          full-width line of its own (`flex: 1 0 100%` on the form itself).
+
+          Correctable only if it is one of OUR guest documents. Legacy door rows
+          come from the standalone check-in app's own Firebase project, whose
+          kiosk shut down 2026-08-03 - history, and history is read-only. */}
+      {ref ? (
+        <EditVisitorForm
+          visitor={{
+            docId: ref.docId,
+            childIndex: ref.childIndex,
+            name: child.name,
+            grade: child.grade,
+            ...ref.contact,
+          }}
+          siblingCount={ref.siblingCount}
+        />
+      ) : (
+        <span
+          style={{ fontSize: 11, color: 'var(--muted)', whiteSpace: 'nowrap' }}
+          title="Recorded by the standalone door app, which is no longer running"
+        >
+          Door record
+        </span>
+      )}
     </div>
   );
 }

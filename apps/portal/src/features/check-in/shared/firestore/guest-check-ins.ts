@@ -1,5 +1,5 @@
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
-import { sessionDateFor } from '@cmt/shared-domain';
+import { sessionDateFor, normalizeGuestChildField } from '@cmt/shared-domain';
 
 /** One guest child captured at self-serve check-in: name + grade so a teacher
  *  can match the child to their class. Grade is a CHILD_GRADE_OPTIONS value. */
@@ -68,4 +68,105 @@ export async function recordGuestCheckIn(
     checkedInAt: new Date().toISOString(),
   });
   return ref.id;
+}
+
+/** Why a correction was refused. Each reason is a DIFFERENT thing for the desk
+ *  to do about it, which is why they are not one generic failure. */
+export type UpdateGuestChildFailure =
+  /** The visit was deleted (or the id is wrong) - nothing to correct. */
+  | 'not-found'
+  /** A pre-2026-07-24 document with a bare count and no `children` array. There
+   *  is no child row to address, so a positional edit is meaningless. */
+  | 'no-children'
+  /** The visit exists but has no child at that position. */
+  | 'index-out-of-range'
+  /** Someone else changed this child between the read and the save. */
+  | 'changed';
+
+export type UpdateGuestChildResult = { ok: true } | { ok: false; reason: UpdateGuestChildFailure };
+
+export interface UpdateGuestChildParams {
+  docId: string;
+  childIndex: number;
+  /** What the desk was SHOWN. The write refuses unless it is still true. */
+  expected: { name: string; grade: string };
+  child: { name: string; grade: string };
+  /** Belongs to the VISIT, so it necessarily applies to that visit's other
+   *  children too. The form says so. */
+  contact: { firstName: string; lastName: string; email: string; phone: string };
+  editedByUid: string | null;
+}
+
+/**
+ * Correct ONE child of an existing guest visit, plus the visit's contact.
+ *
+ * ── Why a transaction with a compare-and-swap ────────────────────────────────
+ * `children` is a plain array, so a child's only address is its position, and a
+ * position is not an identity. Two people work the desk on a Sunday morning;
+ * `arrayRemove`/`arrayUnion` cannot express "replace element 2"; and a
+ * read-then-write without a guard would let the second save silently overwrite
+ * a different child than the one its author was looking at. So the desk sends
+ * back what it was shown and the write refuses if the document has moved on -
+ * `expected` compared under the SAME normalization the board rendered with.
+ *
+ * ── What it deliberately does NOT touch ─────────────────────────────────────
+ * `date` and `sessionDate` are left exactly as they are. They decide which
+ * Sunday - and therefore which teacher - a guest belongs to; a correction screen
+ * that silently re-filed the visit would move it off the board the corrector is
+ * looking at. `checkedInAt` likewise stays the original instant: it is when they
+ * walked in, not when someone fixed a typo.
+ *
+ * `numberOfChildren` IS rewritten from the array, because it is derived and this
+ * is the only other writer of `children`. It cannot drift here (the array length
+ * is unchanged by an in-place edit), but re-deriving it costs nothing and means
+ * the two can never disagree after a write from this path.
+ */
+export async function updateGuestChild(
+  params: UpdateGuestChildParams,
+): Promise<UpdateGuestChildResult> {
+  const db = portalFirestore();
+  const ref = db.collection('guest_check_ins').doc(params.docId);
+
+  return db.runTransaction<UpdateGuestChildResult>(async (txn) => {
+    const snap = await txn.get(ref);
+    if (!snap.exists) return { ok: false, reason: 'not-found' };
+
+    const data = (snap.data() ?? {}) as Record<string, unknown>;
+    const kids = data['children'];
+    // Array.isArray, not a truthiness check: documents written before b1395e0
+    // carry `numberOfChildren` and no `children` key at all.
+    if (!Array.isArray(kids)) return { ok: false, reason: 'no-children' };
+    if (params.childIndex >= kids.length) return { ok: false, reason: 'index-out-of-range' };
+
+    const current = (kids[params.childIndex] ?? {}) as { name?: unknown; grade?: unknown };
+    if (
+      normalizeGuestChildField(current.name) !== params.expected.name ||
+      normalizeGuestChildField(current.grade) !== params.expected.grade
+    ) {
+      return { ok: false, reason: 'changed' };
+    }
+
+    // Spread the existing element rather than replacing it: a child object may
+    // carry fields this route knows nothing about, and a correction to a grade
+    // must not silently drop them.
+    const next = kids.map((kid, i) =>
+      i === params.childIndex
+        ? { ...(kid as Record<string, unknown>), name: params.child.name, grade: params.child.grade }
+        : kid,
+    );
+
+    txn.update(ref, {
+      children: next,
+      numberOfChildren: next.length,
+      firstName: params.contact.firstName,
+      lastName: params.contact.lastName,
+      email: params.contact.email,
+      phone: params.contact.phone,
+      // Denormalized onto the document instead of `audit_log`, which is
+      // write-only in this codebase (zero readers) and has no index to read by.
+      lastEditedAt: new Date().toISOString(),
+      lastEditedByUid: params.editedByUid,
+    });
+    return { ok: true };
+  });
 }

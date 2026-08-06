@@ -186,9 +186,11 @@ describe('readDoorGuestCheckIns', () => {
       return { exists: false };
     };
     const out = await readDoorGuestCheckIns('2026-01-04');
+    // editRef null on EVERY legacy row: these live in the standalone door app's
+    // own Firebase project, so the portal must never offer to rewrite them.
     expect(out).toEqual([
-      { name: 'Arjun X', grade: '2', parentEmail: 'mom@x.com', parentName: 'Mom X', phone: '416' },
-      { name: 'Ravi Y', grade: 'Grade 1', parentEmail: 'dad@y.com', parentName: null, phone: null },
+      { name: 'Arjun X', grade: '2', parentEmail: 'mom@x.com', parentName: 'Mom X', phone: '416', editRef: null },
+      { name: 'Ravi Y', grade: 'Grade 1', parentEmail: 'dad@y.com', parentName: null, phone: null, editRef: null },
     ]);
   });
 
@@ -202,7 +204,9 @@ describe('readDoorGuestCheckIns', () => {
       return { exists: false };
     };
     const out = await readDoorGuestCheckIns('2026-01-04');
-    expect(out).toEqual([{ name: 'Sam', grade: '', parentEmail: 'a@x.com', parentName: null, phone: null }]);
+    expect(out).toEqual([
+      { name: 'Sam', grade: '', parentEmail: 'a@x.com', parentName: null, phone: null, editRef: null },
+    ]);
   });
 
   it('returns [] when the guest-families list read fails', async () => {
@@ -232,10 +236,67 @@ describe('readPortalGuestChildren', () => {
       };
     };
     const out = await readPortalGuestChildren('2026-01-04');
+    // N=2 in ONE document, which is the whole reason editRef carries an index:
+    // both siblings share a docId and differ only by childIndex. A ref keyed on
+    // anything the two have in common (docId, email, parent name) would address
+    // the wrong child, and a correction would silently rewrite the sibling.
+    const carolContact = {
+      firstName: 'Carol', lastName: 'Visitor', email: 'c@v.com', phone: '+16475550100',
+    };
     expect(out).toEqual([
-      { name: 'Aarav Visitor', grade: '2', parentEmail: 'c@v.com', parentName: 'Carol Visitor', phone: '+16475550100' },
-      { name: 'Diya Visitor', grade: '2', parentEmail: 'c@v.com', parentName: 'Carol Visitor', phone: '+16475550100' },
+      {
+        name: 'Aarav Visitor', grade: '2', parentEmail: 'c@v.com',
+        parentName: 'Carol Visitor', phone: '+16475550100',
+        editRef: { docId: 'g-carol', childIndex: 0, contact: carolContact, siblingCount: 1 },
+      },
+      {
+        name: 'Diya Visitor', grade: '2', parentEmail: 'c@v.com',
+        parentName: 'Carol Visitor', phone: '+16475550100',
+        editRef: { docId: 'g-carol', childIndex: 1, contact: carolContact, siblingCount: 1 },
+      },
     ]);
+  });
+
+  it('gives a lone child siblingCount 0, so the shared-contact warning stays off', async () => {
+    portalGuestResolver.fn = (field, date) => {
+      if (field !== 'sessionDate' || date !== '2026-01-04') return { docs: [] };
+      return {
+        docs: [
+          { id: 'g-solo', data: () => ({
+            firstName: 'Solo', lastName: 'Parent', email: 'solo@v.com', phone: '+16475550122',
+            children: [{ name: 'Only Child', grade: '4' }],
+          }) },
+        ],
+      };
+    };
+    const out = await readPortalGuestChildren('2026-01-04');
+    expect(out[0]?.editRef?.siblingCount).toBe(0);
+  });
+
+  it('yields no rows, and does not throw, for a pre-b1395e0 doc with no children array', async () => {
+    // NOT hypothetical: `pdsBr0M0QutelNwyX2vn` is live in UAT, created
+    // 2026-07-23 - hours before b1395e0 introduced per-child `children[]`. It
+    // carries a bare `numberOfChildren: 1` and no `children` key at all. A
+    // `for...of` over a non-array throws, which would take out the whole day's
+    // board rather than skipping one stale row.
+    portalGuestResolver.fn = (field, date) => {
+      if (field !== 'sessionDate' || date !== '2026-01-04') return { docs: [] };
+      return {
+        docs: [
+          { id: 'g-legacy-shape', data: () => ({
+            firstName: 'Visitor', lastName: '1', numberOfAdults: 1, numberOfChildren: 1,
+            checkedInAt: '2026-07-23T23:58:59.076Z',
+          }) },
+          { id: 'g-ok', data: () => ({
+            firstName: 'Fine', lastName: 'Parent', email: 'f@v.com', phone: '+1647',
+            children: [{ name: 'Good Row', grade: '1' }],
+          }) },
+        ],
+      };
+    };
+    const out = await readPortalGuestChildren('2026-01-04');
+    // The stale doc contributes nothing; the healthy one beside it still renders.
+    expect(out.map((c) => c.name)).toEqual(['Good Row']);
   });
 
   it('still finds a pre-backfill doc that only carries the old `date` key', async () => {
@@ -254,7 +315,15 @@ describe('readPortalGuestChildren', () => {
     };
     const out = await readPortalGuestChildren('2026-01-04');
     expect(out).toEqual([
-      { name: 'Ravi Guest', grade: '3', parentEmail: 'o@g.com', parentName: 'Old Guest', phone: null },
+      {
+        name: 'Ravi Guest', grade: '3', parentEmail: 'o@g.com', parentName: 'Old Guest', phone: null,
+        editRef: {
+          docId: 'g-old', childIndex: 0, siblingCount: 0,
+          // `phone` normalizes a stored null to '' - the correction form binds it
+          // to a text input, and React would treat null as uncontrolled.
+          contact: { firstName: 'Old', lastName: 'Guest', email: 'o@g.com', phone: '' },
+        },
+      },
     ]);
   });
 
