@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { SevakRow } from '@cmt/shared-domain';
+import { GRANTABLE_ROLES, type SevakRow } from '@cmt/shared-domain';
+import { ROLE_CHIP } from '../role-badges';
 import { SevakManager, type SelfIdentity } from '../sevak-manager';
 
 const toastMock = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), warning: vi.fn() }));
@@ -230,5 +231,108 @@ describe('SevakManager — filter + search + sort', () => {
     await user.click(d.getByRole('button', { name: /^Name/ }));
     const namesDesc = within(desktop()).getAllByTestId('sevak-row').map((r) => within(r).getByText(/Rao|Person/).textContent);
     expect(namesDesc[0]).toBe('Staff Person');
+  });
+});
+
+// ── Every grantable role must be VISIBLE and GRANTABLE, not just storable ────
+//
+// Reported by the owner on production, looking at /admin/users:
+//   "how can I see coordinator role? when click add sevak role I can only add
+//    welcome team or admin"
+//
+// `coordinator` has been in GRANTABLE_ROLES, in listSevaks, in grantRole, in
+// this component's own draft state and in its save path the whole time. What it
+// was missing was three HARDCODED display lists: the desktop table's columns,
+// the filter chips, and the Add-dialog's role buttons. The model knew; the
+// render did not.
+//
+// These loops iterate GRANTABLE_ROLES rather than naming the three roles, which
+// is the actual guard: a fourth role added later is covered here with no test
+// edit, and fails until someone gives it display data. That matters because this
+// is the THIRD instance of the pattern in one night - the session-claims
+// discriminated union (a 404 for standalone coordinators in production) and the
+// /admin dashboard tile copy were the other two.
+describe('SevakManager — every grantable role is displayed, not just stored', () => {
+  const COORD_ONLY: SevakRow = {
+    key: 'CMT-FAM3-01', mid: 'CMT-FAM3-01', fid: 'CMT-FAM3', uid: null,
+    name: 'Meera Iyer', contact: 'meera@example.com', roles: ['coordinator'],
+    isTeacher: false, teacherLevels: [], source: 'family', lastSignIn: null,
+  };
+  // N=2 for the newly-plural thing (repo rule 6): one role-only carrier and one
+  // who holds it ALONGSIDE another grant, because a row that renders correctly
+  // with a single role can still drop one of two.
+  const COORD_AND_WELCOME: SevakRow = {
+    key: 'CMT-FAM4-01', mid: 'CMT-FAM4-01', fid: 'CMT-FAM4', uid: null,
+    name: 'Nikhil Shah', contact: 'nikhil@example.com', roles: ['welcome-team', 'coordinator'],
+    isTeacher: false, teacherLevels: [], source: 'family', lastSignIn: null,
+  };
+
+  it('the desktop table has a column for EVERY grantable role', () => {
+    renderMgr([COORD_ONLY]);
+    const d = within(desktop());
+    for (const role of GRANTABLE_ROLES) {
+      expect(
+        d.getByRole('columnheader', { name: ROLE_CHIP[role].label }),
+        `no desktop column for '${role}' - it can be granted but not seen`,
+      ).toBeTruthy();
+    }
+  });
+
+  it('ticks the right column for a coordinator, and only that one', () => {
+    renderMgr([COORD_ONLY]);
+    const d = within(desktop());
+    expect(d.getByTestId('check-coordinator-CMT-FAM3-01').textContent).not.toBe('–');
+    // The negative half. Without it the test passes on a row that ticks
+    // everything, which is the other way to be wrong about a check grid.
+    expect(d.getByTestId('check-admin-CMT-FAM3-01').textContent).toBe('–');
+    expect(d.getByTestId('check-welcome-team-CMT-FAM3-01').textContent).toBe('–');
+  });
+
+  it('ticks BOTH columns for someone holding two grants (N=2)', () => {
+    renderMgr([COORD_AND_WELCOME]);
+    const d = within(desktop());
+    expect(d.getByTestId('check-coordinator-CMT-FAM4-01').textContent).not.toBe('–');
+    expect(d.getByTestId('check-welcome-team-CMT-FAM4-01').textContent).not.toBe('–');
+    expect(d.getByTestId('check-admin-CMT-FAM4-01').textContent).toBe('–');
+  });
+
+  it('has a filter chip for every grantable role, and it filters', async () => {
+    const user = userEvent.setup();
+    renderMgr([DUAL, COORD_ONLY, PLAIN_ADMIN]);
+    const d = within(desktop());
+    await user.click(d.getByRole('button', { name: 'Coordinators' }));
+    expect(d.queryByText('Meera Iyer'), 'the coordinator was filtered OUT of their own chip').toBeTruthy();
+    expect(d.queryByText('Staff Person')).toBeNull();
+    expect(d.queryByText('Asha Rao')).toBeNull();
+  });
+
+  it('offers every grantable role in the Add-sevak dialog', async () => {
+    const user = userEvent.setup();
+    renderMgr([PLAIN_ADMIN]);
+    await user.click(within(desktop()).getByRole('button', { name: 'Add sevak role' }));
+    const dialog = screen.getByRole('dialog', { name: 'Add sevak role' });
+    for (const role of GRANTABLE_ROLES) {
+      expect(
+        within(dialog).getByRole('radio', { name: ROLE_CHIP[role].label }),
+        `the Add dialog cannot grant '${role}'`,
+      ).toBeTruthy();
+    }
+  });
+
+  it('actually grants coordinator when it is the one chosen', async () => {
+    // The assertion the owner's report reduces to: not "is the button there"
+    // but "does choosing it send the right role to the server".
+    mockGrant.mockResolvedValue({ ok: true });
+    mockList.mockResolvedValue([PLAIN_ADMIN, COORD_ONLY]);
+    const user = userEvent.setup();
+    renderMgr([PLAIN_ADMIN]);
+    await user.click(within(desktop()).getByRole('button', { name: 'Add sevak role' }));
+    const dialog = screen.getByRole('dialog', { name: 'Add sevak role' });
+    await user.type(within(dialog).getByLabelText('Registered portal email'), 'meera@example.com');
+    await user.click(within(dialog).getByRole('radio', { name: 'Coordinator' }));
+    await user.click(within(dialog).getByRole('button', { name: /Grant role/ }));
+    expect(mockGrant).toHaveBeenCalledWith(
+      expect.objectContaining({ contact: 'meera@example.com', role: 'coordinator' }),
+    );
   });
 });
