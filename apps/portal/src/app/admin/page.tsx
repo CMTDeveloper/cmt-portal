@@ -18,7 +18,12 @@ const GROUPS: Array<{
     heading: 'People & access',
     tiles: [
       { href: '/welcome', title: 'Family search', icon: 'search', tone: 'primary', sub: 'Look up any family by name, FID, legacy FID, email, or phone. Read-only family detail.' },
-      { href: '/admin/users', title: 'Users & roles', icon: 'people', tone: 'primary', sub: 'Grant + revoke admin & welcome-team roles for CMT sevaks. View teacher assignments.' },
+      // "coordinator" named explicitly. The copy listed only admin & welcome-team
+      // and was the third place in one night where the role existed in the model
+      // and was missing from a hardcoded list - the others being the
+      // session-claims union (a production 404) and this screen's own table,
+      // filter chips and Add-role dialog.
+      { href: '/admin/users', title: 'Users & roles', icon: 'people', tone: 'primary', sub: 'Grant + revoke admin, welcome-team & coordinator roles for CMT sevaks. View teacher assignments.' },
       { href: '/admin/disclaimers', title: 'Acknowledgements', icon: 'info', tone: 'primary', sub: 'Edit the acknowledgement sections families accept at sign-in. Publishing asks all families to re-accept.' },
     ],
   },
