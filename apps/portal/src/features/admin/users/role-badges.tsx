@@ -6,7 +6,17 @@ import type { GrantableRole } from '@cmt/shared-domain';
 // no client state — but kept in the 'use client' tree so it can sit inside
 // the interactive list without a server/client boundary hop.
 
-const ROLE_CHIP: Record<GrantableRole, { label: string; bg: string; fg: string }> = {
+/**
+ * Display data for every grantable role, keyed by the role itself.
+ *
+ * EXPORTED (2026-08-06) so the desktop table, the filter chips and the
+ * Add-sevak dialog all read their labels and colours from here instead of
+ * hardcoding a subset. The `Record<GrantableRole, ...>` typing is the point: a
+ * role added to GRANTABLE_ROLES fails to compile until it has display data, so
+ * it cannot be grantable-but-invisible. `coordinator` was exactly that for weeks
+ * - storable, savable, and absent from three hardcoded lists.
+ */
+export const ROLE_CHIP: Record<GrantableRole, { label: string; bg: string; fg: string }> = {
   admin: { label: 'Admin', bg: 'var(--accentSoft)', fg: 'var(--accentDeep)' },
   'welcome-team': { label: 'Welcome team', bg: 'var(--info-soft)', fg: 'var(--info-deep)' },
   coordinator: { label: 'Coordinator', bg: 'var(--ok-soft)', fg: 'var(--ok-deep)' },

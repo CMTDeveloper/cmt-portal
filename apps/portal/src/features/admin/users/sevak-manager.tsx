@@ -7,7 +7,7 @@ import type { SevakRow, GrantableRole } from '@cmt/shared-domain';
 import { GRANTABLE_ROLES } from '@cmt/shared-domain';
 import { ROLE_REFERENCE } from '@/lib/auth/roles-reference';
 import { grantRoleClient, revokeRoleClient, listSevaksClient } from './users-client';
-import { RoleChip, TeacherBadge } from './role-badges';
+import { ROLE_CHIP, RoleChip, TeacherBadge } from './role-badges';
 import { RolesReferencePanel } from './roles-reference-panel';
 
 // Who's viewing — used to flag their own row with a "You" badge (and the backend
@@ -96,10 +96,23 @@ const SOURCE_LABEL: Record<SevakRow['source'], string> = { family: 'Family', sta
 type SortCol = 'name' | 'source' | 'lastSignIn';
 type SortDir = 'asc' | 'desc';
 
+/**
+ * Plural chip copy per role. A `Record<GrantableRole, string>`, not a literal
+ * list, so a new grantable role cannot be filtered-out-of-existence: adding one
+ * to GRANTABLE_ROLES breaks this line until it gets a label.
+ */
+const FILTER_LABEL: Record<GrantableRole, string> = {
+  admin: 'Admins',
+  'welcome-team': 'Welcome team',
+  coordinator: 'Coordinators',
+};
+
+// Derived, not hand-listed. `teacher` stays bespoke and last because it is NOT
+// a grantable role - it comes from level assignments at /admin/levels and is
+// read-only here.
 const FILTER_CHIPS: { key: GrantableRole | 'teacher' | null; label: string }[] = [
   { key: null, label: 'All' },
-  { key: 'admin', label: 'Admins' },
-  { key: 'welcome-team', label: 'Welcome team' },
+  ...GRANTABLE_ROLES.map((role) => ({ key: role as GrantableRole, label: FILTER_LABEL[role] })),
   { key: 'teacher', label: 'Teachers' },
 ];
 
@@ -289,8 +302,15 @@ export function SevakManager({ initialSevaks, self }: SevakManagerProps) {
                 <tr>
                   <Th><button type="button" className="ur-sorth" onClick={() => toggleSort('name')}>Name{arrow('name')}</button></Th>
                   <Th>Contact</Th>
-                  <Th center width={84}>Admin</Th>
-                  <Th center width={110}>Welcome team</Th>
+                  {/* One column per grantable role, derived from GRANTABLE_ROLES.
+                      Hardcoding them is what hid `coordinator` from this table
+                      while it was perfectly grantable in the drawer beside it.
+                      If GRANTABLE_ROLES ever reaches five, collapse these into a
+                      single "Roles" chips column - which is what the mobile
+                      cards already do - rather than widening further. */}
+                  {GRANTABLE_ROLES.map((role) => (
+                    <Th key={role} center width={role === 'admin' ? 84 : 110}>{ROLE_CHIP[role].label}</Th>
+                  ))}
                   <Th>Teacher</Th>
                   <Th width={96}><button type="button" className="ur-sorth" onClick={() => toggleSort('source')}>Source{arrow('source')}</button></Th>
                   <Th width={130}><button type="button" className="ur-sorth" onClick={() => toggleSort('lastSignIn')}>Last sign-in{arrow('lastSignIn')}</button></Th>
@@ -317,8 +337,11 @@ export function SevakManager({ initialSevaks, self }: SevakManagerProps) {
                       <Td>
                         <span style={{ fontSize: 13, color: 'var(--body-text)', fontFamily: 'var(--mono)' }}>{row.contact || '(no contact)'}</span>
                       </Td>
-                      <Td center><CheckCell on={row.roles.includes('admin')} bg="var(--accentSoft)" fg="var(--accentDeep)" /></Td>
-                      <Td center><CheckCell on={row.roles.includes('welcome-team')} bg="var(--info-soft)" fg="var(--info-deep)" /></Td>
+                      {GRANTABLE_ROLES.map((role) => (
+                        <Td key={role} center testId={`check-${role}-${row.key}`}>
+                          <CheckCell on={row.roles.includes(role)} bg={ROLE_CHIP[role].bg} fg={ROLE_CHIP[role].fg} />
+                        </Td>
+                      ))}
                       <Td>{row.isTeacher ? <TeacherBadge levels={row.teacherLevels} /> : <Dash />}</Td>
                       <Td><SourcePill source={row.source} /></Td>
                       <Td>
@@ -660,7 +683,11 @@ function AddDialog({ onClose, onGranted }: { onClose: () => void; onGranted: () 
           <div className="field" style={{ marginBottom: 18 }}>
             <label id={roleId}>Role</label>
             <div role="radiogroup" aria-labelledby={roleId} style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-              {([['welcome-team', 'Welcome team'], ['admin', 'Admin']] as const).map(([value, label]) => {
+              {/* Derived from GRANTABLE_ROLES. The hardcoded two-tuple that used
+                  to live here is the bug the owner reported: the server accepts
+                  every grantable role, and this dialog offered two of them. */}
+              {GRANTABLE_ROLES.map((value) => {
+                const label = ROLE_CHIP[value].label;
                 const active = role === value;
                 return (
                   <button
@@ -742,8 +769,11 @@ function Th({ children, center = false, right = false, width }: { children?: Rea
   );
 }
 
-function Td({ children, center = false, right = false }: { children?: React.ReactNode; center?: boolean; right?: boolean }) {
-  return <td style={{ padding: '13px 16px', textAlign: center ? 'center' : right ? 'right' : 'left', verticalAlign: 'middle' }}>{children}</td>;
+function Td({ children, center = false, right = false, testId }: { children?: React.ReactNode; center?: boolean; right?: boolean; testId?: string }) {
+  // `testId` exists so a role check-cell can be asserted BY ROLE rather than by
+  // column position. A positional assertion would still pass if two columns were
+  // swapped, which is the failure a derived column list makes newly possible.
+  return <td data-testid={testId} style={{ padding: '13px 16px', textAlign: center ? 'center' : right ? 'right' : 'left', verticalAlign: 'middle' }}>{children}</td>;
 }
 
 function CheckCell({ on, bg, fg }: { on: boolean; bg: string; fg: string }) {
