@@ -25,6 +25,30 @@ test.describe('admin Users & Roles', () => {
     await expect(vis(page.getByRole('button', { name: /roles reference/i }))).toBeVisible();
   });
 
+  // ── Every grantable role is DISPLAYED, against the deployed page ────────────
+  //
+  // The owner reported this from production: "how can I see coordinator role?"
+  // `coordinator` was in GRANTABLE_ROLES, in listSevaks, in grantRole and in this
+  // screen's own draft state - and missing from three hardcoded display lists.
+  // The unit tests loop over GRANTABLE_ROLES; this proves the built page renders
+  // it, which is a different claim (the earlier run of this spec passed 3/3 while
+  // the column did not exist, because nothing here asserted on it).
+  test('the table and filters show a column and chip for coordinator', async ({ page }) => {
+    await page.goto('/admin/users');
+    await expect(page.getByRole('heading', { name: /users & roles/i }).first()).toBeVisible();
+    // Columns are derived from GRANTABLE_ROLES, so all three must be here.
+    for (const label of ['Admin', 'Welcome team', 'Coordinator']) {
+      await expect(
+        vis(page.getByRole('columnheader', { name: label })),
+        `no '${label}' column on the deployed table`,
+      ).toBeVisible();
+    }
+    await expect(
+      vis(page.getByRole('button', { name: 'Coordinators' })),
+      'no Coordinators filter chip on the deployed page',
+    ).toBeVisible();
+  });
+
   test('granting an unregistered contact is rejected by the registered-user guard', async ({ page }) => {
     await page.goto('/admin/users');
 
@@ -32,8 +56,19 @@ test.describe('admin Users & Roles', () => {
     // email, pick welcome-team, and attempt the grant.
     await vis(page.getByRole('button', { name: /add sevak role/i })).click();
     await vis(page.getByPlaceholder('person@example.com')).fill(TARGET);
-    // Role is a segmented radio control (not a native select).
-    await vis(page.getByRole('radio', { name: 'Welcome team' })).click();
+    // Role is a segmented radio control (not a native select). All three
+    // grantable roles must be offered - the dialog used to hardcode two, which
+    // is the bug the owner hit.
+    for (const label of ['Admin', 'Welcome team', 'Coordinator']) {
+      await expect(
+        vis(page.getByRole('radio', { name: label })),
+        `the Add dialog cannot grant '${label}'`,
+      ).toBeVisible();
+    }
+    // Deliberately COORDINATOR, not welcome-team: this drives the newly-added
+    // option through the real guard. Nothing is written either way (the contact
+    // is unregistered), so there is still nothing to clean up.
+    await vis(page.getByRole('radio', { name: 'Coordinator' })).click();
     await vis(page.getByRole('button', { name: /grant role/i })).click();
 
     // cf25: grantRole now requires an already-registered portal user. An unknown
