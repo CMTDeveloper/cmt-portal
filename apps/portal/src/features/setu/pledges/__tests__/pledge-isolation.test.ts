@@ -106,6 +106,17 @@ describe('the pledge feature is quarantined', () => {
     //      take it back. Added 2026-08-05 after review caught the first draft
     //      leaving that write open for the whole pledge population.
     join('features', 'setu', 'roster', 'payment.ts'),
+    // The welcome-desk payment panels. Note what this entry is NOT: it makes no
+    // payment DECISION at all - `payment.ts` above already decided, and this
+    // file renders what it was handed. It appears here only because it names
+    // `StaffPledgeView` to type its props.
+    //
+    // It is nonetheless the right thing to allowlist rather than to type around,
+    // because it does display pledge state: status, the monthly amount, the
+    // dates, and the payment service's own error text. Erasing the type to slip
+    // past this guard would hide a real surface, which is the failure this
+    // quarantine exists to prevent. Added 2026-08-06 with the payment view.
+    join('features', 'setu', 'roster', 'components', 'family-payment-panels.tsx'),
     // 🔴 The double-charge guard. This entry is NOT the usual "a pledge counts
     // as paid" claim the warning above describes - it is the opposite, and the
     // only entry that REFUSES money rather than reporting it received. A family

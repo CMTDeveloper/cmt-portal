@@ -50,10 +50,40 @@ export const EnrollmentDocSchema = z.object({
    *
    * Bare `.optional()`, never `.default()`: doc schemas validate on READ and
    * every enrollment written before 2026-08-04 lacks the field. Absent means
-   * not settled. Who did it, when and why live in the `audit_log` row written
-   * in the same transaction - this flag is only what the READERS need.
+   * not settled.
+   *
+   * Who did it, when and why are ALSO written to `audit_log` in the same
+   * transaction, and were originally left there alone. That turned out to make
+   * them unreadable in practice: `audit_log` has no reader anywhere in the
+   * codebase and no Firestore index, so answering "who marked this family paid?"
+   * meant a composite index and a prod deploy. The three fields below duplicate
+   * that provenance onto a document every staff screen already reads, which is
+   * what makes it answerable at the welcome desk for free. The audit row remains
+   * the tamper-evident record; these are the display copy.
    */
   settledOffPortal: z.boolean().optional(),
+  /**
+   * Provenance for `settledOffPortal`, denormalized for display.
+   *
+   * All three bare `.nullable().optional()` with NO default and NO `.min(1)` -
+   * this schema validates on READ, and every enrollment settled before
+   * 2026-08-06 carries none of them. A reader must therefore distinguish
+   * "settled, details not recorded" from "settled by X on Y" rather than
+   * rendering a blank name. No backfill: the older rows genuinely do not know.
+   */
+  settledAt: z.date().nullable().optional(),
+  /**
+   * WHO settled it, identified by the actor's session email - not a display
+   * name, because the session does not carry one (`SessionClaims` has `email`,
+   * optional, and no name field). Named `settledBy` rather than `settledByName`
+   * for exactly that reason: a field called ...Name holding an email address is
+   * the kind of small lie that survives into a UI label.
+   *
+   * Null when the acting session had no email, which is why the reader must
+   * handle "settled, and we know when but not by whom" as its own case.
+   */
+  settledBy: z.string().nullable().optional(),
+  settledNote: z.string().nullable().optional(),
   status: z.enum(['active', 'cancelled']),
   cancelledAt: z.date().nullable(),
   cancelledReason: z.string().nullable(),
