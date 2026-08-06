@@ -251,8 +251,10 @@ describe('classifyRosterPayment - settled outside the portal', () => {
 // ── explainRosterPayment - the arithmetic behind the one-word verdict ────────
 //
 // The verdict alone is what the welcome desk has had until now, and it is why
-// Vaibhav ends up in the Stripe dashboard: `unknown` is reachable five distinct
-// ways and the chip cannot say which. A volunteer told "Unknown" has learned
+// Vaibhav ends up in the Stripe dashboard: `unknown` is reachable FOUR distinct
+// ways and the chip cannot say which. (Four, not five - an earlier draft of this
+// header counted the non-finite and negative totals as separate causes, but they
+// share one branch and one reason, `corrupt-total`.) A volunteer told "Unknown" has learned
 // nothing they can act on or repeat back to the family on the phone.
 //
 // `classifyRosterPayment` delegates here, so the explanation cannot drift from

@@ -105,7 +105,7 @@ export interface RosterPaymentExplained {
  * nothing is never labelled paid however much they happened to donate.
  *
  * `classifyRosterPayment` delegates to this and keeps its own signature, so the
- * five existing callers are untouched and - more importantly - the explanation
+ * existing callers are untouched and - more importantly - the explanation
  * can never drift from the verdict it explains. Computing the reason in a
  * second function beside the classifier would have been two implementations of
  * one rule, which is the failure mode this repo has already been bitten by
@@ -186,11 +186,22 @@ export function explainRosterPayment(
 /**
  * The verdict alone, for the callers that only need the word.
  *
- * Five call sites depend on this exact signature (the roster report, the bulk
- * CSV rows, the teacher roster confirmation, the enrollment report, and the
- * off-portal override route's money guard), so it keeps it. It is a projection
- * of `explainRosterPayment`, never a second implementation - that is what stops
- * a screen and the guard that blocks its action from drifting apart.
+ * It is a projection of `explainRosterPayment`, never a second implementation -
+ * that is what stops a screen and the guard that blocks its action from
+ * drifting apart.
+ *
+ * ── Who actually calls this, checked rather than remembered ─────────────────
+ * ONE direct caller: `classifyBulkPayment` in the portal's roster/payment.ts,
+ * which the three bulk surfaces use (report-dataset, build-csv-rows,
+ * teacher/attendance-detail). Everything single-family goes through
+ * `deriveFamilyPayment` → `loadFamilyPaymentData` → `explainRosterPayment` and
+ * never touches this signature.
+ *
+ * An earlier version of this comment listed "five call sites" including the
+ * teacher roster confirmation, the enrollment report and the override route's
+ * money guard. None of those three call it. Corrected 2026-08-06 after review;
+ * the number was written from memory of which SCREENS show a payment verdict,
+ * not from grepping which code calls this function.
  */
 export function classifyRosterPayment(
   active: readonly ActiveEnrollmentCharge[],

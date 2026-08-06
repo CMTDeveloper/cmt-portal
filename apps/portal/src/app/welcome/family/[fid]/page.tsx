@@ -177,9 +177,16 @@ export async function WelcomeFamilyDetailBody({
   // centre and breaks ties the same way the family's enroll page does, so the
   // admin cannot enrol them into a different centre's class than the one they
   // would have joined themselves.
+  // `payment &&` is load-bearing, not defensive noise. `hasActiveBv` is derived
+  // from `overridable`, which is EMPTY when the payment read failed - so without
+  // this guard a family we could not read looks exactly like a family with no
+  // Bala Vihar enrollment, and the admin is offered "Enrol and mark paid",
+  // whose confirm path ends in the same `settledOffPortal` write as the
+  // override button beside it. The button we DID gate and the button we did not
+  // reach the same money record; gating one was not enough.
   const hasActiveBv = overridable.some((e) => e.programKey === BALA_VIHAR);
   let joinableBv: AdminEnrollOffering | null = null;
-  if (admin && !hasActiveBv) {
+  if (admin && payment && !hasActiveBv) {
     try {
       const offerings = await getOpenOfferingsForFamily(BALA_VIHAR, data.family.location);
       const chosen = resolveCurrentOffering(offerings, data.family.location);
@@ -307,7 +314,7 @@ function FamilyDetailBody({ family, members, adults, children, sevaProgress, pay
           Kept BELOW the two read-only sections deliberately: status, then
           evidence, then the action. An admin should have read what actually
           happened before being offered a button that records money. */}
-      {canOverride && (
+      {canOverride && payment && (
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: '.1em', textTransform: 'uppercase', marginBottom: 4 }}>
             Record an off-portal donation

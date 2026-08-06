@@ -165,6 +165,20 @@ export async function deriveFamilyPayment(fid: string): Promise<RosterPayment> {
  * refuses only on a positive 'paid', because blocking settlement on absence of
  * evidence would strand the families that action exists for.
  */
+/**
+ * Why THIS screen cannot answer - the domain's four reasons, plus one only a
+ * caller with a failed read can know about.
+ *
+ * `donations-unavailable` is deliberately a NAMED reason rather than `null`.
+ * The first cut returned `unknown` with no reason on a failed donations read,
+ * which put a bare "Unknown" chip in front of a volunteer with nothing to tell
+ * the family - exactly the failure this whole feature exists to end,
+ * reintroduced through the back door. Worse, it was type-INVISIBLE: nothing
+ * would ever have forced copy to exist for it. Naming it makes the panel's
+ * `Record<FamilyUnknownReason, string>` refuse to compile without a sentence.
+ */
+export type FamilyUnknownReason = RosterPaymentUnknownReason | 'donations-unavailable';
+
 export interface FamilyPaymentData {
   /** ALL enrollments, active and cancelled, newest first. */
   enrollments: EnrollmentWithOffering[];
@@ -181,8 +195,8 @@ export interface FamilyPaymentData {
   expectedCAD: number | null;
   /** Completed donations, ALL TIME (#117). Null when the read failed. */
   paidCAD: number | null;
-  /** Which of the four routes to `unknown` was taken. Null otherwise. */
-  unknownReason: RosterPaymentUnknownReason | null;
+  /** Why the verdict is `unknown`. Null on every other verdict. */
+  unknownReason: FamilyUnknownReason | null;
   /** True when an active pledge is what makes this family 'paid'. */
   paidByPledge: boolean;
 }
@@ -217,7 +231,7 @@ export async function loadFamilyPaymentData(fid: string): Promise<FamilyPaymentD
       verdict: 'unknown',
       expectedCAD: null,
       paidCAD: null,
-      unknownReason: null,
+      unknownReason: 'donations-unavailable',
       paidByPledge: false,
     };
   }

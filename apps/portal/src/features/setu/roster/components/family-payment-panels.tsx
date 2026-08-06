@@ -1,7 +1,7 @@
-import type { RosterPayment, RosterPaymentUnknownReason, DonationDoc } from '@cmt/shared-domain';
+import type { RosterPayment, DonationDoc } from '@cmt/shared-domain';
 import { chargeAmount, paymentSourceOf } from '@cmt/shared-domain/setu';
 import type { StaffPledgeView } from '@/features/setu/pledges/get-pledges-for-staff';
-import type { FamilyPaymentData } from '../payment';
+import type { FamilyPaymentData, FamilyUnknownReason } from '../payment';
 
 /**
  * The welcome desk's payment answer for one family.
@@ -96,7 +96,12 @@ const VERDICT_TONE: Record<RosterPayment, 'good' | 'warn' | 'neutral'> = {
  * corrupt amount). So a desk that saw only "Unknown" was being sent to look in
  * the one place the answer could never be.
  */
-const UNKNOWN_COPY: Record<RosterPaymentUnknownReason, string> = {
+const UNKNOWN_COPY: Record<FamilyUnknownReason, string> = {
+  // Not a family fact at all - a fault on our side. It says so, because telling
+  // a volunteer "unknown" about a family who may well have paid is how a paid
+  // family gets chased for money.
+  'donations-unavailable':
+    'We could not read this family\u2019s donation history just now, so this is not a verdict on whether they have paid. Please refresh before telling them anything.',
   'no-active-enrollment': 'Nobody in this family is enrolled in a program this year, so there is nothing to pay.',
   'unpriceable-enrollment':
     'One of their programs has no fee recorded against it, so the portal cannot work out what is owed. An admin needs to set the price on that offering.',
@@ -156,13 +161,27 @@ export function FamilyPaymentSection({ payment, canSeeMoney }: FamilyPaymentSect
         {canSeeMoney && payment.expectedCAD !== null && (
           <p style={{ fontSize: 13, margin: '0 0 4px', color: 'var(--body-text)' }}>
             Expected {money(payment.expectedCAD)}
-            {payment.paidCAD !== null && (
+            {/* ⚠️ The received figure is SUPPRESSED for a pledge family, and
+                that is not cosmetic. A live pre-authorized debit writes no
+                completed donation docs (no Stripe webhook), so the honest value
+                of `paidCAD` is $0 - and "Paid · Monthly plan" printed directly
+                above "received $0" reads as a contradiction that sends the
+                reader to Stripe to find out which half is lying. Both halves
+                are true; putting them side by side is what misleads. */}
+            {payment.paidByPledge ? (
               <>
                 {' · '}
-                <span style={{ color: 'var(--muted)' }}>
-                  received {money(payment.paidCAD)} in portal donations (all time)
-                </span>
+                <span style={{ color: 'var(--muted)' }}>collected by monthly pre-authorized debit</span>
               </>
+            ) : (
+              payment.paidCAD !== null && (
+                <>
+                  {' · '}
+                  <span style={{ color: 'var(--muted)' }}>
+                    received {money(payment.paidCAD)} in portal donations (all time)
+                  </span>
+                </>
+              )
             )}
           </p>
         )}
@@ -278,10 +297,16 @@ function EnrollmentRow({
             : 'Fees for this program are recorded outside the portal.'}
         </div>
       )}
-      {/* Settlement provenance. Absent on every enrollment settled before the
-          fields existed, so the row says which of the two it is rather than
-          rendering a blank "by  on ". */}
-      {e.settledOffPortal === true && (
+      {/* Settlement provenance - ADMIN ONLY (`canSeeMoney`).
+          The chip above says THAT it was settled and stays visible to everyone,
+          because that is a status like any other. This line is different: it
+          carries `settledBy` (a staff member's email) and `settledNote`, which
+          is REQUIRED free text whose stated purpose is "why this family's ask
+          was changed" - i.e. the field an admin fills with "$500 e-transfer
+          confirmed Aug 3". Shipping it ungated leaked a dollar figure to every
+          volunteer on a page that gates the amount line ten lines above.
+          Caught in review, before anyone had settled a family with a note. */}
+      {canSeeMoney && e.settledOffPortal === true && (
         <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
           {/* Three cases, not two. Every enrollment settled before 2026-08-06
               carries none of these fields, and a session without an email
@@ -310,7 +335,14 @@ const DONATION_STATUS_COPY: Record<string, string> = {
 };
 
 const PLEDGE_STATUS_COPY: Record<string, string> = {
-  active: 'Active - debited monthly',
+  // "Active as of the last check", NOT "Active - debited monthly". The portal
+  // re-checks a pledge only while it is `started`; once active nothing ever
+  // looks again (#54/#64). A subscription cancelled at Stripe, or one whose
+  // debits are failing, reads `active` here forever - so a flat "debited
+  // monthly" is a claim about the present that nothing has verified, on the one
+  // screen built to stop people trusting the wrong thing. `lastCheckedAt`
+  // renders beside this.
+  active: 'Active as of the last check',
   started: 'Started - mandate not yet confirmed',
   failed: 'Failed',
   cancelled: 'Cancelled',

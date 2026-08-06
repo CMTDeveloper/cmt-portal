@@ -754,3 +754,120 @@ describe('WelcomeFamilyDetailPage — payment activity (admin only)', () => {
     expect(screen.queryByText(/No donations have been started/i)).toBeNull();
   });
 });
+
+// ── Review findings, 2026-08-06 (Codex) ─────────────────────────────────────
+// Three defects that every existing test passed straight through, because the
+// unit suite mocks the loader and never renders these combinations.
+describe('WelcomeFamilyDetailPage — review fixes', () => {
+  const asAdmin = () =>
+    mockVerifyPortalSessionCookie.mockResolvedValue({ uid: 'ad-1', role: 'admin' } as never);
+
+  const settled = {
+    eid: 'e1', programKey: 'bala-vihar', programLabel: 'Bala Vihar', termLabel: '2026-27',
+    status: 'active', effectiveSuggestedAmount: 0, suggestedAmountSnapshot: 400,
+    suggestedAmountOverride: 0, settledOffPortal: true,
+    settledAt: new Date('2026-08-03T00:00:00Z'),
+    settledBy: 'treasurer@chinmayatoronto.org',
+    settledNote: '$500 e-transfer confirmed Aug 3',
+    enrolledAt: new Date('2026-09-01T00:00:00Z'),
+    offering: { pricingTiers: [{ effectiveFrom: '2026-09-01', amountCAD: 400, label: 'Year' }] },
+  };
+
+  const render_ = async () =>
+    render(await WelcomeFamilyDetailPage({ params: Promise.resolve({ fid: 'FAM001' }) }) as React.ReactElement);
+
+  beforeEach(() => {
+    mockGetFamilyForWelcome.mockResolvedValue({ family: SAMPLE_FAMILY, members: SAMPLE_MEMBERS });
+  });
+
+  it('does NOT leak the settlement note or the settling admin to a volunteer', async () => {
+    // `settledNote` is REQUIRED free text meaning "why this family's ask was
+    // changed" - the field an admin fills with a dollar amount. It shipped
+    // ungated on a page whose amount line ten lines above IS gated.
+    mockLoadPayment.mockResolvedValue({
+      enrollments: [settled], donations: [], pledges: [], verdict: 'paid',
+      expectedCAD: 0, paidCAD: 0, unknownReason: null, paidByPledge: false,
+    });
+
+    await render_();
+
+    expect(screen.queryByText(/e-transfer confirmed/i)).toBeNull();
+    expect(screen.queryByText(/treasurer@chinmayatoronto.org/)).toBeNull();
+    // The CHIP stays - "settled off-portal" is a status, like any other, and a
+    // volunteer needs to know the money is handled elsewhere.
+    expect(screen.getAllByText(/Settled off-portal/i).length).toBeGreaterThan(0);
+  });
+
+  it('shows an ADMIN who settled it and why', async () => {
+    asAdmin();
+    mockLoadPayment.mockResolvedValue({
+      enrollments: [settled], donations: [], pledges: [], verdict: 'paid',
+      expectedCAD: 0, paidCAD: 0, unknownReason: null, paidByPledge: false,
+    });
+
+    await render_();
+
+    expect(screen.getAllByText(/Recorded by treasurer@chinmayatoronto.org/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/e-transfer confirmed Aug 3/).length).toBeGreaterThan(0);
+  });
+
+  it('never prints "received $0" beside a Paid chip for a pledge family', async () => {
+    // The contradiction: a live PAD writes no completed donation docs, so
+    // paidCAD is honestly 0 - and "Paid · Monthly plan" directly above
+    // "received $0" reads as one of the two being a lie, which is exactly the
+    // trip to Stripe this feature exists to prevent.
+    asAdmin();
+    mockLoadPayment.mockResolvedValue({
+      enrollments: [], donations: [], pledges: [], verdict: 'paid',
+      expectedCAD: 500, paidCAD: 0, unknownReason: null, paidByPledge: true,
+    });
+
+    await render_();
+
+    expect(screen.queryByText(/received \$0/)).toBeNull();
+    expect(screen.getAllByText(/collected by monthly pre-authorized debit/).length).toBeGreaterThan(0);
+    // The expected figure still shows - an admin still needs to know the ask.
+    expect(screen.getAllByText(/Expected \$500/).length).toBeGreaterThan(0);
+  });
+
+  it('explains an Unknown caused by a FAILED READ, rather than leaving it bare', async () => {
+    // A volunteer seeing a bare "Unknown" is the exact failure this feature was
+    // built to end. A lost donations read reintroduced it through the back door,
+    // and was type-invisible because the reason was `null`.
+    mockLoadPayment.mockResolvedValue({
+      enrollments: [], donations: 'unavailable', pledges: [], verdict: 'unknown',
+      expectedCAD: null, paidCAD: null, unknownReason: 'donations-unavailable', paidByPledge: false,
+    });
+
+    await render_();
+
+    expect(screen.getAllByText(/could not read this family/i).length).toBeGreaterThan(0);
+    // ...and it must NOT read as a verdict about the family.
+    expect(screen.getAllByText(/not a verdict on whether they have paid/i).length).toBeGreaterThan(0);
+  });
+});
+
+// ── The second money control, found by Fable after the first was fixed ───────
+describe('WelcomeFamilyDetailPage — the OTHER off-portal write must also fail closed', () => {
+  it('offers no enrol-and-mark-paid path on a family whose payment could not be read', async () => {
+    // `hasActiveBv` is derived from `overridable`, which is EMPTY when the
+    // payment read fails - so a family we could not read looked exactly like a
+    // family with no Bala Vihar enrollment, and the admin was still offered
+    // "Enrol and mark paid", whose confirm path ends in the SAME
+    // settledOffPortal write as the button beside it.
+    //
+    // Worse, the fallback copy asserted "This family has no active enrollment" -
+    // a claim the page knows it cannot make, printed directly under "Couldn't
+    // load this family's programs".
+    mockVerifyPortalSessionCookie.mockResolvedValue({ uid: 'ad-1', role: 'admin' } as never);
+    mockGetFamilyForWelcome.mockResolvedValue({ family: SAMPLE_FAMILY, members: SAMPLE_MEMBERS });
+    mockLoadPayment.mockRejectedValue(new Error('firestore unavailable'));
+
+    render(await WelcomeFamilyDetailPage({ params: Promise.resolve({ fid: 'FAM001' }) }) as React.ReactElement);
+
+    expect(screen.getAllByText(/Couldn't load this family's programs/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/Record an off-portal donation/i)).toBeNull();
+    // The sentence the page had no right to say.
+    expect(screen.queryByText(/no active enrollment/i)).toBeNull();
+  });
+});
