@@ -58,6 +58,13 @@ vi.mock('@/features/setu/auth/get-current-session-email', () => ({
 // ── Firestore ─────────────────────────────────────────────────────────────────
 const mockFirestoreGet = vi.hoisted(() => vi.fn());
 const mockFirestoreSet = vi.hoisted(() => vi.fn());
+// `create` is pointed at the SAME spy as `set` on purpose. The accept route's
+// legacy-create branch writes with txn.create() so a taken member id fails
+// loudly instead of overwriting; WHICH verb it uses is pinned by that route's
+// own unit test. This suite is about the send->accept flow end to end, and
+// splitting the spy here would only make every write assertion below ask a
+// question it does not care about.
+const mockFirestoreCreate = mockFirestoreSet;
 const mockFirestoreDelete = vi.hoisted(() => vi.fn());
 const mockFirestoreUpdate = vi.hoisted(() => vi.fn());
 const mockCollectionGet = vi.hoisted(() => vi.fn());
@@ -71,6 +78,7 @@ vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
         id: _id ?? 'auto-id',
         get: mockFirestoreGet,
         set: mockFirestoreSet,
+      create: mockFirestoreCreate,
         delete: mockFirestoreDelete,
         update: mockFirestoreUpdate,
         collection: vi.fn().mockImplementation((_sub: string) => ({
@@ -78,6 +86,7 @@ vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
             id: _sid ?? 'sub-auto-id',
             get: mockFirestoreGet,
             set: mockFirestoreSet,
+      create: mockFirestoreCreate,
             delete: mockFirestoreDelete,
             update: mockFirestoreUpdate,
           })),
@@ -243,6 +252,7 @@ function setupSendTransaction() {
         // 3. txn.get(inviterMemberRef)
         .mockResolvedValueOnce({ exists: true, data: () => MANAGER_DOC }),
       set: mockFirestoreSet,
+      create: mockFirestoreCreate,
     };
     return fn(txn);
   });
@@ -272,6 +282,7 @@ function setupAcceptTransaction(opts: {
           data: () => contactKeyExists ? { fid: contactKeyFid, mid: `${contactKeyFid}-99` } : undefined,
         }),
       set: mockFirestoreSet,
+      create: mockFirestoreCreate,
       update: mockFirestoreUpdate,
     };
     return fn(txn);
@@ -416,7 +427,8 @@ describe('edge: expired invite', () => {
     const fakeRef = { parent: { parent: { id: FID } } };
     mockCollectionGroupGet.mockResolvedValueOnce({ empty: false, docs: [{ data: () => inviteDoc, ref: fakeRef }] });
     mockRunTransaction.mockImplementation(async (fn: (txn: unknown) => Promise<unknown>) => {
-    const txn = { get: vi.fn().mockResolvedValueOnce({ exists: true, data: () => inviteDoc }), set: mockFirestoreSet, update: mockFirestoreUpdate };
+    const txn = { get: vi.fn().mockResolvedValueOnce({ exists: true, data: () => inviteDoc }), set: mockFirestoreSet,
+      create: mockFirestoreCreate, update: mockFirestoreUpdate };
     return fn(txn);
   });
 
@@ -458,7 +470,8 @@ describe('edge: already-accepted invite', () => {
     const fakeRef = { parent: { parent: { id: FID } } };
     mockCollectionGroupGet.mockResolvedValueOnce({ empty: false, docs: [{ data: () => inviteDoc, ref: fakeRef }] });
     mockRunTransaction.mockImplementation(async (fn: (txn: unknown) => Promise<unknown>) => {
-    const txn = { get: vi.fn().mockResolvedValueOnce({ exists: true, data: () => inviteDoc }), set: mockFirestoreSet, update: mockFirestoreUpdate };
+    const txn = { get: vi.fn().mockResolvedValueOnce({ exists: true, data: () => inviteDoc }), set: mockFirestoreSet,
+      create: mockFirestoreCreate, update: mockFirestoreUpdate };
     return fn(txn);
   });
 
@@ -485,7 +498,8 @@ describe('edge: email mismatch — wrong user tries to accept', () => {
     const fakeRef = { parent: { parent: { id: FID } } };
     mockCollectionGroupGet.mockResolvedValueOnce({ empty: false, docs: [{ data: () => inviteDoc, ref: fakeRef }] });
     mockRunTransaction.mockImplementation(async (fn: (txn: unknown) => Promise<unknown>) => {
-    const txn = { get: vi.fn().mockResolvedValueOnce({ exists: true, data: () => inviteDoc }), set: mockFirestoreSet, update: mockFirestoreUpdate };
+    const txn = { get: vi.fn().mockResolvedValueOnce({ exists: true, data: () => inviteDoc }), set: mockFirestoreSet,
+      create: mockFirestoreCreate, update: mockFirestoreUpdate };
     return fn(txn);
   });
 

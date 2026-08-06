@@ -158,6 +158,48 @@ describe('build-session-claims — sign-in gate (pending members)', () => {
     expect(mockLazyMigrate).toHaveBeenCalledWith('42');
   });
 
+  // The SAME sevak exemption, on the LEGACY path. The two gating conditions in
+  // build-session-claims are textual duplicates, and a duplicate with only one
+  // of them pinned is not really pinned: delete `!isCoordinatorUser` from the
+  // lazy-migration branch and every other test here stays green.
+  //
+  // This is not a hypothetical route either - a legacy family's FIRST sign-in
+  // comes through here, so a sevak who has never used the portal before would
+  // be locked out on exactly one of the two ways in.
+  //
+  // ⚠️ KNOWN LIMIT, measured while writing this: the grant must be on the
+  // ACCOUNT CLAIMS for the exemption to fire here. A MID-KEYED grant (one that
+  // lives in roleAssignments) is still gated on this path, because
+  // `getMemberRoles` runs against the pre-migration lookup - which has no Setu
+  // mid yet, so there is nothing to key on. The same is true of welcome-team
+  // and admin; it is not specific to coordinator, and it is pre-existing.
+  // Tracked separately rather than papered over: the first version of this test
+  // used a mid-keyed grant, failed, and would have read as "the fix does not
+  // work" instead of "it does not reach one of the two ways a grant arrives".
+  it('a lazy-migrated pending member who is a SEVAK is not gated on the legacy path either', async () => {
+    mockFind
+      .mockResolvedValueOnce({ source: 'legacy', fid: null, mid: null, legacyFid: '43', member: undefined })
+      .mockResolvedValueOnce({
+        source: 'setu',
+        fid: 'CMT-FAMNEW',
+        mid: 'CMT-FAMNEW-03',
+        legacyFid: '43',
+        member: { manager: false, portalAccess: 'pending' },
+      });
+    mockGetUser.mockResolvedValue({ customClaims: { role: 'coordinator' } });
+
+    const res = await buildSessionClaimsForContact({
+      type: 'email',
+      value: 'legacy.coord@example.com',
+      contactProvenance: 'otp',
+    });
+
+    expect(isPendingApproval(res)).toBe(false);
+    expect(hasSession(res)).toBe(true);
+    if (!hasSession(res)) return;
+    expect(res.claims.extraRoles).toContain('coordinator');
+  });
+
   it('a pending member who is ALSO a sevak (welcome-team) is NOT gated (keeps family resolution)', async () => {
     mockFind.mockResolvedValue({
       source: 'setu',
@@ -180,5 +222,59 @@ describe('build-session-claims — sign-in gate (pending members)', () => {
     if (!hasSession(res)) return;
     expect(res.claims.role).toBe('family-member');
     expect(res.claims.extraRoles).toEqual(['welcome-team']);
+  });
+
+  // The same rule has to cover coordinator as of 2026-08-05, when it became a
+  // SUPERSET of welcome-team. This function does not call isWelcomeTeam() - it
+  // derives its own boolean from the grant docs - so the one-line inheritance
+  // in role.ts does NOT reach it.
+  //
+  // The failure it prevents is the worst shape available: a coordinator whose
+  // own family record is pending gets no session at all, so the route-layer
+  // inheritance never runs. They are not degraded, they are locked out, and the
+  // screen tells them to go ask their family manager for approval.
+  it('a pending member who is ALSO a coordinator is NOT gated either', async () => {
+    mockFind.mockResolvedValue({
+      source: 'setu',
+      fid: 'CMT-FAM1',
+      mid: 'CMT-FAM1-04',
+      legacyFid: null,
+      member: { manager: false, portalAccess: 'pending' },
+    });
+    mockGetMemberRoles.mockResolvedValue(['coordinator']);
+
+    const res = await buildSessionClaimsForContact({
+      type: 'email',
+      value: 'coord-pending@example.com',
+      contactProvenance: 'otp',
+    });
+
+    expect(isPendingApproval(res)).toBe(false);
+    expect(hasSession(res)).toBe(true);
+    if (!hasSession(res)) return;
+    expect(res.claims.role).toBe('family-member');
+    expect(res.claims.extraRoles).toEqual(['coordinator']);
+  });
+
+  // The gate must still hold for someone with NO sevak role - the bypass is for
+  // staff, not a hole. Without this the test above would pass just as well if
+  // the gate were deleted outright.
+  it('still gates a pending member who holds no sevak role at all', async () => {
+    mockFind.mockResolvedValue({
+      source: 'setu',
+      fid: 'CMT-FAM1',
+      mid: 'CMT-FAM1-04',
+      legacyFid: null,
+      member: { manager: false, portalAccess: 'pending' },
+    });
+    mockGetMemberRoles.mockResolvedValue([]);
+
+    const res = await buildSessionClaimsForContact({
+      type: 'email',
+      value: 'plain-pending@example.com',
+      contactProvenance: 'otp',
+    });
+
+    expect(isPendingApproval(res)).toBe(true);
   });
 });

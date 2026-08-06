@@ -51,19 +51,24 @@ describe('welcome mobile nav — role scoping', () => {
   const hrefs = (a: Parameters<typeof buildWelcomeNavItems>[0]) => buildWelcomeNavItems(a).map((i) => i.href);
 
   it('welcome-team gets the roster and the visitors board, and nothing else', () => {
-    expect(hrefs({ role: 'welcome-team' })).toEqual(['/welcome/roster', '/welcome/visitors']);
+    expect(hrefs({})).toEqual(['/welcome/roster', '/welcome/visitors']);
   });
 
   it('a welcome-team member with their own family also gets a way back to it', () => {
-    expect(hrefs({ role: 'welcome-team', hasFamily: true })).toEqual([
+    expect(hrefs({ hasFamily: true })).toEqual([
       '/welcome/roster',
       '/welcome/visitors',
       '/family',
     ]);
   });
 
-  it('coordinator gets the roster only — the visitors board is not in that grant', () => {
-    expect(hrefs({ role: 'coordinator' })).toEqual(['/welcome/roster']);
+  // Was "coordinator gets the roster only - the visitors board is not in that
+  // grant". Coordinator inherits the whole welcome-team grant as of 2026-08-05,
+  // so it now gets the same two tabs and `role` stopped being an input to this
+  // builder at all. Kept as a named case rather than deleted: the question
+  // "what does a coordinator see here?" is still worth an answer in this file.
+  it('coordinator sees the same two boards - it inherits welcome-team', () => {
+    expect(hrefs({})).toEqual(['/welcome/roster', '/welcome/visitors']);
   });
 
   it('admin keeps every section, because /admin does not link levels or prasad', () => {
@@ -79,7 +84,7 @@ describe('welcome mobile nav — role scoping', () => {
   });
 
   it('the teacher tab is additive and does not displace a section', () => {
-    expect(hrefs({ role: 'welcome-team', showTeacher: true })).toEqual([
+    expect(hrefs({ showTeacher: true })).toEqual([
       '/welcome/roster',
       '/welcome/visitors',
       '/teacher',
@@ -147,7 +152,7 @@ describe('welcome bottom nav fits one row', () => {
   const AUDIENCES = [
     { name: 'admin (the worst case - every destination)', audience: { isAdmin: true, showTeacher: true, hasFamily: true } },
     { name: 'welcome-team volunteer', audience: { hasFamily: true } },
-    { name: 'coordinator', audience: { role: 'coordinator' as const, hasFamily: true } },
+    { name: 'coordinator (same tabs as welcome-team since 2026-08-05)', audience: { hasFamily: true } },
   ];
 
   for (const { name, audience } of AUDIENCES) {

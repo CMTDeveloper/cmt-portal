@@ -126,3 +126,61 @@ describe('getEnrollments — effectiveSuggestedAmount', () => {
     expect(result).toEqual([]);
   });
 });
+
+// ── Every Date field must survive the Firestore→object conversion ────────────
+//
+// 🔴 `settledAt` was added to EnrollmentDocSchema on 2026-08-06 and NOT added to
+// `rawToEnrollment`, which converts `enrolledAt` and `cancelledAt` by hand and
+// spreads everything else through raw. A Firestore `Timestamp` is not a `Date`
+// and has no `toLocaleDateString`, so `/welcome/family/[fid]` would have thrown
+// server-side - for EVERY staff role, since the settlement line renders for all
+// of them - the first time anyone marked a family settled off-portal.
+//
+// The `as Omit<EnrollmentDoc, ...>` cast is what hid it: it asserts the raw
+// object already matches the type for every field not named, which is a lie for
+// exactly the field someone forgot. The compiler cannot help here, so this test
+// is the guard.
+describe('rawToEnrollment converts EVERY timestamp, not just the two it started with', () => {
+  const SETTLED = new Date('2026-08-03T15:00:00Z');
+
+  it('turns a Firestore Timestamp settledAt into a real Date', async () => {
+    enrollmentsGet.mockResolvedValue({
+      empty: false,
+      docs: [
+        {
+          data: () =>
+            enrollmentData({
+              settledOffPortal: true,
+              // Exactly what the Admin SDK hands back: an object with toDate(),
+              // NOT a Date. `FieldValue.serverTimestamp()` writes one of these.
+              settledAt: { toDate: () => SETTLED },
+              settledBy: 'treasurer@chinmayatoronto.org',
+              settledNote: 'cheque',
+            }),
+        },
+      ],
+    });
+    offeringGet.mockResolvedValue({ exists: false });
+
+    const rows = await getEnrollments('CMT-MATTA');
+
+    expect(rows[0]?.settledAt).toBeInstanceOf(Date);
+    expect(rows[0]?.settledAt?.getTime()).toBe(SETTLED.getTime());
+    // The thing that actually crashed: any screen formatting the value.
+    expect(() => rows[0]!.settledAt!.toLocaleDateString('en-CA')).not.toThrow();
+  });
+
+  it('leaves settledAt null on an enrollment that was never settled', async () => {
+    // Every enrollment written before 2026-08-06 lacks the field entirely, so
+    // absent must read as null rather than becoming `new Date(undefined)`.
+    enrollmentsGet.mockResolvedValue({
+      empty: false,
+      docs: [{ data: () => enrollmentData() }],
+    });
+    offeringGet.mockResolvedValue({ exists: false });
+
+    const rows = await getEnrollments('CMT-MATTA');
+
+    expect(rows[0]?.settledAt).toBeNull();
+  });
+});

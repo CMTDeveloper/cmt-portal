@@ -214,3 +214,95 @@ describe('PATCH override — a family who already paid in the portal', () => {
     expect(mockTxnUpdate).toHaveBeenCalled();
   });
 });
+
+// ── Settlement provenance on the enrollment doc ──────────────────────────────
+//
+// The same who/when/why has always gone to `audit_log` in this transaction, and
+// still does. It was unreadable in practice: audit_log has no reader anywhere in
+// the codebase and no Firestore index, so "who marked this family paid?" needed
+// a composite index and a prod deploy to answer. These fields put it on a
+// document the welcome desk already reads.
+describe('PATCH override - settlement provenance', () => {
+  /** The same request, plus the email header middleware normally supplies. */
+  function requestWithEmail(body: unknown, email: string) {
+    return new Request('http://localhost/api/welcome/enrollments/E1/override', {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+        'x-portal-role': 'admin',
+        'x-portal-uid': 'admin-1',
+        'x-portal-email': email,
+      },
+      body: JSON.stringify(body),
+    });
+  }
+
+  it('stamps who, when and why alongside the flag', async () => {
+    setup({ programKey: 'bala-vihar', suggestedAmountOverride: null });
+
+    await PATCH(requestWithEmail({ suggestedAmountOverride: 0, note: 'legacy PAD' }, 'admin@chinmayatoronto.org'), {
+      params: Promise.resolve({ eid: 'E1' }),
+    });
+
+    expect(mockTxnUpdate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        settledOffPortal: true,
+        settledAt: 'ts',
+        settledBy: 'admin@chinmayatoronto.org',
+        settledNote: 'legacy PAD',
+      }),
+    );
+  });
+
+  it('records the date even when the session carries no email', async () => {
+    // `email` is optional on SessionClaims, so `settledBy` is genuinely
+    // nullable. The screen has to render "Recorded on <date>" for this case
+    // rather than "Recorded by  on <date>" - which is why the field is named
+    // settledBy and not settledByName, and why the reader has three branches.
+    setup({ programKey: 'bala-vihar', suggestedAmountOverride: null });
+
+    await PATCH(makeRequest({ suggestedAmountOverride: 0, note: 'cash at the office' }), {
+      params: Promise.resolve({ eid: 'E1' }),
+    });
+
+    expect(mockTxnUpdate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ settledOffPortal: true, settledAt: 'ts', settledBy: null }),
+    );
+  });
+
+  it('CLEARS the provenance on undo, rather than leaving a stale attribution', async () => {
+    // The direction that matters. An admin clicking Undo restores the ask; if
+    // "Recorded by X on Sep 3" survived underneath it, the screen would keep
+    // attributing a settlement that no longer exists to a named person.
+    setup({ programKey: 'bala-vihar', suggestedAmountOverride: 0, settledOffPortal: true });
+
+    await PATCH(makeRequest({ suggestedAmountOverride: null, note: 'arrangement ended' }), {
+      params: Promise.resolve({ eid: 'E1' }),
+    });
+
+    expect(mockTxnUpdate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        settledOffPortal: false,
+        settledAt: null,
+        settledBy: null,
+        settledNote: null,
+      }),
+    );
+  });
+
+  it('still writes the audit row - this denormalization does not replace it', async () => {
+    // The audit row is the tamper-evident record and is written inside the same
+    // transaction, so a committed write can never lack one. The enrollment
+    // fields are display copy, not a substitute.
+    setup({ programKey: 'bala-vihar', suggestedAmountOverride: null });
+
+    await PATCH(makeRequest({ suggestedAmountOverride: 0, note: 'cheque' }), {
+      params: Promise.resolve({ eid: 'E1' }),
+    });
+
+    expect(writeAuditLog).toHaveBeenCalled();
+  });
+});

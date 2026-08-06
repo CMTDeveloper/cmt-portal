@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { isWelcomeTeam, isCoordinator, isTeacher, type WithRole } from '@cmt/shared-domain';
 
 // The coordinator role must be able to hold a session with NO family. Three
 // separate sites decide that, and preservedExtras() is only one of them: the
@@ -125,9 +126,22 @@ describe('build-session-claims - coordinator role', () => {
     expect(res.redirectTo).toBe('/admin');
   });
 
-  it('welcome-team still wins over coordinator when both are held (they are siblings)', async () => {
-    // Order in the family-less chain is deliberate and pinned: welcome-team is
-    // the broader existing staff surface, so it keeps the primary slot.
+  // Was "welcome-team still wins over coordinator when both are held (they are
+  // siblings)", justified as "welcome-team is the broader existing staff
+  // surface". Both halves died on 2026-08-05: they are not siblings, and
+  // coordinator is the broader surface.
+  //
+  // The ordering was not merely mislabelled, it dropped a capability. This
+  // branch mints `{ role, ...contactClaim }` with NO extraRoles - unlike the
+  // family branch, which calls preservedExtras() - so whichever role loses the
+  // if/else is not demoted to an extra, it is GONE. A standalone sevak holding
+  // both grants was signed in as plain welcome-team and lost /admin/programs
+  // and /admin/levels, the screens the coordinator role exists for.
+  //
+  // Coordinator is checked first now, which needs no extraRoles to be correct:
+  // isWelcomeTeam() returns true for coordinator, so the senior role carries
+  // the junior one's whole grant with it.
+  it('coordinator wins the primary slot over welcome-team - it is the superset', async () => {
     mockGetUser.mockResolvedValue({ customClaims: { role: 'welcome-team', extraRoles: ['coordinator'] } });
 
     const res = await buildSessionClaimsForContact({
@@ -138,10 +152,29 @@ describe('build-session-claims - coordinator role', () => {
 
     expect(hasSession(res)).toBe(true);
     if (!hasSession(res)) return;
-    expect(res.claims.role).toBe('welcome-team');
+    expect(res.claims.role).toBe('coordinator');
     // '/welcome/roster', not '/welcome': the index is a next.config redirect
     // now, so naming it here would cost a signed-in sevak an extra round trip.
     expect(res.redirectTo).toBe('/welcome/roster');
+  });
+
+  // The point of the reorder, asserted as a capability rather than as a string:
+  // whatever primary role this person ends up with, both grants must survive
+  // the session. Pinning only `claims.role` is what let the loss go unnoticed.
+  it('a sevak holding BOTH grants keeps both capabilities in the minted session', async () => {
+    mockGetUser.mockResolvedValue({ customClaims: { role: 'welcome-team', extraRoles: ['coordinator'] } });
+
+    const res = await buildSessionClaimsForContact({
+      type: 'email',
+      value: 'both@chinmayatoronto.org',
+      contactProvenance: 'password',
+    });
+
+    expect(hasSession(res)).toBe(true);
+    if (!hasSession(res)) return;
+    const claims = { role: res.claims.role, extraRoles: res.claims.extraRoles } as WithRole;
+    expect(isWelcomeTeam(claims), 'lost the welcome-team grant').toBe(true);
+    expect(isCoordinator(claims), 'lost the coordinator grant').toBe(true);
   });
 
   it('still redirects a brand-new no-role account to register (guard intact)', async () => {
@@ -155,5 +188,43 @@ describe('build-session-claims - coordinator role', () => {
 
     expect(hasSession(res)).toBe(false);
     expect('redirectTo' in res && res.redirectTo).toBe('/register?contact=verified');
+  });
+
+  // ── The family-less chain must not DROP a capability ──────────────────────
+  //
+  // Ordering fixes the welcome-team/coordinator pair because one subsumes the
+  // other. It cannot fix teacher: isTeacher({role:'coordinator'}) is false, so
+  // a standalone sevak who both coordinates AND teaches loses one of the two
+  // whichever way the if/else is ordered. Only extras can carry both.
+  it('a standalone coordinator who also TEACHES keeps both capabilities', async () => {
+    mockGetUser.mockResolvedValue({ customClaims: { role: 'coordinator', extraRoles: ['teacher'] } });
+
+    const res = await buildSessionClaimsForContact({
+      type: 'email',
+      value: 'coach@chinmayatoronto.org',
+      contactProvenance: 'password',
+    });
+
+    expect(hasSession(res)).toBe(true);
+    if (!hasSession(res)) return;
+    const claims = { role: res.claims.role, extraRoles: res.claims.extraRoles } as WithRole;
+    expect(isCoordinator(claims), 'lost the coordinator grant').toBe(true);
+    expect(isTeacher(claims), 'lost the teacher grant').toBe(true);
+  });
+
+  it('a standalone welcome-team volunteer who also TEACHES keeps both', async () => {
+    mockGetUser.mockResolvedValue({ customClaims: { role: 'welcome-team', extraRoles: ['teacher'] } });
+
+    const res = await buildSessionClaimsForContact({
+      type: 'email',
+      value: 'desk-teacher@chinmayatoronto.org',
+      contactProvenance: 'password',
+    });
+
+    expect(hasSession(res)).toBe(true);
+    if (!hasSession(res)) return;
+    const claims = { role: res.claims.role, extraRoles: res.claims.extraRoles } as WithRole;
+    expect(isWelcomeTeam(claims), 'lost the welcome-team grant').toBe(true);
+    expect(isTeacher(claims), 'lost the teacher grant').toBe(true);
   });
 });

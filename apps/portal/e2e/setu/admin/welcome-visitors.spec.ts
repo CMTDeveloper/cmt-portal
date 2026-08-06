@@ -1,4 +1,12 @@
 import { test, expect, type Page } from '@playwright/test';
+// STATIC, not `await import(...)`. A dynamic import of this module dies under
+// Playwright's loader with "./apps does not provide an export named
+// getMasterApp" - firestore.ts imports getMasterApp from './apps', and the
+// named exports of a TS module are not discoverable when it is pulled in at
+// runtime rather than transformed at load. A static import is transformed with
+// the rest of the file and resolves fine; mint-session.ts has always done it
+// this way, which is why session minting never hit this and every seed did.
+import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { hasFamilyCreds } from '../../_helpers';
 
 /**
@@ -102,7 +110,6 @@ test.describe('/welcome/visitors - the day’s door guests, grouped by class (de
   test.afterAll(async () => {
     if (writtenIds.length === 0) return;
     try {
-      const { portalFirestore } = await import('@cmt/firebase-shared/admin/firestore');
       const db = portalFirestore();
       for (const id of writtenIds) await db.collection('guest_check_ins').doc(id).delete();
     } catch (err) {
@@ -134,7 +141,6 @@ test.describe('/welcome/visitors - the day’s door guests, grouped by class (de
       writtenIds.push(((await res.json()) as { id: string }).id);
     }
 
-    const { portalFirestore } = await import('@cmt/firebase-shared/admin/firestore');
     const snap = await portalFirestore().collection('guest_check_ins').doc(writtenIds[0]!).get();
     sunday = (snap.data() as { sessionDate?: string }).sessionDate ?? '';
     expect(sunday, 'the guest doc carries no sessionDate').toMatch(/^\d{4}-\d{2}-\d{2}$/);

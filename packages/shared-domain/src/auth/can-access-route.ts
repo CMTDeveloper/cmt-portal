@@ -77,20 +77,25 @@ export function canAccessRoute(
   if (pathname === '/api/admin/teachers/search' || pathname.startsWith('/api/admin/teachers/')) {
     return isAdmin(claims) || isCoordinator(claims);
   }
-  // Per-level teacher add/remove — admin + coordinator. Only the `/teachers`
-  // sub-path opens up; level CRUD stays admin-only via the catch-all.
+  // Per-level teacher add/remove — admin + coordinator.
   if (/^\/api\/admin\/levels\/[^/]+\/teachers\/?$/.test(pathname)) {
     return isAdmin(claims) || isCoordinator(claims);
   }
   // Coordinator API surface: programs, offerings (pricing lives in
   // offering.pricingTiers) and level CRUD.
   //
-  // PLACEMENT IS LOAD-BEARING. The broad /api/admin/levels clause MUST stay
-  // below the /api/admin/levels/{id}/teachers regex directly above.
-  // canAccessRoute returns at the FIRST match, so hoisting it would swallow the
-  // teachers sub-path and silently revoke welcome-team's per-level teacher
-  // management - a capability that works in production today. A regression test
-  // pins it.
+  // This block used to be headed "PLACEMENT IS LOAD-BEARING ... hoisting it
+  // would silently revoke welcome-team's per-level teacher management, a
+  // capability that works in production today". Both halves of that were
+  // false by 2026-08-05 and the note is rewritten rather than trimmed:
+  //   - welcome-team has not had teacher management since 2026-08-03; the
+  //     regex above grants admin + coordinator.
+  //   - the regex and the broad /api/admin/levels clause below now return the
+  //     IDENTICAL expression, so reordering them changes no answer at all.
+  // Keep the specific-before-general order anyway - it is the shape that stays
+  // correct if the broad clause is ever narrowed back to admin - but do not
+  // believe a comment claiming a guard is live without checking that the two
+  // branches actually differ.
   if (pathname === '/api/admin/programs' || pathname.startsWith('/api/admin/programs/')) {
     return isAdmin(claims) || isCoordinator(claims);
   }
@@ -161,12 +166,17 @@ export function canAccessRoute(
     return isSetuFamily(claims);
   }
 
-  // Welcome-team + coordinator: roster browse + read-only family detail.
+  // Welcome-team: roster browse + family detail (read AND edit).
   // `/welcome` root is included because it redirects to /welcome/roster -
   // denying it would block the redirect itself. `/welcome/family/*` is included
   // because EVERY roster row links to it, so without it the screen is a dead end
-  // that 302s on click. Spec 3.1 excludes family EDIT from coordinator, not
-  // family READ, and the roster already exposes the same PII.
+  // that 302s on click.
+  //
+  // The `|| isCoordinator(claims)` this clause used to carry is GONE, and its
+  // removal grants rather than revokes: since 2026-08-05 `isWelcomeTeam()`
+  // returns true for coordinator (role.ts), so the extra term was redundant.
+  // Leaving it would have implied coordinator needs naming on each welcome
+  // route, which is exactly the per-route bookkeeping the inheritance removes.
   if (
     pathname === '/welcome' ||
     pathname === '/welcome/roster' ||
@@ -174,10 +184,10 @@ export function canAccessRoute(
     pathname === '/welcome/family' ||
     pathname.startsWith('/welcome/family/')
   ) {
-    return isWelcomeTeam(claims) || isCoordinator(claims);
+    return isWelcomeTeam(claims);
   }
-  // Welcome-team: the Sunday visitors board. Welcome-team only, NOT coordinator
-  // (whose grant is Programs + Levels + Roster).
+  // The Sunday visitors board. Reads as welcome-team-only and is no longer:
+  // coordinator inherits it now, which was the point of Vaibhav's hierarchy.
   if (pathname === '/welcome/visitors' || pathname.startsWith('/welcome/visitors/')) {
     return isWelcomeTeam(claims);
   }
@@ -240,8 +250,12 @@ export function canAccessRoute(
   //     to match the invite email; a fresh OTP-signed-in invitee has
   //     role='family' (no fid yet) and must be allowed through middleware.
   // POST /api/setu/invite/send and /api/setu/invite/cancel are intentionally NOT
-  // covered here — they fall through to the catch-all below and are manager +
-  // welcome-team + admin only (the handlers further enforce own-family scope).
+  // covered here — they fall through to the catch-all below, which is
+  // `isSetuManager || isAdmin`: MANAGER + ADMIN only (the handlers further
+  // enforce own-family scope). This said "manager + welcome-team + admin" until
+  // 2026-08-05, and had been wrong since the 2026-08-03 narrowing that the
+  // catch-all's own comment thirty lines below already documents - i.e. the
+  // file contradicted itself, in the too-WIDE direction.
   if (
     pathname.startsWith('/api/setu/invite/') &&
     !pathname.startsWith('/api/setu/invite/send') &&
@@ -346,11 +360,22 @@ export function canAccessRoute(
     return isWelcomeTeam(claims);
   }
 
+  // Welcome-team API - the Sunday visitors board's writes (2026-08-05). The
+  // desk records a walk-in the kiosk would otherwise have to.
+  //
+  // An explicit clause is REQUIRED, not optional tidiness: there is no
+  // /api/welcome catch-all, so a path without one falls to the default-deny at
+  // the end of this function and 401s for every role, admin included.
+  if (pathname === '/api/welcome/visitors' || pathname.startsWith('/api/welcome/visitors/')) {
+    return isWelcomeTeam(claims);
+  }
+
   // Welcome-team API - single-page roster report (browse/filter dataset + CSV).
-  // Coordinator included: this is the ONLY data endpoint behind /welcome/roster,
-  // the one screen the role is granted, so omitting it leaves the page empty.
+  // Coordinator reaches this through isWelcomeTeam now (role.ts, 2026-08-05);
+  // the explicit `|| isCoordinator` it used to carry was made redundant by that
+  // change, not dropped.
   if (pathname === '/api/welcome/roster' || pathname.startsWith('/api/welcome/roster/')) {
-    return isWelcomeTeam(claims) || isCoordinator(claims);
+    return isWelcomeTeam(claims);
   }
 
   // Prasad day-of lists (read-only) — ADMIN-ONLY as of 2026-08-03, matching the

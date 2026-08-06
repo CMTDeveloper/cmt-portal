@@ -127,13 +127,17 @@ describe('PATCH /api/welcome/families/[fid]/members/[mid]', () => {
     expect(res.status).toBe(403);
   });
 
-  it('returns 403 for a coordinator', async () => {
+  // Was "returns 403 for a coordinator" (spec 3.1 granted coordinator family
+  // READ but not family EDIT). Reversed 2026-08-05: coordinator inherits the
+  // whole welcome-team grant, so it reaches this handler like any other
+  // welcome-team caller.
+  it('returns 200 for a coordinator - it inherits welcome-team', async () => {
     useDb(seed());
     const res = await PATCH(
       makeRequest('PATCH', { schoolGrade: 'Grade 6' }, staffHeaders({ 'x-portal-role': 'coordinator' })),
       ctx,
     );
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(200);
   });
 
   it('returns 200 for welcome-team and writes to the ROUTE fid', async () => {

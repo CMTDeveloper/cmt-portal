@@ -116,11 +116,14 @@ describe('POST /api/welcome/families/[fid]/members', () => {
     expect((await res.json()).error).toBe('forbidden');
   });
 
-  it('returns 403 for a coordinator', async () => {
-    // Spec 3.1 grants coordinator family READ but not family EDIT.
+  // Was "returns 403 for a coordinator" (spec 3.1 granted coordinator family
+  // READ but not family EDIT). Reversed 2026-08-05: coordinator inherits the
+  // whole welcome-team grant, so it reaches this handler like any other
+  // welcome-team caller.
+  it('returns 201 for a coordinator - it inherits welcome-team', async () => {
     useDb(seed());
     const res = await POST(makeRequest(CHILD, staffHeaders({ 'x-portal-role': 'coordinator' })), ctx);
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(201);
   });
 
   it('returns 201 for welcome-team', async () => {

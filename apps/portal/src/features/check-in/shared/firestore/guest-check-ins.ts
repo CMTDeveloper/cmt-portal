@@ -30,17 +30,30 @@ function torontoYMD(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-export async function recordGuestCheckIn(input: GuestCheckInInput): Promise<string> {
+/**
+ * `onDate` (YYYY-MM-DD) overrides the walk-in day. The kiosk never passes it -
+ * a self-serve guest is always checking in NOW - but the front desk records
+ * visitors from a screen with a date picker on it, and stamping "today" for a
+ * desk viewing last Sunday would file the guest somewhere the person who just
+ * typed them in cannot see. Absent, the behaviour is exactly as before.
+ */
+export async function recordGuestCheckIn(
+  input: GuestCheckInInput,
+  onDate?: string,
+): Promise<string> {
   // Read the clock ONCE. Two torontoYMD() calls are two independent reads and
   // can straddle a Toronto midnight, which would stamp a `sessionDate` that is
   // not the Sunday of the recorded `date`.
-  const ymd = torontoYMD();
+  const ymd = onDate && /^\d{4}-\d{2}-\d{2}$/.test(onDate) ? onDate : torontoYMD();
   const ref = await portalFirestore().collection('guest_check_ins').add({
     ...input,
     // Keep the derived count so the admin guest list / stats / reports (which
     // read numberOfChildren) keep working without change.
     numberOfChildren: input.children.length,
-    // `date` is the actual Toronto calendar day the guest walked in. Kept for
+    // `date` is the Toronto calendar day the visit is RECORDED AGAINST. For a
+    // kiosk self-check-in that is the day they walked in; for a front-desk row
+    // carrying an explicit `onDate` it is the Sunday the desk was viewing, which
+    // may not be today. The real instant is always `checkedInAt`. Kept for
     // forensic value and because rewriting existing docs would destroy it. It
     // has no PRIMARY reader after this change: its only one was
     // check-in-attendance.ts, which now queries `sessionDate` and reads `date`

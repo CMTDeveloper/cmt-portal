@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockLevelGet, txnGet, txnSet, mockRunTxn, mockMarkGuest } = vi.hoisted(() => ({
+const { mockLevelGet, txnGet, txnSet, txnCreate, mockRunTxn, mockMarkGuest } = vi.hoisted(() => ({
   mockLevelGet: vi.fn(),
   txnGet: vi.fn(),
   txnSet: vi.fn(),
+  txnCreate: vi.fn(),
   mockRunTxn: vi.fn(),
   mockMarkGuest: vi.fn(),
 }));
@@ -57,7 +58,7 @@ beforeEach(() => {
   mockLevelGet.mockResolvedValue({ exists: true, data: () => ({ levelId: PARAMS.levelId, location: 'Brampton', pid: 'bv-brampton-2025-26' }) });
   mockMarkGuest.mockResolvedValue({ ok: true, aid: 'a1', autoEnrolled: true });
   // runTransaction invokes the callback with our txn stub
-  mockRunTxn.mockImplementation(async (cb: (t: { get: typeof txnGet; set: typeof txnSet }) => Promise<unknown>) => cb({ get: txnGet, set: txnSet }));
+  mockRunTxn.mockImplementation(async (cb: (t: { get: typeof txnGet; set: typeof txnSet; create: typeof txnCreate }) => Promise<unknown>) => cb({ get: txnGet, set: txnSet, create: txnCreate }));
 });
 
 describe('addStudentOnPrompt', () => {
@@ -85,11 +86,15 @@ describe('addStudentOnPrompt', () => {
   it('appends the child to the parent’s EXISTING family when the email already claims one', async () => {
     txnGet
       .mockResolvedValueOnce({ exists: true, data: () => ({ fid: 'CMT-EXIST' }) }) // contactKeys → existing fid
-      .mockResolvedValueOnce({ size: 3 }); // members collection size → next mid -04
+      // Member doc IDS, not a count: the mid is allocated from the highest
+      // existing suffix (ids/member-mid.ts), so a count would not survive a gap.
+      .mockResolvedValueOnce({ docs: [{ id: 'CMT-EXIST-01' }, { id: 'CMT-EXIST-02' }, { id: 'CMT-EXIST-03' }] }); // → -04
     const res = await addStudentOnPrompt(PARAMS);
     expect(res).toMatchObject({ ok: true, fid: 'CMT-EXIST', childMid: 'CMT-EXIST-04', createdFamily: false });
-    // only the child member is written (no new family/manager/contactKey)
-    expect(txnSet).toHaveBeenCalledTimes(1);
+    // only the child member is written (no new family/manager/contactKey), and
+    // through create() so a taken id fails loudly instead of overwriting.
+    expect(txnCreate).toHaveBeenCalledTimes(1);
+    expect(txnSet).not.toHaveBeenCalled();
     expect(mockMarkGuest).toHaveBeenCalledWith(expect.objectContaining({ mid: 'CMT-EXIST-04' }));
   });
 });

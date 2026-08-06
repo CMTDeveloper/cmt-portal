@@ -48,7 +48,20 @@ export function isSetuManager(claims: WithRole): boolean {
 export function isWelcomeTeam(claims: WithRole): boolean {
   // Admins implicitly get welcome-team capability — they can do anything
   // a welcome-team volunteer can. This avoids needing to grant both.
-  return hasRole(claims, 'welcome-team') || hasRole(claims, 'admin');
+  //
+  // Coordinators do too, as of 2026-08-05. Vaibhav: *"Coordinator gets
+  // everything Welcome team has and plus"* — so the ladder is
+  // welcome-team < coordinator < admin, and this single line is what makes it
+  // true everywhere rather than one clause at a time. Adding `|| isCoordinator`
+  // to individual routes was the alternative and it is the worse one: it makes
+  // every NEW welcome-team route a decision someone has to remember to repeat.
+  //
+  // What this does NOT grant is as important: the `/welcome/*` catch-all in
+  // canAccessRoute is `isAdmin`, so reports/seva/prasad/levels stay closed to
+  // both roles, and the enrollment payment override is admin-only at all three
+  // gates. The full allow/deny table lives in
+  // __tests__/can-access-route.test.ts.
+  return hasRole(claims, 'welcome-team') || hasRole(claims, 'coordinator') || hasRole(claims, 'admin');
 }
 
 // Dedicated least-privilege role for the shared kiosk/tablet account used at
@@ -59,10 +72,21 @@ export function isKiosk(claims: WithRole): boolean {
   return hasRole(claims, 'kiosk') || hasRole(claims, 'admin');
 }
 
-// Programs + Levels + Roster coordinator. Deliberately inherits NOTHING from
-// welcome-team and grants nothing to it: the two are siblings with disjoint
-// grants (spec 3.1 excludes reports / seva / prasad / family-search from
-// coordinator). Admins inherit it, same pattern as isTeacher/isWelcomeTeam.
+// Programs + Levels + Offerings + teacher assignment.
+//
+// This used to read "Deliberately inherits NOTHING from welcome-team ... the
+// two are siblings with disjoint grants (spec 3.1)". That is no longer true:
+// as of 2026-08-05 coordinator sits ABOVE welcome-team and inherits all of it
+// (see isWelcomeTeam above), which was a deliberate reversal of spec 3.1 by
+// the owner, not drift.
+//
+// So `isCoordinator` is now the narrow question — "does this caller hold the
+// Programs/Levels grant specifically?" — and it is NOT the way to ask whether
+// someone can reach a welcome-team surface. Use isWelcomeTeam for that; it
+// already returns true for coordinator. A route that asks
+// `isWelcomeTeam(c) || isCoordinator(c)` is redundant, not safer.
+//
+// Admins inherit it, same pattern as isTeacher/isWelcomeTeam.
 export function isCoordinator(claims: WithRole): boolean {
   return hasRole(claims, 'coordinator') || hasRole(claims, 'admin');
 }

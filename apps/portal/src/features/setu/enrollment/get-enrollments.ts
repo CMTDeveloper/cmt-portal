@@ -10,11 +10,29 @@ function toDate(v: unknown): Date {
   return new Date(v as string);
 }
 
+/**
+ * ⚠️ EVERY Date field must be named here, twice: once in the `Omit` and once in
+ * the conversion below.
+ *
+ * The spread carries raw Firestore values straight through, and a Firestore
+ * `Timestamp` is not a `Date` - it has no `toLocaleDateString`, so any screen
+ * that formats one crashes at render. The `as Omit<...>` cast is what makes that
+ * invisible to the compiler: it asserts the raw object already matches
+ * `EnrollmentDoc` for every field not listed, which is a lie for exactly the
+ * fields someone forgot to list.
+ *
+ * `settledAt` was added to the schema on 2026-08-06 and NOT added here, which
+ * would have crashed `/welcome/family/[fid]` server-side for every staff role
+ * the first time anyone marked a family settled off-portal. Caught in review,
+ * not by tests - the unit suites mock this module wholesale, so nothing
+ * exercises the real Firestore-to-object conversion.
+ */
 function rawToEnrollment(data: Record<string, unknown>): EnrollmentDoc {
   return {
-    ...(data as Omit<EnrollmentDoc, 'enrolledAt' | 'cancelledAt'>),
+    ...(data as Omit<EnrollmentDoc, 'enrolledAt' | 'cancelledAt' | 'settledAt'>),
     enrolledAt: toDate(data['enrolledAt']),
     cancelledAt: data['cancelledAt'] != null ? toDate(data['cancelledAt']) : null,
+    settledAt: data['settledAt'] != null ? toDate(data['settledAt']) : null,
   };
 }
 

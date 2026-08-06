@@ -1,5 +1,11 @@
 import { test, expect, type Page } from '@playwright/test';
 import { hasFamilyCreds } from '../../_helpers';
+// STATIC, not `await import(...)`. The dynamic form dies under Playwright's
+// loader with "./apps does not provide an export named getMasterApp" (#123) -
+// the named exports of a TS module are not discoverable when it is pulled in at
+// runtime rather than transformed at load. Every seed that used it was silently
+// broken, and so was its cleanup.
+import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 
 /**
  * Regression guard for `318448f` - the completed-donation confirmation signal on
@@ -65,7 +71,6 @@ async function expandSection(page: Page): Promise<void> {
 }
 
 async function db() {
-  const { portalFirestore } = await import('@cmt/firebase-shared/admin/firestore');
   return portalFirestore();
 }
 

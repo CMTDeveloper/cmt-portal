@@ -132,10 +132,18 @@ describe('isCoordinator', () => {
     expect(isCoordinator({ role: 'welcome-team' })).toBe(false);
   });
 
-  it('does NOT make a coordinator a welcome-team member', () => {
-    // Siblings, not a hierarchy. Their grants are disjoint by design:
-    // spec 3.1 excludes reports / seva / prasad / family-search from coordinator.
-    expect(isWelcomeTeam({ role: 'coordinator' })).toBe(false);
+  it('DOES make a coordinator a welcome-team member', () => {
+    // A hierarchy now, not siblings: welcome-team < coordinator < admin.
+    // Vaibhav, 2026-08-05: "Coordinator gets everything Welcome team has and
+    // plus". This assertion previously said the opposite and cited spec 3.1 -
+    // the reversal is deliberate, decided by the owner, not drift.
+    expect(isWelcomeTeam({ role: 'coordinator' })).toBe(true);
+  });
+
+  it('but welcome-team still does NOT get the coordinator grant', () => {
+    // The ladder only goes one way. A welcome-team volunteer must not reach
+    // Programs/Levels just because coordinator can reach the roster.
+    expect(isCoordinator({ role: 'welcome-team' })).toBe(false);
   });
 
   it('does not make a coordinator an admin', () => {

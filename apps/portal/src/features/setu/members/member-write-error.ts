@@ -39,9 +39,32 @@ const MESSAGES: Record<string, string> = {
   'not-found': 'That member could no longer be found.',
 };
 
+/**
+ * Copy that differs when the person reading it is STAFF rather than the family.
+ *
+ * Only where the instruction itself changes. The family default for
+ * `enrolled-cannot-deactivate` is "Cancel that enrollment first" - true for a
+ * family manager, who owns their own enrollments, and false for a welcome-team
+ * volunteer: clearing an enrollment goes through /api/welcome/enrollments/*,
+ * which is admin-only (can-access-route.ts). Telling the front desk to do
+ * something the server will refuse is worse than telling them nothing, because
+ * they will try it, fail, and have no idea who can help.
+ *
+ * This is the desk's most likely subject - a parent ringing to say their
+ * enrolled child has stopped coming - so it is the one code worth splitting.
+ */
+const STAFF_MESSAGES: Record<string, string> = {
+  'enrolled-cannot-deactivate':
+    'They are still enrolled in a program this year. An admin needs to cancel that enrollment first - the front desk cannot.',
+};
+
 /** Maps a member-write error response to a friendly sentence for a toast. */
-export function memberWriteErrorMessage(data: MemberWriteError): string {
+export function memberWriteErrorMessage(
+  data: MemberWriteError,
+  audience: 'family' | 'staff' = 'family',
+): string {
   const code = data.error ?? 'unknown';
+  if (audience === 'staff' && STAFF_MESSAGES[code]) return STAFF_MESSAGES[code];
   if (code === 'bad-request' && Array.isArray(data.issues) && data.issues.length > 0) {
     const issues = data.issues
       .map((i) => `${(i.path ?? []).join('.') || 'field'}: ${i.message ?? 'invalid'}`)

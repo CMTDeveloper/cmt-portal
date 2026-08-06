@@ -6,6 +6,12 @@ import {
   type Page,
 } from '@playwright/test';
 import { E2E_BASE_URL, hasFamilyCreds } from '../../_helpers';
+// STATIC, not `await import(...)`. The dynamic form dies under Playwright's
+// loader with "./apps does not provide an export named getMasterApp" (#123) -
+// the named exports of a TS module are not discoverable when it is pulled in at
+// runtime rather than transformed at load. Every seed that used it was silently
+// broken, and so was its cleanup.
+import { FieldValue, portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 
 // Slice "admin-managed locations + levels redesign" — the master-detail Level
 // management screen (/admin/levels), deployed UAT. The single seeded UAT user is
@@ -80,7 +86,6 @@ test.describe('Admin — Level management redesign', () => {
       // Discover the enabled donation period per centre for the live year (the
       // level's periodLabel is snapshotted from it). Admin SDK read — the config
       // creds are in process.env because playwright.config loads .env.local.
-      const { portalFirestore } = await import('@cmt/firebase-shared/admin/firestore');
       const db = portalFirestore();
       const dpSnap = await db.collection('donationPeriods').where('enabled', '==', true).get();
       const pidFor = (location: string): string => {
@@ -111,7 +116,6 @@ test.describe('Admin — Level management redesign', () => {
     // No HTTP DELETE for a level — clean up directly with the admin SDK. Unwind
     // any teacherAssignments (arrayRemove) so no dangling refs remain, then
     // delete the level doc. Mirrors level-management.spec.ts.
-    const { portalFirestore, FieldValue } = await import('@cmt/firebase-shared/admin/firestore');
     const db = portalFirestore();
     for (const levelId of createdLevelIds) {
       try {

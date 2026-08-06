@@ -127,6 +127,31 @@ export async function buildSessionClaimsForContact(
   const isCoordinatorUser =
     allExistingRoles.has('coordinator') || memberRoles.includes('coordinator');
 
+  /**
+   * Extras for the FAMILY-LESS sevak chain, given the role that won the primary
+   * slot. Ordering alone cannot carry every combination: it works for the
+   * welcome-team/coordinator pair because one subsumes the other, but
+   * isTeacher({role:'coordinator'}) is false, so a sevak who both coordinates
+   * and teaches loses one grant whichever way the if/else is written. Only
+   * extras can hold both.
+   *
+   * The primary is filtered out so a role never appears twice in one session.
+   */
+  function standaloneExtras(primary: string): string[] {
+    const all: string[] = [];
+    if (isAdminUser) all.push('admin');
+    if (isWelcomeTeamUser) all.push('welcome-team');
+    if (isCoordinatorUser) all.push('coordinator');
+    if (isTeacherUser) all.push('teacher');
+    if (isKioskUser) all.push('kiosk');
+    return all.filter((r) => r !== primary);
+  }
+
+  function withExtras(role: string): Record<string, unknown> {
+    const extras = standaloneExtras(role);
+    return extras.length > 0 ? { extraRoles: extras } : {};
+  }
+
   function preservedExtras(): string[] {
     const extras: string[] = [];
     if (isAdminUser) extras.push('admin');
@@ -156,11 +181,21 @@ export async function buildSessionClaimsForContact(
   if (result.source === 'setu' && result.fid && result.mid) {
     // Gated member (portalAccess === 'pending', non-manager): recognized but not
     // yet approved. Do NOT mint family claims — return the pending signal so the
-    // sign-in UI can show "access pending your manager's approval". A pending
-    // member who also carries a sevak (admin/welcome-team) role still gets gated
-    // here for their family identity; sevak access is granted via the auth-claim
-    // path (no family fid), not via this Setu-member resolution.
-    if (isMemberGated(result.member) && !isAdminUser && !isWelcomeTeamUser) {
+    // sign-in UI can show "access pending your manager's approval".
+    //
+    // A SEVAK is exempt, because the alternative is not a degraded session, it
+    // is no session: this returns before any claims are minted, so none of the
+    // role inheritance at the route layer ever gets to run. A staff member whose
+    // own family record happens to be pending would be shown "ask your family
+    // manager for approval" and have no way into the tools they administer.
+    //
+    // `isCoordinatorUser` is listed EXPLICITLY. This function deliberately does
+    // not call isWelcomeTeam() - it derives its own booleans from the grant docs
+    // above - so the 2026-08-05 one-line inheritance that made coordinator a
+    // welcome-team superset does NOT reach here. Any future role that inherits
+    // welcome-team has to be added by hand, in this condition and the one on the
+    // lazy-migration path below.
+    if (isMemberGated(result.member) && !isAdminUser && !isWelcomeTeamUser && !isCoordinatorUser) {
       return { pendingApproval: true, pendingFid: result.fid, pendingMatchedMid: result.mid };
     }
     const isManager = result.member?.manager === true;
@@ -184,8 +219,16 @@ export async function buildSessionClaimsForContact(
         const setuResult = await findSetuFamilyByContact(type, value);
         if (setuResult.source === 'setu' && setuResult.fid && setuResult.mid) {
           // A freshly lazy-migrated non-primary adult is portalAccess:'pending'
-          // → gated. Short-circuit before minting any family claims.
-          if (isMemberGated(setuResult.member) && !isAdminUser && !isWelcomeTeamUser) {
+          // → gated. Short-circuit before minting any family claims. Same sevak
+          // exemption as the Setu path above, and it must stay identical to it -
+          // a legacy family's first sign-in comes through HERE, so a divergence
+          // locks staff out on exactly one of the two routes into the portal.
+          if (
+            isMemberGated(setuResult.member) &&
+            !isAdminUser &&
+            !isWelcomeTeamUser &&
+            !isCoordinatorUser
+          ) {
             return {
               pendingApproval: true,
               pendingFid: setuResult.fid,
@@ -218,25 +261,36 @@ export async function buildSessionClaimsForContact(
   // Family-manager who also has admin claim stays in their family role.
   if (result.source === null && !hasPendingInvite) {
     if (isAdminUser) {
-      claims = { role: 'admin', ...contactClaim };
+      claims = { role: 'admin', ...contactClaim, ...withExtras('admin') };
       redirectTo = '/admin';
+    } else if (isCoordinatorUser) {
+      // Standalone coordinator (no family). Ordered BEFORE welcome-team, and
+      // the order is load-bearing rather than cosmetic.
+      //
+      // This branch mints `{ role, ...contactClaim }` with NO extraRoles -
+      // unlike the family branch above, which calls preservedExtras(). So the
+      // role that loses this if/else is not demoted to an extra, it is DROPPED.
+      // Until 2026-08-05 welcome-team was checked first, on the reasoning that
+      // it was "the broader existing surface"; a sevak holding both grants was
+      // therefore signed in as plain welcome-team and silently lost
+      // /admin/programs and /admin/levels - the screens the coordinator role
+      // exists for.
+      //
+      // Putting the SUPERSET first fixes it without needing extraRoles at all:
+      // isWelcomeTeam() returns true for coordinator, so this session carries
+      // the whole welcome-team grant too.
+      claims = { role: 'coordinator', ...contactClaim, ...withExtras('coordinator') };
+      redirectTo = '/welcome/roster';
     } else if (isWelcomeTeamUser) {
-      claims = { role: 'welcome-team', ...contactClaim };
+      claims = { role: 'welcome-team', ...contactClaim, ...withExtras('welcome-team') };
       // Names the roster directly. '/welcome' is a config redirect now, so
       // sending them there would spend a round trip arriving at the same place
       // - and this is the very first request after signing in.
       redirectTo = '/welcome/roster';
-    } else if (isCoordinatorUser) {
-      // Standalone coordinator (no family). Ordered AFTER welcome-team on
-      // purpose: the two are siblings with disjoint grants, and welcome-team is
-      // the broader existing surface, so it keeps the primary slot when someone
-      // holds both. Lands on the roster, the coordinator's main screen.
-      claims = { role: 'coordinator', ...contactClaim };
-      redirectTo = '/welcome/roster';
     } else if (isKioskUser) {
       // Generic kiosk tablet account: mint a kiosk session and land on the
       // check-in kiosk. isKiosk() inherits admin, so an admin above wins first.
-      claims = { role: 'kiosk', ...contactClaim };
+      claims = { role: 'kiosk', ...contactClaim, ...withExtras('kiosk') };
       redirectTo = '/check-in';
     }
   }

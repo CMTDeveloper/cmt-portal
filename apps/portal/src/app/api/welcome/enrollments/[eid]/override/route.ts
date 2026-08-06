@@ -173,9 +173,30 @@ export async function PATCH(
         return;
       }
 
+      // ── Provenance, denormalized onto the enrollment ─────────────────────
+      // The same who/when/why already goes to `audit_log` below, and that row
+      // remains the tamper-evident record. But `audit_log` has no reader
+      // anywhere in the codebase and no Firestore index, so "who marked this
+      // family paid?" was in practice unanswerable without a composite index
+      // and a prod deploy. These three fields put it on a document the welcome
+      // desk already reads.
+      //
+      // CLEARED on un-settle, not just written on settle. An admin who clicks
+      // Undo restores the ask, and leaving "Recorded by X on Sep 3" underneath
+      // it would attribute a settlement that no longer exists to a named person.
+      // `null` rather than FieldValue.delete(): the schema reads the fields as
+      // nullable, and an explicit null is a fact ("not settled") where a deleted
+      // key is indistinguishable from a document written before the fields
+      // existed.
+      //
+      // `session.email` and not a display name - the session carries no name.
+      // See the field's own comment on EnrollmentDocSchema.
       txn.update(enrollmentRef, {
         suggestedAmountOverride: parsed.data.suggestedAmountOverride,
         settledOffPortal,
+        settledAt: settledOffPortal ? FieldValue.serverTimestamp() : null,
+        settledBy: settledOffPortal ? (session.email ?? null) : null,
+        settledNote: settledOffPortal ? parsed.data.note : null,
         updatedAt: FieldValue.serverTimestamp(),
       });
 

@@ -68,13 +68,20 @@ vi.mock('@/features/setu/adult-class/program-keys', () => ({
   adultStudyClassProgramKeys: mockAdultClassKeys,
   isAdultStudyClassKey: vi.fn(),
 }));
-// The SHARED payment verdict - the same function the override route's guard
-// calls, so page and route cannot drift. It never throws (it catches internally
-// and returns 'unknown'), so unlike the enrollments and programs reads beside
-// it, a failure here does NOT collapse the panel: it leaves the action
-// available, which is the deliberate 'unknown'-stays-settleable direction.
+// ── The consolidated payment loader ──────────────────────────────────────────
+// The page now makes ONE call for enrollments + donations + pledge + verdict
+// (it used to read enrollments twice - directly, and again inside the verdict).
+// `mockGetEnrollments` and `mockVerdict` survive as the INPUTS to this stub so
+// every fixture written before the consolidation still reads the same way.
+//
+// Unlike `deriveFamilyPayment`, this one CAN throw - deliberately, so the page
+// fails closed on a lost enrollments read. `mockLoadPayment.mockRejectedValue`
+// is how a test exercises that.
 const mockVerdict = vi.hoisted(() => vi.fn());
-vi.mock('@/features/setu/roster/payment', () => ({ deriveFamilyPayment: mockVerdict }));
+const mockDonations = vi.hoisted(() => vi.fn());
+const mockPledges = vi.hoisted(() => vi.fn());
+const mockLoadPayment = vi.hoisted(() => vi.fn());
+vi.mock('@/features/setu/roster/payment', () => ({ loadFamilyPaymentData: mockLoadPayment }));
 vi.mock('@/features/setu/enrollment/get-open-offerings', () => ({
   getOpenOfferingsForFamily: vi.fn(async () => []),
   resolveCurrentOffering: vi.fn(() => null),
@@ -103,6 +110,25 @@ beforeEach(() => {
   // pass by accident.
   mockAdultClassKeys.mockResolvedValue(['adult-study-class', 'adult-study-east']);
   mockVerdict.mockReset();
+  mockDonations.mockReset();
+  mockDonations.mockResolvedValue([]);
+  mockPledges.mockReset();
+  mockPledges.mockResolvedValue([]);
+  mockLoadPayment.mockReset();
+  mockLoadPayment.mockImplementation(async () => {
+    const enrollments = await mockGetEnrollments();
+    const verdict = await mockVerdict();
+    return {
+      enrollments,
+      donations: await mockDonations(),
+      pledges: await mockPledges(),
+      verdict,
+      expectedCAD: null,
+      paidCAD: null,
+      unknownReason: null,
+      paidByPledge: false,
+    };
+  });
   // Nothing paid: the state in which the off-portal action is legitimate.
   mockVerdict.mockResolvedValue('outstanding');
 });
@@ -489,5 +515,359 @@ describe('WelcomeFamilyDetailPage — a family paying by monthly pledge', () => 
 
     expect(screen.queryByRole('button', { name: /mark paid off-portal/i })).toBeNull();
     expect(screen.getAllByText(/paid through the portal/i).length).toBeGreaterThan(0);
+  });
+});
+
+// ── The payment view Vaibhav asked for (2026-08-05) ──────────────────────────
+//
+// "Showing Enrollment status, Donation status, etc... I am currently checking
+// through Stripe logs to see what has happened when someone inquires."
+//
+// The bar these tests hold the screen to is NOT "renders a chip". It is: does a
+// staff member on the phone get an ANSWER without opening Stripe? So they assert
+// the arithmetic, the reason behind an `unknown`, and the provider's own error
+// words - and, on the volunteer side, the ABSENCE of every money figure.
+describe('WelcomeFamilyDetailPage — programs & payment', () => {
+  const asAdmin = () =>
+    mockVerifyPortalSessionCookie.mockResolvedValue({ uid: 'ad-1', role: 'admin' } as never);
+
+  const enr = (over: Record<string, unknown> = {}) => ({
+    eid: 'e1',
+    programKey: 'bala-vihar',
+    programLabel: 'Bala Vihar',
+    termLabel: '2026-27',
+    status: 'active',
+    effectiveSuggestedAmount: 400,
+    suggestedAmountSnapshot: 400,
+    suggestedAmountOverride: null,
+    settledOffPortal: false,
+    enrolledAt: new Date('2026-09-01T00:00:00Z'),
+    offering: { pricingTiers: [{ effectiveFrom: '2026-09-01', amountCAD: 400, label: 'Year' }] },
+    ...over,
+  });
+
+  const render_ = async () => {
+    const page = await WelcomeFamilyDetailPage({ params: Promise.resolve({ fid: 'FAM001' }) });
+    render(page as React.ReactElement);
+  };
+
+  beforeEach(() => {
+    mockGetFamilyForWelcome.mockResolvedValue({ family: SAMPLE_FAMILY, members: SAMPLE_MEMBERS });
+  });
+
+  it('shows BOTH active programs, not just the first (N=2)', async () => {
+    mockLoadPayment.mockResolvedValue({
+      enrollments: [enr(), enr({ eid: 'e2', programKey: 'tabla', programLabel: 'Tabla' })],
+      donations: [], pledges: [], verdict: 'outstanding',
+      expectedCAD: 700, paidCAD: 0, unknownReason: null, paidByPledge: false,
+    });
+
+    await render_();
+
+    // getAllBy*: the page renders a mobile and a desktop variant from one
+    // component, so every match legitimately appears twice.
+    expect(screen.getAllByText('Bala Vihar').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Tabla').length).toBeGreaterThan(0);
+  });
+
+  it('gives an ADMIN the arithmetic, labelled as all-time (#117)', async () => {
+    asAdmin();
+    mockLoadPayment.mockResolvedValue({
+      enrollments: [enr()], donations: [], pledges: [], verdict: 'outstanding',
+      expectedCAD: 400, paidCAD: 150, unknownReason: null, paidByPledge: false,
+    });
+
+    await render_();
+
+    // The difference between a chip and an answer: "they owe $400, we have
+    // received $150" is what ends the phone call.
+    expect(screen.getAllByText(/Expected \$400/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/received \$150 in portal donations \(all time\)/).length).toBeGreaterThan(0);
+  });
+
+  it('shows a VOLUNTEER the verdict but NOT a single dollar figure', async () => {
+    // Default session in this file is welcome-team. The owner's rule is that the
+    // role is roster + visitors; the verdict itself is already theirs (it is the
+    // roster's payment column), the amounts behind it are not.
+    mockLoadPayment.mockResolvedValue({
+      enrollments: [enr()], donations: [], pledges: [], verdict: 'outstanding',
+      expectedCAD: 400, paidCAD: 150, unknownReason: null, paidByPledge: false,
+    });
+
+    await render_();
+
+    expect(screen.getAllByText('Outstanding').length).toBeGreaterThan(0);
+    expect(screen.queryByText(/Expected \$400/)).toBeNull();
+    expect(screen.queryByText(/\$150/)).toBeNull();
+    // ...and none of the admin activity section.
+    expect(screen.queryByText(/Payment activity/i)).toBeNull();
+  });
+
+  it('explains WHY it is unknown instead of leaving a bare chip', async () => {
+    // The whole point. "Unknown" with no reason is what sent staff to Stripe -
+    // where this particular answer does not even exist, because the missing
+    // price is in CMT's own offering data.
+    mockLoadPayment.mockResolvedValue({
+      enrollments: [enr()], donations: [], pledges: [], verdict: 'unknown',
+      expectedCAD: null, paidCAD: 0, unknownReason: 'unpriceable-enrollment', paidByPledge: false,
+    });
+
+    await render_();
+
+    expect(screen.getAllByText(/no fee recorded against it/i).length).toBeGreaterThan(0);
+  });
+
+  it('tells a VOLUNTEER the off-portal reason too - it carries no money', async () => {
+    mockLoadPayment.mockResolvedValue({
+      enrollments: [enr()], donations: [], pledges: [], verdict: 'unknown',
+      expectedCAD: 0, paidCAD: 0, unknownReason: 'off-portal-program', paidByPledge: false,
+    });
+
+    await render_();
+
+    // "the teacher collects that one" IS the answer to the payment question,
+    // and a volunteer needs it as much as an admin does.
+    expect(screen.getAllByText(/teacher collects it directly/i).length).toBeGreaterThan(0);
+  });
+
+  it("says a pledge family pays monthly rather than showing them as having given nothing", async () => {
+    asAdmin();
+    mockLoadPayment.mockResolvedValue({
+      enrollments: [enr()], donations: [], pledges: [], verdict: 'paid',
+      expectedCAD: 400, paidCAD: 0, unknownReason: null, paidByPledge: true,
+    });
+
+    await render_();
+
+    expect(screen.getAllByText('Monthly plan').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/monthly pre-authorized debit/i).length).toBeGreaterThan(0);
+  });
+
+  it('degrades honestly when the read fails, and the write panel collapses CLOSED', async () => {
+    asAdmin();
+    mockLoadPayment.mockRejectedValue(new Error('firestore unavailable'));
+
+    await render_();
+
+    // Not an empty "no programs" state - that reads as "not enrolled", which is
+    // the wrong thing to tell someone on the phone.
+    expect(screen.getAllByText(/Couldn't load this family's programs/i).length).toBeGreaterThan(0);
+    // And the money button must NOT be offered on a family we could not read.
+    expect(screen.queryByText(/Mark paid off-portal/i)).toBeNull();
+    // The family itself still renders - the volunteer keeps names and allergies.
+    expect(screen.getAllByText(/Raj Patel/).length).toBeGreaterThan(0);
+  });
+});
+
+describe('WelcomeFamilyDetailPage — payment activity (admin only)', () => {
+  const asAdmin = () =>
+    mockVerifyPortalSessionCookie.mockResolvedValue({ uid: 'ad-1', role: 'admin' } as never);
+
+  const donation = (over: Record<string, unknown> = {}) => ({
+    did: 'd1', fid: 'FAM001', label: 'Bala Vihar Donation', amountCAD: 400,
+    status: 'completed', coverFee: false, feeCAD: 0, clientReferenceId: 'FID-5001-abc',
+    createdAt: new Date('2026-09-10T00:00:00Z'), updatedAt: new Date('2026-09-10T00:00:00Z'),
+    ...over,
+  });
+
+  const pledge = (over: Record<string, unknown> = {}) => ({
+    pid: 'p1', status: 'active', monthlyAmountCAD: 108,
+    startedAt: new Date('2026-07-01T00:00:00Z'), activatedAt: new Date('2026-07-03T00:00:00Z'),
+    cancelledAt: null, lastCheckedAt: null, lastError: null, needsStripeVerification: false,
+    subscriptionId: 'sub_1', verifiedSubscriptionId: null, customerId: 'cus_1',
+    ...over,
+  });
+
+  beforeEach(() => {
+    mockGetFamilyForWelcome.mockResolvedValue({ family: SAMPLE_FAMILY, members: SAMPLE_MEMBERS });
+  });
+
+  it('distinguishes a CONFIRMED donation from one that never came back (N=2)', async () => {
+    asAdmin();
+    mockLoadPayment.mockResolvedValue({
+      enrollments: [], donations: [donation(), donation({ did: 'd2', amountCAD: 50, status: 'redirected' })],
+      pledges: [], verdict: 'paid', expectedCAD: 400, paidCAD: 400,
+      unknownReason: null, paidByPledge: false,
+    });
+
+    await render(await WelcomeFamilyDetailPage({ params: Promise.resolve({ fid: 'FAM001' }) }) as React.ReactElement);
+
+    // A `redirected` row beside a completed one is the single most confusing
+    // thing a family can ask about ("I paid, why does it say I didn't?"), and
+    // the copy has to be honest that the portal learns this from the BROWSER.
+    expect(screen.getAllByText(/Completed \(confirmed at the Stripe return page\)/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Started - never confirmed back to the portal/).length).toBeGreaterThan(0);
+  });
+
+  it("surfaces the payment service's OWN error words, which nothing has ever displayed", async () => {
+    asAdmin();
+    const words = '/pad/monthly-subscription failed with 400: branding_settings.display_name';
+    mockLoadPayment.mockResolvedValue({
+      enrollments: [], donations: [], pledges: [pledge({ status: 'failed', lastError: words })],
+      verdict: 'outstanding', expectedCAD: 400, paidCAD: 0, unknownReason: null, paidByPledge: false,
+    });
+
+    await render(await WelcomeFamilyDetailPage({ params: Promise.resolve({ fid: 'FAM001' }) }) as React.ReactElement);
+
+    expect(screen.getAllByText(words).length).toBeGreaterThan(0);
+  });
+
+  it('warns about a subscription the portal cannot stop', async () => {
+    asAdmin();
+    mockLoadPayment.mockResolvedValue({
+      enrollments: [], donations: [], pledges: [pledge({ needsStripeVerification: true })],
+      verdict: 'paid', expectedCAD: 400, paidCAD: 0, unknownReason: null, paidByPledge: true,
+    });
+
+    await render(await WelcomeFamilyDetailPage({ params: Promise.resolve({ fid: 'FAM001' }) }) as React.ReactElement);
+
+    expect(screen.getAllByText(/the portal cannot stop a debit/i).length).toBeGreaterThan(0);
+  });
+
+  it('sets the expectation that Stripe holds facts the portal never receives', async () => {
+    asAdmin();
+    mockLoadPayment.mockResolvedValue({
+      enrollments: [], donations: [donation()], pledges: [], verdict: 'paid',
+      expectedCAD: 400, paidCAD: 400, unknownReason: null, paidByPledge: false,
+    });
+
+    await render(await WelcomeFamilyDetailPage({ params: Promise.resolve({ fid: 'FAM001' }) }) as React.ReactElement);
+
+    // Without this an admin reading a complete-looking history would conclude a
+    // family never paid, when the truth is that refunds and monthly debits are
+    // simply not sent to us.
+    expect(screen.getAllByText(/is not sent to the portal/i).length).toBeGreaterThan(0);
+  });
+
+  it('says the history is MISSING rather than showing an empty one', async () => {
+    asAdmin();
+    mockLoadPayment.mockResolvedValue({
+      enrollments: [], donations: 'unavailable', pledges: 'unavailable', verdict: 'unknown',
+      expectedCAD: null, paidCAD: null, unknownReason: null, paidByPledge: false,
+    });
+
+    await render(await WelcomeFamilyDetailPage({ params: Promise.resolve({ fid: 'FAM001' }) }) as React.ReactElement);
+
+    expect(screen.getAllByText(/Donation history could not be loaded/i).length).toBeGreaterThan(0);
+    // "No donations" would be a lie told to someone deciding whether to chase a
+    // family for money.
+    expect(screen.queryByText(/No donations have been started/i)).toBeNull();
+  });
+});
+
+// ── Review findings, 2026-08-06 (Codex) ─────────────────────────────────────
+// Three defects that every existing test passed straight through, because the
+// unit suite mocks the loader and never renders these combinations.
+describe('WelcomeFamilyDetailPage — review fixes', () => {
+  const asAdmin = () =>
+    mockVerifyPortalSessionCookie.mockResolvedValue({ uid: 'ad-1', role: 'admin' } as never);
+
+  const settled = {
+    eid: 'e1', programKey: 'bala-vihar', programLabel: 'Bala Vihar', termLabel: '2026-27',
+    status: 'active', effectiveSuggestedAmount: 0, suggestedAmountSnapshot: 400,
+    suggestedAmountOverride: 0, settledOffPortal: true,
+    settledAt: new Date('2026-08-03T00:00:00Z'),
+    settledBy: 'treasurer@chinmayatoronto.org',
+    settledNote: '$500 e-transfer confirmed Aug 3',
+    enrolledAt: new Date('2026-09-01T00:00:00Z'),
+    offering: { pricingTiers: [{ effectiveFrom: '2026-09-01', amountCAD: 400, label: 'Year' }] },
+  };
+
+  const render_ = async () =>
+    render(await WelcomeFamilyDetailPage({ params: Promise.resolve({ fid: 'FAM001' }) }) as React.ReactElement);
+
+  beforeEach(() => {
+    mockGetFamilyForWelcome.mockResolvedValue({ family: SAMPLE_FAMILY, members: SAMPLE_MEMBERS });
+  });
+
+  it('does NOT leak the settlement note or the settling admin to a volunteer', async () => {
+    // `settledNote` is REQUIRED free text meaning "why this family's ask was
+    // changed" - the field an admin fills with a dollar amount. It shipped
+    // ungated on a page whose amount line ten lines above IS gated.
+    mockLoadPayment.mockResolvedValue({
+      enrollments: [settled], donations: [], pledges: [], verdict: 'paid',
+      expectedCAD: 0, paidCAD: 0, unknownReason: null, paidByPledge: false,
+    });
+
+    await render_();
+
+    expect(screen.queryByText(/e-transfer confirmed/i)).toBeNull();
+    expect(screen.queryByText(/treasurer@chinmayatoronto.org/)).toBeNull();
+    // The CHIP stays - "settled off-portal" is a status, like any other, and a
+    // volunteer needs to know the money is handled elsewhere.
+    expect(screen.getAllByText(/Settled off-portal/i).length).toBeGreaterThan(0);
+  });
+
+  it('shows an ADMIN who settled it and why', async () => {
+    asAdmin();
+    mockLoadPayment.mockResolvedValue({
+      enrollments: [settled], donations: [], pledges: [], verdict: 'paid',
+      expectedCAD: 0, paidCAD: 0, unknownReason: null, paidByPledge: false,
+    });
+
+    await render_();
+
+    expect(screen.getAllByText(/Recorded by treasurer@chinmayatoronto.org/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/e-transfer confirmed Aug 3/).length).toBeGreaterThan(0);
+  });
+
+  it('never prints "received $0" beside a Paid chip for a pledge family', async () => {
+    // The contradiction: a live PAD writes no completed donation docs, so
+    // paidCAD is honestly 0 - and "Paid · Monthly plan" directly above
+    // "received $0" reads as one of the two being a lie, which is exactly the
+    // trip to Stripe this feature exists to prevent.
+    asAdmin();
+    mockLoadPayment.mockResolvedValue({
+      enrollments: [], donations: [], pledges: [], verdict: 'paid',
+      expectedCAD: 500, paidCAD: 0, unknownReason: null, paidByPledge: true,
+    });
+
+    await render_();
+
+    expect(screen.queryByText(/received \$0/)).toBeNull();
+    expect(screen.getAllByText(/collected by monthly pre-authorized debit/).length).toBeGreaterThan(0);
+    // The expected figure still shows - an admin still needs to know the ask.
+    expect(screen.getAllByText(/Expected \$500/).length).toBeGreaterThan(0);
+  });
+
+  it('explains an Unknown caused by a FAILED READ, rather than leaving it bare', async () => {
+    // A volunteer seeing a bare "Unknown" is the exact failure this feature was
+    // built to end. A lost donations read reintroduced it through the back door,
+    // and was type-invisible because the reason was `null`.
+    mockLoadPayment.mockResolvedValue({
+      enrollments: [], donations: 'unavailable', pledges: [], verdict: 'unknown',
+      expectedCAD: null, paidCAD: null, unknownReason: 'donations-unavailable', paidByPledge: false,
+    });
+
+    await render_();
+
+    expect(screen.getAllByText(/could not read this family/i).length).toBeGreaterThan(0);
+    // ...and it must NOT read as a verdict about the family.
+    expect(screen.getAllByText(/not a verdict on whether they have paid/i).length).toBeGreaterThan(0);
+  });
+});
+
+// ── The second money control, found by Fable after the first was fixed ───────
+describe('WelcomeFamilyDetailPage — the OTHER off-portal write must also fail closed', () => {
+  it('offers no enrol-and-mark-paid path on a family whose payment could not be read', async () => {
+    // `hasActiveBv` is derived from `overridable`, which is EMPTY when the
+    // payment read fails - so a family we could not read looked exactly like a
+    // family with no Bala Vihar enrollment, and the admin was still offered
+    // "Enrol and mark paid", whose confirm path ends in the SAME
+    // settledOffPortal write as the button beside it.
+    //
+    // Worse, the fallback copy asserted "This family has no active enrollment" -
+    // a claim the page knows it cannot make, printed directly under "Couldn't
+    // load this family's programs".
+    mockVerifyPortalSessionCookie.mockResolvedValue({ uid: 'ad-1', role: 'admin' } as never);
+    mockGetFamilyForWelcome.mockResolvedValue({ family: SAMPLE_FAMILY, members: SAMPLE_MEMBERS });
+    mockLoadPayment.mockRejectedValue(new Error('firestore unavailable'));
+
+    render(await WelcomeFamilyDetailPage({ params: Promise.resolve({ fid: 'FAM001' }) }) as React.ReactElement);
+
+    expect(screen.getAllByText(/Couldn't load this family's programs/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/Record an off-portal donation/i)).toBeNull();
+    // The sentence the page had no right to say.
+    expect(screen.queryByText(/no active enrollment/i)).toBeNull();
   });
 });

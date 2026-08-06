@@ -120,14 +120,21 @@ describe('WelcomeMemberProfileBody — grade editor gate', () => {
     expect(editors[0]!.getAttribute('data-staff')).toBe('true');
   });
 
-  it('does NOT render the grade editor for a coordinator', async () => {
-    // Coordinator reads this page (every roster row links here) but must not
-    // edit: isWelcomeTeam does not inherit coordinator, and the staff route
-    // would 403 anyway. Rendering a control that cannot work is the bug.
+  // Was "does NOT render the grade editor for a coordinator" - the read-without-
+  // edit split from spec 3.1, which the owner reversed on 2026-08-05. The
+  // ORIGINAL reasoning still stands and is why this test is kept rather than
+  // deleted: rendering a control the route would 403 is the bug. The route no
+  // longer 403s for a coordinator, so the control must now appear - and if the
+  // inheritance were ever reverted, this test failing is the correct alarm.
+  it('DOES render the grade editor for a coordinator - it inherits welcome-team', async () => {
     mockVerifyPortalSessionCookie.mockResolvedValueOnce({ uid: 'c-1', role: 'coordinator' } as never);
     const page = await WelcomeMemberProfileBody({ params: Promise.resolve({ fid: 'FAM001', mid: 'FAM001-02' }) });
     render(page as React.ReactElement);
-    expect(screen.queryByTestId('member-grade-editor')).toBeNull();
+    const editors = screen.getAllByTestId('member-grade-editor');
+    expect(editors.length).toBeGreaterThan(0);
+    // `staff` - a coordinator is not an admin, so it saves through the welcome
+    // member PATCH, not the admin set-grade route.
+    expect(editors[0]!.getAttribute('data-staff')).toBe('true');
     expect(screen.getAllByTestId('child-profile-view').length).toBeGreaterThan(0);
   });
 

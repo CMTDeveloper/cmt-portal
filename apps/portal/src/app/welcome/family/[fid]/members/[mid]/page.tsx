@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { cookies } from 'next/headers';
 import { SetuIcon } from '@cmt/ui';
 import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
-import { isWelcomeTeam, isAdmin, isCoordinator, type WithRole } from '@cmt/shared-domain';
+import { isWelcomeTeam, isAdmin, type WithRole } from '@cmt/shared-domain';
 import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 import { CspRoot } from '@/features/family/components/atoms';
 import { getChildProfile } from '@/features/setu/members/get-child-profile';
@@ -43,10 +43,13 @@ export async function WelcomeMemberProfileBody({
   // use the welcome member PATCH), which is what `admin` still distinguishes.
   const admin = !!raw && isAdmin(raw as unknown as WithRole);
   const canEditGrade = !!raw && isWelcomeTeam(raw as unknown as WithRole);
-  // Coordinator gets READ access to this page (every roster row links here) but
-  // NOT the grade editor, which stays gated on `admin` below. That split is the
-  // whole point of granting family read without family edit.
-  if (!raw || !(isWelcomeTeam(raw as unknown as WithRole) || isCoordinator(raw as unknown as WithRole))) {
+  // A coordinator now reaches the editor too. This used to grant them READ and
+  // withhold the editor - "the whole point of granting family read without
+  // family edit" - which was spec 3.1's split. The owner reversed it on
+  // 2026-08-05 (coordinator inherits welcome-team), so isWelcomeTeam already
+  // answers for both roles and naming isCoordinator separately would only
+  // reintroduce the distinction the reversal removed.
+  if (!raw || !isWelcomeTeam(raw as unknown as WithRole)) {
     return (
       <div style={{ padding: 32, fontFamily: 'var(--body)' }}>
         <p style={{ color: 'var(--err)', fontSize: 14 }}>Access denied. Welcome-team role required.</p>
@@ -73,11 +76,24 @@ export async function WelcomeMemberProfileBody({
   // means we omit the prop entirely rather than pass undefined). Staff get one
   // exception: an inline grade editor below the read-only view (children only —
   // grade is a child concept), so the rollover "Review →" link is actionable.
-  // A coordinator reaches this page but never this control: isWelcomeTeam does
-  // not inherit coordinator, which is the family-read-without-family-edit split.
   const view = (
     <>
       <ChildProfileView profile={profile} journey={journey} />
+      {/* Vaibhav, 2026-08-05: staff need to be able to set the graduation and
+          "not taking part" flags on a family's behalf, and correct a record
+          while they have the family on the phone. The full form lives one
+          route down and reuses the family's own; this is the way in.
+          Gated on `canEditGrade` (= isWelcomeTeam) rather than on page access,
+          so it never renders for someone the PATCH route would refuse. */}
+      {canEditGrade && (
+        <Link
+          href={`/welcome/family/${fid}/members/${mid}/edit`}
+          className="btn btn--g"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 18 }}
+        >
+          Edit member
+        </Link>
+      )}
       {canEditGrade && profile.type === 'Child' && (
         <MemberGradeEditor
           fid={profile.fid}

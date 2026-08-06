@@ -8,7 +8,7 @@ import { MobileBottomNav } from '@/features/family/components/mobile-bottom-nav'
 import { LoadingOm } from '@/components/chrome/loading-om';
 import { SchoolYearBadge } from '@/components/chrome/school-year-badge';
 import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
-import { isAdmin, isTeacher, isWelcomeTeam, isCoordinator, type WithRole } from '@cmt/shared-domain';
+import { isAdmin, isTeacher, isWelcomeTeam, hasRole, type WithRole } from '@cmt/shared-domain';
 import { profileGatePending, earlierGatesPending, getDisclaimerStateCached } from './_helpers/gates';
 import { loadAdultClassGateDataFailSoft } from '@/features/setu/adult-class/load-gate-data';
 import { needsAdultClassSelection } from '@/features/setu/adult-class/needs-selection';
@@ -173,12 +173,17 @@ async function readSevakFlagsFromCookie(): Promise<SevakFlags> {
     return {
       isAdmin: admin,
       showTeacher: flags.setuTeacher && isTeacher(withRole),
+      // Coordinator is tested FIRST, and the order is load-bearing: since
+      // 2026-08-05 isWelcomeTeam() returns true for a coordinator, so asking it
+      // first would label every coordinator "Welcome team" and the branch below
+      // would be unreachable. Someone holding both grants is shown the senior
+      // title. Matches the /welcome layout's own label derivation.
       staffArea: admin
         ? null
-        : isWelcomeTeam(withRole)
-          ? 'welcome-team'
-          : isCoordinator(withRole)
-            ? 'coordinator'
+        : hasRole(withRole, 'coordinator')
+          ? 'coordinator'
+          : isWelcomeTeam(withRole)
+            ? 'welcome-team'
             : null,
     };
   } catch {

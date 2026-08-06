@@ -2,6 +2,7 @@ import { FieldValue, portalFirestore } from '@cmt/firebase-shared/admin/firestor
 import { generateFid } from '@/features/setu/registration/generate-fid';
 import { hashContactKey } from '@/features/setu/registration/hash-contact-key';
 import { allocateMemberPublicIds } from '@/features/setu/ids/public-id-allocator';
+import { nextMemberMid } from '@/features/setu/ids/member-mid';
 
 // The portal has no direct firebase-admin dep, so we derive the Firestore type
 // from the portal handle factory (mirrors check-in-source.ts's pattern).
@@ -21,10 +22,6 @@ export interface PendingChildResult {
   fid: string;
   childMid: string;
   createdFamily: boolean;
-}
-
-function zeroPad(n: number): string {
-  return n.toString().padStart(2, '0');
 }
 
 function baseMemberFields(now: FirebaseFirestore.FieldValue) {
@@ -81,8 +78,22 @@ export async function upsertPendingFamilyChild(db: Db, params: PendingChildParam
 
     if (existingFid) {
       const memSnap = await txn.get(db.collection('families').doc(existingFid).collection('members'));
-      const nextMid = `${existingFid}-${zeroPad(memSnap.size + 1)}`;
-      txn.set(db.collection('families').doc(existingFid).collection('members').doc(nextMid), {
+      // Highest existing suffix + 1, NEVER the member count. count+1 collides
+      // with a live member the moment the numbering has a gap - which is how a
+      // real family lost a child, back when this wrote with `set` and the
+      // overwrite was silent (see ids/member-mid.ts). This path was not moved
+      // onto the helper at the time; it is now, and the write below is a
+      // `create` so a future regression is loud rather than lossy.
+      const nextMid = nextMemberMid(
+        existingFid,
+        (memSnap.docs as Array<{ id: string }>).map((d) => d.id),
+      );
+      // `create`, not `set`. nextMemberMid should always hand back a free id, so
+      // this can only fire if that invariant breaks - a refactor hoisting the
+      // read out of the transaction, or an id shape the allocator does not
+      // model. `set` would absorb exactly that silently, by overwriting a live
+      // member, which is the failure this whole path was just fixed for.
+      txn.create(db.collection('families').doc(existingFid).collection('members').doc(nextMid), {
         mid: nextMid,
         publicMid: publicMids[0]!,
         firstName: params.firstName,

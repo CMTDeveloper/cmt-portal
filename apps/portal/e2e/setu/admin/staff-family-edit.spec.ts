@@ -23,10 +23,15 @@ const STAFF = `setu-test-sevak@${DOMAIN}`;
 /**
  * welcome-team volunteer whose PRIMARY role is family-manager.
  *
- * NOT `parent-brampton`, which looks identical but carries COORDINATOR - a role
- * deliberately denied family edit, so it proves the opposite thing. And not the
- * standalone `sevak` account either: its primary role already IS welcome-team,
- * so code that reads only the primary role passes for it and fails here.
+ * NOT the standalone `sevak` account: its primary role already IS welcome-team,
+ * so code that reads only the primary role passes for it and fails here. This
+ * account is the one that proves `extraRoles` is consulted.
+ *
+ * (It is also not `parent-brampton`. That account carries COORDINATOR, which
+ * this docstring used to describe as "deliberately denied family edit" - true
+ * until the owner reversed spec 3.1 on 2026-08-05. Coordinator now inherits
+ * welcome-team, so parent-brampton would no longer prove anything different
+ * from this account.)
  */
 const VOLUNTEER_PARENT = `setu-test-parent-volunteer@${DOMAIN}`;
 const PLAIN_PARENT = `setu-test-parent-scarborough@${DOMAIN}`;
@@ -38,7 +43,6 @@ const PLAIN_PARENT = `setu-test-parent-scarborough@${DOMAIN}`;
  * leaving a probe child on a real UAT family on every run.
  */
 const ADMIN = `setu-test-admin@${DOMAIN}`;
-const COORDINATOR = `setu-test-coordinator@${DOMAIN}`;
 
 test.skip(!PASSWORD, 'TEST_ACCOUNTS_PASSWORD required (run seed:test-accounts first)');
 
@@ -102,24 +106,40 @@ test.describe.serial('staff cross-family edit', () => {
     expect(res.status()).toBe(200);
   });
 
-  test('a plain family-manager and a coordinator are both DENIED', async () => {
-    // Coordinator is the interesting one: spec 3.1 grants it family READ (it
-    // reaches the roster and the member detail page) but NOT family EDIT.
-    for (const email of [PLAIN_PARENT, COORDINATOR]) {
-      const ctx = await ctxFor(email);
-      const patch = await ctx.patch(`/api/welcome/families/${fid}`, {
-        data: { location: 'Brampton' },
-        failOnStatusCode: false,
-      });
-      expect([401, 403], `${email} reached the family PATCH`).toContain(patch.status());
+  test('a plain family-manager is DENIED another family entirely', async () => {
+    // ⚠️ COORDINATOR WAS REMOVED FROM THIS LIST ON 2026-08-06, and the removal
+    // is the point rather than a convenience.
+    //
+    // This test used to assert that a coordinator is denied family edit, citing
+    // spec 3.1. The owner REVERSED spec 3.1 on 2026-08-05 - "Coordinator gets
+    // everything Welcome team has and plus" - and `isWelcomeTeam()` has
+    // inherited coordinator ever since, which is the single gate both these
+    // routes use. So the assertion had become false, and this spec would have
+    // failed the moment it next ran against preview. It was not in the batch the
+    // coordinator change was verified with.
+    //
+    // A plain family-manager with no staff grant is the real boundary, and it is
+    // the one worth keeping: it proves the routes check a STAFF capability
+    // rather than merely "is signed in".
+    //
+    // The POSITIVE half - that a coordinator now reaches the family PATCH - is
+    // already asserted in coordinator.spec.ts, against a fid that does not
+    // exist, so it proves the gate without mutating a real UAT family. Not
+    // duplicated here.
+    const ctx = await ctxFor(PLAIN_PARENT);
+    const patch = await ctx.patch(`/api/welcome/families/${fid}`, {
+      data: { location: 'Brampton' },
+      failOnStatusCode: false,
+    });
+    expect([401, 403], `${PLAIN_PARENT} reached the family PATCH`).toContain(patch.status());
 
-      const add = await ctx.post(`/api/welcome/families/${fid}/members`, {
-        data: PROBE,
-        failOnStatusCode: false,
-      });
-      expect([401, 403], `${email} reached the member POST`).toContain(add.status());
-    }
+    const add = await ctx.post(`/api/welcome/families/${fid}/members`, {
+      data: PROBE,
+      failOnStatusCode: false,
+    });
+    expect([401, 403], `${PLAIN_PARENT} reached the member POST`).toContain(add.status());
   });
+
 
   test('the shared required-field matrix runs on the staff path', async () => {
     // Without it staff could create a Child with no grade, which immediately

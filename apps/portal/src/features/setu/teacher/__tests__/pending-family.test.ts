@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { txnGet, txnSet, mockRunTxn } = vi.hoisted(() => ({ txnGet: vi.fn(), txnSet: vi.fn(), mockRunTxn: vi.fn() }));
+const { txnGet, txnSet, txnCreate, mockRunTxn } = vi.hoisted(() => ({ txnGet: vi.fn(), txnSet: vi.fn(), txnCreate: vi.fn(), mockRunTxn: vi.fn() }));
 vi.mock('@cmt/firebase-shared/admin/firestore', () => ({
   FieldValue: { serverTimestamp: () => 'SERVER_TS' },
 }));
@@ -31,7 +31,7 @@ const db = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockRunTxn.mockImplementation(async (cb: (t: { get: typeof txnGet; set: typeof txnSet }) => Promise<unknown>) => cb({ get: txnGet, set: txnSet }));
+  mockRunTxn.mockImplementation(async (cb: (t: { get: typeof txnGet; set: typeof txnSet; create: typeof txnCreate }) => Promise<unknown>) => cb({ get: txnGet, set: txnSet, create: txnCreate }));
 });
 
 const P = { levelLocation: 'Brampton', firstName: 'New', lastName: 'Kid', schoolGrade: 'Grade 2', gender: 'PreferNotToSay' as const, parentEmail: 'p@x.com', parentPhone: null };
@@ -47,10 +47,42 @@ describe('upsertPendingFamilyChild', () => {
   it('appends to an existing family when email already claims one', async () => {
     txnGet
       .mockResolvedValueOnce({ exists: true, data: () => ({ fid: 'CMT-EXIST' }) })
-      .mockResolvedValueOnce({ size: 2 }); // members size → -03
+      // Contiguous numbering: highest suffix is -02, so the next is -03.
+      .mockResolvedValueOnce({ docs: [{ id: 'CMT-EXIST-01' }, { id: 'CMT-EXIST-02' }] });
     const r = await upsertPendingFamilyChild(db, P);
     expect(r).toEqual({ fid: 'CMT-EXIST', childMid: 'CMT-EXIST-03', createdFamily: false });
-    expect(txnSet).toHaveBeenCalledTimes(1); // only the child member
+    // create(), not set(): appending to an existing family must fail loudly if
+    // the allocated id is somehow taken, rather than overwrite whoever holds it.
+    expect(txnCreate).toHaveBeenCalledTimes(1);
+    expect(txnSet).not.toHaveBeenCalled();
+  });
+
+  // ── mid allocation must survive a gap in the numbering (task #129) ─────────
+  //
+  // This is not a hypothetical. `ids/member-mid.ts` exists because count+1 once
+  // clobbered a real child: a family whose -02 had been deleted allocated -04
+  // over the daughter already sitting there. The helper was written; this path
+  // and invite-accept were never moved onto it.
+  //
+  // The gap is reachable in production today - staff member DELETE is live
+  // (admin-only) on /welcome/family/{fid}/members/{mid}.
+  it('appending to a family with a DELETED member does not overwrite the survivor', async () => {
+    txnGet
+      .mockResolvedValueOnce({ exists: true, data: () => ({ fid: 'CMT-EXIST' }) })
+      // -02 was deleted. Two members remain, so count+1 resolves to -03 - which
+      // is TAKEN. Correct answer is highest-suffix+1 = -04.
+      .mockResolvedValueOnce({ docs: [{ id: 'CMT-EXIST-01' }, { id: 'CMT-EXIST-03' }] });
+
+    const r = await upsertPendingFamilyChild(db, P);
+
+    expect(r.childMid).toBe('CMT-EXIST-04');
+    // Assert the WRITE target too, not just the returned id: the id being right
+    // while the doc lands somewhere else is precisely the failure that loses a
+    // member, and the return value alone would not catch it.
+    expect(txnCreate).toHaveBeenCalledTimes(1);
+    const [ref, payload] = txnCreate.mock.calls[0] as [{ __id: string }, { mid: string }];
+    expect(ref.__id).toBe('CMT-EXIST-04');
+    expect(payload.mid).toBe('CMT-EXIST-04');
   });
 
   it('with NO email and NO phone, creates an un-claimable pending family (no contactKey)', async () => {
@@ -89,10 +121,10 @@ describe('upsertPendingFamilyChild', () => {
   it('appends to existing family: child gets a publicMid (no publicFid — no new family)', async () => {
     txnGet
       .mockResolvedValueOnce({ exists: true, data: () => ({ fid: 'CMT-EXIST' }) })
-      .mockResolvedValueOnce({ size: 2 }); // members size → -03
+      .mockResolvedValueOnce({ docs: [{ id: 'CMT-EXIST-01' }, { id: 'CMT-EXIST-02' }] }); // → -03
     await upsertPendingFamilyChild(db, P);
 
-    const payloads = txnSet.mock.calls.map((c) => c[1] as Record<string, unknown>);
+    const payloads = txnCreate.mock.calls.map((c) => c[1] as Record<string, unknown>);
     expect(payloads).toHaveLength(1); // only the child member
     const child = payloads[0]!;
     expect(child.type).toBe('Child');

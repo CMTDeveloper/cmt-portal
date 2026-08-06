@@ -1,9 +1,12 @@
 import { Suspense } from 'react';
 import { connection } from 'next/server';
+import { cookies } from 'next/headers';
 import Link from 'next/link';
 import type { Metadata } from 'next';
-import { gradeLabel } from '@cmt/shared-domain';
+import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
+import { gradeLabel, isWelcomeTeam, type WithRole } from '@cmt/shared-domain';
 import { getAllVisitorsView, type VisitorLevelGroup } from '@/features/setu/teacher/all-visitors';
+import { AddVisitorForm } from '@/features/setu/visitors/add-visitor-form';
 import { mostRecentSunday } from '@/features/setu/calendar/calendar';
 import type { DoorGuestChild } from '@/features/setu/attendance/check-in-attendance';
 
@@ -26,6 +29,28 @@ export default function WelcomeVisitorsPage({
 // The welcome layout already provides CspRoot, so brand tokens resolve here.
 async function WelcomeVisitorsBody({ searchParams }: { searchParams: Promise<{ date?: string }> }) {
   await connection();
+
+  // Gate 2 of three, and it was MISSING until 2026-08-05 - this page had no
+  // role check of its own, and the welcome layout only gates its DESKTOP
+  // branch (the phone branch renders {children} straight through). So on a
+  // phone, middleware was the only thing standing here.
+  //
+  // Not exploitable as it stood - canAccessRoute does deny the path - but "one
+  // gate" is not the rule this codebase runs on, and this screen is about to
+  // grow writes. A page that trusts middleware alone is one config edit away
+  // from being open. Renders "Access denied" rather than redirecting: an
+  // authorization redirect from inside a gated layout is what produces the
+  // ERR_TOO_MANY_REDIRECTS bounce recorded elsewhere in this repo.
+  const cookieStore = await cookies();
+  const raw = await verifyPortalSessionCookie(cookieStore.get('__session')?.value ?? '').catch(() => null);
+  if (!raw || !isWelcomeTeam(raw as unknown as WithRole)) {
+    return (
+      <div style={{ padding: 32, fontFamily: 'var(--body)' }}>
+        <p style={{ color: 'var(--err)', fontSize: 14 }}>Access denied. Welcome-team role required.</p>
+      </div>
+    );
+  }
+
   const { date: dateParam } = await searchParams;
   // Same rule the teacher visitors page uses, so the two screens agree on which
   // day they are showing when a date is absent or malformed.
@@ -74,6 +99,11 @@ async function WelcomeVisitorsBody({ searchParams }: { searchParams: Promise<{ d
           </button>
         </form>
       </div>
+
+      {/* Recording a walk-in the kiosk did not catch. Takes the VIEWED date,
+          not today, so a desk reviewing another Sunday files the guest where
+          they are looking. */}
+      <AddVisitorForm date={date} />
 
       <p style={{ fontSize: 13, color: 'var(--muted)', margin: 0, fontFeatureSettings: '"tnum"' }}>
         {view.childCount === 0

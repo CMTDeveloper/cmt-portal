@@ -1,5 +1,11 @@
 import { test, expect } from '@playwright/test';
 import { hasFamilyCreds, visibleText } from '../_helpers';
+// STATIC, not `await import(...)`. The dynamic form dies under Playwright's
+// loader with "./apps does not provide an export named getMasterApp" (#123) -
+// the named exports of a TS module are not discoverable when it is pulled in at
+// runtime rather than transformed at load. Every seed that used it was silently
+// broken, and so was its cleanup.
+import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 
 // Pending co-manager invite - deployed UAT. Feature B: an invited co-manager is
 // created immediately at invite-SEND as inviteStatus:'pending' (visible before
@@ -16,7 +22,6 @@ const INVITEE_NAME = 'E2E Pending Invitee';
 
 /** Remove any leftover pending member + its invite (safety before/after). */
 async function cleanupPending(): Promise<void> {
-  const { portalFirestore } = await import('@cmt/firebase-shared/admin/firestore');
   const db = portalFirestore();
   const members = await db.collection('families').doc(FID).collection('members').where('inviteStatus', '==', 'pending').get();
   for (const m of members.docs) await m.ref.delete();
@@ -64,7 +69,6 @@ test.describe('Family - pending co-manager invite', () => {
 
     // Gone from the list after the refresh, and gone from Firestore.
     await expect(visibleText(page, INVITEE_NAME)).toHaveCount(0, { timeout: 15_000 });
-    const { portalFirestore } = await import('@cmt/firebase-shared/admin/firestore');
     const db = portalFirestore();
     const remaining = await db.collection('families').doc(FID).collection('members').where('inviteStatus', '==', 'pending').get();
     expect(remaining.size, 'the pending member should be deleted').toBe(0);

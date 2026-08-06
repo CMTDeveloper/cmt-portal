@@ -1,6 +1,12 @@
 import { test, expect, request, type APIRequestContext, type Browser, type Page } from '@playwright/test';
 import { sessionDateFor } from '@cmt/shared-domain';
 import { TEST_ACCOUNT_EMAILS, TEST_ACCOUNTS_PASSWORD, hasTestAccounts, hasFamilyCreds } from '../../_helpers';
+// STATIC, not `await import(...)`. The dynamic form dies under Playwright's
+// loader with "./apps does not provide an export named getMasterApp" (#123) -
+// the named exports of a TS module are not discoverable when it is pulled in at
+// runtime rather than transformed at load. Every seed that used it was silently
+// broken, and so was its cleanup.
+import { portalFirestore } from '@cmt/firebase-shared/admin/firestore';
 
 /**
  * P2 Task 9 / spec §5.3 - the guest→teacher walk, end to end against DEPLOYED UAT,
@@ -129,7 +135,6 @@ test.describe('guest check-in → teacher Visitors (deployed UAT)', () => {
   test.afterAll(async () => {
     if (writtenIds.length === 0) return;
     try {
-      const { portalFirestore } = await import('@cmt/firebase-shared/admin/firestore');
       const db = portalFirestore();
       for (const id of writtenIds) await db.collection('guest_check_ins').doc(id).delete();
     } catch (err) {
@@ -178,7 +183,6 @@ test.describe('guest check-in → teacher Visitors (deployed UAT)', () => {
     // `date` is the real Toronto walk-in day (server clock); `sessionDate` is the
     // Sunday every teacher surface defaults to. Asserting the relation - not a
     // hardcoded day - is what makes this hold on a Tuesday as well as a Sunday.
-    const { portalFirestore } = await import('@cmt/firebase-shared/admin/firestore');
     const db = portalFirestore();
     const snap = await db.collection('guest_check_ins').doc(writtenIds[0]!).get();
     expect(snap.exists, 'the guest doc the route reported writing is not there').toBe(true);
@@ -232,7 +236,6 @@ test.describe('guest check-in → teacher Visitors (deployed UAT)', () => {
     expect(sessionDateFor(midweek), 'fixture arithmetic: the midweek day must roll back to this Sunday').toBe(sunday);
     expect(midweek).not.toBe(sunday);
 
-    const { portalFirestore } = await import('@cmt/firebase-shared/admin/firestore');
     const db = portalFirestore();
 
     /** A midweek guest doc, exactly the shape `recordGuestCheckIn` writes. */

@@ -1039,8 +1039,11 @@ describe('canAccessRoute — coordinator: denied', () => {
     ['/welcome/seva', 'GET'],
     ['/welcome/prasad', 'GET'],
     ['/api/welcome/reports', 'GET'],
-    ['/api/setu/family/search', 'GET'],
-    ['/api/welcome/families/CMT-X', 'PATCH'],
+    // `/api/setu/family/search` and `/api/welcome/families/{fid}` PATCH used to
+    // sit here. Both moved to ALLOWED on 2026-08-05 when coordinator began
+    // inheriting welcome-team - see "Coordinator ⊇ Welcome team" below, which
+    // asserts them positively. Left named here so the removal reads as a
+    // decision rather than a line someone dropped.
   ])('denies %s %s', (path, method) => {
     expect(canAccessRoute(coordinator, path, method)).toBe(false);
   });
@@ -1069,8 +1072,19 @@ describe('canAccessRoute — the welcome-team grant, in full', () => {
     // Every roster row links into family detail; without it the screen is a dead end.
     ['/welcome/family/CMT-AB12CD34', 'GET'],
     ['/welcome/family/CMT-AB12CD34/members/CMT-AB12CD34-02', 'GET'],
+    // The staff member EDIT screen (2026-08-05). It rides the /welcome/family/
+    // prefix rather than having a clause of its own, so it is pinned here: a
+    // future narrowing of that prefix would otherwise strand the screen
+    // silently, and the failure would look like a redirect loop rather than a
+    // permission change.
+    ['/welcome/family/CMT-AB12CD34/members/CMT-AB12CD34-02/edit', 'GET'],
     // The data behind those screens.
     ['/api/welcome/roster/report', 'GET'],
+    // Recording a walk-in visitor from the desk (2026-08-05). There is no
+    // /api/welcome catch-all, so a path with no clause of its own default-denies
+    // at the bottom of canAccessRoute - for admins too. This row is the proof
+    // the clause exists, not a formality.
+    ['/api/welcome/visitors', 'POST'],
     ['/api/welcome/families', 'GET'],
     ['/api/welcome/families/migration-status', 'GET'],
     ['/api/setu/family/search', 'GET'],
@@ -1128,13 +1142,65 @@ describe('canAccessRoute — the welcome-team grant, in full', () => {
     expect(canAccessRoute(admin, '/welcome/some-future-section', 'GET')).toBe(true);
   });
 
-  it('coordinator is unaffected: still roster + programs + levels, still no visitors', () => {
-    const coord: SessionClaims = { uid: 'c', role: 'coordinator' };
-    expect(canAccessRoute(coord, '/welcome/roster', 'GET')).toBe(true);
-    expect(canAccessRoute(coord, '/api/welcome/roster/report', 'GET')).toBe(true);
-    expect(canAccessRoute(coord, '/admin/levels', 'GET')).toBe(true);
-    expect(canAccessRoute(coord, '/api/admin/teacher-assignments', 'POST')).toBe(true);
-    expect(canAccessRoute(coord, '/welcome/visitors', 'GET')).toBe(false);
+  // ── Coordinator ⊇ Welcome team (2026-08-05) ───────────────────────────────
+  //
+  // Vaibhav: *"Coordinator gets everything Welcome team has and plus"*. Until
+  // today the two were deliberate SIBLINGS with disjoint grants, and this file
+  // pinned that. The owner chose the literal reading, which reverses the older
+  // "spec 3.1 excludes family EDIT from coordinator" decision on purpose.
+  //
+  // Mechanically it is one line - `isWelcomeTeam()` now returns true for
+  // coordinator, the same way it already does for admin - so the two lists
+  // below are not hand-maintained parallel copies: ALLOWED is reused verbatim,
+  // and a coordinator row can only drift from a welcome-team row if someone
+  // reintroduces a separate coordinator branch somewhere.
+  it.each(ALLOWED)('ALLOWS coordinator (inherits welcome-team): %s %s', (path, method) => {
+    expect(canAccessRoute(coordinator, path, method)).toBe(true);
+  });
+
+  // The "and plus" half: Programs + Levels + teacher assignment, which
+  // welcome-team does NOT have (they sit in that role's DENIED list above).
+  const COORDINATOR_ALSO_ALLOWED: Array<[string, string]> = [
+    ['/admin/programs', 'GET'],
+    ['/admin/levels', 'GET'],
+    ['/api/admin/programs', 'POST'],
+    ['/api/admin/offerings', 'POST'],
+    ['/api/admin/levels', 'POST'],
+    ['/api/admin/teacher-assignments', 'POST'],
+    ['/api/admin/teachers/search', 'GET'],
+    ['/api/admin/levels/brampton-l2/teachers', 'POST'],
+  ];
+
+  it.each(COORDINATOR_ALSO_ALLOWED)('ALLOWS coordinator (its own grant): %s %s', (path, method) => {
+    expect(canAccessRoute(coordinator, path, method)).toBe(true);
+  });
+
+  // Spelled out rather than computed as `DENIED minus COORDINATOR_ALSO_ALLOWED`:
+  // a filter that silently matches nothing still goes green, and this is the
+  // list that says where the role STOPS. Money is the one to look at first.
+  const COORDINATOR_DENIED: Array<[string, string]> = [
+    ['/welcome/levels', 'GET'],
+    ['/welcome/seva', 'GET'],
+    ['/welcome/prasad', 'GET'],
+    ['/welcome/reports', 'GET'],
+    ['/api/welcome/seva/opportunities', 'GET'],
+    ['/api/welcome/prasad/upcoming', 'GET'],
+    ['/api/welcome/reports/enrollment', 'GET'],
+    // Rewriting what a family owes stays ADMIN-only. The owner was explicit:
+    // "The manual payment - only admin at this time (later we will extend that
+    // to Coordinator)." When that later comes, this row moves - nothing else.
+    ['/api/welcome/enrollments/e1/override', 'POST'],
+    ['/api/admin/calendar', 'POST'],
+    ['/api/admin/users', 'GET'],
+    ['/api/setu/invite/send', 'POST'],
+  ];
+
+  it.each(COORDINATOR_DENIED)('DENIES coordinator: %s %s', (path, method) => {
+    expect(canAccessRoute(coordinator, path, method)).toBe(false);
+  });
+
+  it('a new, unlisted /welcome page is admin-only for coordinator too', () => {
+    expect(canAccessRoute(coordinator, '/welcome/some-future-section', 'GET')).toBe(false);
   });
 });
 
@@ -1142,8 +1208,12 @@ describe('canAccessRoute — staff family edit (Track B)', () => {
   it('allows welcome-team to PATCH a family', () => {
     expect(canAccessRoute(welcomeTeam, '/api/welcome/families/CMT-X', 'PATCH')).toBe(true);
   });
-  it('denies a coordinator - family EDIT is excluded even though family READ is granted', () => {
-    expect(canAccessRoute(coordinator, '/api/welcome/families/CMT-X', 'PATCH')).toBe(false);
+  // Was "denies a coordinator - family EDIT is excluded even though family READ
+  // is granted". Reversed 2026-08-05 when the owner took Vaibhav's hierarchy
+  // literally: coordinator now inherits the whole welcome-team grant, and
+  // family edit is part of it.
+  it('allows a coordinator - it inherits welcome-team, family EDIT included', () => {
+    expect(canAccessRoute(coordinator, '/api/welcome/families/CMT-X', 'PATCH')).toBe(true);
   });
   it('denies a plain family-manager', () => {
     expect(canAccessRoute(manager, '/api/welcome/families/CMT-X', 'PATCH')).toBe(false);
@@ -1160,12 +1230,17 @@ describe('canAccessRoute — staff family edit (Track B)', () => {
     expect(canAccessRoute(welcomeTeam, path, method)).toBe(true);
   });
 
+  // DELETE is in this ALLOW list for both roles and that is not a mistake: the
+  // middleware lets them reach the path, and the route handler itself requires
+  // isAdmin (api/welcome/families/[fid]/members/[mid]/route.ts:30). Deleting a
+  // person is gated in the handler, not here - see the note above the
+  // /api/welcome/families clause in can-access-route.ts.
   it.each([
     ['/api/welcome/families/CMT-X/members', 'POST'],
     ['/api/welcome/families/CMT-X/members/CMT-X-02', 'PATCH'],
     ['/api/welcome/families/CMT-X/members/CMT-X-02', 'DELETE'],
-  ])('denies a coordinator %s %s', (path, method) => {
-    expect(canAccessRoute(coordinator, path, method)).toBe(false);
+  ])('allows a coordinator %s %s (inherits welcome-team)', (path, method) => {
+    expect(canAccessRoute(coordinator, path, method)).toBe(true);
   });
 
   it('denies a plain family-manager the member sub-paths', () => {

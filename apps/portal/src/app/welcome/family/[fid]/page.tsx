@@ -6,10 +6,13 @@ import { CspRoot } from '@/features/family/components/atoms';
 import { getFamilyForWelcome } from '@/features/setu/search/get-family-for-welcome';
 import { getFamilySevaProgress, type FamilySevaProgress } from '@/features/setu/seva/get-family-seva-progress';
 import { verifyPortalSessionCookie } from '@cmt/firebase-shared/admin/session';
-import { isWelcomeTeam, isCoordinator, isAdmin, BALA_VIHAR, recordedAllergy, isParticipating, inactiveLabelFor, type WithRole } from '@cmt/shared-domain';
-import { getEnrollments } from '@/features/setu/enrollment/get-enrollments';
+import { isWelcomeTeam, isAdmin, BALA_VIHAR, recordedAllergy, isParticipating, inactiveLabelFor, type WithRole } from '@cmt/shared-domain';
 import { adultStudyClassProgramKeys } from '@/features/setu/adult-class/program-keys';
-import { deriveFamilyPayment } from '@/features/setu/roster/payment';
+import { loadFamilyPaymentData, type FamilyPaymentData } from '@/features/setu/roster/payment';
+import {
+  FamilyPaymentSection,
+  PaymentActivity,
+} from '@/features/setu/roster/components/family-payment-panels';
 import { getOpenOfferingsForFamily, resolveCurrentOffering } from '@/features/setu/enrollment/get-open-offerings';
 import { resolveSuggestedAmount } from '@cmt/shared-domain';
 import {
@@ -59,10 +62,15 @@ export async function WelcomeFamilyDetailBody({
   let admin = false;
   if (sessionCookie) {
     const raw = await verifyPortalSessionCookie(sessionCookie);
-    // Coordinator reaches this page too: every /welcome/roster row links here,
-    // so without it the one screen the role is granted dead-ends on click.
-    // Spec 3.1 excludes family EDIT from coordinator, not family READ.
-    if (raw && (isWelcomeTeam(raw as unknown as WithRole) || isCoordinator(raw as unknown as WithRole))) {
+    // Coordinator reaches this page through isWelcomeTeam(), which has covered
+    // it since 2026-08-05 - so isCoordinator is not named again here.
+    //
+    // This block used to add "Spec 3.1 excludes family EDIT from coordinator,
+    // not family READ", and the coordinator note was appended BELOW that rather
+    // than replacing it, leaving a comment that contradicted itself in a file
+    // the same commit was editing. Spec 3.1 was reversed by the owner: family
+    // edit is coordinator's now.
+    if (raw && isWelcomeTeam(raw as unknown as WithRole)) {
       allowed = true;
       admin = isAdmin(raw as unknown as WithRole);
     }
@@ -80,69 +88,86 @@ export async function WelcomeFamilyDetailBody({
 
   if (!data) notFound();
 
-  const sevaProgress = await getFamilySevaProgress(fid);
+  // ── One read set for the whole payment picture ─────────────────────────────
+  // `loadFamilyPaymentData` performs exactly the reads `deriveFamilyPayment`
+  // used to perform internally and then discard - enrollments, donations, the
+  // pledge - and hands them back. Before this the page called `getEnrollments`
+  // for the override control AND `deriveFamilyPayment` (which reads them again),
+  // so an admin render read the same subcollection twice to show strictly less.
+  //
+  // Loaded for EVERY allowed viewer, not just admins: a coordinator or a
+  // welcome-team volunteer now sees the programs and the payment verdict, which
+  // is the same verdict they already read as the roster's payment column. The
+  // amounts behind it stay admin-only (`canSeeMoney` below).
+  //
+  // `.catch(() => null)` rather than letting it throw: the loader deliberately
+  // throws when the enrollments read fails, and a family's name, contact details
+  // and allergy warnings must still render for the volunteer on the phone. The
+  // section says it could not load rather than showing an empty programs list,
+  // which would read as "not enrolled".
+  const [sevaProgress, payment] = await Promise.all([
+    getFamilySevaProgress(fid),
+    loadFamilyPaymentData(fid).catch((err: unknown) => {
+      console.error('[welcome-family] could not load the payment picture', err);
+      return null;
+    }),
+  ]);
 
-  // ADMIN ONLY, and not loaded at all otherwise - a coordinator viewing this
-  // page pays no extra read for a control they will never be shown.
-  // Fail-soft: the override is a staff convenience, and losing it must not cost
-  // the family detail a coordinator actually came here for.
-  // Which programs ARE the adult class is data, not a key - each centre may run
-  // its own (Scarborough's is `adult-study-east`). Read once here and passed
-  // down, because the control is a client component and cannot ask. Resolving it
-  // with a literal key comparison inside the control is what mislabelled a
-  // Scarborough family's genuine waiver as "no reason recorded" and offered to
-  // record a payment they never made (reported on FID 5010, 2026-08-04).
-  // `listPrograms()` behind this is `use cache`d on the 'programs' tag.
+  // ── The off-portal write control: ADMIN ONLY ───────────────────────────────
+  // The rows come from the SAME `payment` result above - no second enrollments
+  // read. The verdict guarding the button is the same `loadFamilyPaymentData`
+  // verdict the override ROUTE's own guard derives, so the screen an admin reads
+  // and the rule that refuses their click stay one predicate rather than two
+  // kept in step by hand. (An earlier draft inlined `classifyRosterPayment` here
+  // and consequently missed live monthly pledges, which write no completed
+  // donations - this page would have called them unpaid while the roster called
+  // them Paid.)
   //
-  // Deliberately INSIDE the try, not `.catch(() => [])`: an empty list would
-  // make every waived enrollment look like an unexplained zero and put the
-  // "Mark paid off-portal" button back on it - i.e. a transient read failure
-  // would fail OPEN, into exactly the false money record this fixes. Losing the
-  // whole panel for one render is the cheaper failure.
-  //
-  // The payment verdict joins the SAME promise: a family whose money already
-  // arrived must not be offered "Mark paid off-portal".
-  //
-  // `deriveFamilyPayment` rather than calling `classifyRosterPayment` here -
-  // the route's guard calls the SAME function, so the screen and the rule that
-  // stops the write are ONE predicate rather than two that must be kept in
-  // step. The first draft of this inlined the classifier and consequently
-  // missed live monthly pledges, which write no completed donations and would
-  // have read as unpaid on this page while the roster read Paid. It never
-  // throws (returns 'unknown'), so it cannot be what collapses the panel.
-  const overridable: PaymentOverrideEnrollment[] = admin
-    ? await Promise.all([getEnrollments(fid), adultStudyClassProgramKeys(), deriveFamilyPayment(fid)])
-        .then(([rows, adultClassKeys, verdict]) => {
-          const active = rows.filter((e) => e.status === 'active');
-          // Family-level, and every row receives the same answer: donations are
-          // recorded against the family, and a live pledge is a family-level
-          // arrangement. Only a POSITIVE 'paid' suppresses - 'unknown' leaves
-          // the action available, because this route is the only way to record
-          // a genuine off-portal arrangement.
-          const familyHasPaid = verdict === 'paid';
-          return active
-            .map((e) => ({
-              familyHasPaid,
-              isAdultClass: adultClassKeys.includes(e.programKey),
-              eid: e.eid,
-              programKey: e.programKey,
-              programLabel: e.programLabel,
-              termLabel: e.termLabel,
-              effectiveSuggestedAmount: e.effectiveSuggestedAmount,
-              suggestedAmountOverride: e.suggestedAmountOverride ?? null,
-              // Absent on every enrollment written before 2026-08-04, so `=== true`
-              // rather than a truthiness check. Omitting it here is what let the
-              // control keep reading a bare `0` as "settled" after the rest of the
-              // app had stopped - a hand-mapped projection dropping a new field,
-              // silently, because the object is built by listing fields.
-              settledOffPortal: e.settledOffPortal === true,
-            }));
-        })
-        .catch((err) => {
-          console.error('[welcome-family] could not read enrollments for the override control', err);
-          return [];
-        })
-    : [];
+  // `payment === null` (the loader threw) collapses this to empty, which is the
+  // fail-CLOSED direction the original `.catch(() => [])` chose and the reason
+  // the programs read was never softened: an empty list would make every waived
+  // enrollment look like an unexplained zero and re-offer "Mark paid
+  // off-portal" on money that was already handled.
+  let overridable: PaymentOverrideEnrollment[] = [];
+  if (admin && payment) {
+    try {
+      // Which programs ARE the adult class is data, not a key - each centre may
+      // run its own (Scarborough's is `adult-study-east`). Resolving it with a
+      // literal key comparison inside the control is what mislabelled a
+      // Scarborough family's genuine waiver as "no reason recorded" and offered
+      // to mark it paid (FID 5010, 2026-08-04). Still INSIDE the try: a
+      // transient programs-read failure must lose the panel, not fail open into
+      // that same false money record.
+      const adultClassKeys = await adultStudyClassProgramKeys();
+      // Family-level, and every row receives the same answer: donations are
+      // recorded against the family, and a live pledge is a family-level
+      // arrangement. Only a POSITIVE 'paid' suppresses - 'unknown' leaves
+      // the action available, because this route is the only way to record
+      // a genuine off-portal arrangement.
+      const familyHasPaid = payment.verdict === 'paid';
+      overridable = payment.enrollments
+        .filter((e) => e.status === 'active')
+        .map((e) => ({
+          familyHasPaid,
+          isAdultClass: adultClassKeys.includes(e.programKey),
+          eid: e.eid,
+          programKey: e.programKey,
+          programLabel: e.programLabel,
+          termLabel: e.termLabel,
+          effectiveSuggestedAmount: e.effectiveSuggestedAmount,
+          suggestedAmountOverride: e.suggestedAmountOverride ?? null,
+          // Absent on every enrollment written before 2026-08-04, so `=== true`
+          // rather than a truthiness check. Omitting it here is what let the
+          // control keep reading a bare `0` as "settled" after the rest of the
+          // app had stopped - a hand-mapped projection dropping a new field,
+          // silently, because the object is built by listing fields.
+          settledOffPortal: e.settledOffPortal === true,
+        }));
+    } catch (err) {
+      console.error('[welcome-family] could not resolve the adult-class program keys', err);
+      overridable = [];
+    }
+  }
 
   // The Bala Vihar offering this family could be enrolled INTO, when they are
   // not already. Admin-only and only when needed, so no family that is already
@@ -152,9 +177,16 @@ export async function WelcomeFamilyDetailBody({
   // centre and breaks ties the same way the family's enroll page does, so the
   // admin cannot enrol them into a different centre's class than the one they
   // would have joined themselves.
+  // `payment &&` is load-bearing, not defensive noise. `hasActiveBv` is derived
+  // from `overridable`, which is EMPTY when the payment read failed - so without
+  // this guard a family we could not read looks exactly like a family with no
+  // Bala Vihar enrollment, and the admin is offered "Enrol and mark paid",
+  // whose confirm path ends in the same `settledOffPortal` write as the
+  // override button beside it. The button we DID gate and the button we did not
+  // reach the same money record; gating one was not enough.
   const hasActiveBv = overridable.some((e) => e.programKey === BALA_VIHAR);
   let joinableBv: AdminEnrollOffering | null = null;
-  if (admin && !hasActiveBv) {
+  if (admin && payment && !hasActiveBv) {
     try {
       const offerings = await getOpenOfferingsForFamily(BALA_VIHAR, data.family.location);
       const chosen = resolveCurrentOffering(offerings, data.family.location);
@@ -191,7 +223,7 @@ export async function WelcomeFamilyDetailBody({
               <div style={{ width: 32 }}/>
             </div>
             <div style={{ flex: 1, overflowY: 'auto', padding: '18px 18px 90px' }}>
-              <FamilyDetailBody family={family} members={members} adults={adults} children={children} sevaProgress={sevaProgress} overridable={overridable} canOverride={admin} joinableBv={joinableBv} fid={fid}/>
+              <FamilyDetailBody family={family} members={members} adults={adults} children={children} sevaProgress={sevaProgress} payment={payment} overridable={overridable} canOverride={admin} joinableBv={joinableBv} fid={fid}/>
             </div>
           </div>
         </CspRoot>
@@ -208,7 +240,7 @@ export async function WelcomeFamilyDetailBody({
           </p>
           <h1 style={{ fontSize: 38, fontWeight: 400, marginTop: 6 }}>The {family.name} Family</h1>
         </header>
-        <FamilyDetailBody family={family} members={members} adults={adults} children={children} sevaProgress={sevaProgress} overridable={overridable} canOverride={admin} joinableBv={joinableBv} fid={fid}/>
+        <FamilyDetailBody family={family} members={members} adults={adults} children={children} sevaProgress={sevaProgress} payment={payment} overridable={overridable} canOverride={admin} joinableBv={joinableBv} fid={fid}/>
       </div>
     </>
   );
@@ -220,6 +252,12 @@ type FamilyDetailBodyProps = {
   adults: MemberDoc[];
   children: MemberDoc[];
   sevaProgress: FamilySevaProgress;
+  /**
+   * The family's programs, payment verdict and payment history, or null when
+   * the read failed. Loaded for EVERY staff viewer; which parts of it are
+   * rendered is decided by `canOverride` (money is admin-only).
+   */
+  payment: FamilyPaymentData | null;
   /** Empty for non-admins - the control is admin-only and the data is not even read. */
   overridable: PaymentOverrideEnrollment[];
   /**
@@ -235,7 +273,7 @@ type FamilyDetailBodyProps = {
   fid: string;
 };
 
-function FamilyDetailBody({ family, members, adults, children, sevaProgress, overridable, canOverride, joinableBv, fid }: FamilyDetailBodyProps) {
+function FamilyDetailBody({ family, members, adults, children, sevaProgress, payment, overridable, canOverride, joinableBv, fid }: FamilyDetailBodyProps) {
   const sevaMet = sevaProgress.hoursEarned >= sevaProgress.hoursPerYear;
 
   return (
@@ -253,15 +291,33 @@ function FamilyDetailBody({ family, members, adults, children, sevaProgress, ove
         </div>
       </div>
 
-      {/* ── Donation, for ADMINS only ──────────────────────────────────────────
-          `overridable` is empty for every other role - the page does not even
-          read the enrollments - so this section cannot render for a coordinator
-          or a welcome-team volunteer. The route enforces the same rule again;
-          this is the page-level half of the repo's three-gate requirement. */}
-      {canOverride && (
+      {/* ── Programs & payment: EVERY staff viewer ─────────────────────────────
+          The verdict chip here is the same value welcome-team already reads as
+          the roster's payment column, so the detail page stops being less
+          informative than the list that links to it. Amounts, donation history
+          and provider errors are gated behind `canOverride` (admin). */}
+      <FamilyPaymentSection payment={payment} canSeeMoney={canOverride} />
+
+      {/* ── Payment activity: ADMINS only ──────────────────────────────────────
+          Every payment the portal initiated, plus the payment service's own
+          words about the ones that failed. `payment` may be null when the read
+          failed, in which case FamilyPaymentSection above has already said so
+          and there is nothing here to show. */}
+      {canOverride && payment && <PaymentActivity payment={payment} />}
+
+      {/* ── Record an off-portal donation, for ADMINS only ─────────────────────
+          `overridable` is empty for every other role, so this section cannot
+          render for a coordinator or a welcome-team volunteer. The route
+          enforces the same rule again; this is the page-level half of the
+          repo's three-gate requirement.
+
+          Kept BELOW the two read-only sections deliberately: status, then
+          evidence, then the action. An admin should have read what actually
+          happened before being offered a button that records money. */}
+      {canOverride && payment && (
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: '.1em', textTransform: 'uppercase', marginBottom: 4 }}>
-            Donation
+            Record an off-portal donation
           </div>
           <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5, margin: '0 0 4px' }}>
             Use this when a family&apos;s donation is already collected outside the portal - an
